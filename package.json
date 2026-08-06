@@ -1,0 +1,24 @@
+{
+  "name": "moe-next",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Greenfield local-first multi-agent orchestration control plane",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": ">=24.16.0 <25",
+    "pnpm": "11.0.8"
+  },
+  "scripts": {
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "vitest run",
+    "test:meta": "vitest run packages/testkit/src",
+    "verify:foundation": "pnpm typecheck && pnpm test:meta"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

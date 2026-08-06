@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - adapters/*
+  - packages/*
+autoInstallPeers: false
+engineStrict: true
+saveExact: true
+strictPeerDependencies: true
