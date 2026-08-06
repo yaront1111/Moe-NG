@@ -6,6 +6,7 @@ import {
   COMMAND_EFFECT_IDENTITY_VERSION,
   DurableStoreError,
   EXPECTED_VERSION_DECISION_COVERAGE,
+  MAX_PAGE_DECODED_BYTES,
 } from "./store-contracts.js";
 import type {
   CommandDecisionKey,
@@ -22,6 +23,13 @@ import {
   rejectionAuditEventId,
   rejectionAuditPayload,
 } from "./store-digests.js";
+import {
+  assertReadPageCursors,
+  requirePageDecodedByteLimit,
+  requireStoredDecodedByteCount,
+  selectReadPagePrefix,
+} from "./read-page-budget.js";
+import { DECISION_DECODED_BYTES_SQL } from "./read-page-queries.js";
 import {
   requireNonnegativeBigInt,
   requirePageLimit,
@@ -69,8 +77,9 @@ export class DecisionReadModelStore extends EventLedgerStore {
   public readCommandDecisionsAfter(
     afterDecisionPosition: bigint,
     limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
   ): CursorPage<CommandDecisionRecord, bigint> {
-    return this.readOperation("read scoped command decisions", () => {
+    return this.readSnapshotOperation("read scoped command decisions", () => {
       if (this.projectId === null) {
         throw new DurableStoreError(
           "PROJECT_SCOPE_REQUIRED",
@@ -83,19 +92,28 @@ export class DecisionReadModelStore extends EventLedgerStore {
         "afterDecisionPosition",
       );
       const safeLimit = requirePageLimit(limit);
-      const rows = this.database
+      const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      const candidateRows = this.database
         .prepare(`
-          SELECT CAST(decision_position AS TEXT) AS decision_position
-          FROM command_decisions
-          WHERE decision_position > ?
-          ORDER BY decision_position
+          SELECT
+            CAST(decisions.decision_position AS TEXT) AS decision_position,
+            CAST(${DECISION_DECODED_BYTES_SQL} AS TEXT) AS decoded_bytes
+          FROM command_decisions AS decisions
+          WHERE decisions.decision_position > ?
+          ORDER BY decisions.decision_position
           LIMIT ?
         `)
         .all(safeAfter, safeLimit + 1);
-      const hasMore = rows.length > safeLimit;
-      const items = rows.slice(0, safeLimit).map((row) => {
-        const position = requireStoredPositiveBigIntText(row, "decision_position");
-        const decision = this.loadCommandDecisionByPosition(position);
+      const selection = selectReadPagePrefix(
+        candidateRows.map((row) => ({
+          cursor: requireStoredPositiveBigIntText(row, "decision_position"),
+          decodedBytes: requireStoredDecodedByteCount(row),
+        })),
+        safeLimit,
+        safeDecodedByteLimit,
+      );
+      const items = selection.selected.map(({ cursor: position }) => {
+        const decision = this.loadCommandDecisionByPosition(position, true);
         if (decision === null) {
           throw new DurableStoreError(
             "STORE_CORRUPT",
@@ -104,9 +122,13 @@ export class DecisionReadModelStore extends EventLedgerStore {
         }
         return toCommandDecisionRecord(decision);
       });
+      assertReadPageCursors(
+        items.map((decision) => decision.decisionPosition),
+        selection.selected,
+      );
       return this.page(
         items,
-        hasMore,
+        selection.hasMore,
         items.length === 0 ? null : items.at(-1)!.decisionPosition,
       );
     });
@@ -155,6 +177,7 @@ export class DecisionReadModelStore extends EventLedgerStore {
 
   private loadCommandDecisionByPosition(
     decisionPosition: bigint,
+    liveBindingAlreadyValidated = false,
   ): StoredCommandDecision | null {
     const row = this.database
       .prepare(`
@@ -193,10 +216,15 @@ export class DecisionReadModelStore extends EventLedgerStore {
         WHERE decision_position = ?
       `)
       .get(decisionPosition);
-    return row === undefined ? null : this.mapCommandDecision(row);
+    return row === undefined
+      ? null
+      : this.mapCommandDecision(row, liveBindingAlreadyValidated);
   }
 
-  private mapCommandDecision(row: Record<string, unknown>): StoredCommandDecision {
+  private mapCommandDecision(
+    row: Record<string, unknown>,
+    liveBindingAlreadyValidated = false,
+  ): StoredCommandDecision {
     const decisionPosition = requireStoredPositiveBigIntText(row, "decision_position");
     const key = Object.freeze({
       commandId: requireStoredIdentifier(row, "command_id"),
@@ -293,7 +321,11 @@ export class DecisionReadModelStore extends EventLedgerStore {
         `command decision ${decisionPosition} has a non-canonical internal receipt link`,
       );
     }
-    const receipt = this.loadReceipt(receiptCommandId);
+    const receipt = this.loadReceipt(
+      receiptCommandId,
+      true,
+      liveBindingAlreadyValidated,
+    );
     if (receipt === null || receipt.effectSha256 !== effectSha256) {
       throw new DurableStoreError(
         "STORE_CORRUPT",

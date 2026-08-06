@@ -277,15 +277,26 @@ export class SqliteEventStore {
     aggregateId: string,
     afterAggregateSequence = 0,
     limit = 100,
+    maxDecodedBytes?: number,
   ): CursorPage<StoredEvent, number> {
-    return this.#core.readAggregateEvents(aggregateId, afterAggregateSequence, limit);
+    return this.#core.readAggregateEvents(
+      aggregateId,
+      afterAggregateSequence,
+      limit,
+      maxDecodedBytes,
+    );
   }
 
   public readCommandDecisionsAfter(
     afterDecisionPosition: bigint,
     limit = 100,
+    maxDecodedBytes?: number,
   ): CursorPage<CommandDecisionRecord, bigint> {
-    return this.#core.readCommandDecisionsAfter(afterDecisionPosition, limit);
+    return this.#core.readCommandDecisionsAfter(
+      afterDecisionPosition,
+      limit,
+      maxDecodedBytes,
+    );
   }
 
   public readEvents(aggregateId: string): readonly StoredEvent[] {
@@ -295,8 +306,9 @@ export class SqliteEventStore {
   public readEventsAfter(
     afterGlobalPosition: bigint,
     limit = 100,
+    maxDecodedBytes?: number,
   ): CursorPage<StoredEvent, bigint> {
-    return this.#core.readEventsAfter(afterGlobalPosition, limit);
+    return this.#core.readEventsAfter(afterGlobalPosition, limit, maxDecodedBytes);
   }
 
   public readPendingOutbox(limit = 100): readonly PendingOutboxMessage[] {
@@ -306,8 +318,13 @@ export class SqliteEventStore {
   public readPendingOutboxPage(
     afterOutboxPosition: bigint,
     limit = 100,
+    maxDecodedBytes?: number,
   ): CursorPage<PendingOutboxMessage, bigint> {
-    return this.#core.readPendingOutboxPage(afterOutboxPosition, limit);
+    return this.#core.readPendingOutboxPage(
+      afterOutboxPosition,
+      limit,
+      maxDecodedBytes,
+    );
   }
 }
 

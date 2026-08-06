@@ -460,20 +460,24 @@ export interface DecisionLedgerCore {
     aggregateId: string,
     afterAggregateSequence?: number,
     limit?: number,
+    maxDecodedBytes?: number,
   ) => CursorPage<StoredEvent, number>;
   readonly readCommandDecisionsAfter: (
     afterDecisionPosition: bigint,
     limit?: number,
+    maxDecodedBytes?: number,
   ) => CursorPage<CommandDecisionRecord, bigint>;
   readonly readEvents: (aggregateId: string) => readonly StoredEvent[];
   readonly readEventsAfter: (
     afterGlobalPosition: bigint,
     limit?: number,
+    maxDecodedBytes?: number,
   ) => CursorPage<StoredEvent, bigint>;
   readonly readPendingOutbox: (limit?: number) => readonly PendingOutboxMessage[];
   readonly readPendingOutboxPage: (
     afterOutboxPosition: bigint,
     limit?: number,
+    maxDecodedBytes?: number,
   ) => CursorPage<PendingOutboxMessage, bigint>;
   readonly validateStartup: () => void;
 }
@@ -505,15 +509,31 @@ export function createDecisionLedgerCore(
       aggregateId: string,
       afterAggregateSequence?: number,
       limit?: number,
-    ) => ledger.readAggregateEvents(aggregateId, afterAggregateSequence, limit),
-    readCommandDecisionsAfter: (afterDecisionPosition: bigint, limit?: number) =>
-      ledger.readCommandDecisionsAfter(afterDecisionPosition, limit),
+      maxDecodedBytes?: number,
+    ) =>
+      ledger.readAggregateEvents(
+        aggregateId,
+        afterAggregateSequence,
+        limit,
+        maxDecodedBytes,
+      ),
+    readCommandDecisionsAfter: (
+      afterDecisionPosition: bigint,
+      limit?: number,
+      maxDecodedBytes?: number,
+    ) => ledger.readCommandDecisionsAfter(afterDecisionPosition, limit, maxDecodedBytes),
     readEvents: (aggregateId: string) => ledger.readEvents(aggregateId),
-    readEventsAfter: (afterGlobalPosition: bigint, limit?: number) =>
-      ledger.readEventsAfter(afterGlobalPosition, limit),
+    readEventsAfter: (
+      afterGlobalPosition: bigint,
+      limit?: number,
+      maxDecodedBytes?: number,
+    ) => ledger.readEventsAfter(afterGlobalPosition, limit, maxDecodedBytes),
     readPendingOutbox: (limit?: number) => ledger.readPendingOutbox(limit),
-    readPendingOutboxPage: (afterOutboxPosition: bigint, limit?: number) =>
-      ledger.readPendingOutboxPage(afterOutboxPosition, limit),
+    readPendingOutboxPage: (
+      afterOutboxPosition: bigint,
+      limit?: number,
+      maxDecodedBytes?: number,
+    ) => ledger.readPendingOutboxPage(afterOutboxPosition, limit, maxDecodedBytes),
     validateStartup: () => ledger.validateStartup(),
   });
 }

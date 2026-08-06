@@ -12,7 +12,7 @@
 - An identical retry replays the original decision and sets `requiresAffordanceRefresh=true`. Reusing the scoped key for a different request fails with `IDEMPOTENCY_CONFLICT` and creates no effect.
 - Stored events retain the physical receipt identity in `commandId` and `requestSha256`. Events written for a decision separately expose the outer command provenance in `decisionTrace`.
 - Receipt digests bind their durable effect bytes and positions; decision digests additionally bind command scope and receipt linkage. A separate relational invariant binds every receipt to the database project. Startup rejects schema, binding, scope, foreign-key, ordering, tombstone, reserved-namespace, or ledger inconsistencies, including missing, duplicate, malformed, non-contiguous, or unknown SQLite sequence evidence.
-- Event, outbox, and decision cursors remain exact 64-bit `bigint` values and have bounded pagination APIs.
+- Event, outbox, and decision cursors remain exact 64-bit `bigint` values. Cursor reads are bounded by both row count and a fixed 64 MiB decoded-field ceiling: they preflight cursor/UTF-8/BLOB lengths, choose the largest ordered prefix, and only then materialize that prefix. A caller may request a smaller per-read byte limit but cannot raise the ceiling; a too-small first-record budget fails explicitly instead of returning a zero-progress page.
 - The exported store is a frozen composition facade with an ECMAScript-private core slot. Internal database handles, scope flags, state, and protected ledger helpers are not runtime properties of the public object.
 
 ## Exact boundary
@@ -23,6 +23,6 @@ Accepted `committedResultBytes` are opaque bytes supplied by a trusted future co
 
 The schema-v1-to-v2 path is pre-release development migration evidence only: it accepts an exact empty v1 database and refuses populated v1 history. It is not a production backup or reconciliation strategy. Different-request idempotency conflicts are refused but are not yet written as durable attempt-audit records.
 
-Cursor APIs are row-count bounded but do not yet enforce a total decoded-byte ceiling across a page. No external adapter may expose caller-controlled page sizes until a byte-budgeted or streaming read layer is added.
+The current page ceiling accounts for every persisted record BLOB and UTF-8 text field materialized by event and outbox reads. Decision preflight also includes its result plus the receipt, event, and outbox fields reloaded for integrity verification. Fixed-width numbers and bounded cursor/count/project-binding control scalars are outside this logical record-byte count; the 1,000-row cap bounds them separately. This is not a JavaScript heap-size claim, and the store remains internal until the authoritative command/query adapter exists.
 
 Keep this package internal until the authoritative command core owns the complete decision and a structured durable-result codec.

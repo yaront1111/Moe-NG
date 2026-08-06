@@ -251,6 +251,34 @@ export class StoreRuntime {
     }
   }
 
+  protected readSnapshotOperation<Result>(
+    operation: string,
+    read: () => Result,
+  ): Result {
+    return this.readOperation(operation, () => {
+      this.database.exec("BEGIN DEFERRED");
+      try {
+        const result = read();
+        this.database.exec("COMMIT");
+        return result;
+      } catch (error) {
+        if (this.database.isTransaction) {
+          try {
+            this.database.exec("ROLLBACK");
+          } catch (rollbackError) {
+            this.poison();
+            throw new DurableStoreError(
+              "STORE_UNAVAILABLE",
+              `${operation} could not release its read snapshot`,
+              { cause: new AggregateError([error, rollbackError]) },
+            );
+          }
+        }
+        throw error;
+      }
+    });
+  }
+
   protected normalizeOperationalError(error: unknown, operation: string): DurableStoreError {
     if (isSqliteBusy(error)) {
       return new DurableStoreError("STORE_BUSY", `${operation} timed out waiting for SQLite`, {

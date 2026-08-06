@@ -18,6 +18,7 @@ export const MAX_OUTBOX_MESSAGES_PER_COMMIT = 1_024 as const;
 export const MAX_BLOB_BYTES = 8 * 1_024 * 1_024;
 export const MAX_COMMIT_BYTES = 32 * 1_024 * 1_024;
 export const MAX_PAGE_SIZE = 1_000 as const;
+export const MAX_PAGE_DECODED_BYTES = 2 * MAX_COMMIT_BYTES;
 
 export interface OutboxDraft {
   readonly headers?: Uint8Array;

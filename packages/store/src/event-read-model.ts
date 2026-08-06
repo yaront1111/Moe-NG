@@ -4,6 +4,7 @@ import {
   COMMAND_REQUEST_IDENTITY_VERSION,
   DurableStoreError,
   EVENT_RECORD_VERSION,
+  MAX_PAGE_DECODED_BYTES,
   MAX_PAGE_SIZE,
   OPAQUE_PAYLOAD_CODEC_VERSION,
   RECEIPT_RESULT_VERSION,
@@ -15,6 +16,18 @@ import type {
   StoredEvent,
 } from "./store-contracts.js";
 import { identifyCommandEffects } from "./store-digests.js";
+import {
+  assertReadPageCursors,
+  requirePageDecodedByteLimit,
+  requireStoredDecodedByteCount,
+  selectReadPagePrefix,
+} from "./read-page-budget.js";
+import {
+  EVENT_DECODED_BYTES_SQL,
+  OUTBOX_DECODED_BYTES_SQL,
+  STORED_EVENT_DECISION_JOIN,
+  STORED_EVENT_SELECT_COLUMNS,
+} from "./read-page-queries.js";
 import {
   limitExceeded,
   requireIdentifier,
@@ -82,7 +95,7 @@ export class EventReadModelStore extends StoreRuntime {
     const page = this.readAggregateEvents(aggregateId, 0, MAX_PAGE_SIZE);
     if (page.hasMore) {
       return limitExceeded(
-        `aggregate has more than ${MAX_PAGE_SIZE} events; use readAggregateEvents with its cursor`,
+        "aggregate exceeds a single bounded page; use readAggregateEvents with its cursor",
       );
     }
     return page.items;
@@ -92,8 +105,9 @@ export class EventReadModelStore extends StoreRuntime {
     aggregateId: string,
     afterAggregateSequence = 0,
     limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
   ): CursorPage<StoredEvent, number> {
-    return this.readOperation("read aggregate events", () => {
+    return this.readSnapshotOperation("read aggregate events", () => {
       this.assertCachedProjectBinding();
       const safeAggregateId = requireIdentifier(aggregateId, "aggregateId");
       const safeAfter = requireSafeNonnegativeInteger(
@@ -101,41 +115,52 @@ export class EventReadModelStore extends StoreRuntime {
         "afterAggregateSequence",
       );
       const safeLimit = requirePageLimit(limit);
-      const rows = this.database
+      const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      const candidateRows = this.database
         .prepare(`
         SELECT
-          CAST(events.global_position AS TEXT) AS global_position,
-          events.aggregate_id,
           events.aggregate_sequence,
-          events.command_id,
-          decisions.project_id AS decision_project_id,
-          decisions.principal_id AS decision_principal_id,
-          decisions.command_id AS decision_command_id,
-          decisions.command_kind AS decision_command_kind,
-          decisions.request_identity_version AS decision_request_identity_version,
-          decisions.request_sha256 AS decision_request_sha256,
-          events.record_version,
-          events.payload_codec_version,
-          events.request_sha256,
-          events.event_id,
-          events.event_type,
-          events.payload,
-          events.metadata,
-          events.committed_at
+          CAST(${EVENT_DECODED_BYTES_SQL} AS TEXT) AS decoded_bytes
         FROM domain_events AS events
-        LEFT JOIN command_decisions AS decisions
-          ON decisions.receipt_command_id = events.command_id
+        ${STORED_EVENT_DECISION_JOIN}
         WHERE events.aggregate_id = ? AND events.aggregate_sequence > ?
         ORDER BY events.aggregate_sequence
         LIMIT ?
         `)
         .all(safeAggregateId, safeAfter, safeLimit + 1);
-      const hasMore = rows.length > safeLimit;
-      const items = rows.slice(0, safeLimit).map((row) => this.mapStoredEvent(row));
+      const selection = selectReadPagePrefix(
+        candidateRows.map((row) => ({
+          cursor: requireStoredIntegerAtLeast(row, "aggregate_sequence", 1),
+          decodedBytes: requireStoredDecodedByteCount(row),
+        })),
+        safeLimit,
+        safeDecodedByteLimit,
+      );
+      const lastSequence = selection.selected.at(-1)?.cursor;
+      if (lastSequence === undefined) {
+        return this.page<StoredEvent, number>([], false, null);
+      }
+      const rows = this.database
+        .prepare(`
+        SELECT ${STORED_EVENT_SELECT_COLUMNS}
+        FROM domain_events AS events
+        ${STORED_EVENT_DECISION_JOIN}
+        WHERE events.aggregate_id = ?
+          AND events.aggregate_sequence > ?
+          AND events.aggregate_sequence <= ?
+        ORDER BY events.aggregate_sequence
+        LIMIT ?
+        `)
+        .all(safeAggregateId, safeAfter, lastSequence, selection.selected.length);
+      const items = rows.map((row) => this.mapStoredEvent(row));
+      assertReadPageCursors(
+        items.map((event) => event.aggregateSequence),
+        selection.selected,
+      );
       return this.page(
         items,
-        hasMore,
-        items.length === 0 ? null : items.at(-1)!.aggregateSequence,
+        selection.hasMore,
+        lastSequence,
       );
     });
   }
@@ -143,49 +168,59 @@ export class EventReadModelStore extends StoreRuntime {
   public readEventsAfter(
     afterGlobalPosition: bigint,
     limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
   ): CursorPage<StoredEvent, bigint> {
-    return this.readOperation("read global events", () => {
+    return this.readSnapshotOperation("read global events", () => {
       this.assertCachedProjectBinding();
       const safeAfter = requireNonnegativeBigInt(
         afterGlobalPosition,
         "afterGlobalPosition",
       );
       const safeLimit = requirePageLimit(limit);
-      const rows = this.database
+      const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      const candidateRows = this.database
         .prepare(`
         SELECT
           CAST(events.global_position AS TEXT) AS global_position,
-          events.aggregate_id,
-          events.aggregate_sequence,
-          events.command_id,
-          decisions.project_id AS decision_project_id,
-          decisions.principal_id AS decision_principal_id,
-          decisions.command_id AS decision_command_id,
-          decisions.command_kind AS decision_command_kind,
-          decisions.request_identity_version AS decision_request_identity_version,
-          decisions.request_sha256 AS decision_request_sha256,
-          events.record_version,
-          events.payload_codec_version,
-          events.request_sha256,
-          events.event_id,
-          events.event_type,
-          events.payload,
-          events.metadata,
-          events.committed_at
+          CAST(${EVENT_DECODED_BYTES_SQL} AS TEXT) AS decoded_bytes
         FROM domain_events AS events
-        LEFT JOIN command_decisions AS decisions
-          ON decisions.receipt_command_id = events.command_id
+        ${STORED_EVENT_DECISION_JOIN}
         WHERE events.global_position > ?
         ORDER BY events.global_position
         LIMIT ?
         `)
         .all(safeAfter, safeLimit + 1);
-      const hasMore = rows.length > safeLimit;
-      const items = rows.slice(0, safeLimit).map((row) => this.mapStoredEvent(row));
+      const selection = selectReadPagePrefix(
+        candidateRows.map((row) => ({
+          cursor: requireStoredPositiveBigIntText(row, "global_position"),
+          decodedBytes: requireStoredDecodedByteCount(row),
+        })),
+        safeLimit,
+        safeDecodedByteLimit,
+      );
+      const lastPosition = selection.selected.at(-1)?.cursor;
+      if (lastPosition === undefined) {
+        return this.page<StoredEvent, bigint>([], false, null);
+      }
+      const rows = this.database
+        .prepare(`
+        SELECT ${STORED_EVENT_SELECT_COLUMNS}
+        FROM domain_events AS events
+        ${STORED_EVENT_DECISION_JOIN}
+        WHERE events.global_position > ? AND events.global_position <= ?
+        ORDER BY events.global_position
+        LIMIT ?
+        `)
+        .all(safeAfter, lastPosition, selection.selected.length);
+      const items = rows.map((row) => this.mapStoredEvent(row));
+      assertReadPageCursors(
+        items.map((event) => event.globalPosition),
+        selection.selected,
+      );
       return this.page(
         items,
-        hasMore,
-        items.length === 0 ? null : items.at(-1)!.globalPosition,
+        selection.hasMore,
+        lastPosition,
       );
     });
   }
@@ -194,7 +229,7 @@ export class EventReadModelStore extends StoreRuntime {
     const page = this.readPendingOutboxPage(0n, limit);
     if (page.hasMore) {
       return limitExceeded(
-        `pending outbox has more than ${limit} messages; use readPendingOutboxPage with its cursor`,
+        "pending outbox exceeds a single bounded page; use readPendingOutboxPage with its cursor",
       );
     }
     return page.items;
@@ -203,37 +238,68 @@ export class EventReadModelStore extends StoreRuntime {
   public readPendingOutboxPage(
     afterOutboxPosition: bigint,
     limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
   ): CursorPage<PendingOutboxMessage, bigint> {
-    return this.readOperation("read pending outbox", () => {
+    return this.readSnapshotOperation("read pending outbox", () => {
       this.assertCachedProjectBinding();
       const safeAfter = requireNonnegativeBigInt(
         afterOutboxPosition,
         "afterOutboxPosition",
       );
       const safeLimit = requirePageLimit(limit);
-      const rows = this.database
+      const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      const candidateRows = this.database
         .prepare(`
         SELECT
-          CAST(outbox_position AS TEXT) AS outbox_position,
-          message_id,
-          event_id,
-          topic,
-          payload,
-          headers,
-          created_at,
-          delivery_attempts
-        FROM outbox_messages
-        WHERE delivered_at IS NULL AND outbox_position > ?
+          CAST(outbox_messages.outbox_position AS TEXT) AS outbox_position,
+          CAST(${OUTBOX_DECODED_BYTES_SQL} AS TEXT) AS decoded_bytes
+        FROM outbox_messages AS outbox_messages
+        WHERE outbox_messages.delivered_at IS NULL
+          AND outbox_messages.outbox_position > ?
         ORDER BY outbox_messages.outbox_position
         LIMIT ?
         `)
         .all(safeAfter, safeLimit + 1);
-      const hasMore = rows.length > safeLimit;
-      const items = rows.slice(0, safeLimit).map((row) => this.mapOutboxMessage(row));
+      const selection = selectReadPagePrefix(
+        candidateRows.map((row) => ({
+          cursor: requireStoredPositiveBigIntText(row, "outbox_position"),
+          decodedBytes: requireStoredDecodedByteCount(row),
+        })),
+        safeLimit,
+        safeDecodedByteLimit,
+      );
+      const lastPosition = selection.selected.at(-1)?.cursor;
+      if (lastPosition === undefined) {
+        return this.page<PendingOutboxMessage, bigint>([], false, null);
+      }
+      const rows = this.database
+        .prepare(`
+        SELECT
+          CAST(outbox_messages.outbox_position AS TEXT) AS outbox_position,
+          outbox_messages.message_id,
+          outbox_messages.event_id,
+          outbox_messages.topic,
+          outbox_messages.payload,
+          outbox_messages.headers,
+          outbox_messages.created_at,
+          outbox_messages.delivery_attempts
+        FROM outbox_messages AS outbox_messages
+        WHERE outbox_messages.delivered_at IS NULL
+          AND outbox_messages.outbox_position > ?
+          AND outbox_messages.outbox_position <= ?
+        ORDER BY outbox_messages.outbox_position
+        LIMIT ?
+        `)
+        .all(safeAfter, lastPosition, selection.selected.length);
+      const items = rows.map((row) => this.mapOutboxMessage(row));
+      assertReadPageCursors(
+        items.map((message) => message.outboxPosition),
+        selection.selected,
+      );
       return this.page(
         items,
-        hasMore,
-        items.length === 0 ? null : items.at(-1)!.outboxPosition,
+        selection.hasMore,
+        lastPosition,
       );
     });
   }
@@ -332,7 +398,11 @@ export class EventReadModelStore extends StoreRuntime {
     });
   }
 
-  protected loadReceipt(commandId: string, validateAggregateTail = true): StoredReceipt | null {
+  protected loadReceipt(
+    commandId: string,
+    validateAggregateTail = true,
+    liveBindingAlreadyValidated = false,
+  ): StoredReceipt | null {
     const row = this.database
       .prepare(`
         SELECT
@@ -381,7 +451,9 @@ export class EventReadModelStore extends StoreRuntime {
         "the inspection handle predates the database project binding; reopen it before reading scoped receipts",
       );
     }
-    this.assertLiveProjectBinding();
+    if (!liveBindingAlreadyValidated) {
+      this.assertLiveProjectBinding();
+    }
     if (receiptProjectId !== this.projectId) {
       throw new DurableStoreError(
         "STORE_CORRUPT",
