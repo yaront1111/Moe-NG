@@ -1,13 +1,10 @@
 {
-  "name": "@moe/testkit",
+  "name": "@moe/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
-  },
-  "dependencies": {
-    "@moe/contracts": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json",

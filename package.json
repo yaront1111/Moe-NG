@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "pnpm --recursive typecheck",
     "test": "vitest run",
-    "test:meta": "vitest run packages/testkit/src",
+    "test:meta": "vitest run packages/contracts/src packages/testkit/src",
     "verify:foundation": "pnpm typecheck && pnpm test:meta"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { types } from "node:util";
 
-export const CANONICAL_JSON_VERSION = "moe-canonical-json/1" as const;
+export { CANONICAL_JSON_VERSION } from "@moe/contracts";
 
 const MAX_CANONICAL_DEPTH = 64;
 const MAX_STRING_UTF8_BYTES = 256 * 1024;

@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 
+import { EVIDENCE_IDENTITY_VERSION } from "@moe/contracts";
+
 import { CANONICAL_JSON_VERSION, canonicalize } from "./canonical-json.js";
 
-export const EVIDENCE_IDENTITY_VERSION = "moe-evidence-identity/1" as const;
+export { EVIDENCE_IDENTITY_VERSION } from "@moe/contracts";
 
 export interface EvidenceIdentity {
   readonly algorithm: "sha256";
@@ -30,7 +32,7 @@ const typedArrayBufferGetter = requireTypedArrayGetter("buffer");
 const typedArrayByteLengthGetter = requireTypedArrayGetter("byteLength");
 const typedArrayByteOffsetGetter = requireTypedArrayGetter("byteOffset");
 
-function snapshotBytes(bytes: Uint8Array): Uint8Array {
+export function snapshotEvidenceBytes(bytes: Uint8Array): Uint8Array {
   if (types.isProxy(bytes)) {
     throw new TypeError("Unsupported evidence bytes: proxy");
   }
@@ -59,7 +61,7 @@ function snapshotBytes(bytes: Uint8Array): Uint8Array {
 }
 
 export function identifyEvidence(bytes: Uint8Array): EvidenceIdentity {
-  const snapshot = snapshotBytes(bytes);
+  const snapshot = snapshotEvidenceBytes(bytes);
   const digest = createHash("sha256").update(snapshot).digest("hex");
 
   return {

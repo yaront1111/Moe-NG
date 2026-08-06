@@ -21,11 +21,11 @@
 - Create: `tsconfig.base.json`
 - Create: `vitest.config.ts`
 
-- [ ] Configure pnpm policy in `pnpm-workspace.yaml`; `.npmrc` is reserved for registry/authentication settings.
-- [ ] Initialize Git with `git init -b main` after `.gitattributes` exists.
-- [ ] Run `pnpm install`, expect exit 0 and a new exact `pnpm-lock.yaml`.
-- [ ] Run `pnpm exec tsc --version`, expect `Version 7.0.2`.
-- [ ] Stage only the listed root files and lockfile, inspect the staged diff, and commit `chore: bootstrap phase-one workspace`.
+- [x] Configure pnpm policy in `pnpm-workspace.yaml`; `.npmrc` is reserved for registry/authentication settings.
+- [x] Initialize Git with `git init -b main` after `.gitattributes` exists.
+- [x] Run `pnpm install`, expect exit 0 and a new exact `pnpm-lock.yaml`.
+- [x] Run `pnpm exec tsc --version`, expect `Version 7.0.2`.
+- [x] Stage only the listed root files and lockfile, inspect the staged diff, and commit `chore: bootstrap phase-one workspace`.
 
 ### Task 2: Specify canonical JSON bytes
 
@@ -37,11 +37,11 @@
 - Create after the failing test: `packages/testkit/src/canonical-json.ts`
 - Create after the failing test: `packages/testkit/src/index.ts`
 
-- [ ] Write a test that requires recursively sorted object keys, preserved array order, JSON-compatible scalar encoding, and rejection of unsupported values.
-- [ ] Run `pnpm test:meta`, expect a focused assertion failure because the canonicalizer is absent.
-- [ ] Implement only the canonicalizer required by the test.
-- [ ] Run `pnpm test:meta`, expect all canonical JSON tests to pass.
-- [ ] Run `pnpm typecheck`, expect exit 0.
+- [x] Write a test that requires recursively sorted object keys, preserved array order, JSON-compatible scalar encoding, and rejection of unsupported values.
+- [x] Run `pnpm test:meta`, expect a focused assertion failure because the canonicalizer is absent.
+- [x] Implement only the canonicalizer required by the test.
+- [x] Run `pnpm test:meta`, expect all canonical JSON tests to pass.
+- [x] Run `pnpm typecheck`, expect exit 0.
 
 ### Task 3: Specify content-addressed evidence identity
 
@@ -51,13 +51,32 @@
 - Create after the failing test: `packages/testkit/src/evidence-digest.ts`
 - Modify: `packages/testkit/src/index.ts`
 
-- [ ] Write a test requiring lowercase SHA-256 of exact bytes and the path `objects/sha256/{first-two-hex}/{full-digest}`.
-- [ ] Run `pnpm test:meta`, expect a focused assertion failure because evidence hashing is absent.
-- [ ] Implement byte hashing without filesystem writes.
-- [ ] Run `pnpm verify:foundation`, expect typecheck and all meta tests to pass.
-- [ ] Stage only `packages/testkit` and this plan, inspect the staged diff, and commit `test: add deterministic evidence primitives`.
+- [x] Write a test requiring lowercase SHA-256 of exact bytes and the path `objects/sha256/{first-two-hex}/{full-digest}`.
+- [x] Run `pnpm test:meta`, expect a focused assertion failure because evidence hashing is absent.
+- [x] Implement byte hashing without filesystem writes.
+- [x] Run `pnpm verify:foundation`, expect typecheck and all meta tests to pass.
+- [x] Stage only `packages/testkit` and this plan, inspect the staged diff, and commit `test: add deterministic evidence primitives`.
 
-### Task 4: Freeze-review integration boundary
+### Task 4: Specify trusted Phase 0 evidence capture
+
+**Files:**
+
+- Create: `packages/contracts/src/phase0-evidence-contract.test.ts`
+- Create: `packages/contracts/src/phase0-evidence-contract.ts`
+- Create: `packages/contracts/src/index.ts`
+- Create: `packages/testkit/src/phase0-evidence-capture.test.ts`
+- Create after the failing tests: `packages/testkit/src/phase0-evidence-capture.ts`
+- Modify: `packages/testkit/src/index.ts`
+
+- [x] Bind all six roles to exact owners, paths, repository roots, commands, and version identifiers.
+- [x] Carry and validate source root/resolved file path, Git command/commit/path, and target root across every port boundary; fail closed on symlink/reparse escape.
+- [x] Derive hashes, lengths, line counts, and source states from snapshotted bytes instead of caller claims.
+- [x] Resolve tracked identity against the captured immutable commit and reject source/repository mutation.
+- [x] Persist and re-read the complete content-addressed object set before returning `VERIFIED`.
+- [x] Add hostile tests for ABA HEAD changes, getter TOCTOU, object-store aliasing, and staged-new state naming.
+- [x] Run `pnpm verify:foundation`, expect strict typecheck and all focused tests to pass.
+
+### Task 5: Freeze-review integration boundary
 
 **Files:**
 
