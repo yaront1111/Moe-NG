@@ -19,6 +19,8 @@ it("loads and executes the scheduler entrypoint in Node's strip-types runtime", 
 
   expect(result).toEqual({
     admissionReadyWidth: 1,
+    counterfactualEdgeCount: 0,
+    counterfactualType: "function",
     dispatchableWidth: 1,
     internalSubpath: "ERR_PACKAGE_PATH_NOT_EXPORTED",
     logicalReadyWidth: 1,

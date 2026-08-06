@@ -1,6 +1,7 @@
 import { parentPort } from "node:worker_threads";
 
 import {
+  analyzeHardEdgeCounterfactuals,
   analyzeGraphStructure,
   partitionFrontier,
   validateGraphSnapshot,
@@ -30,6 +31,7 @@ if (!frontier.ok) {
   throw new Error("runtime frontier did not partition");
 }
 const analysis = analyzeGraphStructure(validated.graph, frontier.partition);
+const counterfactuals = analyzeHardEdgeCounterfactuals(validated.graph);
 let internalSubpath;
 try {
   await import("@moe/scheduler/src/graph-provenance.js");
@@ -42,6 +44,8 @@ try {
 
 parentPort.postMessage({
   admissionReadyWidth: analysis.admissionReadyWidth,
+  counterfactualEdgeCount: counterfactuals.edges.length,
+  counterfactualType: typeof analyzeHardEdgeCounterfactuals,
   dispatchableWidth: analysis.dispatchableWidth,
   logicalReadyWidth: analysis.logicalReadyWidth,
   internalSubpath,

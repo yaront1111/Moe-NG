@@ -4,6 +4,7 @@
  * Public surface:
  *  - validateGraphSnapshot: fail-closed structural validation -> ValidatedGraph.
  *  - analyzeGraphStructure: deterministic structural facts about a ValidatedGraph.
+ *  - analyzeHardEdgeCounterfactuals: review-only source-edge pressure facts.
  *  - partitionFrontier: readiness partition from caller-supplied frontier facts.
  *
  * The kernel is contract-neutral: it reports exact structural facts and never
@@ -13,6 +14,7 @@
 
 export { validateGraphSnapshot } from "./validate-graph.js";
 export { analyzeGraphStructure } from "./analyze-graph.js";
+export { analyzeHardEdgeCounterfactuals } from "./hard-edge-counterfactual.js";
 export { GraphAnalysisError } from "./graph-analysis-error.js";
 export { partitionFrontier } from "./frontier.js";
 export {
@@ -61,3 +63,7 @@ export type {
   ValidatedGraph,
 } from "./graph-model.js";
 export type { GraphAnalysisErrorCode } from "./graph-analysis-error.js";
+export type {
+  HardEdgeCounterfactual,
+  HardEdgeCounterfactualAnalysis,
+} from "./hard-edge-counterfactual-model.js";
