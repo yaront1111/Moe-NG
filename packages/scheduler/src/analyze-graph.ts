@@ -50,6 +50,13 @@ export function analyzeGraphStructure(
   frontier?: FrontierPartition,
   counter?: TraversalCounter,
 ): GraphStructuralAnalysis {
+  // Bind the frontier to THIS graph: a partition computed for another graph must
+  // never be used to report readiness here. Fail closed on identity mismatch.
+  if (frontier !== undefined && frontier.graphIdentity !== graph.graphIdentity) {
+    throw new Error(
+      "analyzeGraphStructure: frontier partition graphIdentity does not match the graph — a partition may only be analysed against the graph it was computed over",
+    );
+  }
   const index = buildHardGraphIndex(graph, counter);
   const n = index.nodeKeys.length;
   const topo = topologicalOrder(index, counter);

@@ -47,9 +47,11 @@ export type GraphIssueCode =
   | "GRAPH_SELF_EDGE"
   | "GRAPH_CYCLE"
   | "GRAPH_COMPLETION_NODE_MISSING"
+  | "GRAPH_COMPLETION_NOT_TERMINAL"
   | "COMPLETION_CLOSURE_INCOMPLETE"
   | "GRAPH_NODE_LIMIT_EXCEEDED"
   | "GRAPH_HARD_EDGE_LIMIT_EXCEEDED"
+  | "GRAPH_TOTAL_EDGE_LIMIT_EXCEEDED"
   | "FRONTIER_MALFORMED_CURSOR"
   | "FRONTIER_EDGE_FACT_MISSING"
   | "FRONTIER_EDGE_FACT_DUPLICATE"
@@ -80,6 +82,14 @@ export interface ValidatedGraph {
   readonly edges: readonly GraphEdge[];
   readonly completionNodeKey: string;
   readonly policy: GraphPolicy;
+  /**
+   * A deterministic, collision-free canonical identity of this graph's
+   * structure (nodes, edges, completion — not policy). Length-framed so no key
+   * can forge a boundary; identical structure yields the identical string. Used
+   * to bind a {@link FrontierPartition} to the exact graph it was computed over
+   * so cross-graph mix-ups fail closed.
+   */
+  readonly graphIdentity: string;
 }
 
 /**
@@ -92,6 +102,14 @@ export interface ValidatedGraph {
 export interface GraphPolicy {
   readonly maxNodes: number;
   readonly maxHardEdges: number;
+  /**
+   * Cap on the TOTAL edge count (HARD + ADVISORY), bounding advisory/
+   * organizational relations as an input/resource guard. Provisional
+   * conservative default 64 (see graph-policy.ts) — separate from and never
+   * derived from `maxHardEdges`; this is a kernel assumption, not a frozen
+   * design fact, and is overrideable via explicit policy.
+   */
+  readonly maxTotalEdges: number;
   readonly minGatedDescendantsForReview: number;
 }
 
@@ -246,6 +264,12 @@ export interface BlockedNode {
  *  - blocked: NOT logicalReady, with exact offending HARD edges/producers.
  */
 export interface FrontierPartition {
+  /**
+   * Identity of the graph this partition was computed over (equals the source
+   * {@link ValidatedGraph}'s `graphIdentity`). Consumers must reject a partition
+   * whose identity does not match the graph they are analysing.
+   */
+  readonly graphIdentity: string;
   readonly logicalReady: readonly string[];
   readonly admissionReady: readonly string[];
   readonly dispatchable: readonly string[];
@@ -267,10 +291,17 @@ export type FrontierResult = FrontierOk | FrontierError;
 // --- Instrumentation ---------------------------------------------------------
 
 /**
- * Optional development-only traversal counter. Kernel operations are
- * single-pass over nodes and edges; passing a counter lets tests prove that
- * ordinary validation/topology/frontier work does not repeatedly rescan full
- * descendant histories (no O(V*E) per-node re-traversal).
+ * Optional development-only traversal counter. It instruments only the CORE
+ * single-pass work — HARD-index build, Kahn topological order, the closure
+ * reverse-BFS, the ancestor/descendant/stage DP passes, and the frontier
+ * partition — proving that path visits each node/edge a bounded constant number
+ * of times (no O(V*E) per-node descendant-history rescan).
+ *
+ * It deliberately does NOT count: the redundancy-candidate witness BFS
+ * (worst-case O(E*(V+E))), result sorting, or the per-node bitset
+ * materialization/popcount (O(V^2) at worst). Those are NOT claimed linear;
+ * they are bounded instead by the node/total-edge policy caps. Do not read the
+ * counter as a linearity claim about the whole kernel.
  */
 export interface TraversalCounter {
   nodeVisits: number;

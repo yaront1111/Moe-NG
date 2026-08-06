@@ -67,16 +67,17 @@ describe("validateGraphSnapshot — fail-closed rejection (required test 7)", ()
     }
   });
 
-  it("rejects a HARD cycle", () => {
+  it("rejects a HARD cycle (completion at a terminal node outside the cycle)", () => {
     const result = validateGraphSnapshot(
       devSnapshot(
-        [devNode("dev-a"), devNode("dev-b"), devNode("dev-c")],
+        [devNode("dev-a"), devNode("dev-b"), devNode("dev-c"), devNode("dev-done")],
         [
           devHardEdge("dev-ab", "dev-a", "dev-b"),
           devHardEdge("dev-bc", "dev-b", "dev-c"),
           devHardEdge("dev-ca", "dev-c", "dev-a"),
+          devHardEdge("dev-cd", "dev-c", "dev-done"),
         ],
-        "dev-c",
+        "dev-done",
       ),
     );
     expect(result.ok).toBe(false);
@@ -169,28 +170,66 @@ describe("validateGraphSnapshot — explicit limits (required test 9)", () => {
     return nodes;
   }
 
-  it("accepts exactly the 24-node / 64-hard-edge boundary", () => {
-    const nodes = chainNodes(DEFAULT_MAX_NODES);
+  const completion = `${DEVELOPMENT_ONLY_NODE_PREFIX}${DEFAULT_MAX_NODES}`;
+
+  /**
+   * Build a DAG on 24 nodes with EXACTLY `hardCount` forward HARD edges (i -> j
+   * for i < j <= 24). Every node reaches the completion node (node-24 is a
+   * consumer only, hence a terminal HARD sink). Requires 23 <= hardCount <= 253.
+   */
+  function graphWithHardEdges(hardCount: number): GraphEdge[] {
     const edges: GraphEdge[] = [];
-    // A star: node-1 fans HARD edges to the completion node (node-24). Keep
-    // within 64 hard edges. Every non-completion node points at completion.
-    const completion = `${DEVELOPMENT_ONLY_NODE_PREFIX}${DEFAULT_MAX_NODES}`;
-    let e = 0;
+    // First guarantee reachability: a chain 1->2->...->24 (23 edges).
     for (let i = 1; i < DEFAULT_MAX_NODES; i += 1) {
-      e += 1;
       edges.push(
         devHardEdge(
-          `${DEVELOPMENT_ONLY_EDGE_PREFIX}${e}`,
+          `${DEVELOPMENT_ONLY_EDGE_PREFIX}chain-${i}`,
           `${DEVELOPMENT_ONLY_NODE_PREFIX}${i}`,
-          completion,
+          `${DEVELOPMENT_ONLY_NODE_PREFIX}${i + 1}`,
         ),
       );
     }
-    expect(edges.length).toBeLessThanOrEqual(DEFAULT_MAX_HARD_EDGES);
+    // Then add extra forward edges i -> j (j > i + 1) until the exact count.
+    for (let i = 1; i <= DEFAULT_MAX_NODES && edges.length < hardCount; i += 1) {
+      for (
+        let j = i + 2;
+        j <= DEFAULT_MAX_NODES && edges.length < hardCount;
+        j += 1
+      ) {
+        edges.push(
+          devHardEdge(
+            `${DEVELOPMENT_ONLY_EDGE_PREFIX}x-${i}-${j}`,
+            `${DEVELOPMENT_ONLY_NODE_PREFIX}${i}`,
+            `${DEVELOPMENT_ONLY_NODE_PREFIX}${j}`,
+          ),
+        );
+      }
+    }
+    return edges;
+  }
+
+  it("accepts a graph with exactly 64 HARD edges", () => {
+    const edges = graphWithHardEdges(DEFAULT_MAX_HARD_EDGES);
+    expect(edges.filter((e) => e.kind === "HARD")).toHaveLength(64);
     const result = validateGraphSnapshot(
-      devSnapshot(nodes, edges, completion),
+      devSnapshot(chainNodes(DEFAULT_MAX_NODES), edges, completion),
+      // Keep the total-edge cap out of the way; only exercise the hard cap.
+      { maxTotalEdges: 200 },
     );
     expect(result.ok).toBe(true);
+  });
+
+  it("rejects a graph with 65 HARD edges", () => {
+    const edges = graphWithHardEdges(DEFAULT_MAX_HARD_EDGES + 1);
+    expect(edges.filter((e) => e.kind === "HARD")).toHaveLength(65);
+    const result = validateGraphSnapshot(
+      devSnapshot(chainNodes(DEFAULT_MAX_NODES), edges, completion),
+      { maxTotalEdges: 200 },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(codesOf(result.issues)).toContain("GRAPH_HARD_EDGE_LIMIT_EXCEEDED");
+    }
   });
 
   it("rejects one node over the limit", () => {

@@ -219,6 +219,13 @@ export function partitionFrontier(
     if (counter !== undefined) {
       counter.nodeVisits += 1;
     }
+    // Non-execution-bearing (advisory/organizational) nodes have NO execution
+    // authority: they never enter logicalReady/admissionReady/dispatchable, and
+    // never appear as a blocked *executable*. They remain visible only as
+    // structural graph facts (analyzeGraphStructure's node/root/leaf lists).
+    if (!node.executionBearing) {
+      continue;
+    }
     const reasons: BlockedReason[] = [];
     for (const dep of incomingHard.get(node.nodeKey)!) {
       const state = edgeState.get(dep.edgeKey)!;
@@ -253,6 +260,7 @@ export function partitionFrontier(
   }
 
   const partition: FrontierPartition = {
+    graphIdentity: graph.graphIdentity,
     logicalReady: sortedCopy(logicalReady),
     admissionReady: sortedCopy(admissionReady),
     dispatchable: sortedCopy(dispatchable),

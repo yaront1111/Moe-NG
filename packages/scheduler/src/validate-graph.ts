@@ -1,16 +1,15 @@
 import {
   buildHardGraphIndex,
+  computeGraphIdentity,
   deepFreeze,
+  findCycleCore,
   makeIssue,
   sortIssues,
   sortedCopy,
   topologicalOrder,
   type GraphStructureView,
 } from "./graph-internal.js";
-import {
-  DEFAULT_GRAPH_POLICY,
-  resolveGraphPolicy,
-} from "./graph-policy.js";
+import { resolveGraphPolicy } from "./graph-policy.js";
 import type {
   GraphEdge,
   GraphEdgeKind,
@@ -208,7 +207,7 @@ export function validateGraphSnapshot(
     }
   }
 
-  // --- Completion node presence ---
+  // --- Completion node presence + terminality ---
   if (nodeShapeOk && !nodeKeySet.has(rawCompletion)) {
     issues.push(
       makeIssue(
@@ -218,6 +217,24 @@ export function validateGraphSnapshot(
         [],
       ),
     );
+  } else if (nodeShapeOk) {
+    // The completion node must be a terminal HARD sink: no outgoing HARD edge
+    // may leave it. Advisory outgoing relations are organizational and allowed.
+    const outgoingHard = normalizedEdges
+      .filter(
+        (edge) => edge.kind === "HARD" && edge.producerNodeKey === rawCompletion,
+      )
+      .map((edge) => edge.edgeKey);
+    if (outgoingHard.length > 0) {
+      issues.push(
+        makeIssue(
+          "GRAPH_COMPLETION_NOT_TERMINAL",
+          `completion node "${rawCompletion}" has outgoing HARD edge(s); it must be a terminal HARD sink`,
+          [rawCompletion],
+          sortedCopy(outgoingHard),
+        ),
+      );
+    }
   }
 
   // --- Limits (explicit policy) ---
@@ -236,6 +253,16 @@ export function validateGraphSnapshot(
       makeIssue(
         "GRAPH_HARD_EDGE_LIMIT_EXCEEDED",
         `graph has ${hardEdgeCount} hard edges; policy limit is ${policy.maxHardEdges}`,
+        [],
+        [],
+      ),
+    );
+  }
+  if (normalizedEdges.length > policy.maxTotalEdges) {
+    issues.push(
+      makeIssue(
+        "GRAPH_TOTAL_EDGE_LIMIT_EXCEEDED",
+        `graph has ${normalizedEdges.length} total edges (HARD + ADVISORY); policy limit is ${policy.maxTotalEdges}`,
         [],
         [],
       ),
@@ -263,16 +290,15 @@ export function validateGraphSnapshot(
   // --- Cycle (HARD edges only) ---
   const topo = topologicalOrder(index, counter);
   if (!topo.acyclic) {
-    const ordered = new Set<number>(topo.order);
-    const cyclicKeys = sortedCopy(
-      index.nodeKeys.filter((_key, i) => !ordered.has(i)),
-    );
+    // Report only the actual cycle members and their edges, not every node Kahn
+    // failed to order (which would wrongly include acyclic downstream nodes).
+    const core = findCycleCore(index);
     return fail([
       makeIssue(
         "GRAPH_CYCLE",
         "the HARD-edge subgraph contains a cycle",
-        cyclicKeys,
-        [],
+        sortedCopy(core.nodeIndices.map((i) => index.nodeKeys[i]!)),
+        [...core.edgeKeys],
       ),
     ]);
   }
@@ -320,6 +346,7 @@ export function validateGraphSnapshot(
     edges: sortedEdges.map((edge) => ({ ...edge })),
     completionNodeKey: rawCompletion,
     policy: { ...policy },
+    graphIdentity: computeGraphIdentity(view),
   });
   return deepFreeze({ ok: true, graph });
 }
@@ -327,5 +354,3 @@ export function validateGraphSnapshot(
 function fail(issues: readonly GraphIssue[]): GraphValidationResult {
   return deepFreeze({ ok: false, issues: sortIssues(issues) });
 }
-
-export { DEFAULT_GRAPH_POLICY };

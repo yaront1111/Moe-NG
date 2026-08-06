@@ -269,3 +269,146 @@ export function topologicalOrder(
 export function edgeKeysOf(edges: readonly GraphEdge[]): string[] {
   return edges.map((edge) => edge.edgeKey);
 }
+
+/** Length-frame a token so concatenation is collision-free (no forged boundary). */
+function frame(token: string): string {
+  return `${token.length}:${token}`;
+}
+
+/**
+ * Deterministic, collision-free canonical identity of a graph's STRUCTURE
+ * (nodes, edges, completion — not policy). Assumes nodes/edges are already
+ * sorted (as in a ValidatedGraph). Every variable-length key is length-framed,
+ * so no key value can forge a field boundary; identical structure always yields
+ * the identical string. No hashing / Node crypto is used.
+ */
+export function computeGraphIdentity(view: GraphStructureView): string {
+  const parts: string[] = ["MOE-GRAPH-IDENTITY/1", `N${view.nodes.length}`];
+  for (const node of view.nodes) {
+    parts.push(frame(node.nodeKey) + (node.executionBearing ? "1" : "0"));
+  }
+  parts.push(`E${view.edges.length}`);
+  for (const edge of view.edges) {
+    parts.push(
+      frame(edge.edgeKey) +
+        frame(edge.producerNodeKey) +
+        frame(edge.consumerNodeKey) +
+        (edge.kind === "HARD" ? "H" : "A"),
+    );
+  }
+  parts.push("C" + frame(view.completionNodeKey));
+  // "\n" is a safe joiner: every token between joins is length-framed or a fixed
+  // prefix, so the newline cannot be confused with framed content.
+  return parts.join("\n");
+}
+
+export interface CycleCore {
+  /** Node indices that lie on at least one HARD cycle (deterministic). */
+  readonly nodeIndices: readonly number[];
+  /** HARD edge keys whose endpoints are both cycle-core members. */
+  readonly edgeKeys: readonly string[];
+}
+
+/**
+ * Identify the EXACT cycle members (and their edges) of a cyclic HARD subgraph
+ * via strongly-connected components — not source/sink peeling, which would also
+ * report acyclic bridge nodes/edges connecting two distinct cycles. A node is on
+ * a cycle iff it belongs to an SCC of size >= 2 (self-loops are rejected earlier
+ * as GRAPH_SELF_EDGE, so size >= 2 is exact). A HARD edge is cyclic iff its
+ * producer and consumer share such an SCC; cross-SCC bridge edges are excluded.
+ *
+ * Uses an ITERATIVE (explicit-stack) Tarjan pass — no recursion — in O(V + E).
+ * Deterministic: the outer scan and every adjacency walk follow ascending
+ * indices / the sorted HARD arcs, and the results are sorted.
+ */
+export function findCycleCore(index: HardGraphIndex): CycleCore {
+  const n = index.nodeKeys.length;
+  const vindex = new Array<number>(n).fill(-1);
+  const lowlink = new Array<number>(n).fill(0);
+  const onStack = new Uint8Array(n);
+  const sccId = new Array<number>(n).fill(-1);
+  const sccSize: number[] = [];
+  const tarjan: number[] = [];
+  let counter = 0;
+
+  interface Frame {
+    readonly node: number;
+    arc: number;
+  }
+
+  for (let start = 0; start < n; start += 1) {
+    if (vindex[start] !== -1) {
+      continue;
+    }
+    const callStack: Frame[] = [{ node: start, arc: 0 }];
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1]!;
+      const v = frame.node;
+      if (frame.arc === 0) {
+        vindex[v] = counter;
+        lowlink[v] = counter;
+        counter += 1;
+        tarjan.push(v);
+        onStack[v] = 1;
+      }
+      const arcs = index.hardOut[v]!;
+      let recursed = false;
+      while (frame.arc < arcs.length) {
+        const w = arcs[frame.arc]!.nodeIndex;
+        frame.arc += 1;
+        if (vindex[w] === -1) {
+          callStack.push({ node: w, arc: 0 });
+          recursed = true;
+          break;
+        } else if (onStack[w] === 1) {
+          lowlink[v] = Math.min(lowlink[v]!, vindex[w]!);
+        }
+      }
+      if (recursed) {
+        continue;
+      }
+      if (lowlink[v] === vindex[v]) {
+        const id = sccSize.length;
+        let size = 0;
+        for (;;) {
+          const w = tarjan.pop()!;
+          onStack[w] = 0;
+          sccId[w] = id;
+          size += 1;
+          if (w === v) {
+            break;
+          }
+        }
+        sccSize.push(size);
+      }
+      callStack.pop();
+      const parent = callStack[callStack.length - 1];
+      if (parent !== undefined) {
+        lowlink[parent.node] = Math.min(lowlink[parent.node]!, lowlink[v]!);
+      }
+    }
+  }
+
+  const core: number[] = [];
+  for (let node = 0; node < n; node += 1) {
+    if (sccSize[sccId[node]!]! >= 2) {
+      core.push(node);
+    }
+  }
+  const edgeKeys: string[] = [];
+  for (let node = 0; node < n; node += 1) {
+    const id = sccId[node]!;
+    if (sccSize[id]! < 2) {
+      continue;
+    }
+    for (const arc of index.hardOut[node]!) {
+      if (sccId[arc.nodeIndex] === id) {
+        edgeKeys.push(arc.edgeKey);
+      }
+    }
+  }
+  return {
+    nodeIndices: core,
+    edgeKeys: edgeKeys.sort(compareStrings),
+  };
+}

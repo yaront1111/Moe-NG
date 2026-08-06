@@ -13,11 +13,20 @@ import type { GraphPolicy } from "./graph-model.js";
  */
 export const DEFAULT_MAX_NODES = 24 as const;
 export const DEFAULT_MAX_HARD_EDGES = 64 as const;
+/**
+ * Provisional conservative default cap on the TOTAL edge count (HARD +
+ * ADVISORY). This bounds advisory/organizational relations as an input/resource
+ * guard. It is intentionally set equal to the hard-edge default (64) as a
+ * conservative starting point but is a SEPARATE, independently overrideable
+ * limit — NOT a frozen design fact, and never derived from the hard-edge cap.
+ */
+export const DEFAULT_MAX_TOTAL_EDGES = 64 as const;
 export const MIN_GATED_DESCENDANTS_FOR_REVIEW = 1 as const;
 
 export const DEFAULT_GRAPH_POLICY: GraphPolicy = Object.freeze({
   maxNodes: DEFAULT_MAX_NODES,
   maxHardEdges: DEFAULT_MAX_HARD_EDGES,
+  maxTotalEdges: DEFAULT_MAX_TOTAL_EDGES,
   minGatedDescendantsForReview: MIN_GATED_DESCENDANTS_FOR_REVIEW,
 });
 
@@ -44,11 +53,13 @@ export function resolveGraphPolicy(
   }
   const maxNodes = override.maxNodes ?? DEFAULT_MAX_NODES;
   const maxHardEdges = override.maxHardEdges ?? DEFAULT_MAX_HARD_EDGES;
+  const maxTotalEdges = override.maxTotalEdges ?? DEFAULT_MAX_TOTAL_EDGES;
   const minGatedDescendantsForReview =
     override.minGatedDescendantsForReview ?? MIN_GATED_DESCENDANTS_FOR_REVIEW;
   if (
     !isNonNegativeInteger(maxNodes) ||
     !isNonNegativeInteger(maxHardEdges) ||
+    !isNonNegativeInteger(maxTotalEdges) ||
     !isNonNegativeInteger(minGatedDescendantsForReview)
   ) {
     return null;
@@ -56,6 +67,7 @@ export function resolveGraphPolicy(
   return Object.freeze({
     maxNodes,
     maxHardEdges,
+    maxTotalEdges,
     minGatedDescendantsForReview,
   });
 }

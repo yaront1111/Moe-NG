@@ -18,6 +18,7 @@ export {
   DEFAULT_GRAPH_POLICY,
   DEFAULT_MAX_HARD_EDGES,
   DEFAULT_MAX_NODES,
+  DEFAULT_MAX_TOTAL_EDGES,
   MIN_GATED_DESCENDANTS_FOR_REVIEW,
   resolveGraphPolicy,
 } from "./graph-policy.js";

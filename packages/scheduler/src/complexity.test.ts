@@ -42,15 +42,20 @@ function totalTraversalWork(length: number): number {
   return counter.nodeVisits + counter.edgeVisits;
 }
 
-describe("complexity — linear traversal, no descendant rescans (required test 15)", () => {
-  it("keeps instrumented work near-linear in graph size", () => {
+describe("complexity — CORE traversal is single-pass, no descendant rescans (required test 15)", () => {
+  // Scope of the claim (see TraversalCounter docs): the counter instruments ONLY
+  // the core single-pass work — HARD-index build, Kahn topo, closure reverse-BFS,
+  // the ancestor/descendant/stage DP, and the frontier partition. It does NOT
+  // count the redundancy witness BFS, sorting, or bitset/popcount work, which are
+  // NOT claimed linear — they are bounded by the node/total-edge policy caps. So
+  // this proves the core path never rescans descendant histories (no O(V*E)); it
+  // is not a linearity claim about the whole kernel.
+  it("keeps the core instrumented work near-linear in graph size", () => {
     const n = 20;
     const work = totalTraversalWork(n);
-    // A single graph has V = n nodes and E = n - 1 hard edges. Validation
-    // (index + topo + closure), analysis (index + topo + three DP passes), and
-    // the frontier partition each make a bounded number of single passes. A
-    // naive per-node descendant rescan would be O(V*E) ~ 400*k for n=20; the
-    // linear bound below (well under that) proves we do not rescan histories.
+    // A single graph has V = n nodes and E = n - 1 hard edges. A naive per-node
+    // descendant rescan would be O(V*E) ~ 400*k for n=20; the linear bound below
+    // (well under that) proves the core path does not rescan histories.
     const v = n;
     const e = n - 1;
     expect(work).toBeLessThanOrEqual(20 * (v + e));
