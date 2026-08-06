@@ -20,6 +20,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/scheduler: {}
+
   packages/store: {}
 
   packages/testkit:
