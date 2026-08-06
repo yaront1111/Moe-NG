@@ -20,6 +20,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/store: {}
+
   packages/testkit:
     dependencies:
       '@moe/contracts':
