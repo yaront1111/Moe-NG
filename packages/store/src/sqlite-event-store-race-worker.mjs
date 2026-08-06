@@ -9,7 +9,7 @@ if (parentPort === null) {
 const gate = new Int32Array(workerData.gate);
 parentPort.postMessage({ kind: "PREOPEN_READY" });
 Atomics.wait(gate, 0, 0);
-const store = SqliteEventStore.open(workerData.databasePath);
+const store = SqliteEventStore.openForProject(workerData.databasePath, "moe-test-project");
 parentPort.postMessage({ kind: "READY" });
 Atomics.wait(gate, 1, 0);
 
@@ -41,5 +41,9 @@ try {
   };
 } finally {
   store.close();
+}
+if (gate.length > 2) {
+  Atomics.store(gate, 2, 1);
+  Atomics.notify(gate, 2, 1);
 }
 parentPort.postMessage(outcome);
