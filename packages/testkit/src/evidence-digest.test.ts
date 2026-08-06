@@ -2,7 +2,11 @@ import { runInNewContext } from "node:vm";
 
 import { describe, expect, it } from "vitest";
 
-import { identifyCanonicalEvidence, identifyEvidence } from "./evidence-digest.js";
+import {
+  identifyCanonicalEvidence,
+  identifyEvidence,
+  snapshotEvidenceBytes,
+} from "./evidence-digest.js";
 
 describe("identifyEvidence", () => {
   it("identifies exact bytes with lowercase SHA-256 and a portable object path", async () => {
@@ -54,6 +58,18 @@ describe("identifyEvidence", () => {
       byteLength: 3,
       digest: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     });
+  });
+
+  it("rejects an intrinsic byte length over a caller ceiling before copying", () => {
+    class MisreportedLength extends Uint8Array {
+      public override get byteLength(): number {
+        return 1;
+      }
+    }
+
+    expect(() => snapshotEvidenceBytes(new MisreportedLength([1, 2, 3]), 2)).toThrowError(
+      "Evidence bytes exceed 2 bytes",
+    );
   });
 
   it("rejects shared backing memory", async () => {

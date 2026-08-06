@@ -6,6 +6,8 @@ import {
   EVIDENCE_IDENTITY_VERSION,
   PHASE0_EVIDENCE_MANIFEST_VERSION,
   PHASE0_GIT_STATUS_COMMAND,
+  PHASE0_MAX_DOCUMENT_BYTES,
+  PHASE0_MAX_STATUS_BYTES,
   PHASE0_ROLE_METADATA,
   PHASE0_SOURCE_REPOSITORY,
   PHASE0_TARGET_REPOSITORY,
@@ -170,11 +172,16 @@ async function readAndValidateSourceFile(
   if (typeof resolvedPath !== "string" || !equalWindowsPaths(resolvedPath, expectedPath)) {
     captureError("PHASE0_SOURCE_PATH_MISMATCH", role);
   }
+  let bytes: Uint8Array;
   try {
-    return snapshotEvidenceBytes(rawBytes as Uint8Array);
-  } catch {
+    bytes = snapshotEvidenceBytes(rawBytes as Uint8Array, PHASE0_MAX_DOCUMENT_BYTES);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return captureError("PHASE0_SOURCE_FILE_LIMIT_EXCEEDED", role);
+    }
     return captureError("PHASE0_SOURCE_BYTES_INVALID", role);
   }
+  return bytes;
 }
 
 function validateEvidenceObjectLocation(
@@ -196,6 +203,7 @@ async function readAndValidateEvidenceObject(
   port: Phase0EvidenceCapturePort,
   objectPath: string,
   errorDetail: string,
+  maxByteLength: number,
 ): Promise<Uint8Array> {
   let raw: Phase0RawEvidenceObject;
   try {
@@ -213,7 +221,7 @@ async function readAndValidateEvidenceObject(
     errorDetail,
   );
   try {
-    return snapshotEvidenceBytes(rawBytes as Uint8Array);
+    return snapshotEvidenceBytes(rawBytes as Uint8Array, maxByteLength);
   } catch {
     return captureError("PHASE0_OBJECT_STORE_VERIFY_FAILED", errorDetail);
   }
@@ -236,7 +244,12 @@ async function persistAndVerifyObject(
     return captureError("PHASE0_OBJECT_STORE_VERIFY_FAILED", errorDetail);
   }
   validateEvidenceObjectLocation(receipt, objectPath, errorDetail);
-  const stored = await readAndValidateEvidenceObject(port, objectPath, errorDetail);
+  const stored = await readAndValidateEvidenceObject(
+    port,
+    objectPath,
+    errorDetail,
+    bytes.byteLength,
+  );
   if (!equalBytes(bytes, stored)) {
     captureError("PHASE0_OBJECT_STORE_VERIFY_FAILED", errorDetail);
   }
@@ -274,8 +287,11 @@ async function readAndVerifyRepositorySnapshot(
   }
   let statusBytes: Uint8Array;
   try {
-    statusBytes = snapshotEvidenceBytes(rawStatusBytes as Uint8Array);
-  } catch {
+    statusBytes = snapshotEvidenceBytes(rawStatusBytes as Uint8Array, PHASE0_MAX_STATUS_BYTES);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return captureError("PHASE0_REPOSITORY_STATUS_LIMIT_EXCEEDED", label);
+    }
     captureError("PHASE0_REPOSITORY_STATUS_INVALID", label);
   }
   const statusIdentity = identifyEvidence(statusBytes);
@@ -370,6 +386,7 @@ async function verifyCompleteObjectSet(
       port,
       objectPath,
       `final-${expected.detail}`,
+      expected.bytes.byteLength,
     );
     if (!equalBytes(expected.bytes, stored)) {
       captureError("PHASE0_OBJECT_STORE_VERIFY_FAILED", `final-${expected.detail}`);

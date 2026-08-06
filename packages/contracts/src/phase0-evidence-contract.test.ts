@@ -6,6 +6,11 @@ interface EvidenceContractModule {
   readonly CANONICAL_JSON_VERSION: string;
   readonly EVIDENCE_IDENTITY_VERSION: string;
   readonly PHASE0_EVIDENCE_MANIFEST_VERSION: string;
+  readonly PHASE0_MAX_AUTHORIZATION_BYTES: number;
+  readonly PHASE0_MAX_DOCUMENT_BYTES: number;
+  readonly PHASE0_MAX_MANIFEST_BYTES: number;
+  readonly PHASE0_MAX_REVIEW_RECEIPT_BYTES: number;
+  readonly PHASE0_MAX_STATUS_BYTES: number;
   readonly PHASE0_ROLE_METADATA: readonly {
     readonly owner: string;
     readonly relativePath: string;
@@ -35,6 +40,24 @@ describe("Phase 0 evidence contract", () => {
       manifest: "moe-phase0-evidence-manifest/1",
       source: "D:\\projexts\\moes",
       target: "D:\\projexts\\moe-next",
+    });
+  });
+
+  it("versions one shared set of capture and verification byte ceilings", async () => {
+    const contract = await loadContract();
+
+    expect({
+      authorization: contract.PHASE0_MAX_AUTHORIZATION_BYTES,
+      document: contract.PHASE0_MAX_DOCUMENT_BYTES,
+      manifest: contract.PHASE0_MAX_MANIFEST_BYTES,
+      reviewReceipt: contract.PHASE0_MAX_REVIEW_RECEIPT_BYTES,
+      status: contract.PHASE0_MAX_STATUS_BYTES,
+    }).toEqual({
+      authorization: 64 * 1024,
+      document: 8 * 1024 * 1024,
+      manifest: 1024 * 1024,
+      reviewReceipt: 64 * 1024,
+      status: 4 * 1024 * 1024,
     });
   });
 

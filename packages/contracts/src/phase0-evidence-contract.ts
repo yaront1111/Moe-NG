@@ -6,6 +6,11 @@ export const PHASE0_SOURCE_REPOSITORY = "D:\\projexts\\moes" as const;
 export const PHASE0_TARGET_REPOSITORY = "D:\\projexts\\moe-next" as const;
 export const PHASE0_GIT_STATUS_COMMAND =
   "git status --porcelain=v2 -z --untracked-files=all" as const;
+export const PHASE0_MAX_AUTHORIZATION_BYTES = 64 * 1024;
+export const PHASE0_MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+export const PHASE0_MAX_MANIFEST_BYTES = 1024 * 1024;
+export const PHASE0_MAX_REVIEW_RECEIPT_BYTES = 64 * 1024;
+export const PHASE0_MAX_STATUS_BYTES = 4 * 1024 * 1024;
 
 const roleMetadata = [
   {

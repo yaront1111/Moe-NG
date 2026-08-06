@@ -3,6 +3,8 @@ import { win32 } from "node:path";
 
 import {
   PHASE0_GIT_STATUS_COMMAND,
+  PHASE0_MAX_DOCUMENT_BYTES,
+  PHASE0_MAX_STATUS_BYTES,
   PHASE0_ROLE_METADATA,
   PHASE0_SOURCE_REPOSITORY,
   PHASE0_TARGET_REPOSITORY,
@@ -563,5 +565,32 @@ describe("capturePhase0Evidence", () => {
     port.setCommitPath(BASE_HEAD, DESIGN_METADATA.relativePath, headPath);
 
     await expect(capture(port)).rejects.toThrowError(new RegExp(`^${code}: rebuild-design$`));
+  });
+
+  it("rejects an oversized source document under the shared contract ceiling", async () => {
+    const capture = await loadCapture();
+    const port = new FakeCapturePort();
+    const absolutePath = win32.join(
+      PHASE0_SOURCE_REPOSITORY,
+      DESIGN_METADATA.relativePath,
+    );
+    port.files.set(absolutePath, new Uint8Array(PHASE0_MAX_DOCUMENT_BYTES + 1));
+
+    await expect(capture(port)).rejects.toThrowError(
+      "PHASE0_SOURCE_FILE_LIMIT_EXCEEDED: rebuild-design",
+    );
+  });
+
+  it("rejects oversized repository status under the shared contract ceiling", async () => {
+    const capture = await loadCapture();
+    const port = new FakeCapturePort();
+    port.snapshots[0] = {
+      ...port.snapshots[0]!,
+      statusBytes: new Uint8Array(PHASE0_MAX_STATUS_BYTES + 1),
+    };
+
+    await expect(capture(port)).rejects.toThrowError(
+      "PHASE0_REPOSITORY_STATUS_LIMIT_EXCEEDED: before",
+    );
   });
 });

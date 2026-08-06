@@ -32,7 +32,13 @@ const typedArrayBufferGetter = requireTypedArrayGetter("buffer");
 const typedArrayByteLengthGetter = requireTypedArrayGetter("byteLength");
 const typedArrayByteOffsetGetter = requireTypedArrayGetter("byteOffset");
 
-export function snapshotEvidenceBytes(bytes: Uint8Array): Uint8Array {
+export function snapshotEvidenceBytes(
+  bytes: Uint8Array,
+  maxByteLength: number = Number.MAX_SAFE_INTEGER,
+): Uint8Array {
+  if (!Number.isSafeInteger(maxByteLength) || maxByteLength < 0) {
+    throw new TypeError("Unsupported evidence byte ceiling");
+  }
   if (types.isProxy(bytes)) {
     throw new TypeError("Unsupported evidence bytes: proxy");
   }
@@ -53,6 +59,9 @@ export function snapshotEvidenceBytes(bytes: Uint8Array): Uint8Array {
 
   if (types.isSharedArrayBuffer(buffer)) {
     throw new TypeError("Unsupported evidence bytes: shared backing buffer");
+  }
+  if (byteLength > maxByteLength) {
+    throw new RangeError(`Evidence bytes exceed ${maxByteLength} bytes`);
   }
 
   const snapshot = new Uint8Array(byteLength);
