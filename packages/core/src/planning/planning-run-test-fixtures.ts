@@ -1,11 +1,11 @@
 /**
  * Shared planning-run reducer test fixtures.
  *
- * Mirrors `packages/scheduler/src/test-fixtures.ts`: it lives under `src/` so
- * `tsc` typechecks it, but `vitest.config.ts` only collects `*.test.ts`, so it
- * registers no suite. Every binding is a `const` or a factory that returns a
- * fresh object, so importing it from more than one test file cannot create
- * shared mutable state. It exports no production API.
+ * Mirrors the scheduler package's own test-fixtures module: it lives under
+ * `src/` so `tsc` typechecks it, but `vitest.config.ts` only collects
+ * `*.test.ts`, so it registers no suite. Every binding is a `const` or a
+ * factory that returns a fresh object, so importing it from more than one test
+ * file cannot create shared mutable state. It exports no production API.
  */
 import { expect } from "vitest";
 
