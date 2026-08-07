@@ -69,12 +69,10 @@ export interface BudgetMeterBuckets {
 }
 export interface BudgetAccountRecord {
   readonly accountId: string; readonly ownerRef: string; readonly parentRef: string | null;
-  readonly graphRevisionRef: string; readonly version: number;
-  readonly state: BudgetAccountState; readonly meters: readonly BudgetMeterBuckets[];
+  readonly graphRevisionRef: string; readonly version: number; readonly state: BudgetAccountState;
+  readonly meters: readonly BudgetMeterBuckets[];
 }
-export interface ObservedIntervalRefs {
-  readonly startRef: string; readonly endRef: string;
-}
+export interface ObservedIntervalRefs { readonly startRef: string; readonly endRef: string }
 export interface UsageMeasurementRecord {
   readonly meter: string; readonly quantity: number | null;
   readonly coverage: BudgetMeasurementCoverage; readonly source: BudgetMeasurementSource;
@@ -83,11 +81,8 @@ export interface UsageMeasurementRecord {
   readonly observedInterval: ObservedIntervalRefs;
 }
 export interface ReserveDeclarationRecord {
-  readonly purpose: BudgetReservePurpose; readonly meter: string; readonly quantity: number;
-}
-export interface BudgetIssue {
-  readonly code: BudgetIssueCode; readonly message: string;
-}
+  readonly purpose: BudgetReservePurpose; readonly meter: string; readonly quantity: number }
+export interface BudgetIssue { readonly code: BudgetIssueCode; readonly message: string }
 export type BudgetValidationResult<T> =
   | { readonly ok: true; readonly record: T }
   | { readonly ok: false; readonly issues: readonly BudgetIssue[] };
@@ -126,12 +121,9 @@ function isRef(value: unknown): value is string {
 }
 /** Safe nonnegative integer. Rejects NaN, Infinity, fractions, -0, and unsafe magnitudes. */
 function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    && !Object.is(value, -0);
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
 }
-function isDigest(value: unknown): value is string {
-  return typeof value === "string" && HEX_64.test(value);
-}
+function isDigest(value: unknown): value is string { return typeof value === "string" && HEX_64.test(value); }
 function readRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
   if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
   const output: Record<string, unknown> = {};
