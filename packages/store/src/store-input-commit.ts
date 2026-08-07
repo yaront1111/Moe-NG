@@ -1,4 +1,5 @@
 import {
+  DOMAIN_EVENT_SCHEMA_VERSION,
   MAX_COMMIT_BYTES,
   MAX_EVENTS_PER_COMMIT,
   MAX_OUTBOX_MESSAGES_PER_COMMIT,
@@ -131,7 +132,21 @@ export function snapshotCommitInput(
       };
     });
 
+    const rawDomainSchemaVersion = readOwnDataProperty(
+      event,
+      "domainSchemaVersion",
+      `events[${eventIndex}].domainSchemaVersion`,
+      false,
+    );
+
     return {
+      domainSchemaVersion:
+        rawDomainSchemaVersion === undefined
+          ? DOMAIN_EVENT_SCHEMA_VERSION
+          : requireIdentifier(
+              rawDomainSchemaVersion,
+              `events[${eventIndex}].domainSchemaVersion`,
+            ),
       eventId,
       eventType: requireIdentifier(
         readOwnDataProperty(event, "eventType", `events[${eventIndex}].eventType`),

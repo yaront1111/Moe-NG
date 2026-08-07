@@ -99,29 +99,45 @@
     {
       "stepId": "step-6",
       "description": "src/policy/policy-invariants.test.ts (<=250) + root index settlement. Invariants (VACUITY-PROOFED harness: seeded state pools from asserted-good sequences, ~70/30 biased selection, per-outcome existence assertions across seeds — uniform draws over absorbing outcomes never reach deep branches): (1) no input permutation reaches ALLOW with any UNKNOWN-classed required fact; (2) effectiveTier >= computedTier always; hint never influences computedTier or the fact set; (3) invalidation touches ONLY the impact set (non-intersecting approvals bit-identical, deep-equal); (4) waiver can relax only named SOFT obligations and never launders HOLD_UNKNOWN; (5) SYSTEM_POLICY actorKind never yields a valid R2/R3 approval and its truthClass is never HUMAN_APPROVED; (6) deterministic frozen outputs, same seed -> identical trace; existence report per outcome/tier/code included in the step note (non-vacuity evidence). ROOT INDEX SETTLEMENT (governor-sanctioned, collision-free — planning blocks committed, its children keep exports frozen): append policy export blocks (per-module value blocks + alphabetized export type block per landed convention) AND the missing identity block — re-export identity's existing curated area seam ('./identity/index.js') as ONE block (the seam already curates three modules; re-export avoids duplicating its surface). Announce the settlement in #architects AND update the convention-core-reducer-modules Serena memory (remove the do-not-fix-identity clause; fix its stale ILLEGAL_TRANSITION validSources list — the registry file is authoritative and INCLUDES APPROVAL).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/policy-invariants.test.ts",
         "packages/core/src/index.ts"
       ],
       "newFiles": [
         "packages/core/src/policy/policy-invariants.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/policy-invariants.test.ts"
+      ],
+      "note": "QA issue 4 closed. `policy-invariants.test.ts` 250 lines (was 240); typecheck exit 0; `pnpm exec vitest run packages/core/src/policy` -> 4 files / 37 tests passed.\n\nGenerator bias (the vacuity fix). `buildInput` now varies the required-fact set BETWEEN links instead of hard-coding `[]` on both:\n  const rootRequired = rand() < 0.55 ? FACT_IDS.filter(() => rand() < 0.6) : [];\n  const draw = rand();\n  const childRequired = draw < 0.35 ? rootRequired.slice(1)\n    : draw < 0.6 ? [...new Set([...rootRequired, pick(FACT_IDS)])] : rootRequired;\nThree shapes — shrink, widen, keep — so the sweep exercises both directions of monotonicity, not only the one that now fails closed.\n\nDetection is derived from the input, not from generator bookkeeping: `shrinksRequiredFacts` reads the chain's two links and reports whether the redeclaration dropped an ancestor's fact. A generator retune cannot silently desynchronise a counter from what it actually emitted.\n\nNON-VACUITY REPORT, measured on the landed suite (temporary forced-fail assertion, run, reverted; `git status` confirms no probe left behind):\n  outcomes over 320 seeds — HOLD_UNKNOWN 169, DENY 74, REQUIRE_HUMAN_APPROVAL 67, ALLOW 10\n  unusable-required-fact seeds: 222\n  SHRINK-SHAPE seeds: 10  (was 0 — the shape QA proved unreachable)\nAll four outcomes and all four tiers still reached, so widening the generator did not collapse the ALLOW branch it needs to keep hitting.\n\nEvery shrink seed now asserts the property directly, not merely \"not ALLOW\": `expect(decision).toBe(\"DENY\")` plus `toContain(\"SLICE_RELAXATION_DETECTED\")`. The floor assertion is `expect(shrunk).toBeGreaterThanOrEqual(5)` with the observed 10/320 recorded beside it — a `> 0` floor would let a future retune drift to a single seed and still pass, which is how this got here.\n\n`hasUnusableRequiredFact` now unions the required set over every slice's rules plus the top-level list. Previously it read only `input.requiredFactIds`, so invariant (1) never looked at rule-declared facts at all — the sweep could not have caught the escape even with a biased generator. It now states the spec-level property: a fact ANY link demanded must be usable or the decision is not ALLOW (dropped -> DENY via layer 2, still demanded -> HOLD_UNKNOWN via layer 1).\n\nAlso removed a vacuous assertion found while working here: `expect(POLICY_OUTCOMES.indexOf(result.record.decision)).toBeGreaterThanOrEqual(0)` in the waiver-laundering test cannot fail for any valid outcome.\n\nSize: the file was 240 and these additions ran it to 263, so I compressed comments and collapsed a four-line null-tier branch to reach exactly 250. No assertion was dropped to make room.\n\nROOT INDEX: no change. The settlement landed in afbdfa7 and QA's re-run verified it; `policy-relaxation.test.ts` is a test file and is deliberately not exported. The `convention-core-reducer-modules` memory correction also already landed.\n\nSHARED-TREE EVENT (flagged, not acted on): commit d6c7bcf `feat(task-18c7921fb1f34a8cb1ed39509bf67a31): Foundation executable specification` landed mid-session and captured five of my in-flight policy paths (policy-composition.ts, policy-evaluation.ts, policy-decision-table.test.ts, policy-relaxation.test.ts, and an intermediate policy-invariants.test.ts) alongside its own packages/runner/src/providers/claude/** work. That is the epic-rail-3 hazard from the other side. I am preserving it — no reset, no rebase — and will commit only my remaining delta in step 7. Review pointers go in the completion summary so QA reads the right diff.",
+      "startedAt": "2026-08-07T21:31:32.198Z",
+      "completedAt": "2026-08-07T21:31:47.978Z"
     },
     {
       "stepId": "step-7",
       "description": "Verification gate + adversarial self-review + explicit-pathspec commit. (1) `wc -l packages/core/src/policy/*.ts` — EVERY file <=250 (the human requirement; hard 400 never approached); (2) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; repo gate with foreign-red by-path attribution; (3) grep policy/ for Date.now|Math.random|process\\.|node:crypto|createHash -> ZERO; (4) run suite twice — identical. Adversarial (Skill adversarial-self-review) red-team: (a) UNKNOWN laundering — attempt every path from an UNKNOWN-classed fact to ALLOW (hint raise, waiver, slice composition, auto-opt-in) — all must refuse; (b) auto-approval laundering — SYSTEM_POLICY record claiming HUMAN_APPROVED truth or R2/R3 scope must be invalid; (c) silent-degrade audit — grep every createRuntimeError call: only APPROVAL-legal codes with correct source shape; (d) decision immutability — attempt decision mutation after DECIDED and validity backward moves; (e) relabeling — attempt to apply an old approval to a new revision hash (must refuse; SUPERSEDED only via successor linkage); (f) no scratch files. Completion note declares total LOC up front with the skills/+1621 precedents. Commit per epic rail 3: `git status --porcelain`, unstage foreign, `git add` + `git commit -- packages/core/src/policy/policy-contract.ts packages/core/src/policy/policy-validation.ts packages/core/src/policy/policy-evaluation.ts packages/core/src/policy/approval-invalidation.ts packages/core/src/policy/policy-decision-table.test.ts packages/core/src/policy/approval-invalidation.test.ts packages/core/src/policy/policy-invariants.test.ts packages/core/src/index.ts`; `git show --stat` lists exactly these 8 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/policy-contract.ts",
         "packages/core/src/policy/policy-evaluation.ts",
         "packages/core/src/policy/approval-invalidation.ts",
         "packages/core/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/policy-composition.ts",
+        "packages/core/src/policy/policy-evaluation.ts",
+        "packages/core/src/policy/policy-decision-table.test.ts",
+        "packages/core/src/policy/policy-relaxation.test.ts",
+        "packages/core/src/policy/policy-invariants.test.ts"
+      ],
+      "note": "GATE, RED-TEAM, COMMIT — all clean.\n\nDELTA THIS PASS: +11/-20 in one file plus what landed inside a foreign commit; policy area total 2052 lines across 11 files, largest 250. Production change is 12 lines of logic across two files.\n\n(1) SIZE: every policy file <=250. invariants 250, decision-table 249, approval-invalidation.test 246, then down. The 400 hard split is never approached.\n(2) GATE: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0, 13 files / 226 tests. Run TWICE, identical counts (570ms / 518ms). Repo-wide `pnpm test` -> 109 files, 1549 passed | 1 skipped, ZERO failures, so nothing to attribute by path.\n(3) PURITY: `grep -nE \"Date\\.now|Math\\.random|process\\.|node:crypto|createHash\" packages/core/src/policy/*.ts` -> 3 hits, all prose in header comments (policy-contract:11, policy-validation:8, policy-invariants:16 — each saying the construct is deliberately ABSENT). Zero in code.\n(4) createRuntimeError call sites unchanged at three, all `INPUT_INVALID` sourceless or the APPROVAL-sourced ILLEGAL_TRANSITION in approval-invalidation. No new call site, so no new silent-degrade surface.\n\nADVERSARIAL RED-TEAM of my own diff (the four laundering paths, re-run against the fixed code):\n(a) Shrink via a DIFFERENT ruleId — a child declaring a new rule cannot remove the parent's, since the fold never deletes a ruleId; the parent's required facts stay in both the effective set and the union. Refused.\n(b) Shrink via an intra-slice duplicate — two rules with the same ruleId inside ONE slice hit the same `rules.get(ruleId) !== undefined` branch, so the second is compared against the first. Refused, no special case needed.\n(c) Waiver over a shrink — asserted for three `namedObligationId` spellings (fact ID, rule ID, real SOFT obligation). The waiver branch is reachable only from the ancestor-obligation loop, and a required fact never enters it. Refused.\n(d) Hint or opt-in rescuing a shrink — DENY dominates every outcome those layers can produce. Refused.\n(e) Overshoot check (the opposite failure): a child ADDING a required fact must not be slandered as a relaxation. Asserted explicitly — widened with the fact present is ALLOW, widened with it absent is HOLD_UNKNOWN and specifically NOT SLICE_RELAXATION_DETECTED.\n(f) Hostile input — both new loops read the SNAPSHOTTED, validated structure (`validateEvaluationInput` returns the snapshot), so no accessor or proxy is reachable from them. `new Set(child.requiredFactIds)` is local, no shared state, no mutation of caller data.\n(g) Determinism — the required-set iteration order changed (chain order, not fold order), which cannot matter: `reasonCodes` is a sorted Set and `outcome` folds through an order-independent lattice. Confirmed by the two identical runs.\n(h) Complexity — assessEvidence is now O(slices x rules) instead of O(distinct rules). Same order as the fold that already runs beside it; no new unbounded loop.\n(i) No scratch files: `git status --porcelain -- packages` returns empty. The forced-fail probe used to read the non-vacuity counts was an in-file assertion, reverted, not a probe file.\n\nBehaviour note for review: on a shrink chain the reason codes may now also include REQUIRED_FACT_MISSING beside SLICE_RELAXATION_DETECTED, because the evidence union sees the ancestor's fact. Strictly more informative; those chains were ALLOW before, so nothing regressed.\n\nCOMMIT — and this is the part QA needs before opening the diff. The fix is split across TWO commits, not by choice:\n  d6c7bcf `feat(task-18c7921fb1f34a8cb1ed39509bf67a31): Foundation executable specification` landed mid-session with a broad add and captured five of my in-flight policy paths (policy-composition.ts, policy-evaluation.ts, policy-decision-table.test.ts, the new policy-relaxation.test.ts, and an intermediate policy-invariants.test.ts) alongside its own packages/runner/src/providers/claude/** work.\n  9369318 `fix(core): refuse a policy slice that shrinks a rule required-fact set` is mine and contains exactly ONE path, the final policy-invariants.test.ts, verified by `git show --stat`.\nReviewing 9369318 alone shows a fifth of the work. The whole rejection fix is `git diff afbdfa7..HEAD -- packages/core/src/policy`.\n\nI did not reset, rebase, or rewrite d6c7bcf — the other task's work is in it and epic rail 3 says preserve foreign work. I did amend my OWN commit once, guarded by a `git rev-parse HEAD` equality check so it could not touch a commit that had appeared underneath me: the first attempt used PowerShell here-string syntax in the Bash tool and the literal `@` markers ended up in the subject line. Message-only fix, same single path, same content.\n\nPosted to #general (msg-9541ffaba28f410d9ff32d59d9f36567) with the review pointer and a reminder that the shared index makes `git add -A` sweep whoever else is mid-edit.",
+      "startedAt": "2026-08-07T21:31:51.002Z",
+      "completedAt": "2026-08-07T21:34:17.427Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2edeee3c",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -133,12 +149,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.155Z",
-  "updatedAt": "2026-08-07T21:25:54.129Z",
+  "updatedAt": "2026-08-07T21:35:12.045Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:07:44.997Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -157,7 +173,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -186,27 +204,25 @@
   },
   "planApprovedAt": "2026-08-07T20:41:41.954Z",
   "workStartedAt": "2026-08-07T20:45:00.842Z",
-  "reviewStartedAt": "2026-08-07T21:10:46.480Z",
+  "reviewStartedAt": "2026-08-07T21:34:55.713Z",
   "verification": {
     "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  12 passed (12)\n      Tests  221 passed (221)\n   Start at  00:09:20\n   Duration  574ms (transform 1.62s, setup 0ms, import 2.27s, tests 428ms, environment 1ms)\n",
-    "reportedAt": "2026-08-07T21:10:46.480Z"
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  13 passed (13)\n      Tests  226 passed (226)\n   Start at  00:34:21\n   Duration  515ms (transform 1.49s, setup 0ms, import 2.13s, tests 397ms, environment 1ms)\nFINAL_GATE_EXIT=0",
+    "reportedAt": "2026-08-07T21:34:55.713Z"
   },
   "filesModified": [
     "packages/core/src/goal/goal-validation.ts",
     "packages/core/src/planning/planning-run-reducer.ts",
+    "packages/core/src/policy/policy-relaxation.test.ts",
     "packages/core/src/policy/policy-decision-table.test.ts",
     "packages/core/src/policy/policy-contract.ts",
-    "packages/core/src/policy/approval-contract.ts",
     "packages/core/src/policy/policy-validation.ts",
-    "packages/core/src/policy/policy-evaluation.ts",
     "packages/core/src/policy/policy-composition.ts",
+    "packages/core/src/policy/policy-evaluation.ts",
     "packages/core/src/policy/approval-invalidation.test.ts",
     "packages/core/src/policy/approval-invalidation.ts",
-    "packages/core/src/policy/approval-validation.ts",
-    "packages/core/src/policy/policy-invariants.test.ts",
-    "packages/core/src/index.ts"
+    "packages/core/src/policy/policy-invariants.test.ts"
   ],
   "reviewCompletedAt": "2026-08-07T21:17:57.495Z",
   "rejectionDetails": {

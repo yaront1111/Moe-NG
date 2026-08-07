@@ -54,7 +54,12 @@ export function contractFor(
 
 export function entryFor(edge: GraphEdge, overrides: Partial<DependencyContract> = {}): Record<string, unknown> {
   const contract = contractFor(edge.producerNodeKey, edge.consumerNodeKey, overrides);
-  return { edgeKey: edge.edgeKey, edgeKind: contract.edgeKind, contract };
+  return {
+    edgeKey: edge.edgeKey,
+    edgeKind: contract.edgeKind,
+    contract,
+    necessityWitness: { edgeKey: edge.edgeKey, truthClass: contract.necessity.truthClass },
+  };
 }
 
 export function entriesFor(snapshot: GraphSnapshot, overrides: Partial<DependencyContract> = {}): Record<string, unknown>[] {

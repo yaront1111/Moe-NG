@@ -111,6 +111,65 @@ describe("admission step 2 — hard dependency proof", () => {
     expect(codes(admitGraph(inputFor(snapshot, { contracts })))).toContain("ADMISSION_HARD_DEPENDENCY_UNPROVEN");
   });
 
+  it("refuses exactly the HARD edge whose necessity witness is absent", () => {
+    const snapshot = chain();
+    const contracts = entriesFor(snapshot);
+    delete contracts[0]!.necessityWitness;
+    const result = admitGraph(inputFor(snapshot, { contracts }));
+    const unproven = result.ok
+      ? []
+      : result.issues.filter((issue) => issue.code === "ADMISSION_HARD_DEPENDENCY_UNPROVEN");
+    expect(result.ok).toBe(false);
+    expect(unproven.map((issue) => issue.edgeKeys)).toEqual([["dev-edge-ab"]]);
+  });
+
+  it.each([
+    ["DAEMON_VERIFIED", true],
+    ["AGENT_REPORTED", false],
+    ["OBSERVED", false],
+    ["HUMAN_APPROVED", false],
+    ["UNKNOWN", false],
+  ] as const)("applies the %s necessity truth floor at admitGraph", (truthClass, expectedOk) => {
+    const snapshot = chain();
+    const contracts = snapshot.edges.map((edge) => entryFor(edge, {
+      necessity: {
+        failedConsumerCriterionRef: `criterion:${edge.consumerNodeKey}`,
+        failureKind: "MISSING_ARTIFACT",
+        truthClass,
+      },
+    }));
+    const result = admitGraph(inputFor(snapshot, { contracts }));
+    expect(result.ok).toBe(expectedOk);
+    expect(result.ok ? [] : result.issues
+      .filter((issue) => issue.code === "ADMISSION_HARD_DEPENDENCY_UNPROVEN")
+      .map((issue) => issue.edgeKeys)).toEqual(expectedOk ? [] : [["dev-edge-ab"], ["dev-edge-bc"]]);
+  });
+
+  it("does not admit a held agent claim or expose lifecycle machinery", () => {
+    const snapshot = chain();
+    const contracts = entriesFor(snapshot);
+    contracts[0] = {
+      ...contracts[0],
+      contract: contractFor("dev-node-a", "dev-node-b", {
+        necessity: {
+          failedConsumerCriterionRef: "criterion:dev-node-b",
+          failureKind: "MISSING_ARTIFACT",
+          truthClass: "AGENT_REPORTED",
+        },
+      }),
+      necessityWitness: {
+        edgeKey: "dev-edge-ab",
+        truthClass: "AGENT_REPORTED",
+        humanDecisionRef: "decision:42",
+      },
+    };
+    const result = admitGraph(inputFor(snapshot, { contracts }));
+    expect(result.ok).toBe(false);
+    expect(Object.keys(result).sort()).toEqual(["issues", "ok"]);
+    expect(JSON.stringify(result)).not.toMatch(/status|state|transition|recheck|schedul|blocker/iu);
+    expect(codes(result)).toContain("ADMISSION_HARD_DEPENDENCY_UNPROVEN");
+  });
+
   it("never emits the frontier readiness codes for an unproven dependency", () => {
     const emitted = codes(admitGraph(inputFor(chain(), { contracts: [] })));
     expect(emitted).not.toContain("HARD_DEPENDENCY_UNSATISFIED");

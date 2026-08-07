@@ -31,6 +31,7 @@ export interface EffectOutboxDraft extends SnapshotOutboxDraft {
 }
 
 export interface SnapshotEventDraft {
+  readonly domainSchemaVersion: string;
   readonly eventId: string;
   readonly eventType: string;
   readonly metadata: Uint8Array;
@@ -38,7 +39,12 @@ export interface SnapshotEventDraft {
   readonly payload: Uint8Array;
 }
 
-export interface EffectEventDraft extends Omit<SnapshotEventDraft, "outbox"> {
+// domainSchemaVersion is omitted deliberately: the command effect digest hashes
+// an explicit field list that excludes it, and the replay side rebuilds effect
+// events from receipt rows that never select it. Including it here would break
+// that rebuild at the type level and invite it into the digest.
+export interface EffectEventDraft
+  extends Omit<SnapshotEventDraft, "domainSchemaVersion" | "outbox"> {
   readonly aggregateSequence: number;
   readonly commandEventIndex: number;
   readonly globalPosition: bigint;

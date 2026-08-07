@@ -18,7 +18,7 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Characterization baseline (read-only): planning-run-reducer.test.ts is 514 lines with 32 it() cases; fixture surface = lines 18-153 (hash() + the ~20 frozen witness/command constants PLAN_HASH..CANCELLATION, summaries(), finalizeWitness(), SEALED, state(), commandFor(), expectError(), expectIllegal(), accepted()); describe blocks partition cleanly on the task's named boundary — 'creation and readiness' + 'ownership' + proposal/submission blocks stay, approval/activation/cancellation/concurrency/version-ceiling/exhaustive-lifecycle blocks move. Record the EXACT baseline: `git show HEAD:packages/core/src/planning/planning-run-reducer.test.ts | grep -c \"it(\"` (=32) and the full it()-name list to a scratchpad file OUTSIDE the repo (auto-commit sweep) — this is the preserved-exactly-once oracle. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting; note the planning-run suite's current pass count.",
+      "description": "Characterize the exact pre-split proof without editing or running a gate. Confirm prerequisite task-866713137aee4794a51973fe4e6e3f44 is DONE, the 514-line source and three owned paths are clean, and the committed baseline contains exactly 32 `it()` names. Inventory the contiguous helper region and the 20/12 describe-block partition, including all derived loops/matrices, imports, and helper consumers. Use the committed `bcdc2f6` file as the no-loss/no-rename oracle; create no scratch or generated evidence file.",
       "status": "PENDING",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts"
@@ -26,7 +26,7 @@
     },
     {
       "stepId": "step-2",
-      "description": "Extract packages/core/src/planning/planning-run-test-fixtures.ts BY RANGE: move lines 18-153 verbatim (hash helper, all frozen constants, summaries/finalizeWitness/SEALED, state/commandFor factories, expectError/expectIllegal/accepted assertion helpers) with exactly their current imports (expect from vitest stays importable in a fixtures module — the assertion helpers call expect; that is test-infrastructure, legal in a *.ts non-test file under the root vitest run since it is only ever imported FROM test files); export every moved symbol; `import type` for the contract types; NodeNext '.js' specifiers. RAIL CHECK: the module contains ONLY deterministic construction/assertion helpers — no production API re-exports (DoD 2); no Date/random (hash() is deterministic seed-based — verify verbatim). File lands ~140 lines.",
+      "description": "Create `planning-run-test-fixtures.ts` by moving the deterministic helper region verbatim: hash constants and witness values, `summaries`, `finalizeWitness`, `SEALED`, `state`, `commandFor`, `expectError`, `expectIllegal`, and `accepted`. Export only symbols consumed by the two test files; use type-only imports from the stable `planning-contract.js` facade and keep Vitest `expect` solely for the moved assertion helpers. Do not change object shapes, literals, error expectations, casts, or factory behavior; introduce no module-level `let`, random/time source, production re-export, or test registration. Keep the fixture <=250 physical lines.",
       "status": "PENDING",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-test-fixtures.ts"
@@ -37,7 +37,7 @@
     },
     {
       "stepId": "step-3",
-      "description": "Split the 32 cases across the two test files on the task's named partition, moving describe blocks VERBATIM: planning-run-reducer.test.ts KEEPS creation, readiness, ownership, proposal, and submission-finalization coverage (imports fixtures via './planning-run-test-fixtures.js'); NEW planning-run-authority.test.ts takes approval, activation, cancellation, concurrency, version-ceiling, and exhaustive-lifecycle coverage (same fixture imports). ZERO case bodies edited; ZERO renamed/skip/only/todo; matrix/derived case sets (exhaustive lifecycle loops over SEALED etc.) move with their derivation intact. ORDERING INDEPENDENCE (DoD 3): fixtures are frozen constants + pure factories — no module-level mutable state; each file's suites run standalone (`pnpm exec vitest run --root ../.. packages/core/src/planning/planning-run-authority.test.ts` green in isolation, same for the trimmed original). All three files <=250 physical lines (expect ~190 / ~140 / ~230).",
+      "description": "Split describe blocks by verbatim move. Keep the 20 creation/readiness, ownership, proposal, and submission-finalization cases in `planning-run-reducer.test.ts`; move the 12 approval/activation, cancellation, concurrency, version-ceiling, and exhaustive lifecycle cases into new `planning-run-authority.test.ts`, together with their required `RUNTIME_LIFECYCLES`/reducer-constant imports. Both tests import shared helpers through `./planning-run-test-fixtures.js`. Preserve every `describe`/`it` name, assertion body, loop-derived matrix, ordering within each block, and exact error/result expectation; add no skip/only/todo and no cross-file mutable writes. Keep all three owned files <=250 lines.",
       "status": "PENDING",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
@@ -49,17 +49,17 @@
     },
     {
       "stepId": "step-4",
-      "description": "Verification gate + preserved-exactly-once audit: (1) `wc -l` all three files — each <=250 (LF/CRLF equivalently); (2) case audit — combined `grep -c \"it(\"` across both test files === 32 AND the sorted it()-name multiset equals the step-1 baseline list exactly (no loss, no duplication, no rename — the DoD-1 oracle); grep for skip|only|todo -> zero; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched (`git status --porcelain -- packages/core/src/planning` shows only the three owned test/fixture paths) — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; total planning-run assertions pass count unchanged vs baseline; (4) isolation runs of each test file individually -> green; (5) repo gate with foreign-red attribution; run twice — identical.",
+      "description": "Run the single exact regression gate once after the complete split: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0 and retain the fresh command, exit code, and output tail for `moe.complete_task`. Any failure is a move/import defect in the three owned test paths; production files and assertions remain off-limits.",
       "status": "PENDING",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
-        "packages/core/src/planning/planning-run-authority.test.ts",
-        "packages/core/src/planning/planning-run-test-fixtures.ts"
+        "packages/core/src/planning/planning-run-test-fixtures.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts"
       ]
     },
     {
       "stepId": "step-5",
-      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff — each moved describe block and fixture body identical to the HEAD baseline (assertion strings, error-code expectations, matrix derivations untouched); (b) fixtures module exports no production symbol (grep its exports against packages/core/src/index.ts exports — zero overlap); (c) delete the scratchpad baseline file (it lives outside the repo — confirm nothing strayed under the tree; auto-commit sweep); (d) no shared mutable state — grep fixtures for `let`/mutation -> zero. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/planning-run-reducer.test.ts packages/core/src/planning/planning-run-test-fixtures.ts packages/core/src/planning/planning-run-authority.test.ts`; `git show --stat` lists exactly these 3 paths.",
+      "description": "Perform the one final adversarial review. Mechanically compare the combined post-split `it()` name multiset with all 32 committed baseline names and diff every moved helper/describe body against `bcdc2f6` to prove each appears exactly once with no rename/assertion/loop drift; scan for skip/only/todo, module-level `let`, writes to imported fixture values, nondeterministic APIs, or package-root exports. Use an in-memory cross-platform Node counter to prove each owned file is <=250 under LF/CRLF/CR, confirm production/index/other tests are untouched, and run `git diff --check`. If review causes any edit, rerun the exact gate. Then inspect shared `git status --porcelain`, stage/commit only the three explicit owned paths (never broad add or bare commit), and verify `git show --stat` lists exactly those paths.",
       "status": "PENDING",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
@@ -73,7 +73,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: dependency satisfied — commit bcdc2f6 is landed. Third of the five decomposition children required by the approved size exception (prop-2eaa632d). Splits planning-run-reducer.test.ts and extracts planning-run-test-fixtures.ts. Note the exception explicitly covers TEST files too — the <=250-line rule is not production-only.",
+  "reopenReason": "Human explicitly requested PLAN; promoting the next ordered planning test decomposition child.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -81,30 +81,32 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T21:22:52.607Z",
+  "updatedAt": "2026-08-07T21:31:29.854Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "architect-c4babdf9"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-07T21:22:50.581Z",
+  "planSubmittedAt": "2026-08-07T21:31:27.825Z",
   "planningNotes": {
-    "approachesConsidered": "Partition is pre-named by the task and matches the file's existing describe structure (verified: 32 it() cases; fixture surface is a clean 18-153 range of frozen constants + pure factories + assertion helpers). Alternatives (three-way test split, per-lifecycle files) rejected: the named two-file partition lands all three files comfortably under 250 (~190/~140/~230) and keeps the exhaustive-lifecycle matrix in one place with its derivation. Assertion helpers calling vitest expect stay in the fixtures module — legal test infrastructure (only ever imported from test files; root vitest include only matches *.test.ts so the fixtures module itself never runs as a suite). No verification workflow: trivial-class refactor, partition pre-named, preserved-exactly-once enforced by a mechanical it()-name multiset audit against the HEAD baseline.",
-    "codebaseInsights": "planning-run-reducer.test.ts = 514 lines / 32 cases; fixture range 18-153 (hash(), ~20 frozen witness/command constants, summaries/finalizeWitness/SEALED, state/commandFor factories, expectError/expectIllegal/accepted helpers — all deterministic, no Date/random, no module-level mutable state, so ordering independence is by construction); describe blocks: 'creation and readiness', 'ownership', proposal/submission blocks (STAY) vs approval/activation/cancellation/concurrency/version-ceiling/exhaustive-lifecycle (MOVE). Root vitest include packages/**/*.test.ts — the new authority test file is auto-discovered; the fixtures .ts (non-.test) is never collected as a suite. Production files untouched (rail); root index frozen.",
-    "risks": "(1) Case loss/duplication is THE failure mode — the it()-name multiset audit vs the HEAD baseline is mechanical and non-negotiable; grep skip|only|todo zero. (2) Matrix derivations (loops over SEALED etc.) must move with their loops intact — a hand-unrolled copy would silently drop cases while keeping counts plausible; the audit counts NAMES, and derived names must match too. (3) Fixtures exporting anything production-shaped violates DoD 2 — export-overlap grep. (4) Baseline scratch file must live OUTSIDE the repo (wrapper auto-commit sweep). (5) Shared tree: three-path explicit commit; foreign-red attribution.",
+    "approachesConsidered": "Use the task's existing describe-boundary split: the original file keeps the first 20 creation/readiness/ownership/submission/finalization cases; the new authority file receives the final 12 approval/activation/cancellation/concurrency/version/matrix cases; a shared fixture module receives the contiguous helper region. Rejected a three-test-file split because three files already land comfortably below 250 and the authority/concurrency matrix is one coherent responsibility. Rejected fixture rewrites, new assertions, or runtime freezing changes because this is a verbatim test decomposition. Rejected the prior plan's baseline gate, two isolation gates, full-repo gate, and repeated package run: current moe-planning requires one concentrated exact gate at task end.",
+    "codebaseInsights": "The stable planning-contract facade prerequisite task-866713137aee4794a51973fe4e6e3f44 is DONE. planning-run-reducer.test.ts is 514 physical lines with exactly 32 named `it()` cases. Lines 18-153 are a clean shared-fixture responsibility: deterministic hash/witness constants, `summaries`, `finalizeWitness`, `SEALED`, `state`, `commandFor`, and exact rejection/acceptance assertion helpers. Lines 155-361 contain 20 cases in creation/readiness, ownership, submission, and finalization describes; lines 362-514 contain 12 authority/cancellation/concurrency cases. The fixture imports Vitest `expect` only for test assertion helpers and is not collected as a suite because it is not a `.test.ts` file.",
+    "risks": "The primary hazards are losing, duplicating, renaming, or subtly editing an assertion while moving; separating a derived matrix from its production constants; or introducing shared writes through a fixture module cache. Preserve all 32 names/bodies exactly once, move entire describe blocks, keep `RUNTIME_LIFECYCLES`/transition constants with the authority file that uses them, and keep every fixture binding const with no module-level `let` or writes from tests. Do not add skip/only/todo, export fixtures through package root, touch production sources, or use Unix-only line-count commands. Shared-tree commit must name only the three owned paths.",
     "keyFiles": [
       "packages/core/src/planning/planning-run-reducer.test.ts",
+      "packages/core/src/planning/planning-contract.ts",
       "packages/core/src/planning/planning-run-reducer.ts",
-      "packages/core/src/planning/planning-contract.ts"
+      "packages/core/src/planning/planning-invariants.test.ts"
     ]
   },
   "budget": {
     "wallClockMs": 2700000
   },
-  "planApprovedAt": "2026-08-07T21:22:52.607Z"
+  "planApprovedAt": "2026-08-07T21:31:29.854Z"
 }

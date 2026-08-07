@@ -121,12 +121,12 @@
       "completedAt": "2026-08-07T20:50:34.517Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-875b53a2",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: requeueing — this is the single highest-unlock task available and its dependencies are met. SQLite schema decomposition is DONE (commit 9e16dde) and gave it the conformance/integrity/migration/bootstrap seam to build against. It gates the entire projection chain: StoredEvent commit seam, pure upcaster engine, transactional relay, subscription cursors, and crash/rebuild hardening — five tasks, none of which can start until schema v3 lands. Blocking-analysis findings are already in the description so they are not rediscovered: ALTER splices sqlite_schema text and can never match the exact validator, so the migration recreates domain_events on empty through an intermediate moe-sqlite-schema/2 constant.",
+  "reopenReason": "Governor: the foreign RED you were waiting on has cleared. The two modules your block named as missing — packages/core/src/policy/policy-contract and policy-evaluation — now exist on disk; worker-2edeee3c advanced from TDD RED to implementation and is at 5/7. Re-run the repository delivery gate. Your own work is unaffected and already committed at 7f31a4d with the exact store gate at 124/124. If @moe/core is still red for a different reason (e.g. the .js strip-types bridges for those modules are not written yet), block again naming the new cause rather than waiting silently — do not touch packages/core, that is foreign work. Preserving the foreign RED instead of forcing it was the correct call.",
   "createdBy": "WORKER",
   "parentTaskId": "task-50874e678c054f62ae0ac0c9a5d397cb",
   "priority": "CRITICAL",
@@ -141,22 +141,25 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:13.030Z",
-  "updatedAt": "2026-08-07T20:56:55.600Z",
+  "updatedAt": "2026-08-07T21:35:19.927Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T18:40:29.422Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T21:35:19.927Z",
+    "wallClockMs": 10490505
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
     "architect-d89636d1",
-    "worker-875b53a2"
+    "worker-875b53a2",
+    "qa-bdf27860"
   ],
-  "blockedReason": "Implementation is committed as 7f31a4d and the exact store gate passes 124/124, but the required repository delivery gate cannot run green in the shared checkout. Active policy task task-556d87c3571e4d94a6d57e5ca77ab35f has untracked packages/core/src/policy/policy-decision-table.test.ts importing missing policy-contract.js and policy-evaluation.js; @moe/core typecheck remained red across 30 foreground polls over 5 minutes. Preserving foreign TDD RED and waiting for its owner to finish.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-07T20:56:55.599Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -190,5 +193,25 @@
     "escalatedAt": "2026-08-07T20:40:52.677Z"
   },
   "planApprovedAt": "2026-08-07T20:39:02.013Z",
-  "workStartedAt": "2026-08-07T20:41:24.575Z"
+  "workStartedAt": "2026-08-07T20:41:24.575Z",
+  "reviewStartedAt": "2026-08-07T21:31:36.844Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  20 passed (20)\n      Tests  124 passed (124)\n   Start at  00:31:04\n   Duration  1.16s (transform 3.50s, setup 0ms, import 5.23s, tests 3.91s, environment 1ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src",
+    "reportedAt": "2026-08-07T21:31:36.844Z"
+  },
+  "filesModified": [
+    "packages/store/src/sqlite-schema-manifest.ts",
+    "packages/store/src/sqlite-schema-migration.ts",
+    "packages/store/src/store-schema-v3-migration.test.ts",
+    "packages/store/src/store-internals.ts",
+    "packages/store/src/store-contracts.ts",
+    "packages/store/src/command-decision-integrity.test.ts",
+    "packages/store/src/store-project-and-schema-contract.test.ts",
+    "packages/store/src/sqlite-event-store-core.test.ts"
+  ],
+  "completedAt": "2026-08-07T21:35:19.927Z",
+  "reviewCompletedAt": "2026-08-07T21:35:19.927Z",
+  "reviewSummary": "Re-ran verification myself: `pnpm --filter @moe/store typecheck` exit 0; `test` exit 0, 20 files / 124 tests — matches reported outputTail. Commit 7f31a4d = exactly the 8 owned paths, +371/-57 (net +314); tree clean for packages/store. Sizes: manifest 231, migration 148, new test 180.\n\nDoD 1: 14 objects; the 4 new tables have no AUTOINCREMENT (cursor_generations uses explicit INTEGER PRIMARY KEY). Test 3 runs validateExactSchemaObjects against the v3 manifest on a MIGRATED db and it is accepted.\n\nDoD 2: verified structurally, not only by test. The v2 snapshot is a pure export rename — the diff touches only the identifier line, so the frozen literals are byte-exact by construction. Compare-Object on v2 vs v3 domain_events: 20 vs 21 lines, one added line `domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'`, rest identical, AUTOINCREMENT retained. No ALTER — migrateV2ToV3 is DROP + CREATE. Two legs confirmed; refusals use existing codes only.\n\nTwo checks beyond the plan: (a) the DROP is atomic — bootstrap wraps migrateLocked in BEGIN IMMEDIATE/COMMIT with a ROLLBACK path, so a crash mid-migration cannot leave a half-recreated ledger; (b) FK-child audit — the only two `REFERENCES domain_events` sites are outbox_messages:68 and command_decisions:139, BOTH inside the 6-table emptiness gate, so the DROP cannot orphan a populated child. bound-but-empty has its own test.\n\nDoD 3: the diff across the three existing test files is exactly 5 version literals, nothing else. Too-new case re-pointed (tamper 3->4 + paired assertion), not deleted. Frozen v1 pins intact (:269 user_version 1, :275 'moe-sqlite-schema/1'). The third file is architect-sanctioned — comment-7c518f02 (20:37:44) predates plan submission (20:38:59).\n\nRails: validator never weakened — conformance and integrity files have zero edits. Task-B fence held: grep for StoredEvent, domainSchemaVersion, PROJECTION_APPLY_FAILED, applyInTransaction returns nothing. No scratch files."
 }

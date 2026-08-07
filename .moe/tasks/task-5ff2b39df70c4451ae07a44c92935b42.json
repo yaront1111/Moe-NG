@@ -129,17 +129,29 @@
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) authority laundering — attempt to reach any command/effect-shaped field from the render output or the skill mirror types; attempt a snapshot with authority:'GRANTED' or advisoryOnly:false — type-level rejection + runtime refusal both required; (b) capability laundering — attempt UNSUPPORTED->supported via port failure modes, help-text-style probe responses, and version-string-only evidence; (c) digest drift — flip one byte in a golden fixture locally: the runner-side pinned-digest re-verification must fail BEFORE any assertion uses the fixture, restore; (d) bounded-retention audit — feed an over-16MiB synthetic stream: inline retention must cap with the artifact-ref outcome, digest coverage must still span all bytes; (e) fence audit — grep diff for lease/effect.activate/ARMED/SUSPECT/bootstrap-credential identifiers -> zero (supervisor's vocabulary); (f) CRLF fixture — confirm the \\r\\n-bearing fixture round-trips byte-exact post-commit (git add then git show the blob, compare digests); (g) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/runner/src/providers/claude/claude-observation.ts packages/runner/src/providers/claude/claude-probe.ts packages/runner/src/providers/claude/claude-probe.test.ts packages/runner/src/providers/claude/claude-stream.ts packages/runner/src/providers/claude/claude-stream.test.ts packages/runner/src/providers/claude/claude-render.ts packages/runner/src/providers/claude/claude-cancel-reconcile.ts packages/runner/src/providers/claude/claude-render-reconcile.test.ts packages/testkit/src/providers/claude/claude-golden-streams.ts packages/testkit/src/providers/claude/claude-golden-streams.test.ts`; `git show --stat` lists exactly these 10 paths (plus amendment-recorded splits).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-render.ts",
         "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
         "packages/testkit/src/providers/claude/claude-golden-streams.ts"
       ],
-      "startedAt": "2026-08-07T21:23:16.209Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-observation.ts",
+        "packages/runner/src/providers/claude/claude-stream-anomalies.ts",
+        "packages/runner/src/providers/claude/claude-stream.ts",
+        "packages/runner/src/providers/claude/claude-render.ts",
+        "packages/runner/src/providers/claude/claude-probe.test.ts",
+        "packages/runner/src/providers/claude/claude-stream.test.ts",
+        "packages/runner/src/providers/claude/claude-render.test.ts",
+        "packages/runner/src/providers/claude/claude-reconcile.test.ts"
+      ],
+      "note": "Adversarial self-review loaded and run in full. It was NOT a formality — reading my own diff as a hostile reviewer found FIVE real defects with no failing test behind any of them. All five are fixed with tests; final gates green.\n\nDEFECTS FOUND AND FIXED (the \"unbounded input\" and \"assumptions about the caller\" checklist rows did all the work):\n1. UNBOUNDED EVENTS ARRAY. Retention was capped at 16 MiB but the parsed-event array was not — and an over-16 MiB capture is an EXPECTED case (that is the whole ARTIFACT_REF path). A pathological capture of millions of one-byte lines would allocate without limit through the back door of the very bound I had just written. Fix: MAX_FRAMED_LINES 262_144 in frameStream + typed CLAUDE_STREAM_EVENT_LIMIT_EXCEEDED. It refuses rather than keeping a silent prefix, because a silently-kept prefix is exactly the \"never silent truncation\" rule inverted.\n2. UNBOUNDED ADVISORY BUILD. advisoryBytes concatenated every skill file BEFORE the context limit could reject anything, so a hostile snapshot with a million skills exhausted memory before the check that was supposed to stop it. The limit was never a memory bound. Fix: MAX_MIRRORED_SKILLS 16 / MAX_MIRRORED_SKILL_FILES 64 (mirroring the bounds @moe/skills already enforces, since the snapshot crosses the boundary as data and arrives unvalidated) + typed CLAUDE_RENDER_SKILL_SNAPSHOT_LIMIT.\n3. TOKENIZER PORT EXCEPTION ESCAPED. countTokens is caller code; if it threw, renderClaudeContext threw instead of returning a typed failure — in a function whose entire contract is typed refusal, and inconsistent with how probeClaudeRuntime already handled a throwing port. Fix: wrapped, and a throw or a non-integer count is now UNTRUSTWORTHY -> CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN. A bound you cannot evaluate is not a bound. Also fixed the same unguarded call on the tokenCount field.\n4. LYING PROBE PORT CRASHED. normalizeClosure did `entries.length` on a value that arrives from an out-of-process port, so a non-array closure threw TypeError and a null entry threw on `.kind` — a hostile report became a crash instead of a typed refusal. Fix: Array.isArray + per-entry record guards, all four shapes tested (null, string, [null], unknown kind).\n5. MANDATORY BYTES COPIED BEFORE BEING CHECKED. The size check ran after framing, so an over-budget input was copied first and only then rejected. Fix: raw-size precheck before any concat — framing only ever grows the payload, so an input already over budget cannot be rescued by copying it.\n\nSPLIT FORCED BY THE HARDENING: the new render tests pushed claude-render-reconcile.test.ts to 426 lines, past the 400 hard bound. Split into claude-render.test.ts (294) and claude-reconcile.test.ts (138) and the oversized file deleted; it was never tracked, so nothing lingers. Final counts, every file under 400: 110/120/131/138/215/262/265/289/294/300/316/372/392.\n\nRED-TEAM PROBES (a)-(g):\n(a) AUTHORITY LAUNDERING — no path found. The render output's EXACT sorted key list is asserted, so a future authority-shaped field breaks the test rather than slipping in; commandKind/leaseAuthority/effectIntent/approval/capabilityGrant are absent from the serialization; authority:\"GRANTED\" and advisoryOnly:false are both refused at runtime (not sanitised) as well as being type-level violations.\n(b) CAPABILITY LAUNDERING — no path found, and the probe closed a gap I had left. Help-text-only reports yield 11/11 UNSUPPORTED; contradicting observations prove the opposite; RESUME stays UNSUPPORTED against an explicit resumeClaim. I ADDED the version-string-only case the plan named and I had not covered: a report carrying nothing but reportedVersion moves VERSION_REPORT to SUPPORTED and leaves all ten others UNSUPPORTED — a version string proves only that a version was reported.\n(c) DIGEST DRIFT — executed for real, not reasoned about. Flipped the last nibble of the `complete` fixture's pinned sha256 in the committed testkit module. BOTH suites failed at module load with \"Tests no tests\": runner \"golden case complete does not match its pinned digest\", testkit \"case complete does not match its pinned digest\". The refusal happens strictly BEFORE any assertion consumes the fixture, which is what the probe was for. Restored from a backup held OUTSIDE the repo (so the auto-commit could not swallow it) and confirmed `git status` clean for that path.\n(d) BOUNDED RETENTION — a real >16 MiB stream is built and recorded in the suite: retention flips to ARTIFACT_REF, sha256/byteLength still span every byte, the 64 KiB tail is byte-identical to the true tail, and the serialized record stays under 16 MiB.\n(e) FENCE — zero executable child_process/spawn(/.kill(, zero Date.now/Math.random/new Date, zero cross-package import specifiers, zero scheduler references. The only ARMED/SUSPECT/effect.activate matches are three doc-comment sentences that state the fence is NOT crossed.\n(f) CRLF POST-COMMIT — verified against the FINAL committed blob by piping `git show ",
+      "startedAt": "2026-08-07T21:23:16.209Z",
+      "completedAt": "2026-08-07T21:32:38.812Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29a7f3a3",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-bdf27860",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -158,16 +170,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.808Z",
-  "updatedAt": "2026-08-07T21:23:16.209Z",
+  "updatedAt": "2026-08-07T21:35:27.146Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:41:47.787Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "worker-29a7f3a3"
+    "worker-29a7f3a3",
+    "qa-bdf27860"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -178,7 +191,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T20:56:07.445Z",
@@ -201,5 +215,28 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-07T20:56:09.468Z",
-  "workStartedAt": "2026-08-07T20:56:27.230Z"
+  "workStartedAt": "2026-08-07T20:56:27.230Z",
+  "reviewStartedAt": "2026-08-07T21:33:34.036Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  7 passed (7)\n      Tests  153 passed (153)\n   Start at  00:31:09\n   Duration  906ms (transform 318ms, setup 0ms, import 513ms, tests 971ms, environment 0ms)\n\nVERIFICATION_EXIT=0",
+    "reportedAt": "2026-08-07T21:33:34.036Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/claude/claude-observation.ts",
+    "packages/runner/src/providers/claude/claude-capabilities.ts",
+    "packages/runner/src/providers/claude/claude-probe.ts",
+    "packages/runner/src/providers/claude/claude-probe.test.ts",
+    "packages/testkit/src/providers/claude/claude-golden-streams.ts",
+    "packages/testkit/src/providers/claude/claude-golden-streams.test.ts",
+    "packages/runner/src/providers/claude/claude-stream.ts",
+    "packages/runner/src/providers/claude/claude-stream-anomalies.ts",
+    "packages/runner/src/providers/claude/claude-stream.test.ts",
+    "packages/runner/src/providers/claude/claude-render.ts",
+    "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
+    "packages/runner/src/providers/claude/claude-render-reconcile.test.ts",
+    "packages/runner/src/providers/claude/claude-render.test.ts",
+    "packages/runner/src/providers/claude/claude-reconcile.test.ts"
+  ]
 }

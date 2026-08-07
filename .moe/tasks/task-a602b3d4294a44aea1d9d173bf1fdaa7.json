@@ -20,31 +20,41 @@
     {
       "stepId": "step-1",
       "description": "SCOPE (comment-53b369f7): this plan covers Task B1 ONLY — domainSchemaVersion threading through write/read paths. The commit seam + PROJECTION_APPLY_FAILED moved to sibling task-bfc39542 with verified mechanics (honest combined map was 13-14 files vs the 10 cap). Baseline (READ-ONLY, zero edits): confirm Task A landed state — sqlite-schema-manifest.ts domain_events DDL carries `domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'` (grep 'moe-domain-schema' — hits manifest + migration test only; the TS constant does NOT exist yet); fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN before starting (shared tree — attribute by path).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline gate PASS (read-only, zero edits). (1) Task A landed for real: grep 'moe-domain-schema' hits exactly 2 files — sqlite-schema-manifest.ts:199 `domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'` and store-schema-v3-migration.test.ts:102. TS constant does NOT exist yet, as the plan predicted. (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN: 20 files / 124 tests, exit 0.\n\nSymbol verification (explore-before-assume), all plan claims confirmed against the landed tree:\n- store-contracts.ts: EVENT_RECORD_VERSION :11, EventDraft :30-36, StoredEvent :143-164 (13 keys, decisionTrace optional), DurableStoreErrorCode :183-199 closed (B2's, untouched here).\n- store-input.ts is a FACADE — real snapshotCommitInput lives in store-input-commit.ts (SnapshotEventDraft literal built at :134-156). Covered by my `store-input*.ts` ownership glob; noting because the plan named store-input.ts.\n- requireIdentifier (store-input-primitives.ts:24-38) is charset-agnostic — string/non-empty/<=512 UTF-8 bytes/well-formed/no-NUL. Accepts 'moe-domain-schema/0' (the slash is fine). Correct validator; throws STORE_INPUT_INVALID.\n- Only TWO SnapshotEventDraft literal producers exist repo-wide (grep): store-input-commit.ts:55 and decision-ledger-canonical.ts:225-233. Both in owned paths — no third write site to miss.\n- read-page-queries.ts: STORED_EVENT_SELECT_COLUMNS :6-25, EVENT_DECODED_BYTES_SQL :32-51. event-read-decode.ts mapStoredEvent :82-149.\n\nCORRECTION to the plan's stated mechanism for the EffectEventDraft Omit (the conclusion holds, the reason differs — recorded so step-6's red-team tests the right thing): identifyCommandEffects (store-digests.ts:190-221) hashes an EXPLICIT FIELD LIST, never key enumeration. So an extra runtime property riding the append-site spread cannot change digest bytes, and write/replay could not diverge that way. The Omit is load-bearing for TYPECHECK instead, and provably so: event-read-decode.ts:55-58 derives `DecodedReceiptEventBody = Omit<EffectEventDraft, ...>` and decodeReceiptEventBody :208-217 returns only 4 fields; event-read-materialization.ts:156-162 builds its replay effectEvent literal from that. If EffectEventDraft required domainSchemaVersion, BOTH would fail to compile. Step-6 will red-team the typecheck failure, not a phantom digest divergence.",
+      "startedAt": "2026-08-07T21:30:28.759Z",
+      "completedAt": "2026-08-07T21:32:16.699Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — new packages/store/src/store-domain-schema-version.test.ts (<=250). Cases: (1) ROUNDTRIP: commit an EventDraft WITHOUT domainSchemaVersion -> read back via readEvents/readEventsAfter -> StoredEvent.domainSchemaVersion === 'moe-domain-schema/0' (the DDL default constant, now also a TS constant DOMAIN_EVENT_SCHEMA_VERSION); commit WITH an explicit caller value (e.g. 'moe-domain-schema/2') -> read back UNCHANGED through every read path (by-aggregate, by-position cursor) — DoD: written on append, read back unchanged, sufficient for a later upcaster to dispatch on; (2) VALIDATION: snapshotCommitInput rejects non-string/empty/oversized domainSchemaVersion with the store's stable input codes (bounded length — reuse requireIdentifier-style validation; caller values are opaque, NOT pinned to the constant — upcasters dispatch on recorded values); (3) DIGEST NEUTRALITY (the replay-corruption guard): effect digests must NOT include the field — commit events with a non-default value, then loadReceipt must succeed (replay rebuilds effect events WITHOUT the field; if it entered identifyCommandEffects the write/replay sides would diverge and every receipt would throw STORE_CORRUPT); requestSha256 unchanged (hashes only aggregateId/expectedVersion/commandBytes); (4) rejection-audit path: a decision rejection's audit event carries the DEFAULT constant (decision-ledger-canonical builds its event literal directly). Run focused test — RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-domain-schema-version.test.ts"
       ],
       "newFiles": [
         "packages/store/src/store-domain-schema-version.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-domain-schema-version.test.ts"
+      ],
+      "note": "TDD RED achieved. New packages/store/src/store-domain-schema-version.test.ts (208 lines, under the 250 cap), 13 cases: 10 FAIL / 3 pass, exit 1.\n\nFailures are all for the correct reason — `expected undefined to be 'moe-domain-schema/0'` (field absent) and the 6 validation cases where commit currently SUCCEEDS instead of throwing.\n\nCoverage vs plan:\n(1) ROUNDTRIP default + explicit, each asserted through ALL THREE StoredEvent read paths via a readEveryPath() helper — readEvents, readAggregateEvents (by-aggregate cursor), readEventsAfter (by-position cursor).\n(1b) Added beyond plan, cheap and directly serves the DoD's \"sufficient for a later upcaster to dispatch on\": one commit carrying THREE events with different versions (explicit, other explicit, omitted-defaulting) asserts per-event resolution, not per-commit.\n(2) VALIDATION table-driven, 6 cases: empty, number, null, object, 513-char oversize, embedded NUL. Each asserts STORE_INPUT_INVALID, the exact message `events[0].domainSchemaVersion must be well-formed, non-empty, at most 512 UTF-8 bytes, and contain no NUL`, AND that nothing persisted (empty ledger + aggregate version 0) — a rejected commit must not half-write.\n(3) DIGEST NEUTRALITY, two angles: (a) two fresh stores committing byte-identical input differing ONLY in domainSchemaVersion must produce identical requestSha256 AND effectSha256; (b) getCommandReceipt on a non-default-version commit must re-prove the stored digest (verified path: event-read-model.ts:28-32 -> loadReceipt -> event-read-materialization.ts:197 recompute + STORE_CORRUPT on mismatch).\n(4) Rejection-audit event carries the default constant, plus a decision's committed business events carry an explicit caller value (covers decision-ledger-canonical's direct literal AND the decision commit path).\n\nTwo mechanical notes for the next step:\n- A literal NUL byte got into the source on first write and Edit could not match it (Read renders it as a space). Replaced via serena regex with `String.fromCharCode(0)`; `grep -nP '\\x00'` now reports no raw NUL bytes in the file. Do not hand-type control characters into source.\n- proposedDecision() from command-decision-test-helpers is hard-scoped to projectId \"project-1\", so the two decision cases pass an explicit projectId through withStore or they die on PROJECT_SCOPE_MISMATCH, not on the assertion under test.\n\nZero production files touched in this step.",
+      "startedAt": "2026-08-07T21:32:18.864Z",
+      "completedAt": "2026-08-07T21:35:24.605Z"
     },
     {
       "stepId": "step-3",
       "description": "Green part 1 — types + write path. store-contracts.ts: DOMAIN_EVENT_SCHEMA_VERSION = 'moe-domain-schema/0' beside EVENT_RECORD_VERSION (:11); StoredEvent gains readonly domainSchemaVersion: string; EventDraft gains OPTIONAL domainSchemaVersion?: string (optional-with-default keeps every draft-constructing test compiling). NO index.ts edit — the constant goes public when the upcaster task needs it (deferral noted). store-input.ts: snapshotCommitInput reads the optional field, validates (non-empty string, bounded), defaults to DOMAIN_EVENT_SCHEMA_VERSION; SnapshotEventDraft gains REQUIRED domainSchemaVersion. store-internals.ts: EffectEventDraft becomes extends Omit<SnapshotEventDraft, \"outbox\" | \"domainSchemaVersion\"> (digest neutrality — the spread at event-ledger-append still compiles; spreads skip excess-property checks). event-ledger-append.ts: INSERT gains the domain_schema_version column + binding from the snapshot draft (sole INSERT site). decision-ledger-canonical.ts: the rejection-audit event literal (:225-233, typed SnapshotCommitInput, bypasses snapshotCommitInput) gains explicit domainSchemaVersion: DOMAIN_EVENT_SCHEMA_VERSION. Typecheck green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/store-input.ts",
         "packages/store/src/store-internals.ts",
         "packages/store/src/event-ledger-append.ts",
         "packages/store/src/decision-ledger-canonical.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:35:27.347Z"
     },
     {
       "stepId": "step-4",
@@ -76,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-c8bf9f6b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -95,19 +105,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T21:20:22.133Z",
+  "updatedAt": "2026-08-07T21:35:27.347Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:09:08.735Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "worker-c8bf9f6b"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:20:20.098Z",
   "planningNotes": {
@@ -128,5 +143,6 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-07T21:20:22.133Z"
+  "planApprovedAt": "2026-08-07T21:20:22.133Z",
+  "workStartedAt": "2026-08-07T21:30:28.759Z"
 }

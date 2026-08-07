@@ -28,19 +28,25 @@
     {
       "stepId": "step-2",
       "description": "TDD red — src/admission/admission-pass.test.ts. The 8-step design-396 matrix, with EXPLICIT step allocation (QA-verifiable, no silent drops): STEP 1 — structural members (self-edge, cycle, missing endpoint, duplicates, completion codes) are REUSED from validateGraphSnapshot verbatim (assert pass-through of GRAPH_* issues, no re-implementation, no duplicate ADMISSION_* codes for the same facts); genuinely admission-local step-1 additions each get a stable ADMISSION_* code + test: cross-snapshot input, incompatible contract (contract fields vs edge endpoints/kind disagree), stale fact (source-fact versions older than declared current), duplicate contract (two contracts for one edge); STEP 2 — ADMISSION_HARD_DEPENDENCY_UNPROVEN when a hard edge lacks its current typed contract (no collision with landed frontier HARD_DEPENDENCY_UNSATISFIED/UNKNOWN codes); same-epic/prose-order/same-repo/ownership/resource-scarcity witnesses each REJECTED as proof (design 399); STEP 3 — minimum-milestone: depending on full ACCEPTED is INVALID when the contract's minimumQualifyingMilestone + an INTERFACE_AVAILABLE/FIXTURE_AVAILABLE ruling shows an earlier milestone satisfies the consumer (design 400); STEP 4 — EXPLICIT: contract-level semantic transitive reduction with the PINNED LICENSING CONDITION — a proposal-refusal (ADMISSION_EDGE_SEMANTICALLY_REDUNDANT) is licensed ONLY when the kernel ContractRedundancyAssessment shows FULL identity along the alternate path: producer-arm identity AND predicate identity AND invalidation/horizon identity (design 396.4 'identical input/predicate and invalidation semantics'); ANY partial equivalence -> reviewOnly RECORD, never refusal; refusing a PROPOSAL is distinct from removing a landed edge, so the kernel's requiresSemanticProof:true fence is never contradicted — assert the assessment object passes through unmodified; a direct artifact edge an intermediate does not reproduce stays VALID; STEP 5 — completion closure reused (COMPLETION_CLOSURE_INCOMPLETE pass-through); STEP 6 — baseline comparison: structural half DERIVED from analyzeGraphStructure outputs (structuralStageCount, criticalPathHardEdges, hardDescendantCount, null-not-zero widths — assert admission NEVER recomputes its own critical path); estimate half = VALIDATED caller-supplied truth-classed duration/cost fields (planner proposes, core validates — design 392/447/457); UNKNOWN stays UNKNOWN, never zero, never a speed claim; STEP 7 — interface-first record = composition of landed INTERFACE_FIRST_REVIEW_REQUIRED StructuralDiagnostic edges × kernel alternative ruling × design-404 stub constraints (non-production, hash-bound to approved interface contract, producer+consumer conformance recipes, replaced/verified at integration) — RECORD only, no stub generation, no second serial-edge detector; STEP 8 — 24-node/64-hard-edge limits REUSED from landed GRAPH_NODE_LIMIT_EXCEEDED/GRAPH_HARD_EDGE_LIMIT_EXCEEDED (assert pass-through, no new codes); depth-3/child-width-6/nine-per-expansion are expansion-LINEAGE facts owned by the Expansion admission protocol task — admission ships ONLY a pure checker parameterized by caller-supplied expansion-lineage facts plus an R2-raise reference record. J6/CORE-S13 shapes: naked A->B->C->D refused with corrected-frontier evidence via landed analyzeHardEdgeCounterfactuals output; interface-first variant admits with the milestone edge retained. Determinism: same inputs -> byte-identical frozen results. Confirm RED.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
       ],
-      "startedAt": "2026-08-07T21:28:29.464Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/admission/admission-fixtures.ts",
+        "packages/scheduler/src/admission/admission-pass.test.ts"
+      ],
+      "note": "QA-reopen RED added at the real admitGraph entry point. Fixtures now carry an explicit edge-bound DAEMON_VERIFIED necessity witness instead of relying on an omitted-field default. New tests pin: omission refuses exactly that edge; all five truth classes are gated (only DAEMON_VERIFIED admits); and an agent-reported human-decision claim cannot produce an admitted/lifecycle-bearing result. Fresh path-scoped RED `pnpm exec vitest run --root ../.. packages/scheduler/src/admission/admission-pass.test.ts` exited 1 as expected: 21 failures, including DAEMON_VERIFIED unexpectedly refused because current parser accepts only `{kind}`, omission still admitted while the other edge failed, and the existing happy paths now expose the permissive default dependency.",
+      "startedAt": "2026-08-07T21:28:29.464Z",
+      "completedAt": "2026-08-07T21:35:00.116Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — src/admission/admission-pass.ts (+ one-line shim admission-pass.js). COMPOSITION MECHANICS (verified): GraphStructureView is package-internal — the reuse surface is validateGraphSnapshot (returns ValidatedGraph | issues), analyzeGraphStructure (REQUIRES in-process provenance — admission runs validateGraphSnapshot itself on BOTH the proposed snapshot AND the sequential-baseline snapshot before analysis, else GraphAnalysisError), partitionFrontier, and analyzeHardEdgeCounterfactuals; findRedundancyCandidates is NOT directly callable (internal params) — structural candidates arrive via GraphStructuralAnalysis.structuralRedundancyCandidates. Admission-local additions implemented with dependencies-local-convention helpers (local ADMISSION_* closed code union, local makeIssue/sortIssues/deepFreeze clones, runtime-shape hostile-input helpers via '../runtime-shape.js'). Inputs: validated proposed graph + baseline + DependencyContracts (kernel validateDependencyContract run per contract first) + caller-supplied truth-classed estimates + optional expansion-lineage facts. Output: deep-frozen AdmissionResult { ok: true, records: {baseline, interfaceFirst[], reduction[], counterfactuals} } | { ok: false, issues } — records are evidence artifacts, distinct from refusals. Target <=250, split before 400 (likely split: admission-records.ts via amendment). Step-2 tests green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
@@ -48,7 +54,8 @@
       "newFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:35:04.284Z"
     },
     {
       "stepId": "step-4",
@@ -112,12 +119,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T21:28:29.464Z",
+  "updatedAt": "2026-08-07T21:35:04.284Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8,
+    "executedStepCount": 9,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -128,7 +135,8 @@
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [
     {

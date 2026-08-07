@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "Dependency gate: B1 (task-a602b3d4, StoredEvent domainSchemaVersion) SHOULD land first — the only shared file is store-contracts.ts with disjoint edits (B1: field + constant; B2: error-code union entry). Check `git log --oneline -- packages/store/src/store-domain-schema-version.test.ts` (B1's new test) or the task status; if B1 is WORKING-uncommitted in the shared tree, coordinate in #general before editing store-contracts.ts (whole-file staging — a simultaneous edit would sweep their hunk); if B1 is unstarted, proceed — the edits remain disjoint and B1's plan carries the same coordination note. Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN baseline (attribute foreign red by path). Re-read the verified mechanics pinned in this task's own description — they came from two adversarial verification rounds; do not rediscover or deviate silently.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-07T21:35:08.163Z"
     },
     {
       "stepId": "step-2",
@@ -56,7 +57,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-29a7f3a3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -68,7 +69,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:18:21.612Z",
-  "updatedAt": "2026-08-07T21:28:56.765Z",
+  "updatedAt": "2026-08-07T21:35:08.163Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:27:58.705Z",
     "plannedStepCount": 4,
@@ -92,5 +93,9 @@
   "budget": {
     "wallClockMs": 3600000
   },
-  "planApprovedAt": "2026-08-07T21:28:56.765Z"
+  "planApprovedAt": "2026-08-07T21:28:56.765Z",
+  "contextFetchedBy": [
+    "worker-29a7f3a3"
+  ],
+  "workStartedAt": "2026-08-07T21:35:08.163Z"
 }

@@ -9,6 +9,12 @@ export const COMMAND_REJECTION_AUDIT_VERSION = "moe-command-rejection-audit/1" a
 export const EXPECTED_VERSION_DECISION_COVERAGE = "EXPECTED_VERSION_ONLY" as const;
 export const SQLITE_APPLICATION_ID = 0x4d4f4531 as const;
 export const EVENT_RECORD_VERSION = "moe-event-record/1" as const;
+/**
+ * Default domain schema version stamped on an event whose producer did not
+ * declare one. Callers may record any opaque version; upcasters dispatch on the
+ * recorded value, so this constant is a default, never a pinned expectation.
+ */
+export const DOMAIN_EVENT_SCHEMA_VERSION = "moe-domain-schema/0" as const;
 export const OPAQUE_PAYLOAD_CODEC_VERSION = "moe-opaque-bytes/1" as const;
 export const RECEIPT_RESULT_VERSION = "moe-commit-result/1" as const;
 export const COMMAND_EFFECT_IDENTITY_VERSION = "moe-command-effect/1" as const;
@@ -28,6 +34,8 @@ export interface OutboxDraft {
 }
 
 export interface EventDraft {
+  /** Defaults to {@link DOMAIN_EVENT_SCHEMA_VERSION} when omitted. */
+  readonly domainSchemaVersion?: string;
   readonly eventId: string;
   readonly eventType: string;
   readonly metadata?: Uint8Array;
@@ -153,6 +161,7 @@ export interface StoredEvent {
     readonly requestIdentityVersion: typeof COMMAND_DECISION_REQUEST_IDENTITY_VERSION;
     readonly requestSha256: string;
   }>;
+  readonly domainSchemaVersion: string;
   readonly eventId: string;
   readonly eventType: string;
   readonly globalPosition: bigint;

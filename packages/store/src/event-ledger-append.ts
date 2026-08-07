@@ -97,12 +97,13 @@ export class EventAppendStore extends EventOutboxStore {
         command_event_index,
         record_version,
         payload_codec_version,
+        domain_schema_version,
         request_sha256,
         event_type,
         payload,
         metadata,
         committed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     insertEvent.setReadBigInts(true);
     return insertEvent;
@@ -173,6 +174,7 @@ export class EventAppendStore extends EventOutboxStore {
           eventIndex,
           EVENT_RECORD_VERSION,
           OPAQUE_PAYLOAD_CODEC_VERSION,
+          event.domainSchemaVersion,
           requestSha256,
           event.eventType,
           event.payload,

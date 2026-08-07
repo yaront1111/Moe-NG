@@ -16,6 +16,7 @@ import { analyzeHardEdgeCounterfactuals } from "../hard-edge-counterfactual.js";
 import { validateGraphSnapshot } from "../validate-graph.js";
 import { validateDependencyContract, type DependencyContract } from "../dependencies/dependency-contract.js";
 import type { ValidatedGraph } from "../graph-model.js";
+import type { HardEdgeCounterfactual } from "../hard-edge-counterfactual-model.js";
 import {
   deepFreeze, dense, isRef, isVersion, makeIssue, record, refuse,
   type AdmissionIssue, type AdmissionResult,
@@ -24,6 +25,7 @@ import {
   buildInterfaceFirstRecords, buildReductionRecords, evaluateExpansionLineage,
   parseEstimates, summarizeStructure,
 } from "./admission-records.js";
+import { evaluateNecessityClaim } from "./admission-necessity.js";
 
 /**
  * Witness classes that never prove a hard dependency (design 399). They are
@@ -32,9 +34,6 @@ import {
 export const REJECTED_NECESSITY_WITNESS_KINDS = [
   "PROSE_ORDER", "RESOURCE_SCARCITY", "SAME_EPIC", "SAME_REPOSITORY", "SHARED_OWNERSHIP",
 ] as const;
-/** The only witness class admission accepts: the typed contract itself. */
-const PROVING_WITNESS_KIND = "TYPED_CONTRACT";
-
 const INPUT_KEYS = ["proposedSnapshot", "sequentialBaselineSnapshot", "contracts", "predicateRegistry",
   "currentSourceFactVersions", "estimates", "expansionLineage", "policyOverride"] as const;
 const INPUT_REQUIRED = ["proposedSnapshot", "sequentialBaselineSnapshot", "contracts"] as const;
@@ -97,6 +96,7 @@ function sameWorkSet(left: ValidatedGraph, right: ValidatedGraph): boolean {
 function collectContracts(
   parsed: ParsedInput,
   graph: ValidatedGraph,
+  counterfactuals: ReadonlyMap<string, HardEdgeCounterfactual>,
   issues: AdmissionIssue[],
 ): Map<string, DependencyContract> {
   const byEdge = new Map<string, DependencyContract>();
@@ -105,10 +105,7 @@ function collectContracts(
   const seen = new Set<string>();
   for (const raw of parsed.contracts) {
     const item = record(raw, ENTRY_KEYS, ENTRY_REQUIRED);
-    const witness = item === null || item.necessityWitness === undefined
-      ? { kind: PROVING_WITNESS_KIND }
-      : record(item.necessityWitness, ["kind"]);
-    if (item === null || witness === null || !isRef(item.edgeKey) || typeof item.edgeKind !== "string") {
+    if (item === null || !isRef(item.edgeKey) || typeof item.edgeKind !== "string") {
       issues.push(makeIssue("ADMISSION_INPUT_MALFORMED", "admission contract entry is malformed"));
       continue;
     }
@@ -146,7 +143,7 @@ function collectContracts(
       continue;
     }
     bindings.add(contract.graphBindingDigest);
-    checkContract(contract, edgeKey, witness.kind, parsed.currentFactVersions, issues);
+    checkContract(contract, edgeKey, item.necessityWitness, counterfactuals.get(edgeKey), parsed.currentFactVersions, issues);
     byEdge.set(edgeKey, contract);
   }
   if (bindings.size > 1) {
@@ -165,13 +162,17 @@ function collectContracts(
 function checkContract(
   contract: DependencyContract,
   edgeKey: string,
-  witnessKind: unknown,
+  necessityWitness: unknown,
+  counterfactual: HardEdgeCounterfactual | undefined,
   currentFactVersions: ReadonlyMap<string, number>,
   issues: AdmissionIssue[],
 ): void {
-  if (witnessKind !== PROVING_WITNESS_KIND) {
+  const necessity = counterfactual === undefined
+    ? null
+    : evaluateNecessityClaim(necessityWitness, contract, counterfactual);
+  if (necessity === null || !necessity.ok || necessity.outcome.kind !== "ADMISSIBLE") {
     issues.push(makeIssue("ADMISSION_HARD_DEPENDENCY_UNPROVEN",
-      "the supplied necessity witness class never proves a hard dependency", [], [edgeKey]));
+      "hard edge lacks daemon-verifiable necessity evidence", [], [edgeKey]));
   }
   for (const fact of contract.invalidationFacts) {
     const current = currentFactVersions.get(fact.sourceFactRef);
@@ -205,7 +206,9 @@ export function admitGraph(input: unknown): AdmissionResult {
   if (!sameWorkSet(proposed.graph, baseline.graph)) {
     issues.push(makeIssue("ADMISSION_CROSS_SNAPSHOT_INPUT", "the baseline snapshot describes a different work set"));
   }
-  const contracts = collectContracts(parsed, proposed.graph, issues);
+  const counterfactuals = analyzeHardEdgeCounterfactuals(proposed.graph);
+  const byEdge = new Map(counterfactuals.edges.map((edge) => [edge.edgeKey, edge] as const));
+  const contracts = collectContracts(parsed, proposed.graph, byEdge, issues);
   const analysis = analyzeGraphStructure(proposed.graph);
   const reduction = buildReductionRecords(analysis, contracts, parsed.registry);
   issues.push(...reduction.issues);
@@ -230,7 +233,7 @@ export function admitGraph(input: unknown): AdmissionResult {
       },
       interfaceFirst: buildInterfaceFirstRecords(analysis, contracts),
       reduction: reduction.records,
-      counterfactuals: analyzeHardEdgeCounterfactuals(proposed.graph),
+      counterfactuals,
       expansion: lineage.record,
     },
   });
