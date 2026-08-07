@@ -1,0 +1,174 @@
+import { canonicalize } from "../canonical-json.js";
+import {
+  FAIRNESS_REFERENCE_KIND,
+  type FairnessResult,
+  type FairnessState,
+  type FairnessTicket,
+} from "./fairness-model.js";
+import {
+  deepFreeze,
+  fail,
+  isNonEmptyString,
+  isRecord,
+  makeIssue,
+  sortTickets,
+} from "./fairness-internal.js";
+import { BYPASSES_PER_LEVEL, isFairnessPriority, isNonNegativeInteger } from "./fairness-policy.js";
+
+const TICKET_KEYS = [
+  "ticketId",
+  "workItemId",
+  "dimension",
+  "priority",
+  "bypassesInLevel",
+  "forced",
+  "forcedCohortEntryEvent",
+  "dispatchable",
+  "continuousEligibilityEvent",
+] as const;
+const STATE_KEYS = ["kind", "policyMd", "eventSeq", "dispatchableCount", "tickets"] as const;
+
+/** Exactly the allowed keys — no missing, no extra (strict, non-lenient decode). */
+function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]): boolean {
+  const own = Object.keys(record);
+  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(record, k));
+}
+
+/** Canonical, deterministic serialization of a reduced state (restart evidence). */
+export function toCanonicalBytes(state: FairnessState): string {
+  return canonicalize({
+    kind: FAIRNESS_REFERENCE_KIND,
+    policyMd: state.policyMd,
+    eventSeq: state.eventSeq,
+    dispatchableCount: state.dispatchableCount,
+    tickets: sortTickets(state.tickets),
+  });
+}
+
+/** Read one ticket, returning a normalized frozen ticket or null when malformed. */
+function readTicket(raw: unknown): FairnessTicket | null {
+  if (!isRecord(raw) || !hasExactKeys(raw, TICKET_KEYS)) {
+    return null;
+  }
+  const {
+    ticketId,
+    workItemId,
+    dimension,
+    priority,
+    bypassesInLevel,
+    forced,
+    forcedCohortEntryEvent,
+    dispatchable,
+    continuousEligibilityEvent,
+  } = raw;
+  if (
+    !isNonEmptyString(ticketId) ||
+    !isNonEmptyString(workItemId) ||
+    !isNonEmptyString(dimension) ||
+    !isFairnessPriority(priority) ||
+    !isNonNegativeInteger(bypassesInLevel) ||
+    bypassesInLevel >= BYPASSES_PER_LEVEL ||
+    typeof forced !== "boolean" ||
+    typeof dispatchable !== "boolean" ||
+    !isNonNegativeInteger(continuousEligibilityEvent) ||
+    !(forcedCohortEntryEvent === null || isNonNegativeInteger(forcedCohortEntryEvent))
+  ) {
+    return null;
+  }
+  // Active-cohort invariant: an entry event exists iff forced AND dispatchable.
+  const inActiveCohort = forced && dispatchable;
+  if (inActiveCohort !== (forcedCohortEntryEvent !== null)) {
+    return null;
+  }
+  // Forced tickets are only ever reached at P0 with a reset counter; reject any
+  // snapshot claiming a forced ticket the reducer could never have produced.
+  if (forced && (priority !== "P0" || bypassesInLevel !== 0)) {
+    return null;
+  }
+  return {
+    ticketId,
+    workItemId,
+    dimension,
+    priority,
+    bypassesInLevel,
+    forced,
+    forcedCohortEntryEvent,
+    dispatchable,
+    continuousEligibilityEvent,
+  };
+}
+
+/** Strict, fail-closed reconstruction; round-trips to byte-identical output. */
+export function fromCanonicalBytes(text: string): FairnessResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "not valid JSON"));
+  }
+  if (!isRecord(parsed) || !hasExactKeys(parsed, STATE_KEYS)) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "payload must be an object with exactly the state keys"));
+  }
+  const { kind, policyMd, eventSeq, dispatchableCount, tickets } = parsed;
+  if (kind !== FAIRNESS_REFERENCE_KIND) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "unexpected or missing kind tag"));
+  }
+  if (
+    !isNonNegativeInteger(policyMd) ||
+    policyMd < 1 ||
+    !isNonNegativeInteger(eventSeq) ||
+    !isNonNegativeInteger(dispatchableCount) ||
+    !Array.isArray(tickets)
+  ) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "top-level fields are malformed"));
+  }
+  const normalized: FairnessTicket[] = [];
+  const ids = new Set<string>();
+  let live = 0;
+  let dimension: string | undefined;
+  let maxEvent = 0;
+  for (const raw of tickets) {
+    const ticket = readTicket(raw);
+    if (ticket === null) {
+      return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "a ticket is malformed"));
+    }
+    if (ids.has(ticket.ticketId)) {
+      return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "duplicate ticketId", [ticket.ticketId]));
+    }
+    ids.add(ticket.ticketId);
+    // A state is scoped to a single compatibility dimension.
+    if (dimension === undefined) {
+      dimension = ticket.dimension;
+    } else if (ticket.dimension !== dimension) {
+      return fail(
+        makeIssue("FAIRNESS_MALFORMED_STATE", "tickets span multiple dimensions", [ticket.ticketId]),
+      );
+    }
+    const event = Math.max(ticket.continuousEligibilityEvent, ticket.forcedCohortEntryEvent ?? 0);
+    if (event > maxEvent) {
+      maxEvent = event;
+    }
+    if (ticket.dispatchable) {
+      live += 1;
+    }
+    normalized.push(ticket);
+  }
+  if (live !== dispatchableCount || dispatchableCount > policyMd) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "dispatchableCount is inconsistent"));
+  }
+  // eventSeq is a monotonic high-water mark; a snapshot claiming a smaller value
+  // than a ticket's own events could let a resumed forced ticket overtake an
+  // earlier one, breaking the FIFO starvation order. Reject it.
+  if (eventSeq < maxEvent) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "eventSeq is below a ticket event"));
+  }
+  return deepFreeze({
+    ok: true,
+    state: {
+      policyMd,
+      eventSeq,
+      dispatchableCount,
+      tickets: sortTickets(normalized),
+    },
+  });
+}
