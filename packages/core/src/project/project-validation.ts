@@ -42,6 +42,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 type DataSnapshot = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const SNAPSHOT_FAILURE = Object.freeze({ ok: false as const });
+const INVALID_SNAPSHOT_VALUE = Symbol("INVALID_SNAPSHOT_VALUE");
 
 function snapshotData(value: unknown, seen = new WeakSet<object>()): DataSnapshot {
   const kind = typeof value;
@@ -119,7 +120,7 @@ export function snapshotProjectCommand(value: unknown): ProjectCommand | undefin
       const property = Object.getOwnPropertyDescriptor(value, key);
       if (property === undefined || !property.enumerable || !("value" in property)) return undefined;
       const nested = snapshotData(property.value);
-      record[key] = nested.ok ? nested.value : undefined;
+      record[key] = nested.ok ? nested.value : INVALID_SNAPSHOT_VALUE;
     }
     if (!PROJECT_COMMAND_KINDS.some((kind) => kind === record["kind"])) return undefined;
     return record as unknown as ProjectCommand;

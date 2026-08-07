@@ -264,4 +264,18 @@ describe("goal reducer state invariants", () => {
     const unknown = { ...ACTIVATE, kind: "goal.unknown" } as unknown as GoalCommand;
     expectUnknown(reduceGoal(mutableState("DRAFT"), unknown));
   });
+
+  it("does not collapse malformed optional close proofs into absence", () => {
+    const hidden = Symbol("authority");
+    const invalidZero = { truthClass: "DAEMON_VERIFIED" as const,
+      zeroAuthorityProofRef: "zero-1", [hidden]: true };
+    expectIllegal(reduceGoal(mutableState("EXECUTION_ENABLED"), {
+      ...COMBINED_CLOSE, zeroAuthorityWitness: invalidZero,
+    }), "goal.close", "EXECUTION_ENABLED");
+    const invalidClosure = { ...COMBINED_CLOSE.closureWitness, [hidden]: true };
+    expectIllegal(reduceGoal(mutableState("CLOSING"), {
+      commandId: "cmd-complete", expectedVersion: 7, kind: "goal.close",
+      closureWitness: invalidClosure, zeroAuthorityWitness: COMBINED_CLOSE.zeroAuthorityWitness,
+    }), "goal.close", "CLOSING");
+  });
 });
