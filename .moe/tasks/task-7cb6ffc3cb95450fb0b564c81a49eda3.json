@@ -99,7 +99,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.400Z",
-  "updatedAt": "2026-08-07T22:02:13.689Z",
+  "updatedAt": "2026-08-07T22:02:16.393Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:23:51.254Z",
     "plannedStepCount": 4,
@@ -109,7 +109,8 @@
   "contextFetchedBy": [
     "architect-d89636d1",
     "architect-c4babdf9",
-    "worker-29a7f3a3"
+    "worker-29a7f3a3",
+    "qa-bdf27860"
   ],
   "stepsCompleted": [
     "step-1",

@@ -129,8 +129,8 @@
       "completedAt": "2026-08-07T21:47:00.146Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-875b53a2",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T21:57:53.145Z",
+  "updatedAt": "2026-08-07T22:03:17.757Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
@@ -206,22 +206,21 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "reviewStartedAt": "2026-08-07T20:53:32.905Z",
+  "reviewStartedAt": "2026-08-07T22:03:14.488Z",
   "verification": {
     "command": "pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  5 passed (5)\n      Tests  125 passed (125)\n   Start at  23:53:08\n   Duration  409ms (transform 475ms, setup 0ms, import 928ms, tests 193ms, environment 0ms)",
-    "reportedAt": "2026-08-07T20:53:32.905Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next\nTest Files 6 passed (6)\nTests 125 passed (125)\nStart at 01:02:18\nDuration 403ms (transform 536ms, setup 0ms, import 1.11s, tests 217ms, environment 0ms)\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/mcp/src",
+    "reportedAt": "2026-08-07T22:03:14.488Z"
   },
   "filesModified": [
     "packages/mcp/src/stdio/stdio-dispatch-port.ts",
     "packages/mcp/src/http/http-session.test.ts",
     "packages/mcp/src/http/http-session.ts",
     "packages/mcp/src/http/http-server.test.ts",
-    "packages/mcp/src/http/http-server.ts",
-    "packages/mcp/src/http/http-tool-bridge.ts",
-    "packages/mcp/src/http/http-resume.ts",
-    "packages/mcp/src/http/http-parity.test.ts"
+    "packages/mcp/src/http/http-server-lifecycle.test.ts",
+    "packages/mcp/src/http/http-server-test-helpers.ts",
+    "packages/mcp/src/http/http-resume.ts"
   ],
   "reviewCompletedAt": "2026-08-07T20:57:06.637Z",
   "rejectionDetails": {

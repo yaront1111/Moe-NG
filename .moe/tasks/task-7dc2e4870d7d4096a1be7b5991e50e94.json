@@ -14,9 +14,51 @@
     "Local stable reason spellings are implementation choices, not claims of design-pinned runtime codes; freeze them in tests and defer runtime mapping.",
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-d89636d1",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Design + convention baseline (read-only). Design section 11 exact vocabulary (verified at lines 585-660; worker re-reads before typing): ACCOUNT STATES = OPEN | SETTLING | CLOSED | CLOSED_WITH_UNKNOWN_LIABILITY | OVERDRAWN (line ~591); BUCKETS = AVAILABLE | RESERVED | QUARANTINED | COMMITTED (four conserved integer buckets; conservation equation AVAILABLE + RESERVED + QUARANTINED + COMMITTED summed root+descendants exactly once — the equation itself is the LEDGER child's to enforce, this task only defines the vocabulary + record shapes); RESERVE PURPOSES = the design-587 protected set: VERIFICATION, REVIEW, ACCEPTANCE_PROCESSING, CONTINGENCY + fan-out INPUT_MATERIALIZATION, INTEGRATION (linear J1 protects the first four before any acceptance-bearing launch); MEASUREMENT COVERAGE = COMPLETE | PARTIAL | UNKNOWN (line ~634, UsageMeasurement); MEASUREMENT SOURCE = the closed source set the design names around UsageMeasurement/AdmissionQuote (~634-660: adapter-reported, correlated billing receipt, daemon observation — read the exact spellings and pin them; if the design leaves the set open, define the minimal scheduler-local closed set and mark it LOCAL in a comment). POLICY/TRUTH COMPATIBILITY: local STRING-IDENTICAL copies (task rail: no @moe/core or @moe/contracts imports) of the landed policy values needed for compatibility typing — POLICY_OUTCOMES ALLOW|DENY|REQUIRE_HUMAN_APPROVAL|HOLD_UNKNOWN and tiers R0-R3 (packages/core/src/policy/policy-contract.ts:17-30) + the 5-string truth vocabulary — each with a divergence-risk comment naming the canonical source (dependency-kernel precedent). Conventions: local BUDGET_* issue codes + local makeIssue/sortIssues/deepFreeze clones (4th clone set, consolidation note — graph-internal's closed GraphIssueCode makes reuse impossible), '../runtime-shape.js' hostile-input helpers reused read-only, one-line .js bridge, unexported subdir (Branch-A, 4th instance), integers only (design 44: no floating-point currency/token accounting).",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-07T22:02:38.386Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — packages/scheduler/src/budget/budget-contract.test.ts (<=250 physical lines HARD — the DoD pins both files at 250, tighter than the usual 400 escape). Cases: (1) VOCABULARY EXACTNESS: frozen tuples equal the design/policy spellings from step 1 (mechanical toStrictEqual against inline expected arrays — the DoD-1 oracle); every vocabulary Object.isFrozen; (2) RECORD VALIDATION fail-closed matrix, one stable BUDGET_* code per class with deterministic sortIssues ordering: prototype-hostile objects (proxy/accessor/__proto__ tricks via runtime-shape helpers), extra keys (closed key sets), negative / fractional / unsafe-integer meter quantities (safe nonnegative integers ONLY — design integer rule), malformed refs (empty/oversized — bounded identifier validation), malformed versions, oversized lists (bounded collection ceilings before element traversal); (3) ACCEPTED records: deeply frozen, DETACHED (mutating the input object after acceptance does not alter the accepted record — snapshot semantics), nested collections frozen, repeat calls over equal bytes deep-equal (determinism); (4) shapes covered: BudgetAccountRecord {accountId, ownerRef, parentRef|null, graphRevisionRef, version, state, perMeter direct buckets (integer quadruple)}, UsageMeasurementRecord {meter, quantity|null (null when coverage UNKNOWN — never zero), coverage, source, providerRunRef, sourceParserVersion, sequence, rawReceiptDigest (hex64), observedInterval refs}, ReserveDeclaration {purpose, meter, quantity}, result union {ok:true, record}|{ok:false, issues} — shapes are DATA + VALIDATION only, zero mutation authority (no allocate/reserve/settle functions — those are the sibling children's). Confirm RED via the task's own focused command.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-contract.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-contract.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — packages/scheduler/src/budget/budget-contract.ts (<=250 physical lines HARD) + budget-contract.js (exactly `export * from \"./budget-contract.ts\";`). Implement step-2's vocabularies, record types, validators with the step-1 conventions; UNKNOWN-coverage quantity is null and can never be zero (the schedule-checker UNKNOWN-never-zero precedent, design 11.3 'unknown estimates never become zero'); no Date/random/imports beyond '../runtime-shape.js' and local clones; all exports frozen; module doc-comment marks LOCAL vocabularies vs design-pinned ones and carries the consolidation + divergence-risk notes. Focused tests green; `pnpm --filter @moe/scheduler typecheck` green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/budget/budget-contract.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/budget/budget-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250 physical (LF/CRLF equivalently); bridge is ONE line. (2) Fresh task verification: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts` -> exit 0 — complete_task evidence with that exact command; ALSO run the full `pnpm --filter @moe/scheduler test` for regression awareness (three sibling subtrees in flight — attribute foreign red by path, own suite green regardless). (3) Greps: '@moe/core\\|@moe/contracts' in budget/ -> ZERO (task rail); Date.now|Math.random -> zero; 'scheduler/src\\|@moe/scheduler/' -> zero. Adversarial (Skill adversarial-self-review): (a) authority hunt — no exported function mutates or allocates (types+validators only; grep for any function whose name implies movement: allocate|reserve|settle|commit -> zero); (b) vocabulary drift — diff each local copy against its canonical source file by value; (c) detachment red-team — mutate every nested input array/object post-acceptance, accepted record bit-stable; (d) UNKNOWN-never-zero — attempt to construct coverage:UNKNOWN with quantity 0 -> refused; (e) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/budget/budget-contract.ts packages/scheduler/src/budget/budget-contract.js packages/scheduler/src/budget/budget-contract.test.ts`; `git show --stat` lists exactly these 3 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/budget/budget-contract.js",
+        "packages/scheduler/src/budget/budget-contract.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-c8bf9f6b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -28,11 +70,33 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:46:52.656Z",
-  "updatedAt": "2026-08-07T22:01:12.041Z",
+  "updatedAt": "2026-08-07T22:02:38.386Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T22:01:02.258Z"
+    "firstClaimAt": "2026-08-07T22:01:02.258Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
-  ]
+    "architect-d89636d1",
+    "worker-c8bf9f6b"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T22:02:27.204Z",
+  "planningNotes": {
+    "approachesConsidered": "The governor authored this child directly from my earlier block analysis — scope, owned paths, rails, and the focused verification command are already exact, so no adversarial workflow was run: types-only, 3 files, every hazard class already settled by four sibling scheduler-subtree plans (local code clones because graph-internal's GraphIssueCode is closed; runtime-shape reuse; unexported subdir Branch-A; one-line bridge; string-identical local copies of policy/truth vocabularies with divergence notes because the scheduler is dependency-free by design). Alternatives rejected: (1) importing policy vocab from @moe/core — forbidden by the task rail and the package's zero-dependency invariant; (2) shipping any allocate/reserve/settle helper — the three sibling children own mutation semantics, this task grants ZERO movement authority; (3) modeling the conservation equation here — ledger child's deliverable; the vocabulary only defines the bucket quadruple shape.",
+    "codebaseInsights": "Design 11 (lines 585-660) verified: account states OPEN|SETTLING|CLOSED|CLOSED_WITH_UNKNOWN_LIABILITY|OVERDRAWN; buckets AVAILABLE|RESERVED|QUARANTINED|COMMITTED (integer, conserved); protected reserve purposes per 587 (verification, review, acceptance processing, contingency; fan-out adds input materialization, integration); UsageMeasurement fields per ~634 (meter, integer quantity when known, coverage COMPLETE|PARTIAL|UNKNOWN, source, provider run ID, source/parser version, sequence, raw receipt digest, observed interval); integers throughout — no floating currency/tokens. Landed policy surface to mirror: POLICY_OUTCOMES + R0-R3 at packages/core/src/policy/policy-contract.ts:17-30. Scheduler subtree conventions established across dependencies/authority/admission plans; this is clone-set 4 with the standing consolidation note. UNKNOWN-never-zero encoded as quantity:null under UNKNOWN coverage.",
+    "risks": "(1) The 250-line HARD cap on BOTH files (tighter than the usual 400 escape) — vocabulary + 3 record validators + hostile matrix is dense; if the test file presses the cap, split assertions per record type is NOT allowed (only 3 owned paths) — tighten fixtures instead, or report to the governor if genuinely impossible (expect ~200/~230, feasible). (2) Measurement-source spellings: if the design leaves the set open, the LOCAL marking must be explicit or QA reads it as a design claim. (3) Vocabulary drift vs policy/truth canon — by-value diff in the adversarial step. (4) Zero-authority rail — any movement-named export is a reject. (5) Shared tree: three sibling scheduler subtrees in flight; three-path explicit commit; foreign-red attribution.",
+    "keyFiles": [
+      "packages/scheduler/src/runtime-shape.ts",
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/core/src/policy/policy-contract.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-07T22:02:29.237Z",
+  "workStartedAt": "2026-08-07T22:02:38.386Z"
 }

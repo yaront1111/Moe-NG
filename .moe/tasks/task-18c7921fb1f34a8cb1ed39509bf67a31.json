@@ -84,7 +84,7 @@
     {
       "stepId": "step-5",
       "description": "TDD — tests/fault/foundation/{j1-linear.test.ts, j3-crash.test.ts, j4-replan-stale.test.ts} (root-vitest discovered via tests/** include; NOT under the testkit filter — honest note; untypechecked, so every gate tooth is a runtime assertion; cross-package RELATIVE imports of @moe/core + @moe/store + @moe/contracts + the foundation modules). Each file it.each's over its OWNED manifest partition and asserts produced-outcome === declared-outcome per schedule (the end-to-end DoD-4 enforcement; combined with foundation-spec's partition-completeness, no schedule can drift). j1-linear.test.ts: drive the J1 model against landed core reducers via injected fakes (goal.create -> planning -> approval path executes TODAY through reduceProject/reduceGoal/reducePlanningRun/reduceGraphRevision); zero-work false-green schedule asserts the model REFUSES; segments needing the absent dispatch composition assert PRODUCTION_BEHAVIOR_ABSENT via probe. j3-crash.test.ts: store crash-boundary schedules EXECUTE against the landed SqliteEventStore recovery surface (transaction begin/write/commit/ack whole-or-none, quarantine semantics); restart-record classification against the J3 model; absent surfaces (timers, attempt management) probed-ABSENT. j4-replan-stale.test.ts: J4 delta-approval/carry-forward model schedules (planning reducers execute; approval surfaces probed) + CORE-S7 stale-client subset (envelope/version/command-ID rejections EXECUTE against the landed contracts registry + decoders; lease staleness against landed authority modules via ports) — if this file nears 250 lines, split stale-clients.test.ts via step amendment. Fresh `pnpm exec vitest run tests/fault/foundation` green with the manifest fully partitioned.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/fault/foundation/j1-linear.test.ts",
         "tests/fault/foundation/j3-crash.test.ts",
@@ -95,17 +95,27 @@
         "tests/fault/foundation/j3-crash.test.ts",
         "tests/fault/foundation/j4-replan-stale.test.ts"
       ],
-      "startedAt": "2026-08-07T21:57:35.516Z"
+      "modifiedFiles": [
+        "tests/fault/foundation/tsconfig.json",
+        "tests/fault/foundation/foundation-harness.ts",
+        "tests/fault/foundation/j1-linear.test.ts",
+        "tests/fault/foundation/j3-crash.test.ts",
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "note": "DELIBERATE DEVIATION from this step's original text, which said \"untypechecked, so every gate tooth is a runtime assertion\". That premise is exactly what QA rejected. The fix is to remove the premise, not to work around it.\n\nNEW tests/fault/foundation/tsconfig.json (inside the owned glob, so no foreign file is touched): extends ../../../tsconfig.base.json, include [\"./*.ts\"], composite:false + declaration:false because the cross-package RELATIVE imports pull package sources into the program and a composite project demands every such file be listed. Everything else — strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, noUnusedLocals/Parameters, verbatimModuleSyntax — is inherited unchanged, so these files are held to the same bar as production. tests/ is not a pnpm workspace member and has no package.json, so `pnpm -r typecheck` does not pick this up: it is invoked explicitly by the widened gate.\n\nFirst run: 68 errors across all four files. Final run: exit 0, 0 errors.\n\nThe typecheck found a real latent defect, not just missing annotations. j1-linear.test.ts:185 read `late.error.code` on a `GoalReducerResult` union — `Property 'error' does not exist on type 'GoalAcceptedResult'`. `expect(late.ok).toBe(false)` on the line above is a runtime assertion vitest does not use to narrow, so had the reducer ever started ACCEPTING a post-cancel start — the precise regression that schedule exists to catch — the next line would have thrown TypeError on undefined rather than reporting a schedule failure. Same shape in j4 at three sites. Now routed through typed `accepted()`/`refused()` narrowers that throw a named error.\n\nHarness typing, no `any` anywhere:\n- `accepted`/`refused`: generic over `TResult extends OkOrRefused`, returning `Extract<TResult, {ok:true|false}>`, so the caller keeps its own core/contracts result type and `state`/`envelope`/`error.details` stay typed. Single narrowing cast each, after a runtime discriminant check.\n- `fixturePayload(fixtureId, typedConstant)`: `FoundationFixture.payload` is `unknown` by design (one manifest, three journeys). Rather than cast, the caller passes the exported typed constant and this asserts referential identity with the registered fixture — the fixture stays the source of registration, the constant the source of the type, and a fixture rebuilt from different data throws.\n- `produceAbsenceOutcome` / new `missingEvidenceOf`: reject an entry of the wrong outcome kind instead of falling back to a pass.\n- `executorFor` replaces `EXECUTORS[entryId]`, which under noUncheckedIndexedAccess was `... | undefined`; a missing executor now throws a named ReferenceError rather than \"not a function\".\n- `assertPartitionOwnership` no longer takes `expect` as an untyped parameter; the harness imports it.\n\nAlso caught by the stricter shapes: `decodeEnvelope({leaseAuthority:{epoch:7}})` could not be expressed once the override was typed, because a half-built lease authority is not a `FakeLeaseAuthority`. Rather than widen the fake's type (which would weaken every honest caller), the malformed case now builds the record explicitly through a `decodeRecord` seam. Same assertion, and the type now says out loud that the value is deliberately not a lease authority.\n\nVerification, all fresh and foreground:\n- `pnpm exec tsc --project tests/fault/foundation/tsconfig.json` -> exit 0.\n- `pnpm exec vitest run tests/fault/foundation` -> 3 files / 43 tests passed. Same 43; the refactor changed no assertion's meaning.\n- `pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test` -> 18 files / 234 tests (was 17/229; +1 file, +5 tests, all from the new gate-coverage ratchet).\n- Sizes: every owned file <=250 (max is foundation-spec.test.ts at 250; j1-linear.test.ts 227, harness 202).\n- Import discipline: the only non-relative, non-builtin, non-vitest imports under packages/testkit/src/foundation are `@moe/contracts`. The `@moe/core`/`@moe/store`/`@moe/scheduler` grep hits are probe packageName STRING LITERALS, not imports.\n- Date.now / Math.random / new Date across both owned dirs: zero.",
+      "startedAt": "2026-08-07T21:57:35.516Z",
+      "completedAt": "2026-08-07T22:03:43.146Z"
     },
     {
       "stepId": "step-6",
       "description": "Verification gate. (1) RE-RUN the step-1 inventory (git merge-base --is-ancestor + export greps) — if any surface landed mid-task, the affected probe is red: flip its manifest entry honestly (that is the ratchet working), never suppress. (2) `wc -l packages/testkit/src/foundation/*.ts tests/fault/foundation/*.ts` — every file <=250 target/400 hard. (3) Fresh `pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test\", exitCode: 0, outputTail }. (4) `pnpm exec vitest run tests/fault/foundation` -> green; repo gate `pnpm typecheck && pnpm test` with foreign-red by-path attribution. (5) grep foundation modules for '@moe/core\\|@moe/store\\|@moe/scheduler\\|@moe/skills' -> ZERO (import discipline); grep for 'scheduler/src\\|@moe/scheduler/' -> zero (boundary tripwire); grep for Date.now|Math.random -> zero. (6) Run both suites twice — identical (fixture hashes stable). (7) QA-LOC pre-note for completion: expected ~1600-2000 net LOC; cite the skills +1412 approval, the schedule-coverage verdict ('defect rejection, NOT an oversize rejection' at +1621), and the new-surface precedent — declared up front, not shipped silently into the pending prop-2eaa632d dispute.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
         "packages/testkit/src/foundation/foundation-fault-schedule.ts",
         "packages/testkit/src/foundation/foundation-incident-schedules.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T22:03:49.149Z"
     },
     {
       "stepId": "step-7",
@@ -137,12 +147,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.498Z",
-  "updatedAt": "2026-08-07T21:57:35.516Z",
+  "updatedAt": "2026-08-07T22:03:49.149Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:18:23.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 11,
+    "executedStepCount": 12,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -156,7 +166,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {

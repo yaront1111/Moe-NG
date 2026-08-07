@@ -89,8 +89,8 @@
       "completedAt": "2026-08-07T21:59:50.533Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -102,14 +102,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T22:01:54.873Z",
+  "updatedAt": "2026-08-07T22:02:22.027Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 10,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T22:02:22.026Z",
+    "wallClockMs": 2430980
   },
   "contextFetchedBy": [
     "worker-c8bf9f6b",
@@ -159,7 +161,7 @@
     "packages/core/src/planning/planning-run-test-fixtures.ts",
     "packages/core/src/planning/planning-run-authority.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T21:55:02.802Z",
+  "reviewCompletedAt": "2026-08-07T22:02:22.026Z",
   "rejectionDetails": {
     "failedDodItems": [
       "The focused core typecheck and test command exits 0 with production files unchanged."
@@ -214,5 +216,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T22:02:22.026Z",
+  "reviewSummary": "APPROVE — reopen #1 fixed with the minimum possible change.\n\nFIX VERIFIED: d2b1d77 touches exactly one file, 5 insertions / 5 deletions, all inside the leading block comment. Pure prose reflow dropping the scheduler path; zero code, import, export, literal, cast or assertion bytes moved.\n- `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> 14/14 passed, was 1 failed / 13 passed at reject time. Red-to-green confirmed by me, not inherited.\n- Focused gate: typecheck exit 0; core 14 files / 226 tests exit 0. Same shape as before, so the reword cost nothing.\n\nSPLIT STILL INTACT — re-ran my own reconstruction rather than assuming a comment edit was harmless: the three bodies concatenated still equal `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514, 25591 chars both sides. 32 it() names, multiset equal, zero duplicates. Sizes unchanged at 228 / 180 / 156. No skip/only/todo, no module-level let/var, no nondeterminism, no production file touched, fixture absent from index.ts.\n\nREPO GATE: I ran `pnpm test` myself — 113 passed / 1 failed, with package-boundary now among the passing. The single red is tests/fault/foundation/j4-replan-stale.test.ts from task-18c7921f's uncommitted in-flight edits (`git status` shows its five files ` M` plus two untracked; assertPartitionOwnership is mid-signature-change). Zero planning paths involved. Foreign and transient; the worker hit a different transient in the same tree and re-ran to 114/114 green.\n\nWorth crediting: step-5 checked the reworded comment is still TRUE — confirmed packages/scheduler/src/test-fixtures.ts still exists, so \"mirrors the scheduler package's own test-fixtures module\" is accurate. Rewording to dodge a regex can quietly turn a precise comment false; catching that unprompted is the right instinct.\n\nProcess gap from the rejection closed: the full-repo gate was run before completing, with foreign red attributed by path rather than absorbed."
 }
