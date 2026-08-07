@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { RUNTIME_LIFECYCLES } from "../../../packages/contracts/src/index.js";
-import { GOAL_TRANSITIONS, PROJECT_TRANSITIONS } from "../../../packages/core/src/index.js";
+import {
+  GOAL_TRANSITIONS,
+  GRAPH_REVISION_TRANSITIONS,
+  PLANNING_RUN_TRANSITIONS,
+  PROJECT_TRANSITIONS,
+} from "../../../packages/core/src/index.js";
 import { checkScheduleCoverage } from "../../../packages/testkit/src/schedule/schedule-checker.js";
 import {
   RELEASE_SCHEDULE_FLOOR,
@@ -13,16 +18,28 @@ import {
   CORE_OBLIGATION_COUNT,
 } from "../../../packages/testkit/src/schedule/schedule-obligations.js";
 import {
-  CORE_FAULT_BOUNDARIES,
   CORE_INVARIANT_SCHEDULES,
-  CORE_TRANSITION_TABLES,
-  GENESIS_STATE,
 } from "../../../packages/testkit/src/schedule/schedule-universe-invariants.js";
 import {
   CORE_SCENARIO_SCHEDULES,
 } from "../../../packages/testkit/src/schedule/schedule-universe-scenarios.js";
+import {
+  CORE_FAULT_BOUNDARIES,
+  CORE_TRANSITION_TABLES,
+  GENESIS_COMMANDS,
+  GENESIS_STATE,
+  NEVER_LEGAL_COMMANDS,
+} from "../../../packages/testkit/src/schedule/schedule-universe-tables.js";
 
 const CORE_SCHEDULE_UNIVERSE = [...CORE_INVARIANT_SCHEDULES, ...CORE_SCENARIO_SCHEDULES];
+
+/** The landed tables, keyed exactly as the injected universe names their aggregates. */
+const LANDED_TRANSITIONS = {
+  GOAL: GOAL_TRANSITIONS,
+  GRAPH_REVISION: GRAPH_REVISION_TRANSITIONS,
+  PLANNING_RUN: PLANNING_RUN_TRANSITIONS,
+  PROJECT: PROJECT_TRANSITIONS,
+};
 
 function buildManifest() {
   return checkScheduleCoverage({
@@ -35,12 +52,25 @@ function buildManifest() {
   });
 }
 
-/** A landed reducer table is (commandKind -> legal from-states); creation commands are GENESIS. */
-function landedDomain(table) {
-  return [...new Set(Object.entries(table).flatMap(([commandKind, fromStates]) =>
-    (fromStates.length === 0
-      ? [`${GENESIS_STATE}|${commandKind}`]
-      : fromStates.map((fromState) => `${fromState}|${commandKind}`))))].sort();
+function emptyRows(table) {
+  return Object.entries(table).filter(([, fromStates]) => fromStates.length === 0)
+    .map(([commandKind]) => commandKind).sort();
+}
+
+/**
+ * A landed reducer table is (commandKind -> legal from-states). An empty row means either a
+ * creation command (GENESIS) or a command no state admits; the two are declared separately so
+ * a new empty row cannot slip in silently under either reading.
+ */
+function landedDomain(aggregate, table) {
+  const genesis = GENESIS_COMMANDS[aggregate] ?? [];
+  const neverLegal = NEVER_LEGAL_COMMANDS[aggregate] ?? [];
+  return [...new Set(Object.entries(table).flatMap(([commandKind, fromStates]) => {
+    if (fromStates.length > 0) return fromStates.map((fromState) => `${fromState}|${commandKind}`);
+    if (genesis.includes(commandKind)) return [`${GENESIS_STATE}|${commandKind}`];
+    if (neverLegal.includes(commandKind)) return [];
+    throw new Error(`unclassified empty table row: ${aggregate} ${commandKind}`);
+  }))].sort();
 }
 
 function authoredDomain(aggregate) {
@@ -51,9 +81,40 @@ function authoredDomain(aggregate) {
 const manifest = buildManifest();
 
 describe("CORE schedule coverage manifest", () => {
-  it("keeps the authored tables in lockstep with the landed reducers", () => {
-    expect(authoredDomain("PROJECT")).toEqual(landedDomain(PROJECT_TRANSITIONS));
-    expect(authoredDomain("GOAL")).toEqual(landedDomain(GOAL_TRANSITIONS));
+  it("keeps the authored tables in lockstep with every landed reducer", () => {
+    expect(Object.keys(LANDED_TRANSITIONS).sort())
+      .toEqual(CORE_TRANSITION_TABLES.map((table) => table.aggregate).sort());
+    for (const [aggregate, table] of Object.entries(LANDED_TRANSITIONS)) {
+      expect(authoredDomain(aggregate)).toEqual(landedDomain(aggregate, table));
+    }
+  });
+
+  it("authors every state name from the aggregate's landed lifecycle", () => {
+    for (const table of CORE_TRANSITION_TABLES) {
+      const lifecycle = RUNTIME_LIFECYCLES[table.aggregate];
+      const authored = new Set(table.edges.flatMap((edge) => [edge.fromState, edge.toState]));
+      const foreign = [...authored]
+        .filter((state) => state !== GENESIS_STATE && !lifecycle.includes(state));
+      expect(foreign).toEqual([]);
+      // GENESIS is a pseudo-state: it may be entered from nothing, never reached.
+      expect(table.edges.filter((edge) => edge.toState === GENESIS_STATE)).toEqual([]);
+    }
+  });
+
+  it("classifies every empty landed table row as genesis or never-legal", () => {
+    for (const [aggregate, table] of Object.entries(LANDED_TRANSITIONS)) {
+      const genesis = GENESIS_COMMANDS[aggregate] ?? [];
+      const neverLegal = NEVER_LEGAL_COMMANDS[aggregate] ?? [];
+      expect(genesis.filter((command) => neverLegal.includes(command))).toEqual([]);
+      expect([...genesis, ...neverLegal].sort()).toEqual(emptyRows(table));
+      for (const command of genesis) {
+        expect(authoredDomain(aggregate)).toContain(`${GENESIS_STATE}|${command}`);
+      }
+      for (const command of neverLegal) {
+        expect(authoredDomain(aggregate).some((entry) => entry.endsWith(`|${command}`)))
+          .toBe(false);
+      }
+    }
   });
 
   it("registers exactly the closed CORE obligation namespace", () => {
@@ -172,24 +233,47 @@ describe("CORE schedule coverage manifest", () => {
         for (const code of entry.reasonCodes) codes.add(code);
       }
     }
-    expect([...codes].sort()).toEqual(["SCHEDULE_AGGREGATE_UNLANDED", "SCHEDULE_EVIDENCE_ABSENT"]);
+    expect([...codes].sort()).toEqual(["SCHEDULE_EVIDENCE_ABSENT"]);
     for (const finding of manifest.findings) {
       expect(finding.verdict).toBe("UNKNOWN");
       expect(finding.detail.length).toBeGreaterThan(0);
     }
   });
 
-  it("names the un-landed aggregates it cannot yet assert", () => {
-    const unlanded = manifest.findings
-      .filter((finding) => finding.code === "SCHEDULE_AGGREGATE_UNLANDED");
-    expect(unlanded.length).toBeGreaterThan(0);
-    const named = new Set(unlanded.map((finding) =>
-      finding.detail.includes("GRAPH_REVISION") ? "GRAPH_REVISION" : "PLANNING_RUN"));
-    expect([...named].sort()).toEqual(["GRAPH_REVISION", "PLANNING_RUN"]);
-    for (const aggregate of named) {
-      expect(Object.keys(RUNTIME_LIFECYCLES)).toContain(aggregate);
-      expect(CORE_TRANSITION_TABLES.map((table) => table.aggregate)).not.toContain(aggregate);
+  it("injects and checks every landed aggregate, asserting none abstractly", () => {
+    expect(CORE_TRANSITION_TABLES.map((table) => table.aggregate).sort())
+      .toEqual(["GOAL", "GRAPH_REVISION", "PLANNING_RUN", "PROJECT"]);
+    for (const table of CORE_TRANSITION_TABLES) {
+      expect(Object.keys(RUNTIME_LIFECYCLES)).toContain(table.aggregate);
+      expect(table.edges.length).toBeGreaterThan(0);
     }
+    expect(manifest.findings.filter((finding) =>
+      finding.code === "SCHEDULE_AGGREGATE_UNLANDED")).toEqual([]);
+    const cited = new Set(CORE_SCHEDULE_UNIVERSE.flatMap((definition) => [
+      ...definition.transitionRefs.map((ref) => ref.aggregate),
+      ...definition.racePairRefs.map((ref) => ref.aggregate),
+    ]));
+    expect([...cited].sort()).toEqual(["GOAL", "GRAPH_REVISION", "PLANNING_RUN", "PROJECT"]);
+  });
+
+  it("keeps an auditable UNKNOWN path for an aggregate that has not landed", () => {
+    const unlanded = checkScheduleCoverage({
+      faultBoundaries: CORE_FAULT_BOUNDARIES,
+      hitEvidence: [],
+      knownAggregates: Object.keys(RUNTIME_LIFECYCLES),
+      obligations: CORE_OBLIGATIONS,
+      transitionTables: CORE_TRANSITION_TABLES.filter((table) =>
+        table.aggregate !== "GRAPH_REVISION"),
+      universe: CORE_SCHEDULE_UNIVERSE,
+    });
+    const named = unlanded.findings.filter((finding) =>
+      finding.code === "SCHEDULE_AGGREGATE_UNLANDED");
+    expect(named.length).toBeGreaterThan(0);
+    for (const finding of named) {
+      expect(finding.verdict).toBe("UNKNOWN");
+      expect(finding.detail).toContain("GRAPH_REVISION");
+    }
+    expect(unlanded.verdict).toBe("UNKNOWN");
   });
 
   it("declares itself development-only engineering evidence", () => {
