@@ -17,49 +17,63 @@ import {
   buildLeaseAuthority,
   encodeCanonicalBytes,
 } from "../../../packages/testkit/src/foundation/foundation-fakes.js";
+import type {
+  CommandEnvelopeOverrides,
+} from "../../../packages/testkit/src/foundation/foundation-fakes.js";
 import {
   FOUNDATION_PARTITION_COUNTS,
   foundationPartition,
   resolveEvidenceOutcome,
 } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
 import { J4_MAX_ROUNDS, evaluateJ4Round } from "../../../packages/testkit/src/foundation/foundation-model-j3j4.js";
-import { J4_ROUND } from "../../../packages/testkit/src/foundation/foundation-journey-fixtures.js";
+import {
+  J4_CONFLICTING_DELTA,
+  J4_ROUND,
+} from "../../../packages/testkit/src/foundation/foundation-journey-fixtures.js";
 import { passExpected } from "../../../packages/testkit/src/foundation/foundation-outcomes-fixtures.js";
 import {
+  accepted,
   assertPartitionOwnership,
   contracts,
   core,
-  fixtureById,
+  executorFor,
+  fixturePayload,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
+  refused,
 } from "./foundation-harness.js";
+import type { FoundationExecutors } from "./foundation-harness.js";
 
 const PARTITION = foundationPartition("J4");
 
-function decodeEnvelope(overrides) {
-  return contracts.decodeRuntimeCommandEnvelopeBytes(
-    encodeCanonicalBytes(buildCommandEnvelopeRecord("goal.create", overrides)),
-  );
+function decodeRecord(record: Readonly<Record<string, unknown>>) {
+  return contracts.decodeRuntimeCommandEnvelopeBytes(encodeCanonicalBytes(record));
+}
+
+function decodeEnvelope(overrides: CommandEnvelopeOverrides) {
+  return decodeRecord(buildCommandEnvelopeRecord("goal.create", overrides));
 }
 
 function draftGoal() {
-  const created = core.reduceGoal(undefined, {
+  return accepted(core.reduceGoal(undefined, {
     budgetAccountRef: "budget-1", commandId: "cmd-goal-create", expectedVersion: 0,
     goalId: "goal-1", kind: "goal.create", planningRunRef: "planning-1", projectId: "project-1",
     witness: { projectReadyRef: "project-1", truthClass: "DAEMON_VERIFIED" },
-  });
-  expect(created.ok).toBe(true);
-  return created.state;
+  }), "goal.create").state;
 }
 
-const EXECUTORS = {
+const EXECUTORS: FoundationExecutors = {
   "fixture:j4-delta-approval-round": () =>
-    outcomeFromVerdict(evaluateJ4Round(fixtureById("fixture:j4-delta-approval-round").payload)),
+    outcomeFromVerdict(
+      evaluateJ4Round(fixturePayload("fixture:j4-delta-approval-round", J4_ROUND)),
+    ),
 
   "fixture:j4-node-both-invalidated-and-carried": () =>
     outcomeFromVerdict(
-      evaluateJ4Round(fixtureById("fixture:j4-node-both-invalidated-and-carried").payload),
+      evaluateJ4Round(
+        fixturePayload("fixture:j4-node-both-invalidated-and-carried", J4_CONFLICTING_DELTA),
+      ),
     ),
 
   "schedule:j4-delta-approval-round-accepted": () => {

@@ -15,8 +15,8 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-c4babdf9",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -25,8 +25,31 @@
   "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
   "priority": "HIGH",
   "order": 18,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-70c6d93f50674af982bfeba0cc46b668",
+      "author": "architect-c4babdf9",
+      "content": "SPIDR sizing decision: one honest upcast+fold task needs two production responsibilities plus two bridges and hostile/determinism coverage (~500+ LOC), exceeding the <=400 task rail even if every file stays <=250. Created producer child task-14ba8b74f05f458d94591e02ce851e29 for the pure stored-event upcaster (3 files, <=386 LOC). After it lands, this parent becomes the pure fold/order consumer and should own exactly projection-fold.ts/.js/.test.ts (<=155/1/235): explicit checkpoint + recursive plain-data state, preflight strict globalPosition/unique eventId/per-aggregate nondecreasing sequence, call the child upcaster, reject duplicate/out-of-order before the offending reducer, return no partial state on reducer/upcast failure, and prove same-input deep-frozen determinism with fixed seeds. Package-root export, SQLite/quarantine/persistence, relay, and CURSOR_GAP stay out of scope; the later crash/rebuild task remains the epic hardening gate.",
+      "timestamp": "2026-08-07T21:59:50.239Z"
+    },
+    {
+      "id": "comment-0da58bdf030c4d358787a31faf625529",
+      "author": "architect-c4babdf9",
+      "content": "Correction to comment-70c6d93f50674af982bfeba0cc46b668: per-aggregate sequence must be strictly increasing within the supplied batch (equal is duplicate, lower is out-of-order), not merely nondecreasing. Do not require contiguity or sequence 1 because incremental pages/checkpoints may start midstream.",
+      "timestamp": "2026-08-07T21:59:58.785Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:45.149Z",
-  "updatedAt": "2026-08-07T21:37:00.496Z"
+  "updatedAt": "2026-08-07T22:00:06.408Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:52:41.182Z"
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9"
+  ],
+  "blockedReason": "SPIDR interface split required: combining exact schema-route validation/upcasting with ordered frozen-state folding and mutation-resistant tests would exceed the <=400 net-LOC task rail. The producer interface is now isolated in child task-14ba8b74f05f458d94591e02ce851e29; planning the fold before its exact landed API would force speculative function/type names.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-07T22:00:06.408Z"
 }

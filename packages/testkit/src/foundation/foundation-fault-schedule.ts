@@ -47,7 +47,19 @@ const probe = (
     probeRef,
   });
 
-/** Catalogue probes. Every pattern was checked against the live export sets. */
+/**
+ * Catalogue probes. Every pattern was checked against the live export sets.
+ *
+ * A probe measures the PUBLIC EXPORT SURFACE of a package, so ABSENT here means
+ * "not reachable from the package index", not "not implemented anywhere". That
+ * is deliberate and conservative: a schedule can only be driven through what a
+ * consumer can import. `probe:scheduler-authority-lease` is the live example —
+ * the lease and fencing modules are committed inside the scheduler package but
+ * are not re-exported from its index, so no caller can exercise them and the
+ * schedule stays honestly PRODUCTION_BEHAVIOR_ABSENT. Adding the re-export is
+ * what flips it: the probe goes red against the declared outcome and forces the
+ * manifest entry to be updated to PASS_EXPECTED.
+ */
 const CATALOGUE_PROBES: readonly FoundationAbsenceProbe[] = Object.freeze([
   probe(
     "probe:core-attempt-execution-reducer",

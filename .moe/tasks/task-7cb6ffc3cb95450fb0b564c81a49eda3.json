@@ -30,7 +30,7 @@
     {
       "stepId": "step-2",
       "description": "Extract BY RANGE per the task's named responsibility split: (1) packages/core/src/planning/planning-invariant-fixtures.ts ← the fixture surface (hashes, witnesses, lifecycle rank/terminal tables, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) — deterministic constructors + assertion helpers, verbatim bodies, `import type` for contract types, NodeNext '.js' specifiers; (2) packages/core/src/planning/planning-invariant-drivers.ts ← the driver surface (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS, the *_STEPS valid-state pools) importing the fixtures module; (3) planning-invariants.test.ts keeps ONLY the 7 property cases + describe structure, importing both modules. RAIL CHECKS: neither support module registers Vitest suites (non-.test filenames — never collected; expectDeepFrozen calling expect is legal imported test infrastructure, sibling-fixture precedent) and neither exports anything production-shaped (zero overlap with core index exports — DoD 3); SEEDS/steps/traces move VERBATIM — any seed or pool change alters the exercised corpus (DoD 1). ZERO assertion edits in the test file.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts",
@@ -40,31 +40,54 @@
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts"
       ],
-      "startedAt": "2026-08-07T21:51:51.843Z"
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts",
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ],
+      "note": "Range extraction done exactly as planned. planning-invariant-fixtures.ts = HEAD lines 25-101 verbatim (hash + 7 hash constants, HASHES/BINDING/PLAN_APPROVAL/RUN_ACTIVATION/REVISION_ACTIVATION, RUN_RANK/RUN_TERMINAL/RUN_APPROVAL_STATES/REVISION_RANK/REVISION_TERMINAL, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) plus a header docblock and two `import type` lines with NodeNext '.js' specifiers. planning-invariant-drivers.ts = HEAD lines 103-314 verbatim (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS, RunStep, the six *_STEPS pools, driveRun, runSeedPool, sealedRun, planReviewRun, approvedRevision) importing the fixtures module one-way. planning-invariants.test.ts keeps only the describe + 7 it() cases (HEAD 316-432) verbatim, with a new 11-line import header. Only edits to moved code: a leading `export ` on the 24 symbols consumed across the module boundary; hash, QUALITY_HASH, DEPENDENCY_HASH, POLICY_HASH, summaries, pickRunKind, RunStep, the *_STEPS pools, driveRun and runSeedPool stay module-private. RUN_APPROVAL_STATES deliberately kept on one 105-char line rather than wrapped so the `export `-stripped text is still byte-identical to HEAD (no eslint/max-len rule exists in this repo). Verification after the split: pnpm --filter @moe/core typecheck exit 0; pnpm --filter @moe/core test exit 0, Test Files 14 passed (14), Tests 226 passed (226) — identical to baseline.",
+      "startedAt": "2026-08-07T21:51:51.843Z",
+      "completedAt": "2026-08-07T21:54:40.739Z"
     },
     {
       "stepId": "step-3",
       "description": "Verification gate + corpus audit: (1) `wc -l` all three files — each <=250 physical lines (expect ~140 test / ~120 fixtures / ~140 drivers; if any exceeds, rebalance the range boundary between fixtures and drivers — never trim cases/seeds); (2) corpus audit — it()-name list === baseline (7, no skip/only/todo); SEEDS literal byte-identical; grep the diff for any changed numeric literal in traces/steps/perturbations -> zero; assertion inventory (expectDeepFrozen sites, equality-assertion counts) === baseline; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; pass counts unchanged vs baseline; (4) isolation run of planning-invariants.test.ts alone -> green; repo gate with foreign-red attribution; run twice — identical (determinism preserved through the module boundary).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariants.test.ts",
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts",
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ],
+      "note": "Verification gate + corpus audit all green.\n\n(1) SIZE (counted with a split on \\r\\n|\\r|\\n so LF/CRLF count equally; all three files are pure LF, 0 CRLF): planning-invariants.test.ts 129, planning-invariant-fixtures.ts 88, planning-invariant-drivers.ts 235 — each <=250. No rebalancing needed.\n\n(2) CORPUS AUDIT — proved by byte containment rather than eyeballing. For each new file I took the text after its import header, stripped only a leading `export ` per line, and tested it against `git show HEAD:...planning-invariants.test.ts`: fixtures body, drivers body and test body are each a CONTIGUOUS byte-identical substring of the HEAD file. That single check subsumes \"no changed numeric literal\" — every seed, roll modulus, loop bound (120), bearing set, xorshift shift and perturbation constant is byte-identical by construction. Coverage arithmetic from the substring offsets: fixtures = HEAD 25-101, drivers = HEAD 102-314, test = HEAD 316-432; HEAD lines 24/102-boundary/315 are blank separators, HEAD 1-23 was the import block (legitimately rewritten). No overlap, no orphaned line. SEEDS literal `const SEEDS = [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d] as const;` present verbatim. it() names: 7, same text, same order as baseline; zero .only/.skip/.todo. Assertion inventory summed across the three files vs baseline: expect( 48/48, expectDeepFrozen( 4/4, .toBe( 40/40, .toEqual( 5/5, .toStrictEqual( 0/0, .toBeGreaterThanOrEqual( 2/2, it( 7/7, describe( 1/1 — all OK. Support modules register no suite (describe(/it(/test( = 0 in both). No production-shaped exports: packages/core/src/index.ts has 0 references to either module and none of the 26 exported symbol names appear in it; the only repo-wide importers are the test file and drivers importing fixtures (one-way, no cycle).\n\n(3) NAMED VERIFICATION, fresh: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0, Test Files 14 passed (14), Tests 226 passed (226) — identical to the pre-change baseline. Production files untouched: git status shows only the three owned paths under packages/.\n\n(4) ISOLATION + DETERMINISM: `vitest run packages/core/src/planning/planning-invariants.test.ts` run twice -> 1 file / 7 tests passed both times, exit 0 both times. Determinism survives the module boundary (the self-comparison assertions runTrace(seed,1) toEqual runTrace(seed,1) are the in-test proof and they pass).\n\nREPO GATE — two FOREIGN reds, neither mine, both attributed:\n(a) packages/scheduler/src/package-boundary.test.ts \"keeps scheduler registrars behind the package-root import boundary\" failed on the first repo run and PASSED in isolation and on re-run (14/14). That test greps every source file under adapters/apps/packages for /@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/]/; a sibling agent's in-flight file tripped it mid-scan. My three files contain 0 matches for that pattern. Test-file count moved 113 -> 114 between the two repo runs, confirming a sibling was writing concurrently.\n(b) packages/testkit/src/foundation/foundation-gate-coverage.test.ts \"typechecks every owned file through a tsconfig project on the shared base\" fails deterministically with `ENOENT: no such file or directory, open 'D:\\projexts\\moe-next\\tests\\fault\\foundation\\tsconfig.json'`. That path is hardcoded at foundation-gate-coverage.test.ts:37; `git ls-tree -r HEAD -- tests` shows NO tsconfig anywhere under tests/, and `git status --porcelain -- tests` is empty, so the file is absent at HEAD too — a pre-existing red belonging to the foundation-gate owner, untouchable from packages/core/src/planning.",
+      "startedAt": "2026-08-07T21:54:42.885Z",
+      "completedAt": "2026-08-07T21:58:00.726Z"
     },
     {
       "stepId": "step-4",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff of every extracted body vs `git show HEAD:.../planning-invariants.test.ts` — xorshift32/perturb/trace generators byte-identical (a single changed constant silently shrinks the corpus while staying green — the vacuity hazard this suite exists to prevent); (b) support modules: no Vitest registration (grep describe(|it( -> zero), no production-shaped exports (index-overlap grep -> zero), no `let` outside xorshift32's closure; (c) scratchpad baseline outside the repo, no strays; (d) coverage arithmetic — every HEAD support line claimed exactly once across the two modules. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/planning-invariants.test.ts packages/core/src/planning/planning-invariant-fixtures.ts packages/core/src/planning/planning-invariant-drivers.ts`; `git show --stat` lists exactly these 3 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariants.test.ts",
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts",
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ],
+      "note": "Adversarial self-review done, then committed by explicit pathspec as a929e11.\n\n(a) VERBATIM-MOVE PROOF. Per-symbol regex extraction of xorshift32, perturb, summaries, finalizeWitness, expectDeepFrozen, runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, driveRun and runSeedPool, each `export `-stripped, all 12 confirmed byte-contained in `git show HEAD:...planning-invariants.test.ts`; on top of that the three whole bodies are contiguous substrings of that blob. Base blob verified unchanged after two sibling commits landed mid-session: HEAD:planning-invariants.test.ts is still 446691c0304f8c49025785294434d1058e32370c, identical to the blob at session start, last touched by the dependency commit bcdc2f6 — no sibling edit was swallowed by the split.\n\n(b) SUPPORT-MODULE RAILS. describe(/it(/test( = 0 in both modules. Zero overlap with packages/core/src/index.ts (0 references to either module; none of the 26 exported names appear there). Zero module-level `let` in either module — every `let` is function-local (xorshift32's closure, and the loop cursors that came over verbatim), so no cross-test mutable state was introduced by the split. Import graph is one-way: test -> drivers -> fixtures, no cycle.\n\n(c) HYGIENE. All three files LF-only (0 CR), final newline present, no tabs, no trailing whitespace. Scratchpad baseline and the commit message live in %TEMP%, outside the repo; no debug/probe/scratch file anywhere in the tree.\n\n(d) COVERAGE ARITHMETIC. fixtures = old 25-101, drivers = old 102-314, test = old 316-432; old 1-23 was the import block, rewritten. Boundaries are blank lines, no overlap (101<102, 314<316), no orphaned line.\n\n(e) MUTATION TESTING — the check that a green refactor cannot give you. Green alone proves nothing here, so I broke the moved code on purpose to confirm the corpus still bites through the new module boundary: making perturb an identity (fixtures) turned \"rejects every perturbed approval and activation digest with zero state change\" red, 1 failed / 6 passed; flipping SEALED_STEPS from roll 3 to roll 1 (drivers) turned \"never moves either aggregate backward\", \"keeps every multi-node graph out of plan review...\" and \"refuses a multi-node admission...\" red, 3 failed / 4 passed. Both reverted, and byte containment against HEAD re-confirmed after the revert so no mutation residue shipped.\n\nADVERSARIAL ANGLES CONSIDERED, no risk found: the `as const` witness objects are shared module singletons exactly as they were pre-split (constructed once, spread-copied not mutated at every use site, so exporting them adds no aliasing hazard); module evaluation order is unchanged because nothing at module scope calls a driver — the *_STEPS pools are pure array literals and driveRun only runs inside a test; runTrace calling runSeedPool defined later still works via function-declaration hoisting, same as before; importing `expect` into a non-.test module would throw outside a vitest run, which is why the modules are only reachable from the test file, matching the two sibling fixture modules already in this directory.\n\nCOMMIT. `git status --porcelain` first: foreign entries present and deliberately left alone (packages/testkit/src/foundation/foundation-fault-schedule.ts modified, foundation-gate-coverage.test.ts and tests/fault/foundation/tsconfig.json untracked, plus daemon-owned .moe state). Staged with `git add --` on the three owned paths only, confirmed `git diff --cached --name-only` listed exactly those three, committed with `git commit -F <tempfile> --` on the same three. a929e11 `git show --stat` = exactly the three owned paths, 330 insertions / 310 deletions; message body verified intact (no stray `@`); `git status --porcelain -- packages/core/src/planning` now empty. Message file came from %TEMP% via -F rather than an inline -m, per the known Bash-heredoc trap.\n\nPost-commit fresh verification: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0, Test Files 14 passed (14), Tests 226 passed (226).",
+      "startedAt": "2026-08-07T21:58:05.752Z",
+      "completedAt": "2026-08-07T22:00:52.046Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29a7f3a3",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-bdf27860",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -76,12 +99,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.400Z",
-  "updatedAt": "2026-08-07T21:51:51.843Z",
+  "updatedAt": "2026-08-07T22:02:13.689Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:23:51.254Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 1
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -89,7 +112,10 @@
     "worker-29a7f3a3"
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:24:48.592Z",
@@ -104,8 +130,21 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-07T22:00:52.066Z"
   },
   "planApprovedAt": "2026-08-07T21:24:50.624Z",
-  "workStartedAt": "2026-08-07T21:49:55.249Z"
+  "workStartedAt": "2026-08-07T21:49:55.249Z",
+  "reviewStartedAt": "2026-08-07T22:02:09.968Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  14 passed (14)\n      Tests  226 passed (226)\n   Start at  01:00:26\n   Duration  919ms (transform 1.84s, setup 0ms, import 2.54s, tests 423ms, environment 1ms)\n",
+    "reportedAt": "2026-08-07T22:02:09.968Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-invariants.test.ts",
+    "packages/core/src/planning/planning-invariant-fixtures.ts",
+    "packages/core/src/planning/planning-invariant-drivers.ts"
+  ]
 }

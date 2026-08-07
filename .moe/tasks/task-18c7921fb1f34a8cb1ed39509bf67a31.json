@@ -19,24 +19,33 @@
     {
       "stepId": "step-1",
       "description": "IMPORT-DISCIPLINE AND INVENTORY BASELINE (read-only step; no files edited — the two verified traps). Discipline: EVERY module under packages/testkit/src/foundation imports ONLY @moe/contracts (testkit's package.json declares no other dep — do NOT edit it, it is outside owned paths; an @moe/core import fails the task's own typecheck+test filter under pnpm strict node_modules) — landed reducers reach the schedules exclusively via INJECTED ports from tests/fault/foundation/*.test.ts, which import @moe/core and siblings via RELATIVE paths (working precedent: tests/property/schedule/schedule-coverage.test.ts). Landed-surface inventory — verify FRESH with git log + export greps, then re-verify immediately before commit (`git merge-base --is-ancestor` + export grep; the schedule-coverage task was QA-REJECTED for baking FALSE not-landed claims into its manifest — mem:task-task-1de468316...-qa-verdict): LANDED today = @moe/core 4 reducers + TRANSITIONS + identity; @moe/contracts full runtime vocab/registry/envelopes; @moe/store SqliteEventStore FULL commit/decision/outbox/recovery (the J3 transaction begin/write/commit/ack crash boundaries are a BUILT surface — do NOT mark ABSENT); @moe/scheduler graph validate/analyze/preview/frontier exported + authority lease modules landed-but-unexported; @moe/runner workspace; @moe/skills; @moe/mcp stdio. Genuinely ABSENT = core-to-store dispatch composition, ATTEMPT/execution reducer, acceptance/release/terminal management, timers, review assignment, distribution handshake. Stale-lease and store-crash schedules therefore EXECUTE today; the six legacy-incident schedules are mostly ABSENT. Content tripwire: no '@moe/scheduler/' or 'scheduler/src/' literal substrings in any packages/testkit file (boundary walk scans contents; root tests/ exempt).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "REOPEN pass. Read-only re-inventory + repair scoping for the QA reject (declared gate cannot reach tests/fault/foundation/**).\n\nFresh facts (2026-08-08):\n- All 13 owned files tracked; `git log -- <owned paths>` = cb3cb6a (mine) + f8db0a5 + 4e8ac7c (two foreign session-end sweeps, mem:gotcha-session-end-commit-sweeps-foreign-work). Nothing lost.\n- `find tests -name tsconfig*.json` -> EMPTY. No tsconfig in the repo covers tests/ (root has only tsconfig.base.json; testkit include is [\"src/**/*.ts\"]). QA item 2 reproduces exactly.\n- `pnpm --filter @moe/testkit test` = `vitest run --root ../.. packages/testkit/src` — positional filter, structurally cannot match tests/. QA item 1 reproduces exactly.\n- Baseline re-run this session: testkit typecheck exit 0; `pnpm exec vitest run tests/fault/foundation` 3 files / 43 tests passed. Files work; nothing guards them.\n- Export surfaces re-verified: scheduler index exports graph/frontier only (partitionFrontier present, NO authority/lease export) — the ratchet's ABSENT entries are still honest. core index now carries policy + `export * from \"./identity/index.js\"`.\n\nRepair scope (design NOT rewritten, owned paths NOT narrowed — governor msg-1ee68f0c is explicit on both):\n1. NEW `tests/fault/foundation/tsconfig.json` (inside owned glob) so the 4 tests/ files become a typechecked project; annotate foundation-harness.ts, which is untyped only because nothing checked it.\n2. Widen the filed gate to two commands per the governor's instruction-contract precedent (`pnpm exec vitest run tests/<dir>`), keeping the declared command as a strict prefix.\n3. Add a spec-test ratchet so the coverage hole cannot silently return.\n4. Non-blocking QA item 3: comment that probe absence = unexported, not unimplemented.\nNo files edited in this step.",
+      "startedAt": "2026-08-07T21:53:58.995Z",
+      "completedAt": "2026-08-07T21:54:50.660Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — packages/testkit/src/foundation/foundation-spec.test.ts (INSIDE the testkit filter; this is the DoD-4 proof the task's own verification command runs). Assert: (1) expected-outcome vocabulary CLOSED: PASS_EXPECTED | EXPECTED_RED{reason} | PRODUCTION_BEHAVIOR_ABSENT{missingSurface, probeRef} | HONEST_UNKNOWN{missingEvidence}; (2) the foundation expected-outcome manifest (OWN version constant \"moe-foundation-expected-outcome/1\" — distinct artifact: never reuses moe-schedule-coverage/1, SCHEDULE_* codes, or coverage authority over the schedule-checker's source-derived universe) maps EVERY fixture and schedule to exactly one declared outcome; (3) PARTITION COMPLETENESS: the union of the per-journey partitions the fault tests own equals the full manifest (no hand-picked subset drift); (4) every fixture carries DEVELOPMENT_ONLY + NOT_CONFIRMATORY labels and a pinned sha256 via the LANDED testkit canonicalize/identifyCanonicalEvidence helpers (canonical-json.ts + evidence-digest.ts — never hand-rolled JSON.stringify hashing; identity excludes random IDs/wall timestamps/seeds per the schedule-model precedent); (5) ABSENT entries carry a PROBE REF (see step 4 — no unprobed constants); (6) determinism: two manifest builds byte-identical; zero BENCH-* identifiers anywhere; (7) 'held-out' operationalized: fixture/model files are testkit-resident, labeled advisory, and a source-scan asserts no packages/** production module imports the foundation subdir (fairness-reference precedent — held-out = testkit-only + production-must-not-import + labels; NO hidden-label bytes: the reviewer-calibration corpus is a SEPARATE unowned Phase-1 artifact, flagged to the governor, zero bytes here). Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-spec.test.ts"
       ],
       "newFiles": [
         "packages/testkit/src/foundation/foundation-spec.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/foundation/foundation-gate-coverage.test.ts"
+      ],
+      "note": "TDD RED for the reopen repair. The step-2 spec assertions (closed vocabulary, manifest 1:1, partition completeness, labels, pinned digests, probe refs, determinism, held-out) all still hold in foundation-spec.test.ts and were NOT rewritten — QA said the design is strong.\n\nWhat was missing was a spec assertion about the GATE itself, which is the defect QA found. Added packages/testkit/src/foundation/foundation-gate-coverage.test.ts (152 lines) — new file rather than growing foundation-spec.test.ts, which is already exactly at the 250 cap. It lives inside packages/testkit/src on purpose so the narrow declared command can never drop the check that guards the narrow declared command.\n\nIt reads real tool config off disk, not a prose claim:\n- enumerates every .ts under BOTH owned dirs (floor >=13 so an empty scan cannot fake-pass);\n- asserts each owned *.test.ts is matched by a filed gate filter, and that each filed filter covers something;\n- parses packages/testkit/package.json scripts.test and pins its positional filter to exactly [\"packages/testkit/src\"] — if the script widens, the credited coverage must be re-derived;\n- asserts vitest.config.ts still includes \"tests/**/*.test.ts\";\n- asserts every owned file falls inside a tsconfig project that extends tsconfig.base.json, using a tsconfig-glob matcher (** spans dirs, * does not).\n\nRED confirmed, and red for the right reason: 1 failed / 4 passed — `ENOENT ... tests\\fault\\foundation\\tsconfig.json`. The four gate assertions that pass today are the ones already true; the one that fails is exactly QA's second blocker.",
+      "startedAt": "2026-08-07T21:55:34.876Z",
+      "completedAt": "2026-08-07T21:56:32.806Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — foundation-outcomes-fixtures.ts + foundation-model-j1.ts + foundation-model-j3j4.ts (each <=250 hard; per-journey model split pre-planned because one 250-line file cannot hold three journeys — measured density: fairness-model.ts is 162 lines for ONE model). foundation-outcomes-fixtures.ts: the closed outcome vocabulary, the versioned manifest builder, versioned hashed fixture data (canonicalize/identifyCanonicalEvidence reuse, DEVELOPMENT_ONLY + NOT_CONFIRMATORY labels). foundation-model-j1.ts: held-out J1 pure model (design 1095): goal.create -> exact plan/initial-graph approval -> execution -> final acceptance with EXACTLY three human actions; includes the ZERO-WORK FALSE-GREEN oracle self-test hook — the model must REFUSE an attempt trace with no work (empty diff, no artifacts/receipts, green self-claim); anchors CORE-I4 (proof before acceptance), CORE-I14 ('agent text cannot satisfy a gate'), CORE-S1 — a J1 model satisfiable by a no-op trace is itself the false-green defect, and this oracle self-test is executable TODAY (it tests the model, not production). foundation-model-j3j4.ts: J3 crash-recovery model (design 1099: declared crash boundaries, restart record classes adopted/suspect/quarantined/reconciliation, healthy continuation = one safe action creating a traceable binding, never edited history) + J4 rejection/re-plan model (design 1101: findings->evidence links, delta approval with changed hashes + invalidated/carry-forward sets, visible three-round counter, explicit escalation, old artifacts stay readable). All pure data + pure functions over @moe/contracts vocabularies only.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
         "packages/testkit/src/foundation/foundation-model-j1.ts",
@@ -46,12 +55,15 @@
         "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
         "packages/testkit/src/foundation/foundation-model-j1.ts",
         "packages/testkit/src/foundation/foundation-model-j3j4.ts"
-      ]
+      ],
+      "note": "No-op on the reopen pass, deliberately. QA's verdict was explicit: \"The specification design is strong; do not rewrite it.\" The step-3 deliverables landed and were confirmed by mutation, not by reading — flipping one hex char of a pinned fixture digest turned 2 tests red, and the DEVELOPMENT_ONLY/NOT_CONFIRMATORY labels plus the zero-Date.now/Math.random/new Date property were verified by QA directly.\n\nRe-verified present and unchanged this session:\n- foundation-outcomes-fixtures.ts 196 lines (closed vocabulary, moe-foundation-expected-outcome/1 manifest builder, canonicalize/identifyCanonicalEvidence identity)\n- foundation-model-j1.ts 150 lines (three-human-action linear journey + zero-work false-green refusal)\n- foundation-model-j3j4.ts 184 lines (crash-boundary restart classification + delta-approval/carry-forward)\n- foundation-journey-fixtures.ts 163 lines (pinned sha256 literals)\nAll still exercised green by the declared testkit command. Zero bytes changed in this step; the rejection was about gate reach, not about these modules.",
+      "startedAt": "2026-08-07T21:56:37.779Z",
+      "completedAt": "2026-08-07T21:56:45.669Z"
     },
     {
       "stepId": "step-4",
       "description": "Green — foundation-fakes.ts + foundation-fault-schedule.ts + foundation-incident-schedules.ts (incident split pre-planned — six incidents + the DoD-2 catalogue cannot share 250 lines). foundation-fakes.ts: pure injected-port fakes conforming to @moe/contracts envelope shapes (fake dispatch port, fake observation/clock ports — caller-supplied time only) sufficient for the fault tests to drive landed reducers WITHOUT testkit importing them. foundation-fault-schedule.ts: typed schedules for the DoD-2 catalogue — stale version/lease (EXECUTES today against landed contracts registry + authority lease modules via injected ports), cancel-start races, crash boundaries (design-1225 catalogue subset applicable to the LANDED store commit surface — executes today), zero-work false green (the J1 no-op-trace schedule), honest UNKNOWN (missing-evidence schedules asserting HONEST_UNKNOWN, never PASS). foundation-incident-schedules.ts: the six mandatory legacy incident schedules (design 1229): terminal-release-resurrect (53271ca), release-handoff-atomicity (3563791+28a6588), hot-claim-loop (1aa1546), timer-reentrancy (28a6588), silent-review-theft (3d2cb16+b30fb6f), stale-assets handshake — each attempts its production surface through a PRESENCE-DETECTING PROBE: the schedule asserts the named surface is absent from the target package's export set (falsifiable — when the surface lands, the probe goes RED and forces the manifest flip from PRODUCTION_BEHAVIOR_ABSENT to PASS_EXPECTED; the schedule-coverage lockstep pattern; an unprobed constant rots into exactly the false-evidence state QA rejected). The RATCHET is design-honest: 1229 makes fixtures mandatory complements, 1304 requires failures to NAME missing behavior, 1324 requires them to PASS at Foundation Preview exit — the probe is what forces the flip. Step-2 spec test green after this step.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-fakes.ts",
         "packages/testkit/src/foundation/foundation-fault-schedule.ts",
@@ -61,12 +73,18 @@
         "packages/testkit/src/foundation/foundation-fakes.ts",
         "packages/testkit/src/foundation/foundation-fault-schedule.ts",
         "packages/testkit/src/foundation/foundation-incident-schedules.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/foundation/foundation-fault-schedule.ts"
+      ],
+      "note": "Schedules, fakes and incident probes unchanged in substance — QA proved the ratchet real by mutation (adding a genuine `partitionFrontier` export to probe:scheduler-authority-lease turned j4-replan-stale.test.ts:176 red, declared PRODUCTION_BEHAVIOR_ABSENT vs produced PASS_EXPECTED). Rewriting a mechanism QA confirmed working would be the wrong repair.\n\nFixed QA's non-blocking observation (rejectionDetails issue 3, foundation-fault-schedule.ts:73): the probe doc now states the semantics explicitly. A probe measures the PUBLIC EXPORT SURFACE, so ABSENT means \"not reachable from the package index\", not \"not implemented anywhere\", and probe:scheduler-authority-lease is named as the live example.\n\nRe-verified the claim rather than trusting the review text: the scheduler package's authority directory does contain authority-kernel, lease-fencing, lease-state, lease-drain, lease-resource and presence modules, and `grep authority packages/scheduler/src/index.ts` finds only a prose mention in the module doc — no re-export. So the probe is conservative and correct: no consumer can import the surface, therefore no schedule can drive it. Adding the re-export flips the probe red and forces the manifest to PASS_EXPECTED, which is the ratchet working.\n\nComment written to avoid the '@moe/scheduler/' and 'scheduler/src/' literals — the scheduler package-boundary test greps raw file CONTENT, so prose trips it exactly like a deep import (mem:gotcha-boundary-test-greps-prose-not-imports). Tripwire grep over the whole foundation directory: CLEAN. File is 211 lines, under the 250 target.",
+      "startedAt": "2026-08-07T21:57:20.428Z",
+      "completedAt": "2026-08-07T21:57:28.592Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD — tests/fault/foundation/{j1-linear.test.ts, j3-crash.test.ts, j4-replan-stale.test.ts} (root-vitest discovered via tests/** include; NOT under the testkit filter — honest note; untypechecked, so every gate tooth is a runtime assertion; cross-package RELATIVE imports of @moe/core + @moe/store + @moe/contracts + the foundation modules). Each file it.each's over its OWNED manifest partition and asserts produced-outcome === declared-outcome per schedule (the end-to-end DoD-4 enforcement; combined with foundation-spec's partition-completeness, no schedule can drift). j1-linear.test.ts: drive the J1 model against landed core reducers via injected fakes (goal.create -> planning -> approval path executes TODAY through reduceProject/reduceGoal/reducePlanningRun/reduceGraphRevision); zero-work false-green schedule asserts the model REFUSES; segments needing the absent dispatch composition assert PRODUCTION_BEHAVIOR_ABSENT via probe. j3-crash.test.ts: store crash-boundary schedules EXECUTE against the landed SqliteEventStore recovery surface (transaction begin/write/commit/ack whole-or-none, quarantine semantics); restart-record classification against the J3 model; absent surfaces (timers, attempt management) probed-ABSENT. j4-replan-stale.test.ts: J4 delta-approval/carry-forward model schedules (planning reducers execute; approval surfaces probed) + CORE-S7 stale-client subset (envelope/version/command-ID rejections EXECUTE against the landed contracts registry + decoders; lease staleness against landed authority modules via ports) — if this file nears 250 lines, split stale-clients.test.ts via step amendment. Fresh `pnpm exec vitest run tests/fault/foundation` green with the manifest fully partitioned.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/fault/foundation/j1-linear.test.ts",
         "tests/fault/foundation/j3-crash.test.ts",
@@ -76,7 +94,8 @@
         "tests/fault/foundation/j1-linear.test.ts",
         "tests/fault/foundation/j3-crash.test.ts",
         "tests/fault/foundation/j4-replan-stale.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:57:35.516Z"
     },
     {
       "stepId": "step-6",
@@ -99,7 +118,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-2edeee3c",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -118,20 +137,27 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.498Z",
-  "updatedAt": "2026-08-07T21:48:57.052Z",
+  "updatedAt": "2026-08-07T21:57:35.516Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:18:23.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7,
+    "executedStepCount": 11,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-2edeee3c"
+  ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [
     {
       "item": "The focused testkit typecheck and test command exits 0 with expected-red fixtures mechanically distinguished.",
@@ -156,7 +182,8 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-07T21:54:50.677Z"
   },
   "planApprovedAt": "2026-08-07T20:30:09.154Z",
   "workStartedAt": "2026-08-07T20:55:03.025Z",

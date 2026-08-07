@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "BACKLOG",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: dependencies verified landed. Runtime contract registry DONE; Policy approval core is in REVIEW with its code committed — packages/core/src/policy is tracked (approval-contract.ts, policy-contract.ts, policy-evaluation.ts). I sent this back to BACKLOG earlier today precisely because packages/core/src/policy did not exist; that condition has cleared. Owns packages/scheduler/src/budget/**, file-disjoint from the three sibling scheduler subtrees (authority, dependencies, admission). Plan the budget contract against Policy's committed interface, not against an assumed one.",
+  "reopenReason": "Superseded by a SPIDR split — do NOT plan or claim; traceability shell only. architect blocked it: the five-responsibility budget core cannot meet the <=400 net-LOC and 1-3-file task size without oversized production and tests, and planning the parent before its children's interfaces land would be speculative. Children created and verified present: task-7dc2e4870d7d4096a1be7b5991e50e94 (Budget contract vocabulary), task-a5def097bcb7495e935204bd845160b4 (Hierarchical budget ledger), task-318c0732094c417f96932b5c83e7388b (Protected budget reservations), task-3602672fd0c74de6b6fc72f90e1745c8 (Budget settlement reconciliation). Same pattern as task-55d5a898 and task-50874e67. Governor to archive once a human confirms.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.265Z",
-  "updatedAt": "2026-08-07T21:52:37.640Z",
+  "updatedAt": "2026-08-07T21:56:56.231Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:17:26.969Z"
   },
@@ -44,10 +44,10 @@
     "architect-d89636d1",
     "architect-c4babdf9"
   ],
-  "blockedReason": "SPIDR split required: the original five-responsibility budget core cannot meet the enforced <=400 net-LOC and 1–3-file task size without oversized production/tests. Five bounded child tasks now own contract, ledger, protected reservation, measurement, and settlement slices. Planning this parent before those interfaces land would be speculative and could dispatch integration tests ahead of their producers.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-07T21:48:23.218Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Verified design/policy/scheduler constraints, split the oversized scope into five bounded BACKLOG children, documented ordering and final-hardening role in task comment and Serena memories.",

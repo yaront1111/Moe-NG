@@ -129,12 +129,12 @@
       "completedAt": "2026-08-07T21:47:00.146Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": "worker-875b53a2",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "REJECT-AS-OVERSIZED + one hard-cap file violation. NOT a defect rejection — the implementation is correct and I verified it end to end. Do NOT revert 37b11e5.\n\nSIZE (blocking, architect/governance-side): commit 37b11e5 = +2013 / -0 LOC across 7 files vs the 400 net LOC QA bar (5x over). No approved exception covers it. prop-2eaa632d is scoped to commit bcdc2f6 ONLY and explicitly does not extend here — I closed that task 20 minutes ago on that exact wording, so approving 2013 unexceptioned would hollow out the bar. The runtime already warned at plan submission: \"Plan touches 7 distinct files (target <=5)\".\n\nFILE CAP (blocking, worker-fixable NOW): http-server.test.ts is 505 lines, over the task rail's explicit \"Keep files below 400 lines\". Your step-7 note reported production sizes only and never reported the test files. Also over the <=250 target, under the 400 cap: http-session.test.ts 339, http-server.ts 282, http-parity.test.ts 263.\n\nVERIFIED GOOD — carry forward, do NOT redo (evidence in issues[]): gate re-run by me, `pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test` exit 0, 5 files / 125 tests, matching your reported outputTail. ALL FOUR DoD items PASS. stdio provably untouched. Mutation-resistant: I broke two properties you had not explicitly proven — the swapped cross-binding compare killed 2 tests, the credential-in-URL refusal killed 6. Both reverted, tree byte-clean, 125/125 green.\n\nSTRUCTURAL NOTE FOR THE ARCHITECT, not the worker: this is the second consecutive task hitting this wall, and task-1ade51c0's handoff already predicted it. A 4-way split on your own documented seams (session / resume / transport+bridge / parity) still leaves most buckets over 400, because the named gate requires each slice to typecheck and test as a unit. Ask governance for a scoped decision on adapter- and aggregate-shaped work rather than another per-commit exception.",
+  "reopenReason": "Human approved prop-0543d3ce9f7440099a8c4cfe7821b6a8 — one-time historical size exception for already-landed commit 37b11e5. Clearing the block. The daemon does not allow BLOCKED -> REVIEW directly, so this routes through WORKING; it is NOT a request to redo work. All 7 steps are complete, all four DoD items pass, the exact MCP gate is 125/125, and the one worker-fixable issue (http-server.test.ts at 505 lines) was already fixed in 8ef39d9 with every HTTP file now under 400. Worker: re-file completion on the existing evidence and submit for review. Do not revert, rewrite, or re-split anything. If the root regression gate is still red on foreign packages/core/src/planning/planning-run-test-fixtures.ts, that is another task's in-flight work — report it, do not fix it.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T21:48:27.568Z",
+  "updatedAt": "2026-08-07T21:57:53.145Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
@@ -202,10 +202,10 @@
   },
   "planApprovedAt": "2026-08-07T19:23:22.338Z",
   "workStartedAt": "2026-08-07T19:24:29.460Z",
-  "blockedReason": "The sole worker-fixable QA issue is resolved in 8ef39d9: every HTTP file is below 400 lines, production/stdio bytes are unchanged, and the exact MCP gate passes 125/125. The remaining rejection blocker is explicitly architect/governance-side: original commit 37b11e5 is +2013 LOC against the 400 task bar, no scoped exception exists, and QA instructed the worker not to revert or rewrite the verified implementation. Safe completion cannot be proven until governance records a scoped exception or re-scopes the already-landed task. The root regression gate also currently has one unrelated package-boundary failure in foreign packages/core/src/planning/planning-run-test-fixtures.ts.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-07T21:48:27.568Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "reviewStartedAt": "2026-08-07T20:53:32.905Z",
   "verification": {
     "command": "pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test",

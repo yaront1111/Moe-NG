@@ -20,27 +20,29 @@ import {
   J1_REQUIRED_HUMAN_ACTIONS,
   evaluateJ1Journey,
 } from "../../../packages/testkit/src/foundation/foundation-model-j1.js";
+import {
+  J1_AGENT_TEXT,
+  J1_WORKED,
+  J1_ZERO_WORK,
+} from "../../../packages/testkit/src/foundation/foundation-journey-fixtures.js";
 import { passExpected } from "../../../packages/testkit/src/foundation/foundation-outcomes-fixtures.js";
 import {
+  accepted,
   assertPartitionOwnership,
   contracts,
   core,
-  fixtureById,
+  executorFor,
+  fixturePayload,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
+  refused,
 } from "./foundation-harness.js";
+import type { FoundationExecutors } from "./foundation-harness.js";
 
 const PARTITION = foundationPartition("J1");
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
-
-function accepted(result, label) {
-  if (result.ok !== true) {
-    throw new Error(`${label} was refused with ${result.error.code}`);
-  }
-  return result;
-}
 
 /** Drives the landed reducers along the linear J1 path and returns the final goal. */
 function driveLinearPath() {
@@ -117,13 +119,19 @@ function driveGraphApproval() {
   return approved.state;
 }
 
-const EXECUTORS = {
+const EXECUTORS: FoundationExecutors = {
   "fixture:j1-linear-happy-path": () =>
-    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-linear-happy-path").payload)),
+    outcomeFromVerdict(
+      evaluateJ1Journey(fixturePayload("fixture:j1-linear-happy-path", J1_WORKED)),
+    ),
   "fixture:j1-zero-work-false-green": () =>
-    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-zero-work-false-green").payload)),
+    outcomeFromVerdict(
+      evaluateJ1Journey(fixturePayload("fixture:j1-zero-work-false-green", J1_ZERO_WORK)),
+    ),
   "fixture:j1-agent-text-as-gate": () =>
-    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-agent-text-as-gate").payload)),
+    outcomeFromVerdict(
+      evaluateJ1Journey(fixturePayload("fixture:j1-agent-text-as-gate", J1_AGENT_TEXT)),
+    ),
 
   "schedule:j1-linear-approval-path-executes": () => {
     const goal = driveLinearPath();
@@ -134,7 +142,7 @@ const EXECUTORS = {
   },
 
   "schedule:j1-zero-work-false-green-refused": () => {
-    const worked = fixtureById("fixture:j1-linear-happy-path").payload;
+    const worked = fixturePayload("fixture:j1-linear-happy-path", J1_WORKED);
     const noop = {
       ...worked,
       attempt: {
@@ -148,13 +156,13 @@ const EXECUTORS = {
   },
 
   "schedule:j1-agent-text-cannot-satisfy-gate": () => {
-    const narrated = fixtureById("fixture:j1-agent-text-as-gate").payload;
+    const narrated = fixturePayload("fixture:j1-agent-text-as-gate", J1_AGENT_TEXT);
     expect(evaluateJ1Journey(narrated)).toEqual({ ok: false, refusal: "J1_AGENT_TEXT_AS_GATE" });
     return passExpected();
   },
 
   "schedule:j1-acceptance-requires-proof": () => {
-    const worked = fixtureById("fixture:j1-linear-happy-path").payload;
+    const worked = fixturePayload("fixture:j1-linear-happy-path", J1_WORKED);
     const unproven = { ...worked, acceptanceProofRef: null };
     expect(evaluateJ1Journey(unproven)).toEqual({
       ok: false, refusal: "J1_ACCEPTANCE_WITHOUT_PROOF",
@@ -173,15 +181,14 @@ const EXECUTORS = {
     }), "goal.cancel");
     expect(cancelled.state.lifecycle).toBe("CANCELLED");
 
-    const late = core.reduceGoal(cancelled.state, {
+    const late = refused(core.reduceGoal(cancelled.state, {
       commandId: "cmd-late-start", expectedVersion: cancelled.state.version,
       kind: "goal.activate_initial_graph",
       witness: {
         activeGraphRevisionRef: "revision-2", graphApprovalRef: "approval-2",
         truthClass: "HUMAN_APPROVED",
       },
-    });
-    expect(late.ok).toBe(false);
+    }), "goal.activate_initial_graph after cancel");
     expect(late.error.code).toBe("ILLEGAL_TRANSITION");
     expect(late.error.details.sourceState).toBe("CANCELLED");
     return passExpected();
@@ -197,7 +204,7 @@ const EXECUTORS = {
 
 describe("J1 linear journey fault schedules", () => {
   it("owns exactly the J1 manifest partition", () => {
-    assertPartitionOwnership(expect, PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J1);
+    assertPartitionOwnership(PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J1);
   });
 
   it("keeps the model's command claims true against the landed vocabulary", () => {
@@ -214,6 +221,6 @@ describe("J1 linear journey fault schedules", () => {
   });
 
   it.each(partitionRows(PARTITION))("%s produces its declared outcome", (entryId, entry) => {
-    expect(EXECUTORS[entryId](entry)).toEqual(entry.outcome);
+    expect(executorFor(EXECUTORS, entryId)(entry)).toEqual(entry.outcome);
   });
 });

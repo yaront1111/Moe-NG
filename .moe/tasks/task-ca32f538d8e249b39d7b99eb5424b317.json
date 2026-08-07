@@ -23,9 +23,9 @@
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts"
       ],
-      "note": "Characterization only; no edits, no gate run, no scratch files.\n\nPrereq: task-866713137aee4794a51973fe4e6e3f44 DONE (planning-contract.ts type-only facade, commit 3431a56). Owned paths clean: planning-run-reducer.test.ts tracked at baseline bcdc2f6; planning-run-test-fixtures.ts and planning-run-authority.test.ts do not exist. Only foreign .moe/** metadata is dirty.\n\nOracle: disk file is BYTE-IDENTICAL to `git show bcdc2f6:packages/core/src/planning/planning-run-reducer.test.ts`. 514 physical lines, exactly 32 `it()` names, 6 describes, no skip/only/todo, no module-level `let`.\n\nRegion map (baseline line numbers): 1-17 imports; 18-153 contiguous deterministic helper region; 155-360 describes 1-4 (creation and readiness 4, ownership 4, submission 5, submission finalization 7 = 20 cases); 362-514 describes 5-6 (approval and activation 7, cancellation and concurrency 5 = 12 cases). 20+12=32.\n\nSymbol matrix (word-boundary scan of each region) fixes the per-file imports:\n- fixtures must EXPORT: hash, SUBMISSION_HASH, HASHES, READINESS, RESUME, RECOVERY, EFFECT_TERMINAL, REVISION_SEAL, REFUSAL, PLAN_APPROVAL, REVISE, ACTIVATION, CANCELLATION, finalizeWitness, state, commandFor, expectError, expectIllegal, accepted.\n- fixtures keep PRIVATE (each still consumed internally, so noUnusedLocals is satisfied): PLAN_HASH, GRAPH_HASH, QUALITY_HASH, DEPENDENCY_HASH, BUDGET_HASH, POLICY_HASH, CLAIM, RELEASE, SUBMISSION, summaries, SEALED.\n- reducer half needs value `reducePlanningRun` + type `PlanningRunCommand` only (NOT PlanningRunState/PlanningRunLifecycle/PLANNING_RUN_* /RUNTIME_LIFECYCLES).\n- authority half needs values RUNTIME_LIFECYCLES, reducePlanningRun, PLANNING_RUN_COMMAND_KINDS, PLANNING_RUN_TRANSITIONS + types PlanningRunCommand, PlanningRunLifecycle, PlanningRunState.\n- fixtures need types PlanRevisionHashes, PlanningRunCommand, PlanningRunCommandKind, PlanningRunLifecycle, PlanningRunReducerResult, PlanningRunState.\n\nConstraints that shape the move: tsconfig.base.json sets noUnusedLocals, noUnusedParameters, verbatimModuleSyntax (type-only imports must say `import type`), exactOptionalPropertyTypes, isolatedModules, declaration. vitest.config.ts include is `packages/**/*.test.ts`, so the fixture module is NOT collected as a suite. Precedent for src-resident fixture modules exists (packages/scheduler/src/test-fixtures.ts, authority/test-fixtures.ts, admission/admission-fixtures.ts); planning/ carries no `.js` shims (only identity/ does), so none is needed. No line-limit or file-inventory guard test exists in the repo.\n\nProjected sizes: fixtures ~150, reducer test ~217, authority test ~168 — all <=250.",
-      "startedAt": "2026-08-07T21:43:17.816Z",
-      "completedAt": "2026-08-07T21:45:47.135Z"
+      "note": "Re-characterization after QA reject (reopenCount 1). QA's finding independently reproduced, not taken on trust.\n\nState on disk: the three owned paths are committed (swept into 5a57b2a) and clean in `git status --porcelain`. The only working-tree entries are foreign (.moe state files, packages/core/src/planning/planning-invariants.test.ts + planning-invariant-{drivers,fixtures}.ts belonging to another task). No re-split is needed: QA verified the decomposition byte-for-byte against bcdc2f6 (25591 chars both sides, 32 it() names, sizes 228/180/156) and explicitly instructed not to redo it.\n\nReproduced the red: `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> exit 1, \"Tests 1 failed | 13 passed (14)\", violations array is exactly one entry, `packages\\core\\src\\planning\\planning-run-test-fixtures.ts`.\n\nMechanism confirmed by reading the checker rather than inferring it: package-boundary.test.ts:10 defines `const forbiddenInternalPath = /(?:@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/])/u` and lines 42-43 apply it to `readFile(file, \"utf8\")` — whole raw file contents, with no parse of imports vs comments. My fixture line 4 reads \"Mirrors `packages/scheduler/src/test-fixtures.ts`\", whose `scheduler/src/` substring matches the second alternative. The comment is factually correct and I import nothing from @moe/scheduler; the checker simply cannot distinguish prose from a specifier. Per QA, the scheduler-side regex is the durable defect but is not my path — I will not touch it.\n\nScope for this reopen, therefore: (1) reword fixture line 4 so it does not spell the path, changing nothing else; (2) close the process gap by running the full-repo `pnpm test` before completing, attributing any residual red by path, since a cross-package content scan living in @moe/scheduler is invisible to the plan's focused `--filter @moe/core` gate by construction. Steps 2 and 3 are already satisfied by the committed split and will be recorded as such rather than re-executed.",
+      "startedAt": "2026-08-07T21:55:25.374Z",
+      "completedAt": "2026-08-07T21:55:52.481Z"
     },
     {
       "stepId": "step-2",
@@ -40,9 +40,9 @@
       "modifiedFiles": [
         "packages/core/src/planning/planning-run-test-fixtures.ts"
       ],
-      "note": "Created planning-run-test-fixtures.ts (156 physical lines, <=250) as a verbatim move of baseline lines 18-153.\n\nMechanical proof, not eyeballing: stripped the `export ` keyword from exactly the 19 intended names and byte-compared the module body (everything after the `planning-contract.js` type import block) against `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-153. Result: byte-identical `true`. Un-exporting by explicit name list (per mem:gotcha-export-keyword-defeats-chunk-equality) means an accidental extra export would surface as a diff rather than be normalized away.\n\nExport set is exactly the 19 symbols the two test halves consume: hash, SUBMISSION_HASH, HASHES, READINESS, RESUME, RECOVERY, EFFECT_TERMINAL, REVISION_SEAL, REFUSAL, PLAN_APPROVAL, REVISE, ACTIVATION, CANCELLATION, finalizeWitness, state, commandFor, expectError, expectIllegal, accepted. Unexpected exports: none. Missing: none. PLAN_HASH, GRAPH_HASH, QUALITY_HASH, DEPENDENCY_HASH, BUDGET_HASH, POLICY_HASH, CLAIM, RELEASE, SUBMISSION, summaries, SEALED stay private and are still consumed internally, so noUnusedLocals holds.\n\nImports are `import { expect } from \"vitest\"` (used only by expectError/expectIllegal/accepted) plus one `import type { ... } from \"./planning-contract.js\"` block through the stable facade. No production API is exported and no `.js` shim is needed (planning/ has none; only identity/ does).\n\nOrdering safety re-confirmed on the written file: no describe/it/test registration, no module-level `let`, no skip/only/todo, no Date/Math.random/performance.now. Every value is `const`; state/commandFor/summaries/finalizeWitness return fresh objects and spread HASHES rather than aliasing it.\n\nNo gate run in this step; the single exact gate is step-4.",
-      "startedAt": "2026-08-07T21:45:51.867Z",
-      "completedAt": "2026-08-07T21:47:02.631Z"
+      "note": "Fixture module. The helper extraction this step describes was already completed and committed (swept into 5a57b2a) and QA verified it byte-for-byte against bcdc2f6, so it was not re-executed. The only work in this reopen is the QA-mandated line-4 reword.\n\nApplied exactly the fix QA verified, and nothing else. The header prose no longer spells the scheduler path; it now reads \"Mirrors the scheduler package's own test-fixtures module\". The paragraph was reflowed across the same five comment lines so the file stays 156 physical lines — identical to the size QA measured.\n\n`git diff` on the file is exactly those five comment lines: 5 removed, 5 added, all inside the leading block comment. Zero code, import, export, literal, cast, or assertion bytes changed, so the reconstruction proof QA reproduced against bcdc2f6 still holds for every executable byte.\n\nRed-to-green proven both ways, not assumed. Before: `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> exit 1, 1 failed / 13 passed, violations `[\"packages\\\\core\\\\src\\\\planning\\\\planning-run-test-fixtures.ts\"]`. After: exit 0, \"Test Files 1 passed (1) / Tests 14 passed (14)\".\n\nAlso swept all three owned paths with the checker's own regex `@moe/scheduler/|scheduler[\\\\/]src[\\\\/]` to be sure no second occurrence lurks in the reducer or authority file — zero matches across all three. Line counts re-measured cross-platform (split on \\r\\n|\\r|\\n): 156 fixture / 228 reducer / 180 authority, all <=250 and all unchanged from QA's measurement.\n\npackages/scheduler/src/package-boundary.test.ts was not touched, per QA's explicit instruction; its whole-contents regex is a real defect but belongs to the scheduler owner.",
+      "startedAt": "2026-08-07T21:55:54.559Z",
+      "completedAt": "2026-08-07T21:56:32.189Z"
     },
     {
       "stepId": "step-3",
@@ -55,13 +55,9 @@
       "newFiles": [
         "packages/core/src/planning/planning-run-authority.test.ts"
       ],
-      "modifiedFiles": [
-        "packages/core/src/planning/planning-run-reducer.test.ts",
-        "packages/core/src/planning/planning-run-authority.test.ts"
-      ],
-      "note": "Split done by slicing the committed bcdc2f6 baseline directly, so the describe bodies could not drift by hand-transcription. Only the two owned test paths were written; no scratch or generated evidence file exists.\n\nResult: planning-run-reducer.test.ts 228 lines, planning-run-authority.test.ts 180 lines, planning-run-test-fixtures.ts 156 lines — all <=250.\n\nVerbatim proof (byte compare against `git show bcdc2f6:...`): reducer body == baseline lines 155-360 `true`; authority body == baseline lines 362-514 `true`. Everything below each import block is untouched baseline bytes, so every assertion, cast, loop-derived matrix, and error/result expectation is preserved with its original ordering.\n\nNo-loss proof: baseline 32 `it()` names split 20 (reducer) + 12 (authority); sorted combined multiset equals the baseline multiset `true`, so each name appears exactly once. Describe multiset also equal, in baseline order: creation and readiness / ownership / submission / submission finalization stayed; approval and activation / cancellation and concurrency moved.\n\nImports are exactly what each half uses (noUnusedLocals + verbatimModuleSyntax): reducer takes `describe, expect, it`, type `PlanningRunCommand`, value `reducePlanningRun`, and 15 fixture symbols; authority additionally takes `RUNTIME_LIFECYCLES`, `PLANNING_RUN_COMMAND_KINDS`, `PLANNING_RUN_TRANSITIONS`, and types `PlanningRunLifecycle`/`PlanningRunState`, since the version-ceiling and exhaustive command-kind-by-lifecycle matrix live there and need the transition table next to them.\n\nRescanned both files: no skip/only/todo, no module-level `let`, no Date/Math.random/performance.now, and neither file writes to an imported fixture binding.\n\nGate not run in this step; step-4 runs the single exact gate.",
-      "startedAt": "2026-08-07T21:47:05.086Z",
-      "completedAt": "2026-08-07T21:47:59.522Z"
+      "note": "Describe-block split. Already completed and committed in the pre-reject pass (swept into 5a57b2a); QA reproduced the reconstruction proof independently rather than trusting mine — the three bodies concatenated equal `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514 at 25591 chars on both sides — and instructed explicitly that the split not be redone. So this step was re-verified, not re-executed.\n\nRe-ran the proof myself against the current working tree, because my step-2 edit touched the fixture file and I will not assume an untested file is unchanged in the ways that matter:\n- 20 `it()` in planning-run-reducer.test.ts + 12 in planning-run-authority.test.ts = 32 total, 32 distinct (zero duplicates).\n- Multiset compared name-by-name against the 32 names extracted from `git show bcdc2f6:...` via Compare-Object on sorted sets: no difference in either direction. Nothing lost, renamed, added, or duplicated.\n- Zero matches for `it.skip|only|todo`, `describe.skip|only|todo`, or module-level `let`/`var` across both test files, so no assertion was disabled and no cross-file mutable state was introduced.\n- Both files import shared helpers through `./planning-run-test-fixtures.js`; the authority file retains its own `RUNTIME_LIFECYCLES`/reducer-constant imports so the derived lifecycle matrix stays with the constants it is derived from.\n\nSizes still 228 reducer / 180 authority / 156 fixture, all <=250 under a cross-platform \\r\\n|\\r|\\n split. The step-2 reword changed only comment prose and preserved the fixture's line count, so nothing here shifted.",
+      "startedAt": "2026-08-07T21:56:34.979Z",
+      "completedAt": "2026-08-07T21:56:56.788Z"
     },
     {
       "stepId": "step-4",
@@ -72,9 +68,9 @@
         "packages/core/src/planning/planning-run-test-fixtures.ts",
         "packages/core/src/planning/planning-run-authority.test.ts"
       ],
-      "note": "Ran the exact named gate once, in the foreground, after the complete split.\n\nCommand: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`\nExit code: 0\n\nOutput tail:\n  $ tsc --project tsconfig.json\n  $ vitest run --root ../.. packages/core/src\n   RUN  v4.1.10 D:/projexts/moe-next\n   Test Files  14 passed (14)\n        Tests  226 passed (226)\n     Duration  523ms\n\ntsc is clean under noUnusedLocals/noUnusedParameters/verbatimModuleSyntax, which is the real check on the per-file import sets: an over-broad or missing import in either half would have failed here rather than passing silently. Test count is unchanged at 226 because the split moves 32 cases and creates none; file count rises by exactly one (the new authority suite). The fixture module is not counted as a suite, matching `vitest.config.ts` include `packages/**/*.test.ts`.\n\nNo production file was touched and no assertion was altered, so no failure had to be diagnosed. Retaining this fresh command/exit code/output tail for moe.complete_task.",
-      "startedAt": "2026-08-07T21:48:02.093Z",
-      "completedAt": "2026-08-07T21:48:27.399Z"
+      "note": "Gates. Ran the plan's named gate plus the full-repo gate QA required, closing the process gap named in the rejection.\n\nNamed gate, fresh: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> typecheck exit 0, then \"Test Files 14 passed (14) / Tests 226 passed (226)\", EXITCODE=0. Same 14/226 shape QA measured, so the reword cost nothing.\n\nFull-repo gate, first run: `pnpm test` -> exit 1, \"Test Files 1 failed | 113 passed (114) / Tests 1 failed | 1582 passed | 1 skipped\". Attributed by path before doing anything with it, per the rejection's instruction. The one red was packages/testkit/src/foundation/foundation-gate-coverage.test.ts: `Error: ENOENT ... open 'D:\\projexts\\moe-next\\tests\\fault\\foundation\\tsconfig.json'`. That test declares `OWNED_DIRECTORIES = [\"packages/testkit/src/foundation\", \"tests/fault/foundation\"]` — zero overlap with my three planning paths, and a comment reword in packages/core cannot create or delete a tsconfig under tests/. Foreign, and structurally incapable of being caused by this task.\n\nRoot cause of that red, established rather than guessed: `git status --porcelain tests/` showed `?? tests/fault/foundation/tsconfig.json` — the file existed on disk and was untracked while `git ls-files tests/` did not list it. Another worker owning that gate created it while my run was in flight, so the run observed the directory mid-write. A live race in the shared working directory that epic rail 2 pins us all to, not a defect in either task.\n\nFull-repo gate, re-run after that settled: `pnpm test` -> \"Test Files 114 passed (114) / Tests 1583 passed | 1 skipped (1584)\", EXITCODE=0. Repo is fully green.\n\nThe scheduler boundary check that caused the rejection now passes inside that repo-wide run, so the fix is confirmed at repo scope and not only in the isolated file run. No production file was touched and no assertion was altered to reach green.",
+      "startedAt": "2026-08-07T21:56:59.131Z",
+      "completedAt": "2026-08-07T21:58:13.263Z"
     },
     {
       "stepId": "step-5",
@@ -86,21 +82,19 @@
         "packages/core/src/planning/planning-run-authority.test.ts"
       ],
       "modifiedFiles": [
-        "packages/core/src/planning/planning-run-reducer.test.ts",
-        "packages/core/src/planning/planning-run-test-fixtures.ts",
-        "packages/core/src/planning/planning-run-authority.test.ts"
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
       ],
-      "note": "Adversarial review passed, and it caught a shared-tree incident. Review caused no edit, so the step-4 gate stands as the fresh evidence.\n\nSTRONGEST PROOF (supersedes name-matching): I reconstructed the ENTIRE baseline file minus its 17-line import block by concatenating the three new files' bodies (fixture body with `export ` stripped from exactly the 19 intended names, then the reducer describes, then the authority describes) and byte-compared it against `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514. Result: TRUE. Every byte of every helper, describe, it(), assertion, cast, loop matrix, and blank line survives exactly once, in order. Only the import block differs, which is required. This makes assertion loosening, rename, loss, and duplication mechanically impossible, not merely unobserved.\n\nSupporting checks: 32 it() total (20+12), multiset equal to baseline, zero duplicates. Cross-platform physical line counts via split(/\\r\\n|\\r|\\n/): reducer 228, authority 180, fixtures 156 — all <=250, all pure LF. No skip/only/todo, no module-level let/var, no Date/new Date/Math.random/performance.now/process.hrtime in any of the three. Fixture registers no suite and imports no production module. packages/core/src/index.ts does not reference either new file, so the package root surface is unchanged. `git diff --check` exit 0. No production source was touched by this task at all.\n\nTwo regex hits for \"writes to imported bindings\" were inspected and are FALSE POSITIVES — all three are type annotations on const declarations: `const allowed: readonly PlanningRunLifecycle[] = PLANNING_RUN_TRANSITIONS[kind]`, `export const HASHES: PlanRevisionHashes = {...}`, `const SEALED: readonly PlanningRunLifecycle[] = [...]`. Zero real writes.\n\nCross-file ordering hazard, considered and cleared: vitest's default forks pool runs with isolate:true, so each test file gets its own module registry and the fixture cannot be shared state across the two suites. Even without isolation every export is const and state/commandFor/summaries/finalizeWitness return fresh objects. Noted for QA (theoretical, pre-existing, not a regression): commandFor returns the same REVISION_SEAL and PLAN_APPROVAL object identity on every call, exactly as it did pre-split inside the single file; no test mutates them and any reducer freeze is idempotent.\n\nCOMMIT — READ THIS. I could not commit: `git status --porcelain` came back EMPTY and my three paths were already at HEAD. Commit `5a57b2a feat(task-bfc395429d9d4b61b91e51e4f3bbe166): Projection commit seam on the event transaction` swept all three of my in-flight files (and another task's graph-revision-{reducer.test,test-fixtures} files) under its own message — the `mem:gotcha-shared-index-commit-capture` failure mode, from the other direction. Per epic rail \"preserve foreign work\" I did NOT reset, revert, rebase, or amend that commit. I verified `git diff HEAD -- <my 3 paths>` is empty, i.e. HEAD holds byte-identical content to what step-4's green gate and this review ran against, and no untracked files remain in packages/core/src/planning/.\n\nQA must not review 5a57b2a — it is 22 files of mixed ownership. Review this range instead:\n`git diff bcdc2f6..HEAD -- packages/core/src/planning/planning-run-reducer.test.ts packages/core/src/planning/planning-run-test-fixtures.ts packages/core/src/planning/planning-run-authority.test.ts`  (3 files, +354/-304)\nPosted the same warning plus the diff range to the team channel.",
-      "startedAt": "2026-08-07T21:48:30.185Z",
-      "completedAt": "2026-08-07T21:50:29.839Z"
+      "note": "Adversarial review + explicit-pathspec commit.\n\nThe change under review is five lines of block-comment prose, so the concurrency/input/side-effect arms of the checklist have no surface: no code, control flow, IO, or state was touched. Ran the arms that do apply rather than declaring the whole checklist vacuous.\n\nClaim accuracy — the attack that matters most here. Rewording to avoid a path can quietly turn a precise comment into a false one, and a false comment is worse than a red gate. Confirmed `packages/scheduler/src/test-fixtures.ts` still exists (2855 bytes), so \"Mirrors the scheduler package's own test-fixtures module\" remains true; a reader can still find it by name. Accepted cost: the path is no longer greppable verbatim from this file. That is exactly the trade QA verified, and the alternative is a red repo.\n\nComment integrity: the reflow could have unbalanced the block comment or backticks. `pnpm --filter @moe/core typecheck` exit 0 proves the comment still terminates correctly and the module still parses.\n\nSecond-order breakage: the new prose could trip some other cross-package content scanner. Full `pnpm test` green across all 114 files rules that out empirically rather than by inspection. Also swept all three owned paths with the checker's own regex `@moe/scheduler/|scheduler[\\\\/]src[\\\\/]` — zero matches, so no second occurrence is waiting to reappear.\n\nSplit integrity re-proven after the edit rather than assumed: 20 + 12 = 32 `it()`, 32 distinct, multiset compared against the 32 names from `git show bcdc2f6:...` with Compare-Object — no difference either direction. Zero `skip/only/todo`, zero module-level `let`/`var`. Sizes 156 / 228 / 180 under a cross-platform \\r\\n|\\r|\\n split, all <=250 and all identical to QA's measurement. `git diff --check` exit 0.\n\nNo lint gate exists to satisfy — root `scripts` are typecheck/test/test:meta/test:property/test:store/verify:*. No scratch, probe, or evidence file was created at any point in this reopen; the untracked entries in the tree (`planning-invariant-{drivers,fixtures}.ts`, `foundation-gate-coverage.test.ts`, `tests/fault/foundation/tsconfig.json`) are all foreign and were left alone.\n\nCommit, per epic rail 3. `git status --porcelain` showed 17 dirty entries, of which exactly one was mine; the index was empty, so nothing foreign could be captured. Committed by explicit pathspec — `git commit -- packages/core/src/planning/planning-run-test-fixtures.ts` — never bare, never `-a`, never `add -A`. Result `d2b1d77`, and `git show --stat` lists exactly one file, 5 insertions / 5 deletions. The other two owned paths were unmodified in this reopen and stay at their swept content. No reset, revert, amend, rebase, stash, merge, or push.\n\nSerena: the gotcha was already captured by QA in `gotcha-package-boundary-test-matches-comments`, so I added no near-duplicate; updated `task-task-ca32f538d8e249b39d7b99eb5424b317-handoff` with the reject, the fix, the do-not-re-add-the-path warning, both commits, and the transient foreign-red pattern to expect on full-repo gates.",
+      "startedAt": "2026-08-07T21:58:15.675Z",
+      "completedAt": "2026-08-07T21:59:50.533Z"
     }
   ],
   "status": "REVIEW",
   "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Human explicitly requested PLAN; promoting the next ordered planning test decomposition child.",
+  "reopenCount": 1,
+  "reopenReason": "REJECT on one line. The split itself is flawless — do not redo any of it.\n\nVERIFIED INDEPENDENTLY, all PASS:\n- Reproduced your reconstruction proof rather than trusting it: the three bodies concatenated (fixture with `export ` stripped from the 19 names, then reducer describes, then authority describes) equal `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514, 25591 chars both sides. Nothing lost, renamed, duplicated or loosened.\n- 32 it() names, multiset equal to baseline, zero duplicates. No skip/only/todo, no module-level let/var, no Date/Math.random.\n- Sizes 228 / 180 / 156. Fixture exports only test helpers, imports no reducer, absent from index.ts. No production file touched.\n- Focused gate: typecheck 0; core 14 files / 226 tests, exit 0.\n\nBLOCKING: main is red now and this task's new file is the sole cause. `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> 1 failed / 13 passed, violation list exactly one entry: this fixture file. The match is your line 4 doc comment naming `packages/scheduler/src/test-fixtures.ts`; package-boundary.test.ts:42-43 regex-tests whole file CONTENTS, with no notion of imports or comments.\n\nYou are NOT violating the rule — the comment is correct and useful. But the gate was green before this file landed and red after, and the cheapest fix is in your owned path.\n\nFIX, verified not guessed: I reworded line 4 to \"Mirrors the scheduler package's own test-fixtures module\", re-ran the boundary test -> 14/14 green; reverted -> failure returned. Reword so it does not spell the path; change nothing else. DO NOT touch package-boundary.test.ts — not your path; its regex is the durable defect, raised separately.\n\nROOT CAUSE: the plan dropped the full-repo gate for one focused gate, and this breakage class is only visible to `pnpm test`. Run it once before completing, attributing foreign red by path.\n\nSweep note, not charged to you: 5a57b2a swept your three files under another task's title.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -108,17 +102,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T21:51:32.281Z",
+  "updatedAt": "2026-08-07T22:01:54.873Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
   "contextFetchedBy": [
-    "architect-d89636d1",
-    "architect-c4babdf9",
-    "worker-2edeee3c",
+    "worker-c8bf9f6b",
     "qa-813cd351"
   ],
   "stepsCompleted": [
@@ -128,7 +122,13 @@
     "step-4",
     "step-5"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "The focused core typecheck and test command exits 0 with production files unchanged.",
+      "rejectedAt": "2026-08-07T21:55:02.802Z",
+      "rejectedBy": "qa-813cd351"
+    }
+  ],
   "planSubmittedAt": "2026-08-07T21:31:27.825Z",
   "planningNotes": {
     "approachesConsidered": "Use the task's existing describe-boundary split: the original file keeps the first 20 creation/readiness/ownership/submission/finalization cases; the new authority file receives the final 12 approval/activation/cancellation/concurrency/version/matrix cases; a shared fixture module receives the contiguous helper region. Rejected a three-test-file split because three files already land comfortably below 250 and the authority/concurrency matrix is one coherent responsibility. Rejected fixture rewrites, new assertions, or runtime freezing changes because this is a verbatim test decomposition. Rejected the prior plan's baseline gate, two isolation gates, full-repo gate, and repeated package run: current moe-planning requires one concentrated exact gate at task end.",
@@ -142,20 +142,77 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-07T21:58:13.283Z"
   },
   "planApprovedAt": "2026-08-07T21:31:29.854Z",
   "workStartedAt": "2026-08-07T21:43:17.816Z",
-  "reviewStartedAt": "2026-08-07T21:51:18.171Z",
+  "reviewStartedAt": "2026-08-07T22:00:33.890Z",
   "verification": {
     "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  14 passed (14)\n      Tests  226 passed (226)\n   Start at  00:50:42\n   Duration  511ms (transform 1.60s, setup 0ms, import 2.29s, tests 404ms, environment 1ms)\n\nEXITCODE=0",
-    "reportedAt": "2026-08-07T21:51:18.171Z"
+    "outputTail": "$ tsc --project tsconfig.json\nTYPECHECK_EXIT=0\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  14 passed (14)\n      Tests  226 passed (226)\n   Start at  00:59:58\n   Duration  538ms (transform 1.64s, setup 0ms, import 2.39s, tests 424ms, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T22:00:33.890Z"
   },
   "filesModified": [
     "packages/core/src/planning/planning-run-reducer.test.ts",
     "packages/core/src/planning/planning-run-test-fixtures.ts",
     "packages/core/src/planning/planning-run-authority.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-07T21:55:02.802Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The focused core typecheck and test command exits 0 with production files unchanged."
+    ],
+    "issues": [
+      {
+        "type": "regression",
+        "file": "packages/core/src/planning/planning-run-test-fixtures.ts",
+        "line": 4,
+        "description": "Doc comment spells `packages/scheduler/src/test-fixtures.ts`, which packages/scheduler/src/package-boundary.test.ts:42-43 matches by regex over raw file contents. Repo gate went green -> red when this file landed: 1 failed / 13 passed, violation list is this file alone. Verified fix: reword so it does not spell the path (I used \"Mirrors the scheduler package's own test-fixtures module\") -> 14/14 green; reverting restored the failure. Keep the rest of the comment."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/planning/planning-run-test-fixtures.ts",
+        "line": 1,
+        "description": "Process gap that let the above through: the plan explicitly dropped the full-repo gate in favour of one focused package gate (`pnpm --filter @moe/core ...`). A cross-package content scan living in @moe/scheduler is invisible to that gate by construction. Before completing, run `pnpm test` once and attribute any foreign red by path -- the focused gate alone cannot show what your change did to another package."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 43,
+        "description": "NOT YOURS -- do not edit; recorded so the fix is not misapplied. The boundary check regex-tests whole file contents, so any comment, changelog line or error message naming the scheduler's internal path becomes a false-positive build failure, making correct documentation a gate break. Durable fix is to match import/export/require specifiers only. Raised separately for the scheduler owner."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on one line. The split itself is flawless — do not redo any of it.\n\nVERIFIED INDEPENDENTLY, all PASS:\n- Reproduced your reconstruction proof rather than trusting it: the three bodies concatenated (fixture with `export ` stripped from the 19 names, then reducer describes, then authority describes) equal `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514, 25591 chars both sides. Nothing lost, renamed, duplicated or loosened.\n- 32 it() names, multiset equal to baseline, zero duplicates. No skip/only/todo, no module-level let/var, no Date/Math.random.\n- Sizes 228 / 180 / 156. Fixture exports only test helpers, imports no reducer, absent from index.ts. No production file touched.\n- Focused gate: typecheck 0; core 14 files / 226 tests, exit 0.\n\nBLOCKING: main is red now and this task's new file is the sole cause. `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> 1 failed / 13 passed, violation list exactly one entry: this fixture file. The match is your line 4 doc comment naming `packages/scheduler/src/test-fixtures.ts`; package-boundary.test.ts:42-43 regex-tests whole file CONTENTS, with no notion of imports or comments.\n\nYou are NOT violating the rule — the comment is correct and useful. But the gate was green before this file landed and red after, and the cheapest fix is in your owned path.\n\nFIX, verified not guessed: I reworded line 4 to \"Mirrors the scheduler package's own test-fixtures module\", re-ran the boundary test -> 14/14 green; reverted -> failure returned. Reword so it does not spell the path; change nothing else. DO NOT touch package-boundary.test.ts — not your path; its regex is the durable defect, raised separately.\n\nROOT CAUSE: the plan dropped the full-repo gate for one focused gate, and this breakage class is only visible to `pnpm test`. Run it once before completing, attributing foreign red by path.\n\nSweep note, not charged to you: 5a57b2a swept your three files under another task's title.",
+      "rejectedAt": "2026-08-07T21:55:02.802Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "The focused core typecheck and test command exits 0 with production files unchanged."
+      ],
+      "issues": [
+        {
+          "type": "regression",
+          "file": "packages/core/src/planning/planning-run-test-fixtures.ts",
+          "line": 4,
+          "description": "Doc comment spells `packages/scheduler/src/test-fixtures.ts`, which packages/scheduler/src/package-boundary.test.ts:42-43 matches by regex over raw file contents. Repo gate went green -> red when this file landed: 1 failed / 13 passed, violation list is this file alone. Verified fix: reword so it does not spell the path (I used \"Mirrors the scheduler package's own test-fixtures module\") -> 14/14 green; reverting restored the failure. Keep the rest of the comment."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/planning/planning-run-test-fixtures.ts",
+          "line": 1,
+          "description": "Process gap that let the above through: the plan explicitly dropped the full-repo gate in favour of one focused package gate (`pnpm --filter @moe/core ...`). A cross-package content scan living in @moe/scheduler is invisible to that gate by construction. Before completing, run `pnpm test` once and attribute any foreign red by path -- the focused gate alone cannot show what your change did to another package."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 43,
+          "description": "NOT YOURS -- do not edit; recorded so the fix is not misapplied. The boundary check regex-tests whole file contents, so any comment, changelog line or error message naming the scheduler's internal path becomes a false-positive build failure, making correct documentation a gate break. Durable fix is to match import/export/require specifiers only. Raised separately for the scheduler owner."
+        }
+      ]
+    }
   ]
 }

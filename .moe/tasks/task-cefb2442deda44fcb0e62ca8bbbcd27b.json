@@ -79,7 +79,7 @@
       "completedAt": "2026-08-07T21:51:34.824Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -92,17 +92,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T21:52:32.566Z",
+  "updatedAt": "2026-08-07T21:55:28.000Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:22:56.502Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-07T21:55:28.000Z",
+    "wallClockMs": 1951498
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "architect-c4babdf9",
-    "worker-c8bf9f6b"
+    "worker-c8bf9f6b",
+    "qa-bdf27860"
   ],
   "stepsCompleted": [
     "step-1",
@@ -124,7 +127,8 @@
   },
   "budget": {
     "wallClockMs": 1800000,
-    "warnedAt": "2026-08-07T21:47:36.580Z"
+    "warnedAt": "2026-08-07T21:47:36.580Z",
+    "escalatedAt": "2026-08-07T21:53:17.188Z"
   },
   "planApprovedAt": "2026-08-07T21:39:51.518Z",
   "workStartedAt": "2026-08-07T21:44:50.388Z",
@@ -138,5 +142,8 @@
   "filesModified": [
     "packages/core/src/planning/graph-revision-reducer.test.ts",
     "packages/core/src/planning/graph-revision-test-fixtures.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:55:28.000Z",
+  "reviewCompletedAt": "2026-08-07T21:55:28.000Z",
+  "reviewSummary": "Re-ran the gate: typecheck exit 0; core test exit 0, 14 files / 226 tests — matches reported outputTail. `git diff --stat HEAD` on the owned paths is empty, so committed content is the final content.\n\nDoD 1 proven mechanically against the pre-split oracle `git show bcdc2f6:...graph-revision-reducer.test.ts` (288 lines): it() count 18 old / 18 new; sorted it()-line comparison => IT_NAMES_IDENTICAL (zero diff, including the derived BOUND-loop names); old lines 95-288 vs new 29-222 join to BYTE-IDENTICAL strings — every case and assertion survived unedited, not merely un-renamed. Isolation run of the file alone: 18 tests passed = 18 declarations executing exactly once.\n\nFixture move verified, not trusted: base region 17-93 vs the new module, `export ` stripped and whitespace normalized, differs by exactly ONE character — an added `,` at position 1211, the trailing comma from wrapping commandFor's parameter list. Inert, and it matches the worker's disclosure exactly.\n\nDoD 2: fixtures contain zero let/var/Date./Math.random/.push/.sort — deterministic, no shared mutable state. The apparent APPROVAL clash with packages/core/src/index.ts is a false positive of my first grep: index.ts exports APPROVAL_ACTOR_KINDS / APPROVAL_COMMAND_KINDS but no bare APPROVAL, so real overlap is zero. Repo-wide the only importer is the owned test file.\n\nDoD 3: 222 and 96 physical lines, CR=0 under CR/CRLF/LF-equivalent splitting; zero .skip/.only/.todo/xit/xdescribe.\n\nMUTATION CHECK (mine, so the green suite is not vacuous on the extracted values): changing the STALE_HASH seed from hash(\"99\") fails 3 of 18 tests. The fixtures are load-bearing. Reverted; owned paths clean.\n\nCommit: swept into sibling 5a57b2a rather than carrying this task's name — disclosed accurately, review range named, correctly not reset or amended."
 }

@@ -15,12 +15,12 @@
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-d89636d1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: first child of the Conserved budget core SPIDR split, and the one the other three depend on — it defines the vocabulary they consume. Its own dependencies are satisfied: Runtime contract registry DONE, Policy approval core landed (packages/core/src/policy tracked). Plan this before Hierarchical budget ledger, Protected budget reservations, or Budget settlement reconciliation; those should declare a hard dependency on it rather than inventing their own types.",
   "createdBy": "WORKER",
   "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
   "priority": "HIGH",
@@ -28,5 +28,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:46:52.656Z",
-  "updatedAt": "2026-08-07T21:46:52.656Z"
+  "updatedAt": "2026-08-07T22:01:12.041Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T22:01:02.258Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ]
 }

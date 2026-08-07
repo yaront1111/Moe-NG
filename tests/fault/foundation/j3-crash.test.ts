@@ -22,23 +22,29 @@ import {
   evaluateJ3Continuation,
 } from "../../../packages/testkit/src/foundation/foundation-model-j3j4.js";
 import {
+  J3_EDITED_HISTORY,
   J3_HEALTHY_CONTINUATION,
+  J3_RESTART_RECORDS,
 } from "../../../packages/testkit/src/foundation/foundation-journey-fixtures.js";
 import { passExpected } from "../../../packages/testkit/src/foundation/foundation-outcomes-fixtures.js";
 import {
   assertPartitionOwnership,
-  fixtureById,
+  executorFor,
+  fixturePayload,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
   store,
 } from "./foundation-harness.js";
+import type { FoundationExecutors } from "./foundation-harness.js";
+
+type OpenedStore = ReturnType<typeof store.SqliteEventStore.openEphemeralForTest>;
 
 const PARTITION = foundationPartition("J3");
 const encoder = new TextEncoder();
-const bytes = (value) => encoder.encode(value);
+const bytes = (value: string): Uint8Array => encoder.encode(value);
 
-function withStore(body) {
+function withStore<TResult>(body: (opened: OpenedStore) => TResult): TResult {
   const opened = store.SqliteEventStore.openEphemeralForTest();
   try {
     return body(opened);
@@ -47,7 +53,7 @@ function withStore(body) {
   }
 }
 
-function seed(opened) {
+function seed(opened: OpenedStore) {
   return opened.commit({
     aggregateId: "goal-1",
     commandBytes: bytes("first"),
@@ -58,9 +64,9 @@ function seed(opened) {
   });
 }
 
-const EXECUTORS = {
+const EXECUTORS: FoundationExecutors = {
   "fixture:j3-restart-record-classes": () => {
-    const records = fixtureById("fixture:j3-restart-record-classes").payload;
+    const records = fixturePayload("fixture:j3-restart-record-classes", J3_RESTART_RECORDS);
     // Ordered by restart class, so cover every declared boundary rather than the order.
     expect(records.map((record) => record.boundary).sort()).toEqual([...J3_CRASH_BOUNDARIES].sort());
     expect(records.map(classifyRestartRecord)).toEqual([
@@ -71,7 +77,9 @@ const EXECUTORS = {
 
   "fixture:j3-history-edited-continuation": () =>
     outcomeFromVerdict(
-      evaluateJ3Continuation(fixtureById("fixture:j3-history-edited-continuation").payload),
+      evaluateJ3Continuation(
+        fixturePayload("fixture:j3-history-edited-continuation", J3_EDITED_HISTORY),
+      ),
     ),
 
   "schedule:j3-commit-boundary-whole-or-none": () => withStore((opened) => {
@@ -166,10 +174,10 @@ const EXECUTORS = {
 
 describe("J3 crash recovery fault schedules", () => {
   it("owns exactly the J3 manifest partition", () => {
-    assertPartitionOwnership(expect, PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J3);
+    assertPartitionOwnership(PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J3);
   });
 
   it.each(partitionRows(PARTITION))("%s produces its declared outcome", (entryId, entry) => {
-    expect(EXECUTORS[entryId](entry)).toEqual(entry.outcome);
+    expect(executorFor(EXECUTORS, entryId)(entry)).toEqual(entry.outcome);
   });
 });

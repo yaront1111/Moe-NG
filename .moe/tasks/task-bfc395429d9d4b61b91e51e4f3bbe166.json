@@ -83,8 +83,8 @@
       "completedAt": "2026-08-07T21:47:43.361Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-bdf27860",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -96,12 +96,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:18:21.612Z",
-  "updatedAt": "2026-08-07T21:49:22.544Z",
+  "updatedAt": "2026-08-07T21:53:12.394Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:27:58.705Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-07T21:53:12.394Z",
+    "wallClockMs": 1513689
   },
   "stepsCompleted": [
     "step-1",
@@ -145,5 +147,8 @@
     "packages/store/src/event-ledger-transaction.ts",
     "packages/store/src/decision-ledger.ts",
     "packages/store/src/sqlite-event-store.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:53:12.394Z",
+  "reviewCompletedAt": "2026-08-07T21:53:12.394Z",
+  "reviewSummary": "Re-ran the gate: typecheck exit 0; store test exit 0, 22 files / 146 tests — matches reported outputTail. Did not rely on the worker's seam suite: wrote my own probe, ran it, deleted it (store tree clean after).\n\nMY PROBE, verbatim:\n  AFTER_ROLLBACK_THEN_ONE_GOOD_COMMIT {\"events\":1,\"heads\":1,\"projections\":0,\"receipts\":1}\n  APPLY_CALLS [\"first:COMMITTED\"] CONFLICT EXPECTED_VERSION_CONFLICT\n  ASYNC_APPLY_ROLLBACK {\"events\":0,\"heads\":0,\"projections\":0,\"receipts\":0}\n  INNER_DURABLE_ERROR PROJECTION_APPLY_FAILED | SYMBOL_THROW PROJECTION_APPLY_FAILED\n\nDoD 2 proven durably ON DISK: apply inserted a real projections row then threw; after close and reopen the row is gone and the append with it — only possible if apply ran in the same transaction, so DoD 1's same-transaction claim is proven by the rollback rather than asserted. The handle then took a plain commit (quickCheck ok), so no quarantine. Message exactly \"PROJECTION_APPLY_FAILED: apply exploded after writing\".\n\nDoD 1 skip paths: apply invoked exactly once, COMMITTED only — zero on REPLAYED, zero on EXPECTED_VERSION_CONFLICT.\n\nTwo traps probed beyond the plan, both hold: an apply throwing its own DurableStoreError(\"OUTCOME_UNKNOWN\") does not leak that code, and a thrown Symbol does not escape as a TypeError to be renamed STORE_UNAVAILABLE. The async-apply footgun the worker self-found is real and fixed.\n\nDoD 3: store-contracts diff is exactly one line in the ASCII slot. DoD 4: the only test file touched across a81aedd+a45b161 is the new seam test. Rail: zero fold/subscribe/relay/upcast hits. Sizes 136/125/229 <=250; store-contracts 270 and sqlite-event-store 310 pre-existing, under 400.\n\nScope growth verified rather than trusted: decision-ledger.ts:37 is an interface implemented at :88 by a frozen literal of arrow delegates, so inheritance cannot reach #core — the \"NO decision-ledger.ts edit\" premise is false and the 3-line delta is the minimum fix."
 }

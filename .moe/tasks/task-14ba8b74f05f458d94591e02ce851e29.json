@@ -1,0 +1,33 @@
+{
+  "id": "task-14ba8b74f05f458d94591e02ce851e29",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Pure stored-event upcaster",
+  "description": "Objective: implement the pure stored-event schema-dispatch half of task-82989467aa474ae786f0c4eb8b23bfb0 without folding projection state. Deliverable: packages/store/src/projections/projection-upcast.ts, its one-line .js bridge, and focused tests for explicit per-event-type current versions, exact multi-hop routes keyed by (eventType, fromVersion), envelope preservation, and detached payload/metadata transformation. StoredEvent domainSchemaVersion values are opaque strings: no numeric/lexical future-version inference. NOT in scope: projection state/reducers, duplicate or ordering checks across event sequences, SQLite, transactions, persistence, quarantine, relay/inbox, CURSOR_GAP, root package export, or real business upcasters. Hard dependency: task-a602b3d4294a44aea1d9d173bf1fdaa7 is DONE and supplies StoredEvent.domainSchemaVersion. Owned paths: packages/store/src/projections/projection-upcast.ts, projection-upcast.js, projection-upcast.test.ts. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store exec vitest run --root ../.. packages/store/src/projections/projection-upcast.test.ts.",
+  "definitionOfDone": [
+    "An explicitly current version returns a detached frozen-envelope snapshot without invoking a handler, while registered legacy versions follow the exact acyclic multi-hop route to the declared current version.",
+    "Every upcast preserves eventId, aggregateId/sequence, globalPosition, command/request/record/codec/provenance fields and eventType; handlers may replace only payload and metadata, whose bytes are defensively copied.",
+    "An unregistered starting version returns frozen SCHEMA_VERSION_UNSUPPORTED evidence naming the offending event and declared current version; it is never treated as current, passed through successfully, or dropped.",
+    "Duplicate dispatch keys, duplicate event-type definitions, self-loops, cycles/dead ends, throwing/thenable handlers, and malformed handler output fail closed under frozen deterministic local codes with no partial successful event.",
+    "projection-upcast.ts is <=165 physical lines, projection-upcast.test.ts is <=220, the bridge is one exact re-export line, no production import or call reaches SQLite/transactions/clock/filesystem/randomness, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "This is an internal @moe/store seam; do not edit packages/store/src/index.ts or export a new package subpath.",
+    "Use SCHEMA_VERSION_UNSUPPORTED exactly for an event with no registered route; other upcast codes are module-local choices and must be frozen in tests, not added to DurableStoreErrorCode.",
+    "Production and test TypeScript files must stay within their stated caps; stage and commit only the three exact owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-82989467aa474ae786f0c4eb8b23bfb0",
+  "priority": "HIGH",
+  "order": 17.99,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:59:35.526Z",
+  "updatedAt": "2026-08-07T21:59:35.526Z"
+}
