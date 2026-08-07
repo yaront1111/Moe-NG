@@ -30,29 +30,35 @@
     {
       "stepId": "step-2",
       "description": "TDD red — src/http/http-session.test.ts. Session/auth matrix with a call-recording fake SessionPort (validate-only). Cases, each asserting fail-closed + ZERO dispatch calls: missing bearer, malformed bearer, expired verdict, revoked verdict; SWAPPED CROSS-BINDING (adapter-owned, testable nowhere else): valid bearer A presented with an Mcp-Session-Id bound to bearer B's session -> refused (the Mcp-Session-Id<->daemon-session binding is adapter state); ROTATION REVOCATION: after the port reports rotation, the OLD bearer fails on the very next request while the Mcp-Session-Id binding survives under the new credential — requires per-request revalidation with NO caching of auth verdicts (assert the port is called every request); CREDENTIAL-IN-URL refusal: any request with a credential-looking query parameter is refused before processing (design 1139 'Credentials never appear in URLs or logs'); redaction: no error path echoes the bearer (grep-style assertion over serialized error bytes). Session lifecycle: initialize binds a daemon session via the port INSIDE the awaited onsessioninitialized callback; DELETE reaps the registry entry and calls port session-close notification; unknown Mcp-Session-Id -> 404 (SDK) with zero dispatch. Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-session.test.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-session.test.ts"
-      ]
+      ],
+      "note": "Reopen audit only: retained the verified session/auth matrix unchanged. Focused http-session suite passes 28/28, including missing/malformed/expired/revoked screening, cross-binding, rotation revalidation, redaction, bind failure, close, and reaping. No QA issue targets this file beyond the nonblocking target-size note.",
+      "startedAt": "2026-08-07T21:42:16.613Z",
+      "completedAt": "2026-08-07T21:42:31.015Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — src/http/http-session.ts (target <=250). SessionPort type is VALIDATE-ONLY: { validateBearer(credential): frozen verdict {ok, principalRef, sessionRef} | {ok:false, code}; bindSession(mcpSessionId, verdict): void|Promise; closeSession(mcpSessionId): void|Promise } — deliberately NO open/renew/rotate methods: the daemon owns session lifecycle (session.open|rotate|renew|close commands, design 987/761); the adapter validates and binds, NEVER mints daemon sessions. Module header documents: this gate is NON-authoritative pre-dispatch screening — authoritative per-command auth (proof-of-possession; design 718 'a valid stolen bearer without the client-key signature cannot authorize a command') stays daemon-side behind DispatchPort; parity across transports comes from both funneling into the SAME daemon check (design 1130). NO @moe/core dependency (layering: adapters depend on contracts; core is the pure-core layer — the verified dep graph has zero packages depending on @moe/core). Session registry: Map Mcp-Session-Id -> {server, transport, boundVerdict} — the SDK transport is ONE-SESSION-PER-INSTANCE (validateSession is strict equality against a single instance field), so multi-session requires this adapter-owned registry routing each request to its instance. Transport-level Mcp-Session-Id is minted by sessionIdGenerator (sync, SDK requirement) and bound to the daemon session inside the AWAITED onsessioninitialized (SDK awaits it before responding — verified webStandardStreamableHttp.js:530-536); onsessionclosed (DELETE) reaps registry + port.closeSession. Step-2 tests green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-session.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-session.ts"
-      ]
+      ],
+      "note": "Reopen audit only: http-session.ts remains 224 lines, depends only on @moe/contracts, exposes the validate/bind/close-only port, revalidates per request, and maintains the adapter session registry. MCP typecheck passes; no production bytes changed.",
+      "startedAt": "2026-08-07T21:42:35.505Z",
+      "completedAt": "2026-08-07T21:42:46.293Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/http/http-server.test.ts + src/http/http-server.ts. Build against WebStandardStreamableHTTPServerTransport (fetch Request -> Promise<Response>; socket-free tests construct `new Request(...)` directly — the Node wrapper routes through @hono/node-server and is painful to mock; keep any node:http bridging as a thin outermost listener so tests exercise the same code prod uses). Wiring per request: (1) HOST/ORIGIN DEFENSE (BLOCKER from verification — SDK ships enableDnsRebindingProtection DEFAULT OFF): construct transports with enableDnsRebindingProtection: true + allowedHosts/allowedOrigins loopback-only defaults (127.0.0.1/localhost, configurable); tests: evil Origin header and wrong Host header -> refused with stable error, ZERO dispatch calls (design 1132/1139 loopback-only + strict Host/Origin); (2) BODY BOUND: the SDK has NO size limit (req.json() unguarded — verified) — adapter reads the body itself with a hard cap at MAX_JSON_BODY_BYTES (1 MiB), tested at exactly N (accepted) and N+1 (stable refusal, zero dispatch), then hands the parsed value via the parsedBody option so the transport never re-reads; this same pre-read serves initialize detection; (3) AUTH BEFORE handleRequest: bearer check via http-session (there is NO auth hook inside the transport — wrap-before is the only mechanism and gives 'zero dispatch on auth failure' trivially); validated identity flows as authInfo (HandleRequestOptions.authInfo -> extra.authInfo); (4) CallTool handlers: same construction as stdio (shared generated schemas + name map imported from src/stdio/ — read-only import, no edits), thread extra.signal into port.dispatch*Bytes(bytes, signal); (5) parity fixture mode: enableJsonResponse: true (plain JSON body, cleanest byte-compare) + keepAliveMs: 0 (suppresses nondeterministic ': keepalive' frames); (6) DISCONNECT test asserts the VERIFIED SDK semantics: raw SSE disconnect does NOT abort extra.signal and does NOT stop dispatch — the stream unmaps, the handler completes, send() throws into onerror — so assert 'response never delivered + dispatch completed + nothing fabricated', NOT 'dispatch aborted'; explicit notifications/cancelled DOES abort the signal — separate test asserts the signal reaches the fake port; (7) DoD3 no-bypass: assert the HTTP ListTools set is EXACTLY the stdio generated set (import both, deep-equal) and no HTTP-only route exists (the adapter exposes exactly one MCP endpoint; registry rejects unknown session ids).",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
@@ -60,7 +66,8 @@
       "newFiles": [
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:42:52.358Z"
     },
     {
       "stepId": "step-5",
@@ -116,12 +123,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T21:42:12.544Z",
+  "updatedAt": "2026-08-07T21:42:52.358Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 8,
+    "executedStepCount": 10,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -132,7 +139,9 @@
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [
     {

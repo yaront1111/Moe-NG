@@ -45,24 +45,33 @@
     {
       "stepId": "step-3",
       "description": "Green — store-contracts.ts + event-ledger-transaction.ts + sqlite-event-store.ts. store-contracts.ts: PROJECTION_APPLY_FAILED joins the closed DurableStoreErrorCode union in ASCII order between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH (union stays closed; message format `${code}: ${message}` — zero external DurableStoreErrorCode consumers so no exhaustive switch breaks; ONLY the union entry in this file — B1 owns the field/constant edits). event-ledger-transaction.ts: NEW public method commitWithApply(rawInput, apply: (context: { database, summary }) => void) on EventTransactionStore — an inherited method needs NO decision-ledger.ts edit and NO change to the existing one-arg commit; implementation shares the commit body (extract-and-share or delegate with an optional internal apply — whichever keeps the file <=250; the EXISTING commit() public signature must stay one-arg either way); the apply invocation sits on the COMMITTED-disposition branch immediately AFTER writeCommitEffects and BEFORE the shared COMMIT, wrapped try/catch at the invocation site: catch (e) => throw new DurableStoreError('PROJECTION_APPLY_FAILED', originalMessage) so the existing recovery path (rethrows DurableStoreError unchanged, ROLLBACK on failure) handles it — anything unwrapped would be renamed STORE_UNAVAILABLE; writeCommitEffects signature and StoredCommitResult UNTOUCHED (positions ripple through the shared decision-ledger contract). sqlite-event-store.ts: one delegating method commitWithApply over #core mirroring the existing commit delegation. All step-2 tests green; typecheck green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/event-ledger-transaction.ts",
         "packages/store/src/sqlite-event-store.ts"
       ],
-      "startedAt": "2026-08-07T21:40:28.197Z"
+      "modifiedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts"
+      ],
+      "note": "GREEN. Seam suite 6/6; full focused suite `pnpm --filter @moe/store test` -> 22 files / 143 tests passed; `pnpm --filter @moe/store typecheck` -> clean (B1 landed 273f417 \"read the domain schema version back on every event read path\" mid-step, so the foreign RED from step-1 cleared itself).\n\nDECLARED SCOPE GROWTH — 5 files, not the planned 4. decision-ledger.ts needed two mechanical hunks because the plan's premise (\"a new inherited method needs NO decision-ledger.ts edit\") is false against this tree: DecisionLedgerCore is an explicit interface (:36-71) implemented as a frozen OBJECT LITERAL of arrow delegates (:87-128), so class inheritance does not reach SqliteEventStore's `#core`. Added exactly one interface member and one delegate entry, both in the existing ASCII slot (commit, commitExpectedVersionDecision, commitWithApply — 'E' 0x45 < 'W' 0x57), plus the `import type { CommitApply }`. Nothing else in that file touched. Flagged to @architects in #general (msg-ea73befa).\n\nWhat landed:\n- store-contracts.ts: ONE line, `| \"PROJECTION_APPLY_FAILED\"` between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH. `git diff` on that file is that single hunk and nothing else, so B1's landed work is untouched. Union stays closed; message format is the inherited `${code}: ${message}`.\n- event-ledger-transaction.ts (75 -> 122 lines): new exported `CommitApplyContext { database, summary }` / `CommitApply` types; new `commitWithApply(rawInput, apply)`; the old commit body moved verbatim into `private runCommandTransaction(rawInput, apply | null)` which BOTH entry points call — `commit()` stays one-arg and its path is unchanged apart from `apply === null`. `resolveCommand` gained a third parameter and now names the writeCommitEffects result before invoking the seam, so the apply runs on the COMMITTED branch only, after writeCommitEffects, before the shared COMMIT. `private applyWithinCommit` wraps the call site: catch -> `new DurableStoreError(\"PROJECTION_APPLY_FAILED\", error instanceof Error ? error.message : String(error), { cause: error })`, which recovery.ts rethrows unchanged rather than renaming to STORE_UNAVAILABLE. Summary is `toCommitResult(stored, \"COMMITTED\")` — the same public CommitResult callers already receive, deliberately in preference to leaking internal StoredCommitResult through a public signature; it carries no positions either way, and the test pins its exact key set so a later positions field fails loudly.\n- writeCommitEffects signature and StoredCommitResult: UNTOUCHED (`git diff` on event-ledger-append.ts and store-internals.ts is empty).\n- sqlite-event-store.ts (332 -> 338): one delegating `commitWithApply` mirroring `commit`, the `import type`, and a `export type { CommitApply, CommitApplyContext }` so the seam types are nameable at the same layer the other public types are re-exported from.\n\nSizes: event-ledger-transaction 122, decision-ledger 130, store-contracts 297, seam test 222 — all <=250. sqlite-event-store 338, over the 250 target but pre-existing (332 before my +6) and under the 400 hard bar; splitting a foreign-shaped facade was not in scope.",
+      "startedAt": "2026-08-07T21:40:28.197Z",
+      "completedAt": "2026-08-07T21:42:35.090Z"
     },
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` edited production files <=400 hard (target 250; event-ledger-transaction split point via amendment if needed). (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 with ZERO existing-test edits (DoD 4) — complete_task evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }; repo gate with foreign-red attribution; focused suite twice — identical. Adversarial (Skill adversarial-self-review): (a) partial-write hunt — crash the apply AFTER it wrote a projection row: rollback must remove the row too (same transaction — assert absent); (b) seam-bypass hunt — confirm plain commit() byte-identical behavior (diff its body path against HEAD); (c) replay double-check — apply recorder shows zero invocations across REPLAYED and IDEMPOTENCY_CONFLICT paths; (d) grep for projection-FOLD logic (fold/subscribe/relay/upcast identifiers) -> ZERO (the seam-not-feature rail); (e) union-entry ASCII position + no other store-contracts hunk (B1 fence); (f) no scratch files. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/event-ledger-transaction.ts packages/store/src/sqlite-event-store.ts packages/store/src/store-projection-seam.test.ts`; `git show --stat` lists exactly these 4 paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/event-ledger-transaction.ts",
         "packages/store/src/sqlite-event-store.ts",
         "packages/store/src/store-projection-seam.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:42:38.064Z"
     }
   ],
   "status": "WORKING",
@@ -78,16 +87,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:18:21.612Z",
-  "updatedAt": "2026-08-07T21:40:28.197Z",
+  "updatedAt": "2026-08-07T21:42:38.064Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:27:58.705Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:28:54.739Z",

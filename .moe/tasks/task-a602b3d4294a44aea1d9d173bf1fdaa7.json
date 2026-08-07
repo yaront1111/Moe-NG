@@ -100,17 +100,26 @@
     {
       "stepId": "step-6",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Red-team: (a) digest divergence — commit a non-default-version event, reopen the store, loadReceipt + validateAllCommandDecisions must pass (replay-side digest identical); temporarily add domainSchemaVersion to the identifyCommandEffects field list in a scratch check OUTSIDE the repo to confirm it WOULD diverge (proves the Omit is load-bearing), never in the tree; (b) default-vs-explicit — both paths through snapshotCommitInput produce the exact stored bytes read back; (c) audit-event coverage — rejection path stores the default (test 4 re-run); (d) key-set edits are literal-only — diff both test files: exactly one added line per literal, digests untouched; (e) seam fence — grep diff for commitWithApply|PROJECTION_APPLY_FAILED|applyInTransaction -> ZERO (task-bfc39542's vocabulary); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/store-input.ts packages/store/src/store-internals.ts packages/store/src/event-ledger-append.ts packages/store/src/decision-ledger-canonical.ts packages/store/src/read-page-queries.ts packages/store/src/event-read-decode.ts packages/store/src/store-domain-schema-version.test.ts packages/store/src/event-read-model-contract.test.ts packages/store/src/sqlite-event-store-core.test.ts`; `git show --stat` lists exactly these 10 paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/store-internals.ts",
         "packages/store/src/event-ledger-append.ts"
       ],
-      "startedAt": "2026-08-07T21:38:37.788Z"
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/read-page-queries.ts",
+        "packages/store/src/event-read-model-contract.test.ts",
+        "packages/store/src/sqlite-event-store-core.test.ts"
+      ],
+      "note": "Adversarial self-review + explicit-pathspec commit done. Commit `273f417`, `git show --stat` lists exactly 5 paths, all owned.\n\nMAJOR FINDING — the deliverable spans TWO commits, review by path not by commit. While this task was still WORKING, `baa8012 fix(task-556d87c3...): Policy approval core` swept 5 of my in-flight files: store-contracts.ts, store-internals.ts, store-input-commit.ts, event-ledger-append.ts and the new store-domain-schema-version.test.ts (222 lines). Verified the swept content is byte-identical to what passed the gate (`git diff baa8012 -- <paths>` empty), so only authorship is wrong, nothing mangled. Per epic rail 3 and prior precedent I did NOT revert/reset/amend it — it carries live foreign work. My own commit carries the remaining 5. Posted to governance with the SHA and file list; it also swept a third task's packages/scheduler/src/admission/* files, so @worker-05d10803 was tagged. Third instance today (bc8e4f5, f8db0a5, baa8012) and all three come from the wrapper's session-end auto-commit, which epic rail 3 does not bind — flagged for a governor decision.\n\nRed-team results:\n(a) Omit load-bearing — PROVEN, and the plan's stated mechanism was wrong (correction filed in step 1). identifyCommandEffects hashes an explicit field list, so a stray runtime property can never change digest bytes; write/replay could not diverge that way. The real proof is the compiler: with the field required on EffectEventDraft, DecodedReceiptEventBody (event-read-decode.ts:55-58) and the replay literal (event-read-materialization.ts:156) both break. Step 3's typecheck showed exactly ONE error and NOT those two, which only holds because the Omit is there. I deliberately did NOT run the plan's suggested in-tree mutation experiment: the tree had just been swept 60 seconds earlier, and a sweep landing during a deliberately-broken window would commit broken code under another task's ID. Rails forbid stash and sibling worktrees, so there was no safe variant; the compiler evidence is decisive without it.\n(b) default-vs-explicit — both paths verified by the roundtrip tests plus a 3-event commit proving PER-EVENT resolution.\n(c) audit coverage — green.\n(d) key-set edits literal-only — 3 insertions, 0 deletions, hardcoded digests untouched and still passing.\n(e) seam fence — grep of ALL my changed store lines for commitWithApply|PROJECTION_APPLY_FAILED|applyInTransaction returns 0. Error-code union untouched by me; the sibling added PROJECTION_APPLY_FAILED to it during this step, which is B2's work, disjoint from mine exactly as planned.\n(f) no scratch/debug — 0 hits for console.|debugger|TODO|FIXME|.only(|.skip(; no stray files.\n\nChecklist items worth recording for QA: (i) domainSchemaVersion is bounded by requireIdentifier at 512 UTF-8 bytes but is NOT charged against MAX_COMMIT_BYTES — same treatment as eventId/eventType, worst case 256 events x 512B = 128KB uncharged against a 32MB ceiling, structurally bounded and consistent with existing design. It IS charged on the read side in EVENT_DECODED_BYTES_SQL, which is where page budgeting actually matters. (ii) No NULL is reachable: the column is NOT NULL DEFAULT, so v2->v3 migrated rows backfill to the default and requireRowString can never see NULL. (iii) Validation runs in the pure snapshot phase before any SQL, so a bad version cannot half-write — asserted directly (empty ledger + version 0 after each rejection). (iv) The INSERT binds a prepared parameter, so opaque caller values with quotes/semicolons are inert. (v) No new check-then-act or shared state, so no new concurrency surface. (vi) EventDraft optional / StoredEvent required is a deliberate asymmetry, JSDoc'd.\n\nVERIFICATION, declared command, fresh, exit 0: 22 files / 143 tests. Note this transiently went RED mid-step on 11 errors in packages/store/src/store-projection-seam.test.ts — sibling task-bfc39542's untracked in-flight seam test, `?? ` in git status, zero errors in my surface. I attributed it by path rather than touching foreign work, proved my surface independently via the temp-tsconfig isolation recipe (whole package MINUS that one file: typecheck 0, 21 files / 137 tests), then re-polled; the sibling landed their implementation and the declared gate went green unaided at 143 tests.",
+      "startedAt": "2026-08-07T21:38:37.788Z",
+      "completedAt": "2026-08-07T21:42:47.974Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-c8bf9f6b",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -129,16 +138,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T21:38:37.788Z",
+  "updatedAt": "2026-08-07T21:43:18.976Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:09:08.735Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "worker-c8bf9f6b"
+    "worker-c8bf9f6b",
+    "qa-813cd351"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -148,7 +158,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:20:20.098Z",
@@ -171,5 +182,24 @@
     "wallClockMs": 5400000
   },
   "planApprovedAt": "2026-08-07T21:20:22.133Z",
-  "workStartedAt": "2026-08-07T21:30:28.759Z"
+  "workStartedAt": "2026-08-07T21:30:28.759Z",
+  "reviewStartedAt": "2026-08-07T21:43:12.909Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  22 passed (22)\n      Tests  143 passed (143)\n   Start at  00:42:04\n   Duration  1.81s (transform 4.55s, setup 0ms, import 6.89s, tests 4.74s, environment 1ms)\n\n=== DECLARED GATE EXIT: 0 ===",
+    "reportedAt": "2026-08-07T21:43:12.909Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-domain-schema-version.test.ts",
+    "packages/store/src/store-contracts.ts",
+    "packages/store/src/store-internals.ts",
+    "packages/store/src/store-input-commit.ts",
+    "packages/store/src/event-ledger-append.ts",
+    "packages/store/src/decision-ledger-canonical.ts",
+    "packages/store/src/read-page-queries.ts",
+    "packages/store/src/event-read-decode.ts",
+    "packages/store/src/event-read-model-contract.test.ts",
+    "packages/store/src/sqlite-event-store-core.test.ts"
+  ]
 }

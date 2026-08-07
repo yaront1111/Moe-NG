@@ -19,10 +19,11 @@
     {
       "stepId": "step-1",
       "description": "Characterize the exact pre-split proof without editing or running a gate. Confirm prerequisite task-866713137aee4794a51973fe4e6e3f44 is DONE, the 514-line source and three owned paths are clean, and the committed baseline contains exactly 32 `it()` names. Inventory the contiguous helper region and the 20/12 describe-block partition, including all derived loops/matrices, imports, and helper consumers. Use the committed `bcdc2f6` file as the no-loss/no-rename oracle; create no scratch or generated evidence file.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:43:17.816Z"
     },
     {
       "stepId": "step-2",
@@ -69,7 +70,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-2edeee3c",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -81,7 +82,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T21:31:29.854Z",
+  "updatedAt": "2026-08-07T21:43:17.816Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
@@ -89,7 +90,8 @@
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "worker-2edeee3c"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -108,5 +110,6 @@
   "budget": {
     "wallClockMs": 2700000
   },
-  "planApprovedAt": "2026-08-07T21:31:29.854Z"
+  "planApprovedAt": "2026-08-07T21:31:29.854Z",
+  "workStartedAt": "2026-08-07T21:43:17.816Z"
 }

@@ -137,8 +137,8 @@
       "completedAt": "2026-08-07T21:41:53.554Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-05d10803",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -150,7 +150,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T21:41:53.554Z",
+  "updatedAt": "2026-08-07T21:43:55.217Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
@@ -206,28 +206,20 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "reviewStartedAt": "2026-08-07T20:53:44.719Z",
+  "reviewStartedAt": "2026-08-07T21:43:55.217Z",
   "verification": {
     "command": "pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  26 passed (26)\n      Tests  357 passed (357)\n   Start at  23:52:58\n   Duration  919ms (transform 3.47s, setup 0ms, import 4.64s, tests 557ms, environment 2ms)",
-    "reportedAt": "2026-08-07T20:53:44.719Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  26 passed (26)\n      Tests  364 passed (364)\n   Start at  00:42:13\n   Duration  560ms (transform 3.39s, setup 0ms, import 4.66s, tests 581ms, environment 2ms)\n\n$ vitest run --root ../.. packages/scheduler/src",
+    "reportedAt": "2026-08-07T21:43:55.217Z"
   },
   "filesModified": [
-    "packages/scheduler/src/admission/admission-pass.test.ts",
-    "packages/scheduler/src/admission/admission-model.ts",
-    "packages/scheduler/src/admission/admission-model.js",
-    "packages/scheduler/src/admission/admission-records.ts",
-    "packages/scheduler/src/admission/admission-records.js",
-    "packages/scheduler/src/admission/admission-pass.ts",
-    "packages/scheduler/src/admission/admission-pass.js",
-    "packages/scheduler/src/admission/admission-necessity.ts",
-    "packages/scheduler/src/admission/admission-necessity.js",
-    "packages/scheduler/src/admission/admission-invariants.test.ts",
     "packages/scheduler/src/admission/admission-fixtures.ts",
-    "packages/scheduler/src/admission/admission-fixtures.js",
-    "packages/scheduler/src/admission/admission-wait.ts",
-    "packages/scheduler/src/admission/admission-wait.js"
+    "packages/scheduler/src/admission/admission-pass.test.ts",
+    "packages/scheduler/src/admission/admission-pass.ts",
+    "packages/scheduler/src/admission/admission-invariants.test.ts",
+    "packages/scheduler/src/admission/admission-necessity.ts",
+    "packages/scheduler/src/admission/admission-wait.ts"
   ],
   "reviewCompletedAt": "2026-08-07T21:01:48.259Z",
   "rejectionDetails": {

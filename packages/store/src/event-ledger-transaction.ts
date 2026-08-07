@@ -32,8 +32,29 @@ export interface CommitApplyContext {
   readonly summary: CommitResult;
 }
 
-/** Caller-supplied work durable with the event append or not at all. */
+/**
+ * Caller-supplied work durable with the event append or not at all. It must be
+ * synchronous and must not end the transaction it is handed.
+ */
 export type CommitApply = (context: CommitApplyContext) => void;
+
+function describeApplyFailure(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  try {
+    return String(error);
+  } catch {
+    return "the commit apply threw a value that cannot be described";
+  }
+}
+
+function isThenable(value: unknown): boolean {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return false;
+  }
+  return typeof (value as { then?: unknown }).then === "function";
+}
 
 /** Internal command transaction layer behind the public event-ledger facade. */
 export class EventTransactionStore extends EventRecoveryStore {
