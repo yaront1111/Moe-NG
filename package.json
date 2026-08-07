@@ -14,6 +14,7 @@
     "typecheck": "pnpm --recursive typecheck",
     "test": "vitest run",
     "test:meta": "vitest run packages/contracts/src packages/testkit/src",
+    "test:property": "vitest run tests/property",
     "test:store": "vitest run packages/store/src",
     "verify:foundation": "pnpm typecheck && pnpm test:meta",
     "verify:store": "pnpm typecheck && pnpm test:store"
