@@ -16,12 +16,12 @@
     "Production and test TypeScript files must stay within their stated caps; stage and commit only the three exact owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-bf90be5d",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: this is the producer interface that task-82989467 (Pure projection upcaster engine) is BLOCKED behind. architect-c4babdf9 split it out at 22:00 and correctly refused to plan the parent fold against a speculative API. Promoting the child so an architect can claim it; parent stays BLOCKED until this lands.",
   "createdBy": "WORKER",
   "parentTaskId": "task-82989467aa474ae786f0c4eb8b23bfb0",
   "priority": "HIGH",
@@ -29,5 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:59:35.526Z",
-  "updatedAt": "2026-08-07T21:59:35.526Z"
+  "updatedAt": "2026-08-07T22:07:34.252Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T22:07:34.162Z"
+  },
+  "contextFetchedBy": [
+    "architect-bf90be5d"
+  ]
 }

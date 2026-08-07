@@ -18,25 +18,33 @@
     {
       "stepId": "step-1",
       "description": "Design + convention baseline (read-only). Design section 11 exact vocabulary (verified at lines 585-660; worker re-reads before typing): ACCOUNT STATES = OPEN | SETTLING | CLOSED | CLOSED_WITH_UNKNOWN_LIABILITY | OVERDRAWN (line ~591); BUCKETS = AVAILABLE | RESERVED | QUARANTINED | COMMITTED (four conserved integer buckets; conservation equation AVAILABLE + RESERVED + QUARANTINED + COMMITTED summed root+descendants exactly once — the equation itself is the LEDGER child's to enforce, this task only defines the vocabulary + record shapes); RESERVE PURPOSES = the design-587 protected set: VERIFICATION, REVIEW, ACCEPTANCE_PROCESSING, CONTINGENCY + fan-out INPUT_MATERIALIZATION, INTEGRATION (linear J1 protects the first four before any acceptance-bearing launch); MEASUREMENT COVERAGE = COMPLETE | PARTIAL | UNKNOWN (line ~634, UsageMeasurement); MEASUREMENT SOURCE = the closed source set the design names around UsageMeasurement/AdmissionQuote (~634-660: adapter-reported, correlated billing receipt, daemon observation — read the exact spellings and pin them; if the design leaves the set open, define the minimal scheduler-local closed set and mark it LOCAL in a comment). POLICY/TRUTH COMPATIBILITY: local STRING-IDENTICAL copies (task rail: no @moe/core or @moe/contracts imports) of the landed policy values needed for compatibility typing — POLICY_OUTCOMES ALLOW|DENY|REQUIRE_HUMAN_APPROVAL|HOLD_UNKNOWN and tiers R0-R3 (packages/core/src/policy/policy-contract.ts:17-30) + the 5-string truth vocabulary — each with a divergence-risk comment naming the canonical source (dependency-kernel precedent). Conventions: local BUDGET_* issue codes + local makeIssue/sortIssues/deepFreeze clones (4th clone set, consolidation note — graph-internal's closed GraphIssueCode makes reuse impossible), '../runtime-shape.js' hostile-input helpers reused read-only, one-line .js bridge, unexported subdir (Branch-A, 4th instance), integers only (design 44: no floating-point currency/token accounting).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-07T22:02:38.386Z"
+      "note": "Design + convention baseline, read-only. No files created.\n\nDESIGN VOCABULARY, read at source rather than taken from the plan's summary:\n- ACCOUNT STATES (design 591, verbatim, design-pinned): OPEN | SETTLING | CLOSED | CLOSED_WITH_UNKNOWN_LIABILITY | OVERDRAWN.\n- BUCKETS (design 592-597, design-pinned): AVAILABLE | RESERVED | QUARANTINED | COMMITTED, integer-valued per meter. Design 609 states the conservation equation and 607 that accounts store only DIRECT buckets with roll-ups derived — I define the quadruple shape only; the equation is the ledger child's.\n- MEASUREMENT COVERAGE (design 634, design-pinned): COMPLETE | PARTIAL | UNKNOWN.\n\nDIVERGENCE FROM THE PLAN, resolved in the design's favour — the measurement SOURCE set is NOT open. The plan guessed \"adapter-reported, correlated billing receipt, daemon observation\" and authorised a LOCAL closed set as fallback. Design section 20.5 line 1260 (benchmark binding T-D1) pins it exactly: \"Every provider adapter emits `UsageMeasurement` rows using exactly `PROVIDER_REPORTED_COMPLETE`, `PROVIDER_REPORTED_PARTIAL`, `DERIVED_LIST_PRICE`, `SUBSCRIPTION_QUOTA`, `ACTUAL_BILLED`, or `UNKNOWN`\". I will ship those six spellings marked DESIGN-PINNED (1260), not the plan's guess and not a LOCAL set. Adopting the plan's wording would have created a vocabulary the adapters can never emit. Note `LIST_PRICE` at design 640 is a price-kind, not a measurement source, and is deliberately not conflated with `DERIVED_LIST_PRICE`.\n\nLOCAL, and marked as such because the design gives prose not identifiers — RESERVE PURPOSES. Design 587 says the transaction protects \"mandatory verification, eligible review, final acceptance processing, and contingency reserves\", and \"Fan-out additionally protects input materialization and integration\". Identifiers VERIFICATION, REVIEW, ACCEPTANCE_PROCESSING, CONTINGENCY, INPUT_MATERIALIZATION, INTEGRATION are my derivation from that sentence; the module comment will say so, so QA does not read them as design-pinned.\n\nMETER is an open bounded identifier, not a closed set. Design 11.2 names attempt.count / runner.authorized_ms / verification.authorized_ms as universal meters but 11.2 also admits provider-specific meters, so closing the set would be wrong. The DoD does not require a meter vocabulary.\n\nSTRING-IDENTICAL COPIES verified by value against their canonical sources, both to be re-diffed in step 4:\n- POLICY_OUTCOMES ALLOW | REQUIRE_HUMAN_APPROVAL | HOLD_UNKNOWN | DENY and tiers R0-R3, from packages/core/src/policy/policy-contract.ts:17-30.\n- TRUTH CLASSES OBSERVED | AGENT_REPORTED | DAEMON_VERIFIED | HUMAN_APPROVED | UNKNOWN, canonical at packages/contracts/src/runtime/runtime-vocabulary.ts:61-63, and already copied identically at dependencies/dependency-contract.ts:87 — so this is the established precedent, not a new duplication.\n\nCONVENTIONS confirmed by reading the code, not assumed. dependencies/dependency-contract.ts is the direct precedent (250 lines, same task shape) and supplies the local clone set: deepFreeze, compareStrings, makeIssue, sortIssues over JSON.stringify, fail, oneOf, isRef, isDigest (HEX_64), isVersion, record(), denseArray() with MAX_ITEMS ceiling before element reads. runtime-shape.js exports read and confirmed: isPlainRecord/isPlainArray (proxy-rejecting via util.types.isProxy in a fail-closed try/catch), readOwnDataProperty/readOwnArrayElement (descriptor-based, {ok:false} on accessors), hasOnlyOwnStringKeys, readPlainArrayLength, hasExactDenseArrayShape. Read order per mem:convention-scheduler-validator-invariants: schema, then key-set closure, then array ceiling, then element reads.\n\n`mem:gotcha-scheduler-js-shims` — packages/scheduler/src/budget/ does not exist yet; the .js bridge is load-bearing (the worker_threads entrypoint smoke test resolves the literal .js), and omitting it fails neither tsc nor vitest, only that smoke test. It ships in the same commit.\n\nZERO-AUTHORITY rail understood: types + validators only, no allocate/reserve/settle export. Sibling subdirs admission/, authority/, dependencies/ are in flight; budget/ is new and file-disjoint from all three.",
+      "startedAt": "2026-08-07T22:02:38.386Z",
+      "completedAt": "2026-08-07T22:04:08.910Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — packages/scheduler/src/budget/budget-contract.test.ts (<=250 physical lines HARD — the DoD pins both files at 250, tighter than the usual 400 escape). Cases: (1) VOCABULARY EXACTNESS: frozen tuples equal the design/policy spellings from step 1 (mechanical toStrictEqual against inline expected arrays — the DoD-1 oracle); every vocabulary Object.isFrozen; (2) RECORD VALIDATION fail-closed matrix, one stable BUDGET_* code per class with deterministic sortIssues ordering: prototype-hostile objects (proxy/accessor/__proto__ tricks via runtime-shape helpers), extra keys (closed key sets), negative / fractional / unsafe-integer meter quantities (safe nonnegative integers ONLY — design integer rule), malformed refs (empty/oversized — bounded identifier validation), malformed versions, oversized lists (bounded collection ceilings before element traversal); (3) ACCEPTED records: deeply frozen, DETACHED (mutating the input object after acceptance does not alter the accepted record — snapshot semantics), nested collections frozen, repeat calls over equal bytes deep-equal (determinism); (4) shapes covered: BudgetAccountRecord {accountId, ownerRef, parentRef|null, graphRevisionRef, version, state, perMeter direct buckets (integer quadruple)}, UsageMeasurementRecord {meter, quantity|null (null when coverage UNKNOWN — never zero), coverage, source, providerRunRef, sourceParserVersion, sequence, rawReceiptDigest (hex64), observedInterval refs}, ReserveDeclaration {purpose, meter, quantity}, result union {ok:true, record}|{ok:false, issues} — shapes are DATA + VALIDATION only, zero mutation authority (no allocate/reserve/settle functions — those are the sibling children's). Confirm RED via the task's own focused command.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-contract.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-contract.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-contract.test.ts"
+      ],
+      "note": "TDD red. Created packages/scheduler/src/budget/budget-contract.test.ts, 246 physical lines (first draft was 256 — over the HARD 250 cap — so the 19-line import block was compacted to 7; no case was dropped to fit).\n\nRED CONFIRMED via the task's own focused command: `pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts` -> exit 1, \"Test Files 1 failed (1) / Tests no tests\" — collection fails because ./budget-contract.js does not exist yet. That is the correct red for a contract module: nothing can pass by accident.\n\nSURFACE THE TESTS PIN (nothing else may be exported as authority): vocabularies BUDGET_ACCOUNT_STATES, BUDGET_BUCKETS, BUDGET_MEASUREMENT_COVERAGES, BUDGET_MEASUREMENT_SOURCES, BUDGET_RESERVE_PURPOSES, BUDGET_POLICY_OUTCOMES, BUDGET_POLICY_RISK_TIERS, BUDGET_TRUTH_CLASSES, BUDGET_ISSUE_CODES, the MAX_BUDGET_METERS ceiling, and exactly three pure validators — validateBudgetAccount, validateUsageMeasurement, validateReserveDeclaration. No allocate/settle/commit/transfer function is imported, because none may exist; movement semantics belong to the three sibling children.\n\nDoD-1 ORACLE is mechanical toStrictEqual against inline literals, so a drifted spelling fails rather than silently passes. The measurement-source assertion pins the six design-1260 strings; a test deliberately refuses \"ADAPTER_REPORTED\" so the plan's guessed vocabulary cannot creep back in.\n\nFAIL-CLOSED MATRIX, one stable BUDGET_* code per class: proxy (util.types.isProxy path), accessor-backed property, JSON-parsed own \"__proto__\" key, extra key, and null -> *_MALFORMED; empty/malformed refs, negative, fractional, unsafe-integer (MAX_SAFE_INTEGER + 2), NaN, Infinity, unknown enum values, non-lowercase and short digests -> *_FIELD_INVALID; duplicate meters and an over-ceiling list (MAX_BUDGET_METERS + 1) -> BUDGET_METER_BUCKETS_MALFORMED.\n\nDETERMINISTIC ORDERING is tested the only way that catches a dropped sortIssues, per mem:convention-scheduler-validator-invariants: an account invalid in BOTH version and state emits two same-code issues in accumulation order (version, then state) but must be REPORTED sorted, so the assertion requires the \"state\" message first. An implementation that returns emission order fails.\n\nUNKNOWN-NEVER-ZERO is pinned as a biconditional, not a one-way check: coverage UNKNOWN with quantity 0 is refused (the exact bug design 11.3 forbids), UNKNOWN with 1200 is refused, UNKNOWN with null is accepted and asserted still null; and COMPLETE or PARTIAL with null is refused, since design 11.3 makes PARTIAL an exact lower bound. PARTIAL with a genuine 0 is accepted — a measured zero is not the same fact as an unknown.\n\nDETACHMENT is tested as snapshot semantics rather than reference equality: after acceptance the caller mutates the meters array (push), a nested bucket object, a top-level field, and the nested observedInterval; the accepted record must be unchanged on all four. Deep freezing is asserted at record, collection, and nested-element level.\n\nDeterminism over equal bytes asserted by toStrictEqual across two independent calls.",
+      "startedAt": "2026-08-07T22:04:11.289Z",
+      "completedAt": "2026-08-07T22:06:28.184Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — packages/scheduler/src/budget/budget-contract.ts (<=250 physical lines HARD) + budget-contract.js (exactly `export * from \"./budget-contract.ts\";`). Implement step-2's vocabularies, record types, validators with the step-1 conventions; UNKNOWN-coverage quantity is null and can never be zero (the schedule-checker UNKNOWN-never-zero precedent, design 11.3 'unknown estimates never become zero'); no Date/random/imports beyond '../runtime-shape.js' and local clones; all exports frozen; module doc-comment marks LOCAL vocabularies vs design-pinned ones and carries the consolidation + divergence-risk notes. Focused tests green; `pnpm --filter @moe/scheduler typecheck` green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-contract.ts",
         "packages/scheduler/src/budget/budget-contract.js"
@@ -44,7 +52,8 @@
       "newFiles": [
         "packages/scheduler/src/budget/budget-contract.ts",
         "packages/scheduler/src/budget/budget-contract.js"
-      ]
+      ],
+      "startedAt": "2026-08-07T22:06:30.596Z"
     },
     {
       "stepId": "step-4",
@@ -70,17 +79,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:46:52.656Z",
-  "updatedAt": "2026-08-07T22:02:38.386Z",
+  "updatedAt": "2026-08-07T22:06:30.596Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T22:01:02.258Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "worker-c8bf9f6b"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T22:02:27.204Z",
   "planningNotes": {

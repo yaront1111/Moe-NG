@@ -109,26 +109,40 @@
     {
       "stepId": "step-6",
       "description": "Verification gate. (1) RE-RUN the step-1 inventory (git merge-base --is-ancestor + export greps) — if any surface landed mid-task, the affected probe is red: flip its manifest entry honestly (that is the ratchet working), never suppress. (2) `wc -l packages/testkit/src/foundation/*.ts tests/fault/foundation/*.ts` — every file <=250 target/400 hard. (3) Fresh `pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test\", exitCode: 0, outputTail }. (4) `pnpm exec vitest run tests/fault/foundation` -> green; repo gate `pnpm typecheck && pnpm test` with foreign-red by-path attribution. (5) grep foundation modules for '@moe/core\\|@moe/store\\|@moe/scheduler\\|@moe/skills' -> ZERO (import discipline); grep for 'scheduler/src\\|@moe/scheduler/' -> zero (boundary tripwire); grep for Date.now|Math.random -> zero. (6) Run both suites twice — identical (fixture hashes stable). (7) QA-LOC pre-note for completion: expected ~1600-2000 net LOC; cite the skills +1412 approval, the schedule-coverage verdict ('defect rejection, NOT an oversize rejection' at +1621), and the new-surface precedent — declared up front, not shipped silently into the pending prop-2eaa632d dispute.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
         "packages/testkit/src/foundation/foundation-fault-schedule.ts",
         "packages/testkit/src/foundation/foundation-incident-schedules.ts"
       ],
-      "startedAt": "2026-08-07T22:03:49.149Z"
+      "note": "Verification gate, all fresh and foreground.\n\n(1) Inventory re-run — every ABSENT probe is still honest. scheduler index exports 12 blocks, none matching lease/authority/fence (the only \"authority\" hit is the phrase \"zero-authority\" in prose). core index has no reduceAttempt/ATTEMPT_TRANSITIONS/createDispatcher/dispatchCommand. store index has no acknowledgeOutbox/ackOutboxMessage/markOutboxDelivered. Nothing landed mid-task, so no manifest entry needed flipping. If one had, the fault tests would have gone red first — that is the ratchet, not a maintenance chore.\n\n(2) Sizes: every owned file <=250 target. Max 250 (foundation-spec.test.ts), then j1-linear.test.ts 227, foundation-fault-schedule.ts 211, j4-replan-stale.test.ts 203, foundation-harness.ts 202. Nothing near the 400 hard split.\n\n(3)+(4) THE GATE — this is the rejection fix. Declared command alone provably cannot reach tests/fault/foundation/**, so the evidence is filed from a strict superset that does, per the governor's instruction-contract precedent (msg-1ee68f0c):\n\n  pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test \\\n    && pnpm exec tsc --project tests/fault/foundation/tsconfig.json \\\n    && pnpm exec vitest run tests/fault/foundation\n\nExit 0. testkit 18 files / 234 tests; tests-project tsc 0 errors; fault 3 files / 43 tests. Because `&&` chains, exit 0 means the originally declared command passed too — the evidence is a superset, not a substitution. All 13 owned .ts files are now both executed and typechecked; before this the 4 under tests/ were neither.\n\nRepo gate: `pnpm typecheck` exit 0 across all 10 workspace packages; `pnpm test` 114 files / 1583 passed / 1 skipped, exit 0. No foreign red to attribute — including the scheduler package-boundary walk, which greps raw content and would have fired on the new probe comment had it named a deep path.\n\n(5) Discipline greps: '@moe/core|@moe/store|@moe/scheduler|@moe/skills|@moe/runner' as IMPORTS under packages/testkit/src/foundation -> zero (the grep hits are probe packageName string literals; the only real non-relative imports are @moe/contracts, node builtins and vitest). 'scheduler/src|@moe/scheduler/' -> zero. 'Date.now|Math.random|new Date' across both owned dirs -> zero.\n\n(6) Determinism: the two owned suites run back-to-back, 7 files / 79 tests both times, identical. Pinned fixture digests stable.\n\n(7) LOC declared up front, not shipped silently. This reopen pass adds ~311 net lines to the 2228 already committed: +150 the new gate-coverage ratchet, +107 the harness typing, +12 the tsconfig and probe comment, ~+42 across the three fault tests. Every line exists because QA found 667 lines of owned deliverable that no gate touched. The oversize question on the ORIGINAL 2228 remains architect-owned and untouched here — QA's own words, \"architect-owned, do not self-split\".",
+      "startedAt": "2026-08-07T22:03:49.149Z",
+      "completedAt": "2026-08-07T22:04:47.054Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) false-evidence hunt (the schedule-coverage reject class): for every PRODUCTION_BEHAVIOR_ABSENT entry, manually verify the probe actually fails when pointed at a LANDED surface (flip one probe target to a landed export in a scratch check outside the repo — it must go red); (b) ratchet integrity: no ABSENT entry without a probeRef; no probe without a manifest entry; (c) zero-work oracle: feed the J1 model a green-claiming empty trace — refusal required; feed it a real-work trace — acceptance required (both directions); (d) held-out integrity: source-scan proves no packages/** production module imports foundation/; labels present on every fixture; zero hidden-label bytes, zero BENCH-*; (e) manifest partition: temporarily drop one schedule from a fault test locally — foundation-spec's completeness assertion must go red, restore; (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/testkit/src/foundation/foundation-spec.test.ts packages/testkit/src/foundation/foundation-outcomes-fixtures.ts packages/testkit/src/foundation/foundation-model-j1.ts packages/testkit/src/foundation/foundation-model-j3j4.ts packages/testkit/src/foundation/foundation-fakes.ts packages/testkit/src/foundation/foundation-fault-schedule.ts packages/testkit/src/foundation/foundation-incident-schedules.ts tests/fault/foundation/j1-linear.test.ts tests/fault/foundation/j3-crash.test.ts tests/fault/foundation/j4-replan-stale.test.ts`; `git show --stat` lists exactly these 10 paths (plus amendment-recorded splits).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
         "packages/testkit/src/foundation/foundation-incident-schedules.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/foundation/foundation-gate-coverage.test.ts",
+        "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+        "tests/fault/foundation/tsconfig.json",
+        "tests/fault/foundation/foundation-harness.ts",
+        "tests/fault/foundation/j1-linear.test.ts",
+        "tests/fault/foundation/j3-crash.test.ts",
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "note": "Adversarial self-review by MUTATION, not by reading. Every claim below was made to fail on purpose and then restored; all four mutations reverted, tree clean, gate green after.\n\nM1 — uncovered owned file: added tests/fault/foundation/nested/scratch.ts. Gate ratchet RED, `expected [ Array(1) ] to deeply equal []`. Removed.\nM2 — the rejection itself, reproduced: narrowed GATE_TEST_FILTERS back to just [\"packages/testkit/src\"]. RED naming exactly the three files QA said never ran: j1-linear.test.ts, j3-crash.test.ts, j4-replan-stale.test.ts. This is the proof the new ratchet catches the defect that got the task rejected, rather than merely asserting it is fixed. Restored.\nM3 — probe ratchet still real after my edits: repointed probe:scheduler-authority-lease at the LANDED export previewGraphSnapshot. j4 RED, produced PASS_EXPECTED vs declared PRODUCTION_BEHAVIOR_ABSENT. Restored.\nM4 — partition drop: removed \"incident:timer-callback-reentrancy\" from the J3 executor map. TWO tests red — the ownership assertion, and the it.each row failing with the named `ReferenceError: No executor for manifest entry ...` from the new executorFor rather than \"undefined is not a function\". Restored.\nM0 (step 2) — deleting the tests tsconfig is already proven red: that was the TDD red, ENOENT.\n\nChecklist items with a real answer rather than a shrug:\n- Fail-closed direction. Every new mechanism errs toward RED. globToRegExp handles `**` and `*` but not brace alternation, so an exotic include pattern makes files look uncovered and the test fails — it cannot produce a false green. Same for a missing scripts.test (positional becomes undefined, assertion fails) and for a nested subdirectory (enumerated but unmatched by \"./*.ts\").\n- fixturePayload uses referential identity, deliberately. If a future author inlines a payload instead of exporting the typed constant, the fixture and the constant diverge and it throws. Brittle in the direction that catches drift.\n- accepted/refused hold one narrowing cast each, taken only after a runtime discriminant check, and return `Extract<T, ...>` so the caller keeps its own core/contracts type. No `any` anywhere in the diff.\n- Concurrency/IO: nothing here holds shared state. The only handle is the ephemeral SQLite store, already closed in a `finally`. Fixtures are frozen; no clock or RNG in either owned directory.\n- No scratch files: the M1 nested dir and both /tmp backups are gone; `git status --porcelain -- packages/testkit tests/` is empty.\n\nFINAL fresh gate after all mutations reverted: testkit 18 files / 234 tests, tests-project tsc 0 errors, fault 3 files / 43 tests, exit 0.\n\nCOMMIT — and a sweep to report. Mid-step, foreign commit `4b7deb3` (\"Planning invariant test decomposition\", task-7cb6ffc3) swept a snapshot of all seven of my owned files including the new tsconfig and gate-coverage test, taken BETWEEN two of my edits, leaving four files half-done in the tree. Not unwound: it carries live foreign work (mem:gotcha-session-end-commit-sweeps-foreign-work, third occurrence on this task). The remaining delta is committed as `cda900b` by explicit pathspec — `git show --stat` lists exactly the 4 owned paths, nothing foreign, and the index was verified empty before staging. Attribution posted to the governor channel as msg-9299cd4d so task-7cb6ffc3's reviewer reviews at the paths, not at the commit.",
+      "startedAt": "2026-08-07T22:04:49.852Z",
+      "completedAt": "2026-08-07T22:07:44.732Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2edeee3c",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -147,12 +161,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.498Z",
-  "updatedAt": "2026-08-07T22:03:49.149Z",
+  "updatedAt": "2026-08-07T22:09:29.353Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:18:23.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -167,7 +181,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -198,27 +214,25 @@
   },
   "planApprovedAt": "2026-08-07T20:30:09.154Z",
   "workStartedAt": "2026-08-07T20:55:03.025Z",
-  "reviewStartedAt": "2026-08-07T21:29:14.138Z",
+  "reviewStartedAt": "2026-08-07T22:09:29.353Z",
   "verification": {
-    "command": "pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test",
+    "command": "pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test && pnpm exec tsc --project tests/fault/foundation/tsconfig.json && pnpm exec vitest run tests/fault/foundation",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  17 passed (17)\n      Tests  229 passed (229)\n   Start at  00:27:03\n   Duration  4.06s (transform 2.00s, setup 0ms, import 2.85s, tests 3.94s, environment 1ms)\n\nEXIT=0",
-    "reportedAt": "2026-08-07T21:29:14.138Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/testkit/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  18 passed (18)\n      Tests  234 passed (234)\n   Start at  01:07:49\n   Duration  5.76s (transform 2.57s, setup 0ms, import 3.42s, tests 4.95s, environment 1ms)\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  3 passed (3)\n      Tests  43 passed (43)\n   Start at  01:07:57\n   Duration  611ms (transform 1.16s, setup 0ms, import 1.49s, tests 26ms, environment 0ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-07T22:09:29.353Z"
   },
   "filesModified": [
-    "packages/testkit/src/foundation/foundation-spec.test.ts",
+    "packages/testkit/src/foundation/foundation-gate-coverage.test.ts",
+    "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
     "packages/testkit/src/foundation/foundation-model-j1.ts",
     "packages/testkit/src/foundation/foundation-model-j3j4.ts",
-    "packages/testkit/src/foundation/foundation-outcomes-fixtures.ts",
-    "packages/testkit/src/foundation/foundation-journey-fixtures.ts",
-    "packages/testkit/src/foundation/foundation-fakes.ts",
     "packages/testkit/src/foundation/foundation-fault-schedule.ts",
-    "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+    "tests/fault/foundation/tsconfig.json",
     "tests/fault/foundation/foundation-harness.ts",
     "tests/fault/foundation/j1-linear.test.ts",
     "tests/fault/foundation/j3-crash.test.ts",
     "tests/fault/foundation/j4-replan-stale.test.ts",
-    "packages/testkit/src/foundation/foundation-fakes.test.ts"
+    "packages/testkit/src/foundation/foundation-incident-schedules.ts"
   ],
   "reviewCompletedAt": "2026-08-07T21:34:36.579Z",
   "rejectionDetails": {

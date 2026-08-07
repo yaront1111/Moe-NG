@@ -129,8 +129,8 @@
       "completedAt": "2026-08-07T21:47:00.146Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -149,17 +149,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T22:03:17.757Z",
+  "updatedAt": "2026-08-07T22:06:06.724Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T22:06:06.724Z",
+    "wallClockMs": 10272155
   },
   "contextFetchedBy": [
-    "worker-875b53a2"
+    "worker-875b53a2",
+    "qa-813cd351"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -222,7 +225,7 @@
     "packages/mcp/src/http/http-server-test-helpers.ts",
     "packages/mcp/src/http/http-resume.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T20:57:06.637Z",
+  "reviewCompletedAt": "2026-08-07T22:06:06.724Z",
   "rejectionDetails": {
     "failedDodItems": [
       "TASK RAIL (not a DoD item): 'Keep files below 400 lines' — http-server.test.ts is 505 lines. All four Definition-of-Done items PASS; the block is size/rails only."
@@ -325,5 +328,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T22:06:06.724Z",
+  "reviewSummary": "APPROVE under human exception prop-0543d3ce.\n\nEXCEPTION AUDITED FROM THE JSON, not from reopenReason: status APPROVED, resolvedBy \"human\", ADD_RAIL scoped to TASK, one-time and scoped to already-landed commit 37b11e5. It explicitly does NOT waive the per-file 400 cap, so I verified that cap myself rather than treating the exception as blanket.\n\nPER-FILE CAP NOW MET: all 9 files under packages/mcp/src/http are below 400 (max 372, http-session.test.ts). http-server.test.ts is 194, down from 505. Remediation 8ef39d9 touches exactly three test paths.\n\nSPLIT LOST NOTHING: extracted it() names from `git show 8ef39d9~1:...http-server.test.ts` vs the two post-split files — 25 pre, 25 post, multiset equal, zero lost, zero added, no skip/only/todo.\n\nGATE re-run: typecheck exit 0; `pnpm --filter @moe/mcp test` 6 files / 125 tests exit 0. Matches filed evidence. stdio provably untouched by 37b11e5 (`git show --numstat -- packages/mcp/src/stdio` empty), so the frozen stdio QA stands.\n\nMY OWN MUTATIONS, beyond the two the prior QA ran on http-session:\n- Disabled the adapter's loopbackRefusal (http-server.ts:108) -> the evil-Origin test died. The evil-Host test survived, and that is correct rather than a gap: the transport pins allowedHosts to the initializing request's Host with enableDnsRebindingProtection true, so Host has a real second layer while Origin is pinned only when the initializing client sent one. Defence in depth confirmed by killing one layer.\n- Removed the streaming cap in readCappedBytes (http-server.ts:150) -> 3 tests failed across 2 files, and the suite went from 0.4s to 22s because the unbounded read actually materialised. That runtime blowup is direct evidence the cap does real work.\nBoth reverted; `git status --porcelain -- packages/mcp` clean; gate green again at 125/125.\n\nMetadata nit, no action: task.filesModified still lists packages/mcp/src/stdio/stdio-dispatch-port.ts from step 1, which 37b11e5 never modified."
 }

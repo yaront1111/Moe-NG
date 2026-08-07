@@ -86,8 +86,8 @@
       "completedAt": "2026-08-07T22:00:52.046Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-bdf27860",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -99,12 +99,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.400Z",
-  "updatedAt": "2026-08-07T22:02:16.393Z",
+  "updatedAt": "2026-08-07T22:04:13.591Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:23:51.254Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-07T22:04:13.591Z",
+    "wallClockMs": 2422337
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -147,5 +149,8 @@
     "packages/core/src/planning/planning-invariants.test.ts",
     "packages/core/src/planning/planning-invariant-fixtures.ts",
     "packages/core/src/planning/planning-invariant-drivers.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T22:04:13.591Z",
+  "reviewCompletedAt": "2026-08-07T22:04:13.591Z",
+  "reviewSummary": "Re-ran the gate: typecheck exit 0; core test exit 0, 14 files / 226 tests — matches reported outputTail. Commit a929e11 = exactly the three owned paths, +330/-310. Sizes under CR/CRLF/LF-equivalent splitting: test 129, fixtures 88, drivers 235, CR=0 in all three.\n\nCOVERAGE ARITHMETIC — the check that settles DoD 1 and 2, against `git show a929e11^:...planning-invariants.test.ts` (19941 chars). For each file I took everything from its first declaration, stripped the added `export `, and located it in the base:\n  fixtures = base[567..4022]\n  drivers  = base[4024..14396]\n  test     = base[14398..19941]\nEach is a CONTIGUOUS BYTE-IDENTICAL substring, the three tile the base end-to-end, and the only gaps are two 2-char blank separators (the leading 567 chars were the import block, legitimately rewritten). So every seed, roll modulus, xorshift constant, loop bound, bearing set, perturbation, lifecycle rank/terminal table, describe and it() body moved exactly once and unchanged — no assertion weakened or dropped, no case duplicated. SEEDS verbatim: [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d].\n\nDoD 3: zero describe(/it(/test(/.skip/.only/.todo in either support module; packages/core/src/index.ts references neither.\n\nMUTATION CHECKS (mine, since a green refactor proves nothing alone):\n- perturb -> identity in fixtures => 1 failed / 6 passed, independently reproducing the worker's reported figure exactly, so their self-review evidence is accurate rather than asserted.\n- xorshift32 shift 13 -> 11 => still 7/7 green. Recorded so it is not later misread as a weak suite: changing the PRNG stream SHOULD NOT break a property test, and corpus identity is guaranteed by the byte-containment proof rather than by that mutation.\nBoth reverted; owned paths clean afterwards.\n\nForeign reds the worker attributed are real and not this task's: the scheduler package-boundary scanner (since fixed at d2b1d77) and foundation-gate-coverage.test.ts's missing tests/fault/foundation/tsconfig.json."
 }
