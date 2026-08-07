@@ -79,17 +79,24 @@
     {
       "stepId": "step-5",
       "description": "Perform the one final adversarial review. Mechanically compare the combined post-split `it()` name multiset with all 32 committed baseline names and diff every moved helper/describe body against `bcdc2f6` to prove each appears exactly once with no rename/assertion/loop drift; scan for skip/only/todo, module-level `let`, writes to imported fixture values, nondeterministic APIs, or package-root exports. Use an in-memory cross-platform Node counter to prove each owned file is <=250 under LF/CRLF/CR, confirm production/index/other tests are untouched, and run `git diff --check`. If review causes any edit, rerun the exact gate. Then inspect shared `git status --porcelain`, stage/commit only the three explicit owned paths (never broad add or bare commit), and verify `git show --stat` lists exactly those paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
         "packages/core/src/planning/planning-run-test-fixtures.ts",
         "packages/core/src/planning/planning-run-authority.test.ts"
       ],
-      "startedAt": "2026-08-07T21:48:30.185Z"
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts",
+        "packages/core/src/planning/planning-run-test-fixtures.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts"
+      ],
+      "note": "Adversarial review passed, and it caught a shared-tree incident. Review caused no edit, so the step-4 gate stands as the fresh evidence.\n\nSTRONGEST PROOF (supersedes name-matching): I reconstructed the ENTIRE baseline file minus its 17-line import block by concatenating the three new files' bodies (fixture body with `export ` stripped from exactly the 19 intended names, then the reducer describes, then the authority describes) and byte-compared it against `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-514. Result: TRUE. Every byte of every helper, describe, it(), assertion, cast, loop matrix, and blank line survives exactly once, in order. Only the import block differs, which is required. This makes assertion loosening, rename, loss, and duplication mechanically impossible, not merely unobserved.\n\nSupporting checks: 32 it() total (20+12), multiset equal to baseline, zero duplicates. Cross-platform physical line counts via split(/\\r\\n|\\r|\\n/): reducer 228, authority 180, fixtures 156 — all <=250, all pure LF. No skip/only/todo, no module-level let/var, no Date/new Date/Math.random/performance.now/process.hrtime in any of the three. Fixture registers no suite and imports no production module. packages/core/src/index.ts does not reference either new file, so the package root surface is unchanged. `git diff --check` exit 0. No production source was touched by this task at all.\n\nTwo regex hits for \"writes to imported bindings\" were inspected and are FALSE POSITIVES — all three are type annotations on const declarations: `const allowed: readonly PlanningRunLifecycle[] = PLANNING_RUN_TRANSITIONS[kind]`, `export const HASHES: PlanRevisionHashes = {...}`, `const SEALED: readonly PlanningRunLifecycle[] = [...]`. Zero real writes.\n\nCross-file ordering hazard, considered and cleared: vitest's default forks pool runs with isolate:true, so each test file gets its own module registry and the fixture cannot be shared state across the two suites. Even without isolation every export is const and state/commandFor/summaries/finalizeWitness return fresh objects. Noted for QA (theoretical, pre-existing, not a regression): commandFor returns the same REVISION_SEAL and PLAN_APPROVAL object identity on every call, exactly as it did pre-split inside the single file; no test mutates them and any reducer freeze is idempotent.\n\nCOMMIT — READ THIS. I could not commit: `git status --porcelain` came back EMPTY and my three paths were already at HEAD. Commit `5a57b2a feat(task-bfc395429d9d4b61b91e51e4f3bbe166): Projection commit seam on the event transaction` swept all three of my in-flight files (and another task's graph-revision-{reducer.test,test-fixtures} files) under its own message — the `mem:gotcha-shared-index-commit-capture` failure mode, from the other direction. Per epic rail \"preserve foreign work\" I did NOT reset, revert, rebase, or amend that commit. I verified `git diff HEAD -- <my 3 paths>` is empty, i.e. HEAD holds byte-identical content to what step-4's green gate and this review ran against, and no untracked files remain in packages/core/src/planning/.\n\nQA must not review 5a57b2a — it is 22 files of mixed ownership. Review this range instead:\n`git diff bcdc2f6..HEAD -- packages/core/src/planning/planning-run-reducer.test.ts packages/core/src/planning/planning-run-test-fixtures.ts packages/core/src/planning/planning-run-authority.test.ts`  (3 files, +354/-304)\nPosted the same warning plus the diff range to the team channel.",
+      "startedAt": "2026-08-07T21:48:30.185Z",
+      "completedAt": "2026-08-07T21:50:29.839Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2edeee3c",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -101,23 +108,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T21:48:30.185Z",
+  "updatedAt": "2026-08-07T21:51:32.281Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "architect-c4babdf9",
-    "worker-2edeee3c"
+    "worker-2edeee3c",
+    "qa-813cd351"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:31:27.825Z",
@@ -136,5 +145,17 @@
     "wallClockMs": 2700000
   },
   "planApprovedAt": "2026-08-07T21:31:29.854Z",
-  "workStartedAt": "2026-08-07T21:43:17.816Z"
+  "workStartedAt": "2026-08-07T21:43:17.816Z",
+  "reviewStartedAt": "2026-08-07T21:51:18.171Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  14 passed (14)\n      Tests  226 passed (226)\n   Start at  00:50:42\n   Duration  511ms (transform 1.60s, setup 0ms, import 2.29s, tests 404ms, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T21:51:18.171Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-run-reducer.test.ts",
+    "packages/core/src/planning/planning-run-test-fixtures.ts",
+    "packages/core/src/planning/planning-run-authority.test.ts"
+  ]
 }

@@ -49,21 +49,34 @@
     {
       "stepId": "step-3",
       "description": "Verification gate + audit: (1) `wc -l` both files — each <=250 physical lines (expect ~215 test / ~85 fixtures); (2) case audit — `grep -c \"it(\"` in the test file === 18 AND the sorted it()-name list equals the step-1 baseline exactly (loops over BOUND move with derivation intact — derived names must match too); grep skip|only|todo -> zero; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched (`git status --porcelain -- packages/core/src/planning` shows only the two owned paths) — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; assertions pass count unchanged vs baseline; (4) isolation run of the test file alone -> green; repo gate with foreign-red attribution; run twice — identical.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.test.ts",
         "packages/core/src/planning/graph-revision-test-fixtures.ts"
       ],
-      "startedAt": "2026-08-07T21:47:38.637Z"
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts",
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ],
+      "note": "Gate passed. (1) Sizes with CR stripped (LF/CRLF equivalent): test 222, fixtures 96 — both <=250. (2) Case audit: `grep -c \"it(\"` = 18; sorted it()-line diff vs the step-1 baseline scratchpad = IT_NAMES_IDENTICAL (zero diff, includes the one 2-line concatenated name); skip/only/todo/xit/xdescribe = 0 across both files. (3) Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` run TWICE, back to back: exit 0 both times, 14 test files / 226 tests passed, identical. (File count moved 13 -> 14 mid-window because the concurrent task-ca32f538 landed planning-run-authority.test.ts; total test count stayed 226, so nothing of mine changed.) (4) Isolation run `npx vitest run --root . packages/core/src/planning/graph-revision-reducer.test.ts` -> 1 file / 18 tests passed: 18 it() declarations, 18 executions, each exactly once. DoD-2 audit: 18 fixture exports, overlap with packages/core/src/index.ts = 0; only importer of the fixtures module in the whole repo is the owned test file; grep for let/var/push/sort/Date./Math.random in fixtures = 0 hits, so deterministic with no shared mutable state. FOREIGN RED, attributed by path: full-repo `npx vitest run` = 1 failed / 112 passed, the failure being packages/scheduler/src/package-boundary.test.ts, whose single violation is the other worker's untracked packages/core/src/planning/planning-run-test-fixtures.ts (task-ca32f538) — its line 4 doc comment names `packages/scheduler/src/test-fixtures.ts` in prose and that test greps raw content, not imports. My two paths have zero `scheduler` occurrences and cannot cause it. Posted the diagnosis + fix to #general (msg-cc1ab3a4) rather than editing their file.",
+      "startedAt": "2026-08-07T21:47:38.637Z",
+      "completedAt": "2026-08-07T21:49:29.225Z"
     },
     {
       "stepId": "step-4",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff of every fixture body against `git show HEAD:packages/core/src/planning/graph-revision-reducer.test.ts` — identical (witness truth classes, hash seeds, BOUND membership untouched); (b) fixtures export-overlap grep vs core index exports -> zero; (c) scratchpad baseline lives outside the repo — confirm no strays (auto-commit sweep); (d) no `let`/mutation in fixtures. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/graph-revision-reducer.test.ts packages/core/src/planning/graph-revision-test-fixtures.ts`; `git show --stat` lists exactly these 2 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.test.ts",
         "packages/core/src/planning/graph-revision-test-fixtures.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts",
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ],
+      "note": "Adversarial review done; COMMIT WAS PRE-EMPTED BY A FOREIGN SWEEP — read this before opening a commit.\n\n(a) Verbatim-move proof vs the correct oracle (a45b161:graph-revision-reducer.test.ts, 288 lines, byte-equal to the pinned bcdc2f6 version): test bodies base lines 95-288 vs current 29-222 diff = EMPTY -> TEST_BODY_BYTE_IDENTICAL (all 4 describes, all 18 cases, every witness truth class, hash seed, BOUND membership, and loop derivation untouched). Fixture region base 17-93 vs fixtures 16-96, normalized by stripping leading `export ` and all whitespace: differs by exactly ONE character — an added `,` at char 1212, the trailing comma from wrapping commandFor's parameter list. Semantically inert. That plus the two documented rewraps (APPROVAL, commandFor signature, both forced by the 100-col ceiling `export ` broke) is the complete deviation set.\n(b) Export overlap vs packages/core/src/index.ts = 0 over all 18 fixture exports; the only importer anywhere in packages/ is the owned test file, so nothing production-shaped escaped. Precedent confirmed: packages/scheduler/src/test-fixtures.ts is the same \"fixtures module under src/\" convention.\n(c) Scratchpads live only in C:/Users/Yaron/AppData/Local/Temp; `git status --porcelain | grep '^??'` outside .moe/ = empty, no strays.\n(d) Fixtures: zero let/var/push/sort/Date./Math.random. state() returns a fresh object and spreads {...BINDING}, so no shared reference escapes; module consts are import-time only and never written. Deterministic and concurrency-safe by construction.\n\nCOMMIT: none of mine exists and none was possible. Commit 5a57b2a \"feat(task-bfc395429d9d4b61b91e51e4f3bbe166): Projection commit seam on the event transaction\" landed mid-session with a broad add and captured BOTH my owned paths (the modified test and the then-untracked fixtures module) plus task-ca32f538's three files. My working delta is now zero — `git diff --stat HEAD -- <both paths>` is empty, so the committed content is exactly my final content. Per mem:gotcha-shared-index-commit-capture I did NOT reset, revert, or amend the foreign commit. QA must review this range instead of a commit named for this task: `git diff a45b161..5a57b2a -- packages/core/src/planning/graph-revision-reducer.test.ts packages/core/src/planning/graph-revision-test-fixtures.ts` (94 deletions from the test, 96-line new fixtures module, zero production files). Posted to #general (msg-5d4464d8) with the sweep detail and the rail-3 reminder.\n\nFinal fresh gate: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0, 14 files / 226 tests passed. Repo-wide red remains exactly one foreign test (scheduler package-boundary, caused by task-ca32f538's planning-run-test-fixtures.ts doc-comment prose, now committed inside 5a57b2a) — untouched by me and unrelated to my paths.",
+      "startedAt": "2026-08-07T21:49:32.714Z",
+      "completedAt": "2026-08-07T21:51:34.824Z"
     }
   ],
   "status": "WORKING",
@@ -79,12 +92,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T21:47:38.637Z",
+  "updatedAt": "2026-08-07T21:51:34.824Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:22:56.502Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 2
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -93,7 +106,9 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:39:49.492Z",

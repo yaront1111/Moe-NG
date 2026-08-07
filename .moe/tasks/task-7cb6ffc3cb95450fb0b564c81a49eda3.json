@@ -19,15 +19,18 @@
     {
       "stepId": "step-1",
       "description": "Characterization baseline (read-only): planning-invariants.test.ts is 432 lines / 7 property it() cases; support machinery ≈ lines 25-260: FIXTURE surface (hash() + seven hash constants, HASHES/BINDING/PLAN_APPROVAL/RUN_ACTIVATION/REVISION_ACTIVATION witnesses, RUN_RANK/RUN_TERMINAL/RUN_APPROVAL_STATES/REVISION_RANK/REVISION_TERMINAL lifecycle tables, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) and DRIVER surface (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS = [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d], DRAFT_STEPS/READY_STEPS/... valid-state step pools). Record the baseline: it()-name list, SEEDS array literal, and the assertion inventory (expectDeepFrozen call sites, toStrictEqual/toBe counts) to a scratchpad OUTSIDE the repo — DoD 1 demands the SAME seed set/traces/perturbations/corpus, so the seed literals are part of the oracle. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariants.test.ts"
-      ]
+      ],
+      "note": "Characterization baseline recorded to C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-task-7cb6ffc3-baseline.md (outside repo). planning-invariants.test.ts = 432 physical lines, LF, trailing newline. Ranges confirmed by read: 1-23 imports, 25-101 fixture surface, 103-314 driver surface, 316-432 describe + 7 it() cases. Oracle captured: 7 it() names in order, SEEDS = [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d] as const, assertion inventory (expect( 48, expectDeepFrozen( 4, .toBe( 40, .toEqual( 5, .toBeGreaterThanOrEqual( 2, it( 7, describe( 1, .only/.skip/.todo 0), plus the corpus constant list (loop bound 120, roll moduli, xorshift shifts, bearings [2,3,5], 12-iteration perturbation loop, *_STEPS rolls). Fresh baseline GREEN: pnpm --filter @moe/core typecheck exit 0; pnpm --filter @moe/core test exit 0, Test Files 14 passed (14), Tests 226 passed (226). Sibling precedent confirmed in the same directory: graph-revision-test-fixtures.ts and planning-run-test-fixtures.ts already import expect from vitest and export test-only helpers with a header docblock noting the root vitest include collects *.test.ts alone. No eslint config in repo; .editorconfig requires LF + final newline.",
+      "startedAt": "2026-08-07T21:49:55.249Z",
+      "completedAt": "2026-08-07T21:51:49.750Z"
     },
     {
       "stepId": "step-2",
       "description": "Extract BY RANGE per the task's named responsibility split: (1) packages/core/src/planning/planning-invariant-fixtures.ts ← the fixture surface (hashes, witnesses, lifecycle rank/terminal tables, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) — deterministic constructors + assertion helpers, verbatim bodies, `import type` for contract types, NodeNext '.js' specifiers; (2) packages/core/src/planning/planning-invariant-drivers.ts ← the driver surface (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS, the *_STEPS valid-state pools) importing the fixtures module; (3) planning-invariants.test.ts keeps ONLY the 7 property cases + describe structure, importing both modules. RAIL CHECKS: neither support module registers Vitest suites (non-.test filenames — never collected; expectDeepFrozen calling expect is legal imported test infrastructure, sibling-fixture precedent) and neither exports anything production-shaped (zero overlap with core index exports — DoD 3); SEEDS/steps/traces move VERBATIM — any seed or pool change alters the exercised corpus (DoD 1). ZERO assertion edits in the test file.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts",
@@ -36,7 +39,8 @@
       "newFiles": [
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:51:51.843Z"
     },
     {
       "stepId": "step-3",
@@ -60,7 +64,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-29a7f3a3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -72,17 +76,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.400Z",
-  "updatedAt": "2026-08-07T21:39:15.692Z",
+  "updatedAt": "2026-08-07T21:51:51.843Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:23:51.254Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "worker-29a7f3a3"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:24:48.592Z",
   "planningNotes": {
@@ -98,5 +106,6 @@
   "budget": {
     "wallClockMs": 2700000
   },
-  "planApprovedAt": "2026-08-07T21:24:50.624Z"
+  "planApprovedAt": "2026-08-07T21:24:50.624Z",
+  "workStartedAt": "2026-08-07T21:49:55.249Z"
 }
