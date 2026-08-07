@@ -49,10 +49,19 @@ export interface ParsedStreamLine {
   readonly resumedFrom: string | null;
 }
 
+/**
+ * A capture larger than the inline bound still has to be framed, so the record
+ * of a pathological stream — millions of one-byte lines — would otherwise grow
+ * without limit even though the raw retention is capped. Framing stops here and
+ * the caller fails closed; it never silently keeps a prefix.
+ */
+export const MAX_FRAMED_LINES = 262_144;
+
 export interface FramedStream {
   readonly lines: readonly ParsedStreamLine[];
   /** Bytes after the last newline. Non-zero means the capture was cut. */
   readonly truncatedTailByteLength: number;
+  readonly lineLimitExceeded: boolean;
 }
 
 function readString(source: Record<string, unknown>, key: string): string | null {
@@ -114,6 +123,13 @@ export function frameStream(rawBytes: Uint8Array): FramedStream {
       end -= 1;
     }
     if (end > start) {
+      if (lines.length >= MAX_FRAMED_LINES) {
+        return Object.freeze({
+          lines: Object.freeze(lines),
+          truncatedTailByteLength: 0,
+          lineLimitExceeded: true,
+        });
+      }
       lines.push(parseLine(ordinal, rawBytes.subarray(start, end)));
       ordinal += 1;
     }
@@ -122,6 +138,7 @@ export function frameStream(rawBytes: Uint8Array): FramedStream {
   return Object.freeze({
     lines: Object.freeze(lines),
     truncatedTailByteLength: rawBytes.byteLength - start,
+    lineLimitExceeded: false,
   });
 }
 

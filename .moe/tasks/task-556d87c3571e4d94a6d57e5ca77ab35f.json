@@ -19,27 +19,37 @@
     {
       "stepId": "step-1",
       "description": "Baseline + conventions (read-only). Landed core conventions to clone (goal/project precedent + planning now landed on main at bcdc2f6): result shapes <X>AcceptedResult/<X>RejectedResult/union deep-frozen; reduce<X>(state|undefined, command); check order snapshot->create->state->expectedVersion->version->commandId->TRANSITIONS->overflow->apply; truth floors from goal-validation.ts:145-186 (strongTruth = DAEMON_VERIFIED|HUMAN_APPROVED ONLY; destructive/authorization witnesses exactly HUMAN_APPROVED); hex64 refs as SUPPLIED opaque strings (planning-snapshot HEX64 precedent — NO node:crypto in core, and the QA purity grep would not catch createHash so do not ship it silently). REGISTRY SOURCE RULES (verified): from {aggregate:'APPROVAL'} the ONLY legal registry code is ILLEGAL_TRANSITION — EXPECTED_VERSION_CONFLICT and IDEMPOTENCY_CONFLICT both EXCLUDE APPROVAL and silently degrade to UNKNOWN_ERROR (runtime-error-factory fail-closed build); graph-revision-reducer.ts:14-15 is the landed fallback precedent; INPUT_INVALID/UNKNOWN_ERROR are raised with NO source. Local vocabularies: ALLOW|DENY|REQUIRE_HUMAN_APPROVAL|HOLD_UNKNOWN (design 692-695 canonical strings — the DoD's 'REQUIRE_APPROVAL' is a paraphrase, documented) + R0-R3 tiers defined locally (no policy vocab exists in contracts); APPROVAL/APPROVAL_DECISION/APPROVAL_VALIDITY lifecycles IMPORTED from RUNTIME_LIFECYCLES. SIZE DISCIPLINE: every file <=250 lines INCLUDING tests (the human's explicit decomposition requirement); expected total declared up front in the completion note with the new-surface precedents (skills +1412 approved; schedule-coverage 'defect rejection, NOT an oversize rejection' at +1621).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-validation.ts",
         "packages/core/src/planning/planning-run-reducer.ts"
-      ]
+      ],
+      "note": "REOPEN TRIAGE (read-only). QA's four issues verified against the landed code, not accepted on description alone:\n\n1. policy-composition.ts:54-80 `ruleRelaxation` — CONFIRMED by reading. It compares `effect` (:59) and `obligations` (:61-78) only. `PolicyRule` (policy-contract.ts:80-85) has exactly four fields: `ruleId` (identity key of the fold map), `effect`, `obligations`, `requiredFactIds`. The fourth is never read by the detector.\n2. policy-evaluation.ts:85 `assessEvidence` — CONFIRMED. It unions `rule.requiredFactIds` over `fold.rules`, and `foldSlices` (:113 `rules.set`) keeps the LAST declaration per ruleId. So a shrinking redeclaration deletes an ancestor's HOLD_UNKNOWN trigger while `relaxed` stays false. The escape is real and I am not disputing it.\n3. policy-decision-table.test.ts:154 — CONFIRMED vacuous on this path. `rule()` (:31) defaults `requiredFactIds: []`; the only fixture that sets it is the top-level `input()` at :52. The field is never varied BETWEEN chain links anywhere in the suite.\n4. policy-invariants.test.ts:16 — CONFIRMED. `buildInput` hard-codes `requiredFactIds: []` on both the root rule (:56) and the child redeclaration (:62), so the 320-seed sweep cannot emit a shrink.\n\nNo pushback on any item. QA's prescribed fix (a redeclared rule whose `requiredFactIds` is not a superset of the ancestor's is an unconditional, non-waivable relaxation) is the right shape: waivers resolve a `namedObligationId` to a SOFT obligation, and a required fact is not an obligation, so there is no waiver vocabulary that could cover this at all.\n\nARCHITECT NOTE acknowledged: fix in place, no rebuild, no re-split.\n\nConventions re-confirmed for this pass: no eslint config exists in the repo, so `tsc` + vitest are the whole machine gate; `noUnusedLocals`/`noUnusedParameters` are ON in tsconfig.base.json, which rules out a dangling type-level exhaustiveness alias (it would be reported as unused) — the monotonicity closure argument goes in a comment plus tests instead.\n\nSIZE: the <=250 ceiling is already binding. policy-decision-table.test.ts is at exactly 250 and policy-invariants.test.ts at 240, so the new coverage cannot all land in the existing files. Plan for this pass: minimal in-place additions to both, plus one new focused test file `policy-relaxation.test.ts` for the evidence-dimension relaxation family (the file this defect proves was missing). Production delta is a handful of lines in policy-composition.ts only.\n\nSerena memories read: task-...-handoff, gotcha-policy-slice-relaxation (QA wrote it; it already carries the repro and the generalizable rule), gotcha-core-policy-lattice-and-guard-exports.",
+      "startedAt": "2026-08-07T21:20:20.930Z",
+      "completedAt": "2026-08-07T21:20:51.566Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — src/policy/policy-decision-table.test.ts (<=250). Decision-table matrix (DoD 1/2): every outcome reachable with stable local reason codes; UNKNOWN/missing required inputs NEVER yield ALLOW under ANY permutation; riskHint matrix — SETTLEMENT effectiveTier = max(computedTier, callerRiskHint) ('cannot lower' constrains the floor; raising is pure tightening under the 699 fail-closed doctrine; computedTier/callerRiskHint/effectiveTier all recorded separately) INCLUDING the mandatory case hint=R2 + missing required fact -> STILL HOLD_UNKNOWN (a hint never rescues missing facts and never enters computedTier or the fact digest); dominance lattice DENY > HOLD_UNKNOWN > REQUIRE_HUMAN_APPROVAL > ALLOW; child-tighten composition — modeled as an ordered policy-SLICE chain fold (root->node; design 255/580/460: node-slice composition along the graph, not an abstract tree) with a relaxation-detected reason code when a child slice removes/weakens a parent rule or obligation absent a matching waiver; WAIVER shape enforced: {waiverRef, namedObligationId resolving to kind=SOFT, scope subset-of decision scope, expiry covering evaluation time, humanApprovalRef} — and a waiver NEVER converts HOLD_UNKNOWN to ALLOW (design 712 'cannot turn UNKNOWN into verified'); R2/R3 human-only (auto path structurally unavailable); R3 reason-required + step-up ref; EVERY human ApprovalDecision carries stepUpAuthRef (design 718 scopes step-up to all human approvals, not R3-only — record-level ref; verification is session/daemon-side, documented); no blanket-ALLOW path exists. Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/policy-decision-table.test.ts"
       ],
       "newFiles": [
         "packages/core/src/policy/policy-decision-table.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/policy-relaxation.test.ts",
+        "packages/core/src/policy/policy-decision-table.test.ts"
+      ],
+      "note": "RED confirmed for the reopened defect. `pnpm exec vitest run packages/core/src/policy/policy-relaxation.test.ts packages/core/src/policy/policy-decision-table.test.ts` -> 5 failed | 12 passed (17). Every failure is `Expected: \"DENY\" / Received: \"ALLOW\"` — the escape itself, not an incidental assertion.\n\nTwo files, addressing QA issue 3:\n\n(a) NEW `policy-relaxation.test.ts` (129 lines) — the evidence dimension the existing suite could not reach. Five cases:\n  1. QA's exact repro. Chain `[root]` with `rule.audit requiredFactIds [\"fact.audit\"]`, fact absent -> HOLD_UNKNOWN/REQUIRED_FACT_MISSING (passes today, pinned so the baseline cannot silently move); append a child redeclaring the same ruleId with `[]` -> must be DENY/SLICE_RELAXATION_DETECTED (RED: ALLOW).\n  2. PARTIAL shrink with every fact present and usable -> DENY. Separates the two properties: the refusal is monotonicity of the DECLARED set, not a downstream side effect of a missing fact. Without it, a \"fix\" that merely re-checked evidence would pass.\n  3. Tighten direction stays admitted: equal redeclaration -> ALLOW; widened -> ALLOW; widened with the added fact absent -> HOLD_UNKNOWN/REQUIRED_FACT_MISSING and explicitly NOT SLICE_RELAXATION_DETECTED. Guards against overshooting into \"any difference is a relaxation\".\n  4. No waiver has a path over a shrink — asserted for three `namedObligationId` values (the fact ID, the rule ID, a real SOFT obligation name). QA's \"not waivable\" made executable.\n  5. Three-link chain root -> middle (widens) -> leaf (shrinks back to root's set) -> DENY. Pins that the comparison is against the RUNNING effective rule, not against the root only; a fix comparing each link to `sliceChain[0]` would pass 1-4 and fail here.\n\n(b) `policy-decision-table.test.ts` relaxation loop rewritten around a shared `base` rule so each entry varies exactly ONE dimension from it: effect weakened, HARD obligation dropped, HARD->SOFT downgrade, requiredFactIds shrunk (NEW, RED), uncovered child opt-in. Net -3 lines, so the file stays at 247 <= 250 with the fifth case added.\n\nHelper note for review: every link in the new file redeclares the opt-in. First draft omitted it and all chains landed on REQUIRE_HUMAN_APPROVAL via AUTO_APPROVAL_NOT_OPTED_IN — the assertions would have been RED for a reason unrelated to the defect, which is exactly the vacuity trap QA called out. Documented in the helper's comment so it is not \"simplified\" away later.",
+      "startedAt": "2026-08-07T21:23:46.813Z",
+      "completedAt": "2026-08-07T21:23:58.713Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — src/policy/policy-contract.ts + src/policy/policy-validation.ts (each <=250). policy-contract.ts: vocabularies (imported lifecycles + local outcomes/tiers); PolicyDecisionRecord per design 697 — {policyRevisionRef, evaluatorVersion, action, actor, graphNodeRevisionRefs, RECORD-LEVEL inputFacts: readonly {factId, truthClass}[] (697 makes fact IDs/truth classes a SIBLING of riskAssessment — rule-matching facts like metering-enforceability/653 and context-limit-trust/864 are recorded even when outside tier derivation), riskAssessment {computedTier, callerRiskHint|null, effectiveTier, usedFactIds (subset refs)}, matchedRuleIds, obligations (typed kind SOFT|HARD), reasonCodes (LOCAL closed vocabulary), decision, decisionDigest (SUPPLIED hex64 ref covering assessment/rule/fact digest — core validates shape, never computes)}; ApprovalDecisionRecord per design 7.2 + 360 — {exactRevisionHash, approvedNodeScope, applicablePolicyRef, criteriaRef, budgetRef, planQualityAssessmentRef, dependencyChanges {additions, removals, challenges}, actor, actorKind: HUMAN|SYSTEM_POLICY, truthClass (auto-approval is DAEMON_VERIFIED never HUMAN_APPROVED — design 701; R2/R3 records with SYSTEM_POLICY actorKind are INVALID — design 710), policyDecisionRef (auto attribution to policy:<hash> inputs), stepUpAuthRef (every HUMAN record), decision: APPROVE|REJECT|null (non-null IFF lifecycle=DECIDED, immutable once set — the missing central field from design 360), decisionReason, lifecycle, validity}. policy-validation.ts: guards — hex64, truth floors, waiver-shape validation (SOFT resolution, scope-subset, expiry-window), slice-chain shape, tier-criteria fact validation. Step-2 decision-table tests green where they exercise contract/validation.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/policy-contract.ts",
         "packages/core/src/policy/policy-validation.ts"
@@ -47,23 +57,33 @@
       "newFiles": [
         "packages/core/src/policy/policy-contract.ts",
         "packages/core/src/policy/policy-validation.ts"
-      ]
+      ],
+      "note": "No change needed in `policy-contract.ts` or `policy-validation.ts` for this defect, and I checked rather than assumed.\n\nThe escape is in the composition detector, not in the shape guards. Two things verified in `policy-validation.ts` that the fix leans on:\n\n1. `RULE_KEYS = [\"effect\", \"obligations\", \"requiredFactIds\", \"ruleId\"]` (:153) is consumed by `validRule` (:177) through `exact()`, which requires `Reflect.ownKeys(value).length === keys.length`. So a validated `PolicyRule` carries EXACTLY those four fields and no others. That is what makes the monotonicity closure argument checkable rather than a claim: `ruleId` is the fold's identity key and the remaining three are the whole authority surface, so a detector comparing effect + obligations + requiredFactIds compares the entire rule.\n\n2. There is no waiver vocabulary that could ever cover a required fact. `validWaiver` (:197) requires `namedObligationId`, and the waiver path in `ruleRelaxation` only fires for an obligation the ancestor declared with `kind: \"SOFT\"`. A required fact is not an obligation and cannot be named as one, which is why QA's \"unconditional, not waivable\" is the only coherent reading — I encoded it as such rather than adding a waivable branch.\n\nConsequence for future changes, recorded here because it is the actual lesson: adding a field to `PolicyRule` forces a `RULE_KEYS` edit (or every rule fails validation), and that edit is the moment to ask whether the new field is authority. The `exact()` guard is what turns \"we might forget\" into \"the build makes you look\".\n\nNo lines changed in this step.",
+      "startedAt": "2026-08-07T21:24:02.525Z",
+      "completedAt": "2026-08-07T21:24:26.672Z"
     },
     {
       "stepId": "step-4",
       "description": "Green — src/policy/policy-evaluation.ts (<=250). evaluatePolicy(inputs) pure + deep-frozen: composition fold over the ordered slice chain on the DENY > HOLD_UNKNOWN > REQUIRE_HUMAN_APPROVAL > ALLOW lattice (design 699: DENY dominates; required-missing evidence -> HOLD_UNKNOWN; REQUIRE_HUMAN_APPROVAL dominates ALLOW; children tighten, never relax — relaxation absent a valid waiver over a named SOFT obligation is itself refused with the relaxation-detected code); risk derivation from normalized immutable facts (computedTier = maximum applicable tier; effectiveTier = max(computedTier, hint); missing/unclassifiable -> HOLD_UNKNOWN); R0/R1 auto-approval eligibility only via explicit policy opt-in refs (manual default for plans/expansions/acceptance — design 710; no approve-everything mode: assert no input combination yields blanket ALLOW). All rejections via createRuntimeError with APPROVAL-legal codes only (ILLEGAL_TRANSITION with source {aggregate:'APPROVAL'}; INPUT_INVALID/UNKNOWN_ERROR sourceless) — tests assert the INTENDED code surfaces (silent UNKNOWN_ERROR degrade is the trap). Decision-table tests fully green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/policy-evaluation.ts"
       ],
       "newFiles": [
         "packages/core/src/policy/policy-evaluation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/policy-composition.ts",
+        "packages/core/src/policy/policy-evaluation.ts"
+      ],
+      "note": "GREEN. `pnpm exec vitest run packages/core/src/policy` -> 4 files / 37 tests passed; `pnpm --filter @moe/core typecheck` exit 0.\n\nTwo changes, one per QA security finding, both at the file/line QA named.\n\n(1) `policy-composition.ts` `ruleRelaxation` (QA issue 1). Added the required-fact comparison:\n    const childFacts = new Set(child.requiredFactIds);\n    let relaxed = effectRank(child.effect) < effectRank(ancestor.effect)\n      || ancestor.requiredFactIds.some((factId) => !childFacts.has(factId));\nNot-a-superset is an unconditional relaxation, sitting with the weakened effect rather than in the obligation loop, because the obligation loop is where the waiver branch lives and this must never reach it. Reasons a waiver cannot cover it are in the function comment, not just here: `validWaiver` requires a `namedObligationId` and the waiver branch only fires for an ancestor obligation with `kind: \"SOFT\"`. A required fact is neither, so there is no shape a caller could send that would make this waivable. That is asserted for three `namedObligationId` spellings in `policy-relaxation.test.ts`.\n\nThe comment also records the closure argument so the next person can re-check it in one read: `PolicyRule` has four fields, `validRule`'s `exact(value, RULE_KEYS)` guarantees no others exist, `ruleId` is the fold's identity key, and the other three are now all compared. The class QA said step-4's original note claimed closed is now actually closed, and checkably so.\n\n(2) `policy-evaluation.ts` `assessEvidence` (QA issue 2). QA described this as a consequence of (1), and fixing (1) does close the reproduced escape. I did not leave it at that, because the dependency runs the wrong way: the evidence layer's refusal was only sound as long as the relaxation detector stayed complete. The required set is now unioned over EVERY slice in `input.sliceChain` instead of over `fold.rules` (the last declaration of each ruleId).\n\nBehaviour is unchanged for every legal chain — a child may only widen, so union == fold — and an illegal chain is already DENY from layer 2. What changes is the failure mode: both layers must now regress before a shrunken redeclaration can reach ALLOW, instead of one. The `assessEvidence` signature lost its `rules` parameter; it reads the chain directly.\n\nAdversarial check on my own change: added rules can only tighten. `assessRules` starts at ALLOW and folds through `dominant`, which never descends, and a new rule's `requiredFactIds` enters the evidence union. So a child that ADDS a rule or widens a required set cannot lower any outcome — verified by the widened-redeclaration case, which stays ALLOW when the added fact is supplied and HOLD_UNKNOWN (not DENY) when it is absent.\n\nSizes after the change: policy-composition.ts 133, policy-evaluation.ts 202. Both well under 250.",
+      "startedAt": "2026-08-07T21:24:29.283Z",
+      "completedAt": "2026-08-07T21:25:39.659Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD red then green — src/policy/approval-invalidation.test.ts + src/policy/approval-invalidation.ts (each <=250). Approval lifecycle: PENDING -> DECIDED|WITHDRAWN (WITHDRAWN terminal, no outgoing edges); decision APPROVE|REJECT immutable once DECIDED; validity projection CURRENT -> INVALIDATED | SUPERSEDED, never backward. SELECTIVE INVALIDATION (DoD 3): takes a SUPPLIED deterministic impact set (the graph diff computation is the scheduler/daemon's job per design 265 — validate-and-apply only): invalidates ONLY approvals whose bound hashes/scope intersect the impact set — non-intersecting approvals BIT-IDENTICAL after (property-asserted); impact-set input inherits the unknown-canonicalization refusal (design 250/265: hashes carry canonicalizer versions; unknown version -> refuse, fail closed). SUPERSEDED path: applied ONLY via an explicit successor-approval linkage input (a new revision's approval marks its predecessor SUPERSEDED — design 263/269 'old approval bytes are never relabeled'), DISTINCT from impact-set intersection -> INVALIDATED. Carry-forward invalidation conditions per design 265, all six: any mismatch, missing dependency, changed applicable policy slice, changed predecessor result, changed environment/runtime closure, unknown canonicalization -> carry-forward INVALID. Lifecycle rejections: ILLEGAL_TRANSITION from {aggregate:'APPROVAL'} with exact-code assertions (this test file is where the silent-degrade assertions live). Both files green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/approval-invalidation.test.ts",
         "packages/core/src/policy/approval-invalidation.ts"
@@ -71,7 +91,10 @@
       "newFiles": [
         "packages/core/src/policy/approval-invalidation.test.ts",
         "packages/core/src/policy/approval-invalidation.ts"
-      ]
+      ],
+      "note": "No change. QA's re-run explicitly confirmed DoD 3 (\"Approvals bind exact hashes/scope/policy/actor and invalidate only the proven impact set\") and none of the four rejection issues touch `approval-invalidation.ts` or its test — the rejection is scoped to the policy evaluation/composition pair.\n\nRe-verified rather than assumed, because the step-4 change altered a signature in the same area: `pnpm exec vitest run packages/core/src/policy/approval-invalidation.test.ts` -> 1 file / 14 tests passed. `approval-invalidation.ts` does not import `assessEvidence` or `ruleRelaxation`, so there is no call-path coupling to the fix; the run confirms it.\n\n`git status --porcelain -- packages/core` shows exactly the four paths this pass touches (3 modified, 1 untracked), so nothing leaked into the approval files.",
+      "startedAt": "2026-08-07T21:25:41.967Z",
+      "completedAt": "2026-08-07T21:25:54.129Z"
     },
     {
       "stepId": "step-6",
@@ -98,7 +121,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-2edeee3c",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -110,16 +133,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.155Z",
-  "updatedAt": "2026-08-07T21:17:57.495Z",
+  "updatedAt": "2026-08-07T21:25:54.129Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:07:44.997Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7,
+    "executedStepCount": 12,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-2edeee3c"
+  ],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -127,7 +152,13 @@
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [
     {
       "item": "Unknown or missing inputs can never become ALLOW and caller risk labels cannot lower daemon-derived risk.",

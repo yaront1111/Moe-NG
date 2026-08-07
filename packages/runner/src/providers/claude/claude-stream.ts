@@ -1,5 +1,6 @@
 import { canonicalDigest, deepFreeze, isSafeByteCount, sha256Hex } from "../../canonical.js";
 import {
+  MAX_FRAMED_LINES,
   analyzeStream,
   frameStream,
   type ClaudeStreamAnomaly,
@@ -33,6 +34,7 @@ export const CLAUDE_ACCEPTED_SCHEMA_VERSIONS = Object.freeze(["claude-stream-jso
 export const CLAUDE_STREAM_ERROR_CODES = Object.freeze([
   "CLAUDE_STREAM_BYTES_INVALID",
   "CLAUDE_STREAM_EFFECT_IDENTITY_INVALID",
+  "CLAUDE_STREAM_EVENT_LIMIT_EXCEEDED",
   "CLAUDE_STREAM_SCHEMA_ALLOWLIST_EMPTY",
 ] as const);
 export type ClaudeStreamErrorCode = (typeof CLAUDE_STREAM_ERROR_CODES)[number];
@@ -172,6 +174,12 @@ export function recordClaudeStream(input: RecordClaudeStreamInput): RecordClaude
     );
   }
   const framed = frameStream(input.rawBytes);
+  if (framed.lineLimitExceeded) {
+    return claudeFailure(
+      "CLAUDE_STREAM_EVENT_LIMIT_EXCEEDED",
+      `capture holds more than ${MAX_FRAMED_LINES} records; refusing rather than keeping a silent prefix`,
+    );
+  }
   const analysis = analyzeStream(framed, input.acceptedSchemaVersions);
   const raw = retain(input.rawBytes);
   const events = framed.lines.map((line): ClaudeStreamEvent => {

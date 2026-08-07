@@ -15,8 +15,47 @@
     "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterization baseline (read-only): graph-revision-reducer.test.ts is 288 lines / 18 it() cases; fixture surface = lines 17-93 (hash(), GRAPH_HASH..STALE_HASH constants, BINDING/SUBMISSION/APPROVAL/ACTIVATION/REJECTION witnesses, BOUND, state(), commandFor(), expectError(), expectIllegal(), accepted() — ~77 lines) — extracting it brings the test to ~215 lines, comfortably <=250, with ALL 18 cases STAYING in the test file (no second test file; DoD 1 demands every name remain HERE and execute exactly once). Record the it()-name baseline list to a scratchpad file OUTSIDE the repo. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting (shared tree — attribute foreign red by path).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract packages/core/src/planning/graph-revision-test-fixtures.ts BY RANGE: move lines 17-93 verbatim with exactly their current imports (RUNTIME_LIFECYCLES if used by the moved code, expect from vitest for the assertion helpers — legal test infrastructure: the module is *.ts non-.test so the root vitest include never collects it as a suite, it is only imported FROM the test; contract types via `import type` from './graph-revision-contract.js'); export every moved symbol; NodeNext '.js' specifiers; prune the test file's now-unused imports (noUnusedLocals) and import the fixtures via './graph-revision-test-fixtures.js'. RAIL CHECK: deterministic only (hash() is seed-based; no Date/random), no shared mutable state (frozen consts + pure factories), exports nothing production-shaped (zero overlap with packages/core/src/index.ts exports — DoD 2). Test file body: ZERO case edits, zero renames, zero skip/only/todo.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-test-fixtures.ts",
+        "packages/core/src/planning/graph-revision-reducer.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Verification gate + audit: (1) `wc -l` both files — each <=250 physical lines (expect ~215 test / ~85 fixtures); (2) case audit — `grep -c \"it(\"` in the test file === 18 AND the sorted it()-name list equals the step-1 baseline exactly (loops over BOUND move with derivation intact — derived names must match too); grep skip|only|todo -> zero; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched (`git status --porcelain -- packages/core/src/planning` shows only the two owned paths) — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; assertions pass count unchanged vs baseline; (4) isolation run of the test file alone -> green; repo gate with foreign-red attribution; run twice — identical.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts",
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff of every fixture body against `git show HEAD:packages/core/src/planning/graph-revision-reducer.test.ts` — identical (witness truth classes, hash seeds, BOUND membership untouched); (b) fixtures export-overlap grep vs core index exports -> zero; (c) scratchpad baseline lives outside the repo — confirm no strays (auto-commit sweep); (d) no `let`/mutation in fixtures. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/graph-revision-reducer.test.ts packages/core/src/planning/graph-revision-test-fixtures.ts`; `git show --stat` lists exactly these 2 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts",
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +68,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T20:53:02.935Z"
+  "updatedAt": "2026-08-07T21:23:47.598Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:22:56.502Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:23:45.563Z",
+  "planningNotes": {
+    "approachesConsidered": "Single extraction, pre-named by the task and structurally obvious (verified: fixture surface is the clean 17-93 range — hash helper, six hash constants, five witness constants, BOUND, two factories, three assertion helpers; 288 - ~77 = ~215 <= 250 with margin). No second test file needed — unlike the sibling planning-run task, DoD 1 here requires every case to REMAIN in graph-revision-reducer.test.ts. Mirrors the just-planned planning-run fixture pattern (task-ca32f538) for cross-file consistency: same fixtures-module conventions (deterministic, frozen, expect-bearing assertion helpers legal since non-.test files are never collected as suites). No verification workflow: trivial-class refactor, fifth of five mechanical decomposition children, preserved-exactly-once enforced by the it()-name audit.",
+    "codebaseInsights": "graph-revision-reducer.test.ts = 288 lines / 18 cases in three describes (creation+submission, approval+activation, refusal+terminal); fixture range 17-93; loops over BOUND derive case names — must move with derivation intact. Root vitest include only collects *.test.ts — the fixtures module never runs standalone. Production files untouched; root index frozen (decomposition-children constraint). This is the LAST of the five children — once landed, the governor's 'Planning source size guard' closing-gate task becomes plannable (directory-wide <=250 enforcement).",
+    "risks": "(1) Derived case names (BOUND loops) — hand-unrolling would keep counts plausible while changing execution; the name audit catches it. (2) Fixture module accidentally exporting production-shaped symbols — overlap grep. (3) Cross-task consistency: task-ca32f538 (planning-run fixtures) is in flight in the same directory — file-disjoint, but if both land the same session the directory gains two fixture modules with matching conventions (intended). (4) Scratch baseline outside the repo; two-path explicit commit; foreign-red attribution.",
+    "keyFiles": [
+      "packages/core/src/planning/graph-revision-reducer.test.ts",
+      "packages/core/src/planning/graph-revision-contract.ts",
+      "packages/core/src/planning/planning-run-test-fixtures.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000
+  },
+  "planApprovedAt": "2026-08-07T21:23:47.598Z"
 }

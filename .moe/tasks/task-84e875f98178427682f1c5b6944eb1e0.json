@@ -19,19 +19,23 @@
     {
       "stepId": "step-1",
       "description": "HARDENED dependency gate (do NOT skip; kernel task-eef1e7f2 is WORKING in this shared tree right now; its owned paths packages/scheduler/src/dependencies/** do not exist on disk yet). Landedness = ALL of: (1) moe task status DONE for task-eef1e7f2 (a commit alone is insufficient — the kernel commits at its final step, and QA-reject rework can change the surface after an early commit); (2) `git log --oneline -- packages/scheduler/src/dependencies` non-empty AND `git status --porcelain -- packages/scheduler/src/dependencies` clean (files on disk uncommitted mid-work = NOT landed); (3) SYMBOL-KEYED surface probe — grep the landed modules for validateDependencyContract, ContractRedundancyAssessment, DependencyChallenge, and the horizon rank/isWithinHorizon helpers — key on exported symbols, NEVER a file census (the kernel plan reserves an amendment split into dependency-predicate-registry.ts; a file-list gate would false-block on a legitimate split). Any check fails -> moe.report_blocked needsFrom task-eef1e7f2 and STOP. During ALL later steps, focused gates run `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` (path-scoped BELOW the package filter — the kernel worker's legitimate TDD RED tests share `pnpm --filter @moe/scheduler test` and would fail it); the full package filter runs only at the final verification step with foreign-work attribution. RE-RUN this whole gate at the final verification step (stale-dependency gotcha: conditional probes must be re-checked at completion).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Re-ran the hardened dependency gate after QA reopen. Kernel task task-eef1e7f2 is DONE; git log shows committed 7e80186; packages/scheduler/src/dependencies is clean; exported production symbols validateDependencyContract, ContractRedundancyAssessment, DependencyChallenge, DEPENDENCY_GATES, and isWithinHorizon are present. No edits.",
+      "startedAt": "2026-08-07T21:27:41.049Z",
+      "completedAt": "2026-08-07T21:28:05.787Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — src/admission/admission-pass.test.ts. The 8-step design-396 matrix, with EXPLICIT step allocation (QA-verifiable, no silent drops): STEP 1 — structural members (self-edge, cycle, missing endpoint, duplicates, completion codes) are REUSED from validateGraphSnapshot verbatim (assert pass-through of GRAPH_* issues, no re-implementation, no duplicate ADMISSION_* codes for the same facts); genuinely admission-local step-1 additions each get a stable ADMISSION_* code + test: cross-snapshot input, incompatible contract (contract fields vs edge endpoints/kind disagree), stale fact (source-fact versions older than declared current), duplicate contract (two contracts for one edge); STEP 2 — ADMISSION_HARD_DEPENDENCY_UNPROVEN when a hard edge lacks its current typed contract (no collision with landed frontier HARD_DEPENDENCY_UNSATISFIED/UNKNOWN codes); same-epic/prose-order/same-repo/ownership/resource-scarcity witnesses each REJECTED as proof (design 399); STEP 3 — minimum-milestone: depending on full ACCEPTED is INVALID when the contract's minimumQualifyingMilestone + an INTERFACE_AVAILABLE/FIXTURE_AVAILABLE ruling shows an earlier milestone satisfies the consumer (design 400); STEP 4 — EXPLICIT: contract-level semantic transitive reduction with the PINNED LICENSING CONDITION — a proposal-refusal (ADMISSION_EDGE_SEMANTICALLY_REDUNDANT) is licensed ONLY when the kernel ContractRedundancyAssessment shows FULL identity along the alternate path: producer-arm identity AND predicate identity AND invalidation/horizon identity (design 396.4 'identical input/predicate and invalidation semantics'); ANY partial equivalence -> reviewOnly RECORD, never refusal; refusing a PROPOSAL is distinct from removing a landed edge, so the kernel's requiresSemanticProof:true fence is never contradicted — assert the assessment object passes through unmodified; a direct artifact edge an intermediate does not reproduce stays VALID; STEP 5 — completion closure reused (COMPLETION_CLOSURE_INCOMPLETE pass-through); STEP 6 — baseline comparison: structural half DERIVED from analyzeGraphStructure outputs (structuralStageCount, criticalPathHardEdges, hardDescendantCount, null-not-zero widths — assert admission NEVER recomputes its own critical path); estimate half = VALIDATED caller-supplied truth-classed duration/cost fields (planner proposes, core validates — design 392/447/457); UNKNOWN stays UNKNOWN, never zero, never a speed claim; STEP 7 — interface-first record = composition of landed INTERFACE_FIRST_REVIEW_REQUIRED StructuralDiagnostic edges × kernel alternative ruling × design-404 stub constraints (non-production, hash-bound to approved interface contract, producer+consumer conformance recipes, replaced/verified at integration) — RECORD only, no stub generation, no second serial-edge detector; STEP 8 — 24-node/64-hard-edge limits REUSED from landed GRAPH_NODE_LIMIT_EXCEEDED/GRAPH_HARD_EDGE_LIMIT_EXCEEDED (assert pass-through, no new codes); depth-3/child-width-6/nine-per-expansion are expansion-LINEAGE facts owned by the Expansion admission protocol task — admission ships ONLY a pure checker parameterized by caller-supplied expansion-lineage facts plus an R2-raise reference record. J6/CORE-S13 shapes: naked A->B->C->D refused with corrected-frontier evidence via landed analyzeHardEdgeCounterfactuals output; interface-first variant admits with the milestone edge retained. Determinism: same inputs -> byte-identical frozen results. Confirm RED.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:28:29.464Z"
     },
     {
       "stepId": "step-3",
@@ -96,7 +100,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-05d10803",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -108,20 +112,24 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T21:01:48.259Z",
+  "updatedAt": "2026-08-07T21:28:29.464Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7,
+    "executedStepCount": 8,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-05d10803"
+  ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [
     {
       "item": "Unnecessary hard edges are rejected or held with stable reasons.",
@@ -145,7 +153,8 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-07T21:26:43.091Z"
   },
   "planApprovedAt": "2026-08-07T19:56:05.344Z",
   "workStartedAt": "2026-08-07T19:56:25.129Z",

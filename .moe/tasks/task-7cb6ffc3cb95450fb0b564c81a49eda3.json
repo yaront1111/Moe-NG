@@ -15,8 +15,51 @@
     "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterization baseline (read-only): planning-invariants.test.ts is 432 lines / 7 property it() cases; support machinery ≈ lines 25-260: FIXTURE surface (hash() + seven hash constants, HASHES/BINDING/PLAN_APPROVAL/RUN_ACTIVATION/REVISION_ACTIVATION witnesses, RUN_RANK/RUN_TERMINAL/RUN_APPROVAL_STATES/REVISION_RANK/REVISION_TERMINAL lifecycle tables, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) and DRIVER surface (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS = [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d], DRAFT_STEPS/READY_STEPS/... valid-state step pools). Record the baseline: it()-name list, SEEDS array literal, and the assertion inventory (expectDeepFrozen call sites, toStrictEqual/toBe counts) to a scratchpad OUTSIDE the repo — DoD 1 demands the SAME seed set/traces/perturbations/corpus, so the seed literals are part of the oracle. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract BY RANGE per the task's named responsibility split: (1) packages/core/src/planning/planning-invariant-fixtures.ts ← the fixture surface (hashes, witnesses, lifecycle rank/terminal tables, xorshift32, expectDeepFrozen, perturb, summaries, finalizeWitness) — deterministic constructors + assertion helpers, verbatim bodies, `import type` for contract types, NodeNext '.js' specifiers; (2) packages/core/src/planning/planning-invariant-drivers.ts ← the driver surface (runCommand, pickRunKind, runTrace, revisionCommand, revisionTrace, SEEDS, the *_STEPS valid-state pools) importing the fixtures module; (3) planning-invariants.test.ts keeps ONLY the 7 property cases + describe structure, importing both modules. RAIL CHECKS: neither support module registers Vitest suites (non-.test filenames — never collected; expectDeepFrozen calling expect is legal imported test infrastructure, sibling-fixture precedent) and neither exports anything production-shaped (zero overlap with core index exports — DoD 3); SEEDS/steps/traces move VERBATIM — any seed or pool change alters the exercised corpus (DoD 1). ZERO assertion edits in the test file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts",
+        "packages/core/src/planning/planning-invariants.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Verification gate + corpus audit: (1) `wc -l` all three files — each <=250 physical lines (expect ~140 test / ~120 fixtures / ~140 drivers; if any exceeds, rebalance the range boundary between fixtures and drivers — never trim cases/seeds); (2) corpus audit — it()-name list === baseline (7, no skip/only/todo); SEEDS literal byte-identical; grep the diff for any changed numeric literal in traces/steps/perturbations -> zero; assertion inventory (expectDeepFrozen sites, equality-assertion counts) === baseline; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; pass counts unchanged vs baseline; (4) isolation run of planning-invariants.test.ts alone -> green; repo gate with foreign-red attribution; run twice — identical (determinism preserved through the module boundary).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts",
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff of every extracted body vs `git show HEAD:.../planning-invariants.test.ts` — xorshift32/perturb/trace generators byte-identical (a single changed constant silently shrinks the corpus while staying green — the vacuity hazard this suite exists to prevent); (b) support modules: no Vitest registration (grep describe(|it( -> zero), no production-shaped exports (index-overlap grep -> zero), no `let` outside xorshift32's closure; (c) scratchpad baseline outside the repo, no strays; (d) coverage arithmetic — every HEAD support line claimed exactly once across the two modules. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/planning-invariants.test.ts packages/core/src/planning/planning-invariant-fixtures.ts packages/core/src/planning/planning-invariant-drivers.ts`; `git show --stat` lists exactly these 3 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-invariants.test.ts",
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +72,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.400Z",
-  "updatedAt": "2026-08-07T20:52:54.603Z"
+  "updatedAt": "2026-08-07T21:24:50.624Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:23:51.254Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:24:48.592Z",
+  "planningNotes": {
+    "approachesConsidered": "Three-way split pre-named by the task and matching the file's actual structure (verified: fixture surface lines 25-101, driver surface ~103-260, 7 property cases after). Range boundary between fixtures and drivers is the only free variable — rebalance it if a file exceeds 250, never trim seeds/cases (the governor's rail is explicit). Support modules bearing expect-calling helpers follow the two sibling fixture-extraction plans (ca32f538, cefb2442) landing in the same directory this batch — three consistent fixture-module conventions. No verification workflow: fourth of five mechanical decomposition children; the corpus-preservation oracle (it()-names + SEEDS byte-identity + assertion inventory + zero numeric-literal drift) is mechanical.",
+    "codebaseInsights": "planning-invariants.test.ts = 432 lines / 7 property cases; SEEDS = [1, 7, 0x12345678, 0xdeadbeef, 0x0badf00d]; xorshift32 + perturb + trace generators are the corpus definition — a changed constant silently shrinks coverage while staying green (the exact vacuity hazard documented in gotcha-property-test-vacuity); lifecycle rank/terminal tables (RUN_RANK etc.) are assertion inputs, moved to fixtures. Root vitest collects only *.test.ts — support modules never run standalone. Production files untouched; root index frozen. This is child 4/5; the closing 'Planning source size guard' task becomes plannable once all five land.",
+    "risks": "(1) Corpus shrink via a single drifted constant is THE hazard — byte-identity audit on SEEDS/generators/perturbations, coverage arithmetic on every support line. (2) Range-boundary rebalancing must move whole functions, never split one. (3) Sibling tasks (ca32f538, cefb2442) touch the same directory concurrently — file-disjoint, but the shared-tree commit discipline applies; three-path explicit commit. (4) Scratch baseline outside the repo (auto-commit sweep).",
+    "keyFiles": [
+      "packages/core/src/planning/planning-invariants.test.ts",
+      "packages/core/src/planning/planning-run-reducer.ts",
+      "packages/core/src/planning/graph-revision-reducer.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-07T21:24:50.624Z"
 }

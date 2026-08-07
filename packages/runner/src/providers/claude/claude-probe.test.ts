@@ -357,6 +357,28 @@ describe("claude capability probe", () => {
     expect(degraded.observation.observationDigest).not.toBe(first.observation.observationDigest);
   });
 
+  it("lets a version string prove only that a version was reported", () => {
+    const { profile } = probeOrThrow(portOf({ ...emptyReport(), reportedVersion: "2.1.0" }));
+    for (const record of profile.capabilities) {
+      const expected = record.capability === "VERSION_REPORT" ? "SUPPORTED" : "UNSUPPORTED";
+      expect(`${record.capability}:${record.status}`).toBe(`${record.capability}:${expected}`);
+    }
+  });
+
+  it("refuses a lying probe report instead of crashing on it", () => {
+    const report = provenReport();
+    for (const closure of [null, "claude.exe", [null], [{ kind: "NOPE", path: "x", sha256: DIGEST_A }]]) {
+      const result = probeClaudeRuntime({
+        port: portOf({ ...report, resolvedRuntimeClosure: closure as never }),
+        clock: fixedClock(),
+        platformIdentity: PLATFORM,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.code).toBe("CLAUDE_OBSERVATION_CLOSURE_INVALID");
+    }
+  });
+
   it("fails closed when the platform identity cannot be trusted", () => {
     const result = probeClaudeRuntime({
       port: portOf(provenReport()),

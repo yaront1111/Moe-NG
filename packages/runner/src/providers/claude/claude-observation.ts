@@ -134,6 +134,15 @@ function isBoundedText(value: unknown): value is string {
 function normalizeClosure(
   entries: readonly RuntimeClosureEntry[],
 ): readonly RuntimeClosureEntry[] | ClaudeFailure<ClaudeObservationErrorCode> {
+  // The closure arrives from an out-of-process probe port, so its shape is a
+  // claim rather than a guarantee: a non-array would throw on `.length` and
+  // turn a hostile report into a crash instead of a typed refusal.
+  if (!Array.isArray(entries)) {
+    return claudeFailure(
+      "CLAUDE_OBSERVATION_CLOSURE_INVALID",
+      "runtime closure must be an array of entries",
+    );
+  }
   if (entries.length > MAX_RUNTIME_CLOSURE_ENTRIES) {
     return claudeFailure(
       "CLAUDE_OBSERVATION_CLOSURE_LIMIT",
@@ -143,6 +152,12 @@ function normalizeClosure(
   const seen = new Set<string>();
   const normalized: RuntimeClosureEntry[] = [];
   for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) {
+      return claudeFailure(
+        "CLAUDE_OBSERVATION_CLOSURE_INVALID",
+        "every runtime closure entry must be a record",
+      );
+    }
     if (!RUNTIME_CLOSURE_KINDS.includes(entry.kind)) {
       return claudeFailure(
         "CLAUDE_OBSERVATION_CLOSURE_INVALID",

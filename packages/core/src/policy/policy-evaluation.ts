@@ -74,15 +74,24 @@ function assessRisk(
   };
 }
 
-/** Evidence layer. A required fact must be present, classified, and above the truth floor. */
+/**
+ * Evidence layer. A required fact must be present, classified, and above the truth floor.
+ *
+ * The required set is unioned over EVERY slice in the chain rather than over the folded rule set.
+ * The two are identical in a legal chain — a child may only widen a rule's required facts — and a
+ * chain that shrinks one is already DENY from the relaxation layer. Reading the whole chain makes
+ * this layer's refusal independent of the fold's last-declaration semantics, so both layers would
+ * have to regress before a shrunken redeclaration could reach `ALLOW` again.
+ */
 function assessEvidence(
   input: PolicyEvaluationInput,
-  rules: readonly PolicyRule[],
   facts: ReadonlyMap<string, PolicyFactInput>,
   codes: Set<PolicyReasonCode>,
 ): PolicyOutcome {
   const required = new Set(input.requiredFactIds);
-  for (const rule of rules) for (const id of rule.requiredFactIds) required.add(id);
+  for (const slice of input.sliceChain) {
+    for (const rule of slice.rules) for (const id of rule.requiredFactIds) required.add(id);
+  }
   let outcome: PolicyOutcome = "ALLOW";
   for (const id of required) {
     const fact = facts.get(id);
@@ -167,7 +176,7 @@ export function evaluatePolicy(value: unknown): PolicyEvaluationResult {
   if (fold.relaxed) codes.add("SLICE_RELAXATION_DETECTED");
   if (fold.waiverInvalid) codes.add("WAIVER_INVALID");
   const rules = assessRules(fold.rules, facts, codes);
-  let decision = dominant(assessEvidence(input, fold.rules, facts, codes), rules.outcome);
+  let decision = dominant(assessEvidence(input, facts, codes), rules.outcome);
   decision = dominant(decision, risk.unclassifiable ? "HOLD_UNKNOWN" : "ALLOW");
   decision = dominant(decision, fold.relaxed ? "DENY" : "ALLOW");
   decision = dominant(decision, assessTier(risk.assessment.effectiveTier, fold, input.action, codes));

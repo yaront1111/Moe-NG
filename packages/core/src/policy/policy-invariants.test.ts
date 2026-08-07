@@ -34,6 +34,7 @@ const EFFECTS = ["ALLOW", "ALLOW", "REQUIRE_HUMAN_APPROVAL", "DENY"] as const;
 const ACTION = "graph.approve";
 const NODE = "node:alpha";
 const OTHER = "node:beta";
+const SWEEP = 320;
 
 function hash(seed: string): string {
   return seed.repeat(64).slice(0, 64);
@@ -44,24 +45,23 @@ function buildInput(rand: () => number): PolicyEvaluationInput {
   const facts: PolicyFactInput[] = [];
   for (const factId of FACT_IDS) {
     if (rand() < 0.2) continue;
-    const strong = rand() < 0.7;
-    facts.push({ factId, tier: pick(TIERS), truthClass: strong ? pick(STRONG) : pick(WEAK) });
+    facts.push({ factId, tier: pick(TIERS), truthClass: rand() < 0.7 ? pick(STRONG) : pick(WEAK) });
   }
-  const obligations = rand() < 0.3
-    ? [{ kind: pick(["HARD", "SOFT"] as const), obligationId: "obligation.named" }]
-    : [];
-  const root: PolicySlice = {
-    autoApprovalOptIns: rand() < 0.7 ? [{ action: ACTION, tier: pick(["R0", "R1"] as const) }] : [],
-    rules: rand() < 0.6
-      ? [{ effect: pick(EFFECTS), obligations, requiredFactIds: [], ruleId: "r.core" }]
-      : [],
-    sliceRef: "slice:root",
-  };
-  const child: PolicySlice = {
-    autoApprovalOptIns: root.autoApprovalOptIns,
-    rules: rand() < 0.5 ? [{ effect: pick(EFFECTS), obligations: [], requiredFactIds: [], ruleId: "r.core" }] : [],
-    sliceRef: "slice:child",
-  };
+  const named = { kind: pick(["HARD", "SOFT"] as const), obligationId: "obligation.named" };
+  const obligations = rand() < 0.3 ? [named] : [];
+  /** Required facts vary BETWEEN links — the child keeps, widens, or SHRINKS the root's set. The
+   * shrink is the shape this sweep could not emit, so invariant (1) passed vacuously over it. */
+  const rootRequired = rand() < 0.55 ? FACT_IDS.filter(() => rand() < 0.6) : [];
+  const draw = rand();
+  const childRequired = draw < 0.35 ? rootRequired.slice(1)
+    : draw < 0.6 ? [...new Set([...rootRequired, pick(FACT_IDS)])] : rootRequired;
+  const optIns = rand() < 0.7 ? [{ action: ACTION, tier: pick(["R0", "R1"] as const) }] : [];
+  const slice = (sliceRef: string, rules: PolicySlice["rules"]): PolicySlice =>
+    ({ autoApprovalOptIns: optIns, rules, sliceRef });
+  const root = slice("slice:root", rand() < 0.6
+    ? [{ effect: pick(EFFECTS), obligations, requiredFactIds: rootRequired, ruleId: "r.core" }] : []);
+  const child = slice("slice:child", rand() < 0.5
+    ? [{ effect: pick(EFFECTS), obligations: [], requiredFactIds: childRequired, ruleId: "r.core" }] : []);
   return {
     action: ACTION,
     actor: "human:root",
@@ -87,13 +87,28 @@ function buildInput(rand: () => number): PolicyEvaluationInput {
 const strongTruth = (value: string): boolean =>
   value === "DAEMON_VERIFIED" || value === "HUMAN_APPROVED";
 
-/** A required fact is unusable when it is absent, UNKNOWN, or a tier claim below the floor. */
+/**
+ * A required fact is unusable when it is absent, UNKNOWN, or a tier claim below the floor. The
+ * set is unioned over every slice's rules as well as the top-level list, so a fact any link in
+ * the chain demanded still counts even if a later link stopped demanding it.
+ */
 function hasUnusableRequiredFact(input: PolicyEvaluationInput): boolean {
-  return input.requiredFactIds.some((id) => {
+  const required = new Set(input.requiredFactIds);
+  for (const slice of input.sliceChain) {
+    for (const rule of slice.rules) for (const id of rule.requiredFactIds) required.add(id);
+  }
+  return [...required].some((id) => {
     const fact = input.facts.find((entry) => entry.factId === id);
     if (fact === undefined) return true;
     return fact.truthClass === "UNKNOWN" || (fact.tier !== null && !strongTruth(fact.truthClass));
   });
+}
+
+/** The generator redeclares only `r.core`, so a shrink is visible from the chain's two links. */
+function shrinksRequiredFacts(input: PolicyEvaluationInput): boolean {
+  const ancestor = input.sliceChain[0]?.rules[0]?.requiredFactIds ?? [];
+  const redeclared = input.sliceChain[1]?.rules[0]?.requiredFactIds;
+  return redeclared !== undefined && ancestor.some((id) => !redeclared.includes(id));
 }
 
 const SWEEP = 320;
@@ -102,18 +117,25 @@ describe("policy invariants", () => {
   it("never reaches ALLOW with an unusable required fact, across the whole sweep", () => {
     const seen = new Map<PolicyOutcome, number>();
     let unusable = 0;
+    let shrunk = 0;
     for (let seed = 0; seed < SWEEP; seed += 1) {
       const input = buildInput(lcg(seed));
       const result = evaluatePolicy(input);
       if (!result.ok) throw new Error(`unexpected rejection ${result.error.code}`);
       const { decision } = result.record;
       seen.set(decision, (seen.get(decision) ?? 0) + 1);
+      if (shrinksRequiredFacts(input)) {
+        shrunk += 1;
+        expect(decision).toBe("DENY");
+        expect(result.record.reasonCodes).toContain("SLICE_RELAXATION_DETECTED");
+      }
       if (!hasUnusableRequiredFact(input)) continue;
       unusable += 1;
       expect(decision).not.toBe("ALLOW");
       expect(result.record.reasonCodes.length).toBeGreaterThan(0);
     }
     expect(unusable).toBeGreaterThan(0);
+    expect(shrunk).toBeGreaterThan(0);
     for (const outcome of POLICY_OUTCOMES) expect(seen.get(outcome) ?? 0).toBeGreaterThan(0);
   });
 
@@ -126,8 +148,7 @@ describe("policy invariants", () => {
       if (!hinted.ok || !bare.ok) throw new Error("unexpected rejection");
       const { computedTier, effectiveTier } = hinted.record.riskAssessment;
       expect(computedTier).toBe(bare.record.riskAssessment.computedTier);
-      expect(hinted.record.riskAssessment.usedFactIds)
-        .toEqual(bare.record.riskAssessment.usedFactIds);
+      expect(hinted.record.riskAssessment.usedFactIds).toEqual(bare.record.riskAssessment.usedFactIds);
       expect(hinted.record.inputFacts).toEqual(bare.record.inputFacts);
       if (computedTier === null) {
         expect(effectiveTier).toBeNull();
@@ -152,8 +173,6 @@ describe("policy invariants", () => {
       expect(result.record.decision).not.toBe("ALLOW");
       const withoutWaiver = evaluatePolicy({ ...input, waivers: [] });
       if (!withoutWaiver.ok) throw new Error("unexpected rejection");
-      expect(POLICY_OUTCOMES.indexOf(result.record.decision))
-        .toBeGreaterThanOrEqual(0);
       expect(withoutWaiver.record.decision).not.toBe("ALLOW");
     }
     expect(waived).toBeGreaterThan(0);

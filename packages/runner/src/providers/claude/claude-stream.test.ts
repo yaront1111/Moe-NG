@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { sha256Hex } from "../../canonical.js";
+import { MAX_FRAMED_LINES } from "./claude-stream-anomalies.js";
 import {
   CLAUDE_ACCEPTED_SCHEMA_VERSIONS,
   MAX_INLINE_STREAM_BYTES,
@@ -279,6 +280,18 @@ describe("record integrity", () => {
     expect(again.recordDigest).toBe(record.recordDigest);
     const other = recordOrThrow(golden("cancelled"));
     expect(other.recordDigest).not.toBe(record.recordDigest);
+  });
+
+  it("refuses a capture with more records than it will hold, rather than keeping a prefix", () => {
+    const overLimit = `${Array.from({ length: MAX_FRAMED_LINES + 1 }, () => "{}").join("\n")}\n`;
+    const result = recordClaudeStream({
+      rawBytes: utf8(overLimit),
+      effect: EFFECT,
+      acceptedSchemaVersions: CLAUDE_ACCEPTED_SCHEMA_VERSIONS,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("CLAUDE_STREAM_EVENT_LIMIT_EXCEEDED");
   });
 
   it("refuses an unusable effect identity or an empty schema allowlist", () => {

@@ -145,20 +145,19 @@ describe("policy decision table", () => {
     expect(humanOverAllow.reasonCodes).toContain("REQUIRE_HUMAN_APPROVAL_BY_RULE");
   });
 
-  it("refuses a child slice that relaxes a parent rule, obligation, or opt-in", () => {
-    const parent = slice("root", {
-      rules: [rule("r", {
-        effect: "DENY", obligations: [{ kind: "HARD", obligationId: "obligation.hard" }],
-      })],
-    });
+  it("refuses a child slice that relaxes a parent rule, obligation, fact set, or opt-in", () => {
+    const base = {
+      effect: "DENY", obligations: [{ kind: "HARD", obligationId: "obligation.hard" }],
+      requiredFactIds: ["fact.read_only"],
+    } as const;
+    const parent = slice("root", { rules: [rule("r", base)] });
     const relaxations: readonly PolicySlice[] = [
-      slice("child", { rules: [rule("r", { effect: "ALLOW" })] }),
-      slice("child", { rules: [rule("r", { effect: "DENY" })] }),
-      slice("child", {
-        rules: [rule("r", {
-          effect: "DENY", obligations: [{ kind: "SOFT", obligationId: "obligation.hard" }],
-        })],
-      }),
+      slice("child", { rules: [rule("r", { ...base, effect: "ALLOW" })] }),
+      slice("child", { rules: [rule("r", { ...base, obligations: [] })] }),
+      slice("child", { rules: [rule("r", {
+        ...base, obligations: [{ kind: "SOFT", obligationId: "obligation.hard" }],
+      })] }),
+      slice("child", { rules: [rule("r", { ...base, requiredFactIds: [] })] }),
       slice("child", { autoApprovalOptIns: [OPT_IN_R1] }),
     ];
     for (const child of relaxations) {

@@ -15,8 +15,60 @@
     "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterization baseline (read-only): planning-run-reducer.test.ts is 514 lines with 32 it() cases; fixture surface = lines 18-153 (hash() + the ~20 frozen witness/command constants PLAN_HASH..CANCELLATION, summaries(), finalizeWitness(), SEALED, state(), commandFor(), expectError(), expectIllegal(), accepted()); describe blocks partition cleanly on the task's named boundary — 'creation and readiness' + 'ownership' + proposal/submission blocks stay, approval/activation/cancellation/concurrency/version-ceiling/exhaustive-lifecycle blocks move. Record the EXACT baseline: `git show HEAD:packages/core/src/planning/planning-run-reducer.test.ts | grep -c \"it(\"` (=32) and the full it()-name list to a scratchpad file OUTSIDE the repo (auto-commit sweep) — this is the preserved-exactly-once oracle. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting; note the planning-run suite's current pass count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract packages/core/src/planning/planning-run-test-fixtures.ts BY RANGE: move lines 18-153 verbatim (hash helper, all frozen constants, summaries/finalizeWitness/SEALED, state/commandFor factories, expectError/expectIllegal/accepted assertion helpers) with exactly their current imports (expect from vitest stays importable in a fixtures module — the assertion helpers call expect; that is test-infrastructure, legal in a *.ts non-test file under the root vitest run since it is only ever imported FROM test files); export every moved symbol; `import type` for the contract types; NodeNext '.js' specifiers. RAIL CHECK: the module contains ONLY deterministic construction/assertion helpers — no production API re-exports (DoD 2); no Date/random (hash() is deterministic seed-based — verify verbatim). File lands ~140 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Split the 32 cases across the two test files on the task's named partition, moving describe blocks VERBATIM: planning-run-reducer.test.ts KEEPS creation, readiness, ownership, proposal, and submission-finalization coverage (imports fixtures via './planning-run-test-fixtures.js'); NEW planning-run-authority.test.ts takes approval, activation, cancellation, concurrency, version-ceiling, and exhaustive-lifecycle coverage (same fixture imports). ZERO case bodies edited; ZERO renamed/skip/only/todo; matrix/derived case sets (exhaustive lifecycle loops over SEALED etc.) move with their derivation intact. ORDERING INDEPENDENCE (DoD 3): fixtures are frozen constants + pure factories — no module-level mutable state; each file's suites run standalone (`pnpm exec vitest run --root ../.. packages/core/src/planning/planning-run-authority.test.ts` green in isolation, same for the trimmed original). All three files <=250 physical lines (expect ~190 / ~140 / ~230).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-run-authority.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate + preserved-exactly-once audit: (1) `wc -l` all three files — each <=250 (LF/CRLF equivalently); (2) case audit — combined `grep -c \"it(\"` across both test files === 32 AND the sorted it()-name multiset equals the step-1 baseline list exactly (no loss, no duplication, no rename — the DoD-1 oracle); grep for skip|only|todo -> zero; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched (`git status --porcelain -- packages/core/src/planning` shows only the three owned test/fixture paths) — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; total planning-run assertions pass count unchanged vs baseline; (4) isolation runs of each test file individually -> green; (5) repo gate with foreign-red attribution; run twice — identical.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts",
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) verbatim-move diff — each moved describe block and fixture body identical to the HEAD baseline (assertion strings, error-code expectations, matrix derivations untouched); (b) fixtures module exports no production symbol (grep its exports against packages/core/src/index.ts exports — zero overlap); (c) delete the scratchpad baseline file (it lives outside the repo — confirm nothing strayed under the tree; auto-commit sweep); (d) no shared mutable state — grep fixtures for `let`/mutation -> zero. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/planning-run-reducer.test.ts packages/core/src/planning/planning-run-test-fixtures.ts packages/core/src/planning/planning-run-authority.test.ts`; `git show --stat` lists exactly these 3 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts",
+        "packages/core/src/planning/planning-run-test-fixtures.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +81,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T20:52:46.910Z"
+  "updatedAt": "2026-08-07T21:22:52.607Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:21:51.046Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:22:50.581Z",
+  "planningNotes": {
+    "approachesConsidered": "Partition is pre-named by the task and matches the file's existing describe structure (verified: 32 it() cases; fixture surface is a clean 18-153 range of frozen constants + pure factories + assertion helpers). Alternatives (three-way test split, per-lifecycle files) rejected: the named two-file partition lands all three files comfortably under 250 (~190/~140/~230) and keeps the exhaustive-lifecycle matrix in one place with its derivation. Assertion helpers calling vitest expect stay in the fixtures module — legal test infrastructure (only ever imported from test files; root vitest include only matches *.test.ts so the fixtures module itself never runs as a suite). No verification workflow: trivial-class refactor, partition pre-named, preserved-exactly-once enforced by a mechanical it()-name multiset audit against the HEAD baseline.",
+    "codebaseInsights": "planning-run-reducer.test.ts = 514 lines / 32 cases; fixture range 18-153 (hash(), ~20 frozen witness/command constants, summaries/finalizeWitness/SEALED, state/commandFor factories, expectError/expectIllegal/accepted helpers — all deterministic, no Date/random, no module-level mutable state, so ordering independence is by construction); describe blocks: 'creation and readiness', 'ownership', proposal/submission blocks (STAY) vs approval/activation/cancellation/concurrency/version-ceiling/exhaustive-lifecycle (MOVE). Root vitest include packages/**/*.test.ts — the new authority test file is auto-discovered; the fixtures .ts (non-.test) is never collected as a suite. Production files untouched (rail); root index frozen.",
+    "risks": "(1) Case loss/duplication is THE failure mode — the it()-name multiset audit vs the HEAD baseline is mechanical and non-negotiable; grep skip|only|todo zero. (2) Matrix derivations (loops over SEALED etc.) must move with their loops intact — a hand-unrolled copy would silently drop cases while keeping counts plausible; the audit counts NAMES, and derived names must match too. (3) Fixtures exporting anything production-shaped violates DoD 2 — export-overlap grep. (4) Baseline scratch file must live OUTSIDE the repo (wrapper auto-commit sweep). (5) Shared tree: three-path explicit commit; foreign-red attribution.",
+    "keyFiles": [
+      "packages/core/src/planning/planning-run-reducer.test.ts",
+      "packages/core/src/planning/planning-run-reducer.ts",
+      "packages/core/src/planning/planning-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-07T21:22:52.607Z"
 }

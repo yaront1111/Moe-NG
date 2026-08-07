@@ -1,0 +1,96 @@
+{
+  "id": "task-bfc395429d9d4b61b91e51e4f3bbe166",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Projection commit seam on the event transaction",
+  "description": "Task B2 of the Task-B sub-split (architect-d89636d1; Task B's honest file map was 13-14 vs the 10 cap, so the field threading and the seam are separated along the interface axis — each is one self-contained deliverable). Objective: expose a commit seam that runs a caller-supplied apply inside the same transaction as the event append. Deliverable, using the residual-verified mechanics (do not rediscover): a NEW commitWithApply method on the event-transaction core class (EventTransactionStore in event-ledger-transaction.ts) — a new inherited method needs NO decision-ledger.ts edit and NO change to the existing one-arg commit signature; the apply callback runs on the COMMITTED-disposition branch immediately after writeCommitEffects (replay returns through the same single COMMIT in event-ledger-recovery.ts and naturally skips the seam); apply context = { database (same open transaction), stored commit summary WITHOUT positions } — do NOT change the writeCommitEffects signature or StoredCommitResult (positions ripple through the shared decision-ledger contract; the callback can SELECT positions by command_id inside the still-open transaction); apply failures are wrapped AT THE INVOCATION SITE as DurableStoreError PROJECTION_APPLY_FAILED (event-ledger-recovery.ts rethrows DurableStoreError unchanged but renames anything else to STORE_UNAVAILABLE via normalizeOperationalError); PROJECTION_APPLY_FAILED joins the closed DurableStoreErrorCode union in store-contracts.ts (insert in ASCII order between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH; message format `${code}: ${message}`; zero external DurableStoreErrorCode consumers exist so no exhaustive switch breaks); a failing apply rolls back the event append with the handle NOT poisoned (commitAttempted=false + successful ROLLBACK skips poison — verified recovery.ts:16-41); SqliteEventStore gains one delegating method over #core. NOT in scope: the projection fold, relay, subscriptions, upcasters, or any domainSchemaVersion work (Task B1). Hard dependency: StoredEvent domain schema version (Task B1, task-a602b3d4) SHOULD land first to avoid store-contracts.ts contention, but the only shared file is store-contracts.ts and the edits are disjoint (error-code union vs field/constant). Owned paths: packages/store/src/event-ledger-transaction.ts, packages/store/src/sqlite-event-store.ts, packages/store/src/store-contracts.ts (error-code union entry ONLY), and one new seam test. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "commitWithApply runs a caller-supplied apply inside the same BEGIN IMMEDIATE transaction as the event append, on the COMMITTED disposition only; replayed commits never invoke it.",
+    "A throwing apply rolls back the entire event append (event absent, aggregate head unchanged, receipt absent) with PROJECTION_APPLY_FAILED surfaced and the store handle NOT quarantined.",
+    "PROJECTION_APPLY_FAILED is a member of the closed DurableStoreErrorCode union with the standard message format; the union stays closed and no other error semantics change.",
+    "Existing tests pass unchanged; the focused store typecheck and test command exits 0 with only owned paths committed."
+  ],
+  "taskRails": [
+    "Build the seam, not the feature: no projection fold, relay, subscription, or upcaster logic.",
+    "Do not change the existing commit signature, writeCommitEffects signature, or StoredCommitResult shape.",
+    "A failed apply must roll back the append; partial writes are never acceptable; the rollback must not poison the handle.",
+    "Use TDD; keep sources <=250 target/400 hard; commit by explicit pathspec only."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Dependency gate: B1 (task-a602b3d4, StoredEvent domainSchemaVersion) SHOULD land first — the only shared file is store-contracts.ts with disjoint edits (B1: field + constant; B2: error-code union entry). Check `git log --oneline -- packages/store/src/store-domain-schema-version.test.ts` (B1's new test) or the task status; if B1 is WORKING-uncommitted in the shared tree, coordinate in #general before editing store-contracts.ts (whole-file staging — a simultaneous edit would sweep their hunk); if B1 is unstarted, proceed — the edits remain disjoint and B1's plan carries the same coordination note. Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN baseline (attribute foreign red by path). Re-read the verified mechanics pinned in this task's own description — they came from two adversarial verification rounds; do not rediscover or deviate silently.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — new packages/store/src/store-projection-seam.test.ts (<=250). Cases: (1) HAPPY PATH: commitWithApply(input, apply) with a succeeding apply — apply observes the SAME open transaction (insert a row into the projections table inside apply, then after commit both the event AND the projection row are durable; reopening the store sees both); apply receives {database, commit summary} where the summary carries commandId/aggregateId/eventIds (NO positions — the callback SELECTs positions by command_id in-transaction when needed; assert that works); (2) ROLLBACK: a THROWING apply rolls back the ENTIRE append — event absent, aggregate head unchanged (assertAggregateTail baseline), receipt absent, projection row absent — and surfaces DurableStoreError PROJECTION_APPLY_FAILED with the original failure message preserved in `${code}: ${message}` format; (3) NO POISON: after the rollback, the SAME store handle accepts a subsequent plain commit successfully (commitAttempted=false + clean ROLLBACK skips quarantine — verified recovery.ts:16-41); (4) REPLAY SKIP: replaying the same commandId+bytes returns REPLAYED and the apply callback is NEVER invoked (call-recording apply; replay flows through the same single COMMIT — the COMMITTED-disposition gate is the skip mechanism); (5) NON-DurableStoreError apply failures are wrapped AT THE INVOCATION SITE (a plain Error thrown in apply surfaces as PROJECTION_APPLY_FAILED, NOT STORE_UNAVAILABLE — the normalizeOperationalError rename is the trap being tested); (6) plain commit() unchanged — signature and behavior identical, zero interaction with the seam. Confirm RED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-projection-seam.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/store-projection-seam.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — store-contracts.ts + event-ledger-transaction.ts + sqlite-event-store.ts. store-contracts.ts: PROJECTION_APPLY_FAILED joins the closed DurableStoreErrorCode union in ASCII order between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH (union stays closed; message format `${code}: ${message}` — zero external DurableStoreErrorCode consumers so no exhaustive switch breaks; ONLY the union entry in this file — B1 owns the field/constant edits). event-ledger-transaction.ts: NEW public method commitWithApply(rawInput, apply: (context: { database, summary }) => void) on EventTransactionStore — an inherited method needs NO decision-ledger.ts edit and NO change to the existing one-arg commit; implementation shares the commit body (extract-and-share or delegate with an optional internal apply — whichever keeps the file <=250; the EXISTING commit() public signature must stay one-arg either way); the apply invocation sits on the COMMITTED-disposition branch immediately AFTER writeCommitEffects and BEFORE the shared COMMIT, wrapped try/catch at the invocation site: catch (e) => throw new DurableStoreError('PROJECTION_APPLY_FAILED', originalMessage) so the existing recovery path (rethrows DurableStoreError unchanged, ROLLBACK on failure) handles it — anything unwrapped would be renamed STORE_UNAVAILABLE; writeCommitEffects signature and StoredCommitResult UNTOUCHED (positions ripple through the shared decision-ledger contract). sqlite-event-store.ts: one delegating method commitWithApply over #core mirroring the existing commit delegation. All step-2 tests green; typecheck green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/sqlite-event-store.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` edited production files <=400 hard (target 250; event-ledger-transaction split point via amendment if needed). (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 with ZERO existing-test edits (DoD 4) — complete_task evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }; repo gate with foreign-red attribution; focused suite twice — identical. Adversarial (Skill adversarial-self-review): (a) partial-write hunt — crash the apply AFTER it wrote a projection row: rollback must remove the row too (same transaction — assert absent); (b) seam-bypass hunt — confirm plain commit() byte-identical behavior (diff its body path against HEAD); (c) replay double-check — apply recorder shows zero invocations across REPLAYED and IDEMPOTENCY_CONFLICT paths; (d) grep for projection-FOLD logic (fold/subscribe/relay/upcast identifiers) -> ZERO (the seam-not-feature rail); (e) union-entry ASCII position + no other store-contracts hunk (B1 fence); (f) no scratch files. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/event-ledger-transaction.ts packages/store/src/sqlite-event-store.ts packages/store/src/store-projection-seam.test.ts`; `git show --stat` lists exactly these 4 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/store-projection-seam.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-a602b3d4294a44aea1d9d173bf1fdaa7",
+  "priority": "CRITICAL",
+  "order": 32,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:18:21.612Z",
+  "updatedAt": "2026-08-07T21:28:56.765Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:27:58.705Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 4
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:28:54.739Z",
+  "planningNotes": {
+    "approachesConsidered": "All mechanics were adversarially verified in two rounds before this task existed (the original seam workflow + Task-B residual agent); the task description pins them and this plan applies them: (1) options-threading through the existing commit chain — REJECTED in favor of a NEW commitWithApply method: an inherited method reaches DecisionLedgerCore/#core with NO decision-ledger.ts edit and the existing one-arg commit stays untouched (4 files instead of 6+). (2) AppendedEventSummary with positions in the apply context — REJECTED: StoredCommitResult carries eventIds only; exposing positions changes the writeCommitEffects contract shared with the decision ledger; the callback SELECTs by command_id inside the still-open transaction. (3) Wrapping apply failures anywhere but the invocation site — REJECTED: the recovery path rethrows DurableStoreError unchanged but renames everything else STORE_UNAVAILABLE via normalizeOperationalError — test 5 pins the trap. (4) Seam on both dispositions — REJECTED: replay returns through the same single COMMIT; gating on the COMMITTED branch after writeCommitEffects is the natural skip. No further verification workflow: the mechanics carry two rounds of verification with file:line evidence recorded in the task description and the B-split handoff memories.",
+    "codebaseInsights": "event-ledger-recovery.ts:16-41: single COMMIT for both dispositions; commitAttempted=false + successful ROLLBACK skips poison — a failed apply leaves the handle usable (test 3). recovery rethrow behavior :42-45 + store-runtime normalizeOperationalError :282-291 — the invocation-site wrap requirement. DurableStoreErrorCode union store-contracts.ts:183-199 (insert PROJECTION_APPLY_FAILED between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH); message format :205; zero external union consumers (repo-grepped). StoredCommitResult store-internals.ts:57-67 (eventIds only). SqliteEventStore commit delegation :250-252 over #core :88. Shared-file fence: B1 (task-a602b3d4) edits store-contracts.ts disjointly (field/constant); whole-file staging means simultaneous uncommitted edits would sweep each other — step-1 coordination gate. Projections table exists (Task A, 7f31a4d) — the happy-path test writes a real projection row through the seam without any projection ENGINE (the fold is the downstream task's).",
+    "risks": "(1) Partial write is the safety-critical failure — the apply-wrote-then-threw case must show the projection row rolled back with the event (same transaction proves it). (2) The STORE_UNAVAILABLE rename trap — unwrapped apply errors lose the stable code; test 5 is the guard. (3) Method-extraction drift in event-ledger-transaction — plain commit() must stay byte-identical in behavior; diff-vs-HEAD in the adversarial step. (4) store-contracts.ts contention with B1 — disjoint hunks but whole-file staging; step-1 gate + #general coordination. (5) Seam-not-feature rail — zero fold/relay/subscription identifiers; the happy-path test writes a raw row, not a projection abstraction.",
+    "keyFiles": [
+      "packages/store/src/event-ledger-transaction.ts",
+      "packages/store/src/event-ledger-recovery.ts",
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/store-internals.ts",
+      "packages/store/src/sqlite-event-store.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T21:28:56.765Z"
+}

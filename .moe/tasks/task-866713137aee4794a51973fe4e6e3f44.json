@@ -95,8 +95,8 @@
       "completedAt": "2026-08-07T21:17:18.700Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,16 +108,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.327Z",
-  "updatedAt": "2026-08-07T21:18:03.277Z",
+  "updatedAt": "2026-08-07T21:21:02.417Z",
   "contextFetchedBy": [
     "architect-c4babdf9",
-    "worker-2edeee3c"
+    "worker-2edeee3c",
+    "qa-813cd351"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-07T20:53:50.659Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-07T21:21:02.417Z",
+    "wallClockMs": 1631758
   },
   "stepsCompleted": [
     "step-1",
@@ -157,5 +160,8 @@
     "packages/core/src/planning/planning-contract.ts",
     "packages/core/src/planning/planning-command-contract.ts",
     "packages/core/src/planning/planning-event-contract.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:21:02.417Z",
+  "reviewCompletedAt": "2026-08-07T21:21:02.417Z",
+  "reviewSummary": "APPROVE — refactor-only split verified mechanically, not from the notes.\n\nGate re-run fresh: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0, 12 files / 221 tests. Reproduces reported evidence.\n\nDoD 1: my own extraction gives baseline bcdc2f6 = 51 names, leaves = 51, facade = 51, exact sorted-set equality all three ways, zero missing, zero extra. Root index.ts planning block (lines 65-117) is 51 names, byte-identical to baseline, all resolvable through the facade.\n\nShape preservation proved beyond a name check: split baseline and both leaves into blank-line-delimited blocks, dropped imports, sorted, compared — 53 vs 53 blocks byte-identical. No changed readonly/optional marker, property order, literal discriminant, extends base, union-member order, or doc comment survived the move.\n\nDoD 2: facade has zero non-type exports and zero imports — pure type-only. Neither leaf references planning-contract.js, so no cycle; only edge is event -> command, one-way. PlanningRunCommandBase and PlanningRunEventBase both present, both still unexported.\n\nDoD 3: portable count splitting on /\\r\\n|\\r|\\n/ (LF/CRLF/CR equal): 63 / 216 / 163, all <=250. No test file in the commit.\n\nDoD 4: 3431a56 touches exactly the three owned paths, 440 insertions / 366 deletions, net +74 LOC. packages/core/src/index.ts is NOT in this commit — it changed only in foreign commit afbdfa7.\n\nMUTATION CHECK — did not take \"typecheck is the public-export sentinel\" on trust. Dropped PlanningRunEvent from the facade: typecheck went red at 3 sites including src/index.ts(103,3) TS2305. Reverted, tree clean, gate green again.\n\nRaised in channel, NOT charged to this worker: session-end auto-commit f8db0a5 carries this task's ID but contains 10 foreign paths plus .moe state. The worker complied with epic rail 3 — explicit three-path pathspec, verified via git show --stat. That sweep is harness behavior, same class as bc8e4f5 in prop-734f1da5."
 }

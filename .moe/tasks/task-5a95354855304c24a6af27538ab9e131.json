@@ -15,13 +15,52 @@
     "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterize the refactor boundary without editing or running a gate: confirm the current 259-line reducer and clean owned paths; inventory the eight contiguous private helpers and every call site; grep the repository to prove no external importer depends on those helpers; record the public reducer exports and preserve the header's three-reducer atomic-composition contract. Treat the unchanged graph reducer and invariant suites as held-out characterization.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract the existing helper block by verbatim move into new `graph-revision-results.ts`. Export exactly the eight package-internal helpers needed by the reducer, preserve their comments, signatures, RuntimeError construction/details/source states, deep-freeze calls, event handling, and content-identity exclusion in `clonedState`; add only minimal value/type imports from `@moe/contracts`, `graph-revision-contract.js`, and `planning-snapshot.js`. Update `graph-revision-reducer.ts` to import those helpers with a NodeNext `.js` specifier and remove only now-unused imports. Keep the reducer header, frozen command/transition exports, per-command handlers, check/call order, and `reduceGraphRevision` signature/value surface byte-semantically unchanged; do not re-export the helpers or edit root index/tests. Both modules must be <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/graph-revision-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Run the single exact regression gate once after the extraction: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0 and retain the fresh command, exit code, and output tail as `moe.complete_task` evidence. Any failure is extraction drift in the two owned production paths; do not edit or weaken held-out tests.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform the one final adversarial review. Compare each moved helper body/comment with the committed pre-split reducer and prove the original block is represented exactly once; inspect for reordered reducer checks/calls, changed stable codes/details/source states, missing deep freezes, changed event/version order, content-hash patchability, accidental root/reducer helper exports, cycles, or lost composition commentary. Use an in-memory cross-platform Node line counter to prove both owned files are <=250 for LF/CRLF/CR, confirm non-owned contracts/index/tests are untouched, and run `git diff --check`. If review requires any edit, rerun the exact gate before completion. Then inspect shared `git status --porcelain`, stage/commit only `packages/core/src/planning/graph-revision-reducer.ts` and `packages/core/src/planning/graph-revision-results.ts` by explicit pathspec (never broad add or bare commit), and verify `git show --stat` lists exactly those two paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: dependency satisfied — commit bcdc2f6 is landed. Second of the five decomposition children required by the approved size exception (prop-2eaa632d). Splits graph-revision-reducer.ts and graph-revision-results.ts under the permanent <=250-line rule. Behavior-preserving move only.",
+  "reopenReason": "Human explicitly requested PLAN; promoting the next ordered, file-disjoint planning decomposition child.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -29,5 +68,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.600Z",
-  "updatedAt": "2026-08-07T20:52:39.931Z"
+  "updatedAt": "2026-08-07T21:27:45.896Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:20:40.463Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "architect-c4babdf9"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:27:43.866Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep the task's pre-named seam: move the contiguous result/error/state-clone helper block (`rejected`, `unknownFailure`, `illegal`, `rebound`, `supersededAuthority`, `versionConflict`, `accepted`, `clonedState`) into graph-revision-results.ts. This mirrors the sibling planning-results.ts responsibility and alone reduces the reducer below 250. Rejected splitting command handlers or transition tables because those are coherent reducer orchestration and would increase churn. Rejected retyping or redesigning helpers; move bodies/comments verbatim. Rejected baseline/full-repo/double gate runs from the prior plan because current moe-planning requires one concentrated exact gate at task end.",
+    "codebaseInsights": "graph-revision-reducer.ts is 259 physical lines. The cohesive helper block is lines 64-121; no external file imports these private helpers. The public package/root surface is only GRAPH_REVISION_COMMAND_KINDS, GRAPH_REVISION_TRANSITIONS, and reduceGraphRevision, so the new helper module stays package-internal and is not re-exported by root or reducer. The lines 1-17 composition-contract header is authoritative reviewer context and stays on the reducer. Core uses NodeNext `.js` specifiers without source `.js` shims. Existing graph-revision-reducer.test.ts and planning-invariants.test.ts are held-out characterization and must remain byte-unchanged.",
+    "risks": "Any retyped helper can alter stable code/source/detail construction, rejection precedence, zero-state-change semantics, compound version accounting, or deep freezing. Preserve every helper body/comment and the reducer's call order exactly. Do not export helpers through the package root, change reducer constants/signatures, drop the three-reducer composition comment, or touch tests. Count LF/CRLF/CR portably rather than using Unix-only wc. Shared-tree staging must name only the two owned paths.",
+    "keyFiles": [
+      "packages/core/src/planning/graph-revision-reducer.ts",
+      "packages/core/src/planning/planning-results.ts",
+      "packages/core/src/planning/graph-revision-contract.ts",
+      "packages/core/src/planning/graph-revision-reducer.test.ts",
+      "packages/core/src/planning/planning-invariants.test.ts",
+      "packages/core/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000
+  },
+  "planApprovedAt": "2026-08-07T21:27:45.896Z"
 }

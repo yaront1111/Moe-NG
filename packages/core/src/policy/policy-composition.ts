@@ -48,15 +48,25 @@ function waiverCovers(
 }
 
 /**
- * Compares a child redeclaration against its ancestor. A weakened effect and any loss of a HARD
- * obligation are unconditional relaxations; only a dropped SOFT obligation is waivable.
+ * Compares a child redeclaration against its ancestor across the WHOLE rule. `PolicyRule` has
+ * exactly four fields and `validRule` enforces that exactly (`RULE_KEYS` + `exact()`), so the
+ * three compared here plus `ruleId` — the fold's identity key — are its entire surface.
+ *
+ * A weakened effect, any loss of a HARD obligation, and any shrinking of the required-fact set
+ * are unconditional relaxations; only a dropped SOFT obligation is waivable. `requiredFactIds`
+ * reads as a matching predicate but is an authority field: `assessEvidence` derives its
+ * `HOLD_UNKNOWN` triggers from the folded rule set, so a child that drops one of its ancestor's
+ * required facts deletes that refusal. It is not waivable and cannot be — a waiver resolves a
+ * `namedObligationId` to a SOFT obligation, and a required fact is not an obligation.
  */
 function ruleRelaxation(
   ancestor: PolicyRule,
   child: PolicyRule,
   input: PolicyEvaluationInput,
 ): { readonly relaxed: boolean; readonly waiverInvalid: boolean } {
-  let relaxed = effectRank(child.effect) < effectRank(ancestor.effect);
+  const childFacts = new Set(child.requiredFactIds);
+  let relaxed = effectRank(child.effect) < effectRank(ancestor.effect)
+    || ancestor.requiredFactIds.some((factId) => !childFacts.has(factId));
   let waiverInvalid = false;
   const childKinds = new Map(child.obligations.map((entry) => [entry.obligationId, entry.kind]));
   for (const { kind, obligationId } of ancestor.obligations) {

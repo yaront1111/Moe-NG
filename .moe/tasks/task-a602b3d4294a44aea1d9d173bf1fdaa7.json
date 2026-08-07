@@ -16,9 +16,67 @@
     "The one permitted test edit is the StoredEvent key set in event-read-model-contract.test.ts. Everything else passes unchanged.",
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-d89636d1",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SCOPE (comment-53b369f7): this plan covers Task B1 ONLY — domainSchemaVersion threading through write/read paths. The commit seam + PROJECTION_APPLY_FAILED moved to sibling task-bfc39542 with verified mechanics (honest combined map was 13-14 files vs the 10 cap). Baseline (READ-ONLY, zero edits): confirm Task A landed state — sqlite-schema-manifest.ts domain_events DDL carries `domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'` (grep 'moe-domain-schema' — hits manifest + migration test only; the TS constant does NOT exist yet); fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN before starting (shared tree — attribute by path).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — new packages/store/src/store-domain-schema-version.test.ts (<=250). Cases: (1) ROUNDTRIP: commit an EventDraft WITHOUT domainSchemaVersion -> read back via readEvents/readEventsAfter -> StoredEvent.domainSchemaVersion === 'moe-domain-schema/0' (the DDL default constant, now also a TS constant DOMAIN_EVENT_SCHEMA_VERSION); commit WITH an explicit caller value (e.g. 'moe-domain-schema/2') -> read back UNCHANGED through every read path (by-aggregate, by-position cursor) — DoD: written on append, read back unchanged, sufficient for a later upcaster to dispatch on; (2) VALIDATION: snapshotCommitInput rejects non-string/empty/oversized domainSchemaVersion with the store's stable input codes (bounded length — reuse requireIdentifier-style validation; caller values are opaque, NOT pinned to the constant — upcasters dispatch on recorded values); (3) DIGEST NEUTRALITY (the replay-corruption guard): effect digests must NOT include the field — commit events with a non-default value, then loadReceipt must succeed (replay rebuilds effect events WITHOUT the field; if it entered identifyCommandEffects the write/replay sides would diverge and every receipt would throw STORE_CORRUPT); requestSha256 unchanged (hashes only aggregateId/expectedVersion/commandBytes); (4) rejection-audit path: a decision rejection's audit event carries the DEFAULT constant (decision-ledger-canonical builds its event literal directly). Run focused test — RED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-domain-schema-version.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/store-domain-schema-version.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green part 1 — types + write path. store-contracts.ts: DOMAIN_EVENT_SCHEMA_VERSION = 'moe-domain-schema/0' beside EVENT_RECORD_VERSION (:11); StoredEvent gains readonly domainSchemaVersion: string; EventDraft gains OPTIONAL domainSchemaVersion?: string (optional-with-default keeps every draft-constructing test compiling). NO index.ts edit — the constant goes public when the upcaster task needs it (deferral noted). store-input.ts: snapshotCommitInput reads the optional field, validates (non-empty string, bounded), defaults to DOMAIN_EVENT_SCHEMA_VERSION; SnapshotEventDraft gains REQUIRED domainSchemaVersion. store-internals.ts: EffectEventDraft becomes extends Omit<SnapshotEventDraft, \"outbox\" | \"domainSchemaVersion\"> (digest neutrality — the spread at event-ledger-append still compiles; spreads skip excess-property checks). event-ledger-append.ts: INSERT gains the domain_schema_version column + binding from the snapshot draft (sole INSERT site). decision-ledger-canonical.ts: the rejection-audit event literal (:225-233, typed SnapshotCommitInput, bypasses snapshotCommitInput) gains explicit domainSchemaVersion: DOMAIN_EVENT_SCHEMA_VERSION. Typecheck green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-internals.ts",
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/decision-ledger-canonical.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Green part 2 — read path. read-page-queries.ts: add events.domain_schema_version to STORED_EVENT_SELECT_COLUMNS AND to EVENT_DECODED_BYTES_SQL (byte accounting — safe: event-page-byte-budget.test.ts computes its budget dynamically from EVENT_DECODED_BYTES_SQL itself, and fixed 4096-byte pages have ~570 bytes headroom vs +20; verified). event-read-decode.ts: mapStoredEvent reads the column via requireRowString-style validation (NOT requireStoredVersion — caller values are legal, not pinned to one constant). Non-readers stay untouched (verified): RECEIPT_EVENT_QUERY (per the Omit decision), REJECTION_AUDIT_EVENT_QUERY, RESERVED_DECISION_NAMESPACE_QUERY, assertAggregateTail, DECISION_DECODED_BYTES_SQL. Step-2 tests green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/read-page-queries.ts",
+        "packages/store/src/event-read-decode.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "The TWO forced key-set test edits (announced comment-53b369f7; both are the same forced-literal class — a new StoredEvent key breaks exact-key assertions): (1) event-read-model-contract.test.ts expectedEvent() (:53-68, used via toStrictEqual at :125-137/:152-155/:183-188) gains domainSchemaVersion: 'moe-domain-schema/0'; (2) sqlite-event-store-core.test.ts (:248-283) — the two 12-key StoredEvent literals under toEqual gain the same key (hardcoded requestSha256/effectSha256 digests stay VALID — neither hashes the field; do not touch them). NOTHING else in either file changes; no other test pins the key set (verified). Full gate: fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }. Repo gate `pnpm typecheck && pnpm test` with foreign-red by-path attribution.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/event-read-model-contract.test.ts",
+        "packages/store/src/sqlite-event-store-core.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Red-team: (a) digest divergence — commit a non-default-version event, reopen the store, loadReceipt + validateAllCommandDecisions must pass (replay-side digest identical); temporarily add domainSchemaVersion to the identifyCommandEffects field list in a scratch check OUTSIDE the repo to confirm it WOULD diverge (proves the Omit is load-bearing), never in the tree; (b) default-vs-explicit — both paths through snapshotCommitInput produce the exact stored bytes read back; (c) audit-event coverage — rejection path stores the default (test 4 re-run); (d) key-set edits are literal-only — diff both test files: exactly one added line per literal, digests untouched; (e) seam fence — grep diff for commitWithApply|PROJECTION_APPLY_FAILED|applyInTransaction -> ZERO (task-bfc39542's vocabulary); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/store-input.ts packages/store/src/store-internals.ts packages/store/src/event-ledger-append.ts packages/store/src/decision-ledger-canonical.ts packages/store/src/read-page-queries.ts packages/store/src/event-read-decode.ts packages/store/src/store-domain-schema-version.test.ts packages/store/src/event-read-model-contract.test.ts packages/store/src/sqlite-event-store-core.test.ts`; `git show --stat` lists exactly these 10 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/store-internals.ts",
+        "packages/store/src/event-ledger-append.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -27,14 +85,48 @@
   "parentTaskId": "task-50874e678c054f62ae0ac0c9a5d397cb",
   "priority": "CRITICAL",
   "order": 18,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-53b369f793e44ae1bf87ca0bc791af77",
+      "author": "architect-d89636d1",
+      "content": "Scope narrowing per the runtime's split instruction: residual verification against the landed post-7f31a4d tree found the honest Task-B file map is 13-14 files (a SECOND forced key-set test edit in sqlite-event-store-core.test.ts:248-283; decision-ledger-canonical.ts builds a SnapshotCommitInput event literal bypassing snapshotCommitInput; store-internals EffectEventDraft needs an explicit Omit so effect digests do not diverge on replay) — over the 10-file hard cap. Created sibling task-bfc39542 (Projection commit seam) carrying the seam deliverable with its verified mechanics (commitWithApply as an inherited core-class method needing NO decision-ledger edit; PROJECTION_APPLY_FAILED union entry; invocation-site wrap; no-poison rollback). THIS task now covers Task B1 only: domainSchemaVersion threading through write and read paths. DoD items 2 and 3 (seam + error code) transfer to task-bfc39542; DoD 4's \"one permitted test edit\" becomes TWO forced key-set edits (event-read-model-contract.test.ts AND sqlite-event-store-core.test.ts — the second pins the same 12-key StoredEvent literal via toEqual and fails on any added key; its hardcoded digests stay valid since neither requestSha256 nor effectSha256 hashes the new field).",
+      "timestamp": "2026-08-07T21:18:34.134Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T21:09:22.026Z",
+  "updatedAt": "2026-08-07T21:20:22.133Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T21:09:08.735Z"
+    "firstClaimAt": "2026-08-07T21:09:08.735Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10
   },
   "contextFetchedBy": [
     "architect-d89636d1"
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T21:20:20.098Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Keeping seam + field in one plan — REJECTED: residual verification against the landed tree raised the honest map to 13-14 files (second forced key-set edit in sqlite-event-store-core.test.ts; decision-ledger-canonical's direct SnapshotCommitInput literal; store-internals Omit) — over the hard cap; split per the runtime's own instruction into sibling task-bfc39542 (seam, with commitWithApply-as-inherited-method needing NO decision-ledger edit and no signature changes) and this B1 (field threading). (2) REQUIRED EventDraft field — REJECTED: optional-with-default keeps every draft-constructing test compiling (the DoD's 'unchanged except forced edits' survives); SnapshotEventDraft is required post-snapshot. (3) EffectEventDraft inheriting the field — REJECTED (replay corruption): identifyCommandEffects hashes named fields; write side would carry the field while receipt replay rebuilds without it -> every loadReceipt STORE_CORRUPT + the hardcoded effectSha256 test breaks; explicit Omit<..., 'outbox' | 'domainSchemaVersion'> keeps digest neutrality, and the append-site spread still compiles. (4) requireStoredVersion for the read-back — REJECTED: caller values are legal opaque versions (upcasters dispatch on recorded values); requireRowString-style validation instead. (5) index.ts export now — DEFERRED to the upcaster task (constant reachable in-package; avoids an 11th file). Verified by targeted residual agent against post-7f31a4d tree; 1 BLOCKER + 2 RISKs folded.",
+    "codebaseInsights": "Task A landed (7f31a4d): domain_events DDL has domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'; TS constant does not exist anywhere yet. Sole INSERT site event-ledger-append.ts (named columns — the DDL default covered pre-B1 inserts; B1 makes the binding explicit). decision-ledger-canonical.ts:207-236 builds the rejection-audit SnapshotCommitInput literal directly (bypasses snapshotCommitInput) — must set the field explicitly. Read surface: STORED_EVENT_SELECT_COLUMNS + EVENT_DECODED_BYTES_SQL in read-page-queries.ts (byte-budget test computes dynamically — safe); mapStoredEvent in event-read-decode.ts. Non-readers verified: RECEIPT_EVENT_QUERY (Omit decision), rejection-audit + reserved-namespace queries, assertAggregateTail, DECISION_DECODED_BYTES_SQL. Key-set pins: event-read-model-contract.test.ts:53-68 (toStrictEqual x5) AND sqlite-event-store-core.test.ts:248-283 (toEqual, 12-key literals; hardcoded digests remain valid — requestSha256 hashes aggregateId/expectedVersion/commandBytes only, effectSha256 hashes named fields only). Seam mechanics recorded in task-bfc39542's description for its planner.",
+    "risks": "(1) Digest divergence is the silent-corruption hazard: the Omit is load-bearing — red-team proves it outside the tree; any future field addition to effect digests must change COMMAND_EFFECT_IDENTITY_VERSION instead. (2) The two key-set edits must stay literal-only — hardcoded digests in sqlite-event-store-core are correct and must not be 'refreshed'. (3) decision-ledger-canonical is the easy-to-miss write site — test 4 pins it. (4) store-contracts.ts is shared with sibling task-bfc39542 (disjoint edits: field/constant vs error-code union) — B1 lands first per the sibling's dependency note; if B2 somehow starts concurrently, coordinate in #general. (5) Shared tree: foreign-red attribution; explicit 10-path commit.",
+    "keyFiles": [
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/store-input.ts",
+      "packages/store/src/store-internals.ts",
+      "packages/store/src/event-ledger-append.ts",
+      "packages/store/src/decision-ledger-canonical.ts",
+      "packages/store/src/read-page-queries.ts",
+      "packages/store/src/event-read-decode.ts",
+      "packages/store/src/store-digests.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-07T21:20:22.133Z"
 }
