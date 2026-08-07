@@ -37,6 +37,12 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/runner:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/scheduler: {}
 
   packages/skills:
