@@ -45,37 +45,38 @@ export const FOUNDATION_INCIDENT_PROBES: readonly FoundationAbsenceProbe[] = Obj
     "probe:core-terminal-release",
     "@moe/core",
     ["reduceWorkRelease", "WORK_TRANSITIONS", "releaseTerminalWork"],
-    "release",
+    // Not a bare "Release": @moe/core already names types PlanningReleased.
+    "WorkRelease|WORK_RELEASE|releaseTerminal|ReleaseTerminal|TERMINAL_RELEASE",
   ),
   probe(
     "probe:core-release-handoff",
     "@moe/core",
     ["releaseWithHandoff", "reduceWorkHandoff", "HANDOFF_TRANSITIONS"],
-    "handoff",
+    "Handoff|HANDOFF",
   ),
   probe(
     "probe:scheduler-hot-claim-admission",
     "@moe/scheduler",
-    ["claimWorkItem", "admitClaim", "reduceClaim"],
-    "claim",
+    ["admitClaim", "claimWorkItem", "reduceClaim"],
+    "Claim|CLAIM",
   ),
   probe(
     "probe:scheduler-timer-reentrancy",
     "@moe/scheduler",
     ["reduceTimer", "scheduleTimerCallback", "reacquireTimerAuthority"],
-    "timer",
+    "Timer|TIMER",
   ),
   probe(
     "probe:core-review-assignment",
     "@moe/core",
     ["reduceReview", "assignReview", "REVIEW_TRANSITIONS"],
-    "review",
+    "Review|REVIEW",
   ),
   probe(
     "probe:contracts-distribution-handshake",
     "@moe/contracts",
     ["verifyDistributionManifest", "checkDistributionCompatibility"],
-    "distribution",
+    "Distribution|DISTRIBUTION",
   ),
 ]);
 

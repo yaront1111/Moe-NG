@@ -71,7 +71,15 @@ export const productionBehaviorAbsent = (
  */
 export interface FoundationAbsenceProbe {
   readonly absentExportNames: readonly string[];
-  /** RegExp source, matched case-insensitively, or null when too collision-prone. */
+  /**
+   * RegExp source, matched CASE-SENSITIVELY, or null when too collision-prone.
+   *
+   * Case sensitivity is load-bearing, not incidental. Case-insensitive matching
+   * collides with ordinary camelCase: `/timer/i` matches `historicalRuntimeResult`
+   * ("...ntimeRe..."), `/lease/i` matches every `Release` name, and `/review/i`
+   * matches every `Preview` name. Any of those would fire a probe on an unrelated
+   * export and turn a schedule falsely red. `Timer`, `Lease` and `Review` do not.
+   */
   readonly absentExportPattern: string | null;
   readonly packageName: string;
   readonly probeRef: string;
@@ -88,7 +96,7 @@ export function evaluateAbsenceProbe(
   const named = new Set(probe.absentExportNames);
   const pattern = probe.absentExportPattern === null
     ? null
-    : new RegExp(probe.absentExportPattern, "iu");
+    : new RegExp(probe.absentExportPattern, "u");
   const present = exportNames.filter((name) => named.has(name) || pattern?.test(name) === true);
   return present.length === 0
     ? Object.freeze({ absent: true as const })

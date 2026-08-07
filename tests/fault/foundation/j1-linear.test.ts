@@ -14,10 +14,16 @@ import {
   foundationPartition,
   resolveEvidenceOutcome,
 } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
-import { evaluateJ1Journey } from "../../../packages/testkit/src/foundation/foundation-model-j1.js";
+import {
+  J1_AGGREGATE_ONLY_ACTIVATION,
+  J1_LINEAR_COMMAND_SEQUENCE,
+  J1_REQUIRED_HUMAN_ACTIONS,
+  evaluateJ1Journey,
+} from "../../../packages/testkit/src/foundation/foundation-model-j1.js";
 import { passExpected } from "../../../packages/testkit/src/foundation/foundation-outcomes-fixtures.js";
 import {
   assertPartitionOwnership,
+  contracts,
   core,
   fixtureById,
   outcomeFromVerdict,
@@ -192,6 +198,19 @@ const EXECUTORS = {
 describe("J1 linear journey fault schedules", () => {
   it("owns exactly the J1 manifest partition", () => {
     assertPartitionOwnership(expect, PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J1);
+  });
+
+  it("keeps the model's command claims true against the landed vocabulary", () => {
+    for (const kind of J1_LINEAR_COMMAND_SEQUENCE) {
+      expect(contracts.RUNTIME_COMMAND_KINDS).toContain(kind);
+    }
+    // Landed on the GOAL aggregate, absent from the runtime vocabulary. Asserting
+    // the divergence keeps it from being quietly "fixed" by a wrong assumption.
+    expect(contracts.RUNTIME_COMMAND_KINDS).not.toContain(J1_AGGREGATE_ONLY_ACTIVATION);
+    expect(core.GOAL_COMMAND_KINDS).toContain(J1_AGGREGATE_ONLY_ACTIVATION);
+    expect([...J1_REQUIRED_HUMAN_ACTIONS]).toEqual([
+      "goal.create", "graph.approve", "acceptance.final",
+    ]);
   });
 
   it.each(partitionRows(PARTITION))("%s produces its declared outcome", (entryId, entry) => {

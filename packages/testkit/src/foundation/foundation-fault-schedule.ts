@@ -53,25 +53,25 @@ const CATALOGUE_PROBES: readonly FoundationAbsenceProbe[] = Object.freeze([
     "probe:core-attempt-execution-reducer",
     "@moe/core",
     ["reduceAttempt", "ATTEMPT_TRANSITIONS", "ATTEMPT_COMMAND_KINDS"],
-    "attempt",
+    "Attempt|ATTEMPT",
   ),
   probe(
     "probe:core-store-dispatch-composition",
     "@moe/core",
     ["createDispatcher", "dispatchCommand", "createCommandDispatcher"],
-    "dispatch",
+    "Dispatch|DISPATCH",
   ),
   probe(
     "probe:store-outbox-acknowledgement",
     "@moe/store",
     ["acknowledgeOutbox", "ackOutboxMessage", "markOutboxDelivered"],
-    "acknowledg|^ack",
+    "[Aa]cknowledg|ACKNOWLEDG",
   ),
   probe(
     "probe:scheduler-authority-lease",
     "@moe/scheduler",
-    ["fenceAuthority", "markSuspect", "confirmRevoke", "restartReconstruct"],
-    "lease|fence",
+    ["LEASE_STATES", "fenceAuthority", "markSuspect", "confirmRevoke", "restartReconstruct"],
+    "Lease|LEASE|Fence|FENCE",
   ),
 ]);
 
