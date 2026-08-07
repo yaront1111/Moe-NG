@@ -64,7 +64,7 @@ export function fxBypass(
   const events: FairnessEvent[] = [];
   for (let i = 0; i < count; i += 1) {
     const pump = `fx-pump-${targetId}-${i}`;
-    events.push(fxAdmit(pump, `wi-${pump}`, dimension));
+    events.push(fxAdmit(pump, `!${pump}`, dimension, "P0"));
     events.push(fxDispatch(pump, [targetId]));
   }
   return events;
@@ -94,9 +94,12 @@ export function fxStateWithNDispatchable(n: number, policyMd: number): FairnessS
       forcedCohortEntryEvent: null,
       dispatchable: true,
       continuousEligibilityEvent: i,
+      migratedBoundAtMost: null,
     });
   }
   return deepFreeze({
+    dimension: "fx-dim",
+    projectCeilingMd: DEFAULT_M_D,
     policyMd,
     eventSeq: n,
     dispatchableCount: n,
@@ -128,6 +131,7 @@ export function fxForcedCohortState(
     forcedCohortEntryEvent: e.forcedCohortEntryEvent,
     dispatchable: true,
     continuousEligibilityEvent: e.forcedCohortEntryEvent,
+    migratedBoundAtMost: null,
   }));
   let maxSeq = 0;
   for (const e of entries) {
@@ -136,6 +140,8 @@ export function fxForcedCohortState(
     }
   }
   return deepFreeze({
+    dimension: "fx-dim",
+    projectCeilingMd: DEFAULT_M_D,
     policyMd: DEFAULT_M_D,
     eventSeq: maxSeq + 1,
     dispatchableCount: tickets.length,

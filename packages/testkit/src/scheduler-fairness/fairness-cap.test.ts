@@ -48,6 +48,8 @@ describe("cap — M_d admission ceiling", () => {
     // A hostile state that claims a full cap with an empty ticket array must
     // still reject admission without inspecting elements.
     const bogusFull: FairnessState = {
+      dimension: "fx-dim",
+      projectCeilingMd: DEFAULT_M_D,
       policyMd: 4,
       eventSeq: 4,
       dispatchableCount: 4,
@@ -72,11 +74,11 @@ describe("cap — M_d admission ceiling", () => {
 });
 
 describe("cap — RAISE_CAP drain-or-tighter-migration", () => {
-  it("raises the cap freely when every live ticket is drained", () => {
-    const state = mustReduce([fxAdmit("a"), fxTerminate("a")]);
-    const r = applyEvent(state, fxRaiseCap(DEFAULT_M_D * 2));
+  it("raises the cap within the project ceiling when every live ticket is drained", () => {
+    const state = mustReduce([fxAdmit("a"), fxTerminate("a")], 100);
+    const r = applyEvent(state, fxRaiseCap(1000));
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.state.policyMd).toBe(DEFAULT_M_D * 2);
+    if (r.ok) expect(r.state.policyMd).toBe(1000);
   });
 
   it("rejects a bare raise while live tickets carry a looser implied bound", () => {
