@@ -1,0 +1,51 @@
+{
+  "id": "task-2d9b0a74dae2463897fa19c6f031a8b4",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "SQLite schema v3 projection tables and migration",
+  "description": "Objective: raise the durable schema to v3 with the four tables a projection/outbox subsystem needs, and a migration the exact-schema validator accepts. Task A of a 2-way split of task-50874e67, which architect-d89636d1 blocked as unplannable at 14 files against a 10-file cap with a self-contradictory DoD. Deliverable: schema manifest carrying a SCHEMA_V2 snapshot plus four new tables (no AUTOINCREMENT), an intermediate moe-sqlite-schema/2 constant, and a two-leg migration. Known constraint found during blocking analysis, do not rediscover it: ALTER splices sqlite_schema text and the result can never match the exact validator, so the migration must recreate domain_events on empty rather than ALTER it. NOT in scope: the StoredEvent domainSchemaVersion field, the EventLedgerStore commit seam, PROJECTION_APPLY_FAILED, or any projection logic — all of that is Task B (StoredEvent domain schema version and projection commit seam) and must have somewhere to land. Hard dependencies: none; builds on task-9e3faf3b (commit 9e16dde) which split sqlite-schema.ts by conformance/integrity/migration/bootstrap. Owned paths: packages/store/src/sqlite-schema*.ts, packages/store/src/store-internals.ts, the schema-version constant in packages/store/src/store-contracts.ts, one new migration test, and the two version-pin test edits named in the DoD. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Schema v3 adds the four projection/inbox/subscription/cursor-generation tables with no AUTOINCREMENT, and the exact-schema validator accepts a migrated database as conformant rather than rejecting added objects.",
+    "The migration runs as two legs through the intermediate moe-sqlite-schema/2 constant, recreates domain_events on empty rather than using ALTER, and refuses a populated or newer database with its existing stable codes.",
+    "Existing tests pass with ONLY the version-literal updates the new schema forces: command-decision-integrity.test.ts (userVersion pin) and store-project-and-schema-contract.test.ts (the too-new tamper, which must be re-pointed above v3 rather than deleted). No test is weakened, skipped, or loosened beyond those literals.",
+    "The focused store typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Do not touch StoredEvent, the commit seam, or PROJECTION_APPLY_FAILED. Those belong to Task B; implementing them here rebuilds the oversized task that was just split.",
+    "The exact-schema validator must be updated to EXPECT the new tables. Never weaken it, bypass it, or make it permissive about unknown objects.",
+    "The two permitted test edits are version literals only. Re-point the too-new tamper above v3; do not delete the case, and do not treat 'existing tests pass unchanged' as license to edit anything else.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-d89636d1",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor: requeueing — this is the single highest-unlock task available and its dependencies are met. SQLite schema decomposition is DONE (commit 9e16dde) and gave it the conformance/integrity/migration/bootstrap seam to build against. It gates the entire projection chain: StoredEvent commit seam, pure upcaster engine, transactional relay, subscription cursors, and crash/rebuild hardening — five tasks, none of which can start until schema v3 lands. Blocking-analysis findings are already in the description so they are not rediscovered: ALTER splices sqlite_schema text and can never match the exact validator, so the migration recreates domain_events on empty through an intermediate moe-sqlite-schema/2 constant.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-50874e678c054f62ae0ac0c9a5d397cb",
+  "priority": "CRITICAL",
+  "order": 18,
+  "comments": [
+    {
+      "id": "comment-7c518f02adcd4e8b8a60525f887abe4f",
+      "author": "architect-d89636d1",
+      "content": "DoD amendment (announced, not silently exceeded): verification found a THIRD test pinning the schema version — sqlite-event-store-core.test.ts:26 `expect(health.userVersion).toBe(2)` inside the fresh-store safety test. It fails the moment SCHEMA_VERSION goes 3 and is exactly the forced-version-literal class the DoD's two named edits cover; it was simply missed in enumeration. The plan includes it as a one-literal edit (2 -> 3), nothing else in that file. Also for QA clarity: the store-project-and-schema-contract.test.ts permitted edit spans TWO paired literals in ONE test (line 65 tamper 3 -> 4 AND lines 85-86 asserted user_version 3 -> 4 — the refusal path persists the tampered value). Literals that must NOT change (frozen v1 semantics): command-decision-integrity.test.ts:268-269/:275, command-decision-test-helpers.ts:123-125 frozen v1 fixture, sqlite-event-store-core.test.ts:74-75/:103.",
+      "timestamp": "2026-08-07T20:37:44.141Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T15:28:13.030Z",
+  "updatedAt": "2026-08-07T20:37:44.141Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T18:40:29.422Z"
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "architect-d89636d1"
+  ],
+  "blockedReason": "The task cannot satisfy its own exact verification gate under the current ownership and test-edit rail. Raising PRAGMA user_version from 2 to 3 necessarily makes packages/store/src/sqlite-event-store-core.test.ts:26 fail (`expect(health.userVersion).toBe(2)`), but the task permits version-literal edits only in command-decision-integrity.test.ts and store-project-and-schema-contract.test.ts and does not own sqlite-event-store-core.test.ts. Repo-wide audit found this is the only additional current-version pin. Required amendment: add packages/store/src/sqlite-event-store-core.test.ts to owned paths and permit only line 26's literal 2→3; no assertion weakening. Without that amendment, either the focused gate fails or the worker violates explicit rails.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-07T18:44:49.261Z"
+}

@@ -15,13 +15,161 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold @moe/runner. package.json { name: \"@moe/runner\", version: \"0.0.0\", private: true, type: \"module\", exports: { \".\": \"./src/index.ts\" }, dependencies: { \"@moe/contracts\": \"workspace:*\" }, scripts: { typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/runner/src\" } }. tsconfig.json mirrors packages/contracts EXCEPT tsBuildInfoFile must be \"../../node_modules/.cache/runner.tsbuildinfo\" (runner-specific — sharing contracts' cache file corrupts incremental builds). src/index.ts placeholder. Run `pnpm install`. LOCKFILE ORDERING RULE (live hazard, verified: working-tree pnpm-lock.yaml already carries an importer block for uncommitted packages/skills; git pathspecs stage whole files): (1) commit pnpm-lock.yaml ONLY when every importer block in the file resolves to a package.json in the same commit or an ancestor; (2) sequence this task's scaffold commit AFTER the @moe/skills (and, if present by then, @moe/core) package.json commits land — check `git log --oneline -- packages/skills/package.json packages/core/package.json` and `git status --porcelain` at commit time; (3) re-run `pnpm install` immediately before committing; (4) the commit pathspec includes BOTH pnpm-lock.yaml and packages/runner/package.json atomically; (5) if blocked on a foreign uncommitted importer, coordinate in #general, escalate via moe.report_blocked only if unresponsive. Do NOT run the package test script in scaffold-only state (passWithNoTests:false exits 1). NO .js shims (documented deferral, precedent @moe/skills). `pnpm --filter @moe/runner typecheck` green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/package.json",
+        "packages/runner/tsconfig.json",
+        "packages/runner/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/runner/package.json",
+        "packages/runner/tsconfig.json",
+        "packages/runner/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/package.json",
+        "packages/runner/tsconfig.json",
+        "packages/runner/src/index.ts"
+      ],
+      "note": "Scaffolded @moe/runner: package.json (name/version/private/type/exports/deps @moe/contracts workspace:*/scripts typecheck+test), tsconfig.json extending ../../tsconfig.base.json with runner-specific tsBuildInfoFile ../../node_modules/.cache/runner.tsbuildinfo, src/index.ts placeholder (`export {}` — a bare empty file is not a module under isolatedModules). `pnpm install` clean (\"Already up to date\", 10 workspace projects). `pnpm --filter @moe/runner typecheck` exit 0. Did NOT run the package test script (scaffold-only, passWithNoTests:false). No .js shims. Lockfile ordering check at this point: packages/skills/package.json IS committed (f4cdba6); packages/core/ is still UNTRACKED with an importer block already in the working-tree lockfile — lockfile commit decision deferred to step-7 per the ordering rule.",
+      "startedAt": "2026-08-07T13:52:38.783Z",
+      "completedAt": "2026-08-07T13:52:59.946Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — src/artifacts/artifact-store.test.ts against the hardened staging protocol (design line 932: written -> flushed -> renamed -> persisted -> verified -> referenced). All tests drive an injectable fd-oriented fs port (open/write/fsync/close/rename/read/unlink/exists + persistAfterRename — writeFileSync has no fd, the port MUST be fd-based for write-then-fsync to be real). Cases: (1) happy path returns frozen ref {sha256, byteLength} only AFTER post-rename persistence (POSIX: parent-directory fsync; Windows: reopen final path + flush — Node cannot fsync a directory on win32; the port makes this a first-class injectable fault point); (2) fault injection at EVERY boundary (after write, after fsync, after close, after rename-before-persist, after persist-before-verify): crash leaves either no object or a non-referenced temp — NEVER a returned ref to a non-durable or unverified address, and no partial temp is ever content-addressed; (3) DUPLICATE CONTENT: staging bytes whose address already exists must check-exists FIRST, digest-verify the EXISTING object, delete the temp, and return the existing ref (idempotent hit) — NEVER rename over an existing address (empirically verified on this machine: win32 renameSync silently REPLACES a closed existing destination, masking corruption, and throws EPERM when a concurrent reader holds it open); existing-bytes mismatch -> RUNNER_ARTIFACT_ADDRESS_CORRUPT; (4) post-rename verify failure: the mismatched object is unlinked (or renamed to a non-addressable quarantine name) BEFORE the corruption code returns — assert the address is empty afterward (a poisoned address would fail every future staging of the true content); (5) temp and final name always share one directory (cross-volume Node rename degrades to non-atomic copy); (6) deletion guard: deleteArtifact(ref, referenceProof) accepts only a typed ZERO_REFERENCES proof; UNCERTAIN/UNKNOWN reference state -> RUNNER_ARTIFACT_REFS_UNCERTAIN, no deletion (design: uncertain reference prevents deletion); (7) verifyArtifact re-read + compare. Stable RUNNER_ARTIFACT_* codes, frozen {ok:false, code, message} results. Confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/artifacts/artifact-store.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/artifacts/artifact-store.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/artifacts/artifact-store.test.ts"
+      ],
+      "note": "RED confirmed: `Error: Cannot find module './artifact-store.js'` — suite fails, exit 1. 30 tests written against the fd-oriented ArtifactFsPort {openWrite,write,fsync,close,exists,rename,persistAfterRename,readAll,unlink} driven by an in-memory MemoryFs with per-operation fault injection. Coverage: (1) happy path asserts the exact op order openWrite,write,fsync,close,exists,rename,persistAfterRename,readAll and that the frozen ref is returned only after persistence; (2) fault injection at all 8 boundaries (openWrite/write/fsync/close/exists/rename/persistAfterRename/readAll) each asserting a distinct code and ZERO content-addressed paths + zero persisted entries surviving; (3) duplicate content — exists-check dominates rename, existing object digest-verified, temp unlinked, deduplicated:true, rename never called; mismatch -> RUNNER_ARTIFACT_ADDRESS_CORRUPT with the existing bytes untouched; (4) post-rename verify failure (corrupt read + truncated read) asserts the address is EMPTY afterward; (5) temp/final share a directory and the temp basename (<sha16>.<counter>.tmp) is never 64-hex addressable; (6) deleteArtifact guard — ZERO_REFERENCES with scanned generations deletes, UNCERTAIN -> RUNNER_ARTIFACT_REFS_UNCERTAIN, REFERENCED -> RUNNER_ARTIFACT_REFS_PRESENT, empty scannedGenerations degrades to REFS_UNCERTAIN, absent address is idempotent; (7) verifyArtifact re-read/compare + MISSING + ADDRESS_CORRUPT + RUNNER_ARTIFACT_REF_INVALID for malformed refs before any fs call (path-traversal guard). Two deviations, both additive and fail-closed: RUNNER_ARTIFACT_REFS_PRESENT distinguishes known-referenced from uncertain (plan named only REFS_UNCERTAIN), and RUNNER_ARTIFACT_REF_INVALID/RUNNER_ARTIFACT_STAGING_INVALID guard malformed refs and non-integer injected counters. Layout resolution: plan step-3 sketched a separate {root}/staging dir but step-2 case (5) hard-requires temp and final to share ONE directory; the tests pin the step-2 requirement — both live under {root}/objects.",
+      "startedAt": "2026-08-07T13:53:00.110Z",
+      "completedAt": "2026-08-07T13:56:21.346Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — src/artifacts/artifact-store.ts (target <=250, split before 400): implement exactly the step-2 protocol over the fd fs port (default adapter: node:fs openSync/writeSync/fsyncSync/closeSync/renameSync/readFileSync/unlinkSync + win32 reopen-flush / POSIX dir-fsync persistence — measured 21.4ms/20 iterations on tmpdir, no CI concern); sha256 via node:crypto; staging dir layout {root}/staging/<random-suffix-from-caller-supplied-entropy? no — temp name = <sha256-prefix>.<monotonic-counter>.tmp with counter injected, NO Math.random/Date.now (determinism rail)}; all results frozen. Read-only for existing objects except the specified unlink/quarantine branches. Artifact tests green; typecheck green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/artifacts/artifact-store.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/artifacts/artifact-store.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/artifacts/artifact-contract.ts",
+        "packages/runner/src/artifacts/artifact-store.ts",
+        "packages/runner/src/artifacts/artifact-node-fs.ts",
+        "packages/runner/src/artifacts/artifact-store.test.ts"
+      ],
+      "note": "GREEN: 28/28 tests pass, `pnpm --filter @moe/runner typecheck` exit 0. Implemented the step-2 protocol over the fd port. Split into three files (all owned, all under the 250 target): artifact-contract.ts 127 (closed RUNNER_ARTIFACT_* code list, ArtifactFsPort, ArtifactRef/ArtifactReferenceProof/result types, attempt() port-call wrapper, sha256Hex, refRejection, refMatches), artifact-store.ts 205 (createArtifactStore: writeTemp -> exists-check -> reuseExisting|publish), artifact-node-fs.ts 75 (default node:fs adapter). Split rationale: a single file was 291 lines, over the <=250 rail target; the contract/implementation split mirrors the @moe/skills skill-contract.ts precedent. Protocol details: sha256 via node:crypto; temp name `<sha16>.<injected counter>.tmp` in the SAME directory as the address ({root}/objects) — no Math.random, no Date.now, no clock; every port call routed through attempt() so no boundary throws past the store; exists(address) dominates rename on every path (rename is reachable only from publish(), which is called only in the occupied===false branch); post-rename verify mismatch and persist failure both discard() the address before returning so a poisoned address cannot survive; results and refs frozen. Node adapter: openSync \"wx\" (temp collision fails rather than clobbers), looping writeSync (short writes), fsyncSync, renameSync, and persistAfterRename that reopens the final path with \"r+\" and fsyncs on win32 (Node cannot open a directory for fsync there) or fsyncs dirname on POSIX; openWrite mkdirSync's the objects directory (adapter-local, documented). Added 2 integration tests beyond the plan: the adapter is production code and the durability boundary is the one claim the in-memory fake cannot exercise — they run under os.tmpdir() (mkdtempSync) with afterAll rmSync, so no fixture touches the repository tree.",
+      "startedAt": "2026-08-07T13:56:21.706Z",
+      "completedAt": "2026-08-07T14:00:07.534Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red then green — src/scope/scope-observation.test.ts + src/scope/scope-observation.ts (design lines 208/810/812). observeScope({worktreeRoot, baseIdentity (commit sha, hex40/hex64), declaredScopePaths, gitObserver, observedAt, observerVersion}) -> frozen digest-bound ScopeObservation {observationVersion, baseIdentity, worktreeIdentity (realpath-canonical root), canonicalEntries, gitAttribution, observedAt, observerVersion, sha256} where sha256 covers ALL fields via sorted-key canonical serialization. observedAt is CALLER-SUPPLIED and format-validated (canonical ISO-8601 UTC, finite — a malformed value must not destabilize the digest); freshness enforcement is the CONSUMER's re-observation duty per design 810 (document this division in a contract comment; the daemon is the caller so 'daemon-observed' holds). Canonicalization fail-closed with distinct RUNNER_SCOPE_* codes: absolute paths, drive letters, UNC/device paths (colon anywhere, CON/PRN/AUX/NUL/COM1-9/LPT1-9 stems, trailing dot/space — reuse the Windows rules proven in the skills task), backslash, \"..\"/\".\"/empty segments, non-NFC, case-fold collisions, symlink/junction resolving outside worktree root (realpath(entry) must start with realpath(root)+path.sep), submodule boundaries (path under a gitObserver-reported submodule -> rejected), repository escapes. Git attribution via injected GitObserver port interface {statusPorcelainV2(), headCommit(), lsFilesTracked(), lsFilesIgnored()} classifying every declared path as clean/dirty/staged/untracked/ignored — the ignored class comes from an explicit lsFilesIgnored call (NOT derivable from default porcelain v2); anything unclassifiable is honestly UNKNOWN, never assumed clean. Unit tests use a FAKE GitObserver (fixture porcelain v2 NUL-framed output — no git spawn); ONE integration test builds a real repo under os.tmpdir() with skipIf(no git). Production adapter (same file or split scope-git.ts via amendment if >400): copy packages/testkit/src/phase0-node-git.ts execFile discipline WHOLESALE — GIT_CONFIG_GLOBAL='NUL' on win32 ('/dev/null' is wrong there), '-c safe.directory=<repo>', GIT_OPTIONAL_LOCKS='0' (prevents index.lock churn in this multi-agent shared tree), core.fsmonitor=false, core.untrackedCache=false, encoding:'buffer' + fatal UTF-8 decode, porcelain=v2 -z NUL framing, no shell, timeout, maxBuffer — and map ERR_CHILD_PROCESS_STDIO_MAXBUFFER (empirically a hard error, fail-closed) to a stable RUNNER_SCOPE_OBSERVATION_OVERFLOW code. RED first, then green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/scope/scope-observation.test.ts",
+        "packages/runner/src/scope/scope-observation.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/scope/scope-observation.test.ts",
+        "packages/runner/src/scope/scope-observation.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/canonical.ts",
+        "packages/runner/src/scope/scope-contract.ts",
+        "packages/runner/src/scope/scope-attribution.ts",
+        "packages/runner/src/scope/scope-observation.ts",
+        "packages/runner/src/scope/scope-git.ts",
+        "packages/runner/src/scope/scope-observation.test.ts"
+      ],
+      "note": "RED then GREEN: RED was `Cannot find module './scope-contract.js'`; now 72/72 tests pass (44 new) and typecheck exits 0. Files: scope-contract.ts 199 (22 RUNNER_SCOPE_* codes, 8 closed attribution classes, GitObserver/ScopePathObserver ports, ScopeObserverError, canonicalPathRejection), scope-attribution.ts 237 (porcelain v2 -z parser + subtree-aware classifier), scope-observation.ts 222 (observeScope), scope-git.ts 182 (production adapter), plus src/canonical.ts 124 (shared canonical JSON/digest/freeze/validators; per-package precedent — @moe/skills and @moe/scheduler each carry their own, @moe/contracts exports none). Every production module is under the 250 target. Canonicalization: distinct codes for ABSOLUTE (leading / and UNC //), DRIVE_QUALIFIED (colon anywhere), BACKSLASH, DOT_SEGMENT (. .. empty), TRAILING_DOT_OR_SPACE, RESERVED_DEVICE (CON/PRN/AUX/NUL/COM1-9/LPT1-9 stems), NOT_NORMALIZED (non-NFC and lone surrogate), LENGTH_INVALID, DUPLICATE, CASE_COLLISION — each with its own test; ordering is length -> NFC -> backslash -> colon -> absolute -> segments so the most specific rule wins. Containment: realpath(entry) must sit under realpath(root)+sep (case-folded on win32); a sibling-prefix junction (root+\"-other\") is rejected, and a not-yet-existing path is never resolved (classified ABSENT). Submodules come from gitObserver.submodulePaths() (mode-160000 gitlinks via ls-files --stage) and reject both the submodule root and anything under it. observedAt is caller-supplied and validated by pure regex+calendar arithmetic — NO Date/clock at all, so a hostile value cannot destabilize the digest; the contract comment records that freshness re-observation is the consumer's duty per design 810. Digest covers every field via sorted-key canonical serialization; tests prove identical sha256 across runs and input key orders, and a changed field always changes the digest. Attribution: dirty/staged/untracked/unmerged/ignored/clean plus ABSENT and UNKNOWN. Three deviations from the plan's letter, all fail-closed and tested: (a) added ScopePathObserver as a second injected port — realpath/exists are needed for symlink containment and cannot come from the git port; (b) added submodulePaths() as a fifth GitObserver method — an unchanged submodule never appears in porcelain v2, so the boundary is not otherwise observable; (c) added UNMERGED and ABSENT to the class list — both are genuinely classifiable, so folding them into UNKNOWN would have been dishonest, and UNKNOWN is now reserved for real contradictions (a `1 .. ...` record claiming a change with no change) rather than being a catch-all. Adapter copies the testkit phase0-node-git discipline wholesale (safe.directory, core.fsmonitor=false, core.untrackedCache=false, GIT_OPTIONAL_LOCKS=0, GIT_CONFIG_GLOBAL=NUL on win32, GIT_CONFIG_NOSYSTEM, LC_ALL=C, buffer encoding + fatal UTF-8, porcelain v2 -z, no shell, 30s timeout, 8 MiB maxBuffer) and maps ERR_CHILD_PROCESS_STDIO_MAXBUFFER to RUNNER_SCOPE_OBSERVATION_OVERFLOW. The base environment is an explicit parameter (hermeticGitEnvironment(base)) rather than an ambient process.env read, which keeps production sources free of process.env for the step-6 determinism gate — verified: the only hit in packages/runner/src is the integration test. One integration test builds a real repo under os.tmpdir() with skipIf(no git) and confirms CLEAN/DIRTY/UNTRACKED/IGNORED end to end; it removes its fixture in a finally block.",
+      "startedAt": "2026-08-07T14:00:07.947Z",
+      "completedAt": "2026-08-07T14:10:19.533Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red then green — src/workspace/workspace-manifest.test.ts + src/workspace/workspace-manifest.ts (design 218-219/485/491/817). buildInputManifest({baseIdentity, entries}) where EVERY entry is {path, sha256, byteLength, producer} and producer is typed { kind: \"BASE\" } | { kind: \"PREDECESSOR\", attemptRef, epoch, adoptionRef? } — producer identity MUST live in the input manifest (BLOCKER from verification: a sha256 is one-way, producer identity is uncomputable from a digest; design 218 requires producer attempts/epochs/adoptions + inherited-path ownership) -> frozen digest-bound manifest, sorted canonical entries. buildResultManifest({inputManifest (the FULL object, not just its digest), scopeObservation, authoredPaths, resultTreeEntries, declaredArtifactRefs}) validates fail-closed with DISTINCT stable RUNNER_WORKSPACE_* codes: escaped (path outside canonical scope), symlinked/junction (from scope observation), FOREIGN (defined precisely: result-tree bytes attributable to NEITHER the inherited input closure NOR an in-scope authored path — no declared producer), dirty/staged/untracked (git-attribution states from the embedded scope observation), undeclared (result entry absent from authoredPaths+inherited closure), authored-path-out-of-scope, inherited-path producer mismatch (result inherited entry whose bytes/digest differ from its input-manifest producer entry). DIGEST BINDING IS EXPLICIT: the serialized result-manifest bytes EMBED inputManifest.sha256, scopeObservation.sha256, baseIdentity, sorted authored paths, sorted result-tree entries, and the inherited-versus-authored split — all inside the bytes producing the manifest sha256 (DoD 2: base, scope observation, input tree, authored paths, result tree all digest bound — transitively through embedded digests). Reproducibility tests: same inputs -> byte-identical manifest + digest across runs and key orders. DEFERRED FIELDS (explicit deferral, name it in a contract comment so QA sees intent vs design 219): authored commit/canonical delta, receipts, decisions, journal references belong to the later result-sealing task; this module builds the tree/ownership/digest core. RED first, then green; src/index.ts exports public surface of all three areas.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/workspace/workspace-manifest.test.ts",
+        "packages/runner/src/workspace/workspace-manifest.ts",
+        "packages/runner/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/workspace/workspace-manifest.test.ts",
+        "packages/runner/src/workspace/workspace-manifest.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/workspace-contract.ts",
+        "packages/runner/src/workspace/workspace-result-rules.ts",
+        "packages/runner/src/workspace/workspace-manifest.ts",
+        "packages/runner/src/workspace/workspace-manifest.test.ts",
+        "packages/runner/src/index.ts"
+      ],
+      "note": "RED (`Cannot find module './workspace-contract.js'`) then GREEN: 29 new tests, runner suite 101/101, typecheck exit 0. Files: workspace-contract.ts (22 RUNNER_WORKSPACE_* codes, mandatory typed producer BASE|PREDECESSOR{attemptRef,epoch,adoptionRef?}, ResultTreeEntry with mandatory observed kind, digest-input functions, explicit deferral comment for authored commit/delta/receipts/decisions/journal refs), workspace-result-rules.ts (per-entry ordering: shape -> kind -> containment -> git attribution -> declaration -> ownership), workspace-manifest.ts (buildInputManifest + buildResultManifest, PathSet case-fold duplicate guard, sorted canonical entries). Result digest embeds inputManifest.sha256 + scopeObservation.sha256 + baseIdentity + sorted authoredPaths + inherited/authored split + sorted artifact refs; both upstream digests are re-verified (recompute) before use, base mismatch rejected. Distinct codes proven by test: ESCAPED, SYMLINKED, KIND_UNSUPPORTED, DIRTY, STAGED, UNTRACKED, ATTRIBUTION_UNKNOWN, UNDECLARED, FOREIGN (both directions), INHERITED_PRODUCER_MISMATCH, AUTHORED_PATH_OUT_OF_SCOPE, ARTIFACT_REF_INVALID. Reproducibility tests assert byte-identical canonicalJson + digest across entry orders. index.ts now exports the public surface of artifacts, scope, workspace.",
+      "startedAt": "2026-08-07T14:10:20.111Z",
+      "completedAt": "2026-08-07T15:34:13.613Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification gate (single concentrated step). (1) `wc -l packages/runner/src/**/*.ts` — every production module <=400 hard (target 250; scope-git.ts split via amendment if needed). (2) Fresh `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> exit 0 — the complete_task evidence: { command: \"pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test\", exitCode: 0, outputTail }. (3) `pnpm typecheck && pnpm test` repo gate — root vitest discovers the three nested test files (verify in run summary); attribute any red to foreign in-flight work (skills/core/store tasks share this tree) before touching anything. (4) grep production sources for Date.now|new Date|Math.random|process\\.env — ZERO hits (determinism; entropy/counters/timestamps are injected). (5) Run the focused suite twice — identical results; `git status --porcelain` shows only owned + scaffold + lockfile paths; confirm no tmpdir fixture leaked into the repo.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/artifacts/artifact-store.ts",
+        "packages/runner/src/scope/scope-observation.ts",
+        "packages/runner/src/workspace/workspace-manifest.ts"
+      ],
+      "note": "Verification gate all green. (1) Line counts, every production module under the 400 hard cap: canonical 124, index 70, artifact-contract 127, artifact-node-fs 75, artifact-store 205, scope-attribution 237, scope-contract 218, scope-git 182, scope-observation 222, workspace-contract 257, workspace-manifest 236, workspace-result-rules 164. (2) Fresh `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0 — 3 files, 101 tests passed. (3) Repo gate: `pnpm typecheck` all 8 packages Done; `pnpm test` 71 files, 887 passed, 1 skipped (foreign; focused runner run has zero skips). `npx vitest list --filesOnly` confirms the root config discovers all three runner test files. (4) grep for Date.now|new Date|Math.random|process.env across non-test runner sources: zero hits (process.platform only, for path folding and win32 git config). (5) Focused suite run twice — identical 101/101. `git status --porcelain` limited to owned scope: ` M pnpm-lock.yaml` and `?? packages/runner/` only; no tmpdir fixture or scratch file leaked into the repo.",
+      "startedAt": "2026-08-07T15:34:18.109Z",
+      "completedAt": "2026-08-07T15:35:15.182Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) staging protocol walk — for each of the 6 fault boundaries, point to the exact test asserting no referenceable/unverified object survives; (b) confirm never-rename-over-existing: grep artifact-store.ts for the rename call and verify the exists-check dominates it on every path; (c) scope: run the hostile-path matrix mentally against the canonicalizer — colon/device/trailing-dot/case-fold/junction each maps to its distinct code (not a generic catch-all); (d) FOREIGN vs undeclared vs dirty codes are distinct and each has a test; (e) producer-identity: assert the input-manifest type makes producer mandatory (compile-time) and the inherited-mismatch test actually flips bytes; (f) no scratch files under repo root. Commit per epic rail 3 + the step-1 LOCKFILE ORDERING RULE: verify foreign importers are committed first (`git log --oneline -- packages/skills/package.json packages/core/package.json`), re-run pnpm install, `git status --porcelain`, unstage foreign paths, then `git add` + `git commit -- packages/runner/package.json packages/runner/tsconfig.json packages/runner/src/index.ts packages/runner/src/artifacts/artifact-store.ts packages/runner/src/artifacts/artifact-store.test.ts packages/runner/src/scope/scope-observation.ts packages/runner/src/scope/scope-observation.test.ts packages/runner/src/workspace/workspace-manifest.ts packages/runner/src/workspace/workspace-manifest.test.ts pnpm-lock.yaml`; `git show --stat` lists exactly these (plus scope-git.ts + its test-file amendment additions if split).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/package.json",
+        "packages/runner/tsconfig.json",
+        "packages/runner/src/index.ts",
+        "packages/runner/src/artifacts/artifact-store.ts",
+        "packages/runner/src/artifacts/artifact-store.test.ts",
+        "packages/runner/src/scope/scope-observation.ts",
+        "packages/runner/src/scope/scope-observation.test.ts",
+        "packages/runner/src/workspace/workspace-manifest.ts",
+        "packages/runner/src/workspace/workspace-manifest.test.ts",
+        "pnpm-lock.yaml"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/workspace/workspace-manifest.ts",
+        "packages/runner/src/workspace/workspace-manifest.test.ts",
+        "packages/runner/src/scope/scope-observation.test.ts"
+      ],
+      "note": "Adversarial self-review done, 3 fail-open holes found and fixed (+5 tests, 101 -> 106). (a) Fault-boundary walk: artifact-store.test.ts:210 parameterizes \"fails closed at ${op} leaving no referenceable address\" over write/fsync/close/rename/persist; :224 \"never returns a ref whose address was not persisted\"; :269 \"empties the address before returning the verification failure\"; :172 asserts the temp name is never content-addressed. (b) Only one fs.rename call exists (artifact-store.ts:88 in publish), and publish is reachable only from the ternary at :143 where the exists-check dominates — an occupied address always routes to reuseExisting. (c) Hostile-path matrix: every scope code except DECLARATION_LIMIT already had a test; added that test, so all 22 RUNNER_SCOPE_* codes are covered and colon/device/trailing-dot/case-fold/junction each map to their own code. (d) FOREIGN, UNDECLARED, DIRTY, STAGED, UNTRACKED, ATTRIBUTION_UNKNOWN, ESCAPED, SYMLINKED, KIND_UNSUPPORTED are distinct codes, each with its own test; FOREIGN is tested in both directions (inherited with no producer, authored with no declaration). (e) WorkspaceInputEntry.producer is non-optional, so an entry without one does not compile; the mismatch tests flip both sha256 and byteLength. (f) No scratch files: post-commit `git status --porcelain` shows only the pre-existing foreign `.codex/agent-instructions.md`.\nFIXES: (1) buildInputManifest/splitResultEntries/canonicalArtifactRefs now reject a non-record element with a coded failure instead of throwing a TypeError on property access — the result-entry shape check runs BEFORE the sort, because the comparator reads `path`. (2) Digest recompute is wrapped: a manifest or observation that cannot even be canonically serialized (e.g. an `adoptionRef: undefined` hand-built entry) is treated as unsealed rather than throwing out of the builder. (3) An authored path that case-collides with a different inherited path is refused (two declarations one filesystem could merge are one path).\nCOMMIT 99f5898 `feat(runner): clean workspace foundation`, explicit pathspec, 18 files, no bare commit. Lockfile ordering honored: skills package.json committed at f4cdba6 and core at 16334bd before this commit, `pnpm install` re-run (already up to date), and every importer block in pnpm-lock.yaml now resolves to a package.json in this commit or an ancestor. `git show --stat` lists exactly the 17 owned/scaffold paths plus pnpm-lock.yaml; nothing foreign was staged. Fresh gate after the commit: focused typecheck + test exit 0 (106/106); repo regression 71 files, 892 passed, 1 skipped.",
+      "startedAt": "2026-08-07T15:35:17.772Z",
+      "completedAt": "2026-08-07T15:39:08.032Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/runner/src/artifacts/**, scope/**, workspace/**. Deps: none stated. New package subtree, no contention with anything live or queued.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +177,82 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.622Z",
-  "updatedAt": "2026-08-07T11:45:45.622Z"
+  "updatedAt": "2026-08-07T18:49:45.875Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:34:27.849Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T18:49:45.875Z",
+    "wallClockMs": 18918026
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-7da09526",
+    "worker-c8bf9f6b",
+    "qa-91cf5a2f"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:41:17.937Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Rename-over-existing for duplicate content — REJECTED after empirical verification on this machine (Node v24.16.0 win32): renameSync silently REPLACES a closed existing destination (would mask corruption at an address) and throws EPERM when a reader holds it open; protocol is check-exists -> verify-existing -> drop-temp, rename only onto nonexistent addresses. (2) writeFileSync-based staging — impossible: no fd, so fsync-before-rename is unimplementable; port is fd-oriented. (3) fsync(file) as the durability point — insufficient: rename metadata is not durable without POSIX parent-dir fsync / win32 reopen-and-flush; persistAfterRename is a first-class injectable fault boundary and the ref returns only after it. (4) Producer identity looked up from digests at result time — impossible (one-way); input-manifest entries carry mandatory typed producer (BASE | PREDECESSOR{attemptRef, epoch, adoptionRef}) per design 218. (5) Depending on @moe/testkit for the git adapter — rejected (phase0-scoped package); the execFile discipline is copied wholesale locally. (6) fast/random temp names — rejected (determinism rail); injected counter entropy. Plan verified by 2-agent workflow (design/fs skeptic, mechanics skeptic); 1 BLOCKER + 6 RISKs folded in.",
+    "codebaseInsights": "Design anchors: 932 (staging: written->flushed->renamed->verified->referenced; uncertain reference prevents deletion), 208/810/812 (ScopeResolutionObservation fields; case/symlink/junction/submodule/device/UNC/absolute/escape fail-closed; git attribution = changed paths + before/after trees + dirty/staged/untracked manifests), 218-219/485/491 (input manifest carries producer attempts/epochs/adoptions + inherited-path ownership; result manifest = input digest/tree, authored delta, result tree, inherited-vs-authored split; no foreign staged/untracked smuggling), 817 (clean-candidate rejection list: dirty, staged, untracked, symlinked, escaped, undeclared). testkit phase0-node-git.ts is the proven Windows git-spawn discipline: GIT_CONFIG_GLOBAL='NUL' on win32, safe.directory, GIT_OPTIONAL_LOCKS=0 (index.lock churn in this multi-agent tree), fsmonitor/untrackedCache off, buffer encoding + fatal UTF-8, porcelain v2 -z; maxBuffer overflow is a hard ERR_CHILD_PROCESS_STDIO_MAXBUFFER error (fail-closed) — map to stable code. Lockfile live state at planning time: packages/skills untracked + its importer already in working-tree pnpm-lock.yaml; packages/core not yet present; ordering rule in steps 1/7. tsBuildInfoFile must be runner.tsbuildinfo.",
+    "risks": "(1) Poisoned content address: post-rename verify failure MUST unlink/quarantine before returning, or the true content can never stage again — test asserts empty address. (2) Lockfile ordering: committing pnpm-lock.yaml while a foreign importer's package.json is uncommitted breaks --frozen-lockfile for everyone; runner commits LAST among current greenfield tasks. (3) Windows rename semantics differ from POSIX in both directions (silent replace vs EPERM-under-reader) — the exists-check-first protocol handles both; AV scanners can hold handles, so EPERM on rename maps to the verify-existing fallback, not a crash. (4) 'ignored' git class requires an explicit lsFilesIgnored call — default porcelain v2 cannot produce it; unclassifiable stays UNKNOWN, never clean. (5) observedAt is caller-supplied — validate format so a hostile timestamp cannot destabilize the observation digest; freshness is the consumer's re-observation duty (design 810), documented. (6) Deferred result-manifest fields (authored commit/delta, receipts, decisions, journal refs) are an EXPLICIT deferral vs design 219 — the contract comment must say so or QA can reject. (7) Shared dirty tree: skills/core/store tasks in flight; attribute red repo gates before acting; no scratch files (auto-commit sweep).",
+    "keyFiles": [
+      "packages/testkit/src/phase0-node-git.ts",
+      "packages/contracts/src/phase0-evidence-contract.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/skills/package.json",
+      "vitest.config.ts",
+      "pnpm-lock.yaml"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-07T15:26:36.295Z",
+    "escalatedAt": "2026-08-07T15:35:15.202Z"
+  },
+  "planApprovedAt": "2026-08-07T13:41:19.965Z",
+  "workStartedAt": "2026-08-07T13:52:38.783Z",
+  "reviewStartedAt": "2026-08-07T15:39:50.418Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  3 passed (3)\n      Tests  106 passed (106)\n   Start at  18:38:39\n   Duration  845ms (transform 121ms, setup 0ms, import 203ms, tests 355ms, environment 0ms)\n\nEXIT=0\n=== REPO GATE ===\n\n Test Files  71 passed (71)\n      Tests  892 passed | 1 skipped (893)\n   Start at  18:38:40\n   Duration  9.54s",
+    "reportedAt": "2026-08-07T15:39:50.418Z"
+  },
+  "filesModified": [
+    "packages/runner/package.json",
+    "packages/runner/tsconfig.json",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/artifacts/artifact-store.test.ts",
+    "packages/runner/src/artifacts/artifact-contract.ts",
+    "packages/runner/src/artifacts/artifact-store.ts",
+    "packages/runner/src/artifacts/artifact-node-fs.ts",
+    "packages/runner/src/canonical.ts",
+    "packages/runner/src/scope/scope-contract.ts",
+    "packages/runner/src/scope/scope-attribution.ts",
+    "packages/runner/src/scope/scope-observation.ts",
+    "packages/runner/src/scope/scope-git.ts",
+    "packages/runner/src/scope/scope-observation.test.ts",
+    "packages/runner/src/workspace/workspace-contract.ts",
+    "packages/runner/src/workspace/workspace-result-rules.ts",
+    "packages/runner/src/workspace/workspace-manifest.ts",
+    "packages/runner/src/workspace/workspace-manifest.test.ts"
+  ],
+  "completedAt": "2026-08-07T18:49:45.875Z",
+  "reviewCompletedAt": "2026-08-07T18:49:45.875Z",
+  "reviewSummary": "APPROVED. QA re-ran `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> exit 0, 3 files/106 tests (DoD 4). Repo gate `pnpm typecheck && pnpm test` -> 71 files/892 passed/1 skipped (skip foreign). Diff 99f5898: 18 files, 3587 insertions.\n\nDoD 1: scope test:79-96 is a 17-case hostile-path matrix, each asserting a DISTINCT code (absolute, UNC, drive+colon, backslash, dot-segment, device stem, trailing dot/space, non-NFC, surrogate, length), plus junction escape and submodule boundary. workspace test:318-380 covers ESCAPED, SYMLINKED, KIND_UNSUPPORTED, DIRTY, STAGED, UNTRACKED, ATTRIBUTION_UNKNOWN, UNDECLARED, FOREIGN both directions, INHERITED_PRODUCER_MISMATCH. 56 distinct RUNNER_* codes; zero toBeTruthy/toBeDefined suite-wide.\n\nDoD 2: workspace-manifest.ts:222-235 digests inputManifest.sha256 + scopeObservation.sha256 + baseIdentity + sorted authoredPaths + inherited/authored split; both upstream digests recomputed, distinct INVALID codes. Reproducible across orders/runs. Seam real - the workspace test calls the actual observeScope, so the two digest-input definitions cannot drift undetected.\n\nDoD 3: write->fsync->close->exists-check->(reuse|rename->persist->re-read verify); the exists-check dominates the single rename everywhere. Verify failure unlinks the address (:105-113). Faults injected at all 5 boundaries. Deletion needs ZERO_REFERENCES with NON-EMPTY scannedGenerations, else REFS_UNCERTAIN.\n\nRails: determinism grep zero hits; every module under 400, largest 272; commit touches only packages/runner/** plus the 6-line runner importer, every lockfile importer resolving to a package.json in the same commit; no scratch files.\n\nRecorded: 3587 net LOC exceeds the >400 bar. Approved because the per-file rail is met and the 3-area scope was fixed upstream, so the worker cannot act on \"split it\"; precedent 16334bd, f4cdba6. Governor: split greenfield package tasks at creation if that budget must bind."
 }

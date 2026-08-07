@@ -14,13 +14,130 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Treat the existing command-decision suites as immutable characterization before moving code: preserve accepted effects, expected-version rejection audit, identical replay, different-request idempotency conflict, derived-ID/receipt/audit namespace collision, concurrent duplicate/conflicting process races, post-effect rollback, startup tamper detection, project scope, and COMMIT/rollback ambiguity assertions exactly as written. Do not edit, skip, loosen, or reorder those tests; they already exercise the observable branches and this refactor introduces no new behavior.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Characterization baseline locked, zero test edits. Recorded HEAD blob hashes for the five command-decision/ambiguity suites + helpers + race worker so any drift is mechanically detectable: concurrency 60238d6, store 3f90612, integrity 5af7de1, scope 2e3b821, ambiguity 34a6389, helpers 5b22610, race-worker 683a2e3, decision-ledger.ts 894f1a4. Enumerated observable branches across the 5 suites (28 `it` cases): accepted effects, stale/future rejection audit, replay, request-identity binding, principal-scope isolation, length-framed composite keys, proposal-field non-inspection, blob copy/limits, durable event collision, post-effect rollback on both branches, v1 migration guards, redacted audit normalization, startup tamper + tombstone deletion, reserved namespace, project binding/transplant/case-exactness, and the four COMMIT/rollback ambiguity classifications. Verified every symbol the split will reference actually exists: protected ancestors requireOpen/readOperation/readSnapshotOperation/assertAggregateTail/assertDurableProjectBinding/normalizeOperationalError/poison/requireStoredVersion (store-runtime.ts), loadReceipt+validateAllReceipts (event-read-materialization.ts:61,235), writeCommitEffects (event-ledger.ts:299), loadCommandDecisionByKey/validateAllCommandDecisions/validateReservedDecisionNamespace (decision-read-model.ts:93,139,154); plus store-input/store-digests/store-internals/store-rows export lists. Bridge shim convention confirmed: exactly `export * from \"./<name>.ts\";`. Baseline gate run fresh: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> 18 files / 112 tests passed.",
+      "startedAt": "2026-08-07T13:36:29.368Z",
+      "completedAt": "2026-08-07T13:37:49.797Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create `decision-ledger-canonical.ts` with its one-line `.js` bridge for deterministic request/decision materialization only. Extract narrow typed helpers that snapshot the expected-version request and decision metadata/proposal, derive request/decision/receipt/audit identities, build accepted or rejected canonical effect/result fields, construct the exact pending StoredCommandDecision/SQL bind values, and compute/finalize its decision digest. Preserve one-time hostile-byte snapshots, version constants, field order and null/empty distinctions, rejectionAuditPayload and expectedVersionConflictResultBytes bytes, PENDING_EFFECT_SHA256 compare-and-set semantics, exact stable errors, and no caller-owned mutable aliases; all database writes remain invoked inside the caller's transaction.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/decision-ledger-canonical.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/decision-ledger-canonical.js",
+        "packages/store/src/decision-ledger-record.ts",
+        "packages/store/src/decision-ledger-record.js"
+      ],
+      "note": "PLAN DEVIATION (recorded per epic rail + `convention-contracts-250-line-splits`): the single planned `decision-ledger-canonical.ts` measured ~303 honest lines, over the <=250 rail, so it is split at a real seam into two owned `decision-ledger-*` paths, both with one-line `.js` bridges:\n\n- `decision-ledger-canonical.ts` (198) — request/effect canonicalization. `snapshotDecisionRequest`, `identifyDecisionRequest` (requestSha256 -> decisionId -> receiptCommandId, original order), `snapshotDecisionInputMetadata`, `snapshotDecisionProposal`, `commitAcceptedDecisionEffect`, `commitRejectedDecisionEffect`, private `rejectionAuditCommitInput`. Effect writes take a narrow `DecisionEffectContext` (`assertAggregateTail`, `writeCommitEffects`) so every database write is still invoked by the caller inside its own transaction.\n- `decision-ledger-record.ts` (183) — canonical row persistence. Both SQL statements, `writeCanonicalDecision`, private `insertPendingDecision` / `pendingStoredDecision`, over a narrow `DecisionRecordContext { prepare }`.\n\nPreservation evidence:\n- Both SQL templates proven byte-identical to HEAD, not eyeballed: extracted every `` .prepare(`...`) `` body from `git show HEAD:packages/store/src/decision-ledger.ts` and every `` = `...` as const `` from the new module, compared as strings -> 2/2 MATCH and 2/2 head templates covered.\n- `identifyDecisionResult` still computed exactly once and reused by both the insert bind and the pending record (no double digest).\n- Rejected branch keeps original statement order: aggregateId -> eventId -> `assertAggregateTail !== 0` STORE_CORRUPT throw -> payload -> commit input -> `writeCommitEffects` -> `expectedVersionConflictResultBytes`. `writeCommitEffects` is bound to a named `const receipt` rather than left as an object-literal property so the ordering is explicit, not dependent on property-evaluation order.\n- 29 insert bind values and all 29 `pendingStoredDecision` fields kept in original positional/field order; `PENDING_EFFECT_SHA256` compare-and-set and the `changes !== 1` STORE_UNAVAILABLE message unchanged; shared `EMPTY_BYTES` constant reused; `businessEventIds: []` / `outboxMessageIds: []` empty-vs-null distinctions unchanged; no caller-owned mutable alias retained.\n- Scope and reserved-namespace checks deliberately NOT moved here — they stay in the transaction between snapshot and identity derivation (step 4 owns that order), so an `INVALID_INPUT` reserved-namespace rejection cannot be preempted by digest work.\n\n`pnpm --filter @moe/store typecheck` exits 0. tsconfig `include: [\"src/**/*.ts\"]` confirmed, so both new modules are typechecked even before they are wired in.",
+      "startedAt": "2026-08-07T13:37:50.565Z",
+      "completedAt": "2026-08-07T13:42:04.214Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create `decision-ledger-replay.ts` with its one-line `.js` bridge, exporting an internal DecisionReplayStore that extends DecisionReadModelStore and owns only locked historical reconciliation. Move reconcileHistoricalDecision verbatim in behavior: BEGIN IMMEDIATE, load by composite key, request-digest equality/IdempotencyConflictError, ROLLBACK before REPLAYED response, missing-decision error propagation, rollback AggregateError/STORE_UNAVAILABLE detail, and operational error normalization. Keep it protected for the transaction subclass and introduce no package-root export.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-ledger-replay.ts",
+        "packages/store/src/decision-ledger-replay.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-replay.ts",
+        "packages/store/src/decision-ledger-replay.js"
+      ],
+      "note": "`decision-ledger-replay.ts` (55 lines) + one-line `.js` bridge. Exports `DecisionReplayStore extends DecisionReadModelStore` holding only `protected reconcileHistoricalDecision`. No package-root export (`index.ts` untouched); no other module imports it yet.\n\nVerbatim move proven mechanically, not by eye (per `mem:gotcha-verbatim-move-refactor-proof`): diffed `git show HEAD:packages/store/src/decision-ledger.ts | sed -n '406,445p'` against the method extracted from the new file, normalizing exactly one pre-declared delta (`protected` <- `private` on the signature, the visibility widening the plan requires for the transaction subclass). `diff -u` produced zero hunks — VERBATIM-MATCH. Indentation is unchanged because the method stays a 2-space class member.\n\nTherefore preserved by construction: BEGIN IMMEDIATE with `normalizeOperationalError(error, \"begin replay reconciliation transaction\")`; `assertDurableProjectBinding` then `loadCommandDecisionByKey`; `IdempotencyConflictError(key)` only when a historical row exists AND its `requestSha256` differs; explicit `ROLLBACK` *before* returning `toCommandDecisionResponse(historical, \"REPLAYED\")`; `throw missingDecisionError` when no history is found; the `isTransaction`-guarded rollback that on failure poisons and raises STORE_UNAVAILABLE \"replay reconciliation could not release its read lock\" with `AggregateError([error, rollbackError])`; `DurableStoreError` passthrough ahead of `normalizeOperationalError(error, \"reconcile command replay\")`.\n\n`pnpm --filter @moe/store typecheck` exits 0.",
+      "startedAt": "2026-08-07T13:42:04.555Z",
+      "completedAt": "2026-08-07T13:42:40.556Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Create `decision-ledger-transaction.ts` with its one-line `.js` bridge, exporting an internal DecisionTransactionStore over the replay layer. Move commitExpectedVersionDecision while preserving exact order: open/project checks; request snapshot/scope/reserved namespace; preflight project binding + historical + aggregate tail; locked replay on history or snapshot failure; proposal precomputation only for a matching preflight version; BEGIN IMMEDIATE; authoritative binding/history/ID/receipt/tail rechecks; exactly one accepted business-effect or rejected audit receipt; canonical decision insert/digest finalize; COMMIT; and response mode. Preserve race winner behavior, SQL and effect write order, exact codes/messages, commitAttempted/isTransaction ambiguity detection, rollback aggregation, poison-on-unknown, DurableStoreError passthrough, and generic operational normalization.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-ledger-transaction.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-ledger-transaction.js",
+        "packages/store/src/decision-ledger-canonical.ts"
+      ],
+      "note": "`decision-ledger-transaction.ts` (201) + one-line `.js` bridge exports `DecisionTransactionStore extends DecisionReplayStore` with the public `commitExpectedVersionDecision`. Not exported from `index.ts`.\n\nOrder preserved exactly as specified: `requireOpen` -> PROJECT_SCOPE_REQUIRED -> `snapshotDecisionRequest` -> PROJECT_SCOPE_MISMATCH (same JSON.stringify message) -> reserved-namespace `invalidInput` -> `identifyDecisionRequest` -> `readOperation(\"preflight expected-version decision\")` doing `assertDurableProjectBinding` + `loadCommandDecisionByKey` + `assertAggregateTail` -> preflight-history locked replay carrying the STORE_CORRUPT \"disappeared between preflight and locked replay\" error -> metadata snapshot with its own locked-replay catch -> `planDecision` (proposal precomputed only when preflight version matches; failure captured, not thrown) -> BEGIN IMMEDIATE -> under the lock: `assertDurableProjectBinding`, history recheck / IdempotencyConflictError, `assertDecisionNamespaceFree` (decision_id collision STORE_CORRUPT then loadReceipt DURABLE_ID_CONFLICT), `assertAggregateTail` recheck, exactly one accepted-effect OR rejected-audit branch, `writeCanonicalDecision`, COMMIT, response mode.\n\nAmbiguity semantics kept intact: both COMMIT sites go through `commitAndRespond`, which sets `commitAttempted = true` BEFORE `exec(\"COMMIT\")` and stays inside the try, so a COMMIT that succeeds without acknowledgement is still caught. `commitAttempted` lives on a small mutable `DecisionAttempt` holder so both call sites and the catch observe one value. `classifyDecisionFailure` computes `commitAttempted && !isTransaction` BEFORE attempting rollback, then poisons and returns OUTCOME_UNKNOWN with `AggregateError(causes)` (1 cause when rollback succeeded, 2 when it failed), then DurableStoreError passthrough, then `normalizeOperationalError(error, \"commit expected-version decision\")`. It returns rather than throws so the single `throw` stays at the catch site; no code path is skipped.\n\nSubtleties handled deliberately:\n- `effectContext()` is a side-effect-free closure bundle, so `lockedDecisionProposal(plan)` throwing a stored `proposalFailure` still precedes any database write.\n- Accepted/rejected selection uses explicit if/else with a named `effect`, not argument-position evaluation, so effect-write ordering is not implicit.\n- The colliding-ID query string is hoisted to `COLLIDING_DECISION_ID_QUERY` byte-identical to the HEAD inline literal.\n\nSecond deviation from the literal plan, same <=250 driver: `DecisionPlan`, `planDecision`, and `lockedDecisionProposal` were placed in `decision-ledger-canonical.ts` (236) rather than the transaction module. They are pure proposal materialization, which is canonical's stated job, and this leaves the transaction module holding control flow only. Without the move the transaction module landed at exactly 250 with no headroom.\n\n`pnpm --filter @moe/store typecheck` exits 0. All four new production modules: canonical 236, record 183, replay 55, transaction 201.",
+      "startedAt": "2026-08-07T13:42:40.917Z",
+      "completedAt": "2026-08-07T13:45:32.122Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Reduce `decision-ledger.ts` to the compatibility composition layer: a thin DecisionLedgerStore subclass adding only validateStartup in the existing receipt -> command-decision -> reserved-namespace order, the unchanged DecisionLedgerCore interface, and createDecisionLedgerCore delegation. Preserve all current method names/signatures, bound method behavior, close/read/write delegation, project/durability constructor inputs, and package/module export surface; do not edit decision-read-model.ts, event-ledger.ts, sqlite-event-store.ts, or index.ts.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "note": "`decision-ledger.ts` reduced 539 -> 126 lines. It now holds only: the thin `DecisionLedgerStore extends DecisionTransactionStore` carrying the public constructor and `validateStartup`, the `DecisionLedgerCore` interface, and `createDecisionLedgerCore`.\n\nBoth retained sections proven verbatim against HEAD by diff, not by eye:\n- `DecisionLedgerCore` + `createDecisionLedgerCore` vs `git show HEAD:... | sed -n '449,539p'` -> zero hunks (TAIL-VERBATIM-MATCH). All 18 bound arrow members, their parameter lists, optional-argument forwarding, and the `Object.freeze` wrapper are unchanged.\n- The class vs HEAD lines 61-77 -> one real hunk, `extends DecisionReadModelStore` -> `extends DecisionTransactionStore`. The only other hunk is the sed window boundary (HEAD's excerpt trailed a blank line where the class continued; the new class ends at its brace). `validateStartup` keeps the receipt -> command-decision -> reserved-namespace order and the constructor still forwards all five project/durability inputs to `super`.\n\nUntouched as required: `decision-read-model.ts`, `event-ledger.ts`, `sqlite-event-store.ts`, `index.ts`. Inheritance is now DecisionReadModelStore -> DecisionReplayStore -> DecisionTransactionStore -> DecisionLedgerStore, so every inherited close/read/write method resolves through the same chain and no public signature moved.\n\nFull gate green with the split wired in: `pnpm --filter @moe/store typecheck` exits 0 and `pnpm --filter @moe/store test` reports 18 test files / 112 tests passed — identical to the pre-refactor baseline captured in step 1, with zero test edits.",
+      "startedAt": "2026-08-07T13:45:32.646Z",
+      "completedAt": "2026-08-07T13:46:31.840Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review over the seven owned paths: trace identical and conflicting requests in both preflight-before-winner and winner-before-lock interleavings; challenge hostile metadata/proposal bytes, reserved IDs, occupied derived IDs, accepted/rejected effect failures, insert/finalize failure, acknowledged and ambiguous COMMIT, rollback failure, close/busy errors, and replay digest mismatch; compare SQL, digest inputs, error text, response freeze/copy behavior, and startup order against HEAD; confirm no cycle or export/schema/policy drift. Use a cross-platform Node line counter to require every changed/new production or test source <=250 physical lines. Inspect the shared index, unstage foreign paths, commit only the seven explicit paths with a pathspec, and verify `git show --stat`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/decision-ledger-canonical.ts",
+        "packages/store/src/decision-ledger-canonical.js",
+        "packages/store/src/decision-ledger-record.ts",
+        "packages/store/src/decision-ledger-record.js",
+        "packages/store/src/decision-ledger-replay.ts",
+        "packages/store/src/decision-ledger-replay.js",
+        "packages/store/src/decision-ledger-transaction.ts",
+        "packages/store/src/decision-ledger-transaction.js"
+      ],
+      "note": "Adversarial review of nine owned paths (plan said seven; the two extra are the <=250 canonical/record split pair recorded in steps 2 and 4). Committed as 9c87dc6.\n\nRACE INTERLEAVINGS\n- Preflight-before-winner, identical request: preflight sees no history, precomputes the proposal, then loses the lock. Under BEGIN IMMEDIATE the history recheck finds the winner, digests match, and `commitAndRespond(attempt, historical, \"REPLAYED\")` sets commitAttempted before COMMIT. One legal durable decision, loser replays.\n- Same interleaving, conflicting request: `IdempotencyConflictError(plan.request.key)` thrown under the lock; classify sees commitAttempted false and a live transaction, rolls back cleanly, and passes the error through untouched.\n- Winner-before-lock: `preflight.historical !== null` routes to `reconcileHistoricalDecision` carrying the STORE_CORRUPT \"disappeared between preflight and locked replay\" error, which surfaces only if the row has since vanished.\n\nHOSTILE INPUT AND OCCUPIED IDENTITY\n- `rawInput` null/non-record/malformed still fails in `snapshotDecisionRequest` after `requireOpen` and the PROJECT_SCOPE_REQUIRED guard, before any digest work.\n- Reserved `targetAggregateId` returns `invalidInput` BEFORE `identifyDecisionRequest`, so INVALID_INPUT cannot be preempted by digest computation. `startsWith` keeps case-exactness.\n- Hostile metadata bytes route to locked replay; hostile proposal bytes are captured into `proposalFailure` and rethrown by `lockedDecisionProposal` only when the locked version still matches — if the version moved, the rejected branch runs and the stored failure is correctly never consulted, matching HEAD.\n- Caller bytes are snapshotted at most once on any path: `lockedDecisionProposal` uses `??`, so a precomputed proposal is reused rather than re-read.\n- decision_id collision -> STORE_CORRUPT, then receipt occupancy -> DURABLE_ID_CONFLICT, then aggregate tail; rejection-audit occupancy -> STORE_CORRUPT before the audit payload is even built.\n\nFAILURE AND AMBIGUITY PATHS\n- Effect-write, insert, and finalize failures all raise inside the transaction try; `changes !== 1` still yields STORE_UNAVAILABLE.\n- COMMIT succeeding without acknowledgement: commitAttempted true and `isTransaction` false -> poison + OUTCOME_UNKNOWN with a one-cause AggregateError. Rejected COMMIT that rolls back: `transactionEndedAfterCommitAttempt` is false, rollback succeeds, handle stays usable. Rollback failure: poison + OUTCOME_UNKNOWN with a two-cause AggregateError. The `commitAttempted && !isTransaction` value is still computed BEFORE the rollback attempt. `toCommandDecisionResponse` remains inside the try exactly as at HEAD, so post-COMMIT response failures classify identically.\n- Replay digest mismatch, rollback-before-REPLAYED, and the STORE_UNAVAILABLE read-lock detail are byte-verbatim (proven in step 3).\n\nMECHANICAL COMPARISONS VS HEAD (not eyeballed)\n- String-literal set diff across HEAD `decision-ledger.ts` vs the five production files: zero real messages lost, zero added. The four reported entries were regex artifacts spanning import statements, verified individually. Every DurableStoreError code/message, `\"command.expected-version-rejected\"`, `\"command decision position\"`, and the colliding-ID query survive verbatim.\n- Both SQL templates string-equal to HEAD (step 2). `reconcileHistoricalDecision` diff-clean modulo the one declared visibility change (step 3). `DecisionLedgerCore` + `createDecisionLedgerCore` diff-clean (step 5), so response freeze/copy and bound-method behavior are untouched; `validateStartup` order unchanged.\n- Import graph is a strict DAG: canonical (leaf) -> record; canonical/record/replay -> transaction; transaction -> ledger; replay -> decision-read-model. No cycle. Zero references to the new internals outside the four modules, and `index.ts`, `decision-read-model.ts`, `event-ledger.ts`, `sqlite-event-store.ts` are untouched — no export, schema, or policy drift.\n\nGATES\n- Cross-platform Node line counter (CRLF/LF safe, trailing-newline safe): ledger 126, canonical 236, record 183, replay 55, transaction 201; all four `.js` bridges exactly 1. LINE-GATE PASS.\n- Zero test edits: `git status --porcelain` over all store `*.test.ts`, `*test-helpers.ts`, `*.mjs` is empty.\n- Regression sweep beyond the task gate: full `pnpm test` -> 62 files, 662 passed, 1 skipped.\n- No debug/probe/scratch artifacts; all comparison temp files were written to `$TEMP` outside the repo and removed.\n\nCOMMIT HYGIENE\nIndex inspected before committing: exactly the eight new owned paths staged, no foreign entry to unstage. Committed by explicit pathspec (all nine paths, no bare `git commit`). `git show --stat` on 9c87dc6 lists exactly those nine files (+681/-415). The 30 foreign working-tree entries (`.codex/`, `.moe/`, `packages/core/`, `packages/skills/`, `pnpm-lock.yaml`) remain uncommitted and untouched.\n\nNoted, not fixed (no behavior impact): `classifyDecisionFailure` returns the error for the call",
+      "startedAt": "2026-08-07T13:46:32.240Z",
+      "completedAt": "2026-08-07T13:50:06.254Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "From `D:/projexts/moe-next`, run exactly `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. Preserve the fresh complete output and zero exit as the sole complete_task verification evidence; do not suppress race failures or modify existing tests to obtain green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-ledger.ts"
+      ],
+      "note": "Ran exactly `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` from D:/projexts/moe-next after the commit, fresh, nothing suppressed.\n\n```\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  16:50:15\n   Duration  1.15s (transform 2.91s, setup 0ms, import 4.55s, tests 3.65s, environment 1ms)\n\nFINAL_EXIT=0\n```\n\nIdentical file/test counts to the pre-refactor baseline captured in step 1 (18 files / 112 tests), including the multi-process duplicate and conflicting-request race suites, which were neither skipped nor retried. No existing test was edited to obtain green — every store `*.test.ts`, `*test-helpers.ts`, and `*.mjs` is byte-unchanged against HEAD.",
+      "startedAt": "2026-08-07T13:50:06.855Z",
+      "completedAt": "2026-08-07T13:50:22.899Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/store/src/decision-ledger.ts + new decision-ledger-*.ts. Deps: none. File-disjoint from sibling store tasks.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -28,5 +145,75 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.552Z",
-  "updatedAt": "2026-08-07T11:44:13.552Z"
+  "updatedAt": "2026-08-07T13:56:12.220Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:15:33.610Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T13:56:12.220Z",
+    "wallClockMs": 2438610
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "worker-7da09526",
+    "qa-200db8e3"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:18:32.529Z",
+  "planningNotes": {
+    "approachesConsidered": "Preserve the existing inheritance seam and turn decision-ledger.ts into a compatibility/factory facade over three focused internals: canonical record materialization, locked replay reconciliation, and the expected-version transaction. Rejected a free-standing service that duplicates DecisionReadModelStore/EventLedgerStore protected access. Rejected one generic helper because the 327-line transaction would remain unreviewable. Rejected modifying the existing large command-decision suites; they are the locked race/idempotency oracle and the refactor changes no behavior. New `.ts` internals require one-line `.js` bridges for Node strip-types runtime.",
+    "codebaseInsights": "decision-ledger.ts is 539 lines. DecisionLedgerStore extends DecisionReadModelStore, whose protected load/validation methods sit above EventLedgerStore.writeCommitEffects. The file's protected/public surface is DecisionLedgerCore, createDecisionLedgerCore, and the inherited core operations; callers do not import the concrete class. The commit flow preflights history and aggregate tail before metadata/proposal snapshotting, then rechecks every authoritative fact under BEGIN IMMEDIATE. Historical preflight and snapshot failures enter a separate locked replay reconciliation path so a concurrent winner is returned rather than lost.",
+    "risks": "Preserve exact preflight/lock/recheck ordering, one legal winner under duplicate/conflicting processes, composite-key versus derived-ID collision errors, rejection-audit IDs/payload, receipt and decision digest versions, pending-digest finalize update, and DECIDED/REPLAYED response modes. Commit acknowledgement loss and rollback failure must poison and return OUTCOME_UNKNOWN before generic busy normalization. Canonicalization must snapshot hostile input once and never retain caller-owned bytes. No new export, command kind, schema, SQL column, or policy. Every changed/new production or test source must be <=250 physical lines; all existing tests stay byte-unchanged.",
+    "keyFiles": [
+      "packages/store/src/decision-ledger.ts",
+      "packages/store/src/decision-read-model.ts",
+      "packages/store/src/event-ledger.ts",
+      "packages/store/src/store-digests.ts",
+      "packages/store/src/store-input.ts",
+      "packages/store/src/store-rows.ts",
+      "packages/store/src/command-decision-concurrency.test.ts",
+      "packages/store/src/command-decision-store.test.ts",
+      "packages/store/src/command-decision-integrity.test.ts",
+      "packages/store/src/store-commit-ambiguity.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-07T13:18:34.557Z",
+  "workStartedAt": "2026-08-07T13:36:29.368Z",
+  "reviewStartedAt": "2026-08-07T13:51:12.839Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  16:50:15\n   Duration  1.15s (transform 2.91s, setup 0ms, import 4.55s, tests 3.65s, environment 1ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-07T13:51:12.839Z"
+  },
+  "filesModified": [
+    "packages/store/src/decision-ledger-canonical.ts",
+    "packages/store/src/decision-ledger-canonical.js",
+    "packages/store/src/decision-ledger-record.ts",
+    "packages/store/src/decision-ledger-record.js",
+    "packages/store/src/decision-ledger-replay.ts",
+    "packages/store/src/decision-ledger-replay.js",
+    "packages/store/src/decision-ledger-transaction.ts",
+    "packages/store/src/decision-ledger-transaction.js",
+    "packages/store/src/decision-ledger.ts"
+  ],
+  "completedAt": "2026-08-07T13:56:12.220Z",
+  "reviewCompletedAt": "2026-08-07T13:56:12.220Z",
+  "reviewSummary": "APPROVED. Commit 9c87dc6, 9 owned paths, +681/-415 (net 266). 539-line decision-ledger.ts split into 5 modules.\n\nNOT a pure verbatim move unlike the sibling store splits - 466 -> 665 logic lines, real restructuring into narrow context interfaces. So a logic-line diff proves nothing here; the load-bearing evidence is the literal diff plus the untouched oracle suite.\n\nLITERAL DIFF old vs the 5 new modules: ZERO error messages, SQL templates or reason codes lost. Exactly 2 deltas, both benign:\n- LOST \"COMMIT\" x1 - HEAD had two identical call sites (155-156, 377-378), now one `commitAndRespond`. It still sets `commitAttempted = true` BEFORE `exec(\"COMMIT\")`. That ordering IS the lost-acknowledgement invariant; inverted, every ambiguous commit would misclassify.\n- ADDED \"disposition\" x1 - a type index, type-level only.\n\nAMBIGUITY CLASSIFIER line-for-line vs HEAD 381-402: `commitAttempted && !isTransaction` still computed BEFORE the rollback attempt (after it, every failure would look like a lost ack), guarded rollback with own catch, 1-vs-2 cause AggregateError, poison(), same OUTCOME_UNKNOWN text and order. Only change is `throw X` -> `return X` at the call site; every path returns a value, so no `throw undefined`.\n\nDoD2 ORACLE - untouched multi-process race suites all RUN and pass: \"serializes same-key replay/conflict and same-version competing commands\" (361ms, real multi-process), \"reconciles a committed decision after the writer exits before an acknowledgement\", plus OUTCOME_UNKNOWN and rejected-COMMIT-rollback. Zero test edits, verified in the commit AND the working tree.\n\nRAN MYSELF: `pnpm --filter @moe/store typecheck && test` -> exit 0, 18 files/112 tests, matching evidence and the pre-refactor baseline | repo excluding foreign untracked packages/core -> 61 files/648, exit 0.\n\nDoD3 PASS: 126/236/183/55/201, max 236 vs the 350 cap, all inside the 250 rail (was 539). Strict DAG, no cycles; 4 bridges 1 line each; consumers byte-unchanged."
 }

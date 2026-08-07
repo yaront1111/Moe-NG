@@ -1,0 +1,33 @@
+{
+  "id": "task-cefb2442deda44fcb0e62ca8bbbcd27b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph revision test fixture extraction",
+  "description": "Objective: bring the graph-revision test below the permanent file-size cap without changing its coverage. Deliverable: new packages/core/src/planning/graph-revision-test-fixtures.ts owns deterministic hashes, witnesses, state/command builders, and exact-error helpers; graph-revision-reducer.test.ts retains every existing test and assertion and is <=250 lines. Hard dependency: commit bcdc2f6. NOT in scope: production edits, new validation rules, renamed/skipped tests, or assertion weakening. Owned paths: packages/core/src/planning/graph-revision-reducer.test.ts and packages/core/src/planning/graph-revision-test-fixtures.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "All existing graph-revision test names and assertions remain in graph-revision-reducer.test.ts and execute exactly once.",
+    "The fixture module is deterministic, has no shared mutable state, and exports test-only helpers without changing production exports.",
+    "Both files are <=250 physical lines with no skip/only/todo or weakened checks.",
+    "The focused core typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only: preserve public types, stable error codes, check precedence, event/result ordering, deep freezing, and all observable reducer behavior.",
+    "Do not weaken, skip, rename, or delete behavioral assertions merely to make the split pass.",
+    "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
+    "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:12.133Z",
+  "updatedAt": "2026-08-07T19:56:12.133Z"
+}

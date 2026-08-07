@@ -1,0 +1,34 @@
+{
+  "id": "task-a602b3d4294a44aea1d9d173bf1fdaa7",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "StoredEvent domain schema version and projection commit seam",
+  "description": "Objective: give StoredEvent a domain schema version for later upcasters to dispatch on, and expose a commit seam that runs a caller-supplied apply inside the existing event transaction. Task B of a 2-way split of task-50874e67. Deliverable: a domainSchemaVersion field threaded through write and read paths, a PROJECTION_APPLY_FAILED code added to the closed DurableStoreErrorCode union, and a seam on the event transaction gated on COMMITTED disposition with the wrap at the invocation site. File map established during blocking analysis, use it rather than rediscovering: commit() body is in event-ledger-transaction.ts (event-ledger.ts is a facade needing no edit); STORED_EVENT_SELECT_COLUMNS is in read-page-queries.ts; the sole INSERT site is event-ledger-append.ts; sqlite-event-store.ts must thread seam options through its fixed one-arg commit over private #core. NOT in scope: the schema tables and migration (Task A), the projection fold, relay, or subscriptions. Hard dependencies: SQLite schema v3 projection tables and migration (Task A) — the columns must exist first. Owned paths: packages/store/src/store-contracts.ts, store-input*.ts, event-ledger-append*.ts, event-ledger-transaction*.ts, event-read-decode*.ts, read-page-queries.ts, sqlite-event-store.ts, one new seam test, and the event-read-model-contract.test.ts key-set edit. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "StoredEvent carries a domain schema version written on append and read back unchanged through every read path, sufficient for a later upcaster to dispatch on without guessing.",
+    "The event transaction exposes a commit seam that runs a caller-supplied apply inside the same transaction as the append, gated on COMMITTED disposition, proven by a test where a failing apply rolls the event back with PROJECTION_APPLY_FAILED.",
+    "PROJECTION_APPLY_FAILED is added to the closed DurableStoreErrorCode union and maps to truth and retryability like every other member; the union stays closed.",
+    "Existing tests pass with ONLY the forced key-set update in event-read-model-contract.test.ts, whose toStrictEqual pins the exact StoredEvent key set. No test is weakened or skipped. The focused store typecheck and test command exits 0 with only owned paths committed."
+  ],
+  "taskRails": [
+    "Task A must land first. The domainSchemaVersion column and projection tables have to exist before this threads through them.",
+    "Build the seam, not the feature. A projection fold, upcaster, relay, or subscription implemented here starves the downstream tasks and rebuilds the oversized task that was split.",
+    "A failed apply must roll back the event append. A partial write is never acceptable, no matter how green the tests are.",
+    "The one permitted test edit is the StoredEvent key set in event-read-model-contract.test.ts. Everything else passes unchanged.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-50874e678c054f62ae0ac0c9a5d397cb",
+  "priority": "CRITICAL",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T15:28:32.838Z",
+  "updatedAt": "2026-08-07T15:28:32.838Z"
+}

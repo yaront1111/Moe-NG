@@ -1,0 +1,33 @@
+{
+  "id": "task-5a95354855304c24a6af27538ab9e131",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph revision reducer decomposition",
+  "description": "Objective: reduce the graph-revision reducer below the permanent file-size cap by extracting result/error/state-clone responsibility. Deliverable: focused packages/core/src/planning/graph-revision-results.ts plus a <=250-line graph-revision-reducer.ts that preserves reduceGraphRevision, command/transition exports, rejection precedence, stable codes, event/version ordering, and frozen results. Hard dependency: commit bcdc2f6. NOT in scope: contract changes, new transitions, graph mutation rules, planning-run changes, or test rewrites. Owned paths: packages/core/src/planning/graph-revision-reducer.ts and packages/core/src/planning/graph-revision-results.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "reduceGraphRevision and GRAPH_REVISION_COMMAND_KINDS/GRAPH_REVISION_TRANSITIONS retain their existing signatures and observable values.",
+    "Stable errors, check precedence, compound version accounting, zero-state-change rejection, events, and deep-frozen results are unchanged.",
+    "Both production modules are <=250 physical lines and each has one named responsibility.",
+    "Existing graph hostile, lifecycle, concurrency, and invariant tests pass unchanged and the focused gate exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only: preserve public types, stable error codes, check precedence, event/result ordering, deep freezing, and all observable reducer behavior.",
+    "Do not weaken, skip, rename, or delete behavioral assertions merely to make the split pass.",
+    "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
+    "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:11.600Z",
+  "updatedAt": "2026-08-07T19:56:11.600Z"
+}

@@ -14,19 +14,209 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline attribution gate (do NOT skip). Run `git status --porcelain` and snapshot it, then run the task verification command FRESH: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. Concurrent task task-9dfd158bbdd5471f8b358eca75ccf23f (event read-model decomposition, worker-4dddabde) is editing event-read-model.ts / event-read-*.ts in this SAME shared tree, and a mid-refactor state was empirically observed red (ReferenceError in DecisionLedgerStore.loadReceipt via event-read-model.ts). If the baseline is red and every failure traces to their in-flight files (event-read-*.ts, event-read-model.ts), call moe.report_blocked with needsFrom that task and STOP — never start a refactor on a red, non-attributable baseline, and NEVER create a sibling worktree (epic rail forbids it). Only proceed once the baseline command exits 0. Also record `wc -l packages/store/src/decision-read-model.ts` (expected 553) and confirm sole importer is decision-ledger.ts (`grep -rn \"decision-read-model\" packages/store/src`).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts"
+      ],
+      "note": "Baseline attribution gate PASSED. Concurrent event-read task landed as commit b5a78b6 before this session, so the shared tree is no longer mid-refactor. git status --porcelain shows zero dirty packages/store paths (only .moe state + packages/contracts owned by other tasks). Fresh verification `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exited 0: 18 test files / 112 tests passed — exactly the expected green baseline. No report_blocked needed. wc -l packages/store/src/decision-read-model.ts = 553 (matches plan). Sole TS importer confirmed: decision-ledger.ts:59 (`import { DecisionReadModelStore } from \"./decision-read-model.js\"`), plus its own committed shim decision-read-model.js. Verified ancestor signatures for the ctx: store-runtime.ts:104 requireStoredVersion&lt;const Version extends string&gt;(row, column, expected): Version; store-runtime.ts:119 assertAggregateTail(aggregateId: string): number; event-read-materialization.ts:61 loadReceipt(commandId, validateAggregateTail = true, liveBindingAlreadyValidated = false): StoredReceipt | null; event-read-decode.ts:70 protected page&lt;Item, Cursor&gt;. Sibling shim convention confirmed (event-read-decode.js = `export * from \"./event-read-decode.ts\";`).",
+      "startedAt": "2026-08-07T12:40:28.524Z",
+      "completedAt": "2026-08-07T12:41:09.640Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract decision-read-sql.ts (+ committed shim decision-read-sql.js containing exactly `export * from \"./decision-read-sql.ts\";`). Move SQL text out of decision-read-model.ts into exported constants: (1) one shared 30-column SELECT column-list constant — the by-key (current lines ~139-176) and by-position (~182-222) SELECT bodies are byte-identical except the WHERE line (verified), so compose both statements from the shared list + distinct WHERE; (2) candidate-page SQL for readCommandDecisionsAfter (keeps interpolating DECISION_DECODED_BYTES_SQL from ./read-page-queries.js); (3) rejection-audit-event SELECT (domain_events by event_id); (4) reserved-namespace validation SQL (the big GLOB 'moe-internal:*' UNION query); (5) startup-scan SQL (SELECT decision_position ORDER BY). Pure constants, zero logic, no behavior change: resulting SQL strings must be functionally identical (same columns, clauses, parameter order). Update decision-read-model.ts imports; NodeNext requires the `./decision-read-sql.js` specifier. tsconfig has noUnusedLocals + verbatimModuleSyntax: prune imports that became unused and use `import type` for type-only imports. Typecheck must pass before completing the step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-sql.ts",
+        "packages/store/src/decision-read-sql.js"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-read-sql.ts",
+        "packages/store/src/decision-read-sql.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-read-sql.ts",
+        "packages/store/src/decision-read-sql.js",
+        "packages/store/src/decision-read-model.ts"
+      ],
+      "note": "Extracted decision-read-sql.ts (107 lines) + committed shim decision-read-sql.js (`export * from \"./decision-read-sql.ts\";`, matches the event-read-*.js convention). All 6 SQL constants are pure text, zero logic: STORED_COMMAND_DECISION_SELECT_COLUMNS (shared 30-column list), COMMAND_DECISION_BY_KEY_QUERY, COMMAND_DECISION_BY_POSITION_QUERY (both composed from the shared list + their distinct WHERE), COMMAND_DECISION_CANDIDATE_PAGE_QUERY (still interpolates DECISION_DECODED_BYTES_SQL from ./read-page-queries.js), REJECTION_AUDIT_EVENT_QUERY, COMMAND_DECISION_POSITION_SCAN_QUERY, RESERVED_DECISION_NAMESPACE_QUERY. Went beyond \"functionally identical\" and proved BYTE identity for the two composed statements: ran the module under `node --experimental-strip-types` and string-compared against the literal pre-refactor template — `byKey identical: true`, `byPosition identical: true`. (First draft put the interpolation on its own line, which injected an extra blank line after SELECT; caught and fixed before completing.) The other four constants were moved character-for-character at their original indentation. DECISION_DECODED_BYTES_SQL import moved out of decision-read-model.ts into decision-read-sql.ts (noUnusedLocals would have flagged it otherwise). decision-read-model.ts: 553 -&gt; 441 lines. Verified: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exit 0, 18 files / 112 tests, zero test edits.",
+      "startedAt": "2026-08-07T12:41:11.762Z",
+      "completedAt": "2026-08-07T12:43:12.777Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract decision-read-decode.ts (+ shim decision-read-decode.js). Move the mapCommandDecision body (current lines ~224-487, ~264 lines) VERBATIM into a standalone function with signature `decodeStoredCommandDecision(row: Record<string, unknown>, ctx: DecisionDecodeContext, liveBindingAlreadyValidated = false): StoredCommandDecision`. CRITICAL (adversarial-verify finding): liveBindingAlreadyValidated stays an EXPLICIT parameter, never baked into ctx — it threads into ctx.loadReceipt(receiptCommandId, true, liveBindingAlreadyValidated) exactly as today; it is `true` only on the paging path and `false` on the by-key and startup-scan paths, and the flag gates assertLiveProjectBinding inside loadReceipt — baking either value in silently changes corruption-check semantics in a way NO existing test observes. DecisionDecodeContext (exact inventory, verified complete): { projectId: string | null; requireStoredVersion; loadReceipt; assertAggregateTail; loadRejectionAuditRow(auditEventId): Record<string, unknown> | undefined }. The class builds ctx with arrow closures (e.g. `(...a) => this.loadReceipt(...a)`) — legal for protected members inside the class (verified with repo tsc 7.0.2), and late-binds through the prototype chain so the concurrent event-read refactor cannot stale-snapshot it. Preserve every DurableStoreError code, message string, and CHECK ORDER byte-for-byte — tests match only codes, so verbatim movement is the sole guard; do not reword or reorder anything. Type-only imports via `import type`. Module will land ~320-345 lines: keep comments lean, hard ceiling 350. mapCommandDecision in the class becomes a thin private delegation (or is inlined into its two callers). Typecheck must pass before completing the step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-decode.js"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-decode.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-decode.js",
+        "packages/store/src/decision-read-model.ts"
+      ],
+      "note": "Extracted decision-read-decode.ts (319 lines, under the 350 ceiling) + shim decision-read-decode.js. Exports `decodeStoredCommandDecision(row, ctx, liveBindingAlreadyValidated = false): StoredCommandDecision` and the `DecisionDecodeContext` interface with exactly the 5 verified members: projectId, requireStoredVersion, loadReceipt, assertAggregateTail, loadRejectionAuditRow.\n\nCRITICAL constraints honored: liveBindingAlreadyValidated is an explicit third PARAMETER, never baked into ctx, and threads unchanged into `ctx.loadReceipt(receiptCommandId, true, liveBindingAlreadyValidated)`. The class builds ctx via `decisionDecodeContext()` returning arrow closures over the protected ancestors, so every call late-binds through the prototype chain. requireStoredVersion is declared as a generic arrow (`&lt;const Version extends string&gt;`) so the literal version types still flow into the StoredCommandDecision literal fields.\n\nVerbatim-move proven MECHANICALLY, not by eye: diffed `git show HEAD:...decision-read-model.ts | sed -n '228,485p'` (normalized: dedent 2, this.-&gt;ctx.) against the new function body. The diff has exactly ONE hunk — the inline rejection-audit SQL replaced by `ctx.loadRejectionAuditRow(auditEventId)` (that SQL moved to decision-read-sql.ts in step 2). Every DurableStoreError code, every message string, and the full check order are otherwise byte-identical; no reordering, no rewording, no `any`.\n\ndecision-read-model.ts: 441 -&gt; 185 lines; mapCommandDecision is now a thin private delegation. Pruned 20 imports that went unused (all store-digests, the 6 version constants, EXPECTED_VERSION_DECISION_COVERAGE, and 8 store-rows helpers) to satisfy noUnusedLocals; DecisionDecodeContext imported via `import type` for verbatimModuleSyntax. Verified: typecheck exit 0, tests 18 files / 112 passed, zero test edits.",
+      "startedAt": "2026-08-07T12:43:15.719Z",
+      "completedAt": "2026-08-07T12:45:47.070Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extract decision-read-pages.ts (+ shim decision-read-pages.js) and slim the class. Page-materialization helper `materializeDecisionCursorPage({ candidates, safeLimit, safeDecodedByteLimit, loadByPosition })` wrapping: selectReadPagePrefix, per-cursor loadByPosition with the disappeared-row STORE_CORRUPT error (exact message preserved), assertReadPageCursors, and nextCursor derivation (items.at(-1) decisionPosition). CRITICAL (adversarial-verify finding): the helper must execute ENTIRELY inside the existing readSnapshotOperation closure — candidate query, per-position loads, and cursor assertion share one BEGIN DEFERRED snapshot; splitting them across the boundary changes concurrency semantics invisibly to the single-connection test suite. The helper returns { items, hasMore, nextCursor } and the CLASS calls protected this.page(...) itself (page freezes items; keep that on the class). loadByPosition is a closure passing the literal `true` for liveBindingAlreadyValidated, exactly as decision-read-model.ts:116 does today. Then finish slimming decision-read-model.ts: keep the exact class surface — public getCommandDecision + readCommandDecisionsAfter (signatures, defaults MAX_PAGE_DECODED_BYTES and limit=100 unchanged), protected loadCommandDecisionByKey / validateAllCommandDecisions / validateReservedDecisionNamespace, private loadCommandDecisionByPosition — plus all scope checks (PROJECT_SCOPE_REQUIRED, PROJECT_SCOPE_MISMATCH) and input validation (requireNonnegativeBigInt, requirePageLimit, requirePageDecodedByteLimit) in their current order. Prune now-unused imports. Typecheck must pass.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-pages.js"
+      ],
+      "newFiles": [
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-pages.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-pages.js",
+        "packages/store/src/decision-read-model.ts"
+      ],
+      "note": "Extracted decision-read-pages.ts (67 lines) + shim decision-read-pages.js. `materializeDecisionCursorPage({ candidates, loadByPosition, safeDecodedByteLimit, safeLimit })` wraps selectReadPagePrefix, the per-cursor load with the verbatim `command decision ${position} disappeared during its cursor read` STORE_CORRUPT error, assertReadPageCursors, and the `items.at(-1)!.decisionPosition` nextCursor derivation. Returns { hasMore, items, nextCursor }; the CLASS still calls protected this.page(...) so page-level freezing stays on the class.\n\nSnapshot boundary preserved: the whole helper call — including the candidate query, which is passed inline as the `candidates` argument — sits inside the existing `this.readSnapshotOperation(\"read scoped command decisions\", ...)` closure, so candidate query + per-position loads + cursor assertion still share one BEGIN DEFERRED snapshot. Nothing moved outside it. loadByPosition is `(position) => this.loadCommandDecisionByPosition(position, true)` — the literal `true` for liveBindingAlreadyValidated, exactly as before.\n\nClass surface verified unchanged: public getCommandDecision + readCommandDecisionsAfter (limit = 100, maxDecodedBytes = MAX_PAGE_DECODED_BYTES); protected loadCommandDecisionByKey / validateAllCommandDecisions / validateReservedDecisionNamespace; private loadCommandDecisionByPosition. PROJECT_SCOPE_REQUIRED / assertLiveProjectBinding / PROJECT_SCOPE_MISMATCH checks and requireNonnegativeBigInt -&gt; requirePageLimit -&gt; requirePageDecodedByteLimit ordering are untouched. Only additions are two private helpers (mapCommandDecision delegation, decisionDecodeContext).\n\nPruned read-page-budget import down to requirePageDecodedByteLimit alone. Renamed the local from `page` to `materialized` so it does not read as shadowing `this.page`. Sizes now: decode 319, model 165, pages 67, sql 106 — all under 350. Verified: typecheck exit 0, tests 18 files / 112 passed, zero test edits.",
+      "startedAt": "2026-08-07T12:45:50.675Z",
+      "completedAt": "2026-08-07T12:47:12.359Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate (single concentrated step; mid-epic — focused scope only, full repo regression belongs to the epic's hardening task). (1) Size rail: `wc -l packages/store/src/decision-read-*.ts` — every production module under 350 lines (DoD). (2) Shim audit: every new non-test decision-read-*.ts has a committed sibling .js shim with exactly `export * from \"./<name>.ts\";` — the store entrypoint smoke test spawns a node:worker_threads Worker under --experimental-strip-types where .js specifiers resolve to literal on-disk files; a missing shim fails ONLY that test with ERR_MODULE_NOT_FOUND. (3) Run fresh: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` — must exit 0 with zero test-file edits (rail: do not weaken or rewrite tests; expected 18 files / 112 tests including store-runtime-entrypoint, decision-page-byte-budget, decision-page-max-record, command-decision-* suites). If the concurrent event-read task landed mid-work, re-run the same command against the updated shared tree — the arrow-closure ctx late-binds so their landed refactor must not require any change here; if it does fail on their landed code, that is a real integration break: report it, do not paper over it. This run is the complete_task verification evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-sql.ts"
+      ],
+      "note": "Verification gate PASSED, all three checks.\n\n(1) Size rail (DoD \"every resulting production module under 350 lines\"): decision-read-decode.ts 319, decision-read-model.ts 165, decision-read-pages.ts 67, decision-read-sql.ts 106. Largest is 319 — 31 lines of headroom. Original was 553.\n\n(2) Shim audit: all four non-test decision-read-*.ts have a sibling .js shim with exactly `export * from \"./&lt;name&gt;.ts\";` — decision-read-decode.js, decision-read-model.js (pre-existing), decision-read-pages.js, decision-read-sql.js. Enumerated programmatically rather than by memory. The guard test store-runtime-entrypoint.test.ts (\"loads the public TypeScript entrypoint in Node's strip-types runtime\", 87ms) passed, which is the test that would have thrown ERR_MODULE_NOT_FOUND on a missing shim.\n\n(3) Fresh run of `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exited 0: 18 test files / 112 tests passed, identical to the step-1 green baseline. Enumerated the executed files to confirm no suite silently dropped — all 18 present, including every suite the plan named: store-runtime-entrypoint, decision-page-byte-budget, decision-page-max-record, command-decision-store, command-decision-integrity, command-decision-concurrency, command-decision-scope, project-binding-contract, store-project-binding-tamper.\n\nZero test-file edits: `git status --porcelain -- 'packages/store/src/*.test.ts'` returns 0 lines. The concurrent event-read decomposition had already landed as commit b5a78b6 before this session began, so this work was built on and verified against their final code — no integration break; event-read-model-contract.test.ts passes alongside.",
+      "startedAt": "2026-08-07T12:47:15.729Z",
+      "completedAt": "2026-08-07T12:47:54.607Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review, then verbatim-move audit: side-by-side diff the old mapCommandDecision body (git show HEAD:packages/store/src/decision-read-model.ts) against decision-read-decode.ts — every DurableStoreError code AND message string AND check order identical; every SQL statement functionally identical to its original; liveBindingAlreadyValidated literal `true` present in the pages loader closure and default `false` elsewhere; no `any` introduced; ctx interface has exactly the 5 verified members, no more. Checklist: concurrent open handles (none added — helpers are pure/closure-based, no new prepare caching), null/empty row paths unchanged, no scratch/probe files anywhere under repo root (delete strays BEFORE the terminal moe call — wrapper auto-commit sweeps the dirty tree). Commit per epic rail 3 EXACTLY: `git status --porcelain`; if any staged path is foreign (especially event-read-*.ts from the concurrent worker), `git restore --staged -- <path>`; then `git add` + `git commit -- packages/store/src/decision-read-model.ts packages/store/src/decision-read-sql.ts packages/store/src/decision-read-sql.js packages/store/src/decision-read-decode.ts packages/store/src/decision-read-decode.js packages/store/src/decision-read-pages.ts packages/store/src/decision-read-pages.js` — never bare `git commit`, never -a; afterwards `git show --stat` must list only these 7 owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-sql.ts",
+        "packages/store/src/decision-read-sql.js",
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-decode.js",
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-pages.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-read-model.ts",
+        "packages/store/src/decision-read-sql.ts",
+        "packages/store/src/decision-read-sql.js",
+        "packages/store/src/decision-read-decode.ts",
+        "packages/store/src/decision-read-decode.js",
+        "packages/store/src/decision-read-pages.ts",
+        "packages/store/src/decision-read-pages.js"
+      ],
+      "note": "Adversarial self-review done, then committed as a92f1b5.\n\nVERBATIM-MOVE AUDIT (mechanical, not by eye):\n- All SIX SQL constants proven BYTE-IDENTICAL to their pre-split originals: loaded decision-read-sql.ts under node --experimental-strip-types, regex-extracted every `.prepare(`...`)` template from `git show HEAD:...decision-read-model.ts` (5 found), resolved the one ${DECISION_DECODED_BYTES_SQL} interpolation, and string-compared. candidate page / by key / by position / rejection audit / reserved ns all IDENTICAL; the position-scan plain string matched via JSON.stringify containment. Result line: `ALL SQL BYTE-IDENTICAL: true`.\n- Decode body diffed against HEAD (dedent 2, this.->ctx.): exactly ONE hunk, the expected `ctx.loadRejectionAuditRow(auditEventId)` substitution. Every DurableStoreError code, message string, and check order identical.\n- liveBindingAlreadyValidated: literal `true` in the pages loader closure (decision-read-model.ts:80-81), default `false` on by-key and startup-scan paths, threaded to ctx.loadReceipt at decision-read-decode.ts:166.\n- No `any`, no `as unknown`, no @ts-ignore/@ts-expect-error. Sole non-null assertion is the pre-existing `items.at(-1)!`, moved verbatim. ctx interface has exactly the 5 verified members.\n\nCHECKLIST FINDINGS:\n- Concurrency: no new shared state, no new prepared-statement caching, no new handles. Verified the snapshot boundary holds — the candidate query is evaluated as an argument INSIDE the readSnapshotOperation closure, so query + per-position loads + assertReadPageCursors still share one BEGIN DEFERRED. Confirmed readSnapshotOperation (store-runtime.ts:254-280) still wraps every throw from the moved code with its ROLLBACK/poison path, since the helper is called from within that closure.\n- Assumption checked, not assumed: decisionDecodeContext() snapshots projectId BY VALUE, which would be a staleness bug if the ctx were ever cached. Verified projectId is `protected readonly`, assigned once in StoreRuntime's constructor (store-runtime.ts:18, 32), so it cannot change per handle; and I build ctx fresh per decode call anyway, which is exactly equivalent to the original inline `this.projectId` read. Theoretical cost noted: 1 object + 5 closures allocated per decoded row (<=100 per page), negligible against per-row SQLite reads and SHA-256 digests. Chose late-binding correctness over hoisting.\n- Optional-parameter subtlety (theoretical, flagged for QA): DecisionDecodeContext types loadReceipt's 2nd/3rd params as optional and the closure forwards them positionally. If a future caller omitted them, JS passes `undefined`, which correctly triggers this.loadReceipt's own `= true` / `= false` defaults, so there is no semantic drift. Today decode always passes both explicitly.\n- Inputs: null/empty paths unchanged — the `row === undefined ? null : ...` guards stay on the class; empty candidates yields empty items and nextCursor null as before.\n- No scratch/probe files under the repo root: verification ran via `node -e` (writes nothing) and the single temp file lived in %TEMP%, outside the repo; deleted anyway.\n\nCOMMIT (epic rail 3): checked `git status --porcelain` first; nothing foreign was staged. Staged only the 7 owned paths, confirmed with `git diff --cached --name-only`, then `git commit -F - -- &lt;7 explicit paths&gt;` — no bare commit, no -a, no add -A, no push. `git show --stat` lists exactly the 7 owned paths. Deliberately left untouched: the foreign untracked packages/testkit/src/phase0-evidence-manifest-verifier.test.ts and the .moe/* wrapper state, which belong to other tasks.\n\n(First commit attempt failed harmlessly: I put `-m` after the `--` separator so git read it as a pathspec, and used PowerShell here-string syntax in a Bash shell. Nothing was committed; reran with a heredoc and `-F -`.)\n\nFinal fresh verification post-commit: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exit 0, 18 files / 112 tests.",
+      "startedAt": "2026-08-07T12:47:57.823Z",
+      "completedAt": "2026-08-07T12:50:56.645Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: feeding the second idle architect. Owns packages/store/src/decision-read-*.ts, file-level disjoint from the event-read-*.ts files worker-4dddabde holds in the same directory. Hard dependencies: none.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-60dbdd8963524eb1b2ebcf9864aee5ef",
+      "author": "governor-c713986e",
+      "content": "GOVERNOR NOTE — two invariants in this commit (a92f1b5) that are invisible in the diff and uncovered by tests. Recorded here for whoever edits packages/store/src/decision-read-* next, not as a defect in this task.\n\n1. `liveBindingAlreadyValidated` must remain an EXPLICIT third parameter of `decodeStoredCommandDecision`. It is `true` only on the paging path and `false` everywhere else. Folding it into the decode ctx reads as a harmless tidy-up but silently changes `assertLiveProjectBinding` corruption semantics.\n\n2. `materializeDecisionCursorPage` must remain called from INSIDE `readSnapshotOperation`. The candidate query, per-position loads, and cursor assertion share one `BEGIN DEFERRED` snapshot. Hoisting the call out changes concurrency semantics, and the single-connection test suite structurally cannot observe the difference.\n\nBoth were identified by worker-4dddabde during adversarial self-review and implemented correctly here — the task's own step notes flag each as a \"CRITICAL (adversarial-verify finding)\". This commit honors both. The exposure is future edits, which is why it is written down rather than fixed.\n\nProcess note, no action needed: worker-4dddabde surfaced these in #general, and I forwarded them to #qa at 12:56:50. qa-200db8e3 had already approved at 12:56:19 — 31 seconds earlier. The approval stands on its own evidence (pnpm --filter @moe/store typecheck && test exit 0, 18 files / 112 tests, zero test-file edits, and a commit containing exactly the seven owned decision-read-* paths). But QA did not have these two invariants when it reviewed, so they are not confirmed-checked, only correct-by-construction. If either constraint is ever violated in a later change, the regression will pass typecheck and the full store suite silently.\n\nGovernor takeaway: a worker's non-obvious findings need to reach QA before QA claims the task, not after. Handoff-to-review latency here was under four minutes and that was not fast enough.",
+      "timestamp": "2026-08-07T12:57:25.907Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.334Z",
-  "updatedAt": "2026-08-07T11:44:13.334Z"
+  "updatedAt": "2026-08-07T12:57:25.907Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T12:23:30.519Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T12:56:19.447Z",
+    "wallClockMs": 1968928
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-4dddabde",
+    "qa-200db8e3"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T12:34:25.747Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Split decode further into decode+integrity modules — rejected: pushes distinct-file count to 9 and the moved body is ~264 lines, fitting one module under the 350 DoD cap; an artificial boundary inside the disposition branches would force parameter explosion. (2) Standalone functions vs subclass layering — chose pure functions with a narrow ctx of arrow closures over protected ancestor methods; closures late-bind through the prototype chain, so the concurrent event-read refactor of the ancestor cannot stale-snapshot them (verified legal with repo tsc 7.0.2 strict flags). (3) Worktree isolation for the red shared-tree baseline — REJECTED: epic rail explicitly forbids sibling worktrees; instead step 1 is a baseline-attribution gate that blocks (moe.report_blocked, needsFrom task-9dfd158bbdd5471f8b358eca75ccf23f) if the store suite is red from foreign in-flight files. Plan was adversarially verified by a 3-agent workflow (ts-mechanics, behavior, ops) before submission; both BLOCKERs it found are baked into steps 1 and 3.",
+    "codebaseInsights": "decision-read-model.ts = 553 lines; sole importer decision-ledger.ts:59 (class chain StoreRuntime > EventReadModelStore > EventLedgerStore > DecisionReadModelStore > DecisionLedgerStore). mapCommandDecision body spans ~lines 224-487 (~264 lines); its complete this.* inventory (awk-verified): projectId, requireStoredVersion (x6), loadReceipt (x1, with liveBindingAlreadyValidated threading), assertAggregateTail (x1), database audit-row query (x1). The two 30-column SELECTs are byte-identical except WHERE. Tests import ONLY ./index.js + ./read-page-budget.js and assert error CODES not messages — zero test edits expected, and message/order preservation is guarded only by the verbatim-move diff audit. Store package has the same committed .js-shim pattern as scheduler (see mem:gotcha-scheduler-js-shims): store-runtime-entrypoint.test.ts spawns store-entrypoint-smoke-worker.mjs under --experimental-strip-types, resolving .js specifiers to literal shim files; missing shim = ERR_MODULE_NOT_FOUND in only that test. tsconfig: noUnusedLocals + verbatimModuleSyntax (prune unused imports, use import type); include src/**/*.ts covers new files automatically; index.ts needs NO change (internal modules never surface there).",
+    "risks": "(1) liveBindingAlreadyValidated flag: baking it into ctx instead of keeping it an explicit parameter silently changes live-binding corruption checks on the by-key/startup paths or adds per-row binding reads on the paging path — NO test observes either drift; keep it a parameter, literal true only in the pages loader closure. (2) Page snapshot boundary: candidate query + per-position loads + assertReadPageCursors must stay inside ONE readSnapshotOperation (BEGIN DEFERRED); splitting changes concurrency semantics invisibly. (3) Shared-tree concurrency: task-9dfd158b is actively editing the ancestor class's file; baseline may be red through no fault of this task — step 1 gates on attributable green, and step 5 re-verifies if they land mid-work. (4) Error messages/check order are NOT test-observable — verbatim move + step 6 diff audit is the only guard; rewording anything breaks the 'stable errors' task rail undetectably. (5) Wrapper auto-commit sweeps the dirty tree (mem:gotcha-moe-wrapper-autocommit) — no scratch files, explicit-pathspec commit only, foreign staged paths (event-read-*.ts) must be unstaged before committing.",
+    "keyFiles": [
+      "packages/store/src/decision-read-model.ts",
+      "packages/store/src/event-read-model.ts",
+      "packages/store/src/store-runtime.ts",
+      "packages/store/src/read-page-budget.ts",
+      "packages/store/src/read-page-queries.ts",
+      "packages/store/src/store-rows.ts",
+      "packages/store/src/decision-ledger.ts",
+      "packages/store/src/store-entrypoint-smoke-worker.mjs"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-07T12:34:27.780Z",
+  "workStartedAt": "2026-08-07T12:40:28.524Z",
+  "reviewStartedAt": "2026-08-07T12:52:45.771Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  15:51:26\n   Duration  1.31s (transform 2.33s, setup 0ms, import 3.49s, tests 3.27s, environment 1ms)\n\nPIPELINE_EXIT=0",
+    "reportedAt": "2026-08-07T12:52:45.771Z"
+  },
+  "filesModified": [
+    "packages/store/src/decision-read-model.ts",
+    "packages/store/src/decision-read-sql.ts",
+    "packages/store/src/decision-read-sql.js",
+    "packages/store/src/decision-read-decode.ts",
+    "packages/store/src/decision-read-decode.js",
+    "packages/store/src/decision-read-pages.ts",
+    "packages/store/src/decision-read-pages.js"
+  ],
+  "completedAt": "2026-08-07T12:56:19.447Z",
+  "reviewCompletedAt": "2026-08-07T12:56:19.447Z",
+  "reviewSummary": "APPROVED. Re-ran `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`: exit 0, 18 files / 112 tests.\n\nDoD1 replay/query compatible: verbatim move proven mechanically, not by eye. Extracted a92f1b5^ lines 228-486, normalized only indent + this.->ctx., diffed vs decision-read-decode.ts 67-318 = exactly ONE hunk, the pre-declared audit-query -> ctx.loadRejectionAuditRow. All DurableStoreError codes, messages and check order identical. All SIX SQL constants proven BYTE-IDENTICAL: loaded decision-read-sql.ts under node --experimental-strip-types, regex-pulled every .prepare template from HEAD~1, resolved DECISION_DECODED_BYTES_SQL, string-compared. BY_KEY/BY_POSITION/CANDIDATE_PAGE/AUDIT/RESERVED/SCAN all match, zero unmatched originals.\n\nDoD2 fail-closed boundaries: materializeDecisionCursorPage runs INSIDE readSnapshotOperation with the candidate query as an inline argument, so query + per-position loads + assertReadPageCursors share one BEGIN DEFERRED. liveBindingAlreadyValidated is still an explicit parameter: literal true only in the loadByPosition closure, default false on by-key and startup-scan. selectReadPagePrefix, requireStoredDecodedByteCount, requirePageLimit, requirePageDecodedByteLimit and the \"disappeared during its cursor read\" STORE_CORRUPT message preserved; page-byte-budget and page-max-record suites green.\n\nDoD3: decode 319, model 165, sql 106, pages 67 lines — all under 350. DoD4: exit 0 above.\n\nRails: class surface unchanged (public getCommandDecision/readCommandDecisionsAfter same signatures+defaults; protected loadCommandDecisionByKey/validateAll/validateReserved; private loadCommandDecisionByPosition). ZERO test files in commit. `git show --name-only a92f1b5` = only the 7 owned paths, nothing foreign staged. Three .js shims each exactly `export * from \"./<name>.ts\";`, entrypoint smoke test passes. No any/@ts-ignore/eslint-disable, no scratch files under packages/store. Diff +107 net (537 ins / 430 del), under the 400 cap."
 }

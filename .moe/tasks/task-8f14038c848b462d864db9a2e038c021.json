@@ -15,13 +15,179 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold @moe/core (one-time; coordinated in #architects — sibling core tasks must NOT re-scaffold). packages/core/package.json: { name: \"@moe/core\", version: \"0.0.0\", private: true, type: \"module\" (mandatory — TS1286 under NodeNext+verbatimModuleSyntax without it), exports: { \".\": \"./src/index.ts\" }, dependencies: { \"@moe/contracts\": \"workspace:*\" }, scripts: { typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/core/src\" } }. tsconfig.json mirrors packages/contracts (rootDir src, tsBuildInfoFile ../../node_modules/.cache/core.tsbuildinfo, types [node], include src/**/*.ts). src/index.ts placeholder — will export directly from area modules (convention: NO per-area index files). Run `pnpm install`; only git delta besides new files must be pnpm-lock.yaml. LOCKFILE CONTENTION RULE (task task-eca1a82 @moe/skills is WORKING in this same tree and also adds a lockfile importer block): before committing pnpm-lock.yaml at the end, check `git log --oneline -- packages/skills/package.json` — if the skills package.json is already committed, commit the lockfile normally (it will contain both importer blocks, both valid); if the skills importer block exists in your lockfile but packages/skills/package.json is NOT yet committed, coordinate in #general for the skills worker to land first (a lockfile referencing an uncommitted importer fails pnpm install --frozen-lockfile), and only escalate via moe.report_blocked if unresponsive. Do NOT run the package test script until the first test file exists (passWithNoTests:false exits 1). NO .js shims in @moe/core yet — deferred to the first raw-node consumer task (same documented deviation as @moe/skills). `pnpm --filter @moe/core typecheck` green before completing.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/package.json",
+        "packages/core/tsconfig.json",
+        "packages/core/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/core/package.json",
+        "packages/core/tsconfig.json",
+        "packages/core/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/package.json",
+        "packages/core/tsconfig.json",
+        "packages/core/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Scaffolded dependency-minimal @moe/core with NodeNext module settings, root-only export, @moe/contracts workspace dependency, and focused scripts. `pnpm install` added the core importer while preserving the concurrent uncommitted skills importer; no other lock delta. Fresh `pnpm --filter @moe/core typecheck` exits 0. Per contention rail the lockfile will not be committed until packages/skills/package.json lands.",
+      "startedAt": "2026-08-07T13:36:57.798Z",
+      "completedAt": "2026-08-07T13:37:39.640Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — src/project/project-reducer.test.ts. EXHAUSTIVE transition matrix: every (ProjectLifecycle state × project command/witness) cell asserted either allowed or rejected with the registry code + exact details — rejections use RuntimeError from @moe/contracts createRuntimeError, codes EXPECTED_VERSION_CONFLICT (details actualVersion/expectedVersion), IDEMPOTENCY_CONFLICT, ILLEGAL_TRANSITION (details aggregateKind/commandKind/sourceState) — NEVER an invented PROJECT_* namespace (createRuntimeError fails closed to UNKNOWN_ERROR for unregistered codes; read runtime-error-factory.ts + runtime-error-registry.ts FIRST for exact signatures/allowlisted detail keys; note RuntimeError deliberately carries NO free-form message — attacker bytes never reflected). Authorized matrix (design-cited, encode EXACTLY this): project.register only from nonexistent -> BOOTSTRAPPING (design 17.1 step 1); project.bind_repository BOOTSTRAPPING-ONLY, repeatable, records frozen repository observation, NO lifecycle change (design 1015-1016; READY/DEGRADED/QUIESCED reject ILLEGAL_TRANSITION — documented inference: design only authorizes it inside bootstrap); project.activate BOOTSTRAPPING -> READY requiring an activation witness whose typed fields reference store/driver, provider minimum profile, credentials, policy, signing key, artifact/backup paths, distribution manifests checks (design 1019) AND carry truthClass: RuntimeTruthClass — reducer rejects when truthClass is UNKNOWN or AGENT_REPORTED (rail: UNKNOWN never gains authority; activation requires DAEMON_VERIFIED or HUMAN_APPROVED); restore-quiesce witness READY|BOOTSTRAPPING -> QUIESCED with recoveryRequired: true facet on state (design 974 — the compound QUIESCED/RECOVERY_REQUIRED is lifecycle QUIESCED + boolean facet, NOT a fifth state); recovery-completion witness (recovery.complete, R3 decision, design 977) QUIESCED -> READY clearing recoveryRequired, truthClass HUMAN_APPROVED required. DEGRADED: NO entry and NO exit transitions exist anywhere in the design (doctor's DEGRADED at line 957 is doctor report vocabulary, not a project mutation) — the state stays REPRESENTABLE (it is in RUNTIME_LIFECYCLES.PROJECT) but UNREACHABLE, and every (DEGRADED, anything) cell rejects ILLEGAL_TRANSITION; contract comment flags this for a future design sync. Idempotency/version: every command carries commandId + expectedVersion; expectedVersion mismatch -> EXPECTED_VERSION_CONFLICT with ZERO state change (deep-equal before/after); reducers have NO replay branch — the store decision ledger owns replay/conflict (single-slot replay detection is provably wrong: ordering makes it unreachable and same-ID-different-bytes would misclassify CORE-I9 conflicts) — commandId is echoed verbatim into every event so the ledger can do its job (this is how 'idempotency inputs are represented'). Seeded-PRNG property tests (hand-rolled xorshift32, NO fast-check, NO Math.random): random command sequences never reach DEGRADED, never resurrect from an unauthorized cell, always deep-frozen results (deep isFrozen walk), same seed -> identical trace. Run focused command, confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/project/project-reducer.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/project/project-reducer.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/project/project-reducer.test.ts"
+      ],
+      "note": "Added the RED project contract suite: mechanically complete ProjectLifecycle × command-kind matrix, exact runtime error code/details, version/idempotency/truth-floor and witness validation boundaries, repeatable repository observations, deep-freeze checks, and seeded xorshift determinism/unreachability properties. Fresh `pnpm --filter @moe/core test` exits 1 solely because `./project-reducer.js` does not yet exist (1 failed file, 0 tests), confirming RED before production.",
+      "startedAt": "2026-08-07T13:37:47.543Z",
+      "completedAt": "2026-08-07T13:42:40.841Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — src/project/project-contract.ts + src/project/project-reducer.ts (each target <=250 lines, split before 400). project-contract.ts: import ProjectLifecycle states from RUNTIME_LIFECYCLES.PROJECT (do not redeclare the vocabulary); typed frozen command interfaces (register/bind_repository/activate) + witness interfaces (activation, restore-quiesce, recovery-complete) each carrying truthClass: RuntimeTruthClass and reference identifiers (IDs/digests as strings validated hex64 where digests) — witnesses are typed REFERENCES validated for shape and truth-class floor, never re-verified truth (daemon authority does that; absent/malformed/UNKNOWN-classed witness -> rejection, so unverifiable evidence never gains authority); ProjectState { projectId, owner, lifecycle, recoveryRequired: boolean, repositoryObservations: readonly frozen records, version: number } deeply frozen; event types (ProjectRegistered, RepositoryBound, ProjectActivated, ProjectQuiesced, ProjectRecovered) each echoing commandId. project-reducer.ts: pure (state | undefined, command) -> frozen { ok: true, state, events } | { ok: false, error: RuntimeError }; transition table as data (frozen map keyed by commandKind -> allowed source states) so the matrix is inspectable; no IO, no Date, no randomness; structuredClone-free immutable updates (spread + freeze). All step-2 matrix tests green; typecheck green (import type discipline).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-reducer.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/project/project-reducer.test.ts",
+        "packages/core/src/index.ts"
+      ],
+      "note": "Implemented the minimal project contract and pure reducer. It imports the closed lifecycle vocabulary, validates exact witness shapes and hex64 digests with truth floors, exposes an inspectable frozen transition table, echoes commandId on all events, delegates replay to persistence, and returns deeply frozen states/events/errors without mutating inputs. DEGRADED remains representable but unreachable; restore quiescence is explicitly an internal restore-controller input. Production files are 144 and 244 lines. Added RED/green coverage for missing and extra witness fields. Fresh typecheck plus focused test: exit 0, 1 file / 14 tests passed.",
+      "startedAt": "2026-08-07T13:42:57.518Z",
+      "completedAt": "2026-08-07T13:47:16.580Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red — src/goal/goal-reducer.test.ts. Exhaustive matrix over GoalLifecycle (RUNTIME_LIFECYCLES.GOAL) × commands/witnesses, same registry-code discipline as step 2. Authorized matrix (design line 278 + 1021, encode EXACTLY): goal.create -> DRAFT, requires project-READY witness reference (truthClass DAEMON_VERIFIED+) and carries typed REFERENCES budgetAccountId + planningRunId (allocated by the caller/daemon per design 1021 — the reducer records the references in GoalCreated, it does NOT model budget arithmetic; do not claim 'allocates nothing': the event shape must let the daemon honor design 1021 atomically); initial-graph-activation witness DRAFT -> EXECUTION_ENABLED (activeGraphRevisionRef required, exactly-one-active-revision represented as a single non-null reference field); goal.close with acceptance-closure witness EXECUTION_ENABLED -> CLOSING — witness typed fields MUST include completionNodeAcceptedRef, acceptanceClosureRef, obligationsHoldRef, noPendingDraftOrSupersession: true, AND noCurrentPreparationGeneration: true (design 278 + 666: entry into CLOSING refuses while a preparation generation is current), truthClass DAEMON_VERIFIED+; goal.close with zero-authority proof witness CLOSING -> COMPLETED (design 278 atomic proof; truthClass DAEMON_VERIFIED+); combined single-command EXECUTION_ENABLED -> CLOSING -> COMPLETED when BOTH witnesses present (design 278 sentence 'If that proof already holds, one command may record EXECUTION_ENABLED -> CLOSING -> COMPLETED in the same transaction' — emits both events); qualification-invalidation witness CLOSING -> EXECUTION_ENABLED (PROOF_INVALIDATED reference, design 278); goal.cancel DRAFT|EXECUTION_ENABLED|CLOSING -> CANCELLED with authorization witness (fences subordinate authority — reference only); goal.reopen_as_revision allowed ONLY from COMPLETED|CANCELLED — returns successor-goal creation data (new goalId reference, predecessor linkage, generation increment) and NEVER mutates the old goal (old state returned unchanged; contract comment cites the inference from design 278 placement after 'COMPLETED and CANCELLED are terminal' for future design sync). Scheduling control (orthogonal GOAL_SCHEDULING): goal.pause(PAUSE_AFTER_CURRENT_STEP|DRAIN_AND_PAUSE) and goal.resume(->RUNNING) allowed in DRAFT and EXECUTION_ENABLED (design 366: no lifecycle restriction, pause blocks planner claims which exist from DRAFT via the PlanningRun); REJECTED in CLOSING with ILLEGAL_TRANSITION (design 278's exhaustive CLOSING allowed-operation list omits pause/resume — documented decision), rejected in terminals; scheduling changes never change lifecycle and vice versa (assert independence). Terminality: every mutation against COMPLETED|CANCELLED rejects except reopen_as_revision. Stale expectedVersion -> EXPECTED_VERSION_CONFLICT, zero state change. Property tests (seeded xorshift32): unauthorized states unreachable, terminal absorption (once COMPLETED|CANCELLED, lifecycle never changes), deep-frozen everywhere, deterministic traces, and CLOSING can only exit to COMPLETED, EXECUTION_ENABLED, or CANCELLED. Confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-reducer.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/goal/goal-reducer.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-reducer.test.ts"
+      ],
+      "note": "Added the RED goal contract suite in one 286-line file: mechanically complete GoalLifecycle × command matrix; create/activation/close/combined-close/invalidation/cancel/reopen/pause/resume behavior; exact runtime errors; stale/idempotency/truth and closure-preparation gates; orthogonal scheduling; immutable successor data; seeded xorshift determinism and CLOSING exit constraints. Fresh `pnpm --filter @moe/core test` exits 1 solely because `./goal-reducer.js` does not exist; existing project suite remains 14/14 green.",
+      "startedAt": "2026-08-07T13:47:25.392Z",
+      "completedAt": "2026-08-07T13:49:44.444Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Green — src/goal/goal-contract.ts + src/goal/goal-reducer.ts (each target <=250, split before 400) + final src/index.ts exports. goal-contract.ts: GoalState { goalId, projectId, lifecycle, schedulingControl, graphEpoch: number (increments only via activation witness, 0 in DRAFT), activeGraphRevisionRef: string | null (non-null exactly when EXECUTION_ENABLED|CLOSING — assert as invariant), budgetAccountRef, planningRunRef, predecessorGoalRef: string | null, generation: number, version, recoveryFacets } deeply frozen; typed frozen commands/witnesses per step 4 with truthClass floors; events (GoalCreated, GoalExecutionEnabled, GoalClosing, GoalCompleted, GoalReopenedAsRevision, GoalCancelled, GoalSchedulingChanged, GoalQualificationInvalidated) echoing commandId. goal-reducer.ts: same pure/frozen discipline as project-reducer; transition table as inspectable frozen data; combined-close path emits GoalClosing + GoalCompleted in one result; reopen_as_revision returns { ok: true, state: <unchanged old state>, events: [GoalReopenedAsRevision], successor: <frozen successor draft creation data> } — successor is DATA for the caller to persist, the reducer never fabricates a second live aggregate. index.ts exports ONLY public surface from both areas (types via export type). All goal tests green; focused typecheck green. If any module crosses 400 lines split it (likely split point: witness validation into project-witness.ts / goal-witness.ts) and record via step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-reducer.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-validation.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-reducer.test.ts",
+        "packages/core/src/index.ts"
+      ],
+      "note": "Implemented the goal contract/reducer and root exports. Authorized lifecycle/scheduling transitions are frozen inspectable data; exact witness-shape/truth validation was split into focused 86-line goal-validation.ts so contract/reducer remain 214/238 lines. Combined close emits versions +1/+2 atomically; qualification invalidation is the sole CLOSING rollback; cancellation fences and clears active graph; terminal reopen returns frozen successor DATA with old state identical; every event echoes commandId. Added missing/extra proof and terminal-absorption assertions (test file 299 lines). Isolated strict NodeNext tsc over owned core files exits 0; isolated project+goal Vitest exits 0, 2 files/24 tests. Package-wide commands are temporarily red only from concurrent worker-4dddabde's unimplemented identity TDD files; coordinated via #general msg-017125456226 and did not touch them.",
+      "startedAt": "2026-08-07T13:49:56.966Z",
+      "completedAt": "2026-08-07T13:56:44.292Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification gate (single concentrated step; mid-epic — focused scope, full-repo regression belongs to the epic hardening task, but run the repo gate anyway since new packages can break root discovery): (1) `wc -l packages/core/src/**/*.ts` — every production module <=400 hard (target 250); (2) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 (this is the complete_task verification evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }); (3) `pnpm typecheck && pnpm test` — root vitest include packages/**/*.test.ts discovers the two nested test files (verify they appear in the run summary; nested dirs under src are covered by the glob); attribute any red to foreign in-flight work (skills/store tasks share this tree) before touching anything — report attribution in the completion note, never paper over; (4) grep production sources for Date.now|new Date|Math.random|process\\.|readFile|writeFile — must be ZERO hits (pure, deterministic, side-effect free per DoD); (5) run focused suite twice — identical results, `git status --porcelain` shows only owned paths + scaffold + pnpm-lock.yaml.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/goal/goal-reducer.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-invariants.test.ts",
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/project/project-validation.ts",
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-invariants.test.ts",
+        "packages/core/src/goal/goal-reducer.test.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-validation.ts"
+      ],
+      "note": "Verification plus independent adversarial review found and fixed two real lifecycle-core defects: successful reductions could freeze caller-owned nested state, and malformed aggregate state/numeric invariants were not fail-closed. Added RED invariant suites, split state/witness validation into focused modules, clone all borrowed nested state before freezing, return a frozen value-copy on reopen, validate exact aggregate shapes/facets/epochs/safe versions, and pin missing transition facets/truth floors. Scope grew only within owned project/** and goal/** to honor <=300 files. Fresh required command exits 0: 6 files/126 tests. Fresh root `pnpm typecheck && pnpm test` exits 0: 70 files, 852 passed/1 skipped. Purity grep ZERO; all production modules <=244 lines; focused lifecycle suite ran twice identically at 4 files/31 tests.",
+      "startedAt": "2026-08-07T13:56:57.079Z",
+      "completedAt": "2026-08-07T14:12:52.388Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra checks: (a) transition-matrix completeness — mechanically derive the tested (state, command) pair set in each test and assert it equals states×commands (no untested cell; the matrix test should fail if a new command is added without a row); (b) confirm NO invented error codes: grep src for createRuntimeError calls — every code literal must exist in RUNTIME_ERROR_CODES, and grep for PROJECT_\\w+|GOAL_\\w+ string literals used as codes -> zero; (c) confirm no reducer replay branch exists and commandId is echoed in every event type; (d) deep-isFrozen walk on a sample of every result/event shape; (e) DEGRADED unreachability: property-test trace logs show zero DEGRADED entries; (f) no scratch files under repo root (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths (expect concurrent skills/store files — leave them), then `git add` + `git commit -- packages/core/package.json packages/core/tsconfig.json packages/core/src/index.ts packages/core/src/project/project-contract.ts packages/core/src/project/project-reducer.ts packages/core/src/project/project-reducer.test.ts packages/core/src/goal/goal-contract.ts packages/core/src/goal/goal-reducer.ts packages/core/src/goal/goal-reducer.test.ts pnpm-lock.yaml` (lockfile ONLY per the step-1 contention rule — if the skills importer is present but their package.json uncommitted, coordinate first); `git show --stat` must list exactly the committed owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/package.json",
+        "packages/core/tsconfig.json",
+        "packages/core/src/index.ts",
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/project/project-reducer.test.ts",
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-reducer.test.ts",
+        "pnpm-lock.yaml"
+      ],
+      "modifiedFiles": [
+        "packages/core/package.json",
+        "packages/core/tsconfig.json",
+        "packages/core/src/index.ts",
+        "packages/core/src/project/project-contract.ts",
+        "packages/core/src/project/project-validation.ts",
+        "packages/core/src/project/project-reducer.ts",
+        "packages/core/src/project/project-reducer.test.ts",
+        "packages/core/src/project/project-invariants.test.ts",
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-validation.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-reducer.test.ts",
+        "packages/core/src/goal/goal-invariants.test.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Final adversarial review completed top-to-bottom plus three independent reviewer passes. Fixed caller-freeze aliasing, exact aggregate invariants, safe-integer overflow, terminal reopen concurrency versioning, recovery-facet cleanup, lineage/self-successor errors, symbol/non-enumerable/accessor aliasing, revoked/throwing proxy paths, and unknown runtime kinds via descriptor-value snapshots. Mechanical state×command matrices, event version/commandId, deep freeze, truth floors, DEGRADED unreachability, purity, error registry, and no-scratch checks are pinned. Production files <=247 lines and tests <=300. Explicit owned-path commits only: 16334bd (13 core paths) and 1f8f7e6 (core-only lock importer); foreign runner lock bytes were restored exactly and remain uncommitted. Fresh focused gate: 6 files/131 tests, exit 0. Fresh broader regression: 70 files, 857 passed/1 skipped, exit 0.",
+      "startedAt": "2026-08-07T14:13:03.693Z",
+      "completedAt": "2026-08-07T14:44:20.082Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/core/src/project/** and packages/core/src/goal/**. Deps: none stated. High unlock value — Planning graph lifecycle core and Bootstrap application services both depend on it.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +195,79 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.698Z",
-  "updatedAt": "2026-08-07T11:45:44.698Z"
+  "updatedAt": "2026-08-07T18:44:29.143Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:20:30.805Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T18:44:29.143Z",
+    "wallClockMs": 19438338
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-05d10803",
+    "qa-91cf5a2f"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:34:07.959Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Invented PROJECT_*/GOAL_* error namespaces — REJECTED after verification: runtime-error-registry.ts already mandates EXPECTED_VERSION_CONFLICT/IDEMPOTENCY_CONFLICT/ILLEGAL_TRANSITION with GOAL,PROJECT validSources and exact detail keys (aggregateKind/commandKind/sourceState); createRuntimeError fails closed to UNKNOWN_ERROR for unregistered codes, so a parallel namespace would collapse at the boundary. Core reuses the registry; granularity goes into allowlisted details. (2) Reducer-level idempotent-replay branch (lastAppliedCommandId) — REJECTED as provably broken: version check makes it unreachable, single slot misses delayed replays (design :735 requires the ORIGINAL result which a pure reducer cannot produce), and commandId-equality without request digest would misclassify CORE-I9 same-ID-different-bytes conflicts that decision-ledger.ts:150-157 handles via requestSha256. DoD 'idempotency inputs are represented' is satisfied by commandId carried on every command and echoed into every event; the store decision ledger is the sole replay authority. (3) DEGRADED transitions — verification proved NO design line authorizes any project-lifecycle mutation to/from DEGRADED (line 957 is doctor report vocabulary): state stays representable but unreachable, all cells reject, flagged for design sync. (4) fast-check dependency for property tests — rejected: hand-rolled seeded xorshift32 keeps zero new deps and full determinism. (5) Scaffold ownership — this is the FIRST packages/core task; scaffold included here and announced in #architects (msg-65670599736b) so 6 sibling core tasks don't re-scaffold. Plan verified by 2-agent adversarial workflow (design-fidelity vs D:/projexts/moes design doc, mechanics vs repo); 4 BLOCKERs folded in.",
+    "codebaseInsights": "RUNTIME_LIFECYCLES.PROJECT/GOAL/GOAL_SCHEDULING in @moe/contracts runtime-vocabulary.ts are the closed state vocabularies — import, never redeclare. RuntimeError (runtime-error-factory.ts) deliberately has NO message field (attacker bytes never reflected); details are allowlisted per code in runtime-error-registry.ts:101-109. Design transitions: Goal line 278 (closed lifecycle incl. combined one-command close, CLOSING->EXECUTION_ENABLED only via qualification invalidation, cancellation from DRAFT|EXECUTION_ENABLED|CLOSING), 1021 (goal.create on READY project, allocates budget+PlanningRun — reducer carries references), 666 (CLOSING refuses while preparation generation current), 366 (pause semantics, 'not a phase change'), 974/977 (restore sets QUIESCED+RECOVERY_REQUIRED; recovery.complete R3 gate exits), 1015-1019 (bootstrap journey; bind_repository BOOTSTRAPPING-only inference). packages/core did NOT exist — scaffold mirrors packages/contracts; root vitest include packages/**/*.test.ts covers nested area dirs; passWithNoTests:false trap.",
+    "risks": "(1) Witness truth-class floor is the rail-compliance mechanism: every witness carries truthClass; UNKNOWN/AGENT_REPORTED reject for proof-gated transitions (activation, closing, completion, recovery) — shape-valid but UNKNOWN-classed evidence must never move state. (2) pnpm-lock.yaml contention: @moe/skills (WORKING) adds its own importer block in this shared tree; a committed lockfile referencing an uncommitted importer fails --frozen-lockfile — step 1/7 carry the serialization rule (skills lands first, or coordinate in #general). (3) DEGRADED intentionally unreachable — QA may flag 'dead state'; the contract comment cites design lines 195+957 and the pending design-sync question; do not invent transitions to silence the matrix. (4) reopen_as_revision from COMPLETED|CANCELLED is a documented inference (design 278 sentence placement); successor is returned as DATA, never a second live aggregate. (5) Combined close emits two events in one result — event consumers must tolerate multi-event results. (6) Do not let matrix tests assert on error MESSAGE text (RuntimeError has none) — assert code + details. (7) Shared dirty tree: concurrent store decomposition + skills tasks; attribute red repo gates before acting (mem:gotcha-moe-wrapper-autocommit for auto-commit sweep).",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/contracts/src/runtime/runtime-error-factory.ts",
+      "packages/contracts/src/runtime/runtime-affordance.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/store/src/decision-ledger.ts",
+      "packages/contracts/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-07T18:40:44.459Z",
+    "escalatedAt": "2026-08-07T18:40:44.459Z"
+  },
+  "planApprovedAt": "2026-08-07T13:34:10.001Z",
+  "workStartedAt": "2026-08-07T13:36:57.798Z",
+  "reviewStartedAt": "2026-08-07T14:48:11.913Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next\nTest Files  6 passed (6)\nTests  132 passed (132)\nDuration  305ms\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src",
+    "reportedAt": "2026-08-07T14:48:11.913Z"
+  },
+  "filesModified": [
+    "packages/core/package.json",
+    "packages/core/tsconfig.json",
+    "packages/core/src/index.ts",
+    "pnpm-lock.yaml",
+    "packages/core/src/project/project-reducer.test.ts",
+    "packages/core/src/project/project-contract.ts",
+    "packages/core/src/project/project-reducer.ts",
+    "packages/core/src/goal/goal-reducer.test.ts",
+    "packages/core/src/goal/goal-contract.ts",
+    "packages/core/src/goal/goal-validation.ts",
+    "packages/core/src/goal/goal-reducer.ts",
+    "packages/core/src/project/project-invariants.test.ts",
+    "packages/core/src/project/project-validation.ts",
+    "packages/core/src/goal/goal-invariants.test.ts"
+  ],
+  "completedAt": "2026-08-07T18:44:29.143Z",
+  "reviewCompletedAt": "2026-08-07T18:44:29.143Z",
+  "reviewSummary": "Re-ran verification myself: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` => exit 0, 6 files / 132 tests (matches claimed evidence). Repo regression re-run green: `pnpm typecheck` exit 0; `pnpm test` exit 0, 71 files, 892 passed / 1 skipped. DoD1 (authorized transitions + stable codes): PROJECT_TRANSITIONS/GOAL_TRANSITIONS are frozen inspectable data; matrix tests mechanically assert the visited cell set equals states x commands (4x5 project, 5x8 goal) with exact code+details; grep shows only registry codes EXPECTED_VERSION_CONFLICT/IDEMPOTENCY_CONFLICT/ILLEGAL_TRANSITION/UNKNOWN_ERROR and zero invented PROJECT_*/GOAL_* code literals; DEGRADED unreachable, asserted in the seeded trace. DoD2 (version/idempotency, zero state change): expectedVersion mismatch rejects before dispatch with actual/expected details; empty commandId => IDEMPOTENCY_CONFLICT; property trace deep-compares state before/after on every rejection; commandId echoed into every event. DoD3 (pure, deterministic, deeply immutable): purity grep (Date.now|new Date|Math.random|process.|readFile|writeFile) over production sources = 0 hits; deep isFrozen walks over every result/event; xorshift32 seeded traces identical across runs; invariants test proves caller-owned mutable state is NOT frozen by the reducer. DoD4: focused gate exit 0. Rails: production modules 144/197/196/216/247/245/58 lines (all <=250 target); commits 16334bd/1f8f7e6/0967d48 hold only owned paths plus the lockfile importer; foreign identity area untouched; tree clean for packages/ and pnpm-lock.yaml, no scratch files. Architect flags (not DoD gaps): diff is ~2345 added LOC (~1305 production, ~1040 test), far over the 400-LOC sizing heuristic — split future dual-aggregate lifecycle tasks one aggregate per task; and src/index.ts exports project+goal only, so the pre-existing identity area is unreachable from the package's single \".\" export — someone needs to close that."
 }

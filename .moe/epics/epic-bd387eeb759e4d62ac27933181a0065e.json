@@ -7,12 +7,12 @@
   "epicRails": [
     "Authoritative design: D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it in implementation tasks.",
     "Development happens only in D:/projexts/moe-next; do not create sibling Git worktrees. Runtime workspace isolation promised by the design remains in scope.",
-    "Preserve foreign work; stage and commit only explicit owned paths. Never use git add -A, implicit push, implicit merge, reset, or stash.",
+    "Preserve foreign work; stage and commit only explicit owned paths. Never use git add -A, implicit push, implicit merge, reset, or stash. Because epic rail 2 pins every agent to the single working directory D:/projexts/moe-next, the staged index is shared state and a bare `git commit` will capture another task's staged files. Therefore: commit by explicit pathspec only — `git commit -- <owned path> [<owned path>...]` — never a bare `git commit` or `git commit -a`. Before committing, run `git status --porcelain` and confirm every staged entry is an owned path of the current task; if a foreign path is staged, unstage it with `git restore --staged -- <path>` and leave it for its owner. After committing, verify with `git show --stat` that the commit contains only owned paths.",
     "Fail closed with stable reason codes; missing or unverifiable evidence stays UNKNOWN and never gains authority.",
     "Use TDD. Keep each production source focused, target <=250 lines, and split before 400 lines. No debug, probe, scratch, or generated evidence files may remain in commits."
   ],
   "status": "ACTIVE",
   "order": 10,
   "createdAt": "2026-08-07T11:41:55.622Z",
-  "updatedAt": "2026-08-07T12:09:39.010Z"
+  "updatedAt": "2026-08-07T12:20:58.999Z"
 }

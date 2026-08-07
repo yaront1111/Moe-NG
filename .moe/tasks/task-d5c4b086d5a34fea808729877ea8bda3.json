@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG. Depends on Policy approval core, which has no committed code (packages/core/src/policy absent from git); Policy itself only just returned to PLANNING. Unlike the Planning-graph case, this dependency is not merely blocked-with-code-landed — there is nothing to build against. Re-queue once packages/core/src/policy is committed.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.265Z",
-  "updatedAt": "2026-08-07T11:45:45.265Z"
+  "updatedAt": "2026-08-07T20:25:48.657Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T20:17:26.969Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

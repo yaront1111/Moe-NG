@@ -1,0 +1,33 @@
+{
+  "id": "task-866713137aee4794a51973fe4e6e3f44",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Planning run contract decomposition",
+  "description": "Objective: split the oversized planning-run contract by contract responsibility without changing its public surface. Deliverable: packages/core/src/planning/planning-contract.ts becomes a compatibility type facade over new planning-command-contract.ts and planning-event-contract.ts; all three files stay <=250 lines and every existing import through planning-contract.js remains valid. Hard dependency: the already-landed planning lifecycle bytes in commit bcdc2f6. NOT in scope: reducer behavior, graph-revision behavior, root package exports, new commands/events, or policy changes. Owned paths: packages/core/src/planning/planning-contract.ts, packages/core/src/planning/planning-command-contract.ts, packages/core/src/planning/planning-event-contract.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "planning-contract.ts remains the compatibility facade and exposes the same complete set of public planning-run type names with unchanged shapes.",
+    "Commands/witnesses and state/events/results are separated into the two named modules without a dependency cycle or runtime authority change.",
+    "Each changed/new TypeScript file is <=250 physical lines, and existing planning tests pass unchanged.",
+    "The focused core typecheck and test command exits 0 with only the three owned paths committed."
+  ],
+  "taskRails": [
+    "Refactor-only: preserve public types, stable error codes, check precedence, event/result ordering, deep freezing, and all observable reducer behavior.",
+    "Do not weaken, skip, rename, or delete behavioral assertions merely to make the split pass.",
+    "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
+    "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:11.327Z",
+  "updatedAt": "2026-08-07T19:56:11.327Z"
+}

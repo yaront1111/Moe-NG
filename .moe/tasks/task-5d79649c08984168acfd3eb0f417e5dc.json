@@ -14,13 +14,86 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterize the current boundary before editing: use `git ls-files .moe` and `git check-ignore -v --no-index` against representative path names to record which existing project/task/control records are tracked and which daemon/runtime leaves are already local. Treat `.moe/project.json`, `epics/`, `tasks/`, `channels/`, `messages/`, `roles/`, `agents/`, and `skills/` as durable for this transitional repository; treat only explicitly named daemon lock/state, activity log rotations, worker/team/proposal/session records, caches, debug output, and scratch/temp directories as regenerable. Do not create probes or delete any current file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".gitignore"
+      ],
+      "note": "Characterization only — no file created, edited, or deleted; no probe files.\n\nTRACKED durable metadata (`git ls-files .moe`, 158 files): `.moe/project.json`, `.moe/.gitignore`, `tasks/` (71), `skills/` (64), `roles/` (8), `messages/` (5), `epics/` (5), `channels/` (5), `agents/` (3). Matches the plan's durable list exactly.\n\nREGENERABLE already local (`git status --short --ignored -- .moe`): `.moe/activity.log`, `.moe/daemon.json`, `.moe/proposals/`, `.moe/teams/`, `.moe/workers/`. Attribution via `git check-ignore -v`: `activity.log` is caught only by root `.gitignore:6:*.log`; `daemon.json`/`workers/`/`teams/`/`proposals/` only by `.moe/.gitignore`. So today the boundary is split across two files and `activity.log` is ignored incidentally by a generic glob, not by intent — the root block will make it explicit.\n\n`.moe/daemon.lock` is declared in `.moe/.gitignore` but absent on disk. `sessions/`, `cache/`, `debug/`, `tmp/`, `scratch/` do not exist yet under `.moe/`.\n\nLoad-bearing finding for step 2/3: grep for `.moe` runtime path constants (`activity.log|daemon.lock|daemon.json|'workers'|'teams'|'proposals'|'sessions'|'cache'|'debug'|'tmp'|'scratch'`) across all `*.{ts,js,mts,cts}` returns ZERO matches. Nothing in moe-next writes `.moe/` — the producer is the external transitional old-Moe daemon. Future leaf names therefore cannot be verified from this repo's source, which is the decisive argument for the plan's allow-by-omission design: the doc must state that any unrecognized new `.moe` category defaults to TRACKED until a human classifies it, so a blanket `.moe/` rule can never silently hide a new durable record class.\n\nEnv: git 2.54.0.windows.1; `docs/` exists containing only `plans/`, so `docs/REPOSITORY_HYGIENE.md` is a clean add.",
+      "startedAt": "2026-08-07T13:10:29.752Z",
+      "completedAt": "2026-08-07T13:11:34.500Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Update the root `.gitignore` with a commented, repository-relative Moe runtime block that names only regenerable leaves (daemon state/lock, activity log rotations, workers, teams, proposals, sessions, cache, debug, scratch, and temp output). Do not add a blanket `.moe/` or `.moe/**` rule and do not ignore project.json, epics, tasks, channels/messages, roles/agents/skills, source, fixtures, or evidence. Keep existing generic rules and negated `.env.example` behavior unchanged; use forward-slash patterns that Git interprets consistently on Windows, macOS, and Linux.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".gitignore"
+      ],
+      "modifiedFiles": [
+        ".gitignore"
+      ],
+      "note": "Root `.gitignore` extended with a commented Moe runtime block. Diff is pure-append (`@@ -9,3 +9,49 @@`, all `+` lines) — lines 1-11 byte-identical, generic rules and `!.env.example` untouched. No blanket `.moe/` or `.moe/**` rule.\n\nTwelve patterns, each root-anchored with a leading `/` so they bind only to the repository-root `.moe/`: daemon.json, daemon.lock, activity.log, activity.log.*, workers/, teams/, proposals/, sessions/, cache/, debug/, tmp/, scratch/. Directory rules keep the trailing `/`.\n\nVerified with Git's own matcher, both directions:\n- 13/13 regenerable probes ignored, including rotations `activity.log.1` and `activity.log.2026-08-07`.\n- 15/15 durable/source/fixture probes visible: all 8 durable categories, `project.json`, `.moe/.gitignore`, `packages/store/src/index.ts`, and the unclassified `.moe/newcategory/rec-x.json` (proves allow-by-omission fails closed — a new category stays visible instead of being silently hidden).\n- Regression sweep `git ls-files -z | git check-ignore --stdin -z -v` returns zero rows: no currently tracked file is matched by any rule, so nothing becomes a phantom-ignored tracked file.\n\nTwo findings worth recording:\n\n1. Root-anchoring is load-bearing, not cosmetic. Unanchored `.moe/cache/` would also match `packages/testkit/fixtures/.moe/cache/` and could hide evidence fixtures for the phase-zero testkit work. Probes confirm `packages/testkit/fixtures/.moe/cache/x.bin`, `packages/testkit/fixtures/.moe/workers/w.json`, and `apps/daemon/.moe/debug/d.txt` all stay visible.\n\n2. `activity.log.*` closes a real gap: the generic `*.log` catches `activity.log` but NOT rotated suffixes like `activity.log.1`, which would otherwise land in `git status` as untracked noise.\n\nCorrection to a bad check of my own: an intermediate probe appeared to show `.env.example` had become ignored. That was my test reading only the exit code of `git check-ignore -v`, which exits 0 whenever ANY pattern matches — including a negation. Re-run without `-v` (negated paths are excluded from output there): `.env` exit=0 IGNORED, `.env.local` exit=0 IGNORED, `.env.example` exit=1 NOT-IGNORED. Verbose output confirms the last match is `.gitignore:9:!.env.example`. Negation behavior is unchanged; the file was never broken.\n\n`.moe/.gitignore` (not an owned path, untouched) still independently ignores daemon.json/lock/workers/teams/proposals and wins precedence as the deeper file. The root rules for those five are deliberately redundant so the whole boundary is readable in one place and survives if the nested file is ever removed. Step 3 documents that overlap.",
+      "startedAt": "2026-08-07T13:11:37.300Z",
+      "completedAt": "2026-08-07T13:13:16.863Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create `docs/REPOSITORY_HYGIENE.md` as a short operational policy: table every durable versus regenerable `.moe` category, state that ignore rules do not remove tracked bytes, prohibit hand-editing task/epic JSON and deleting live daemon/session/role/skill/agent data, and give a fail-closed cleanup sequence—stop Moe/agents through supported controls, inspect `git status --short --ignored`, confirm each candidate with `git check-ignore -v`, dry-run and remove only one explicitly listed regenerable leaf at a time, restart and verify health, and stop/escalate on any unknown path. Explicitly forbid broad `git clean`/recursive `.moe` deletion and explain that this implementation performs no cleanup.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "modifiedFiles": [
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "note": "Created `docs/REPOSITORY_HYGIENE.md`, 160 lines. New file only; no `.moe` byte read-modified, no deletion, no product or test code touched.\n\nStructure: why the boundary needs writing down (the zero-grep finding — nothing in moe-next writes `.moe/`, so leaf names cannot be predicted and the table is the only authority); durable table (8 categories + project.json); regenerable table (12 leaves, matching `.gitignore` one-for-one); an explicit **Unclassified — treat as durable** rule stating that `git status` noise from a new category is the deliberate signal for a human to classify it, never to be silenced with a broad rule; how the rules are written (root-anchoring and the deliberate `.moe/.gitignore` overlap); ignoring-vs-tracking-vs-deleting; prohibitions; the cleanup procedure; Windows notes.\n\nTracking-state section spells out the three distinct states and states that an ignore rule has **no effect** on an already-tracked file, that untracking needs `git rm --cached`, and that untracking is out of scope for this policy and must be raised as its own task.\n\nProhibited, explicitly: broad `git clean` in any form (`-x`, `-X`, `-d`, or `.moe` as target), recursive `.moe` deletion, any deletion while the daemon or an agent session is live, hand-editing daemon-owned JSON (task/epic/channel/message/role/agent/skill), and deleting any path outside the regenerable table.\n\nCleanup procedure is 6 fail-closed steps: stop the fleet via supported controls (no force-kill to manufacture a window) -> `git status --short --ignored -- .moe` -> `git check-ignore -v` per candidate -> `git ls-files --error-unmatch` tracked-check -> dry-run and delete exactly one named leaf (never a glob or parent dir) -> restart, verify health, repeat. Escalation triggers cover the plan's five hazards: unknown path, tracked candidate, symlink (with the note that deletion follows the link, so resolve and inspect the target first), daemon that will not stop cleanly, and a durable directory that looks empty or truncated after restart.\n\nEvery command in the doc was executed against the live repo rather than written from memory:\n- `git ls-files --error-unmatch -- .moe/project.json` exit 0 (tracked -> doc says stop). `-- .moe/daemon.json` exit 1 (not tracked -> doc says proceed). Semantics documented match observed behavior.\n- `git status --short --ignored -- .moe` currently yields 5 `!!` and 21 ` M` rows and zero `??`, consistent with no unclassified category existing today; the `??` guidance is forward-looking by design.\n\nCarried the `git check-ignore -v` exit-code trap into step 3 of the procedure as an inline warning, since I hit it myself in step 2: with `-v` the command exits 0 on a negation match too and prints the rule with a leading `!`, so the operator must read the printed rule rather than branch on exit status. That is exactly the misread that would let someone conclude a protected path is ignored.",
+      "startedAt": "2026-08-07T13:13:19.473Z",
+      "completedAt": "2026-08-07T13:14:38.086Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform the single adversarial review over the two owned paths: verify with Git's matcher that representative daemon/session/cache/debug/scratch names are ignored while synthetic project, epic, task, channel/message, role, agent, skill, source, fixture, and evidence paths are not; review the cleanup procedure for running-process, unknown-path, symlink, Windows path, and already-tracked-file hazards; confirm no live `.moe` byte was edited/deleted and no product or test code changed. Inspect shared-index state, unstage any foreign path with `git restore --staged -- <path>`, and commit only via `git commit -- .gitignore docs/REPOSITORY_HYGIENE.md`, then confirm `git show --stat` contains only those paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".gitignore",
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "modifiedFiles": [
+        ".gitignore",
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "note": "Adversarial self-review run, one real fail-open found and fixed, committed at `7678402`.\n\nFINDING FIXED — `.moe/sessions/` was the one speculative pattern that collides with named future work. This epic plans a durable session coordination fabric (task-f837ce45). If that fabric ever persists under `.moe/sessions/` instead of the store, my rule would hide durable records — exactly the failure the allow-by-omission design exists to prevent, reintroduced by a guessed leaf name. Kept the rule (today the path is transitional-daemon scaffolding) but added an explicit provisional caveat to the doc naming the fabric and instructing a re-check before that work lands. Flagging for QA as the single judgement call in this change.\n\nOver-match probes, the postmortem-grade risk: no rule hides anything durable. Substring collisions all stay visible — `.moe/skills/cache-warmer/SKILL.md`, `.moe/roles/worker-sessions.json`, `.moe/messages/sessions.jsonl`, `.moe/tasks/task-cache.json`, `.moe/epics/tmp-epic.json`, `.moe/skills/skill-x/scratch/note.md`, `.moe/project.json.bak`, and bare `.moe/tasks`. Root-anchoring plus no wildcards is what makes that hold. Combined with step 2: 15/15 durable-visible, 13/13 regenerable-ignored, and `git ls-files -z | git check-ignore --stdin -z -v` returns zero rows, so no tracked file became phantom-ignored.\n\nHonest limit on one probe: the file-versus-directory test is inconclusive for paths that do not exist. `git check-ignore --no-index` cannot stat, so `.moe/cache`/`.moe/sessions`/`.moe/tmp` in bare file form report visible only because git cannot confirm directory-ness. `.moe/workers` DID match — it is a real directory on disk, so that resolution is correct. Trailing-slash rules are directory-only by Git's documented semantics; I did not prove the file-form case empirically and am not claiming I did.\n\nHazard review of the cleanup procedure: running-process covered by mandatory supported-controls stop with no force-kill; unknown-path covered by treat-as-durable plus escalation; already-tracked covered by the `git ls-files --error-unmatch` gate (verified both directions live); symlink covered with the note that deletion follows the link so the target must be resolved first; Windows covered by forward-slash and `core.ignorecase` notes. TOCTOU between verify and delete is real but bounded by the fleet-stop precondition and per-leaf re-verification — theoretical only once step 1 is honored, noted here for QA.\n\nCommit discipline per epic rail 3: index was clean beforehand; `git add -- docs/REPOSITORY_HYGIENE.md` targeted (new file, so `git commit -- <path>` alone cannot see it); `git commit -F <msg outside repo> -- .gitignore docs/REPOSITORY_HYGIENE.md`. `git show --stat 7678402` = exactly `.gitignore` (+46) and `docs/REPOSITORY_HYGIENE.md` (+167), 213 insertions, zero deletions. 21 foreign `.moe/**` daemon-churn entries left dirty and untouched. Message body verified present via `git log -1 --format=%B` (used `-F` with a `$TEMP` file per `gotcha-bash-git-commit-message`; `-m @-` would have silently produced a one-line `@-` message). No scratch or probe file anywhere under the repo root.\n\nNo live `.moe` byte edited or deleted; no product or test code changed.",
+      "startedAt": "2026-08-07T13:15:13.329Z",
+      "completedAt": "2026-08-07T13:16:58.632Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "From `D:/projexts/moe-next`, run exactly `git diff --check && git status --short && pnpm test`. Preserve the fresh complete output and zero exit as the sole `complete_task` verification evidence; do not suppress unrelated failures or modify tests to obtain green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        ".gitignore",
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "modifiedFiles": [
+        ".gitignore",
+        "docs/REPOSITORY_HYGIENE.md"
+      ],
+      "note": "Gate run fresh from `D:/projexts/moe-next`, exactly as named: `git diff --check && git status --short && pnpm test`. CHAIN_EXIT=0.\n\n`Test Files  59 passed (59)` / `Tests  573 passed (573)`, vitest v4.1.10, 5.01s. Zero test edits, zero suppression, no failure filtered out.\n\n`git diff --check` produced no output and succeeded — the chain is `&&`-joined, so pnpm test running at all proves both git commands returned 0. No whitespace or conflict-marker errors in the committed diff.\n\n`git status --short` prints 21 ` M` rows, all `.moe/**` daemon churn owned by the live daemon, not by me. That is expected shared-tree state, not dirt from this task: my two owned paths are committed clean at `7678402` and absent from the list. No untracked scratch, probe, or evidence file anywhere under the repo root.\n\nRan twice for exit-code rigor. The first run piped to `tail`, so its `PIPESTATUS[0]` proved only pnpm test's own status; I re-ran redirecting to a file outside the repo to capture the true chain exit unambiguously. Both runs green with identical 59/573 counts, so the result is reproducible rather than a single lucky pass.\n\nShared-tree note per `gotcha-shared-tree-repo-gate`: this repo-wide gate was the real risk on this task, since task-02249f0a and task-4426932e are both live and a foreign RED phase would have failed a gate I cannot fix. It came back green, so no block report is warranted. 573 passing also exceeds the 545 the governor cited earlier at 12:47, meaning concurrent workers have added tests and nothing regressed.\n\nAll 4 DoD items satisfied: root rules exclude daemon/session/cache/debug artifacts without hiding source, epics, or task records (13/13 ignored, 15/15 visible, zero tracked files matched); the hygiene doc names durable versus regenerable content plus the safe cleanup procedure; nothing was deleted — no daemon, task, epic, role, skill, or agent byte touched; `git diff --check` and `pnpm test` both exit 0.",
+      "startedAt": "2026-08-07T13:17:02.539Z",
+      "completedAt": "2026-08-07T13:17:55.160Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns .gitignore + docs/REPOSITORY_HYGIENE.md. Deps: none. Disjoint from all live and queued work.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -28,5 +101,56 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:12.613Z",
-  "updatedAt": "2026-08-07T11:44:12.613Z"
+  "updatedAt": "2026-08-07T13:21:28.032Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:07:15.819Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 5,
+    "doneAt": "2026-08-07T13:21:28.032Z",
+    "wallClockMs": 852213
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:09:55.479Z",
+  "planningNotes": {
+    "approachesConsidered": "Use an explicit allow-by-omission boundary: add only known regenerable .moe leaf paths to the root ignore file. Rejected ignoring `.moe/` or `.moe/**` with negations because a future durable record class could be silently hidden. Rejected editing `.moe/.gitignore`, deleting current runtime bytes, or changing daemon output paths because those are outside the two owned paths and outside this policy-only task. No new test file is warranted for a documentation/ignore-only change; the plan uses git's own ignore matcher plus the full pnpm regression.",
+    "codebaseInsights": "The root .gitignore currently covers generic dependencies/build/log/env/OS output but no explicit transitional Moe boundary. `.moe/.gitignore` already identifies daemon.json, daemon.lock, workers/, teams/, and proposals/ as local runtime files; root `*.log` currently catches activity.log. In contrast, project.json, epics/, tasks/, channels/, messages/, roles/, agents/, and skills/ are tracked project/control metadata. The shared checkout currently has live daemon and worker records, so this task must document cleanup but perform none.",
+    "risks": "A broad `.moe` pattern can hide newly created task/epic/source metadata and fail closed only on paper. Ignore rules do not untrack existing files, so the document must distinguish tracking state from ignore state. Cleanup instructions must require daemon/agent shutdown, dry-run classification, and explicit leaf deletion; never recommend blanket `git clean`, recursive `.moe` removal, or hand-editing JSON. Patterns must use repository-relative forward slashes so Git behaves identically on Windows, macOS, and Linux. Preserve all live process/session bytes during implementation.",
+    "keyFiles": [
+      ".gitignore",
+      ".moe/.gitignore",
+      ".moe/project.json",
+      "docs/REPOSITORY_HYGIENE.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-07T13:09:57.508Z",
+  "contextFetchedBy": [
+    "worker-4dddabde",
+    "qa-200db8e3"
+  ],
+  "workStartedAt": "2026-08-07T13:10:29.752Z",
+  "reviewStartedAt": "2026-08-07T13:18:52.312Z",
+  "verification": {
+    "command": "git diff --check && git status --short && pnpm test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  59 passed (59)\n      Tests  573 passed (573)\n   Start at  16:17:32\n   Duration  5.01s (transform 11.71s, setup 0ms, import 17.02s, tests 9.22s, environment 4ms)\n\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-07T13:18:52.312Z"
+  },
+  "filesModified": [
+    ".gitignore",
+    "docs/REPOSITORY_HYGIENE.md"
+  ],
+  "completedAt": "2026-08-07T13:21:28.032Z",
+  "reviewCompletedAt": "2026-08-07T13:21:28.032Z",
+  "reviewSummary": "APPROVED. Commit 7678402, 2 files, +213/-0 (.gitignore +46, docs/REPOSITORY_HYGIENE.md +167).\n\nRAN MYSELF: `git diff --check && git status --short && pnpm test` -> exit 0, 59 files/573 tests, matches recorded evidence.\n\nDoD1 PASS - re-tested with Git's own matcher, not the worker's probe counts:\n- 13/13 regenerable IGNORED, incl. rotations activity.log.1 / activity.log.2026-08-07 that the generic *.log misses.\n- 15/15 durable/source/fixture probes VISIBLE: all 8 durable categories, project.json, an unclassified .moe/newcategory/rec.json (allow-by-omission fails closed), plus collisions .moe/skills/cache-warmer/, .moe/messages/sessions.jsonl, .moe/tasks/task-cache.json.\n- Root-anchoring load-bearing: packages/testkit/fixtures/.moe/cache/ and apps/daemon/.moe/debug/ stay visible, so no evidence fixture can be hidden.\n- CRITICAL: `git ls-files -z | git check-ignore --stdin -z -v` returns ZERO rows - no tracked file became phantom-ignored.\n- Diff pure-append; .env/.env.local ignored, .env.example NOT-ignored, negation survives. No blanket .moe/ rule.\n\nDoD2 PASS: 167-line doc - durable table, regenerable table matching .gitignore one-for-one, unclassified-defaults-to-durable, an ignored/tracked/deleted distinction stating an ignore rule has NO effect on a tracked file, prohibitions (broad git clean, recursive .moe delete, hand-editing daemon JSON), 6-step fail-closed cleanup, and the check-ignore -v trap where a negation also exits 0.\n\nDoD3 PASS: zero deletions (diff-filter=D empty). Tracked .moe files 163, up from 158 - nothing removed.\n\nDoD4 PASS (above).\n\nJUDGEMENT CALL ACCEPTED: worker self-flagged /.moe/sessions/ as speculative since the planned session fabric could persist there. Caveat verified at doc lines 60-65: names the fabric, instructs re-check before that work lands.\n\nNOTE: this task's taskRails are copy-pasted from a refactor task and do not fit an ignore/docs change. Authoring artifact, not a worker defect."
 }

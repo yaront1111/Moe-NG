@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG so it stops occupying the board. Verified: packages/runner/src/providers does not exist in git at all, so there is no Claude provider contract to match. Its own DoD requires effect identity, cancellation and crash reconciliation to MATCH that contract. Claude runtime adapter is PLANNING with no code; External effect supervisor is BACKLOG. This was my error — I moved it labelled dependency-clean because my audit filter matched only the plural \"Hard dependencies:\" while this task uses the singular \"Hard dependency:\". Re-queue when packages/runner/src/providers/claude is committed.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,5 +36,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-07T12:10:20.457Z"
+  "updatedAt": "2026-08-07T20:25:39.769Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T19:02:08.922Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

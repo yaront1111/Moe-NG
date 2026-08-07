@@ -1,0 +1,33 @@
+{
+  "id": "task-74508e0de86b40829eda1cd343742336",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Planning source size guard",
+  "description": "Objective: make the permanent <=250-line production-and-test rule mechanically enforceable for the planning core. Deliverable: packages/core/src/planning/planning-source-size.test.ts enumerates every TypeScript source/test/support file in its directory using cross-platform Node paths, counts LF/CRLF/CR physical lines equivalently, and fails with the complete sorted offender list when any file exceeds 250 lines. Hard dependencies: the five planning decomposition children of task-1ade51c0 must land first. NOT in scope: reducer behavior, generated files, repository-wide sizing, or excluding inconvenient planning files. Owned path: packages/core/src/planning/planning-source-size.test.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "The guard includes every packages/core/src/planning/*.ts production, test, fixture, and support file without a hand-maintained allowlist.",
+    "LF, CRLF, and CR inputs produce the same physical-line count, the threshold is exactly 250, and failures name all offenders in deterministic sorted order.",
+    "A local mutation/fixture proving 251 lines fails and 250 lines passes is encoded in the test without leaving generated or scratch files.",
+    "The focused core typecheck and test command exits 0 after all planning TypeScript files satisfy the guard."
+  ],
+  "taskRails": [
+    "This is the final hardening child for the planning-file decomposition; do not start until its five named predecessor refactors are DONE.",
+    "The guard must cover production and tests equally; no basename, suffix, or current-file exception.",
+    "Use Node path/file APIs portably across Windows, macOS, and Linux; leave no generated/scratch files.",
+    "Commit only the explicit owned path; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:12.668Z",
+  "updatedAt": "2026-08-07T19:56:12.668Z"
+}

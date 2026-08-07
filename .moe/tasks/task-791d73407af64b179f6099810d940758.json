@@ -1,0 +1,34 @@
+{
+  "id": "task-791d73407af64b179f6099810d940758",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Projection crash and rebuild hardening",
+  "description": "Objective: prove the projection/outbox subsystem survives crashes and can be rebuilt from the event ledger, and close the durability gaps the earlier steps could only assert. SPIDR step 5 of 5 and the closing gate, split from task-55d5a898264b4880a99bf2c5b3be120b. Deliverable: crash-injection drills at every transaction boundary confirming no partial state; a full projection rebuild from the event ledger producing state byte-identical to the incrementally-built version; generated-history tests over randomized event sequences; and SQLite-level integrity checks after each drill. Where a drill exposes a real defect in steps 1-4, fix it here rather than filing it forward — this task owns closing them. NOT in scope: new projection features, new subscription surface, or performance tuning. Hard dependencies: all of steps 1-4 (Versioned event schema and projection commit seam, Pure projection upcaster engine, Transactional outbox relay with durable inbox dedupe, Subscription cursors with CURSOR_GAP snapshots). Owned paths: packages/store/src/projections/**, outbox-relay/**, subscriptions/**, and store crash/recovery/generated-history tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Crash injection at every transaction boundary leaves no partial state: after each simulated crash the database contains either all effects of the interrupted operation or none, and SQLite integrity checks pass.",
+    "A full rebuild from the event ledger produces projection state byte-identical to the incrementally-built state, over both curated and randomly generated event sequences.",
+    "Redelivery, restart, and rebuild are all idempotent in combination, not just individually — including a restart mid-rebuild.",
+    "Any defect these drills expose in steps 1-4 is fixed here, and the full store suite plus the focused typecheck and test command exit 0 with only owned paths staged and committed."
+  ],
+  "taskRails": [
+    "This is the closing gate for the split parent task. A drill that is weakened, skipped, or narrowed to pass defeats the purpose of the whole SPIDR breakdown.",
+    "Fix defects here rather than filing them forward. This task is where steps 1-4's durability claims are proven or corrected; there is no later task to inherit them.",
+    "Do not add features. New projection, relay, or subscription surface belongs in a new task, not in a hardening gate.",
+    "Byte-identical means byte-identical. A rebuild that differs in ordering, whitespace, or field presence is a failure, not a rounding error.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T13:42:42.088Z",
+  "updatedAt": "2026-08-07T13:42:42.088Z"
+}

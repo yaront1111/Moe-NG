@@ -1,0 +1,32 @@
+{
+  "id": "task-82989467aa474ae786f0c4eb8b23bfb0",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Pure projection upcaster engine",
+  "description": "Objective: a dependency-free, side-effect-free engine that upcasts stored events to their current domain schema version and folds them into projection state. SPIDR step 2 of 5, split from task-55d5a898264b4880a99bf2c5b3be120b. Deliverable: pure functions over in-memory values — no SQLite, no transactions, no I/O — so the fold is exhaustively testable without a database. Upcasters dispatch on the StoredEvent domain schema version added in step 1; an unknown or future version fails closed with a stable reason code and never silently passes the event through unmodified. NOT in scope: persistence, the relay/inbox transaction, subscriptions, CURSOR_GAP, or any SQLite access. Hard dependencies: Versioned event schema and projection commit seam (step 1) — needs the StoredEvent schema-version field to dispatch on. Owned paths: packages/store/src/projections/** and its focused tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Upcasting and projection folding are pure functions over in-memory values with no SQLite, transaction, clock, or filesystem access, demonstrated by tests that construct no database.",
+    "An unknown or future domain schema version fails closed with a stable reason code; no event is silently passed through unmodified or dropped.",
+    "Folding the same event sequence twice yields identical frozen state, and out-of-order or duplicate input is rejected rather than absorbed.",
+    "The focused store typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Purity is the deliverable. Any SQLite handle, transaction, clock read, or filesystem call in this subtree defeats the reason this step was split out.",
+    "Fail closed with stable reason codes on unknown versions; missing or unverifiable input stays UNKNOWN and never gains authority.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T13:41:45.149Z",
+  "updatedAt": "2026-08-07T13:41:45.149Z"
+}

@@ -15,19 +15,313 @@
     "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold @moe/mcp. package.json: { name: \"@moe/mcp\", version: \"0.0.0\", private: true, type: \"module\", exports: { \".\": \"./src/index.ts\" } (repo convention — scheduler package-boundary test asserts this shape; future Streamable HTTP + daemon import through it), dependencies: { \"@moe/contracts\": \"workspace:*\", \"@modelcontextprotocol/sdk\": \"1.30.0\" (exact — saveExact; FIRST external runtime dependency: ~93 transitive lockfile entries (express 5, hono, jose, ajv...), zero build scripts, no pnpm-11 approval needed — empirically probed; record resolved tree size in step note) }, scripts: { typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/mcp/src\" }. NO zod dependency — the plan deliberately uses the SDK's LOW-LEVEL Server class (step 4), not McpServer, whose inputSchema is zod-only. tsconfig.json mirrors packages/contracts EXCEPT: tsBuildInfoFile \"../../node_modules/.cache/mcp.tsbuildinfo\" AND \"skipLibCheck\": true — MANDATORY: SDK d.ts references HeadersInit which @types/node 24.13.3 does not declare globally; without skipLibCheck `pnpm --filter @moe/mcp typecheck` fails with TS2304 (empirically proven with repo toolchain). src/index.ts placeholder. Run `pnpm install`. Lockfile state verified clean at planning time (no uncommitted foreign importers); re-verify at commit time per the standing ordering rule. Placement note for step note: AGENTS.md reserves adapters/* for integration boundaries but governor granted packages/mcp — record the tension, do not relocate. Do NOT run the package test script before the first test file exists (passWithNoTests:false).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/package.json",
+        "packages/mcp/tsconfig.json",
+        "packages/mcp/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/mcp/package.json",
+        "packages/mcp/tsconfig.json",
+        "packages/mcp/src/index.ts"
+      ],
+      "note": "Reopen audit: original scaffold remains committed in 55ecf7e with exact @moe/mcp package shape and SDK 1.30.0 pin. No rebuild performed. packages/mcp is clean; pnpm-lock.yaml has foreign task work and remains untouched.",
+      "startedAt": "2026-08-07T19:49:09.531Z",
+      "completedAt": "2026-08-07T19:49:19.565Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — src/stdio/stdio-schemas.test.ts. Assert on the generated tool surface: (1) determinism — two generation runs byte-identical; (2) coverage — exactly one tool per RUNTIME_COMMAND_KINDS entry + one per RUNTIME_QUERY_KINDS entry, no extras; (3) NAME MAPPING — kinds contain dots (goal.create) which common client/LLM tool-name grammars ([a-zA-Z0-9_-]) reject: deterministic bijective label mapping '.' -> '_' generated alongside schemas; test asserts bijectivity (no two kinds collide after mapping) and round-trip label->kind->label identity; the VERBATIM kind is carried in each schema's description and in the envelope commandKind (design 1009 identity lives in the envelope, not the transport label); (4) CREDENTIAL EXCLUSION (security-critical): no generated input schema contains sessionCredential, requestDigest, or any credential-bearing property — tool inputs are the envelope key sets MINUS adapter-supplied fields; MCP clients log tool args, and design 1139/1141 forbid credentials in logs; (5) bounds — every string property carries maxLength derived from input-limits constants; payload is a bounded OPAQUE object (envelope-shaped schemas are an EXPLICIT interim: design 982's one-source-schema generation pipeline is M3 scope; record the follow-up to re-point the generator at M3's per-command surface when it lands). Confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-schemas.test.ts"
+      ],
+      "newFiles": [
+        "packages/mcp/src/stdio/stdio-schemas.test.ts"
+      ],
+      "note": "Reopen audit: generated-schema characterization from 55ecf7e remains accepted by QA (determinism, full vocabulary coverage, bijective labels, credential exclusion, bounds). No schema or schema-test changes; the rejection is exclusively dispatched-envelope override coverage.",
+      "startedAt": "2026-08-07T19:49:24.936Z",
+      "completedAt": "2026-08-07T19:49:30.527Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — src/stdio/stdio-tool-schemas.ts + src/stdio/stdio-dispatch-port.ts (each target <=250). stdio-tool-schemas.ts: mechanical generation from RUNTIME_COMMAND_KINDS/RUNTIME_QUERY_KINDS + envelope required/optional key sets MINUS adapter-supplied fields (sessionCredential always; requestDigest — adapter computes it over the canonical payload bytes, clients never supply it); plain frozen JSON-Schema data objects (NOT zod — low-level Server serves them verbatim); bijective name mapping exported. stdio-dispatch-port.ts: typed injected port — { authenticate(credential: string, toolKind: string): frozen auth result; dispatchCommandBytes(bytes: Uint8Array): Uint8Array; dispatchQueryBytes(bytes: Uint8Array): Uint8Array } — RAW BYTES both directions (pass-through parity: any parse->re-stringify normalizes escapes/number format/key order and corrupts digest-bound fields and opaque cursors); port contract doc pins the CALL-SEQUENCE OBLIGATION: bounded decode -> authenticate -> dispatch; auth failure short-circuits with ZERO dispatch calls. Also src/dispatch-conformance.ts (scaffold grant, OUTSIDE stdio/ so the Streamable HTTP task imports the SAME suite): transport-agnostic executable conformance fixtures — call-recording fake port asserting the sequence obligation, golden request/response fixtures, and the FULL error-mapping table iterating EVERY RUNTIME_ERROR_CODES entry against lookupRuntimeError(code).transport.mcpCode (design 1130 parity becomes a shared executable gate, not prose; design 1062 registry fixes the mapping). Boundary-scan rule: no '@moe/scheduler/' or 'scheduler/src/' substrings anywhere in packages/mcp sources. Schema tests green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+        "packages/mcp/src/stdio/stdio-dispatch-port.ts",
+        "packages/mcp/src/dispatch-conformance.ts"
+      ],
+      "newFiles": [
+        "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+        "packages/mcp/src/stdio/stdio-dispatch-port.ts",
+        "packages/mcp/src/dispatch-conformance.ts"
+      ],
+      "note": "Reopen audit: generated tool schemas, raw-byte dispatch port (including advisory AbortSignal amendment), and transport-agnostic conformance suite remain committed and explicitly verified GOOD by QA. No production rebuild or drift.",
+      "startedAt": "2026-08-07T19:49:34.771Z",
+      "completedAt": "2026-08-07T19:49:39.453Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red then green — src/stdio/stdio-server.test.ts + src/stdio/stdio-server.ts. Server: LOW-LEVEL SDK Server class + setRequestHandler for ListTools/CallTool (NOT McpServer — its inputSchema is zod-only; low-level serves the generated JSON Schema objects verbatim, zero zod). Per CallTool: map label->kind; build the envelope object by INJECTING the bootstrap credential (read ONCE from the spawning process env per design 1141, held in closure, never logged, never echoed in errors) + computing requestDigest over canonical payload bytes; serialize to bytes; decodeRuntimeCommandEnvelopeBytes/decodeRuntimeQueryEnvelopeBytes (fail closed on malformed/oversized with the decoder's stable RuntimeError); port.authenticate (fail short-circuits, zero dispatch); port.dispatch*Bytes; emit daemon bytes VERBATIM as a single UTF-8 text content block — NO outputSchema/structuredContent (SDK would force re-serialization), NEVER re-parse (command IDs, truth classes, cursors, nextAllowedCommands, recovery commands survive byte-identical). Error routing: ADAPTER-detected failures (malformed, oversized, unknown tool, auth-reject) -> JSON-RPC McpError with registry mcpCode AND the full bounded RuntimeError (code, retryability, redacted details, recovery set — design 1058) in error.data; DAEMON dispatch rejections -> daemon error bytes passed through verbatim in the result content so the LLM client sees recovery commands. Disconnect mid-dispatch: discard outcome, fabricate nothing (idempotency = daemon ledger's job). Tests via SDK InMemoryTransport client<->server with fake recording port: happy command/query roundtrip (fixture daemon bytes survive byte-identical in result.content[0].text — REAL byte-identity even over InMemoryTransport because bytes ride as an opaque string), unknown tool, auth-reject (zero dispatch calls recorded), oversized args, error-mapping spot checks + run the SHARED dispatch-conformance suite; MALFORMED-BYTES CAVEAT: InMemoryTransport passes JSON-RPC objects by reference — malformed wire bytes are unrepresentable in a protocol roundtrip, so the decoder's malformed branch is tested by invoking the registered CallTool handler/decoder DIRECTLY with hostile bytes (state this in the test file header; do not pretend the roundtrip covers it). Both suites green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts",
+        "packages/mcp/src/stdio/stdio-server.ts",
+        "packages/mcp/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts",
+        "packages/mcp/src/stdio/stdio-server.ts"
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts"
+      ],
+      "note": "Added additive regression coverage driven by ADAPTER_SUPPLIED_COMMAND_FIELDS and ADAPTER_SUPPLIED_QUERY_FIELDS. The tests decode dispatched envelopes and assert every adapter-owned field overrides hostile client input. Per-field commandKind and queryKind mutations both failed the new tests; packages/mcp production bytes are unchanged. Fresh package typecheck and 49-test run passed.",
+      "startedAt": "2026-08-07T19:49:43.970Z",
+      "completedAt": "2026-08-07T19:53:04.604Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate (single concentrated step). (1) `wc -l packages/mcp/src/**/*.ts` — every production module <=400 hard (target 250). (2) Fresh `pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test\", exitCode: 0, outputTail }. (3) Repo gate `pnpm typecheck && pnpm test` — scheduler package-boundary walk now covers packages/mcp contents (substring rule) and root vitest discovers the new tests; attribute any red to foreign in-flight work first. (4) Security grep: `grep -rn \"process.env\" packages/mcp/src` — exactly ONE read site (credential bootstrap); grep for the credential variable name in every error/log path -> zero leaks; grep Date.now|Math.random -> zero (determinism; SDK internals exempt). (5) Run focused suite twice — identical; `git status --porcelain` clean of strays.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/src/stdio/stdio-server.ts",
+        "packages/mcp/src/stdio/stdio-tool-schemas.ts"
+      ],
+      "note": "Verification passed: all MCP production sources <=400 lines (max 272); process.env appears exactly once at bootstrap, no Date.now or Math.random; production stdio files are byte-unchanged; focused MCP typecheck and 49 tests passed, then the focused tests passed identically a second time; repository pnpm typecheck plus 81 files / 1066 passed, 1 skipped passed. Only the owned test is changed under packages/mcp.",
+      "startedAt": "2026-08-07T19:53:08.444Z",
+      "completedAt": "2026-08-07T19:53:55.887Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra: (a) credential red-team — walk every error path and the ListTools response for credential/requestDigest leakage; confirm schemas contain no credential-bearing property (re-run the schema exclusion test and eyeball the generated JSON); (b) byte-fidelity red-team — flip one byte in a fixture daemon response and confirm the parity test catches it; confirm no JSON.parse of daemon bytes anywhere in stdio-server.ts (grep); (c) conformance suite is transport-agnostic — no stdio/SDK import inside dispatch-conformance.ts (the HTTP task must import it cleanly); (d) name-mapping bijectivity holds for the FULL current vocabularies; (e) boundary-scan grep '@moe/scheduler/\\|scheduler/src/' -> zero; (f) no scratch files (auto-commit sweep). LOCKFILE ORDERING at commit time: `git status --porcelain` + `git log --oneline -- packages/core/src/planning` etc. — every importer block in pnpm-lock.yaml must resolve to a committed package.json (re-run pnpm install just before committing); then `git add` + `git commit -- packages/mcp/package.json packages/mcp/tsconfig.json packages/mcp/src/index.ts packages/mcp/src/dispatch-conformance.ts packages/mcp/src/stdio/stdio-tool-schemas.ts packages/mcp/src/stdio/stdio-dispatch-port.ts packages/mcp/src/stdio/stdio-server.ts packages/mcp/src/stdio/stdio-schemas.test.ts packages/mcp/src/stdio/stdio-server.test.ts pnpm-lock.yaml`; `git show --stat` lists exactly these 10 paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/mcp/package.json",
+        "packages/mcp/src/dispatch-conformance.ts",
+        "packages/mcp/src/stdio/stdio-server.ts",
+        "pnpm-lock.yaml"
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/stdio/stdio-server.test.ts"
+      ],
+      "note": "Adversarial review found no production or concurrency change: the new tests use valid alternate command/query kinds plus hostile schema, credential, and digest values, and derive asserted keys from both exported adapter-field registries. Confirmed no daemon JSON.parse, no transport imports in dispatch-conformance, no scheduler boundary imports, schema exclusions remain covered, and production bytes remain unchanged. Committed only the owned test path as 0734ea7; git show lists exactly that file. Fresh post-commit MCP typecheck and 49 tests passed.",
+      "startedAt": "2026-08-07T19:54:03.111Z",
+      "completedAt": "2026-08-07T19:55:13.597Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-bdf27860",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT: one mutation-proven gap. DO NOT REVERT 55ecf7e, do not rebuild — fix is test-only, ~15 lines. Repro and fix in issues.\n\nstdio-server.ts:82-86 documents that adapter-supplied fields are written last so a client cannot override them. That ordering is the ONLY thing binding the kind the adapter AUTHENTICATES to the kind the daemon EXECUTES, and the low-level SDK does not validate arguments against inputSchema server-side (your own test at stdio-server.test.ts:148 proves hostile keys reach the decoder). Moving ONLY `commandKind: kind` above `...args` leaves all 48 tests green while producing a capability-check bypass. Moving all four fields kills exactly one test — sessionCredential/requestDigest are locked; commandKind, schemaVersion and the whole query surface are not. Fails DoD 1.\n\nVERIFIED PASS — do not redo: `pnpm --filter @moe/mcp typecheck && test` exit 0, 48 tests, twice identical. Repo `pnpm typecheck` prints \"packages/mcp typecheck: Done\"; `pnpm test` 78 files/1037 passed+1 skipped — the 2 failures are control-room-client, 100% untracked foreign work (`git ls-files` returns 0 files), not yours. Envelope key sets EXACT vs runtime-envelope.ts:56-66. Byte fidelity real: zero JSON.parse, dispatched bytes identical by reference at :285, golden fixtures provably detect re-serialisation. Two mutations KILLED (non-fatal TextDecoder; credential/digest smuggling). One process.env site; credential absent from ListTools, error.data, port-throw messages. Full 38-code error table iterated AND key-set-equal to RUNTIME_ERROR_CODES. Conformance suite transport-agnostic, drift gate uncast. Sizes 215/210/272/30/26 under the 400 rail; zero Date.now|Math.random|scheduler hits. Commit is exactly the 10 planned paths, no strays, all 11 lockfile importers resolve to committed package.json. +2090 (770 lockfile) greenfield, no seam — NOT an oversize reject.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c638d1e86aac41938bfaf7cc64b35355",
+      "author": "architect-d89636d1",
+      "content": "Architect amendment for step 3 (stdio-dispatch-port.ts), from planning the dependent Streamable HTTP task: give both dispatch methods an OPTIONAL AbortSignal — dispatchCommandBytes(bytes: Uint8Array, signal?: AbortSignal): Uint8Array and dispatchQueryBytes(bytes: Uint8Array, signal?: AbortSignal): Uint8Array. Rationale: the SDK surfaces client cancellation (notifications/cancelled) as extra.signal on the request-handler extra for BOTH transports (shared/protocol.js registers a per-request AbortController and passes signal into the handler extra); the HTTP task owns only packages/mcp/src/http/** and cannot extend the port later without touching your file. stdio-server.ts should pass extra.signal through when invoking the port; ignoring it remains legal for port implementations (the SDK already suppresses the response of a cancelled request). Document the param as advisory cancellation, never an authority change. One-line type addition; no behavior change required in your tests beyond accepting the extra parameter.",
+      "timestamp": "2026-08-07T19:21:52.771Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.570Z",
-  "updatedAt": "2026-08-07T11:56:14.570Z"
+  "updatedAt": "2026-08-07T20:36:10.388Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T19:02:59.140Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1
+  },
+  "contextFetchedBy": [
+    "qa-91cf5a2f",
+    "worker-875b53a2",
+    "qa-bdf27860"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Tool schemas are generated and bounded; authentication/capability checks match HTTP.",
+      "rejectedAt": "2026-08-07T19:44:52.869Z",
+      "rejectedBy": "qa-91cf5a2f"
+    }
+  ],
+  "planSubmittedAt": "2026-08-07T19:14:34.204Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) McpServer high-level API — REJECTED: its inputSchema type is zod-only (sdk zod-compat.d.ts AnySchema); feeding generated JSON Schema requires either a zod dependency (new external dep, drift between generated schema and zod re-derivation) or is impossible; LOW-LEVEL Server + setRequestHandler serves the frozen generated JSON Schema objects verbatim with zero zod. (2) Verbatim dotted tool names (goal.create) — REJECTED as sole mechanism: common client tool-name grammars reject dots; deterministic bijective '.'->'_' label mapping with bijectivity test; envelope commandKind carries the verbatim identity (design 1009). (3) Credential as tool argument — REJECTED (security): MCP clients log tool args; design 1139/1141. Tool schemas = envelope keys MINUS sessionCredential (+ requestDigest, adapter-computed); server injects the spawn-env bootstrap credential before decode. (4) Parity-by-prose (shared port 'by construction') — REJECTED as DoD1 evidence: shipped instead as an executable transport-agnostic conformance suite (src/dispatch-conformance.ts) with call-sequence obligation + full registry error-mapping table; the Streamable HTTP sibling imports the same suite. (5) Blocking on M3 like the Codex task — REJECTED decisively: every surface this adapter INTERPRETS is landed/frozen/versioned (kind vocabularies, exact-key bounded envelope decoders, error registry with per-code mcpCode); everything else is opaque bytes behind the injected DispatchPort; Codex's dependency existed in NO form. Interim honesty: tool schemas are envelope-shaped (bounded opaque payload) until M3's one-source-schema pipeline lands — recorded follow-up. Verified by 2-agent workflow; 2 BLOCKERs + 5 RISKs folded in.",
+    "codebaseInsights": "SDK 1.30.0 empirical probes (repo-exact toolchain): (a) tsc FAILS without skipLibCheck — SDK d.ts uses HeadersInit, absent from @types/node 24.13.3 globals (TS2304); skipLibCheck:true in packages/mcp/tsconfig.json fixes it (proven). (b) pnpm install succeeds with ONLY the SDK declared — zod is dual-listed dep+peer and self-satisfies; ~93 transitive entries (express 5, hono, jose, ajv...), zero build scripts, no pnpm-11 onlyBuiltDependencies approval. (c) InMemoryTransport passes JSON-RPC objects BY REFERENCE (no serialization) — malformed wire bytes unrepresentable via roundtrip; byte-identity parity IS testable by riding daemon bytes as an opaque string in result.content[0].text; decoder's malformed branch tested by direct handler invocation. Registry transport bindings landed: mcpCode -32001..-32007 per category (runtime-error-registry.ts:42-53). Envelope decoders REQUIRE sessionCredential non-empty + requestDigest hex64 (runtime-envelope.ts:56-66,143-147) — hence adapter-side injection. No repo dependency-allowlist test exists (hygiene task owned only .gitignore + docs). exports {\".\": \"./src/index.ts\"} is the asserted package-root convention. AGENTS.md reserves adapters/* — governor granted packages/mcp; tension recorded, not relocated.",
+    "risks": "(1) Credential leakage is the top security risk: exactly one process.env read site, closure-held, never in schemas/logs/errors/ListTools; step-5 grep + step-6 red-team enforce. (2) Byte fidelity: ANY parse->re-stringify of daemon bytes corrupts digest-bound fields/opaque cursors — port is bytes-in/bytes-out, content block is opaque text, no outputSchema/structuredContent. (3) SDK upgrade drift: 1.30.0 exact-pinned; skipLibCheck hides SDK type breakage — acceptable, scoped to this package. (4) Envelope-shaped schemas are interim (M3 gap) — explicitly documented, follow-up recorded; QA should not read them as the final generated surface. (5) Malformed-bytes test honesty: state the direct-invocation caveat in the test header or the fixture silently tests the SDK's own -32602 path. (6) First external dep: ~93 lockfile entries land in one commit — lockfile ordering rule applies (every importer resolves to committed package.json; planning/ sources are untracked foreign work with no importer today). (7) Boundary scan covers packages/mcp — no forbidden substrings anywhere including comments.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-envelope.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/input-limits.ts",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/skills/package.json",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-07T19:14:36.232Z",
+  "workStartedAt": "2026-08-07T19:15:58.197Z",
+  "reviewStartedAt": "2026-08-07T19:56:08.174Z",
+  "verification": {
+    "command": "pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  2 passed (2)\n      Tests  49 passed (49)\n   Start at  22:55:38\n   Duration  327ms (transform 175ms, setup 0ms, import 301ms, tests 47ms, environment 0ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/mcp/src",
+    "reportedAt": "2026-08-07T19:56:08.174Z"
+  },
+  "filesModified": [
+    "packages/mcp/package.json",
+    "packages/mcp/tsconfig.json",
+    "packages/mcp/src/index.ts",
+    "pnpm-lock.yaml",
+    "packages/mcp/src/stdio/stdio-schemas.test.ts",
+    "packages/mcp/src/stdio/stdio-tool-schemas.ts",
+    "packages/mcp/src/stdio/stdio-dispatch-port.ts",
+    "packages/mcp/src/dispatch-conformance.ts",
+    "packages/mcp/src/stdio/stdio-server.test.ts",
+    "packages/mcp/src/stdio/stdio-server.ts"
+  ],
+  "reviewCompletedAt": "2026-08-07T19:44:52.869Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Tool schemas are generated and bounded; authentication/capability checks match HTTP."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/mcp/src/stdio/stdio-server.ts",
+        "line": 93,
+        "description": "MUTATION A, SURVIVED (48/48 green): in buildCommandEnvelopeBytes move ONLY `commandKind: kind` above `...args`. Client invokes tool `goal_create` with arguments.commandKind='goal.close'. callTool resolves entry from the LABEL, so entry.kind stays 'goal.create' and decodeAndDispatch authenticates the capability for goal.create, while the dispatched bytes carry 'goal.close' (accepted by isCommandKind, runtime-envelope.ts:142). Daemon executes a command the client was never authorized for."
+      },
+      {
+        "type": "security",
+        "file": "packages/mcp/src/stdio/stdio-server.ts",
+        "line": 96,
+        "description": "MUTATION B, KILLED (contrast): moving all FOUR adapter fields above `...args` fails exactly one test. sessionCredential and requestDigest ARE locked; commandKind and schemaVersion are not. Schema tests do not close this — stdio-schemas.test.ts:124 asserts commandKind is absent from the static inputSchema, a claim about what is ADVERTISED, not what a hostile client can SEND. The SDK enforces nothing server-side."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/mcp/src/stdio/stdio-server.test.ts",
+        "line": 146,
+        "description": "FIX (command surface): assert on the decoded port.dispatched[0] envelope that a client-supplied commandKind (a DIFFERENT valid kind) and a wrong schemaVersion are both overwritten with the label-derived kind and RUNTIME_COMMAND_ENVELOPE_VERSION. Drive it off the exported ADAPTER_SUPPLIED_COMMAND_FIELDS so a field added there later is covered automatically. Then re-run mutation A and confirm it dies."
+      },
+      {
+        "type": "security",
+        "file": "packages/mcp/src/stdio/stdio-server.ts",
+        "line": 109,
+        "description": "buildQueryEnvelopeBytes has NO override test at all: queryKind, schemaVersion and sessionCredential are all unlocked on the query surface. The existing smuggle test exercises only the command surface. Add the query counterpart driven off ADAPTER_SUPPLIED_QUERY_FIELDS, asserting each is overwritten with the adapter value."
+      },
+      {
+        "type": "test_failure",
+        "file": "packages/mcp/src/stdio/stdio-server.test.ts",
+        "line": 134,
+        "description": "'refuses a client attempt to smuggle its own credential or digest' covers 2 of 4 command adapter-supplied fields and 0 of 3 query fields, which is exactly why mutation A survives it. Broaden it or add a sibling covering the declared adapter-supplied sets on BOTH surfaces. Your handoff memory states this behaviour is tested; it is half tested."
+      },
+      {
+        "type": "other",
+        "file": "packages/mcp/src/stdio/stdio-server.ts",
+        "line": 197,
+        "description": "NON-BLOCKING, no action this reopen. Disconnected-client-mid-dispatch has no test. I verified the claim myself by construction rather than on trust: callTool, decodeAndDispatch and the CallTool handler contain no `await`, so there is no interleaving point at which a disconnect could fabricate or half-authorize an outcome. The design argument holds. Leave it."
+      },
+      {
+        "type": "other",
+        "file": "packages/mcp/src/stdio/stdio-server.ts",
+        "line": 79,
+        "description": "NON-BLOCKING, no action. requestDigest = sha256 over JSON.stringify(payload ?? null). Contracts constrain it only to hex64 (runtime-envelope.ts:147) and @moe/contracts has no canonical-JSON helper, so nothing is violated. But this adapter is now the de facto definition, and a daemon that later canonicalises will reject every command. Flag to the architect for a shared helper; do not invent one here."
+      },
+      {
+        "type": "other",
+        "file": "packages/mcp/src/dispatch-conformance.ts",
+        "line": 272,
+        "description": "NON-BLOCKING, no action. 272 lines is over the 250 soft target, under the 400 hard rail; fixture module, fine. Also agreed and correctly left untouched: SDK ErrorCode.RequestTimeout -32001 collides with the frozen registry's UNAUTHENTICATED binding, so clients must read error.data.code. Architect's call."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT: one mutation-proven gap. DO NOT REVERT 55ecf7e, do not rebuild — fix is test-only, ~15 lines. Repro and fix in issues.\n\nstdio-server.ts:82-86 documents that adapter-supplied fields are written last so a client cannot override them. That ordering is the ONLY thing binding the kind the adapter AUTHENTICATES to the kind the daemon EXECUTES, and the low-level SDK does not validate arguments against inputSchema server-side (your own test at stdio-server.test.ts:148 proves hostile keys reach the decoder). Moving ONLY `commandKind: kind` above `...args` leaves all 48 tests green while producing a capability-check bypass. Moving all four fields kills exactly one test — sessionCredential/requestDigest are locked; commandKind, schemaVersion and the whole query surface are not. Fails DoD 1.\n\nVERIFIED PASS — do not redo: `pnpm --filter @moe/mcp typecheck && test` exit 0, 48 tests, twice identical. Repo `pnpm typecheck` prints \"packages/mcp typecheck: Done\"; `pnpm test` 78 files/1037 passed+1 skipped — the 2 failures are control-room-client, 100% untracked foreign work (`git ls-files` returns 0 files), not yours. Envelope key sets EXACT vs runtime-envelope.ts:56-66. Byte fidelity real: zero JSON.parse, dispatched bytes identical by reference at :285, golden fixtures provably detect re-serialisation. Two mutations KILLED (non-fatal TextDecoder; credential/digest smuggling). One process.env site; credential absent from ListTools, error.data, port-throw messages. Full 38-code error table iterated AND key-set-equal to RUNTIME_ERROR_CODES. Conformance suite transport-agnostic, drift gate uncast. Sizes 215/210/272/30/26 under the 400 rail; zero Date.now|Math.random|scheduler hits. Commit is exactly the 10 planned paths, no strays, all 11 lockfile importers resolve to committed package.json. +2090 (770 lockfile) greenfield, no seam — NOT an oversize reject.",
+      "rejectedAt": "2026-08-07T19:44:52.869Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Tool schemas are generated and bounded; authentication/capability checks match HTTP."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/mcp/src/stdio/stdio-server.ts",
+          "line": 93,
+          "description": "MUTATION A, SURVIVED (48/48 green): in buildCommandEnvelopeBytes move ONLY `commandKind: kind` above `...args`. Client invokes tool `goal_create` with arguments.commandKind='goal.close'. callTool resolves entry from the LABEL, so entry.kind stays 'goal.create' and decodeAndDispatch authenticates the capability for goal.create, while the dispatched bytes carry 'goal.close' (accepted by isCommandKind, runtime-envelope.ts:142). Daemon executes a command the client was never authorized for."
+        },
+        {
+          "type": "security",
+          "file": "packages/mcp/src/stdio/stdio-server.ts",
+          "line": 96,
+          "description": "MUTATION B, KILLED (contrast): moving all FOUR adapter fields above `...args` fails exactly one test. sessionCredential and requestDigest ARE locked; commandKind and schemaVersion are not. Schema tests do not close this — stdio-schemas.test.ts:124 asserts commandKind is absent from the static inputSchema, a claim about what is ADVERTISED, not what a hostile client can SEND. The SDK enforces nothing server-side."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/mcp/src/stdio/stdio-server.test.ts",
+          "line": 146,
+          "description": "FIX (command surface): assert on the decoded port.dispatched[0] envelope that a client-supplied commandKind (a DIFFERENT valid kind) and a wrong schemaVersion are both overwritten with the label-derived kind and RUNTIME_COMMAND_ENVELOPE_VERSION. Drive it off the exported ADAPTER_SUPPLIED_COMMAND_FIELDS so a field added there later is covered automatically. Then re-run mutation A and confirm it dies."
+        },
+        {
+          "type": "security",
+          "file": "packages/mcp/src/stdio/stdio-server.ts",
+          "line": 109,
+          "description": "buildQueryEnvelopeBytes has NO override test at all: queryKind, schemaVersion and sessionCredential are all unlocked on the query surface. The existing smuggle test exercises only the command surface. Add the query counterpart driven off ADAPTER_SUPPLIED_QUERY_FIELDS, asserting each is overwritten with the adapter value."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/mcp/src/stdio/stdio-server.test.ts",
+          "line": 134,
+          "description": "'refuses a client attempt to smuggle its own credential or digest' covers 2 of 4 command adapter-supplied fields and 0 of 3 query fields, which is exactly why mutation A survives it. Broaden it or add a sibling covering the declared adapter-supplied sets on BOTH surfaces. Your handoff memory states this behaviour is tested; it is half tested."
+        },
+        {
+          "type": "other",
+          "file": "packages/mcp/src/stdio/stdio-server.ts",
+          "line": 197,
+          "description": "NON-BLOCKING, no action this reopen. Disconnected-client-mid-dispatch has no test. I verified the claim myself by construction rather than on trust: callTool, decodeAndDispatch and the CallTool handler contain no `await`, so there is no interleaving point at which a disconnect could fabricate or half-authorize an outcome. The design argument holds. Leave it."
+        },
+        {
+          "type": "other",
+          "file": "packages/mcp/src/stdio/stdio-server.ts",
+          "line": 79,
+          "description": "NON-BLOCKING, no action. requestDigest = sha256 over JSON.stringify(payload ?? null). Contracts constrain it only to hex64 (runtime-envelope.ts:147) and @moe/contracts has no canonical-JSON helper, so nothing is violated. But this adapter is now the de facto definition, and a daemon that later canonicalises will reject every command. Flag to the architect for a shared helper; do not invent one here."
+        },
+        {
+          "type": "other",
+          "file": "packages/mcp/src/dispatch-conformance.ts",
+          "line": 272,
+          "description": "NON-BLOCKING, no action. 272 lines is over the 250 soft target, under the 400 hard rail; fixture module, fine. Also agreed and correctly left untouched: SDK ErrorCode.RequestTimeout -32001 collides with the frozen registry's UNAUTHENTICATED binding, so clients must read error.data.code. Architect's call."
+        }
+      ]
+    }
+  ]
 }

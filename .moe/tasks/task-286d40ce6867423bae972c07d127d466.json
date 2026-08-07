@@ -14,13 +14,142 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Use `sqlite-event-store-core.test.ts`, `sqlite-event-store-recovery.test.ts`, and `store-commit-ambiguity.test.ts` as explicitly declared read-only characterization scope. Preserve their assertions for ordered event/aggregate/global/outbox writes, receipt replay and ID fencing, collision rollback, safe-integer and byte bounds, isolated bytes, bigint cursors, restart/concurrent expected versions, lost responses, rejected COMMIT reuse, and OUTCOME_UNKNOWN poisoning exactly as written. Do not edit, split, skip, loosen, or stage these shared test files.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Established the three declared characterization files as read-only scope. Worktree blobs equal HEAD: core 1afeafd26c55ed7051652c285734f2ca646a84ba, recovery 1941cb504b43320c3e4aebae5d59ec06f47834e0, ambiguity 34a63898b9cb5ae14249f4a51a45b88cc4c7ccbb. Reviewed test titles covering atomic ordered commit/replay/ID fencing, rollback/bounds/isolated bytes/bigint/restart/concurrency/lost response, and rejected versus ambiguous COMMIT behavior. No shared test edits.",
+      "startedAt": "2026-08-07T13:36:51.653Z",
+      "completedAt": "2026-08-07T13:37:34.212Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create `event-ledger-outbox.ts` with its one-line `.js` bridge, exporting an internal EventOutboxStore over EventReadModelStore that owns only outbox collision checks and per-event message insertion/materialization. Preserve message-ID conflict precedence, prepared SQL and bigint insertion positions, nested eventOutboxIndex order, topic/payload/header byte references, created_at, returned outbox IDs/effect drafts, and the rule that an event is inserted before its outbox messages. Do not add relay or delivery behavior.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/event-ledger-outbox.ts",
+        "packages/store/src/event-ledger-outbox.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-ledger-outbox.ts",
+        "packages/store/src/event-ledger-outbox.js"
+      ],
+      "note": "Added the internal EventOutboxStore layer and one-line strip-types bridge. It owns per-event outbox ID collision checks plus one prepared bigint-returning outbox INSERT and nested-index materialization, preserving SQL bind order, byte references, created_at, durable positions, and message/effect order. `pnpm --filter @moe/store typecheck` exited 0.",
+      "startedAt": "2026-08-07T13:37:38.077Z",
+      "completedAt": "2026-08-07T13:38:57.303Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create `event-ledger-append.ts` with its one-line `.js` bridge, exporting an internal EventAppendStore over the outbox layer and moving protected writeCommitEffects plus receipt-project binding. Preserve safe current-version calculation; event then outbox durable-ID checks; command receipt insert with pending effect digest; project scope insert; input-order aggregate sequence, command index, and SQLite global position; nested outbox calls; exact identifyCommandEffects input/order; one-row digest finalize; aggregate-head upsert after effect finalization; and the exact StoredCommitResult. The method remains protected with its current signature so decision transactions continue to reuse the same atomic append path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/event-ledger-append.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-ledger.ts",
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/event-ledger-append.js",
+        "packages/store/src/event-ledger-outbox.ts",
+        "packages/store/src/event-ledger-outbox.js"
+      ],
+      "note": "Moved the protected writeCommitEffects seam and protected receipt-project binding into EventAppendStore over EventOutboxStore; EventLedgerStore now inherits it. The append orchestration preserves safe-version validation, per-event event-then-outbox conflict precedence, pending receipt/scope before effects, event then nested outbox insertion order, exact digest fields, one-row finalize, head upsert, and StoredCommitResult fields. Helpers keep the new source at 228 lines. Verification: store typecheck exited 0; store tests 18 files/112 tests passed.",
+      "startedAt": "2026-08-07T13:39:02.571Z",
+      "completedAt": "2026-08-07T13:41:27.058Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Create `event-ledger-recovery.ts` with its one-line `.js` bridge, exporting an internal EventRecoveryStore that owns only BEGIN/COMMIT/ROLLBACK and ambiguous-outcome handling around a locked callback. Preserve BEGIN IMMEDIATE and its `begin command transaction` normalization; set commitAttempted immediately before COMMIT; rollback only while SQLite reports an active transaction; classify an ended transaction after attempted COMMIT or any rollback failure as poisoned `OUTCOME_UNKNOWN: the command outcome could not be proven; reopen and reconcile its receipt` with AggregateError; otherwise pass DurableStoreError through and normalize only unknown errors as `commit command effects`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/event-ledger-recovery.ts",
+        "packages/store/src/event-ledger-recovery.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-ledger-recovery.ts",
+        "packages/store/src/event-ledger-recovery.js"
+      ],
+      "note": "Added EventRecoveryStore and its one-line bridge. The generic locked callback wrapper preserves BEGIN IMMEDIATE normalization, marks commitAttempted immediately before COMMIT, rolls back only active transactions, poisons ended-after-COMMIT or rollback-failure outcomes with the exact OUTCOME_UNKNOWN message/AggregateError cause, passes DurableStoreError through after known rollback, and normalizes only unknown commit failures. Store typecheck exited 0.",
+      "startedAt": "2026-08-07T13:41:30.697Z",
+      "completedAt": "2026-08-07T13:42:07.860Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Create `event-ledger-transaction.ts` with its one-line `.js` bridge, exporting an internal EventTransactionStore over the recovery layer and moving public commit. Preserve requireOpen/project assertion, hostile input snapshot and external-identifier validation before the transaction, request identity, binding check, receipt lookup/replay digest and aggregate-key checks, expected-version comparison, and exact COMMITTED versus REPLAYED conversion. For a new command, call the extracted writeCommitEffects once inside the same locked callback rather than retaining duplicate SQL. Reduce `event-ledger.ts` to the exported compatibility class extending EventTransactionStore, preserving its constructor, public commit, protected append seam, inheritance relationships, module exports, and all callers unchanged.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/event-ledger-transaction.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-ledger.ts",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/event-ledger-transaction.js",
+        "packages/store/src/event-ledger-recovery.ts",
+        "packages/store/src/event-ledger-recovery.js",
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/event-ledger-append.js",
+        "packages/store/src/event-ledger-outbox.ts",
+        "packages/store/src/event-ledger-outbox.js"
+      ],
+      "note": "Moved public commit into EventTransactionStore and reduced event-ledger.ts to the 7-line exported compatibility facade over it. Pre-transaction open/project/snapshot/identifier/request checks, locked binding/receipt replay and aggregate-key checks, expected-version comparison, and exact disposition conversion remain ordered; new commands call inherited writeCommitEffects exactly once. Recovery now applies result materialization after COMMIT inside the ambiguity-classifying try, matching the former lost-ack behavior. All production modules are <=240 lines. Store typecheck and all 18 files/112 tests passed.",
+      "startedAt": "2026-08-07T13:42:10.964Z",
+      "completedAt": "2026-08-07T13:44:19.823Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review over the nine owned paths: compare moved SQL, bind order, hashes, errors, and method visibility against HEAD; trace empty/multi-event/multi-outbox, duplicate command, conflicting command, stale version, event collision, outbox collision, version overflow, receipt/scope/finalize/head failure, concurrent writers, restart replay, rejected COMMIT, acknowledged-COMMIT loss, and rollback failure; confirm transaction delegation did not reorder any read or write and introduced no cycle/export/schema/relay drift. Use a cross-platform Node line counter to require every changed/new production or test source <=250 physical lines and confirm the three shared tests are byte-unchanged. Inspect the shared index, unstage foreign paths, commit only the nine explicit paths by pathspec, and verify `git show --stat`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-ledger.ts",
+        "packages/store/src/event-ledger-outbox.ts",
+        "packages/store/src/event-ledger-outbox.js",
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/event-ledger-append.js",
+        "packages/store/src/event-ledger-recovery.ts",
+        "packages/store/src/event-ledger-recovery.js",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/event-ledger-transaction.js"
+      ],
+      "note": "Adversarial review traced empty/multi-event/outbox, replay/conflict/stale/collision/overflow, all append failure points, concurrent BEGIN IMMEDIATE serialization, restart replay, rejected COMMIT rollback, lost acknowledgement, and rollback failure. Normalized moved append SQL is identical to HEAD; bind/order inspection confirmed receipt->scope->event->nested outbox->digest->head->COMMIT. No cycle/export/schema/relay drift. Node physical lines: facade 7, outbox 80, append 239, recovery 48, transaction 75, bridges 1 each. Shared characterization blobs remain byte-identical to HEAD. Shared index contained only the nine owned staged paths; committed explicit pathspec as 3883250 and git show --stat confirms only those nine paths.",
+      "startedAt": "2026-08-07T13:44:25.765Z",
+      "completedAt": "2026-08-07T13:46:57.876Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "From `D:/projexts/moe-next`, run exactly `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. Preserve the fresh complete output and zero exit as the sole complete_task verification evidence; do not suppress recovery/race failures or modify shared tests to obtain green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-ledger.ts"
+      ],
+      "note": "Fresh exact foreground gate from D:/projexts/moe-next exited 0: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. TypeScript completed successfully; Vitest reported 18 passed files and 112 passed tests (duration 1.18s). Post-commit `git show --check HEAD` exited 0 and all nine owned paths are clean.",
+      "startedAt": "2026-08-07T13:47:03.446Z",
+      "completedAt": "2026-08-07T13:47:24.174Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/store/src/event-ledger.ts + new event-ledger-*.ts. Deps: none. Watch: its \"store core/recovery tests\" scope may touch shared store test files — architect must declare them explicitly.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -28,5 +157,74 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.664Z",
-  "updatedAt": "2026-08-07T11:44:13.664Z"
+  "updatedAt": "2026-08-07T13:59:46.098Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:19:03.946Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T13:59:46.098Z",
+    "wallClockMs": 2442152
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:22:02.393Z",
+  "planningNotes": {
+    "approachesConsidered": "Preserve EventLedgerStore as the exported inheritance facade and extract four internal layers matching the ticket: outbox insertion, receipt/event append, transaction preconditions, and commit/rollback recovery. Rejected replacing inheritance with a parallel service because DecisionReadModelStore and the decision ledger rely on protected writeCommitEffects. Rejected leaving commit's duplicated append SQL in place; delegating to the already-equivalent protected append path removes drift while retaining statement/order semantics. Existing core, recovery, and ambiguity suites are declared read-only characterization and will not be rewritten. Each new .ts module needs a one-line .js bridge for Node strip-types runtime.",
+    "codebaseInsights": "event-ledger.ts is 506 lines. Public commit is 254 lines and duplicates the 186-line protected writeCommitEffects block. DecisionReadModelStore extends EventLedgerStore; decision-ledger accepted/rejected paths call protected writeCommitEffects. The observable write sequence is receipt, receipt-project scope, each event in input order, that event's outbox messages in nested order, receipt effect digest finalization, aggregate head, then COMMIT. Global and outbox positions come from SQLite INTEGER PRIMARY KEY insertion and remain bigint.",
+    "risks": "Preserve event/aggregate/global/outbox ordering, exact receipt effect hash input, conflict-check precedence, replay without reapplying effects, and all-or-none transaction behavior. A COMMIT that ended the transaction before acknowledgement or any rollback failure must poison and return OUTCOME_UNKNOWN; a rejected COMMIT with successful rollback remains a known operational failure and reusable handle. Keep protected writeCommitEffects and exported EventLedgerStore signatures for decision-layer consumers. Do not alter event schemas, SQL columns/indexes, relay behavior, stable errors, frozen/copy semantics, or bigint cursor handling. Every changed/new production or test source must be <=250 physical lines; the three declared shared tests remain byte-unchanged.",
+    "keyFiles": [
+      "packages/store/src/event-ledger.ts",
+      "packages/store/src/event-read-model.ts",
+      "packages/store/src/decision-read-model.ts",
+      "packages/store/src/decision-ledger.ts",
+      "packages/store/src/store-digests.ts",
+      "packages/store/src/store-input.ts",
+      "packages/store/src/sqlite-event-store-core.test.ts",
+      "packages/store/src/sqlite-event-store-recovery.test.ts",
+      "packages/store/src/store-commit-ambiguity.test.ts",
+      "packages/store/src/store-runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-07T13:22:04.424Z",
+  "contextFetchedBy": [
+    "worker-875b53a2",
+    "qa-200db8e3"
+  ],
+  "workStartedAt": "2026-08-07T13:36:51.653Z",
+  "reviewStartedAt": "2026-08-07T13:48:31.986Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  16:47:09\n   Duration  1.18s (transform 2.93s, setup 0ms, import 4.51s, tests 3.73s, environment 1ms)",
+    "reportedAt": "2026-08-07T13:48:31.986Z"
+  },
+  "filesModified": [
+    "packages/store/src/event-ledger-outbox.ts",
+    "packages/store/src/event-ledger-outbox.js",
+    "packages/store/src/event-ledger.ts",
+    "packages/store/src/event-ledger-append.ts",
+    "packages/store/src/event-ledger-append.js",
+    "packages/store/src/event-ledger-recovery.ts",
+    "packages/store/src/event-ledger-recovery.js",
+    "packages/store/src/event-ledger-transaction.ts",
+    "packages/store/src/event-ledger-transaction.js"
+  ],
+  "completedAt": "2026-08-07T13:59:46.098Z",
+  "reviewCompletedAt": "2026-08-07T13:59:46.098Z",
+  "reviewSummary": "APPROVED. Commit 3883250, 9 owned paths, +450/-503 (net -53). 506-line event-ledger.ts split into 5 modules.\n\nGOVERNOR WATCH ITEM CLEARED: zero test files in the commit; all three declared characterization files byte-unchanged.\n\nTHE REAL RISK was the DEDUP, not the split - HEAD's public commit carried a 186-line copy of writeCommitEffects, now deleted in favour of delegation. Safe only if it was a true copy. Proved it:\n- Raw literal diff showed 4 \"lost\" SQL templates, but each had a SURVIVING TWIN (1->0 beside 1->1) differing only in indentation - the copy sat at a different nesting depth.\n- After whitespace normalisation: 8 SQL statements before, 8 after, ZERO lost, ZERO added.\n- `UPDATE command_receipts SET effect_sha256 = ?` went 2 -> 1. Direct dedup evidence.\nZero error messages or reason codes lost; added literals are only the 4 import paths, node:sqlite, and a type index.\n\nDoD2 - recovery block LINE-FOR-LINE identical to HEAD 270-291: commitAttempted set immediately before exec(\"COMMIT\"), `commitAttempted && !isTransaction` computed BEFORE the rollback attempt, 1-vs-2 cause AggregateError, poison(), exact OUTCOME_UNKNOWN text. Critically `afterCommit(result)` sits INSIDE the try, so post-COMMIT materialization failures still classify as ambiguous rather than escaping.\n\nORACLE SUITES run and pass, incl. \"recovers a committed lost response after process exit without explicit close\", mid-transaction collision rollback, multi-process startup/version races (222ms), and both ambiguity classifications.\n\nCROSS-TASK: writeCommitEffects still `protected` (event-ledger-append.ts:29), referenced 3x from decision-ledger-canonical.ts, so this composes with task-16909c47. Chain: ReadModel -> Outbox -> Append -> Recovery -> Transaction -> Ledger.\n\nRAN MYSELF: store gate exit 0, 18 files/112 tests | repo excluding foreign untracked packages/core -> 62 files/674, exit 0.\n\nDoD3 PASS: 7/80/239/48/75, max 239 vs the 350 cap, all inside the 250 rail (was 506)."
 }

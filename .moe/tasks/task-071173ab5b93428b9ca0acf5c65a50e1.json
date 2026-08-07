@@ -1,0 +1,34 @@
+{
+  "id": "task-071173ab5b93428b9ca0acf5c65a50e1",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Transactional outbox relay with durable inbox dedupe",
+  "description": "Objective: land event append, projection apply, and outbox enqueue in one atomic transaction, with a durable inbox that makes redelivery idempotent. SPIDR step 3 of 5, split from task-55d5a898264b4880a99bf2c5b3be120b. This is the step where the parent task's core claim — real atomicity rather than faked — is actually satisfied. Deliverable: a relay that drives step 2's pure fold through step 1's commit seam so that a crash at any point leaves either all three effects or none; plus inbox dedupe keyed on a durable message identity so replaying an already-applied message is a no-op with a distinguishable stable outcome, not a silent success. NOT in scope: subscriptions, CURSOR_GAP snapshots, crash/rebuild hardening drills. Hard dependencies: Versioned event schema and projection commit seam (step 1) for the transaction seam and tables; Pure projection upcaster engine (step 2) for the fold. Owned paths: packages/store/src/outbox-relay/** and its focused tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Event append, projection apply, and outbox enqueue commit as one transaction: a failure injected at each point leaves none of the three effects, proven by tests that inspect the database after the failure.",
+    "Redelivering an already-applied message is idempotent and reports a distinguishable stable outcome rather than silently succeeding or double-applying.",
+    "Inbox dedupe survives process restart — it is durable state, not an in-memory set, proven by a test that reopens the database.",
+    "The focused store typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Atomicity is the deliverable and the reason the parent task was blocked. A relay that applies the projection after commit, or enqueues outside the transaction, fails this task no matter how green the tests are.",
+    "Dedupe must be durable across restart. An in-memory dedupe set is the exact failure this step exists to prevent.",
+    "Do not reach into packages/store/src/projections/** to change the fold; consume it. If step 2's contract is wrong, say so in #architects rather than editing across the boundary.",
+    "Fail closed with stable reason codes; a partial write is never acceptable.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T13:42:03.373Z",
+  "updatedAt": "2026-08-07T13:42:03.373Z"
+}

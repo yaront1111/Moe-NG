@@ -1,0 +1,34 @@
+{
+  "id": "task-7617c00dfc4a46eb81ebb8673f724855",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Subscription cursors with CURSOR_GAP snapshots",
+  "description": "Objective: let a consumer follow projection output from a durable cursor, and detect when it has fallen too far behind to resume incrementally. SPIDR step 4 of 5, split from task-55d5a898264b4880a99bf2c5b3be120b. Deliverable: subscription registration with durable cursors keyed to the cursor-generation table from step 1, bounded page reads over projection output, and a stable CURSOR_GAP outcome when a cursor is older than retained history — accompanied by a snapshot the consumer can rebuild from, so CURSOR_GAP is a recoverable answer rather than a dead end. A reopened subscription whose generation has changed reports the gap rather than silently resuming against incompatible state. NOT in scope: the relay/inbox transaction, the projection fold itself, crash/rebuild hardening drills. Hard dependencies: Versioned event schema and projection commit seam (step 1) for the subscription and cursor-generation tables; Transactional outbox relay with durable inbox dedupe (step 3) for the projection output being followed. Owned paths: packages/store/src/subscriptions/** and its focused tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Subscription cursors are durable across restart and bound to a cursor generation; a reopened subscription whose generation changed reports CURSOR_GAP rather than resuming against incompatible state.",
+    "A cursor older than retained history returns a stable CURSOR_GAP outcome together with a snapshot sufficient to rebuild from, never a silent skip and never an unbounded replay.",
+    "Page reads are bounded and deterministic: the same cursor returns the same frozen page, and cursor ordering is total with no duplicate or skipped entries at page boundaries.",
+    "The focused store typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "CURSOR_GAP must be recoverable. Reporting the gap without a usable snapshot leaves the consumer stuck and fails this task.",
+    "Never silently skip ahead to close a gap. A missed range is a stable reason code, not a repositioned cursor.",
+    "Consume the relay's output; do not reach into packages/store/src/outbox-relay/** or projections/** to reshape it. Raise contract problems in #architects instead.",
+    "Page reads must be bounded — no unbounded replay of retained history.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T13:42:21.887Z",
+  "updatedAt": "2026-08-07T13:42:21.887Z"
+}

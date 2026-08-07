@@ -14,13 +14,150 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Before moving production code, add a focused public-contract characterization suite for verifyPhase0EvidenceManifest. Build a compact synthetic manifest/object reader without confirmatory BENCH corpus data and pin the exact manifest identity/hash and canonical manifestJson, status-first then PHASE0_ROLE_METADATA read order, exact Error code/detail precedence for read/location/content failures, frozen result/nested values, and defensive readEvidence copies. Exercise only the existing public facade so the test remains valid after decomposition; keep this new test <=250 physical lines and do not edit or weaken the existing hostile, composition, boundary, or correction suites.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-verifier.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-verifier.test.ts"
+      ],
+      "note": "Added packages/testkit/src/phase0-evidence-manifest-verifier.test.ts (244 physical lines, 28 tests, all green against the pre-refactor code). Compact synthetic fixture only - six one-line role documents plus a synthetic porcelain status blob, no BENCH corpus bytes. Pins: exact canonical manifestJson and manifest identity, status-object-first then PHASE0_ROLE_METADATA read order, frozen result/identity/manifest/entries/sourceState/observations, defensive readEvidence copies plus unknown-role error, 17 structural decode error codes/details in first-failure order, and 5 reader failure paths incl. read -> location -> bounded/identity precedence and line-count-before-git-blob precedence. Exercises only the public facade (verifyPhase0EvidenceManifest), so it stays valid after decomposition. Existing hostile/composition/freeze suites untouched. Verified: pnpm --filter @moe/testkit typecheck clean; vitest on the new file 28/28 pass.",
+      "startedAt": "2026-08-07T12:44:06.351Z",
+      "completedAt": "2026-08-07T12:53:00.197Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract the capture port contract and hostile I/O boundary into phase0-evidence-capture-port.ts with its one-line .js bridge. Move the seven public raw/receipt/port interfaces plus source-path receipt validation, repository snapshot/status validation, commit-bound path lookup, object write/read receipt validation, and final stored-object reread helpers without changing call order or errors. Keep OS-independent Windows path comparison via win32 semantics; propagate source/snapshot/lookup exceptions exactly as today and retain only the existing object-store normalization. In phase0-evidence-capture.ts, type-re-export every public interface under its current name so index.ts, phase0-node-capture-port.ts, phase0-node-git.ts, and external package consumers require no edits.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/phase0-evidence-capture-port.ts",
+        "packages/testkit/src/phase0-evidence-capture-port.js"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-capture-port.ts",
+        "packages/testkit/src/phase0-evidence-capture-port.js",
+        "packages/testkit/src/phase0-evidence-source-reader.ts",
+        "packages/testkit/src/phase0-evidence-source-reader.js",
+        "packages/testkit/src/phase0-evidence-object-store.ts",
+        "packages/testkit/src/phase0-evidence-object-store.js",
+        "packages/testkit/src/phase0-evidence-capture.ts"
+      ],
+      "note": "DEVIATION (recorded per convention-contracts-250-line-splits): the single planned phase0-evidence-capture-port.ts would have been ~340 physical lines, over the epic <=250 rail, so the boundary was split along its real seams into three modules, each with its one-line .js bridge: phase0-evidence-capture-port.ts (81) holds the seven public port/receipt interfaces plus the stable captureError text factory and equalBytes; phase0-evidence-source-reader.ts (175) holds source-file receipt validation, repository snapshot/status validation, and commit-bound path lookup incl. win32 path comparison and sha1/sha256 OID framing; phase0-evidence-object-store.ts (111) holds object write/read receipt validation, persist-and-verify, and the final stored-object reread set. Bodies moved verbatim - same call order, same first-failure precedence, same error codes/details, same defensive slices, only the object-store failures stay normalized. phase0-evidence-capture.ts type-re-exports all seven interfaces under their current names, so index.ts, phase0-node-capture-port.ts, phase0-node-git.ts, and the existing suites needed no edits. Verified: pnpm --filter @moe/testkit typecheck clean; pnpm --filter @moe/testkit test 14 files / 192 tests pass.",
+      "startedAt": "2026-08-07T12:53:38.498Z",
+      "completedAt": "2026-08-07T12:56:02.579Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Reduce phase0-evidence-capture.ts to the single responsibility of ordered capture transaction and manifest derivation. Preserve exact byte snapshotting, SHA-256 identities/object paths, sha1/sha256 Git blob framing, LF line counts, duplicate detection, PHASE0_ROLE_METADATA entry order, before/after comparison precedence (object format, HEAD, status bytes), the placement of now() before final Map-insertion-order rereads, all source/object defensive copies, and the frozen manifest/entries/source-state/observation graph. Do not add validation rules, mutation, policy, new exports, or alternate error mapping.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts"
+      ],
+      "note": "phase0-evidence-capture.ts is now 199 lines and owns only the ordered capture transaction plus manifest derivation: countLines, validateCaptureTime, rememberExpectedObject, repositoryObservation, assertRepositoryUnchanged, capturePhase0Evidence. Structural proof, not just tests: `git diff` on the file past the import/re-export header is pure deletion (zero added lines), and a brace-matching comparison against `git show HEAD:...` confirms all 18 moved/retained function bodies are byte-verbatim - captureError, equalBytes, countLines, expectedOidPattern, computeGitBlobOid, validateCaptureTime, equalWindowsPaths, readAndValidateSourceFile, validateEvidenceObjectLocation, readAndValidateEvidenceObject, persistAndVerifyObject, readAndVerifyRepositorySnapshot, determineSourceState, rememberExpectedObject, verifyCompleteObjectSet, repositoryObservation, assertRepositoryUnchanged, capturePhase0Evidence. So byte snapshotting, SHA-256 identities/object paths, sha1/sha256 blob framing, LF line counts, duplicate detection, role order, before/after precedence (object-format, HEAD, status), the now() placement before the final Map-insertion-order rereads, defensive copies, and the frozen graph are unchanged by construction. No new rules, mutation, policy, exports, or error remapping. Verified: typecheck clean; 14 files / 192 tests pass.",
+      "startedAt": "2026-08-07T12:56:06.833Z",
+      "completedAt": "2026-08-07T12:57:08.825Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extract canonical manifest structural decoding into phase0-evidence-manifest-codec.ts with its one-line .js bridge. Keep the exact bounded canonical-JSON pipeline and first-error order; exact key sets/fixed fields; target, Git format, before/after observation checks; positional PHASE0_ROLE_METADATA role/owner/path validation; document bounds; digest/object-path uniqueness; source-state decoding; canonical capture time; and frozen observations/source states/entries/manifest. Export only the narrow internal decoded-manifest contract needed by the facade, and keep the module <=250 physical lines rather than collapsing entry validation back into an oversized file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-codec.ts",
+        "packages/testkit/src/phase0-evidence-manifest-codec.js"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-codec.ts",
+        "packages/testkit/src/phase0-evidence-manifest-codec.js",
+        "packages/testkit/src/phase0-evidence-entry-codec.ts",
+        "packages/testkit/src/phase0-evidence-entry-codec.js",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "note": "DEVIATION as the step itself anticipated (\"keep the module <=250 lines rather than collapsing entry validation back into an oversized file\"): canonical structural decoding ships as two modules with one-line .js bridges instead of one. phase0-evidence-manifest-codec.ts (135) owns the manifest envelope - bounded canonical-JSON pipeline via parseCanonicalJsonRecord, exact key set, fixed fields, target repository, Git format, both observations, before/after equality, canonical capture time, and the frozen manifest assembly - and exports only DecodedPhase0EvidenceManifest + decodeManifest. phase0-evidence-entry-codec.ts (147) owns positional PHASE0_ROLE_METADATA role/owner/path validation, document bounds, digest/object-path derivation and uniqueness, source-state decoding, and the frozen entries; it also owns the two digest predicates shared with the envelope (gitOidPattern, expectedObjectPath) so the dependency runs one way, manifest -> entry, with no cycle. Bodies moved verbatim: brace-matched comparison against git HEAD confirms gitOidPattern, computeGitBlobOid, expectedObjectPath, decodeObservation, decodeSourceState, decodeEntries, readVerifiedObject, verifyPhase0EvidenceManifest byte-identical, plus a text comparison of the decodeManifest body (its signature moved from an inline return type to the named interface, so it was checked separately). First-error order and all PHASE0_* codes/details unchanged. Verified: typecheck clean; 14 files / 192 tests pass.",
+      "startedAt": "2026-08-07T12:57:12.988Z",
+      "completedAt": "2026-08-07T12:59:06.144Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Extract evidence-object receipt, bounded snapshot, digest/path/byte-length, LF line-count, and Git-blob verification into phase0-evidence-object-verifier.ts with its one-line .js bridge, owning the Phase0FreezeObjectReader port type. Make phase0-evidence-manifest-verifier.ts a thin public orchestrator that type-re-exports Phase0FreezeObjectReader and retains VerifiedPhase0EvidenceManifest and verifyPhase0EvidenceManifest unchanged. Preserve status-first and metadata-order reads, read -> location -> bounded bytes -> identity -> line count -> Git OID failure precedence, exact stable Error text, exact manifest identity/manifestJson, frozen result graph, and fresh readEvidence slices.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/phase0-evidence-object-verifier.ts",
+        "packages/testkit/src/phase0-evidence-object-verifier.js"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-object-verifier.ts",
+        "packages/testkit/src/phase0-evidence-object-verifier.js",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "note": "phase0-evidence-object-verifier.ts (104 lines, one-line .js bridge) now owns Phase0FreezeObjectReader plus all evidence-object verification: the private readVerifiedObject keeps the read -> location -> bounded-snapshot -> digest/objectPath/byteLength precedence verbatim; readVerifiedStatusObject wraps it with the unbounded (PHASE0_MAX_STATUS_BYTES) read and the PHASE0_MANIFEST_STATUS_LIMIT_EXCEEDED check; readVerifiedEntryObject wraps it with the LF line-count then Git-blob-OID checks and keeps computeGitBlobOid's `blob <len>\\\\0` framing. phase0-evidence-manifest-verifier.ts is now a 50-line orchestrator: decode, manifest identity, status object first, entries in decoded metadata order, frozen result with a spread identity copy, identical manifestJson decode, and fresh readEvidence slices with the unknown-role error. It type-re-exports Phase0FreezeObjectReader and keeps VerifiedPhase0EvidenceManifest and verifyPhase0EvidenceManifest names/signatures, so index.ts and phase0-freeze-verifier.ts needed no edits. Shim audit: every non-test .ts in packages/testkit/src has a one-line `export * from \"./<name>.ts\"` sibling (index.js is intentionally absent, as before, since package exports resolve ./src/index.ts directly) and foundation-runtime-entrypoint.test.ts still passes, proving Node-side resolution. Verified: typecheck clean; 14 files / 192 tests pass.",
+      "startedAt": "2026-08-07T12:59:22.957Z",
+      "completedAt": "2026-08-07T13:00:28.651Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review over only the owned diff: compare pre/post public exports and every existing PHASE0_* reason/detail path; trace capture and verifier interaction order including double/final reads; challenge empty, maximum, oversized, aliased, mutated, sha1, sha256, Windows path, and hostile reader cases; confirm no confirmatory BENCH bytes or policy changes entered the diff; and run a cross-platform Node physical-line count over every changed/new production and test TypeScript file, requiring <=250 lines and one named responsibility per production module. Leave the pre-existing oversized test suites byte-unchanged. Before commit, inspect git status, unstage any foreign path with git restore --staged -- <path>, stage only the nine explicit owned paths, commit with an explicit pathspec (never bare commit, -a, broad add, push, merge, reset, stash, or worktree), and inspect git show --stat.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts",
+        "packages/testkit/src/phase0-evidence-capture-port.ts",
+        "packages/testkit/src/phase0-evidence-capture-port.js",
+        "packages/testkit/src/phase0-evidence-source-reader.ts",
+        "packages/testkit/src/phase0-evidence-source-reader.js",
+        "packages/testkit/src/phase0-evidence-object-store.ts",
+        "packages/testkit/src/phase0-evidence-object-store.js",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.test.ts",
+        "packages/testkit/src/phase0-evidence-manifest-codec.ts",
+        "packages/testkit/src/phase0-evidence-manifest-codec.js",
+        "packages/testkit/src/phase0-evidence-entry-codec.ts",
+        "packages/testkit/src/phase0-evidence-entry-codec.js",
+        "packages/testkit/src/phase0-evidence-object-verifier.ts",
+        "packages/testkit/src/phase0-evidence-object-verifier.js"
+      ],
+      "note": "Adversarial review of the owned diff, evidence not assertion. (1) Public surface: index.ts is byte-identical to HEAD; a Node --experimental-strip-types import of the index resolves all 11 runtime exports unchanged; an emitDeclarationOnly probe confirms capturePhase0Evidence, verifyPhase0EvidenceManifest, VerifiedPhase0EvidenceManifest and the eight re-exported type names keep their exact shapes (probe output deleted before commit). (2) Reason codes: quoted PHASE0_* literals tallied over the two old files vs the eight new/changed ones are identical across all 36 codes, and 26 function bodies were proven byte-verbatim by brace-matched comparison against git HEAD, so first-failure precedence and detail strings cannot have drifted. (3) Order: capture (before status, six read/lookup/write/reread cycles, six rereads, after status, compare, now(), final Map-order rereads) and verify (status first, then entries in decoded order, read -> location -> bounded -> identity -> line count -> Git OID) are unchanged by construction plus covered by the untouched 596-line capture suite and the new suite. (4) Concurrency/state: no module-level mutable state was introduced and every moved regex is non-global, so no lastIndex sharing between concurrent runs. (5) Hostile/edge cases (empty, max, oversized, aliased, mutated, sha1/sha256, win32 path, hostile reader) stay covered - the win32 comparison moved intact with its node:path import, and the existing hostile suites plus the new one pass. (6) No BENCH corpus bytes or policy changes: grep for BENCH/benchmark corpus/docs/plans paths over the new files is empty; largest new file is 6.2 KB. (7) Line gate: 199/81/175/111/51/135/147/107 production and 244 test lines - all <=250 - and all six new .js bridges are exactly one line. (8) Known, deliberate, unchanged from before: equalBytes/countLines still exist in both the capture boundary and phase0-freeze-codec.ts; unifying them would couple capture to the freeze codec and is out of scope for a refactor-only task. capture-port.ts intentionally carries captureError/equalBytes next to the interfaces so source-reader and object-store share them without an import cycle. (9) Regression sweep beyond the focused gate: npx vitest run packages/testkit/src packages/contracts/src -> 20 files / 286 tests pass. (10) Commit hygiene: probes removed first, git status inspected, only the 15 owned paths staged, committed by explicit pathspec as 7570b64, git show --stat confirms 15 owned files and zero foreign paths. No pre-existing test suite was modified. The first commit attempt landed with a literal \"@-\" subject because git -m does not read stdin; the message-only amend fixed it before any further work.",
+      "startedAt": "2026-08-07T13:00:31.766Z",
+      "completedAt": "2026-08-07T13:04:07.121Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "From D:/projexts/moe-next, run exactly `pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test` once after implementation and adversarial review. Treat its fresh zero exit and complete output as the sole complete_task verification evidence; do not weaken, rewrite, skip, or selectively rerun failing hostile, determinism, boundary, correction, composition, or freeze tests.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/phase0-evidence-capture.ts",
+        "packages/testkit/src/phase0-evidence-manifest-verifier.ts"
+      ],
+      "note": "Ran exactly `pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test` once from D:/projexts/moe-next after implementation and adversarial review. Exit code 0. tsc --project tsconfig.json clean; vitest run --root ../.. packages/testkit/src -> Test Files 14 passed (14), Tests 192 passed (192), duration 6.92s. No test was weakened, rewritten, skipped, or selectively rerun - the hostile, determinism, boundary, correction, composition, and freeze suites are byte-unchanged and all ran in this pass.",
+      "startedAt": "2026-08-07T13:04:11.317Z",
+      "completedAt": "2026-08-07T13:04:30.322Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: feeding an idle architect. packages/testkit has zero path overlap with the three in-flight tasks (contracts/runtime, store/event-read-*, AGENTS.md). Hard dependencies: none.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -28,5 +165,81 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.901Z",
-  "updatedAt": "2026-08-07T11:44:13.901Z"
+  "updatedAt": "2026-08-07T13:09:09.500Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T12:23:37.442Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T13:09:09.500Z",
+    "wallClockMs": 2732058
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "worker-05d10803",
+    "worker-c8c01fc6",
+    "qa-200db8e3"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T12:32:57.657Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep the two public module paths as compatibility facades and extract only existing responsibilities. Rejected changing package-root exports or production callers because that widens a refactor-only contract. Rejected folding capture and manifest verification into one generic helper because it would obscure the observable first-error/read sequence. Rejected adding assertions to the 596-line capture and 459-line freeze suites: the task requires them to pass unchanged and the human rail forbids growing large test files, so the only new test is a focused <=250-line public-contract suite.",
+    "codebaseInsights": "phase0-evidence-capture.ts is 514 lines: public port shapes, hostile I/O receipt validation, Git/source provenance, object-store persistence/final reread, and ordered manifest assembly. phase0-evidence-manifest-verifier.ts is 376 lines: canonical manifest decoding, ordered role validation, object verification, and frozen public result assembly. Existing callers import only the original .js module paths, so facade type re-exports preserve them without edits. New TypeScript internals need the repository's one-line .js bridges. Capture order is before snapshot/status persist, six PHASE0_ROLE_METADATA reads/lookups/writes, six source rereads, after snapshot/compare, now(), then final Map-order object rereads. Verifier reads status first, then entries in metadata order.",
+    "risks": "Behavior includes exact Error(`CODE: detail`) text and first-failure precedence, not just success values. Preserve propagated readSourceFile/readRepositorySnapshot/lookup failures; only the currently normalized object-store failures may be remapped. Preserve SHA-1/SHA-256 Git blob framing, SHA-256 content identity, raw LF line counts, win32 case-insensitive canonical-path comparison on every host, defensive byte snapshots/slices, all nested freezes, and the exact now()/final-reread position. Do not add or regenerate confirmatory BENCH corpus bytes. Every changed/new production or test TypeScript file in this task must be <=250 physical lines even though the ticket's older ceiling says 350; leave the existing oversized suites byte-unchanged rather than growing or weakening them.",
+    "keyFiles": [
+      "packages/testkit/src/phase0-evidence-capture.ts",
+      "packages/testkit/src/phase0-evidence-manifest-verifier.ts",
+      "packages/testkit/src/phase0-freeze-codec.ts",
+      "packages/testkit/src/index.ts",
+      "packages/testkit/src/phase0-node-capture-port.ts",
+      "packages/testkit/src/phase0-freeze-verifier.ts",
+      "packages/testkit/src/phase0-evidence-capture.test.ts",
+      "packages/testkit/src/phase0-freeze-composition.test.ts",
+      "packages/testkit/src/phase0-freeze-verifier.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-07T12:32:59.689Z",
+  "workStartedAt": "2026-08-07T12:44:06.351Z",
+  "reviewStartedAt": "2026-08-07T13:05:00.046Z",
+  "verification": {
+    "command": "pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/testkit/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  14 passed (14)\n      Tests  192 passed (192)\n   Start at  16:04:17\n   Duration  6.92s (transform 1.53s, setup 0ms, import 2.22s, tests 6.42s, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T13:05:00.046Z"
+  },
+  "filesModified": [
+    "packages/testkit/src/phase0-evidence-manifest-verifier.test.ts",
+    "packages/testkit/src/phase0-evidence-capture-port.ts",
+    "packages/testkit/src/phase0-evidence-capture-port.js",
+    "packages/testkit/src/phase0-evidence-source-reader.ts",
+    "packages/testkit/src/phase0-evidence-source-reader.js",
+    "packages/testkit/src/phase0-evidence-object-store.ts",
+    "packages/testkit/src/phase0-evidence-object-store.js",
+    "packages/testkit/src/phase0-evidence-capture.ts",
+    "packages/testkit/src/phase0-evidence-manifest-codec.ts",
+    "packages/testkit/src/phase0-evidence-manifest-codec.js",
+    "packages/testkit/src/phase0-evidence-entry-codec.ts",
+    "packages/testkit/src/phase0-evidence-entry-codec.js",
+    "packages/testkit/src/phase0-evidence-manifest-verifier.ts",
+    "packages/testkit/src/phase0-evidence-object-verifier.ts",
+    "packages/testkit/src/phase0-evidence-object-verifier.js"
+  ],
+  "completedAt": "2026-08-07T13:09:09.500Z",
+  "reviewCompletedAt": "2026-08-07T13:09:09.500Z",
+  "reviewSummary": "APPROVED. Commit 7570b64, 15 files, +1046/-680 (net 366). Refactor-only split of two oversized modules (514 and 376 lines).\n\nRAN MYSELF: `pnpm --filter @moe/testkit typecheck && test` (exact DoD cmd) -> exit 0, 14 files/192 tests, matches recorded evidence | `pnpm typecheck && pnpm test` -> exit 0, 59 files/573 tests | `pnpm --filter @moe/daemon test` -> exit 0, 28 tests (root gate misses apps/**).\n\nBEHAVIOR PRESERVATION verified independently, NOT from the worker's brace-match claim:\n- All 43 PHASE0_* reason codes identical pre/post, zero diff.\n- All 88 pre-refactor string literals still present, ZERO lost; the only 6 additions are the 6 new import paths. Error detail text provably did not drift.\n- index.ts is NOT in the commit -> public export surface unchanged.\n- diff-filter: only 2 files modified (the originals), 13 added. ZERO pre-existing test suites touched, so the 596-line capture and 459-line freeze suites pinning exact hashes/verdicts are byte-unchanged and pass. That is the real proof.\n\nDoD1 PASS (above). DoD2 PASS: grep for BENCH/benchmark corpus across phase0-evidence-*.ts empty; new fixture is synthetic one-line docs. DoD3 PASS: modules 199/81/175/111/51/135/147/107 - max 199 vs the 350 cap, all also under the stricter 250 epic rail. DoD4 PASS.\n\nNEW TEST (244 lines, only new artifact) is mutation-resistant: toThrowError(new Error(msg)) matches full code+detail, not substring. Pins exact read order via reader.reads toEqual. Proves precedence not just coverage - sets lineCount AND blobOid wrong, expects LINE_COUNT first; sets lieAboutPath AND tampered bytes, expects LOCATION first. Status-failure case asserts reads === [status] alone, proving short-circuit.\n\nRAILS: 15 owned paths, zero foreign; 6 .js bridges exactly 1 line each; no probe/scratch strays; tree clean.\n\nNOTE: plan budgeted 9 files, shipped 15 - the 250-line rail forced splits the plan did not budget. Deviations recorded in step notes; coverage identical."
 }

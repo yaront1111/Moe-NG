@@ -15,13 +15,152 @@
     "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Convention study (no edits): read packages/scheduler/src/validate-graph.ts:75-80 (deep-frozen { ok: true, ... } | { ok: false, issues: sortIssues(...) } result convention), graph-model.ts:51-88 (closed GraphIssueCode union + issue shape with always-present nodeKeys/edgeKeys), graph-internal.ts:37-41 (makeIssue is TYPED against GraphIssueCode — unowned file: the kernel defines a dependencies-LOCAL closed DEPENDENCY_* code union + local makeIssue/sortIssues/deepFreeze equivalents, never edits graph-model/graph-internal), graph-analysis-error.ts (GraphAnalysisError thrown ONLY for programming-error preconditions, never data validation), runtime-shape.ts (hostile-input helpers: isPlainRecord/readOwnDataProperty/closed key sets/ceilings — REUSE via relative '../runtime-shape.js', do not re-implement), redundancy.ts + graph-model.ts:173-187 (existing exported RedundancyCandidate with requiresSemanticProof: true), graph-model.ts:20 (GraphEdgeKind HARD|ADVISORY). DECISION RECORDED: the dependencies/ subdir stays UNEXPORTED from index.ts this milestone (smoke worker imports only the package root and never walks src/; package-boundary.test.ts:72 pins the exports map so no subpath export is possible anyway; later M2 consumer tasks own the index change) — no extra path needed; one-line .js shims are still committed per package convention (inert under vitest, load-bearing the day index exports them). Scheduler is DEPENDENCY-FREE (package.json has no dependencies field) — the kernel imports nothing outside the package.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/runtime-shape.ts"
+      ],
+      "note": "No-edit convention study complete. Verified the frozen ok/fail result shapes, local issue/deepFreeze conventions, hostile-input helpers, GraphEdgeKind HARD|ADVISORY projection, existing findRedundancyCandidates/RedundancyCandidate API, GraphAnalysisError programming-error scope, root-only exports, dependency-free package manifest, and required tracked .js shim pattern. Confirmed dependencies/ does not yet exist and index.ts/package.json remain untouched.",
+      "startedAt": "2026-08-07T19:50:23.732Z",
+      "completedAt": "2026-08-07T19:50:58.743Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — src/dependencies/dependency-contract.test.ts. Contract completeness matrix (DoD 1): a blocking edge's DependencyContract must carry EVERY field or be refused with a stable local code — field set per design 203 INCLUDING the binding the prose opens with ('immutable GRAPH-BOUND justification for ONE EXECUTION-BLOCKING EDGE'): producerNodeKey, consumerNodeKey, hard edgeKind (ARTIFACT_CONSUMPTION|STATE_PRECONDITION|SCOPE_SERIALIZATION|POLICY_SEQUENCE), graphBindingDigest (hex64); PRODUCER SIDE AS DISCRIMINATED UNION keyed 1:1 to edgeKind — ARTIFACT_CONSUMPTION -> {artifactOrInterfaceRef, digest}; STATE_PRECONDITION -> {daemonFactRef, digest}; SCOPE_SERIALIZATION -> {scopeCollisionObservationRef, digest} (design 208/444); POLICY_SEQUENCE -> {policyRuleId, policyHash} — arm/kind DISAGREEMENT is its own stable code, not generic incompleteness; consumer criterion/PRECONDITION + contract hash; minimumQualifyingMilestone (scheduler-LOCAL closed enum CANDIDATE_SEALED|RESULT_SEALED|EVIDENCE_SEALED|INTEGRATION_SEALED|REVIEW_QUALIFIED|ACCEPTED — documented as scheduler-local, design leaves it open); typed satisfaction predicate ref; stability; witness IDs/versions/digests; consumptionHorizon; necessity/counterfactual as TYPED shape {failedConsumerCriterionRef, failureKind: MISSING_ARTIFACT|PRECONDITION_FALSE|SCOPE_CONFLICT|POLICY_VIOLATION, truthClass}; alternative ruling ALWAYS PRESENT (closed union NOT_APPLICABLE{reason}|INTERFACE_AVAILABLE{ref,digest}|FIXTURE_AVAILABLE{ref,digest}|RULED_OUT{reason} — design 205/421/464: a ruling, not an optional list); alternateProducers; truth/provenance (LOCAL closed 5-string truth vocabulary OBSERVED|AGENT_REPORTED|DAEMON_VERIFIED|HUMAN_APPROVED|UNKNOWN — string-identical to the repo canonical set, locally defined because scheduler is dependency-free; divergence risk documented); invalidation/recheck facts. MONOTONIC rules (DoD 2): predicate registry entry requires schema ID+version, typed parameter schema, SOURCE-OPERATION CLASS whose semantics guarantee non-regression, and proof rationale (design 382: 'registered schema AND source operation prove the fact cannot regress' — a bare provenMonotonic boolean is self-attestation and fails); witness whose producing operation mismatches the entry's declared source-operation class -> REVOCABLE demotion refused as invalid, not silently accepted; unregistered predicate -> REVOCABLE always; non-blocking edge kinds (RELATED|CONTAINS|CONTEXT|PREFERRED_ORDER) never accept a contract requirement and never participate in readiness (assert refusal both ways); document the projection: 4 hard kinds -> GraphEdgeKind HARD, 4 non-blocking -> ADVISORY. Hostile-input cases via runtime-shape helpers (proxy/accessor/prototype tricks refused). Confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts"
+      ],
+      "note": "Wrote the 286-line RED contract suite covering exact required fields, four producer arms and mismatch, hard/advisory projection in both directions, local five-value truth/milestone/digest/list shapes, MONOTONIC registry proof and source-operation matching, explicit REVOCABLE fallback, and proxy/accessor/symbol/prototype hostility. RED command `pnpm --filter @moe/scheduler test -- packages/scheduler/src/dependencies/dependency-contract.test.ts` exited 1 for the expected missing `./dependency-contract.js` implementation (new suite 0 tests; existing 120 passed).",
+      "startedAt": "2026-08-07T19:51:26.582Z",
+      "completedAt": "2026-08-07T19:55:06.042Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — src/dependencies/dependency-contract.ts (+ committed shim dependency-contract.js = `export * from \"./dependency-contract.ts\";`). Implement the step-2 vocabulary/types/validation: closed local DEPENDENCY_* issue-code union, local makeIssue/sortIssues/deepFreeze mirroring validate-graph conventions (deep-frozen {ok:true, contract}|{ok:false, issues} with always-present nodeKeys/edgeKeys), predicate schema registry as frozen data with the four-part entry (schemaId+version, parameter schema, sourceOperationClass, proofRationale), validateDependencyContract enforcing completeness + arm/kind agreement + stability rules; target <=250 lines, split before 400 (likely split point: registry into dependency-predicate-registry.ts + shim via step amendment if needed). Step-2 tests green; typecheck green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.js"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.js",
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts"
+      ],
+      "note": "GREEN implementation complete. Added a 250-line hostile-input-safe validator plus tracked .js shim. It normalizes fresh copies, freezes deterministic HARD/ADVISORY or issue envelopes with local closed DEPENDENCY_* codes, validates exact contract/producer/consumer/witness/fact/alternative shapes, keeps the five-value local truth vocabulary, refuses producer/source-operation mismatch, and demotes unregistered MONOTONIC claims to explicit REVOCABLE without authority. Fresh `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test -- packages/scheduler/src/dependencies/dependency-contract.test.ts` exited 0: 17 files, 132 tests.",
+      "startedAt": "2026-08-07T19:55:50.505Z",
+      "completedAt": "2026-08-07T19:59:15.699Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red then green — src/dependencies/dependency-witness.ts (+ shim). Witness provenance validation: exact IDs, versions (safe nonneg integers), digests (hex64), truthClass from the local vocabulary; MONOTONIC exemption only via registry source-operation match (from dependency-contract.ts). Consumption-horizon model: TOTAL-ORDER rank over gate types — MATERIALIZATION_SEAL < EXECUTOR_CLAIM < EFFECT_ACTIVATE < STEP_START < CANDIDATE_SEAL < RESULT_SEAL < EVIDENCE_SEAL < INTEGRATION_SEAL < REVIEW_QUALIFICATION < ACCEPTANCE_QUALIFICATION < GOAL_COMPLETION (design 382 boundary list; review split from acceptance — review rounds precede acceptance per 232/239; GOAL_COMPLETION is the max element per 203 'up to and including atomic goal completion'); horizon comparison helpers (isWithinHorizon(gate, horizon)). Invalidation records: a REVOCABLE flip is an explicit typed event {witnessRef, sourceFactVersions, flippedAt gate context, truthClass}; POST-HORIZON RULE (design 203 tail): an invalidation arriving PAST the declared horizon returns a typed no-op/refusal result — history is never retroactively rewritten — with its own stable code. SCOPE FENCE (documented in module header): this module models the invalidation EVENT RECORD only — the 382 cascade (tombstoning, drain dispositions, slot release, DEPENDENCY_INVALIDATED transitions), Blocker lifecycle (234), frontier/readiness (partitionFrontier exists), and PlanningHold lifecycle are OUT of scope. Tests inside dependency-contract.test.ts extend or a focused block in the invariants file — keep the two test files as the complete surface.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.js"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.js"
+      ],
+      "note": "TDD witness/horizon slice complete. RED failed on missing dependency-witness.js; GREEN adds a 175-line zero-authority event-record module plus shim. It validates/clones/freezes exact witness provenance, preserves MONOTONIC only through the contract registry/schema/source-operation path, exposes the 11-gate total order with inclusive boundary, canonicalizes fact versions, records in-horizon flips, and returns a frozen typed no-op after the horizon with no event/history rewrite. Fresh typecheck plus focused invariants exited 0: 1 file, 8 tests.",
+      "startedAt": "2026-08-07T19:59:22.929Z",
+      "completedAt": "2026-08-07T20:02:46.805Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red then green — src/dependencies/dependency-analysis.ts (+ shim). DO NOT re-implement structural transitive reduction — packages/scheduler/src/redundancy.ts findRedundancyCandidates + graph-model RedundancyCandidate (exported, requiresSemanticProof: true) ALREADY exist. This module layers CONTRACT-level assessment on top (design 392: core proves 'equivalence/redundancy for typed contracts'): ContractRedundancyAssessment takes an existing structural RedundancyCandidate (imported via relative '../graph-model.js' / '../redundancy.js' — in-package relative imports are legal; NON-COLLIDING type names, a second exported RedundancyCandidate would be a tsc duplicate-export conflict if ever surfaced) + the DependencyContracts along the flagged edge and its alternate hard path, and produces a typed conclusion that remains a CANDIDATE: {kind: \"REDUNDANCY_CANDIDATE\", structuralCandidate, contractComparison (producer-arm/predicate/horizon equivalence facts), requiresSemanticProof: true (ALWAYS — DoD 3), semanticProofObligation (what a human/daemon must furnish)} — never an edge-removal authorization. DependencyChallenge types (design 419/237/306): statuses LIFECYCLE-DERIVED, not an invented adjudication enum — OPEN | MAPPED_TO_EXISTING_CONTRACT | RESOLVED_BY_SUPERSESSION | CLOSED_NO_CHANGE | SUPERSEDED | DEDUPLICATED{existingChallengeRef}, each carrying the bound successor planning-run REF (opaque string — NO planning-core type import) + version binding; dedup key = contract/edge hash + graph epoch + source-fact versions; BOTH directions modeled: missing-edge discovery (agent path: AGENT_REPORTED, self-hold on the caller's OWN leased node only — foreign-node holds refused, A-on-B + B-on-A mutual holds refused) and existing-edge necessity/redundancy challenge (SEMANTIC_PREREQUISITE must reference an existing current hard contract). Property tests in dependency-kernel-invariants.test.ts (seeded xorshift): uncertainty NEVER yields MONOTONIC across random registry/witness permutations; assessments ALWAYS carry requiresSemanticProof: true; post-horizon invalidations always no-op; outputs deep-frozen + deterministic (same seed -> identical); hostile inputs refused via runtime-shape helpers.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-analysis.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.js",
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/dependencies/dependency-analysis.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.js",
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-analysis.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.js",
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts"
+      ],
+      "note": "TDD analysis/challenge slice complete. RED failed on missing dependency-analysis.js; GREEN adds a 249-line module plus shim. Assessment consumes a real existing RedundancyCandidate, validates direct/path contracts and graph bindings, reports exact producer/predicate/horizon comparison facts, and always emits requiresSemanticProof:true with no removal/activation affordance. Challenge validation models both missing-edge and existing-edge directions, exact lifecycle statuses and successor run binding, canonical epoch/source-fact dedup keys, AGENT_REPORTED own-lease holds only, mutual-hold refusal, ambiguity refusal, and current-hard-contract enforcement. Seeded tests non-vacuously pin uncertainty never MONOTONIC and all post-horizon flips no-op. Fresh typecheck plus dependency suite exited 0: 2 files, 26 tests.",
+      "startedAt": "2026-08-07T20:03:26.156Z",
+      "completedAt": "2026-08-07T20:10:05.913Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification gate (single concentrated step). (1) `wc -l packages/scheduler/src/dependencies/*.ts` — every production module <=400 hard (target 250). (2) Fresh `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test\", exitCode: 0, outputTail } — ALL existing scheduler suites (validator, frontier, preview, determinism, immutability, package-boundary, runtime-entrypoint smoke) must pass untouched: zero edits outside dependencies/**. (3) Repo gate `pnpm typecheck && pnpm test` with foreign-work attribution. (4) grep dependencies/ for Date.now|Math.random|process\\.|@moe/ — ZERO hits (determinism + dependency-free rail); confirm no import reaches outside the package. (5) Run focused suite twice — identical results.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.ts",
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts"
+      ],
+      "note": "Pre-gate independent adversarial review found and TDD-fixed four same-scope issues: own contract:undefined presence bypass, endpoint-only/missing existing-edge dedup enforcement, forged direct-edge-as-alternate candidates, and cross-graph comparison; reviewer re-check reports all resolved. Line counts: production 250/175/248 (all <=250), tests 300/296. Forbidden Date.now|Math.random|process.|@moe and package-escape import scans returned zero. Focused dependency suite ran twice with identical 2-file/27-test summaries. Fresh required package gate exited 0: 20 files, 230 tests. Root `pnpm typecheck && pnpm test` exited 0: 85 files, 1176 passed/1 skipped.",
+      "startedAt": "2026-08-07T20:12:58.037Z",
+      "completedAt": "2026-08-07T20:20:07.870Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) MONOTONIC laundering — try to construct a MONOTONIC verdict from an unregistered predicate, a registered predicate with mismatched source-operation class, and a proxy-wrapped registry object; all must refuse; (b) candidate-to-removal laundering — walk every analysis output type for any field a caller could read as removal authorization; requiresSemanticProof must be the literal true type; (c) horizon boundary off-by-one — invalidation exactly AT the horizon gate vs one past it (203: 'up to and including'); (d) name collisions vs existing exports — tsc catches only if exported; grep index.ts to confirm the subdir stays unexported and no new symbol shadows RedundancyCandidate/GraphIssueCode; (e) truth-vocabulary drift — assert the local 5 strings equal the canonical set by value in a test comment ritual (cannot import — document); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/dependencies/dependency-contract.ts packages/scheduler/src/dependencies/dependency-contract.js packages/scheduler/src/dependencies/dependency-witness.ts packages/scheduler/src/dependencies/dependency-witness.js packages/scheduler/src/dependencies/dependency-analysis.ts packages/scheduler/src/dependencies/dependency-analysis.js packages/scheduler/src/dependencies/dependency-contract.test.ts packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts`; `git show --stat` lists exactly these 8 paths (plus any amendment-recorded split files).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/dependencies/dependency-contract.ts",
+        "packages/scheduler/src/dependencies/dependency-contract.js",
+        "packages/scheduler/src/dependencies/dependency-witness.ts",
+        "packages/scheduler/src/dependencies/dependency-witness.js",
+        "packages/scheduler/src/dependencies/dependency-analysis.ts",
+        "packages/scheduler/src/dependencies/dependency-analysis.js",
+        "packages/scheduler/src/dependencies/dependency-contract.test.ts",
+        "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts"
+      ],
+      "note": "Adversarial review complete, including an independent reviewer/re-check. Added final pins for proxied registry refusal, string-identical local truth vocabulary, and MONOTONIC invalidation refusal. Confirmed pure/retry-safe functions, bounded dense arrays, fail-closed proxy/accessor handling, no candidate removal affordance, inclusive horizon boundary, canonical two-direction challenge dedup, unexported subdir/no symbol collisions, exact one-line shims, and no scratch files. Explicit-path commit 7e80186 contains exactly the eight owned dependency files; own path is clean. Post-commit isolated strict typecheck plus dependency suite exited 0: 2 files, 27 tests. Shared package full gate is temporarily foreign-red because authority/ step 4 has RED tests before lease-resource.js; final required evidence remains pending and will be rerun foreground.",
+      "startedAt": "2026-08-07T20:20:20.084Z",
+      "completedAt": "2026-08-07T20:24:26.685Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch 2. SOFT DEP — Runtime contract registry is DONE, but Planning graph lifecycle core is still in PLANNING, not landed. Owns packages/scheduler/src/dependencies/**. Architect: if the plan needs Planning graph types that do not exist yet, block rather than stub them — that is what the last two blocks were about, and blocking early is cheaper than a fake plan.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +168,69 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.652Z",
-  "updatedAt": "2026-08-07T11:53:09.652Z"
+  "updatedAt": "2026-08-07T20:34:42.514Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T19:34:23.966Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 7
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-05d10803",
+    "qa-813cd351"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T19:44:02.251Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Blocking on Planning graph lifecycle core (governor's flagged condition) — NOT triggered, verified: DependencyContract (design 203) references producers/witnesses/planning-runs as opaque string refs + hex64 digests; challenge statuses are LIFECYCLE-DERIVED over an opaque planning-run REF; zero planning-core type imports needed. (2) Re-implementing transitive-reduction candidates — REJECTED (BLOCKER from verification): redundancy.ts findRedundancyCandidates + exported RedundancyCandidate already ship with requiresSemanticProof: true; the kernel layers CONTRACT-equivalence assessment on top (design 392) with non-colliding names. (3) Bare provenMonotonic boolean in the predicate registry — REJECTED: design 382 requires schema AND source operation to prove non-regression; registry entries bind schemaId+version, parameter schema, sourceOperationClass, proofRationale; witness validation checks the producing operation class. (4) Importing @moe/contracts for truth classes — REJECTED: scheduler is dependency-free (package.json has NO dependencies field); local closed 5-string vocabulary, string-identical to canonical, divergence risk documented. (5) Exporting from index.ts now — REJECTED (Branch A): smoke worker imports only the package root and never walks src/; unexported-subdir precedent exists (testkit scheduler-fairness); index.ts is not an owned path; later M2 consumer tasks own the export change; shims committed anyway (inert now, load-bearing on export). (6) Reusing GraphIssueCode/makeIssue — impossible without editing unowned graph-model/graph-internal (closed union, typed signature): dependencies-local code union + local helper equivalents cloning the exact conventions. Verified by 2-agent workflow (design-fidelity + conventions); 1 BLOCKER + 6 RISKs folded in.",
+    "codebaseInsights": "Existing machinery the kernel must respect: redundancy.ts:28 findRedundancyCandidates + graph-model.ts:173-187 RedundancyCandidate (exported via index.ts:62, structural, requiresSemanticProof always true); graph-model.ts:20 GraphEdgeKind HARD|ADVISORY (projection documented: 4 hard kinds -> HARD, 4 non-blocking -> ADVISORY); validate-graph.ts:75-80 result convention (deep-frozen ok/issues with sortIssues); graph-internal.ts makeIssue typed against closed GraphIssueCode; GraphAnalysisError = programming errors only; runtime-shape.ts hostile-input helpers (reuse via '../runtime-shape.js'). package-boundary.test.ts:26 SKIPS scheduler's own dir in the content walk (forbidden-substring risk is nil for in-package files) and :72 pins the exports map to exactly {\".\": \"./src/index.ts\"} — no subpath export possible. Smoke worker imports package root only + negative deep-import probe; shims load-bearing only for index-reachable modules. tsconfig include src/**/*.ts covers subdirs. No repo-wide determinism harness — invariants test self-covers. Scheduler has NO truth-class vocabulary today (graph-provenance.ts is a WeakSet registry, unrelated). Design pins: 203 (field list incl. graph binding + producer union), 204 (edge kinds; resource wait never an edge), 205/421/464 (alternative ruling always present), 382 (horizon gate list + schema-AND-source-operation proof + post-horizon no-rewrite), 419/237/306 (challenge dedup, both directions, no foreign holds, no mutual hidden holds), 392 (contract-level redundancy proof), 1279 (legacy links only CONTAINS|RELATED).",
+    "risks": "(1) MONOTONIC laundering is the core safety risk: any path from unregistered/mismatched-source predicates to MONOTONIC breaks CORE-I21; step-7 red-team covers registry proxying too. (2) Candidate-to-removal laundering: every analysis output keeps literal-true requiresSemanticProof; semantic auto-merge is explicitly out of scope. (3) Name collisions with existing exports surface only on future index export — non-colliding names now prevent a delayed tsc conflict. (4) Truth-vocabulary drift: local strings must stay identical to canonical; documented, cannot import (dependency-free rail). (5) Fuzzy design fields are pinned as scheduler-LOCAL vocabularies (milestone enum, failureKind, ruling union) — contract comments must mark them local so a design sync can revisit. (6) Post-horizon rule off-by-one ('up to and including') — boundary test at the exact gate. (7) Shared tree: zero edits outside dependencies/**; attribute red repo gates to foreign in-flight work first.",
+    "keyFiles": [
+      "packages/scheduler/src/redundancy.ts",
+      "packages/scheduler/src/graph-model.ts",
+      "packages/scheduler/src/validate-graph.ts",
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/scheduler/src/runtime-shape.ts",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-07T19:44:04.285Z",
+  "workStartedAt": "2026-08-07T19:50:23.732Z",
+  "reviewStartedAt": "2026-08-07T20:27:31.697Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  21 passed (21)\n      Tests  249 passed (249)\n   Start at  23:27:14\n   Duration  394ms (transform 1.79s, setup 0ms, import 2.66s, tests 308ms, environment 1ms)",
+    "reportedAt": "2026-08-07T20:27:31.697Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/validate-graph.ts",
+    "packages/scheduler/src/runtime-shape.ts",
+    "packages/scheduler/src/dependencies/dependency-contract.test.ts",
+    "packages/scheduler/src/dependencies/dependency-contract.ts",
+    "packages/scheduler/src/dependencies/dependency-contract.js",
+    "packages/scheduler/src/dependencies/dependency-kernel-invariants.test.ts",
+    "packages/scheduler/src/dependencies/dependency-witness.ts",
+    "packages/scheduler/src/dependencies/dependency-witness.js",
+    "packages/scheduler/src/dependencies/dependency-analysis.ts",
+    "packages/scheduler/src/dependencies/dependency-analysis.js"
+  ]
 }

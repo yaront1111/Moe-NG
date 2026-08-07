@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: no hard dependencies stated. Owns packages/runner/src/providers/claude/** and packages/testkit/src/providers/claude/** — both disjoint from Clean workspace foundation (runner/src/artifacts,scope,workspace) and Foundation executable specification (testkit/src/foundation). NOTE for the architect: packages/runner is scaffolded by Clean workspace foundation, currently WORKING at 4/7 — do not re-scaffold, and declare the dependency if the plan needs package.json/tsconfig to exist.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,5 +36,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.808Z",
-  "updatedAt": "2026-08-07T12:10:20.331Z"
+  "updatedAt": "2026-08-07T15:29:50.535Z"
 }

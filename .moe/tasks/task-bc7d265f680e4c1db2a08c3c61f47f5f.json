@@ -14,13 +14,168 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add a <=250-line direct characterization suite through the existing `./store-input.js` compatibility facade before moving code. Pin the exact 18 runtime exports and exact DurableStoreError codes/messages; table-test scalar/record/container boundaries (including nonplain objects, accessors, sparse/subclassed/non-index arrays, proxies and revoked proxies, SharedArrayBuffer/detached/oversized bytes); pin the existing combined-fault evaluation order; prove defaults for omitted metadata/headers, duplicate event/message and reserved-namespace rejection, decision-key freezing, deferred proposal-field reads, shared proposal/commit byte-budget order, and detached-copy isolation for every caller-owned array/record/Uint8Array. A revoked proxy array must fail closed as STORE_INPUT_INVALID by checking `types.isProxy` before `Array.isArray`; this changes no accepted shape and closes the known uncoded-throw hole. Leave all existing event-ledger, recovery, read-model, and command-decision tests byte-unchanged.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "note": "Added a 220-line direct facade characterization suite covering the exact 18 exports, stable scalar/record/container errors, proxies/revoked proxies, sparse/subclass/non-index arrays, shared/detached/oversized bytes, combined-fault order, defaults, duplicates/reserved IDs, copy isolation, frozen decision keys, and deferred proposal reads. RED verified: focused Vitest ran 5 tests with exactly 1 expected failure—the revoked array proxy escapes TypeError instead of DurableStoreError at snapshotDenseArray—while the other 4 characterization tests passed.",
+      "startedAt": "2026-08-07T14:04:54.798Z",
+      "completedAt": "2026-08-07T14:07:37.839Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract the single shared fail-closed normalization boundary without semantic drift. Move invalidInput/limitExceeded plus identifier, integer, bigint, page-limit, timestamp, plain-data-record, and own-data-property validators into `store-input-primitives.ts`; move the intrinsic typed-array accessors, dense-array snapshot, and Uint8Array snapshot/budget logic into `store-input-containers.ts`. Preserve every message, proxy/prototype/descriptor check, UTF-8/NUL boundary, MAX_* comparison, SharedArrayBuffer/detached-byte handling, aggregate-budget decrement timing, returned mutability, and copy behavior verbatim except the proxy-first revoked-array hardening specified by the test. Add exact one-line `.js` strip-types bridges. Neither leaf imports the facade; containers depends only on primitives plus existing contracts/internals. Keep each TS file <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js"
+      ],
+      "newFiles": [
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js",
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "note": "Extracted verbatim scalar/record validators into the 109-line primitives module and intrinsic array/byte normalization into the 104-line containers module, with exact one-line bridges. The only semantic delta is the specified types.isProxy-before-Array.isArray revoked-proxy hardening. Wired the still-partial facade to the leaves so the RED test is GREEN while preserving the 18 export surface. Store typecheck and the focused 5-test characterization suite passed.",
+      "startedAt": "2026-08-07T14:08:01.274Z",
+      "completedAt": "2026-08-07T14:09:30.054Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract commit/event/outbox normalization into `store-input-commit.ts` and its one-line bridge. Preserve the observable order exactly: input record -> events property/container/cap/nonempty -> commandBytes -> events in order; within each event record/eventId/global duplicate -> optional outbox and each message record/id/global duplicate/headers/payload/topic -> eventType/metadata/payload; only then aggregateId/commandId/committedAt/expectedVersion. Preserve default EMPTY_BYTES, the one shared byte budget, all global duplicate sets, reserved external-identifier scan order and allowed internal receipt exception, audit event-type rejection, newly allocated but unfrozen output shapes, and stable STORE_INPUT_INVALID/STORE_LIMIT_EXCEEDED details. Import primitives/containers via their `.js` bridges and keep the module <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js"
+      ],
+      "newFiles": [
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js"
+      ],
+      "note": "Extracted commit/event/outbox normalization and reserved external-ID scanning into a 206-line store-input-commit.ts plus exact one-line bridge. The partial facade delegates to the module without changing callers. Review confirmed the original input/events/command-bytes/event/outbox/top-level evaluation order, shared budget, duplicate sets, default bytes, reserved scan, and output mutability are moved verbatim. Store typecheck and all 5 direct characterization tests passed.",
+      "startedAt": "2026-08-07T14:09:39.384Z",
+      "completedAt": "2026-08-07T14:10:24.630Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extract decision-family normalization into `store-input-decision.ts` and its one-line bridge. Preserve decision-key field order and shallow freeze; expected-version request order (commandKind, expectedVersion, key commandId/principalId/projectId, copied requestBytes, targetAggregateId) and the deliberate temporary `inputRecord` alias used only for synchronous deferred proposal reads; metadata correlation hash before timestamp; and committed-proposal order that charges/copies resultBytes first, then requestBytes/effects through snapshotCommitInput, then applies reserved-ID checks. Preserve lazy replay/stale behavior, byte-limit precedence, copy/freeze shapes, and all messages. Depend on primitives/containers/commit directly, never the facade, and keep the module <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js"
+      ],
+      "newFiles": [
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js",
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "note": "Extracted decision key/request/metadata/committed-proposal normalization verbatim into a 112-line leaf plus one-line bridge, depending directly on primitives/containers/commit. The facade now delegates all 18 functions. Added characterization for correlation-before-timestamp and resultBytes-first shared 32 MiB proposal/commit budget exhaustion; the test source is exactly 250 lines. Store typecheck and all 6 direct tests passed.",
+      "startedAt": "2026-08-07T14:10:36.714Z",
+      "completedAt": "2026-08-07T14:11:44.287Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Replace `store-input.ts` with a narrow compatibility facade that re-exports exactly the original 18 functions from primitives, containers, commit, and decision modules; do not add package-root exports or change any caller import. Keep the existing `store-input.js` bridge byte-unchanged, and leave decision/event ledger, schema, row, pagination, and read-model callers untouched so their current public-store tests remain independent characterization of the split.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input.ts"
+      ],
+      "note": "Finalized the 26-line compatibility facade with exactly the original 18 named runtime exports partitioned across containers, commit, decision, and primitives. Direct namespace characterization proves the exact list. Existing store-input.js worktree blob 800e3a28d1b954081348261bf879a7455d7e9191 equals HEAD, and no caller/package-root file was touched by this task. Store typecheck and all 6 direct tests passed.",
+      "startedAt": "2026-08-07T14:11:51.536Z",
+      "completedAt": "2026-08-07T14:12:09.980Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review across the ten owned paths. Mechanically account for every old store-input.ts function/range exactly once and compare moved bodies/messages/order against HEAD; assert the dependency DAG primitives -> containers -> commit -> decision -> facade has no cycle; verify the facade sorted export list and function identity, all four new bridges are exact one-line re-exports, and every changed TS production/test file is <=250 physical lines. Attack null/extra/accessor/proxy/revoked-proxy/sparse/detached/shared/oversize inputs, N/N+1 limits, partial byte-budget exhaustion, duplicate/reserved IDs, source mutation, lazy proposal reads, and combined-fault precedence. Confirm no partial snapshot reaches a store call, no caller-owned bytes/arrays/nested records survive final normalization (apart from the deliberate non-persisted deferred inputRecord seam), no test was weakened, and no file outside the declared list changed for this task.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js",
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js",
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js",
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js",
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js",
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js",
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "note": "Adversarial review mechanically extracted all function declarations from HEAD and the four leaves: old=19/new=19, every body is byte-identical after normalizing only the approved proxy-first snapshotDenseArray guard. Runtime facade identities equal their leaf exports for all 18 functions. DAG has no leaf-to-facade import; bridges are exact one-line re-exports. Node counts: facade 26, primitives 109, containers 104, commit 206, decision 112, test 250, bridges 1. Boundary probes passed for null/revoked/extra records, 512/513-byte IDs, page 1000/1001, SQLite bigint max/max+1, array max/max+1, and non-decrementing failed byte budgets. Existing tracked tests have no diff. Full store typecheck plus 19 files/118 tests passed; only the ten declared owned paths contain this task's work.",
+      "startedAt": "2026-08-07T14:12:27.618Z",
+      "completedAt": "2026-08-07T14:15:10.176Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the one required fresh gate exactly: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`; use its exit-0 output as complete_task evidence (full repository regression belongs to the epic hardening task). Then run `git status --porcelain`, unstage any foreign entry without altering its working bytes, stage and commit only the ten explicit owned paths with the task ID using `git commit -- <owned path...>`—never a bare commit—and confirm with `git show --stat` that no shared-tree work was captured.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-input.ts",
+        "packages/store/src/store-input-primitives.ts",
+        "packages/store/src/store-input-primitives.js",
+        "packages/store/src/store-input-containers.ts",
+        "packages/store/src/store-input-containers.js",
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/store-input-commit.js",
+        "packages/store/src/store-input-decision.ts",
+        "packages/store/src/store-input-decision.js",
+        "packages/store/src/store-input-decomposition.test.ts"
+      ],
+      "note": "Fresh post-commit exact gate `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exited 0: TypeScript passed; Vitest reported 19/19 files and 118/118 tests (1.12s). Foreign packages/core staged entries were explicitly unstaged without changing working bytes (owner notified in #workers); staged-index guard then showed only ten owned paths. Explicit pathspec commit 8618983 includes the task ID, and git show --stat confirms exactly those ten paths; all owned paths are clean.",
+      "startedAt": "2026-08-07T14:15:18.488Z",
+      "completedAt": "2026-08-07T14:17:35.530Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/store/src/store-input.ts + new store-input-*.ts. Deps: none. Watch: its \"hostile/boundary tests\" scope may overlap event-ledger's test scope — architects must declare test files explicitly.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -28,5 +183,79 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.788Z",
-  "updatedAt": "2026-08-07T11:44:13.788Z"
+  "updatedAt": "2026-08-07T18:53:12.805Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:38:58.646Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T18:53:12.805Z",
+    "wallClockMs": 18854159
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "worker-875b53a2",
+    "qa-91cf5a2f"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:44:43.459Z",
+  "planningNotes": {
+    "approachesConsidered": "Considered a three-module split with scalar and container guards together (~220 lines), but rejected it because the user explicitly requires small production and test files and the four-module DAG leaves more change headroom while staying at the 10-path hard ceiling. Rejected editing oversized existing integration tests because the event/decision-ledger plans rely on them byte-unchanged and their ownership overlaps; one new <=250-line direct facade suite closes only decomposition seams. Rejected changing caller imports to leaf modules because the objective requires one stable fail-closed normalization boundary. Rejected freezing new result shapes or removing the deferred inputRecord alias because either would change observable/lazy behavior. The only intentional hardening is proxy-first array detection so an already-invalid revoked proxy returns the required stable code instead of escaping a TypeError.",
+    "codebaseInsights": "Current store-input.ts is 485 lines with exactly 18 exports. All production callers import `./store-input.js`; package root does not expose these helpers. Existing store-input.js already re-exports store-input.ts and stays unchanged. Exact responsibility ranges are shared guards/containers (37-223), commit/event/outbox snapshot and reserved IDs (225-399), and decision request/metadata/proposal snapshot (401-485). Existing integration coverage lives in sqlite-event-store-core/recovery, command-decision store/integrity/concurrency, event-read-model-contract, and page-budget suites; none imports the module directly. New TS runtime imports need `.js` specifiers and tracked one-line `.js` bridges for Node strip-types smoke paths. Outputs are copied but generally not frozen; only CommandDecisionKey is frozen, and the deferred inputRecord alias is not persisted.",
+    "risks": "Error precedence is highly non-obvious: message headers/payload/topic are validated before the parent eventType/metadata/payload, and top-level aggregate/command/time/version fields are last; moving apparently simpler validation earlier is a behavioral regression. snapshotCommittedProposal must share one MAX_COMMIT_BYTES budget and consume resultBytes first. Array.isArray throws on revoked proxies, so proxy detection must precede it without broadening accepted inputs. Do not freeze outputs, reject extra record properties, inspect deferred proposal fields on replay/stale paths, or replace intrinsic typed-array accessors with overridable getters. Existing ledger tasks may concurrently edit neighboring flat files/tests; preserve the compatibility facade and explicit-path commit discipline.",
+    "keyFiles": [
+      "packages/store/src/store-input.ts",
+      "packages/store/src/store-input.js",
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/store-internals.ts",
+      "packages/store/src/store-digests.ts",
+      "packages/store/src/event-ledger.ts",
+      "packages/store/src/decision-ledger.ts",
+      "packages/store/src/sqlite-event-store-core.test.ts",
+      "packages/store/src/sqlite-event-store-recovery.test.ts",
+      "packages/store/src/command-decision-store.test.ts",
+      "packages/store/src/command-decision-integrity.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-07T18:50:20.547Z",
+    "escalatedAt": "2026-08-07T18:50:20.547Z"
+  },
+  "planApprovedAt": "2026-08-07T13:44:45.488Z",
+  "workStartedAt": "2026-08-07T14:04:54.798Z",
+  "reviewStartedAt": "2026-08-07T14:18:02.770Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  19 passed (19)\n      Tests  118 passed (118)\n   Start at  17:17:23\n   Duration  1.12s (transform 3.08s, setup 0ms, import 4.77s, tests 3.41s, environment 1ms)",
+    "reportedAt": "2026-08-07T14:18:02.770Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-input-decomposition.test.ts",
+    "packages/store/src/store-input.ts",
+    "packages/store/src/store-input-primitives.ts",
+    "packages/store/src/store-input-primitives.js",
+    "packages/store/src/store-input-containers.ts",
+    "packages/store/src/store-input-containers.js",
+    "packages/store/src/store-input-commit.ts",
+    "packages/store/src/store-input-commit.js",
+    "packages/store/src/store-input-decision.ts",
+    "packages/store/src/store-input-decision.js"
+  ],
+  "completedAt": "2026-08-07T18:53:12.805Z",
+  "reviewCompletedAt": "2026-08-07T18:53:12.805Z",
+  "reviewSummary": "APPROVED. Gate re-run by QA: `pnpm --filter @moe/store typecheck` exit 0, `pnpm --filter @moe/store test` exit 0 (19 files / 118 tests). Diff: commit 8618983 = exactly the 10 owned paths, +810/-485 = +325 net (<400); `git diff 8618983..HEAD -- store-input*` empty, worktree clean. Mechanical body comparison (script extracting all top-level functions from HEAD~ store-input.ts vs the 4 leaves): old 19 / new 19, none added/dropped, every body byte-identical except the plan-approved `types.isProxy(value) || !Array.isArray(value)` reorder in snapshotDenseArray, which only turns a revoked-proxy TypeError into STORE_INPUT_INVALID and accepts no new shape. DoD1: codes/messages/evaluation order preserved; new test pins exact \"CODE: detail\" for scalars, records, hostile arrays (proxy, revoked proxy, subclass, sparse, non-index props), bytes (proxy, wrong type, SharedArrayBuffer, detached, oversized, budget), combined-fault order (empty events before commandBytes; outbox payload before parent eventType), duplicate event/message IDs, reserved namespace + audit event type. DoD2: copy isolation asserted by mutating caller-owned commandBytes/payload/outbox payload/topic/eventType after snapshot; decision key frozen; deferred proposal reads and resultBytes-first shared MAX_COMMIT_BYTES budget pinned. DoD3: facade 26, primitives 109, containers 104, commit 205, decision 112 lines (test 250) — all <350. DoD4: verified above. Rails: facade re-exports exactly the original 18 names (sorted Object.keys assertion); all 11 consumers still import ./store-input.js unchanged; DAG primitives->containers->commit->decision->facade, no leaf imports the facade, no cycle; 4 new .js bridges are one-line `export * from \"./<name>.ts\";` matching store-contracts.js/store-internals.js, store-input.js byte-identical; no existing test modified or weakened; no scratch/debug files (git status clean under packages/store)."
 }

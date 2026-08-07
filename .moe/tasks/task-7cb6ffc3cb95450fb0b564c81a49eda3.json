@@ -1,0 +1,33 @@
+{
+  "id": "task-7cb6ffc3cb95450fb0b564c81a49eda3",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Planning invariant test decomposition",
+  "description": "Objective: split the oversized cross-aggregate invariant test by deterministic fixture and driver responsibility while preserving the full property corpus. Deliverable: planning-invariant-fixtures.ts owns hashes, witnesses, seeded generators, perturbation, commands, and traces; planning-invariant-drivers.ts owns valid-state drivers/seed pools; planning-invariants.test.ts retains the invariant assertions. Hard dependency: commit bcdc2f6. NOT in scope: production changes, seed/count reduction, weaker equality/freezing assertions, or new lifecycle policy. Owned paths: packages/core/src/planning/planning-invariants.test.ts, packages/core/src/planning/planning-invariant-fixtures.ts, packages/core/src/planning/planning-invariant-drivers.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "The same deterministic seed set, command traces, digest perturbations, multi-node cases, lifecycle ranks, and terminal-state corpus are exercised.",
+    "Every existing invariant assertion remains and still proves determinism, monotonic lifecycle, exact-hash refusal, zero state change, deep freezing, successor isolation, and terminal graph authority.",
+    "All three files are <=250 physical lines and support modules contain no Vitest registration or production exports.",
+    "The focused core typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only: preserve public types, stable error codes, check precedence, event/result ordering, deep freezing, and all observable reducer behavior.",
+    "Do not weaken, skip, rename, or delete behavioral assertions merely to make the split pass.",
+    "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
+    "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:12.400Z",
+  "updatedAt": "2026-08-07T19:56:12.400Z"
+}

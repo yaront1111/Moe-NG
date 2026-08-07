@@ -19,43 +19,83 @@
     {
       "stepId": "step-1",
       "description": "TDD first: add one table-driven package-root contract test file (keep it <=250 physical lines) that pins the selected literals `moe-runtime-command/1`, `moe-runtime-query/1`, and `moe-runtime-error-registry/1`; the complete closed lifecycle/operation tuples; the immutable deterministic nextAllowedCommands shape; and the full ErrorRegistry key set. Add red tests for exact command/query root and nested keys, missing/wrong fields, old/future schema versions, command/query kind separation, nonnegative-safe version/epoch fields, optional leased-authority all-or-none validation, N and N+1 of the existing JSON byte/depth/string limits, deep freezing, canonical affordance ordering/deduplication, historical results omitting affordances with `requiresAffordanceRefresh=true`, unknown lifecycle/error returning an empty frozen mutation set, and registry/detail sanitization that cannot echo raw bytes, payloads, credentials, tokens, digests, stack, or SQL. Include a raw Node `--experimental-strip-types` package-root import smoke assertion so missing runtime bridges fail.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/contracts/src/runtime/runtime-contracts.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-envelope.test.ts",
+        "packages/contracts/src/runtime/runtime-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "TDD RED. Table-driven contract tests added; verified failing (66 failed / 26 pre-existing passed) with `pnpm --filter @moe/contracts test`, all failures are missing exports (`decodeRuntimeCommandEnvelopeBytes is not a function`, `does not provide an export named 'EMPTY_NEXT_ALLOWED_COMMANDS'`). SCOPE NOTE: the plan asked for ONE test file <=250 lines; the full required coverage came to 354 physical lines, which violates the hard <=250 rail. Split into two focused package-root test files under the owned path instead (runtime-contract.test.ts = 175 lines: schema literals, closed disjoint command/query/telemetry vocabularies, all lifecycle tuples, affordance ordering/dedup/malformed/unknown-source/historical, plus the raw Node --experimental-strip-types worker smoke; runtime-envelope.test.ts = 234 lines: command/query root+nested key sets, version ordering, all malformed/mutation-only field rejections, N and N+1 body/depth/string limits, deep freeze, registry exhaustiveness, detail sanitization, unknown-code/source degradation, no-byte-echo). No coverage was dropped. Both files import only `@moe/contracts`. Design vocabularies verified against pinned doc sections 6/8/12/16/17 before writing.",
+      "startedAt": "2026-08-07T12:17:48.430Z",
+      "completedAt": "2026-08-07T12:21:53.615Z"
     },
     {
       "stepId": "step-2",
       "description": "Create the closed runtime model and affordance vocabulary. Define frozen tuple-derived unions for the canonical TruthClass plus Project, Goal and scheduling control, GraphRevision, PlanningRun and drain overlay, NodeRun, Attempt, Lease, Effect, Integration, Approval state/decision/validity, QualificationRecovery, PlanningHold, supersession funding/fence, provider-slot, and Cutover states from design sections 6/8/12/16. Ratify the section-17 surface into disjoint operation tuples: queries are exactly `project.get`, `goal.get`, `goal.list`, `graph.get`, `graph.preview`, `dependency.explain`, `frontier.get`, `scheduler.readiness_explain`, `work.get_context`, `budget.get`, `evidence.get`, `quarantine.get`, `reconciliation.get`, `events.read`, `events.wait`, and `doctor.get`; `presence.ping` is telemetry and not a mutation affordance; every other listed v1 operation is a command. Define `NextAllowedCommand` as `{commandKind, commandId, commandEnvelopeVersion, inputSchemaVersion, targetAggregateId, expectedVersion, leaseAuthority?, graphRevisionHash?, policyRevisionHash?}` and a fresh-versus-historical result union. Implement a pure builder that accepts a tagged known lifecycle source, rejects malformed/unknown entries without partial authority, permits command kinds only, rejects duplicate command IDs, sorts by commandKind then commandId, deeply freezes the result, and returns the shared frozen empty array for any unknown source state. Keep the module <=250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/contracts/src/runtime/runtime-model.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-guards.ts",
+        "packages/contracts/src/runtime/runtime-guards.js",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.js",
+        "packages/contracts/src/runtime/runtime-affordance.ts",
+        "packages/contracts/src/runtime/runtime-affordance.js",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "GREEN for the vocabulary/affordance suite: 8 passed, 1 failed (the strip-types smoke, which still needs step 3/4 exports). Closed 21 lifecycle tuples from design 6/8/12/16 (PROJECT, GOAL, GOAL_SCHEDULING, GRAPH_REVISION, PLANNING_RUN incl. SUBMISSION_DRAINING overlay, NODE_RUN, ATTEMPT, LEASE, EFFECT, INTEGRATION, APPROVAL/_DECISION/_VALIDITY, QUALIFICATION_RECOVERY, PLANNING_HOLD/_KIND, SUPERSESSION_FUNDING, PLANNING_FENCE, PROVIDER_SLOT, CUTOVER, TRUTH_CLASS). Ratified section 17 into disjoint tuples: 16 queries, 1 telemetry (presence.ping), 92 commands. Builder rejects unknown source/state, non-arrays, malformed entries, duplicate command IDs, and query/telemetry kinds; sorts by commandKind then commandId on code units (no locale); deep-freezes; returns the shared EMPTY_NEXT_ALLOWED_COMMANDS identity for every refusal. SCOPE NOTE: the plan asked for one module <=250 lines; the combined vocabulary+guards+builder came to 321 physical lines, so it was split into three focused modules under the owned path (runtime-guards.ts 76, runtime-vocabulary.ts 140, runtime-affordance.ts 137) with one-line .js strip-types bridges each. This raises the bridge count from the plan's three to (eventually) five; the <=250 rail takes precedence.",
+      "startedAt": "2026-08-07T12:21:56.461Z",
+      "completedAt": "2026-08-07T12:26:06.267Z"
     },
     {
       "stepId": "step-3",
       "description": "Create the closed versioned ErrorRegistry. Define the stable codes `INPUT_INVALID`, `INPUT_LIMIT_EXCEEDED`, `SCHEMA_VERSION_UNSUPPORTED`, `AUTHENTICATION_FAILED`, `CAPABILITY_DENIED`, `SESSION_EXPIRED`, `SESSION_REPLAYED`, `STALE_LEASE`, `STALE_EPOCH`, `EXPECTED_VERSION_CONFLICT`, `IDEMPOTENCY_CONFLICT`, `ILLEGAL_TRANSITION`, `HARD_DEPENDENCY_UNPROVEN`, `DEPENDENCY_REDUNDANT`, `FRONTIER_STALLED`, `FANOUT_SCOPE_REFUSED`, `FANOUT_ORACLE_REFUSED`, `FANOUT_BUDGET_REFUSED`, `FANOUT_FLOW_REFUSED`, `PLANNING_SUBMISSION_FINALIZING`, `SUPERSESSION_PREPARED`, `PLANNING_DISPOSITION_UNKNOWN`, `SUPERSESSION_CONSEQUENCE_CHANGED`, `SUPERSEDED_AUTHORITY`, `REVISION_REBOUND`, `PROVIDER_CAPABILITY_CHANGED`, `METERING_UNAVAILABLE`, `INTEGRATION_PROVENANCE_INVALID`, `INPUT_PROVENANCE_INVALID`, `JOURNAL_LIMIT_REACHED`, `CONTEXT_TOO_LARGE`, `STORAGE_DEGRADED`, `DISTRIBUTION_MISMATCH`, `RESTORE_REQUIRED`, `CUTOVER_STATE_INVALID`, `NEEDS_RECONCILIATION`, `OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN`, and `UNKNOWN_ERROR`. For every code, provide one frozen exhaustive descriptor with TruthClass, retryability (`NEVER|AFTER_REFRESH|AFTER_FACT_CHANGE|AFTER_RECOVERY`), recovery category (`NONE|CORRECT_REQUEST|REAUTHENTICATE|REFRESH|WAIT_OR_OBSERVE|REPLAN|RECONCILE|HUMAN_DECISION|INSPECT_OR_EXPORT|CANCEL`), exact recovery operation tuple, HTTP/MCP transport category/status/code, exact valid lifecycle sources, and an allowlist of required safe scalar detail keys. Implement exhaustive lookup/error construction: known codes copy only allowlisted scalar details into a frozen null-prototype record; missing required details are omitted rather than guessed; unknown code or unknown source resolves to `UNKNOWN_ERROR`, TruthClass UNKNOWN, no details, and the shared frozen empty recovery/affordance set while retaining only a validated correlation ID. Keep the registry <=250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/contracts/src/runtime/error-registry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-error-registry.ts",
+        "packages/contracts/src/runtime/runtime-error-registry.js",
+        "packages/contracts/src/runtime/runtime-error-factory.ts",
+        "packages/contracts/src/runtime/runtime-error-factory.js",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "GREEN for the registry suite: 3 passed (exhaustive frozen descriptors, detail sanitization, unknown-code/source degradation); the 4th test in that describe block needs step 4's decoder. All 38 stable codes are mapped to one frozen descriptor with TruthClass, retryability, recovery category, exact recovery command tuple, transport category/httpStatus/mcpCode, exact valid lifecycle sources, and an allowlisted required-detail key set. Boundary codes (INPUT_INVALID, INPUT_LIMIT_EXCEEDED, SCHEMA_VERSION_UNSUPPORTED, AUTHENTICATION_FAILED, CAPABILITY_DENIED, SESSION_*) declare zero valid sources and must be raised without one; every other code requires a known lifecycle source whose aggregate is listed, else it degrades. Sanitization is double-gated: per-code key allowlist plus a bounded safe-scalar value check (`/^[A-Za-z0-9._:-]{1,64}$/`, safe integers, booleans), copied into a frozen null-prototype record, so payload/credential/token/digest/stack/SQL can never ride through even under an allowlisted key. There is deliberately no `message` field, removing the last echo channel. SCOPE NOTE: the single registry module came to 284 physical lines, so the table (runtime-error-registry.ts, 188) and the construction/sanitization path (runtime-error-factory.ts, 104) were split into two focused modules with one-line .js bridges each.",
+      "startedAt": "2026-08-07T12:26:09.627Z",
+      "completedAt": "2026-08-07T12:30:40.273Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the byte ingress decoders by composing `decodeBoundedJsonBytes`, preserving its exact 1 MiB/depth-64/string-256-KiB N/N+1 behavior and immutable snapshot semantics. `decodeRuntimeCommandEnvelopeBytes` must accept only `{schemaVersion, commandKind, commandId, correlationId, requestDigest, sessionCredential, targetAggregateId, expectedVersion, leaseAuthority?, graphRevisionHash?, policyRevisionHash?, payload}` where `leaseAuthority`, when present, has exactly `{leaseToken, epoch, authorityHash, graphEpoch, attemptBindingVersion}`; require nonempty strings, lowercase 64-hex digests/hashes, safe nonnegative integer versions/epochs, a plain JSON-object payload, a closed command kind, all-or-none lease fields, and no unknown/symbol/accessor keys. `decodeRuntimeQueryEnvelopeBytes` must accept only `{schemaVersion, queryKind, correlationId, sessionCredential, targetAggregateId?, cursor?, payload}`, use the exact closed query tuple, and reject mutation-only version/lease/revision/command fields. Validate in deterministic order: decoded record, schemaVersion, exact key set, kind, identifiers/digests, numeric bindings, then payload. Map body/depth/string limit errors to `INPUT_LIMIT_EXCEEDED`, unsupported versions to `SCHEMA_VERSION_UNSUPPORTED`, and all other syntax/shape failures to `INPUT_INVALID`; construct errors through the registry so no attacker bytes or secrets are reflected. Return only deeply frozen discriminated results and keep the module <=250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/contracts/src/runtime/runtime-envelopes.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-envelope.ts",
+        "packages/contracts/src/runtime/runtime-envelope.js",
+        "packages/contracts/src/runtime/runtime-error-registry.ts",
+        "packages/contracts/src/runtime/runtime-error-factory.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "GREEN: `pnpm --filter @moe/contracts typecheck` clean and `pnpm --filter @moe/contracts test` = 6 files / 92 tests passed. runtime-envelope.ts (212 lines) composes decodeBoundedJsonBytes first, so the existing 1 MiB body / depth 64 / 256 KiB string / duplicate-key / interoperable-number rules and the immutable snapshot apply before any schema inspection. Validation order is exactly: decoded plain record, schemaVersion, exact key set, kind, identifiers/digests, numeric bindings (expectedVersion then all-or-none leaseAuthority), payload. Command envelope accepts only the 9 required + 3 optional keys; query envelope only 5 required + cursor/targetAggregateId, and rejects expectedVersion/leaseAuthority/graph+policyRevisionHash/commandKind/commandId/requestDigest as unknown keys. Limit codes map to INPUT_LIMIT_EXCEEDED with safe {limitName, limitBytes}, version mismatch to SCHEMA_VERSION_UNSUPPORTED, everything else to INPUT_INVALID; every error is built through createRuntimeError so nothing from the input bytes is reflected. Results and envelopes are frozen and payloads stay deeply frozen from the decoder. Also fixed a real typecheck defect found here: inline Object.freeze([...]) in the registry table widened to readonly string[] and silently defeated literal checking of recovery command/source/detail keys; replaced with typed cmds()/srcs()/keys() helpers so every table cell is now literal-checked against the closed vocabularies.",
+      "startedAt": "2026-08-07T12:30:45.686Z",
+      "completedAt": "2026-08-07T12:33:52.079Z"
     },
     {
       "stepId": "step-5",
       "description": "Make the contracts reachable only through the existing package root. Add the repository-required one-line strip-types bridges for each new production module, and update `packages/contracts/src/index.ts` with explicit value/type exports from the `.js` bridge specifiers; do not add package subpath exports or expose internal validation helpers. Ensure the TDD file imports only `@moe/contracts` and the raw Node smoke can load and execute the public decoders/registry through these bridges. Keep the barrel and every bridge <=250 lines (bridges should remain one line).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/index.ts"
       ],
@@ -63,12 +103,24 @@
         "packages/contracts/src/runtime/runtime-model.js",
         "packages/contracts/src/runtime/error-registry.js",
         "packages/contracts/src/runtime/runtime-envelopes.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/runtime/runtime-guards.js",
+        "packages/contracts/src/runtime/runtime-vocabulary.js",
+        "packages/contracts/src/runtime/runtime-affordance.js",
+        "packages/contracts/src/runtime/runtime-error-registry.js",
+        "packages/contracts/src/runtime/runtime-error-factory.js",
+        "packages/contracts/src/runtime/runtime-envelope.js"
+      ],
+      "note": "Root-only reachability verified. All 6 production modules have their tracked one-line `export * from \"./<name>.ts\";` strip-types bridge (runtime-guards, runtime-vocabulary, runtime-affordance, runtime-error-registry, runtime-error-factory, runtime-envelope); the scheduler-shim audit loop reports no missing shim. packages/contracts/src/index.ts (114 lines) adds explicit value/type re-exports through the `.js` bridge specifiers only. package.json `exports` is untouched at `{\".\": \"./src/index.ts\"}` — no subpaths added. Verified at runtime through the real Node strip-types loader: `node --experimental-strip-types packages/contracts/src/runtime/runtime-entrypoint-smoke-worker.mjs` prints the expected payload, and a direct import of the barrel reports 46 exports with zero leaked internals (no is*/has*/parse* guards, no UNKNOWN_ERROR_DESCRIPTOR). Both test files import only `@moe/contracts`.",
+      "startedAt": "2026-08-07T12:33:59.378Z",
+      "completedAt": "2026-08-07T12:34:41.319Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarially review only the owned diff before the final gate: attack null/empty/huge/malformed bytes, wrong or future versions, duplicate/unknown operations, partial lease bindings, unsafe integers, mutation of every nested result, replayed historical results, unknown lifecycle/error/source combinations, and secret/raw-input injection into details; confirm every such path fails closed with zero mutation affordance and stable deterministic output. Check command/query vocabularies against the pinned design and confirm `graph.preview`/wait/get operations never enter nextAllowedCommands. Run a cross-platform Node line-count assertion over `packages/contracts/src/index.ts`, all `packages/contracts/src/runtime/*.ts`, and the three bridge files and fail if any production or test source exceeds 250 physical lines. Inspect `git diff --` for exactly these owned paths, no scratch/generated evidence, and no edits to authoritative docs; if review changes bytes, repeat the affected tests before proceeding.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/index.ts",
         "packages/contracts/src/runtime/runtime-model.ts",
@@ -78,12 +130,23 @@
         "packages/contracts/src/runtime/runtime-model.js",
         "packages/contracts/src/runtime/error-registry.js",
         "packages/contracts/src/runtime/runtime-envelopes.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/runtime/runtime-guards.ts",
+        "packages/contracts/src/runtime/runtime-affordance.ts",
+        "packages/contracts/src/runtime/runtime-error-factory.ts",
+        "packages/contracts/src/runtime/runtime-envelope.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-envelope.test.ts"
+      ],
+      "note": "REAL DEFECT FOUND AND FIXED (fail-closed rail violation): `isPlainRecord` called `Array.isArray(value)` before `types.isProxy(value)`, and `Array.isArray` THROWS `TypeError: Cannot perform 'IsArray' on a proxy that has been revoked`. So a revoked proxy passed to createRuntimeError (as input, details, or source), buildNextAllowedCommands (as source, entries, or an entry), or freshRuntimeResult escaped as an uncaught exception instead of failing closed - violating the epic rail and the repo's existing hostile-input convention (control-room-model already asserts `.not.toThrow()` on revoked proxies). Fixed via TDD: added red tests in both files (confirmed failing with that exact TypeError), then moved the proxy check ahead of Array.isArray and added `isSafeArray` for the entries array. Re-probed all 9 public entry points with revoked object and callable proxies: all fail closed. Also cleaned two smells: createRuntimeError called isPlainRecord twice (once purely for narrowing), and the command decoder placed the unvalidated expectedVersion into the draft before isSafeCount ran (no leak, since every failure path returned before freeze, but the ordering was fragile) - now assigned only after validation. ADVERSARIAL PROBE (all clean): JSON duplicate keys; __proto__/constructor/prototype keys rejected with no global pollution; raw numeric literals -0, 9007199254740992, 1e-3, 2e308 all INPUT_INVALID while 0/1.0/1e3/1E2 correctly normalize; frozen against mutation of envelope, nested lease, and deep payload arrays; byte-identical repeat output; all 92 command kinds rejected by the query decoder and all 16 query kinds rejected by the command decoder; all 16 queries + presence.ping return the shared EMPTY set from the affordance builder while all 92 commands are admissible; affordance array resists push; secret injection ({payload, sessionCredential, leaseToken, requestDigest, stack, sql, ${...}, <script>, 999-char value}) attempted against EVERY code x EVERY valid source with zero leakage and EMPTY affordances everywhere. VOCABULARY CROSS-CHECK: parsed section 17 lines 986-1005 of the pinned design and diffed against the contracts - 109 operations parsed, 109 in contracts, zero missing and zero extra. LINE_COUNT_GATE PASS (cross-platform Node, CRLF/LF-safe): index.ts 114, all runtime/*.ts <=250 (max 250), all 6 bridges exactly 1 line. DIFF SCOPE: only `packages/contracts/src/index.ts` (M) and `packages/contracts/src/runtime/**` (untracked); no scratch or generated evidence files; authoritative design doc untouched. Re-verified after the byte changes: typecheck clean, 6 files / 94 tests passed.",
+      "startedAt": "2026-08-07T12:34:44.286Z",
+      "completedAt": "2026-08-07T12:39:57.068Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the single fresh completion gate from `D:/projexts/moe-next`: `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test`. Require exit code 0 and retain the fresh output tail as `moe.complete_task` evidence. Stage/commit only the explicit owned paths named in this plan; never use a worktree, broad add, push, merge, reset, or stash.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/index.ts",
         "packages/contracts/src/runtime/runtime-model.ts",
@@ -93,11 +156,26 @@
         "packages/contracts/src/runtime/runtime-model.js",
         "packages/contracts/src/runtime/error-registry.js",
         "packages/contracts/src/runtime/runtime-envelopes.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-guards.ts",
+        "packages/contracts/src/runtime/runtime-affordance.ts",
+        "packages/contracts/src/runtime/runtime-error-registry.ts",
+        "packages/contracts/src/runtime/runtime-error-factory.ts",
+        "packages/contracts/src/runtime/runtime-envelope.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-envelope.test.ts",
+        "packages/contracts/src/runtime/runtime-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "Fresh completion gate run from D:/projexts/moe-next: `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test` -> EXIT_CODE=0, \"Test Files 6 passed (6) / Tests 94 passed (94)\". Regression check beyond the named gate: repo-wide `pnpm typecheck` clean across all 6 workspaces and `pnpm test` = 58 files / 545 tests passed, so nothing outside the owned paths broke. Committed as 88e92a4 with `git add --` limited to the two explicit owned paths; 16 files, +1416 lines, all under packages/contracts/src/runtime/** plus packages/contracts/src/index.ts. No worktree, no `git add -A`, no push, merge, reset, or stash. Foreign .moe/ working-tree changes were left unstaged and untouched.",
+      "startedAt": "2026-08-07T12:40:01.523Z",
+      "completedAt": "2026-08-07T12:40:59.234Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-c8c01fc6",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -109,20 +187,32 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.572Z",
-  "updatedAt": "2026-08-07T12:13:26.073Z",
+  "updatedAt": "2026-08-07T12:51:22.843Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T12:00:57.283Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T12:51:22.843Z",
+    "wallClockMs": 3025560
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
-    "worker-c8c01fc6"
+    "worker-c8c01fc6",
+    "qa-200db8e3"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T12:13:20.773Z",
   "planningNotes": {
@@ -140,5 +230,34 @@
   "budget": {
     "wallClockMs": 3600000
   },
-  "planApprovedAt": "2026-08-07T12:13:22.806Z"
+  "planApprovedAt": "2026-08-07T12:13:22.806Z",
+  "workStartedAt": "2026-08-07T12:17:48.430Z",
+  "reviewStartedAt": "2026-08-07T12:41:42.428Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/contracts/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  6 passed (6)\n      Tests  94 passed (94)\n   Start at  15:40:27\n   Duration  331ms (transform 366ms, setup 0ms, import 523ms, tests 204ms, environment 0ms)\n\nEXIT_CODE=0\n\n--- repo-wide regression check (beyond the named gate) ---\n$ pnpm typecheck -> all 6 workspaces Done, no errors\n$ pnpm test -> Test Files  58 passed (58) / Tests  545 passed (545)",
+    "reportedAt": "2026-08-07T12:41:42.428Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "packages/contracts/src/runtime/runtime-envelope.test.ts",
+    "packages/contracts/src/runtime/runtime-entrypoint-smoke-worker.mjs",
+    "packages/contracts/src/runtime/runtime-guards.ts",
+    "packages/contracts/src/runtime/runtime-guards.js",
+    "packages/contracts/src/runtime/runtime-vocabulary.ts",
+    "packages/contracts/src/runtime/runtime-vocabulary.js",
+    "packages/contracts/src/runtime/runtime-affordance.ts",
+    "packages/contracts/src/runtime/runtime-affordance.js",
+    "packages/contracts/src/index.ts",
+    "packages/contracts/src/runtime/runtime-error-registry.ts",
+    "packages/contracts/src/runtime/runtime-error-registry.js",
+    "packages/contracts/src/runtime/runtime-error-factory.ts",
+    "packages/contracts/src/runtime/runtime-error-factory.js",
+    "packages/contracts/src/runtime/runtime-envelope.ts",
+    "packages/contracts/src/runtime/runtime-envelope.js"
+  ],
+  "completedAt": "2026-08-07T12:51:22.843Z",
+  "reviewCompletedAt": "2026-08-07T12:51:22.843Z",
+  "reviewSummary": "APPROVED. Re-ran the gate from D:/projexts/moe-next: typecheck exit 0, test exit 0 (6 files / 94 tests), matching claimed evidence. Also ran my own ~60-assertion attack probe against the barrel, independent of the worker's tests.\n\nDoD1: decoders fail closed on null/undefined/string/number/array/revoked-proxy input, __proto__ key, unknown key, version /0 and /2, empty ids, uppercase+short digests, negative/float expectedVersion, array/null payload, partial lease. Query refuses expectedVersion, leaseAuthority, revision hashes, commandKind, commandId, requestDigest. Results+nested payload deeply frozen; mutation did not stick. Limits re-measured N/N+1 via decoder: body 1048576 ok / 1048577 INPUT_LIMIT_EXCEEDED, string 262144/262145, depth 64/65.\n\nDoD2: parsed design lines 986-1005, expanded the a.b|c|d forms - 109 design ops vs 92 commands + 16 queries + 1 telemetry = 109 shipped; 0 missing, 0 extra, 0 overlap. graph.preview/events.wait/presence.ping are non-commands. Unknown source, unknown state, query kind, duplicate commandId, malformed entry, non-array, revoked-proxy entries each return the shared frozen EMPTY set by identity. Historical results carry zero affordances.\n\nDoD3: all 38 codes give frozen exhaustive descriptors and zero nextAllowedCommands. Injected sessionCredential, leaseToken, requestDigest, stack, SQL - none appear in the serialized error; only allowlisted scalars survive in a frozen null-prototype record. Unknown code/aggregate/state degrade to UNKNOWN_ERROR.\n\nRails: design SHA-256 re-hashed 1D9D1EC9...383191, matches the pin. Commit 88e92a4 = 16 files, all owned paths, +1416/-0, no scratch or foreign paths. Max 250 lines/file, 6 bridges exactly 1 line.\n\nDEVIATION: +1416 LOC exceeds the 400 heuristic. Not rejected - scope matches the approved plan, 491 lines are tests, production bulk is irreducible declarative tables, per-file rail honored, and splitting a closed vocabulary would leave it half-open."
 }

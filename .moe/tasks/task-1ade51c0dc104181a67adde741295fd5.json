@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "Human approved prop-2eaa632d2b594efd90efc141e7be2361 — the one-time historical size exception for already-landed commit bcdc2f6. Clearing the block. Daemon requires unblocking through PLANNING (BLOCKED -> REVIEW is not a legal transition), so this is a routing step, not a request to re-plan the work. The implementation is already landed and verified: 13 files, 189 tests, all four DoD items previously confirmed by QA. Architect: do NOT author a new implementation plan and do NOT re-do the work — submit the minimal plan needed to route this to REVIEW so QA can close it under the exception.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,230 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.807Z",
-  "updatedAt": "2026-08-07T11:45:44.807Z"
+  "updatedAt": "2026-08-07T20:33:50.075Z",
+  "contextFetchedBy": [
+    "worker-2edeee3c",
+    "architect-c4babdf9"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T18:51:02.886Z",
+  "metrics": {
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "firstClaimAt": "2026-08-07T18:51:07.736Z",
+    "executedStepCount": 7,
+    "rejectCount": 1,
+    "reopenCount": 1
+  },
+  "planningNotes": {
+    "approachesConsidered": "(1) Multi-node gate at ACTIVATION — REJECTED by design-fidelity verification: design 291/396/1322 place the admission pass at SUBMISSION VALIDATION (a 2-node graph must never reach PLAN_REVIEW); activation-time check is defense-in-depth only. (2) UNSUPPORTED via registry code — impossible: closed RUNTIME_ERROR_CODES has no UNSUPPORTED family; FANOUT_* codes cannot carry node data (RUNTIME_SAFE_DETAIL_KEYS has no count key); chose a core-local typed third result variant {ok:false, unsupported:true, ...} — precedented (skills/runner domain-local *_UNSUPPORTED codes) and matches the design's literal 'typed UNSUPPORTED'. (3) Caller-computed executionBearingNodeCount — rejected: unverifiable claim, not a provable metric; witness carries the typed node summary list (nodeKey + executionBearing, DAEMON_VERIFIED floor) and the reducer derives the count. (4) REVISION_REBOUND for all hash mismatches — rejected: registry validSources exclude PLANNING_RUN (createRuntimeError silently degrades to UNKNOWN_ERROR); planning-run uses ILLEGAL_TRANSITION, graph-revision may use REVISION_REBOUND/SUPERSEDED_AUTHORITY. (5) bare planning.cancel for INITIAL runs — rejected: design rows 301-302 make planning.cancel expansion-only; INITIAL cancellation requires goal-cancel authorization witness (exactly HUMAN_APPROVED) + terminal proof. (6) @moe/scheduler dependency for NodeSummary — rejected: layering inversion + package.json churn; witness data only. Verified by 2-agent workflow (design-fidelity + conventions); 2 BLOCKERs + 6 RISKs folded in.",
+    "codebaseInsights": "Landed core conventions catalog (verified): result shapes <X>AcceptedResult/<X>RejectedResult/union, deep-frozen; reduce<X>(state|undefined, command); check order snapshot->create->state->expectedVersion(ILLEGAL_TRANSITION)->version(EXPECTED_VERSION_CONFLICT)->commandId(IDEMPOTENCY_CONFLICT only where source-valid)->TRANSITIONS lookup->overflow guard(multi-event versionDelta)->apply; truth floors goal-validation.ts:145-186 (strongTruth=DAEMON_VERIFIED|HUMAN_APPROVED ONLY — OBSERVED rejects; cancel/reopen exactly HUMAN_APPROVED); successor pattern goal-reducer.ts:167-187; compound multi-event version accounting (combined close precedent); goal.activate_initial_graph exists and owns graphEpoch increment (goal-reducer.ts:106-115) — revision activation carries reference data, daemon composes three reducers atomically. Root index exports ONLY project+goal (identity absent — its own anomaly with area index + shims; do not fix as drive-by). Registry validSources (error-registry.ts): ILLEGAL_TRANSITION+EXPECTED_VERSION_CONFLICT valid both aggregates; IDEMPOTENCY_CONFLICT: GOAL/NODE_RUN/PLANNING_RUN/PROJECT (NOT GRAPH_REVISION); REVISION_REBOUND: ATTEMPT/GRAPH_REVISION/NODE_RUN (NOT PLANNING_RUN); SUPERSEDED_AUTHORITY: not PLANNING_RUN; PLANNING_SUBMISSION_FINALIZING: PLANNING_RUN with sourceState detail. Vocabularies confirmed exact: PLANNING_RUN 9 states, GRAPH_REVISION 6 states; PLANNING_FENCE/PLANNING_HOLD are separate aggregates — never conflate. scheduler graph-model.ts:31 has executionBearing per node but is scheduler-internal.",
+    "risks": "(1) Silent error-code degrade: createRuntimeError falls back to UNKNOWN_ERROR on source/code mismatch — every rejection test must assert the INTENDED code so a degrade fails loudly. (2) Admission-gate placement is the DoD2 make-or-break: multi-node refusal at submission finalization with REJECTED+successor, not at activation. (3) Three-reducer J1 composition: reducers stay pure; atomicity is the daemon's job — document the contract, do not reach across aggregates. (4) Epoch authority: goal owns graphEpoch; revision carrying its own counter would fork authority. (5) SUBMISSION_DRAINING facets: live-planner-effect is a state facet, not a lifecycle — don't invent states outside the closed vocabulary. (6) Preview scope: REVISION/EXPANSION/SUPERSEDED paths typed but rejected — QA may flag 'dead states'; contract comments cite design lines + Phase 5. (7) Shared tree: runner task WORKING — attribute red repo gates; explicit-pathspec commit of exactly 8 paths.",
+    "keyFiles": [
+      "packages/core/src/goal/goal-reducer.ts",
+      "packages/core/src/goal/goal-validation.ts",
+      "packages/core/src/goal/goal-contract.ts",
+      "packages/core/src/index.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/contracts/src/runtime/runtime-error-factory.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-07T18:51:04.895Z",
+  "workStartedAt": "2026-08-07T18:51:19.324Z",
+  "reviewStartedAt": "2026-08-07T19:23:11.881Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  9 passed (9)\n      Tests  189 passed (189)\n   Start at  22:21:05\n   Duration  493ms (transform 1.01s, setup 0ms, import 1.43s, tests 310ms, environment 0ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-07T19:23:11.881Z"
+  },
+  "filesModified": [
+    "packages/core/src/goal/goal-reducer.ts",
+    "packages/core/src/goal/goal-validation.ts",
+    "packages/core/src/planning/planning-run-reducer.test.ts",
+    "packages/core/src/planning/planning-contract.ts",
+    "packages/core/src/planning/planning-snapshot.ts",
+    "packages/core/src/planning/planning-validation.ts",
+    "packages/core/src/planning/planning-results.ts",
+    "packages/core/src/planning/planning-run-submission.ts",
+    "packages/core/src/planning/planning-run-reducer.ts",
+    "packages/core/src/planning/graph-revision-reducer.test.ts",
+    "packages/core/src/planning/graph-revision-contract.ts",
+    "packages/core/src/planning/graph-revision-validation.ts",
+    "packages/core/src/planning/graph-revision-reducer.ts",
+    "packages/core/src/planning/planning-invariants.test.ts",
+    "packages/core/src/index.ts"
+  ],
+  "reviewCompletedAt": "2026-08-07T19:27:08.152Z",
+  "rejectionDetails": {
+    "issues": [
+      {
+        "type": "other",
+        "file": "packages/core/src/planning/planning-contract.ts",
+        "description": "BLOCKING — task-level size violation: commit bcdc2f6 is +3116 net LOC across 13 files vs the 400 net LOC QA bar (7.8x over). Split along the existing two-aggregate seam (A: planning-run, B: graph-revision, C: invariants+index) rather than reverting or rewriting code. Individual modules are compliant at 115-368 lines."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/planning/planning-run-submission.ts",
+        "line": 139,
+        "description": "DoD1 PASS (no action). Atomic J1: activate() emits PlanApproved + PlanningRunActivated from one result with single version accounting; approvePlan (line 118) requires exact 4-tuple sameHashes equality against sealedHashes, so approval binds immutable hashes."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/planning/planning-run-submission.ts",
+        "line": 96,
+        "description": "DoD2 PASS (no action). Multi-node admission gate sits at submission validation, not activation, so a >1 execution-bearing graph can never reach PLAN_REVIEW; lifecycle \"PLAN_REVIEW\" is assigned at exactly one site, after executionBearingKeys() runs. Reducer derives the count from the witness instead of trusting a caller-supplied count (planning-validation.ts:152-156) — correct, a caller count is not proof."
+      },
+      {
+        "type": "other",
+        "file": "packages/core/src/planning/graph-revision-reducer.ts",
+        "line": 1,
+        "description": "DoD3 PASS (no action). Hash mismatch rejects with zero state change on both aggregates; graph-revision content identity is fixed at creation; graphEpoch authority correctly stays in the goal aggregate, with the three-reducer atomic composition contract documented in the module header (lines 1-17)."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT-AS-OVERSIZED. Not a defect rejection — the implementation is correct and I verified it end to end. Blocking issue is batch size only.\n\nSIZE: commit bcdc2f6 = +3116 / -0 LOC across 13 files vs the 400 net LOC QA bar (7.8x over). Production alone 1792 LOC. Runtime warned at plan submission (\"Plan touches 10 distinct files (target <=5); plans over 10 are rejected\") and it shipped at 13. Individual modules DO respect the <=400 rail (115-368) — the violation is the task, not the files.\n\nREMEDY IS ARCHITECT-SIDE, NOT A REWRITE. Do NOT revert bcdc2f6; that destroys verified work. The task delivered TWO aggregates that never call each other. Split on that seam:\n A) Planning run — planning-contract/snapshot/validation/results/run-submission/run-reducer +test (~1062 prod LOC)\n B) Graph revision — graph-revision-contract/validation/reducer +test (~530 prod LOC)\n C) Cross-aggregate invariants + root index — planning-invariants.test.ts, index.ts\nRe-scope this task to A; B and C become their own tasks. @architect-d89636d1 owns the carve; worker coordinates, does not rebuild.\n\nVERIFIED GOOD — carry forward, do not redo (detail in issues[]):\n- Ran the gate myself 3x: exit 0, 9 files / 189 tests passed, matches task.verification exactly. DoD4 PASS.\n- DoD1, DoD2, DoD3 all PASS with located evidence.\n- Tests proven mutation-resistant, not assumed: I broke the multi-node gate and the exact-hash binding; each killed 2 tests. Both reverted, suite back to 189/189.\n- Rails clean: purity grep zero hits, owned paths only, no scratch files, error codes tagged to registry-permitted aggregates with no silent UNKNOWN_ERROR degrade.\n\nZero code changes needed for correctness. Purely a re-scoping action.",
+      "rejectedAt": "2026-08-07T19:27:08.152Z",
+      "reopenCount": 1,
+      "issues": [
+        {
+          "type": "other",
+          "file": "packages/core/src/planning/planning-contract.ts",
+          "description": "BLOCKING — task-level size violation: commit bcdc2f6 is +3116 net LOC across 13 files vs the 400 net LOC QA bar (7.8x over). Split along the existing two-aggregate seam (A: planning-run, B: graph-revision, C: invariants+index) rather than reverting or rewriting code. Individual modules are compliant at 115-368 lines."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/planning/planning-run-submission.ts",
+          "line": 139,
+          "description": "DoD1 PASS (no action). Atomic J1: activate() emits PlanApproved + PlanningRunActivated from one result with single version accounting; approvePlan (line 118) requires exact 4-tuple sameHashes equality against sealedHashes, so approval binds immutable hashes."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/planning/planning-run-submission.ts",
+          "line": 96,
+          "description": "DoD2 PASS (no action). Multi-node admission gate sits at submission validation, not activation, so a >1 execution-bearing graph can never reach PLAN_REVIEW; lifecycle \"PLAN_REVIEW\" is assigned at exactly one site, after executionBearingKeys() runs. Reducer derives the count from the witness instead of trusting a caller-supplied count (planning-validation.ts:152-156) — correct, a caller count is not proof."
+        },
+        {
+          "type": "other",
+          "file": "packages/core/src/planning/graph-revision-reducer.ts",
+          "line": 1,
+          "description": "DoD3 PASS (no action). Hash mismatch rejects with zero state change on both aggregates; graph-revision content identity is fixed at creation; graphEpoch authority correctly stays in the goal aggregate, with the three-reducer atomic composition contract documented in the module header (lines 1-17)."
+        }
+      ]
+    }
+  ],
+  "priorAttempt": {
+    "attemptedAt": "2026-08-07T19:30:47.447Z",
+    "reason": "QA rejected on SIZE ONLY: \"not a defect\", \"zero code changes needed\", \"@architect-d89636d1 owns the carve; worker coordinates, does not rebuild\". Remedy is a re-scope = architect authority, so this plan cannot be re-executed as written.\n\nVERIFIED FRESH (2026-08-07T22:28Z): bcdc2f6 intact (13 files, +3116); `git status --porcelain -- packages/core/src/planning packages/core/src/index.ts` empty; gate `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0, 9 files / 189 tests, matching QA's 3 runs. All 4 DoD PASS per QA, with the multi-node gate and exact-hash binding mutation-tested (each killed 2 tests).\n\nNO WORKER-SIDE FIX EXISTS: reverting destroys verified work (QA forbade it; breaches the preserve-work rail) and shrinking a landed commit cannot un-count its LOC. Re-scoping and cutting siblings B/C are architect-only.\n\nTWO CORRECTIONS TO QA'S CARVE (detail in msg-9a60046f to @architect-d89636d1):\n1. Seam is one-directional, not disjoint. graph-revision-validation.ts:18 and graph-revision-reducer.ts:48 both import \"./planning-snapshot.js\"; planning-run imports nothing from graph-revision. B orders AFTER A and must NOT own planning-snapshot.ts; C (invariants test) imports both contracts + both reducers, so C is last.\n2. No bucket reaches the 400 net LOC bar: A = 1262 prod / 1776 total (QA's \"~1062 prod\" undercounts by 200), B = 530 prod / 818 total, C = 522. Finer slicing cannot fix it — the named gate requires each slice to typecheck and test as a unit, and a reducer without its contract does not compile. Bar and gate conflict for aggregate-shaped core work; the next five core aggregates hit the same wall unless settled now.\n\nASK: re-scope to bucket A with a recorded size exception, or relax the per-task LOC bar for core aggregate tasks epic-wide. Do NOT plan a revert or rebuild. Context in Serena `task-task-1ade51c0dc104181a67adde741295fd5-handoff` and `gotcha-core-aggregate-loc-bar`.",
+    "implementationPlan": [
+      {
+        "stepId": "step-1",
+        "description": "Study landed conventions before writing anything: packages/core/src/goal/{goal-contract,goal-reducer,goal-validation}.ts and project equivalents. Clone EXACTLY: result shapes <X>AcceptedResult {events, ok:true, state, successor?} / <X>RejectedResult {error: RuntimeError, ok:false} / union type, deep-frozen via local deepFreeze; reducer signature reduce<X>(state | undefined, command) where undefined accepts only the create kind with expectedVersion===0; check order: snapshot command -> create path -> snapshot state -> expectedVersion validity (ILLEGAL_TRANSITION) -> version mismatch (EXPECTED_VERSION_CONFLICT) -> commandId presence (IDEMPOTENCY_CONFLICT — ONLY where the source aggregate is registry-valid) -> frozen TRANSITIONS lookup -> version-overflow guard (accounts multi-event versionDelta) -> per-command apply; witness-validation failures reject ILLEGAL_TRANSITION, malformed snapshots unknownFailure; truth floors from goal-validation.ts:145-186 — strongTruth admits ONLY DAEMON_VERIFIED|HUMAN_APPROVED (OBSERVED rejects), destructive/authorization witnesses require exactly HUMAN_APPROVED; successor pattern GoalSuccessorData (goal-reducer.ts:167-187: frozen successor data on the accepted result, old aggregate never moves backward); core-local command kinds beyond RUNTIME_COMMAND_KINDS are precedented. Naming: per-aggregate exports PLANNING_RUN_COMMAND_KINDS/PLANNING_RUN_TRANSITIONS/reducePlanningRun and GRAPH_REVISION_COMMAND_KINDS/GRAPH_REVISION_TRANSITIONS/reduceGraphRevision. Two aggregates share the planning/ directory deliberately (contract+validation shared, one reducer file each).",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/goal/goal-reducer.ts",
+          "packages/core/src/goal/goal-validation.ts"
+        ]
+      },
+      {
+        "stepId": "step-2",
+        "description": "TDD red — planning-run-reducer.test.ts. Lifecycles from RUNTIME_LIFECYCLES.PLANNING_RUN (typeof [number] derivation, goal-contract.ts:4 precedent). Exhaustive matrix over the INITIAL-kind linear subset (design table 280-306): planning.create_draft (undefined -> DRAFT, expectedVersion 0); readiness witness DRAFT -> READY (immutable intent/criteria base ref + finite planning-budget ref, strongTruth floor); planning.claim READY -> PLANNING (attempt/lease/slot/context references bind; also legal from unowned-resumable PLANNING with prior-attempt-terminal-proof + handoff-or-NO_HANDOFF_RECOVERY witness refs); planning.release PLANNING -> PLANNING (attempt RELEASED, sealed handoff ref, run becomes unowned-resumable — ownership modeled as a state facet {owned: boolean, resumable: boolean}); planning.recover_absent owned/SUSPECT-facet PLANNING -> unowned resumable PLANNING (NO_HANDOFF_RECOVERY witness: negative-proof refs, missing in-memory state recorded UNKNOWN); plan.propose kind INITIAL seals submissionHash: with live-planner-effect facet -> SUBMISSION_DRAINING; without -> directly finalization-eligible PLANNING; plan.propose kinds REVISION|EXPANSION are TYPED but return the core-local UNSUPPORTED variant (preview scope); submission-finalize witness (attempt/effect/resources/slot terminal proof, strongTruth) from PLANNING-no-live-effect or SUBMISSION_DRAINING: (a) ADMISSION PASS runs HERE (design 291/396/1322 — the single-node gate is at submission validation, NOT activation): witness carries typed node summary list readonly {nodeKey, executionBearing: boolean}[] (DAEMON_VERIFIED floor); reducer derives the count itself — more than one execution-bearing node returns the typed UNSUPPORTED variant and the run moves to REJECTED with successor data (refusal row 293); (b) validation success -> PLAN_REVIEW, one result atomically records planRevision {planHash} + graphRevision content ref {graphContentHash} + dependency/quality refs; (c) core proposal refusal (typed findings ref) -> REJECTED + frozen successor-run data (GoalSuccessorData pattern; dedup is the ledger's job); PLAN_REVIEW + exact plan approval (binds planHash+graphContentHash+qualityHash+dependencyHash, all hex64) -> APPROVED (no execution authority); hash mismatch ANYWHERE -> ILLEGAL_TRANSITION (NOT REVISION_REBOUND — registry validSources exclude PLANNING_RUN; createRuntimeError silently degrades invalid sources to UNKNOWN_ERROR), zero state change; identical-byte re-present accepted idempotently by exact hash (line 306); PLAN_REVIEW REVISE_PLAN (findings ref, HUMAN_APPROVED) -> REJECTED + successor data; goal-cancel authorization witness (exactly HUMAN_APPROVED + no-live/unknown-effect terminal proof) -> CANCELLED — NO bare planning.cancel for INITIAL runs (design rows 301-302: planning.cancel is expansion-only; initial cancellation authority is goal.cancel); compound graph.approve PLAN_REVIEW -> ACTIVATED (J1: plan-decision + graph-decision + activation in ONE result; activation witness binds graph/quality/BUDGET/POLICY hashes + expectedGoalVersion per design 528, goal must be DRAFT with no active revision — witness refs); initial APPROVED -> ACTIVATED via graph.approve similarly. SUPERSEDED and every expansion/supersession transition: representable, always rejected (preview). PLANNING_SUBMISSION_FINALIZING (sourceState detail) used when commands arrive during SUBMISSION_DRAINING that the drain forbids. Assert code+details on every rejection; matrix completeness derived mechanically. Confirm RED.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/planning-run-reducer.test.ts"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/planning-run-reducer.test.ts"
+        ]
+      },
+      {
+        "stepId": "step-3",
+        "description": "Green — planning-contract.ts + planning-validation.ts (each target <=250, split before 400). planning-contract.ts: PlanningRunLifecycle/GraphRevisionLifecycle derived from RUNTIME_LIFECYCLES; typed frozen commands + witnesses per step 2; PlanningRunState {runId, goalRef, kind: \"INITIAL\" (REVISION/EXPANSION in the type union for forward-compat), lifecycle, owned/resumable/livePlannerEffect facets, attemptRef|null, leaseRef|null, submissionHash|null, planHash|null, graphRevisionRef|null, approvedHashes|null {planHash, graphContentHash, qualityHash, dependencyHash}, version}; GraphRevisionState {revisionId, goalRef, lifecycle, graphContentHash, planHash, boundHashes|null {graphHash, qualityHash, budgetHash, policyHash, expectedGoalVersion}, version}; NodeSummary {nodeKey, executionBearing}; the typed UNSUPPORTED result variant — THIRD discriminated union member {ok: false, unsupported: true, reason: \"MULTI_NODE_EXECUTION_UNSUPPORTED\", executionBearingNodeKeys: readonly string[]} — DOCUMENTED as the deliberate exception to registry-only rejections (no UNSUPPORTED code exists in the closed registry; FANOUT_* codes cannot carry counts — RUNTIME_SAFE_DETAIL_KEYS has no count key; precedent for domain-local typed codes: skills SKILL_MANIFEST_VERSION_UNSUPPORTED, runner RUNNER_WORKSPACE_PATH_KIND_UNSUPPORTED); events (PlanningRunCreated, PlanningRunReady, PlanningClaimed, PlanningReleased, PlanningRecoveredAbsent, PlanningSubmissionSealed, PlanRevisionCreated, PlanningRunRejected, PlanApproved, PlanningRunActivated, PlanningRunCancelled) each echoing commandId. planning-validation.ts: hex64/witness/truth-floor guards cloned from goal-validation.ts (strongTruth two-value floor; HUMAN_APPROVED-exact for cancel/REVISE_PLAN authorization). NO @moe/scheduler import — core depends only on @moe/contracts; node summaries arrive as witness data (layering + package.json unchanged). planning-run tests green.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/planning-contract.ts",
+          "packages/core/src/planning/planning-validation.ts",
+          "packages/core/src/planning/planning-run-reducer.ts"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/planning-contract.ts",
+          "packages/core/src/planning/planning-validation.ts",
+          "packages/core/src/planning/planning-run-reducer.ts"
+        ]
+      },
+      {
+        "stepId": "step-4",
+        "description": "TDD red then green — graph-revision-reducer.test.ts + graph-revision-reducer.ts. Matrix (design 526-528): create DRAFT (immutable content: graphContentHash+planHash fixed at creation, never mutated after — any content-mutation command rejects); DRAFT -> PENDING_APPROVAL (submission ref); PENDING_APPROVAL -> APPROVED (approval witness binding graphHash+qualityHash+budgetHash+policyHash+expectedGoalVersion — full design-528 hash set); APPROVED -> ACTIVE (activation); canonical COMPOUND activation from PENDING_APPROVAL emits APPROVED + ACTIVE events in one result (or APPROVED -> ACTIVE single event), version bumped once per event with overflow guard accounting versionDelta (goal-reducer compound-close precedent); graphEpoch is REFERENCE DATA to the goal aggregate's epoch authority (goal.activate_initial_graph already increments it — goal-reducer.ts:106-115): the revision activation result carries {goalRef, expectedGoalVersion} so the daemon composes THREE reducer results atomically (planning-run graph.approve + graph-revision activation + goal.activate_initial_graph) — document this composition contract in the module header; DRAFT|PENDING_APPROVAL|APPROVED -> REJECTED pre-activation; never backward; SUPERSEDED representable, all entries rejected (preview). Error codes for THIS reducer (source aggregate GRAPH_REVISION): REVISION_REBOUND IS valid here — use it for stale-binding hash mismatch on activation; SUPERSEDED_AUTHORITY valid here (expectedEpoch/observedEpoch details); IDEMPOTENCY_CONFLICT is NOT valid from GRAPH_REVISION (registry srcs GOAL/NODE_RUN/PLANNING_RUN/PROJECT) — the empty-commandId branch uses ILLEGAL_TRANSITION or unknownFailure instead of cloning the goal pattern verbatim (createRuntimeError silently degrades invalid sources to UNKNOWN_ERROR — test asserts the CHOSEN code actually surfaces, catching a silent degrade). Stale approval bytes (DoD3): approval/activation carrying hashes that mismatch the revision's sealed content rejects with zero state change; property test: content hashes NEVER change after creation across any accepted command sequence.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/graph-revision-reducer.test.ts",
+          "packages/core/src/planning/graph-revision-reducer.ts"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/graph-revision-reducer.test.ts",
+          "packages/core/src/planning/graph-revision-reducer.ts"
+        ]
+      },
+      {
+        "stepId": "step-5",
+        "description": "planning-invariants.test.ts (covers BOTH aggregates — deliberate deviation from one-dir-per-aggregate, documented) + root index exports. Seeded xorshift32 property tests (landed *-invariants precedent, no fast-check): (1) no backward transition ever accepted for either aggregate across random command sequences; (2) multi-node graphs (2+ execution-bearing nodes in the witness list) NEVER reach PLAN_REVIEW, APPROVED, or ACTIVATED — the UNSUPPORTED variant surfaces at submission finalization and the run is REJECTED (DoD2); (3) stale approval bytes: random hash perturbation (flip one hex char) always rejects with zero state change on both aggregates (DoD3); (4) draft-vs-active authority: after a revision is ACTIVE, every content/approval mutation rejects; a REJECTED planning run never regains authority; successor data never aliases old state (deep-inequality of references); (5) deep-frozen results everywhere (recursive isFrozen walk); (6) determinism: same seed -> identical trace; (7) compound activation: exactly one result carries the full J1 event set and intermediate states are never observable. Root index: append per-aggregate export blocks to packages/core/src/index.ts following the EXACT landed structure (value block per reducer module + type block from planning-contract.js, type names alphabetized within blocks, append-chronological block order). Do NOT touch identity's missing export (not this task's drive-by), no area index, no .js shims (project/goal precedent — identity's shims are its own anomaly).",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/planning-invariants.test.ts",
+          "packages/core/src/index.ts"
+        ],
+        "newFiles": [
+          "packages/core/src/planning/planning-invariants.test.ts"
+        ]
+      },
+      {
+        "stepId": "step-6",
+        "description": "Verification gate (single concentrated step). (1) `wc -l packages/core/src/planning/*.ts` — every production module <=400 hard (target 250). (2) Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail } (existing project/goal/identity suites must pass untouched — zero edits outside planning/ + index.ts). (3) Repo gate `pnpm typecheck && pnpm test`; attribute any red to foreign in-flight work (runner task WORKING in this tree) before touching anything. (4) grep planning/ production sources for Date.now|new Date|Math.random|process\\.|@moe/scheduler — ZERO hits (purity + layering). (5) Run focused suite twice — identical; `git status --porcelain` shows only owned paths.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/planning-run-reducer.ts",
+          "packages/core/src/planning/graph-revision-reducer.ts"
+        ]
+      },
+      {
+        "stepId": "step-7",
+        "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra checks: (a) registry-source audit — grep every createRuntimeError call: planning-run reducer sources only {aggregate:\"PLANNING_RUN\"} with PLANNING_RUN-valid codes (ILLEGAL_TRANSITION, EXPECTED_VERSION_CONFLICT, IDEMPOTENCY_CONFLICT, PLANNING_SUBMISSION_FINALIZING); graph-revision reducer only GRAPH_REVISION-valid codes (ILLEGAL_TRANSITION, EXPECTED_VERSION_CONFLICT, REVISION_REBOUND, SUPERSEDED_AUTHORITY); any invalid pairing silently degrades to UNKNOWN_ERROR — the tests assert the intended code surfaces, re-verify each; (b) UNSUPPORTED variant never carries a RuntimeError and never appears on any path except multi-node admission and REVISION/EXPANSION kinds; (c) admission gate placement — confirm NO path reaches PLAN_REVIEW without the node-summary witness having been evaluated; (d) three-reducer composition contract documented in graph-revision-reducer.ts header (daemon composes planning-run + graph-revision + goal.activate_initial_graph atomically; epoch authority lives in goal); (e) matrix completeness mechanical derivation passes for both aggregates; (f) no scratch files under repo root (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths (runner task may have staged files — leave them), `git add` + `git commit -- packages/core/src/planning/planning-contract.ts packages/core/src/planning/planning-validation.ts packages/core/src/planning/planning-run-reducer.ts packages/core/src/planning/planning-run-reducer.test.ts packages/core/src/planning/graph-revision-reducer.ts packages/core/src/planning/graph-revision-reducer.test.ts packages/core/src/planning/planning-invariants.test.ts packages/core/src/index.ts`; `git show --stat` lists exactly these 8 paths.",
+        "status": "PENDING",
+        "affectedFiles": [
+          "packages/core/src/planning/planning-contract.ts",
+          "packages/core/src/planning/planning-validation.ts",
+          "packages/core/src/planning/planning-run-reducer.ts",
+          "packages/core/src/planning/graph-revision-reducer.ts",
+          "packages/core/src/index.ts"
+        ]
+      }
+    ],
+    "stepsCompleted": []
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified the size-only rejection is mechanically unsplittable after bcdc2f6 landed; submitted task-rail proposal prop-2eaa632d2b594efd90efc141e7be2361; created six bounded <=250-line production/test decomposition children; wrote Serena handoff task-task-1ade51c0dc104181a67adde741295fd5-handoff.",
+      "whatRemains": "Human must approve or reject prop-2eaa632d2b594efd90efc141e7be2361. On approval, reclaim/unblock and submit an evidence-only closeout plan; do not rebuild/revert. Promote/plan the five refactor children then final size guard separately.",
+      "pitfalls": "Do not synthesize retroactive A/B/C ownership, rewrite history, revert bcdc2f6, or submit a no-op plan before the rail proposal is approved.",
+      "openQuestions": "Only the human decision on the one-time historical task-size exception remains.",
+      "releasedAt": "2026-08-07T20:08:18.844Z",
+      "releasedBy": "architect-c4babdf9",
+      "reason": "Explicit architect handoff after reporting the human-gated size-exception block; user requested planning continue on other tasks."
+    }
+  ]
 }

@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: unblocking — the dependency's CODE is available even though its task is not DONE. Planning graph lifecycle core is BLOCKED on a size-rule exception (prop-2eaa632d), but its commit bcdc2f6 is landed on main and 12 files under packages/core/src/planning are tracked and importable. Nothing about that administrative block prevents planning against those types. Plan Policy approval core now; if the planning surface turns out to be genuinely missing rather than merely unapproved, block again naming the symbol.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.155Z",
-  "updatedAt": "2026-08-07T11:45:45.155Z"
+  "updatedAt": "2026-08-07T20:25:18.772Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T20:07:44.997Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

@@ -14,9 +14,141 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-c4babdf9",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add mutation-resistant characterization coverage before moving production code, without editing or weakening existing store tests. Through the public SqliteEventStore surface, seed a fixed command containing multiple ordered events and outbox messages and assert complete normalized values from getAggregateVersion, getCommandReceipt, readEvents/readAggregateEvents, readEventsAfter, readPendingOutbox/readPendingOutboxPage, including number-vs-bigint cursors, hasMore/nextCursor, effect/request digests, and byte contents. Pin exact DurableStoreError code+message pairs for negative/unsafe cursors, zero and 1,001 page limits, zero and 64-MiB-plus-one decoded-byte limits. Assert page/receipt envelopes and their arrays remain frozen, event/outbox objects and returned byte arrays remain mutable detached snapshots, and mutating one read cannot alter the next read. Keep this new table-driven test <=250 physical lines; existing hostile, byte-budget, WAL snapshot, core, recovery, decision, and project-binding tamper tests remain byte-for-byte unchanged.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "note": "Added packages/store/src/event-read-model-contract.test.ts (249 physical lines, 23 tests, all passing). Characterizes the public SqliteEventStore read surface before the split: normalized getAggregateVersion/getCommandReceipt/readEvents/readAggregateEvents/readEventsAfter/readPendingOutbox/readPendingOutboxPage values incl. number vs bigint cursors, hasMore/nextCursor, request/effect digests, byte contents; empty tail pages; frozen page/receipt envelopes and arrays vs mutable detached event/outbox records and byte arrays; table-driven exact DurableStoreError code+message pins for identifier, negative/unsafe cursors, zero and 1001 limits, zero and 64MiB+1 decoded-byte budgets across all three page methods; both single-page overflow messages. No existing test files touched.",
+      "startedAt": "2026-08-07T12:21:51.474Z",
+      "completedAt": "2026-08-07T12:27:35.047Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract stored-row decoding into internal EventReadDecodeStore extending StoreRuntime. Move mapStoredEvent, mapOutboxMessage, page construction, and focused protected receipt/event/outbox row decoders so this layer owns only version/identifier/timestamp/integer/SHA/byte decoding and immutable snapshot construction, with no SQL queries or public read methods. Preserve the exact field evaluation order and messages, the decision-trace rule (all six scoped fields null means absent; any partial trace is STORE_CORRUPT), requireRowBytes detached-copy semantics, expected record/codec/request/effect versions, and the current shallow-freeze boundary. Add the required one-line `export * from \"./event-read-decode.ts\";` bridge and keep both files <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/event-read-decode.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/event-read-decode.js",
+        "packages/store/src/event-read-model.ts"
+      ],
+      "note": "Added event-read-decode.ts (238 lines) + event-read-decode.js bridge. EventReadDecodeStore extends StoreRuntime and owns only stored-row decoding and snapshot construction: page(), mapStoredEvent, mapOutboxMessage (now protected), plus focused protected decoders decodeReceiptRow / decodeReceiptEventIdentity / decodeReceiptEventBody / decodeReceiptOutboxIdentity / decodeReceiptOutboxBody. No SQL, no public read methods. Field evaluation order preserved exactly by sequential statements before each return literal; short-circuit comparison decodes (aggregate_id, request_sha256, committed_at, created_at) intentionally stay inline in loadReceipt so error precedence is unchanged. effectEventById.get moved after outbox identity decode - pure Map lookup, no observable change. EventReadModelStore now extends EventReadDecodeStore (534 lines, shrinks further in steps 3-5). pnpm --filter @moe/store typecheck clean; 18 files / 112 tests pass.",
+      "startedAt": "2026-08-07T12:29:21.304Z",
+      "completedAt": "2026-08-07T12:30:56.462Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract receipt reconstruction into internal EventReadMaterializationStore extending EventReadDecodeStore. Move the exact RECEIPT_OUTBOX_QUERY bytes, loadReceipt, and validateAllReceipts here; delegate only row decoding to the prior layer. Preserve command-id lookup, project-scope lookup and PROJECT_SCOPE_REQUIRED precedence, optional live-binding and aggregate-tail flags, request/result/effect version checks, receipt/event/outbox count and ordering checks, event-to-outbox association, effect digest recomputation, aggregate-tail validation, command_id startup order, disappearance handling, and every stable STORE_CORRUPT message. Do not add a read snapshot or change query order: getCommandReceipt must retain its current readOperation semantics. Re-export the SQL constant later through event-read-model.ts, add the one-line .js bridge, and keep both files <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/store/src/event-read-materialization.ts",
+        "packages/store/src/event-read-materialization.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-materialization.ts",
+        "packages/store/src/event-read-materialization.js",
+        "packages/store/src/event-read-model.ts"
+      ],
+      "note": "Added event-read-materialization.ts (249 lines) + .js bridge. EventReadMaterializationStore extends EventReadDecodeStore and owns RECEIPT_OUTBOX_QUERY (byte-identical, still EXPLAIN-QUERY-PLAN asserted by sqlite-event-store-core.test.ts), loadReceipt, validateAllReceipts. All precedence preserved: command-id key check, scope lookup then PROJECT_SCOPE_REQUIRED, optional live-binding/aggregate-tail flags, version/count/order checks, event-to-outbox association, effect digest recomputation, startup command_id ordering and disappearance handling, every STORE_CORRUPT message. getCommandReceipt still runs under readOperation - no snapshot added. Only whitespace-level change: the three internal (non-exported) SQL literals for command_receipts, command_receipt_scopes, and domain_events were hoisted to module constants with denser column lists so the module fits the 250-line rail; predicates, order, and parameters are identical. event-read-model.ts now extends EventReadMaterializationStore and re-exports RECEIPT_OUTBOX_QUERY (274 lines, facade work lands in steps 4-5). typecheck clean; 18 files / 112 tests pass.",
+      "startedAt": "2026-08-07T12:30:59.870Z",
+      "completedAt": "2026-08-07T12:33:13.898Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extract bounded event/outbox page querying into internal EventReadQueryStore extending EventReadMaterializationStore. Implement protected aggregate, global, and pending-outbox page operations with the existing input defaults and validation order (cached project binding before request fields), exact SQL predicates/order, `limit + 1` preflight, decoded-byte prefix selection, selected-last-cursor materialization, assertReadPageCursors, and frozen page construction. Keep each candidate-size query and its materialization query inside the same readSnapshotOperation/BEGIN DEFERRED so concurrent WAL writes cannot split the snapshot; never decode a later excluded/corrupt row. Preserve aggregate cursors as number and global/outbox cursors as bigint, empty pages as `{items:[], hasMore:false, nextCursor:null}`, and MAX_PAGE_SIZE/MAX_PAGE_DECODED_BYTES fail-closed behavior. Add the one-line .js bridge and keep both files <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/store/src/event-read-query.ts",
+        "packages/store/src/event-read-query.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-query.ts",
+        "packages/store/src/event-read-query.js"
+      ],
+      "note": "Added event-read-query.ts (229 lines) + .js bridge. EventReadQueryStore extends EventReadMaterializationStore with protected aggregateEventPage / globalEventPage / pendingOutboxPage. Bodies moved verbatim: same defaults (0/0n, 100, MAX_PAGE_DECODED_BYTES), same validation order (assertCachedProjectBinding, identifier, cursor, limit, byte budget), same SQL predicates/order, limit+1 preflight, selectReadPagePrefix, selected-last-cursor materialization, assertReadPageCursors, frozen this.page construction. Each preflight and its materialization stay inside one readSnapshotOperation with the unchanged labels \"read aggregate events\" / \"read global events\" / \"read pending outbox\", so BEGIN DEFERRED still covers both and later excluded rows are never decoded. Aggregate cursors stay number, global/outbox stay bigint, empty pages stay {items:[],hasMore:false,nextCursor:null}. typecheck clean; 18 files / 112 tests pass.",
+      "startedAt": "2026-08-07T12:33:27.869Z",
+      "completedAt": "2026-08-07T12:34:36.012Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Reduce event-read-model.ts to the compatibility facade `EventReadModelStore extends EventReadQueryStore`. Keep every existing public method name, signature, default, return type, readOperation/readSnapshotOperation label, and single-page overflow message; public page methods delegate to the protected query layer, while getAggregateVersion/getCommandReceipt/readEvents/readPendingOutbox retain their exact wrapping and freeze behavior. Preserve protected loadReceipt/validateAllReceipts through inheritance for EventLedgerStore, and re-export RECEIPT_OUTBOX_QUERY with byte-identical SQL so sqlite-event-store.ts and query-plan tests require no changes. Do not change event-read-model.js, event-ledger.ts, package-root exports, schemas, cursors, or query features. Keep the facade <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-read-model.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model.ts"
+      ],
+      "note": "event-read-model.ts is now a 93-line compatibility facade: EventReadModelStore extends EventReadQueryStore. All seven public methods keep their names, signatures, defaults and return types. getAggregateVersion/getCommandReceipt keep their readOperation labels and freeze behavior; readEvents/readPendingOutbox keep their exact single-page overflow messages; readAggregateEvents/readEventsAfter/readPendingOutboxPage delegate to the protected query layer, which owns the unchanged readSnapshotOperation labels. loadReceipt/validateAllReceipts remain protected and reach EventLedgerStore through inheritance. RECEIPT_OUTBOX_QUERY is re-exported from event-read-materialization.js with byte-identical SQL, so event-ledger.ts, sqlite-event-store.ts, event-read-model.js, index.ts, and the EXPLAIN QUERY PLAN test are untouched. typecheck clean; 18 files / 112 tests pass.",
+      "startedAt": "2026-08-07T12:34:39.378Z",
+      "completedAt": "2026-08-07T12:34:51.837Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarially review the owned diff as a behavior-preserving move, not a redesign. Compare each old method block against its new layer and attack empty pages, exact and one-byte-short budgets, single-record-over-ceiling corruption, limit 1/1,000/1,001, number/bigint max boundaries, future record versions, partial decision traces, receipt scope/tail/count/order/digest tampering, concurrent WAL writes between preflight and blob reads, caller mutation of returned bytes, closed/busy/rollback normalization, and subclass startup validation. Confirm stable codes/messages, SQL/order, snapshot transaction boundaries, cursor advancement, frozen-vs-mutable boundaries, and public exports are unchanged. Run a cross-platform Node line-count assertion over event-read-model.ts, the three new production .ts modules, all three bridges, and event-read-model-contract.test.ts and fail if any exceeds 250 physical lines. Inspect `git diff --` for exactly these eight owned paths and no scratch/generated evidence; if review changes bytes, rerun the affected focused test before the final gate.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-read-model.ts",
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/event-read-decode.js",
+        "packages/store/src/event-read-materialization.ts",
+        "packages/store/src/event-read-materialization.js",
+        "packages/store/src/event-read-query.ts",
+        "packages/store/src/event-read-query.js",
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "note": "Adversarial review done. Mechanical proof: a Node block-extractor compared each old method body in HEAD:event-read-model.ts against its new layer - page, mapStoredEvent, mapOutboxMessage, getAggregateVersion, getCommandReceipt, readEvents, readPendingOutbox, validateAllReceipts, and all three page queries are byte-identical modulo the signature line. A normalized diff of loadReceipt shows only the five intended extraction hunks. RECEIPT_OUTBOX_QUERY string-compares equal to HEAD (497 chars). Findings and dispositions: (1) key insertion order changed in two INTERNAL draft literals (effectEvent, outbox push) because the decoder spread now precedes outbox:[] - verified non-observable, identifyCommandEffects hashes named fields only and neither draft is returned to a caller; (2) mapStoredEvent/mapOutboxMessage widened private->protected, required by the split, and none of the four classes is exported from index.ts so the public surface is unchanged; (3) three non-exported SQL literals reformatted (whitespace only, same predicates/params/order) - only RECEIPT_OUTBOX_QUERY is EXPLAIN-QUERY-PLAN asserted and it is byte-identical; (4) effectEventById.get now runs after the outbox identity decode instead of between two decodes - Map.get cannot throw, so error precedence is unchanged; (5) short-circuit comparison decodes (aggregate_id, request_sha256, committed_at, created_at) deliberately stay inline in loadReceipt so a corrupt SHA behind a mismatched aggregate_id still reports the original \"does not match receipt\" message. Cross-platform Node assertion: all 8 owned paths <=250 physical lines (93/238/1/249/1/229/1/250) and every internal store .ts has a correct one-line .js bridge (index.ts has none by design - package exports resolve src/index.ts directly). tsconfig noUnusedLocals proves no dead imports. Added out-of-range bigint cursor coverage (MAX_SQLITE_INTEGER+1) to the contract test, then reran it: 23 passed. git status shows exactly the 8 owned paths under packages/store/src and no scratch or generated evidence. Full monorepo suite: 58 files / 543 tests pass.",
+      "startedAt": "2026-08-07T12:35:02.853Z",
+      "completedAt": "2026-08-07T12:37:40.561Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the single fresh completion gate from `D:/projexts/moe-next`: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. Require exit code 0 and retain the fresh output tail as moe.complete_task evidence. Stage/commit only the eight explicit owned paths in this plan; never use a worktree, broad add, push, merge, reset, or stash.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/event-read-model.ts",
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/event-read-decode.js",
+        "packages/store/src/event-read-materialization.ts",
+        "packages/store/src/event-read-materialization.js",
+        "packages/store/src/event-read-query.ts",
+        "packages/store/src/event-read-query.js",
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model.ts",
+        "packages/store/src/event-read-decode.ts",
+        "packages/store/src/event-read-decode.js",
+        "packages/store/src/event-read-materialization.ts",
+        "packages/store/src/event-read-materialization.js",
+        "packages/store/src/event-read-query.ts",
+        "packages/store/src/event-read-query.js",
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "note": "Fresh gate from D:/projexts/moe-next: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exit 0 - 18 test files / 112 tests passed. Committed b5a78b6 on main by explicit pathspec with exactly the 8 owned paths (git show --stat confirms 8 files, 985 insertions, 587 deletions); working tree under packages/store is clean. No worktree, no broad add, no push, merge, reset, or stash. The first commit attempt captured a stray '@' in the subject because a PowerShell here-string was passed to the Bash tool; amended message-only with a heredoc while the index was verified empty, so the tree is unchanged.",
+      "startedAt": "2026-08-07T12:37:43.210Z",
+      "completedAt": "2026-08-07T12:38:44.546Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -28,11 +160,71 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:12.863Z",
-  "updatedAt": "2026-08-07T12:15:20.273Z",
+  "updatedAt": "2026-08-07T12:44:04.974Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T12:15:16.897Z"
+    "firstClaimAt": "2026-08-07T12:15:16.897Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T12:44:04.974Z",
+    "wallClockMs": 1728077
   },
   "contextFetchedBy": [
-    "architect-c4babdf9"
-  ]
+    "architect-c4babdf9",
+    "worker-4dddabde",
+    "qa-200db8e3"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T12:21:25.993Z",
+  "planningNotes": {
+    "approachesConsidered": "Keeping page queries in the 664-line class or combining decode and receipt reconstruction was rejected because both preserve the oversized mixed-responsibility design. The selected internal inheritance chain is EventReadDecodeStore -> EventReadMaterializationStore -> EventReadQueryStore -> EventReadModelStore. This retains protected StoreRuntime access and the EventLedgerStore subclass contract without widening public exports. Three one-line .js bridges are required by the repository's NodeNext/raw strip-types convention; they account for the path count but not additional logic.",
+    "codebaseInsights": "EventReadModelStore currently owns seven public read methods plus protected loadReceipt/validateAllReceipts. Aggregate/global/outbox pages first select `limit + 1` cursor/decoded-byte candidates, use selectReadPagePrefix, then materialize only the selected cursor range inside one readSnapshotOperation/BEGIN DEFERRED. Page envelopes and item arrays are frozen, receipt envelopes and ID arrays are frozen, but StoredEvent/PendingOutboxMessage objects and detached Uint8Array copies remain mutable. EventLedgerStore consumes protected loadReceipt, validateAllReceipts, and the exact RECEIPT_OUTBOX_QUERY export. MAX_PAGE_SIZE is 1,000 and MAX_PAGE_DECODED_BYTES is 64 MiB.",
+    "risks": "Moving methods across classes can silently change protected visibility, validation/error precedence, snapshot transaction scope, cursor type/order, when corrupt later rows are decoded, or byte-copy/freeze behavior. Preserve every SQL predicate/order/limit, default argument, stable DurableStoreError code/message, field read order, and the no-extra-public-export boundary. Per the user's strengthened rail, every changed/new production or test source must be <=250 physical lines even though the task DoD only requires <350.",
+    "keyFiles": [
+      "packages/store/src/event-read-model.ts",
+      "packages/store/src/event-ledger.ts",
+      "packages/store/src/store-runtime.ts",
+      "packages/store/src/read-page-budget.ts",
+      "packages/store/src/read-page-queries.ts",
+      "packages/store/src/event-page-byte-budget.test.ts",
+      "packages/store/src/read-page-snapshot.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T12:21:28.037Z",
+  "workStartedAt": "2026-08-07T12:21:51.474Z",
+  "reviewStartedAt": "2026-08-07T12:39:33.906Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  15:38:34\n   Duration  1.37s (transform 1.77s, setup 0ms, import 2.84s, tests 4.63s, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T12:39:33.906Z"
+  },
+  "filesModified": [
+    "packages/store/src/event-read-model-contract.test.ts",
+    "packages/store/src/event-read-decode.ts",
+    "packages/store/src/event-read-decode.js",
+    "packages/store/src/event-read-model.ts",
+    "packages/store/src/event-read-materialization.ts",
+    "packages/store/src/event-read-materialization.js",
+    "packages/store/src/event-read-query.ts",
+    "packages/store/src/event-read-query.js"
+  ],
+  "completedAt": "2026-08-07T12:44:04.974Z",
+  "reviewCompletedAt": "2026-08-07T12:44:04.974Z",
+  "reviewSummary": "APPROVED. Re-ran gates fresh myself: `pnpm --filter @moe/store typecheck` exit 0; `pnpm --filter @moe/store test` exit 0 (18 files/112 tests); plus repo-wide `npx vitest run --root .` exit 0 (58 files/545 tests) since event-read-model feeds event-ledger/sqlite-event-store. DoD 1 (public APIs + stable errors byte-compatible): no existing test file modified — `git show --stat b5a78b6` is exactly the 8 owned paths; a normalized logical-line set-diff of the old 664-line event-read-model.ts (vs its TRUE parent 82ebebc, not HEAD~1 — 88e92a4 landed on top) against the new four modules returned 0 REMOVED lines, so no error string, SQL predicate, ORDER BY, or validation call was dropped. DoD 2 (fail-closed limits): page-query bodies byte-identical modulo signature; RECEIPT_OUTBOX_QUERY byte-identical (450 chars); the three reformatted non-exported SQL literals verified whitespace-normalized-equal; loadReceipt still runs project-scope/PROJECT_SCOPE_REQUIRED/live-binding checks before any version check, so error precedence is preserved. DoD 3 (modules <350 lines): 93/238/249/229 production, 250 test, 3x 1-line bridges. DoD 4: gate exits 0. Net 398 changed LOC (985/587), under the oversized bar. Independently disproved the two riskiest deltas: draft key-insertion-order changes are non-observable because store-digests.ts:190-221 identifyCommandEffects hashes named fields in fixed order and never serializes the object; the private->protected widening is contained because grep shows event-ledger.ts:39 is the only consumer and index.ts never references event-read-*, so the package export surface is unchanged. New contract test is mutation-resistant (toStrictEqual on full normalized objects so number-vs-bigint cursors are distinguished, exact code+message pairs, frozen-envelope vs mutable-detached-record boundary, caller-mutation isolation, empty tail pages, both overflow messages). No scratch or generated files in the commit; owned paths clean in the working tree."
 }

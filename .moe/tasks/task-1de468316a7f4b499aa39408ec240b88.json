@@ -15,13 +15,136 @@
     "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD red — tests/property/schedule/schedule-checker.test.ts (unit layer against SYNTHETIC universes; tests/ is untypechecked — no tsconfig covers it and vitest esbuild strips types — so every gate tooth must be a RUNTIME assertion, never a type-level one). Exercise every fail-closed path of checkScheduleCoverage with synthetic fixtures: (1) missing obligation mapping -> FAIL SCHEDULE_OBLIGATION_UNMAPPED; (2) duplicate canonical schedule identity -> FAIL SCHEDULE_IDENTITY_DUPLICATE; (3) schedule referencing a transition absent from the injected tables -> FAIL SCHEDULE_TRANSITION_UNREACHABLE; (4) DERIVED-UNIVERSE reverse completeness: a transition/race-pair derived from the injected tables that NO schedule references -> FAIL SCHEDULE_UNIVERSE_UNCOVERED (this is the 'generate' direction — design 1233: authors cannot shrink the source-derived universe); (5) obligation whose schedules reference un-landed aggregates or lack hit evidence -> UNKNOWN with a stable reason code naming the missing aggregate/evidence class (SCHEDULE_AGGREGATE_UNLANDED / SCHEDULE_EVIDENCE_ABSENT) — auditable UNKNOWN, never PASS; (6) stratum minima table violation -> FAIL SCHEDULE_STRATUM_MINIMUM_UNMET; (7) PASS requires reachable + hit-evidence refs — synthetic case proving no silent PASS. Canonicalization property tests (seeded xorshift32, no fast-check): permuting IDs/timestamps/seeds/key order yields byte-identical canonical form + identical sha256 identity; canonicalization is idempotent; distinct semantic content yields distinct identity. Run `pnpm exec vitest run tests/property/schedule` — confirm RED (modules absent).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/property/schedule/schedule-checker.test.ts"
+      ],
+      "newFiles": [
+        "tests/property/schedule/schedule-checker.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/property/schedule/schedule-coverage.test.ts"
+      ],
+      "note": "REOPEN fix-forward. Verified the QA evidence myself first: `git merge-base --is-ancestor bcdc2f6 c4f9f6a` -> true; `git log --oneline -- packages/core/src/planning` -> bcdc2f6; core index exports PLANNING_RUN_TRANSITIONS (line 62) and GRAPH_REVISION_TRANSITIONS (line 121). The step-4 include test in the prior session recorded an empty result and was wrong at HEAD. QA items 1/2/3 all confirmed against the tree; no pushback.\n\nStep 1's synthetic unit layer (tests/property/schedule/schedule-checker.test.ts, 423 lines) was verified good by QA and needs no change — it still covers the SCHEDULE_AGGREGATE_UNLANDED UNKNOWN path with synthetic fixtures (lines 272-276), which is what keeps that path tested once ABSTRACT_EDGE dies.\n\nRED written into the gate instead (QA item 3: the old assertion pinned the shrunk universe): schedule-coverage.test.ts now asserts (a) CORE_TRANSITION_TABLES injects exactly GOAL/GRAPH_REVISION/PLANNING_RUN/PROJECT, (b) zero SCHEDULE_AGGREGATE_UNLANDED findings, (c) every cited aggregate is one of those four, (d) obligation UNKNOWN reason codes reduce to SCHEDULE_EVIDENCE_ABSENT alone, and (e) a NEW separate test keeps the un-landed UNKNOWN path first-class by re-running the checker with GRAPH_REVISION's table withheld and demanding UNKNOWN findings that name it.\n\n`pnpm exec vitest run tests/property/schedule` -> 3 failed / 38 passed, exactly the corrected expectations. Reducer source read for the derivation that follows: PLANNING_RUN 24 edges (rejectRun -> REJECTED, compound graph.approve -> ACTIVATED, propose -> PLANNING|SUBMISSION_DRAINING) / 29 race pairs; GRAPH_REVISION 8 edges / 3 race pairs. Two commands carry an empty from-state list that is NOT genesis (planning.cancel, graph.supersede) — they are never legal, so the lockstep rule needs an explicit genesis-vs-never-legal classification rather than the current \"empty means GENESIS\".",
+      "startedAt": "2026-08-07T19:41:44.272Z",
+      "completedAt": "2026-08-07T19:42:25.087Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Green — packages/testkit/src/schedule/schedule-model.ts + schedule-obligations.ts (each target <=250). schedule-obligations.ts: frozen registry of EXACTLY 36 obligations — CORE-I1..CORE-I22 (22) + CORE-S1..CORE-S14 (14), verified consecutive against design 20.1/20.2; each {obligationId, kind: \"INVARIANT\"|\"SCENARIO\", title, designAnchors: readonly string[]} where the un-named 'additional fan-in and graph predicates' paragraph (design line 1182) is anchored as designAnchor SUB-REFERENCES under its carrying obligations (CORE-I6, CORE-I8, CORE-I14, CORE-I15, CORE-S13) — NO new obligation IDs may be minted (design 1151/1233 close the namespace; bare I*/S* identifiers are invalid). schedule-model.ts: ScheduleDefinition {scheduleId, obligationRefs, transitionRefs [{aggregate, fromState, commandKind, toState}], racePairRefs, faultBoundaryRefs, stratum: \"TWO_EVENT\"|\"MULTI_EVENT\"}; canonicalization: placeholder-normalize volatile IDs, STRIP timestamps/seeds, sorted-key serialization, sha256 identity (node:crypto); STRATUM-KEYED frozen minima table (design 1233: 'frozen mandatory two-event and applicable three-or-more-event partial-order strata' — minima are per-stratum versioned data, NOT per-schedule scalars); manifest types + SCHEDULE_COVERAGE_MANIFEST_VERSION \"moe-schedule-coverage/1\" + provenance field {confirmatory: false, classification: \"DEVELOPMENT_ONLY_ENGINEERING_EVIDENCE\"} (CORE vs BENCH namespaces are disjoint per design 1151 — the manifest self-labels non-confirmatory and never mints BENCH-* ids) + RELEASE_SCHEDULE_FLOOR = 10000 recorded as a Release-bar field with status UNKNOWN (never asserted by this gate); verdict enum PASS|FAIL|UNKNOWN; stable SCHEDULE_* code registry (frozen). CRITICAL CONTENT RULE for every file in packages/testkit/src/schedule/: the scheduler package-boundary scan walks packages/** file CONTENTS — never write the substrings '@moe/scheduler/' (trailing slash) or 'scheduler/src/' in code, comments, or designAnchor strings; anchors are design-doc section refs ('design 20.1 #CORE-I8'), never source paths. Intra-module imports use '.js' specifiers (NodeNext); NO .js shim files and NO index.ts export (scheduler-fairness precedent: unexported testkit subdirectory, smoke worker unaffected).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/schedule/schedule-model.ts",
+        "packages/testkit/src/schedule/schedule-obligations.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/schedule/schedule-model.ts",
+        "packages/testkit/src/schedule/schedule-obligations.ts"
+      ],
+      "note": "No change required — re-verified rather than re-done. QA's verdict explicitly cleared both files (\"Registry is exactly 36 consecutive ids, design-verbatim titles, fan-in anchored under I6/I8/I14/I15/S13. Canonicalization (DoD 3) correct and well tested\") and neither carries aggregate-specific data:\n- schedule-model.ts (255 lines): ScheduleDefinition/TransitionRef/RacePairRef/AggregateTransitionTable are aggregate-agnostic string fields, so PLANNING_RUN and GRAPH_REVISION need no new type. The frozen 8-code registry, the stratum minima table, the canonical form and the sha256 identity are all independent of which aggregates are injected.\n- schedule-obligations.ts (92 lines): the CORE namespace is closed at 36; injecting two more transition tables mints no obligation, so the registry is untouched by design (design 1151/1233).\nBoundary-scan rule re-checked on both files: zero '@moe/scheduler/' and zero 'scheduler/src' substrings. The whole fix lives in step 4's universe data plus the step 5 gate.",
+      "startedAt": "2026-08-07T19:42:27.527Z",
+      "completedAt": "2026-08-07T19:42:39.469Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — packages/testkit/src/schedule/schedule-checker.ts (target <=250, split before 400). checkScheduleCoverage({obligations, universe, transitionTables, hitEvidence}) -> deep-frozen ScheduleCoverageManifest. GENERATION (the task's 'generate' verb, design 1233): from the INJECTED transition tables (data parameters — testkit deps stay @moe/contracts only, no @moe/core dependency), mechanically derive (a) the reachable-edge universe: every {aggregate, fromState, commandKind, toState} in the tables; (b) the two-event race-pair universe: every unordered pair of DISTINCT commands legal in the same fromState of the same aggregate. Verify BOTH directions: forward — every schedule transitionRef/racePairRef exists in the derived universe (else FAIL SCHEDULE_TRANSITION_UNREACHABLE); reverse — every derived edge and race pair is referenced by >=1 schedule (else FAIL SCHEDULE_UNIVERSE_UNCOVERED; authors cannot shrink the derived universe). Completeness: all 36 obligations mapped with stratum minima met (per-stratum table). Verdict computation per obligation: FAIL on any missing/duplicate/unreachable/uncovered/minima violation; UNKNOWN with auditable reason code when schedules reference un-landed aggregates (aggregate absent from injected tables) or hit evidence is absent; PASS ONLY when mapped + reachable + evidence refs present. Determinism: sorted iteration everywhere, no Date/random; manifest digest = sha256 of canonical serialization. All step-1 synthetic tests green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/schedule/schedule-checker.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/schedule/schedule-checker.ts"
+      ],
+      "note": "No change required — re-verified. QA cleared this file explicitly (\"Mutation-tested checker.ts:268: a test dies, teeth are real; file restored. The guard at checker.ts:233 is unreachable - keep it, no test needed\") and the rejection is a DATA defect, not a checker defect: the checker never names an aggregate, it consumes `input.transitionTables` (schedule-checker.ts:80) and derives edges + unordered same-from-state race pairs for whatever is injected. Injecting two more tables therefore grows the derived universe with no code change — which is precisely the build-fails clause the reject invoked.\n\nRe-read the three paths the fix leans on, to confirm they behave correctly once PLANNING_RUN/GRAPH_REVISION are injected rather than abstract:\n- classifyRef (line 118): unknown aggregate -> FAIL; known-but-unlanded -> UNKNOWN; landed-but-off-universe -> FAIL. After the fix the aggregates are landed, so a mis-authored planning edge now FAILs instead of buying an UNKNOWN. That is the whole point of the reject.\n- globalFindings (line 268): reverse completeness runs over the derived transitions AND race pairs, so all 32 new edges and 32 new race pairs must be claimed or the gate goes red.\n- deriveScheduleUniverse dedupes by key and sorts, so the +29 PLANNING_RUN pairs stay deterministic across runs.\n360 lines, unchanged, under the 400 hard bar. `pnpm exec vitest run tests/property/schedule` still shows the 38 passing tests (all unit-layer checker tests) with only the 3 step-1 gate expectations red.",
+      "startedAt": "2026-08-07T19:42:41.577Z",
+      "completedAt": "2026-08-07T19:42:54.639Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Author the canonical universe data — schedule-universe-invariants.ts (CORE-I1..I22) + schedule-universe-scenarios.ts (CORE-S1..S14), each target <=250 (data-heavy; split further via amendment if either approaches 400). Every obligation gets >=1 canonical ScheduleDefinition with: transitionRefs ONLY over aggregates with landed transition tables (PROJECT, GOAL — plus PLANNING_RUN/GRAPH_REVISION IF task-1ade51c0 has landed by then; check `git log --oneline -- packages/core/src/planning` and include if present, else those obligations' schedules reference the aggregates abstractly and correctly yield UNKNOWN); racePairRefs drawn from the derived pair universe for landed aggregates; faultBoundaryRefs as typed named boundaries (commit/outbox/effect/lock boundaries from design 20.2 CORE-S4 wording) — abstract names, no execution; stratum assignment (TWO_EVENT for pair schedules, MULTI_EVENT for scenario partial-order strata). Scenario obligations (S1-S14) map to schedule definitions describing their canonical schedule shape + minima even though execution evidence is UNKNOWN today — the definitions ARE Phase-1 deliverables (design 1205/1233), not confirmatory corpus (design 1151: CORE is the engineering namespace, disjoint from BENCH; manifest provenance field already declares NOT confirmatory). Reverse-completeness discipline: after authoring, every derived PROJECT/GOAL edge and race pair must be claimed by >=1 schedule — run the checker locally to find uncovered edges and extend definitions until the derived universe is fully claimed (this is the design's build-fails clause working as intended).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-scenarios.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-scenarios.ts"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/schedule/schedule-universe-tables.ts",
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-scenarios.ts"
+      ],
+      "note": "THE FIX (QA items 1 and 2). ABSTRACT_EDGE is deleted; nothing is referenced abstractly any more.\n\nDerivation source-read, not guessed — every new edge is transcribed from the landed reducer, including the to-state the transition table itself does not carry:\n- PLANNING_RUN, 24 edges: create_draft GENESIS->DRAFT; ready DRAFT->READY; claim READY->PLANNING and PLANNING->PLANNING (resume branch); release/recover_absent PLANNING->PLANNING; propose PLANNING->PLANNING, PLANNING->SUBMISSION_DRAINING (live planner effect) and SUBMISSION_DRAINING->SUBMISSION_DRAINING (idempotent replay); finalize_submission PLANNING/SUBMISSION_DRAINING -> PLAN_REVIEW (seal) or REJECTED (refusal, rejectRun); plan.approve PLAN_REVIEW->APPROVED and APPROVED->APPROVED; plan.revise PLAN_REVIEW->REJECTED; graph.approve PLAN_REVIEW->ACTIVATED (compound J1) and APPROVED->ACTIVATED; goal.cancel from all six live states -> CANCELLED.\n- GRAPH_REVISION, 8 edges: create GENESIS->DRAFT; submit DRAFT->PENDING_APPROVAL; graph.approve PENDING_APPROVAL->APPROVED, PENDING_APPROVAL->ACTIVE (compound) and APPROVED->ACTIVE; reject from DRAFT/PENDING_APPROVAL/APPROVED -> REJECTED. SUPERSEDED is reached through authority loss, not this table (noted in a comment beside revActivate).\n\nEmpty-row hazard found while transcribing: planning.cancel and graph.supersede have empty from-state lists but are NOT creation commands - the old \"empty means GENESIS\" rule would have fabricated two phantom genesis edges and a phantom race pair. Both are now declared explicitly in NEVER_LEGAL_COMMANDS beside GENESIS_COMMANDS, and step 5's gate proves the two lists exactly partition the empty rows, so a future empty row cannot slip in under either reading.\n\nNew file (structural, in-scope under packages/testkit/src/schedule/**): schedule-universe-tables.ts, 211 lines - the shared EDGE/RACE/FAULT data, the genesis/never-legal declarations, CORE_TRANSITION_TABLES (now GOAL + GRAPH_REVISION + PLANNING_RUN + PROJECT, still projected from EDGE so a schedule cannot cite an edge the table lacks), and defineSchedule. Split out because injecting two aggregates pushed the old invariants file past its target; invariants is now 117 lines and scenarios 84 (tables 211) - all far under the 400 hard bar, no amendment needed for size.\n\nDerived universe grew exactly as intended: 21 -> 53 transitions, 18 -> 50 race pairs. Race authoring uses racesIn(aggregate, fromState, commands), which expands an AUTHOR-DECLARED concurrent command set into its unordered pairs - the checker still derives the same set independently from the injected table, so this is compact, not vacuous. Nine RUN_RACE groups plus three REVISION_RACE groups cover all 32 new pairs (the six-command PLANNING fan-in is covered by four overlapping declared subsets: lease, submission, seal, recovery).\n\nThirteen new schedules claim the growth, each mapped to an obligation that already owns the semantics: I1 claim uniqueness (READY claim vs cancel), I2 fencing (lease/release/recover), I3 legal lifecycle (draft readiness), I4 proof before acceptance (seal), I5 durable ordering (submission drain), I8 supersession (revision decide/reject), I12 approval binding (PLAN_REVIEW fan-in), I13 authority parity (APPROVED decisions), I17 recovery truth (MULTI), S5 rejection lineage, S9 submission drain (MULTI), S11 revision draft, S13 planning fan-in (MULTI, the design-1182 carrier). 51 -> 64 schedules, all identities still unique.\n\n`pnpm exec vitest run tests/property/schedule` -> 42/42 green. Reverse-completeness teeth re-proven by mutation: swapping CORE-I17-PLANNING-RECOVERY's RUN_RACE.recovery for a smaller group produced SCHEDULE_UNIVERSE_UNCOVERED findings and 5 red tests; file restored byte-for-byte and re-run green.",
+      "startedAt": "2026-08-07T19:42:56.922Z",
+      "completedAt": "2026-08-07T19:47:28.102Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "The GATE — tests/property/schedule/schedule-coverage.test.ts + root package.json script. Gate test: import the real universe/checker via RELATIVE paths from tests/ (../../packages/testkit/src/schedule/schedule-checker.js etc. — root tests/ cannot resolve @moe/* bare specifiers: pnpm strict node_modules, root has no workspace deps; cross-package relative .ts import with internal .js specifiers is EMPIRICALLY verified working under root vitest 4.1.10, including .js->.ts resolution inside packages; tests/ is OUTSIDE the scheduler package-boundary walk so relative path strings are safe there); import PROJECT_TRANSITIONS/GOAL_TRANSITIONS (+ planning tables if landed) from ../../packages/core/src/index.js and RUNTIME_LIFECYCLES from ../../packages/contracts/src/index.js. Assert: (i) manifest complete — all 36 obligations mapped, stratum minima table present and met, canonical identities unique, BOTH coverage directions hold over the landed derived universe; (ii) ZERO FAIL verdicts; (iii) no silent PASS — every PASS carries reachable+evidence refs, every UNKNOWN carries an auditable reason code (UNKNOWN is a designed first-class verdict — design 1153/1267: gate tolerates UNKNOWN, all-PASS is impossible pre-implementation and NOT required); (iv) manifest provenance declares confirmatory:false; (v) RELEASE_SCHEDULE_FLOOR field present with status UNKNOWN; (vi) manifest digest deterministic across two builds. Root package.json: add ONE script line \"test:property\": \"vitest run tests/property\" (announced in #architects msg-11abdd7e; matches the vitest filter-arg precedent; root vitest include tests/**/*.test.ts already discovers the files). `pnpm test:property` green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/property/schedule/schedule-coverage.test.ts",
+        "package.json"
+      ],
+      "newFiles": [
+        "tests/property/schedule/schedule-coverage.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/property/schedule/schedule-coverage.test.ts"
+      ],
+      "note": "Gate rewritten around the corrected universe (QA item 3: the old test at line 191 asserted the planning aggregates were ABSENT, so it protected the bug and would have turned red against the fix).\n\nInverted / added teeth:\n- \"injects and checks every landed aggregate, asserting none abstractly\": CORE_TRANSITION_TABLES is exactly [GOAL, GRAPH_REVISION, PLANNING_RUN, PROJECT], each a real RUNTIME_LIFECYCLES aggregate with a non-empty edge set; ZERO SCHEDULE_AGGREGATE_UNLANDED findings; and the set of aggregates CITED by the 64 schedules equals those same four, so no schedule can quietly reach outside the checked universe.\n- \"keeps an auditable UNKNOWN path for an aggregate that has not landed\" (QA's \"keep a separate UNKNOWN path for genuinely un-landed aggregates\"): re-runs the checker with GRAPH_REVISION's table withheld and demands UNKNOWN findings whose detail names GRAPH_REVISION plus an UNKNOWN manifest verdict. The UNKNOWN branch stays first-class and executed rather than being an artifact of a shrunken universe.\n- Lockstep extended from 2 to all 4 aggregates and now proves the KEY SET matches too, so adding a fifth reducer table without authoring it fails the gate.\n- New \"classifies every empty landed table row as genesis or never-legal\": GENESIS_COMMANDS and NEVER_LEGAL_COMMANDS must be disjoint and together exactly equal the empty rows of the landed table; every genesis command must appear as a GENESIS edge and every never-legal command must appear in NO authored edge. This is what stops planning.cancel / graph.supersede from being fabricated into phantom edges.\n- Obligation UNKNOWN reason codes now reduce to SCHEDULE_EVIDENCE_ABSENT alone (no aggregate is unlanded any more), which is the honest pre-implementation state: 36/36 UNKNOWN for want of execution evidence, zero FAIL, no silent PASS.\n\nImports: CORE_FAULT_BOUNDARIES / CORE_TRANSITION_TABLES / GENESIS_STATE now come from the new schedule-universe-tables.js; PLANNING_RUN_TRANSITIONS and GRAPH_REVISION_TRANSITIONS join the core-relative import. Root package.json already carries the single \"test:property\": \"vitest run tests/property\" line from the earlier commit - unchanged, not re-added.\n\n`pnpm test:property` -> exit 0, 2 files / 42 tests (was 40; +2 for the un-landed UNKNOWN path and the empty-row classification).",
+      "startedAt": "2026-08-07T19:47:31.656Z",
+      "completedAt": "2026-08-07T19:47:59.388Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification gate (single concentrated step). (1) `wc -l packages/testkit/src/schedule/*.ts` — every module <=400 hard (target 250). (2) Fresh `pnpm test:property` -> exit 0 — the complete_task evidence: { command: \"pnpm test:property\", exitCode: 0, outputTail }. (3) `pnpm verify:foundation` -> exit 0 (recursive typecheck now covers packages/testkit/src/schedule/** — a type error there breaks it even though test:meta runs no schedule tests). (4) Repo gate `pnpm typecheck && pnpm test` — the scheduler package-boundary suite must stay green over the new testkit modules (content-scan rule) and the gate suite runs repo-wide; attribute any red to foreign in-flight work before touching anything. (5) grep packages/testkit/src/schedule for 'Date.now\\|new Date\\|Math.random\\|process\\.' -> zero; grep for 'scheduler/src\\|@moe/scheduler/' -> zero (boundary-scan safety). (6) Run test:property twice — identical manifest digest both runs.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/schedule/schedule-checker.ts",
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-scenarios.ts"
+      ],
+      "modifiedFiles": [
+        "tests/property/schedule/schedule-coverage.test.ts"
+      ],
+      "note": "Verification gate, all six items run fresh at HEAD 55ecf7e.\n(1) Sizes: checker 360, model 255, tables 211, invariants 117, scenarios 84, obligations 92 - every module under the 400 hard bar; the new tables module let invariants SHRINK from 203 to 117 while the universe grew.\n(2) `pnpm test:property` -> exit 0, 2 files / 42 tests.\n(3) `pnpm verify:foundation` -> exit 0, 20 files / 286 tests.\n(4) Repo gate: `pnpm typecheck` -> exit 0 for all 10 packages including testkit (packages/mcp now typechecks too - the previously-untracked foreign package landed as 55ecf7e, so the typecheck red noted in the last QA verdict is gone). `pnpm test` -> exit 0, 81 files / 1064 passed, 1 skipped (the same long-standing skip; count rose from 78/1036 because of foreign in-flight work, not this task). The scheduler package-boundary suite is green over all six schedule modules.\n(5) grep packages/testkit/src/schedule for 'Date.now|new Date|Math.random|process.' -> 0 hits; for 'scheduler/src|@moe/scheduler/' -> 0 hits.\n(6) Determinism: the in-test assertion compares two manifest builds in one process, and I additionally probed the literal digest across TWO separate vitest processes - 6b08692f4862aa2df8d016affd08487209dbc52ea7d4eef823f68c4f730d947c both times.\n\nHygiene caught during verification: the scripted probe edits round-tripped schedule-coverage.test.ts through Python text mode and silently rewrote it to CRLF, against .gitattributes `* text=auto eol=lf`. Rewritten back to LF in binary mode and re-verified (`pnpm test:property` green, no stray '\\r'). The other five files are LF-only. Both probes (the digest literal and the reverse-completeness mutation) were reverted; `git diff --stat` over owned paths shows exactly the three tracked files plus the one new untracked module, with no scratch files anywhere.",
+      "startedAt": "2026-08-07T19:48:01.359Z",
+      "completedAt": "2026-08-07T19:49:10.724Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra checks: (a) obligation count is EXACTLY 36 with consecutive IDs — mechanical assertion in the gate, re-verify; (b) design-1182 fan-in predicates are anchored under I6/I8/I14/I15/S13 designAnchors — grep the anchors; (c) no silent-PASS hole: temporarily flip one UNKNOWN's evidence to fake-present in a scratch REPL OUTSIDE the repo and confirm the checker would demand reachability too; (d) reverse completeness really bites: delete one schedule's transitionRef locally, watch SCHEDULE_UNIVERSE_UNCOVERED, restore; (e) no BENCH-* or bare I*/S* identifier anywhere (design 1151 — grep); (f) boundary-scan grep one more time; (g) no scratch files under repo root (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/testkit/src/schedule/schedule-model.ts packages/testkit/src/schedule/schedule-obligations.ts packages/testkit/src/schedule/schedule-checker.ts packages/testkit/src/schedule/schedule-universe-invariants.ts packages/testkit/src/schedule/schedule-universe-scenarios.ts tests/property/schedule/schedule-checker.test.ts tests/property/schedule/schedule-coverage.test.ts package.json`; `git show --stat` lists exactly these 8 paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/schedule/schedule-model.ts",
+        "packages/testkit/src/schedule/schedule-obligations.ts",
+        "packages/testkit/src/schedule/schedule-checker.ts",
+        "package.json"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/schedule/schedule-universe-tables.ts",
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-scenarios.ts",
+        "tests/property/schedule/schedule-coverage.test.ts"
+      ],
+      "note": "Adversarial self-review run against my own diff, then committed.\n\nHole found and CLOSED during review: the lockstep test compares only the (fromState|commandKind) domain, so the 32 to-states I transcribed by hand from the reducers were asserted by NOTHING - a typo'd or invented to-state would have sailed through. New gate test \"authors every state name from the aggregate's landed lifecycle\" now requires every authored from/to state to be either GENESIS or a member of RUNTIME_LIFECYCLES[aggregate], and forbids any edge whose to-state is the GENESIS pseudo-state (it may be left, never entered). 43 tests green.\n\nChecklist findings that needed no change, recorded so QA sees they were considered:\n- CORE-I3-PAIR claims ALL_LANDED_EDGES, so the reverse-completeness check on TRANSITIONS is satisfied largely by that one schedule. Deliberate and pre-existing: \"Legal lifecycle\" is exactly the obligation that owns every legal edge. The race-pair direction is genuinely distributed across 12 declared groups, and the forward direction is now pinned three ways (lockstep domain, projected tables, lifecycle state names). Flagging rather than hiding it.\n- racesIn with a one-command list yields no pairs, which would trip minimumRacePairRefs=1 and FAIL; a repeated command would yield a self-pair absent from the derived universe and FAIL. Both fail closed, neither occurs.\n- GENESIS_COMMANDS/NEVER_LEGAL_COMMANDS lookups now use `?? []`, so a fifth reducer table fails on the clean key-set assertion instead of a TypeError.\n- No concurrency/IO/lifetime surface: these modules are frozen data plus a pure function; no Date, random, process, filesystem or network (greps zero).\n\nPlan items (a)-(g): (a) 36 consecutive ids asserted mechanically, green. (b) 5 FAN_IN sub-anchors, exactly I6/I8/I14/I15/S13. (c) no silent-PASS hole - probed the REAL universe with synthetic evidence for all 64 identities: 36/36 flip to PASS with zero findings, proving the only thing holding today's manifest at UNKNOWN is absent execution evidence, not a wiring bug; the unit layer separately pins that PASS also demands reachability and that blank evidence is absent evidence. (d) reverse completeness bites - proven by mutation in step 4. (e) zero BENCH-* and zero bare I*/S* ids. (f) boundary-scan greps zero. (g) only untracked file under the repo is the new module; no scratch files.\n\nCommit 444e034, explicit pathspec, exactly 4 paths: schedule-universe-tables.ts (new), schedule-universe-invariants.ts, schedule-universe-scenarios.ts, schedule-coverage.test.ts. The other four owned paths (model, obligations, checker, checker.test) and package.json are unchanged this round, so they are correctly absent from the stat. Nothing foreign staged. First `git commit` used PowerShell here-string syntax under bash and mangled the subject line into \"@ fix(testkit): ...\"; amended immediately with a heredoc, same tree, no foreign paths touched.\n\nPost-commit re-verification: `pnpm test:property` exit 0 (43 tests). Repo-wide `pnpm test` now shows 1 red - packages/mcp/src/stdio/stdio-server.test.ts \"overwrites every adapter-supplied query field\". NOT mine and NOT a regression from this commit: that file has UNCOMMITTED working-tree modifications from another worker mid-edit (`git status --porcelain -- packages/mcp` shows it dirty), and my own repo-wide run 3 minutes earlier, after all my source changes, was 81 files / 1064 passed green. Left untouched per the preserve-foreign-work rail.",
+      "startedAt": "2026-08-07T19:49:16.475Z",
+      "completedAt": "2026-08-07T19:52:22.918Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT on a defect, NOT on size. The derived universe is shrunk by two aggregates that had already landed.\n\nEVIDENCE (re-run at HEAD c4f9f6a): `git merge-base --is-ancestor bcdc2f6 c4f9f6a` -> true, so `bcdc2f6 feat(core): add planning graph lifecycle` is an ANCESTOR of this commit. `git log --oneline -1 -- packages/core/src/planning` -> bcdc2f6, the exact command step 4 named as its include test and recorded as empty in the step-4 note. packages/core/src/index.ts:62,121 export PLANNING_RUN_TRANSITIONS / GRAPH_REVISION_TRANSITIONS in the same shape as GOAL/PROJECT, injectable today with no new dependency.\n\nThree consequences, detailed in the issues list: (1) the universe omits both landed aggregates and the manifest emits the false detail \"aggregate PLANNING_RUN has no landed transition table\"; (2) since those aggregates never enter the universe, forward reachability never runs on their refs, so ABSTRACT_EDGE cites `graph.activate` and `planning.submit`, which grep finds NOWHERE in contracts or core - phantom edges exactly where the design's no-shrinking clause should bite; (3) schedule-coverage.test.ts:191 asserts those aggregates are ABSENT, so the correct fix turns the gate red - the gate protects the bug.\n\nVERIFIED GOOD, do not redo: `pnpm test:property` exit 0 (2 files/40 tests); repo `pnpm test` exit 0 (78 files/1036 passed, 1 pre-existing skip); testkit typecheck exit 0 (repo typecheck fails only in untracked foreign packages/mcp). Sizes 360/255/92/203/72, under 400. Zero determinism or boundary-substring hits. Registry is exactly 36 consecutive ids, design-verbatim titles, fan-in anchored under I6/I8/I14/I15/S13. Canonicalization (DoD 3) correct and well tested. GOAL/PROJECT edges match the real reducers. Mutation-tested checker.ts:268: a test dies, teeth are real; file restored. The guard at checker.ts:233 is unreachable - keep it, no test needed.\n\nDo not revert the commit; fix forward on the owned paths.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +152,149 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:14.318Z",
-  "updatedAt": "2026-08-07T11:57:14.318Z"
+  "updatedAt": "2026-08-07T20:34:59.116Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T18:51:24.492Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 14,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T20:34:59.116Z",
+    "wallClockMs": 6214624
+  },
+  "contextFetchedBy": [
+    "worker-29a7f3a3",
+    "qa-91cf5a2f",
+    "qa-bdf27860"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Every CORE-I1 through CORE-I22 and CORE-S1 through CORE-S14 obligation maps to canonical schedules and frozen minima.",
+      "rejectedAt": "2026-08-07T19:36:54.522Z",
+      "rejectedBy": "qa-91cf5a2f"
+    },
+    {
+      "item": "Missing, duplicate, unreachable, or unhit obligations yield FAIL or UNKNOWN, never PASS.",
+      "rejectedAt": "2026-08-07T19:36:54.522Z",
+      "rejectedBy": "qa-91cf5a2f"
+    },
+    {
+      "item": "Property gate passes with a complete manifest.",
+      "rejectedAt": "2026-08-07T19:36:54.522Z",
+      "rejectedBy": "qa-91cf5a2f"
+    }
+  ],
+  "planSubmittedAt": "2026-08-07T19:01:49.709Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Pure hand-authored mapping registry — REJECTED by design-fidelity verification: the task verb 'generate' + design 1233's build-fails clause ('authors cannot shrink that source-derived universe') demand mechanical DERIVATION of the reachable-edge and two-event race-pair universes from the landed transition tables, with REVERSE completeness (every derived item claimed by >=1 schedule) — forward-only checking would fail QA. Scenario EXECUTION is NOT demanded (design 1233 puts the 10,000-schedule count and stratum execution under 'Release requires'; T-D8 line 1267 casts the checker as an evidence consumer). (2) Per-schedule frozenMinimum scalar — REJECTED: design 1233 defines minima per STRATUM (two-event mandatory / three-plus-event partial-order); modeled as a stratum-keyed frozen versioned table; the 10,000 floor is a Release-bar manifest field with status UNKNOWN, never asserted here. (3) All-PASS gate — impossible and wrong: UNKNOWN is a designed first-class verdict (design 1153/1267); the gate asserts complete manifest + ZERO FAIL + no silent PASS + auditable UNKNOWN reason codes. (4) @moe/core dependency for testkit — rejected (package.json not owned, layering): transition tables are INJECTED data; the gate test imports landed tables via cross-package RELATIVE imports from tests/ — novel but empirically verified under root vitest 4.1.10 (.js->.ts resolution inside packages works; bare @moe/* specifiers from tests/ do NOT resolve — pnpm strict node_modules). (5) Minting CORE-I23+ for the design-1182 fan-in predicates — forbidden (design 1151/1233 close the namespace): anchored as designAnchor sub-references under I6/I8/I14/I15/S13. Verified by 2-agent workflow (design-dod + mechanics); 1 BLOCKER + 3 RISKs folded in.",
+    "codebaseInsights": "Root package.json has NO test:property script (announced the one-line addition in #architects msg-11abdd7e); root vitest include already covers tests/**/*.test.ts. tests/ is UNTYPECHECKED (no tsconfig covers it; vitest esbuild strips types) — gate teeth must be runtime assertions. packages/testkit/src/schedule/** IS inside the scheduler package-boundary content scan (package-boundary.test.ts:10 walks packages/** contents): never write '@moe/scheduler/' (trailing slash) or 'scheduler/src/' substrings anywhere, including comments and designAnchor strings ('planning.claim', bare 'scheduler', '@moe/scheduler' without slash are safe). scheduler-fairness precedent: unexported testkit subdirectory with no .js shims and no index.ts entry — smoke worker imports package root only and is unaffected; schedule/ follows the same pattern (testkit index.ts NOT touched — not an owned path). pnpm typecheck (recursive) WILL typecheck the new modules — verify:foundation must be run before completion. Obligation count confirmed 36 (I1-I22 consecutive at design lines 1159-1180, S1-S14 at 1188-1201); line 1182's un-named predicates carried by I6/I8/I14/I15/S13.",
+    "risks": "(1) Boundary-scan tripwire is the sneakiest failure: a single doc comment containing 'scheduler/src/' in any new testkit module fails the repo gate — grep before every commit. (2) Reverse completeness makes universe authoring iterative: every derived PROJECT/GOAL edge and race pair must be claimed — run the checker locally during step 4 and extend definitions until covered; do NOT weaken the checker to make authoring easier (rail: validator never made permissive). (3) Planning tables (task-1ade51c0) may land mid-task — step 4 conditionally includes them; if they land AFTER this task, the derived universe grows and the gate goes red for the NEXT task to fix — note this coupling in the completion note. (4) tests/ untypechecked: a wrong import surfaces only at runtime — the gate must import-and-execute everything it asserts about. (5) UNKNOWN discipline: every UNKNOWN carries a reason code naming the un-landed aggregate or missing evidence class — unauditable UNKNOWN is QA bait. (6) No BENCH-* identifiers, manifest declares confirmatory:false — the benchmark rail's corpus prohibition is satisfied because CORE is the disjoint engineering namespace (design 1151). (7) Shared tree: attribute red repo gates to in-flight foreign work before acting.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/testkit/src/scheduler-fairness",
+      "packages/core/src/index.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "tests/instruction-contract/checker.test.ts",
+      "package.json",
+      "vitest.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-07T20:29:48.730Z"
+  },
+  "planApprovedAt": "2026-08-07T19:01:51.730Z",
+  "workStartedAt": "2026-08-07T19:02:07.573Z",
+  "reviewStartedAt": "2026-08-07T19:53:59.119Z",
+  "verification": {
+    "command": "pnpm test:property",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  2 passed (2)\n      Tests  43 passed (43)\n   Start at  22:52:26\n   Duration  335ms (transform 270ms, setup 0ms, import 352ms, tests 37ms, environment 0ms)",
+    "reportedAt": "2026-08-07T19:53:59.119Z"
+  },
+  "filesModified": [
+    "tests/property/schedule/schedule-coverage.test.ts",
+    "packages/testkit/src/schedule/schedule-model.ts",
+    "packages/testkit/src/schedule/schedule-obligations.ts",
+    "packages/testkit/src/schedule/schedule-checker.ts",
+    "packages/testkit/src/schedule/schedule-universe-tables.ts",
+    "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+    "packages/testkit/src/schedule/schedule-universe-scenarios.ts"
+  ],
+  "reviewCompletedAt": "2026-08-07T20:34:59.116Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Every CORE-I1 through CORE-I22 and CORE-S1 through CORE-S14 obligation maps to canonical schedules and frozen minima.",
+      "Missing, duplicate, unreachable, or unhit obligations yield FAIL or UNKNOWN, never PASS.",
+      "Property gate passes with a complete manifest."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "line": 111,
+        "description": "CORE_TRANSITION_TABLES injects only GOAL and PROJECT, yet PLANNING_RUN_TRANSITIONS and GRAPH_REVISION_TRANSITIONS landed in bcdc2f6 (ancestor of c4f9f6a) and are exported from core index:62,121 - so the derived universe is shrunk and the manifest claims PLANNING_RUN has no landed table. Fix: inject both tables (pass them from the gate so testkit keeps no @moe/core dep), then extend definitions until reverse completeness claims every new edge and race pair. That growth is intended."
+      },
+      {
+        "type": "other",
+        "file": "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "line": 55,
+        "description": "ABSTRACT_EDGE cites command kinds that exist nowhere: 'graph.activate' (graphActivate, graphSupersede) and 'planning.submit' (planSubmit) - grep over packages/contracts/src and packages/core/src returns zero hits. The landed table has graph_revision.create/submit, graph.approve, graph_revision.reject, graph.supersede (graph-revision-reducer.ts:56). They escape only because their aggregates are excluded from the injected tables. Replace with real landed edges; planClaim is the one legal entry."
+      },
+      {
+        "type": "regression",
+        "file": "tests/property/schedule/schedule-coverage.test.ts",
+        "line": 191,
+        "description": "The gate asserts CORE_TRANSITION_TABLES does NOT contain PLANNING_RUN/GRAPH_REVISION, pinning the shrunk universe as expected. Injecting the landed tables - the correct fix - turns this gate RED, so the build-fails clause fires against the repair. Invert it to assert the planning aggregates ARE injected and checked, keeping a separate UNKNOWN path for genuinely un-landed aggregates. If you think task-1ade51c0's tables are unstable, raise it in #architects instead of pinning the omission."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on a defect, NOT on size. The derived universe is shrunk by two aggregates that had already landed.\n\nEVIDENCE (re-run at HEAD c4f9f6a): `git merge-base --is-ancestor bcdc2f6 c4f9f6a` -> true, so `bcdc2f6 feat(core): add planning graph lifecycle` is an ANCESTOR of this commit. `git log --oneline -1 -- packages/core/src/planning` -> bcdc2f6, the exact command step 4 named as its include test and recorded as empty in the step-4 note. packages/core/src/index.ts:62,121 export PLANNING_RUN_TRANSITIONS / GRAPH_REVISION_TRANSITIONS in the same shape as GOAL/PROJECT, injectable today with no new dependency.\n\nThree consequences, detailed in the issues list: (1) the universe omits both landed aggregates and the manifest emits the false detail \"aggregate PLANNING_RUN has no landed transition table\"; (2) since those aggregates never enter the universe, forward reachability never runs on their refs, so ABSTRACT_EDGE cites `graph.activate` and `planning.submit`, which grep finds NOWHERE in contracts or core - phantom edges exactly where the design's no-shrinking clause should bite; (3) schedule-coverage.test.ts:191 asserts those aggregates are ABSENT, so the correct fix turns the gate red - the gate protects the bug.\n\nVERIFIED GOOD, do not redo: `pnpm test:property` exit 0 (2 files/40 tests); repo `pnpm test` exit 0 (78 files/1036 passed, 1 pre-existing skip); testkit typecheck exit 0 (repo typecheck fails only in untracked foreign packages/mcp). Sizes 360/255/92/203/72, under 400. Zero determinism or boundary-substring hits. Registry is exactly 36 consecutive ids, design-verbatim titles, fan-in anchored under I6/I8/I14/I15/S13. Canonicalization (DoD 3) correct and well tested. GOAL/PROJECT edges match the real reducers. Mutation-tested checker.ts:268: a test dies, teeth are real; file restored. The guard at checker.ts:233 is unreachable - keep it, no test needed.\n\nDo not revert the commit; fix forward on the owned paths.",
+      "rejectedAt": "2026-08-07T19:36:54.522Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Every CORE-I1 through CORE-I22 and CORE-S1 through CORE-S14 obligation maps to canonical schedules and frozen minima.",
+        "Missing, duplicate, unreachable, or unhit obligations yield FAIL or UNKNOWN, never PASS.",
+        "Property gate passes with a complete manifest."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+          "line": 111,
+          "description": "CORE_TRANSITION_TABLES injects only GOAL and PROJECT, yet PLANNING_RUN_TRANSITIONS and GRAPH_REVISION_TRANSITIONS landed in bcdc2f6 (ancestor of c4f9f6a) and are exported from core index:62,121 - so the derived universe is shrunk and the manifest claims PLANNING_RUN has no landed table. Fix: inject both tables (pass them from the gate so testkit keeps no @moe/core dep), then extend definitions until reverse completeness claims every new edge and race pair. That growth is intended."
+        },
+        {
+          "type": "other",
+          "file": "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+          "line": 55,
+          "description": "ABSTRACT_EDGE cites command kinds that exist nowhere: 'graph.activate' (graphActivate, graphSupersede) and 'planning.submit' (planSubmit) - grep over packages/contracts/src and packages/core/src returns zero hits. The landed table has graph_revision.create/submit, graph.approve, graph_revision.reject, graph.supersede (graph-revision-reducer.ts:56). They escape only because their aggregates are excluded from the injected tables. Replace with real landed edges; planClaim is the one legal entry."
+        },
+        {
+          "type": "regression",
+          "file": "tests/property/schedule/schedule-coverage.test.ts",
+          "line": 191,
+          "description": "The gate asserts CORE_TRANSITION_TABLES does NOT contain PLANNING_RUN/GRAPH_REVISION, pinning the shrunk universe as expected. Injecting the landed tables - the correct fix - turns this gate RED, so the build-fails clause fires against the repair. Invert it to assert the planning aggregates ARE injected and checked, keeping a separate UNKNOWN path for genuinely un-landed aggregates. If you think task-1ade51c0's tables are unstable, raise it in #architects instead of pinning the omission."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-07T20:34:59.116Z",
+  "reviewSummary": "APPROVED at 444e034 (4 files, +376/-155, net 221 <400). Full evidence: mem:task-task-1de468316a7f4b499aa39408ec240b88-qa-verdict.\n\n3 reject issues closed. (1) CORE_TRANSITION_TABLES (schedule-universe-tables.ts:195) injects all 4 landed aggregates; gate :84 asserts the authored (fromState|commandKind) domain equals the domain re-derived from the real reducer tables; universe 21->53 transitions, 18->50 pairs, 51->64 schedules; SCHEDULE_AGGREGATE_UNLANDED gone from the manifest. (2) ABSTRACT_EDGE deleted; grep graph.activate|planning.submit = zero. (3) Gate :243 inverted to assert the aggregates ARE injected/cited; UNKNOWN path kept at :259 by withholding GRAPH_REVISION.\n\nEdges verified against reducer BODIES: all 32 new (from,command,to) triples confirmed incl. multi-to-state branches (decide PENDING->APPROVED vs ->ACTIVE; propose ->PLANNING vs ->SUBMISSION_DRAINING; finalize ->PLAN_REVIEW vs ->REJECTED). 24 PLANNING_RUN + 8 GRAPH_REVISION exactly; planning.cancel/graph.supersede correctly NEVER_LEGAL not genesis. Race count re-derived by hand 15+3+29+3=50; the 4 declared PLANNING subsets union to exactly the 15 fan-in pairs.\n\nRe-run foreground: pnpm test:property exit 0 (43 tests); pnpm typecheck exit 0 all 10 packages; pnpm test exit 0 (90 files/1247 passed, 1 pre-existing skip). Sizes 360/255/211/117/84/92. Zero Date.now|Math.random and zero scheduler/src hits. git diff c4f9f6a..444e034 over model/obligations/checker/checker.test is EMPTY, so DoD 3 stands byte-for-byte.\n\nMutation-tested, both killed, tree restored: runRevise from-state flip kills 6 tests incl. lockstep, driving SCHEDULE_TRANSITION_UNREACHABLE to FAIL; emptying REVISION_RACE.approved kills 4 with SCHEDULE_UNIVERSE_UNCOVERED.\n\nDoD: 36 obligations mapped, zero minima unmet, no silent PASS (all 36 UNKNOWN carry SCHEDULE_EVIDENCE_ABSENT alone), gate green, zero FAIL, deterministic digest, confirmatory:false."
 }

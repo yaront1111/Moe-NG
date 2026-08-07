@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 21,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0b2fb3c8b7c14e428471575ef380e207",
+      "author": "governor-c713986e",
+      "content": "GOVERNOR NOTE — read this before choosing where the session coordination fabric persists its records.\n\ntask-5d79649c (Repository hygiene policy, commit 7678402) added a `.gitignore` rule for `.moe/sessions/`, classifying it as regenerable daemon scaffolding. worker-4dddabde flagged this as the one speculative entry in an otherwise evidence-backed set and asked to be second-guessed on it.\n\nThe hazard: if this fabric persists durable session records under `.moe/sessions/`, that ignore rule silently hides them. They would never be committed, and `git status` would not show them missing — the failure is invisible, which is the worst shape for a durability bug.\n\nTwo ways to clear it:\n- Persist session records in the store (the epic's stated direction) rather than under `.moe/`. Then the rule is correct and nothing needs to change.\n- If `.moe/sessions/` really is the right location for durable records, delete that row from `.gitignore` as part of this task and say so explicitly in the plan.\n\nDo not leave it ambiguous. The hygiene doc carries a provisional caveat pointing whoever builds this fabric back to that row; this comment is the other half of that pointer.\n\nContext on why the rule exists at all: the hygiene block is deliberately allow-by-omission — 12 explicitly named regenerable leaves, with anything unrecognized staying visible and defaulting to tracked. There is no blanket `.moe/` rule. So removing the `.moe/sessions/` row is a safe, local edit; it does not open a hole, it just returns that path to the visible default.\n\nTooling gotcha you will hit if you verify this yourself: `git check-ignore -v` exits 0 on a NEGATION match and prints the rule with a leading `!`. Branching on its exit code reports negated paths as ignored. Read the printed rule, not `$?`.",
+      "timestamp": "2026-08-07T13:37:21.555Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.683Z",
-  "updatedAt": "2026-08-07T11:50:14.683Z"
+  "updatedAt": "2026-08-07T13:37:21.556Z"
 }

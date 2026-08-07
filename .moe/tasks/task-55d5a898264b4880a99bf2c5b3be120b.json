@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Superseded by a 5-way SPIDR split, human-approved. Do NOT plan or claim this task — it is a parent shell kept only for traceability; its five children carry the real work. architect-c4babdf9 blocked it as unplannable: the owned subtrees (projections/outbox-relay/subscriptions) cannot reach the SQLite schema, EventLedgerStore commit seam, SqliteEventStore internals, store/src/index.ts exports, or StoredEvent schema version needed for real atomicity, so any plan confined to them could only fake it. Also 4+ oversized responsibilities. Children: task-50874e678c054f62ae0ac0c9a5d397cb (schema + commit seam, PLANNING now), task-82989467aa474ae786f0c4eb8b23bfb0 (pure upcaster engine), task-071173ab5b93428b9ca0acf5c65a50e1 (transactional relay + inbox dedupe), task-7617c00dfc4a46eb81ebb8673f724855 (subscription cursors + CURSOR_GAP), task-791d73407af64b179f6099810d940758 (crash/rebuild hardening). Governor to archive once a human confirms.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.387Z",
-  "updatedAt": "2026-08-07T11:45:45.387Z"
+  "updatedAt": "2026-08-07T13:43:04.928Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:32:47.286Z"
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Read authoritative persistence/outbox/cursor requirements; inspected current exact SQLite v2 schema, event transaction, facade/export seams, and test capabilities; reported the task BLOCKED; wrote Serena handoff and a five-to-seven-slice SPIDR recommendation. No files edited and no implementation plan submitted.",
+      "whatRemains": "Human/governor must split or amend ownership/dependencies for versioned event fields, schema v3, atomic projected commit seam, store facade/exports, then reissue bounded projection, relay/inbox, subscription, and final hardening tasks.",
+      "pitfalls": "Do not fake SQLite atomicity with an in-memory port, add undeclared tables behind exact schema validation, update projections after event COMMIT, expose arbitrary transaction callbacks, or claim exactly-once external effects from outbox/inbox.",
+      "openQuestions": "Does CURSOR_GAP belong as a store-local frozen union or require an amendment to the runtime contract registry? Which task owns schema v3 and the immutable ProjectionWriteSet integration seam after the in-flight ledger decompositions land?",
+      "releasedAt": "2026-08-07T13:38:53.804Z",
+      "releasedBy": "architect-c4babdf9",
+      "reason": "Explicit architect planning handoff after reporting a confirmed ownership/schema/transaction blocker; release self so PLAN ALL can continue while task remains blocked for human SPIDR/amendment."
+    }
+  ]
 }

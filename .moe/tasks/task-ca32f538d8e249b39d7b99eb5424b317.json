@@ -1,0 +1,33 @@
+{
+  "id": "task-ca32f538d8e249b39d7b99eb5424b317",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Planning run test decomposition",
+  "description": "Objective: split the oversized planning-run reducer test without weakening its behavioral proof. Deliverable: packages/core/src/planning/planning-run-test-fixtures.ts owns deterministic hashes/witness/state/command/error helpers; planning-run-reducer.test.ts retains creation, readiness, ownership, proposal, and submission-finalization coverage; new planning-run-authority.test.ts owns approval, activation, cancellation, concurrency, version-ceiling, and exhaustive lifecycle coverage. Hard dependency: commit bcdc2f6 and the stable planning-contract.js facade. NOT in scope: production edits, new behavior, renamed/skipped cases, or reduced assertions. Owned paths: packages/core/src/planning/planning-run-reducer.test.ts, packages/core/src/planning/planning-run-test-fixtures.ts, packages/core/src/planning/planning-run-authority.test.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "Every existing planning-run test case and assertion is preserved exactly once across the two test files; no skip/only/todo or assertion loosening is introduced.",
+    "The shared fixture module contains only deterministic test construction/assertion helpers and exports no production API.",
+    "All three files are <=250 physical lines and test ordering does not create shared mutable state.",
+    "The focused core typecheck and test command exits 0 with production files unchanged."
+  ],
+  "taskRails": [
+    "Refactor-only: preserve public types, stable error codes, check precedence, event/result ordering, deep freezing, and all observable reducer behavior.",
+    "Do not weaken, skip, rename, or delete behavioral assertions merely to make the split pass.",
+    "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
+    "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
+  "priority": "HIGH",
+  "order": 13.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T19:56:11.867Z",
+  "updatedAt": "2026-08-07T19:56:11.867Z"
+}

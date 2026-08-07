@@ -14,13 +14,147 @@
     "Do not weaken or rewrite tests to make the split pass.",
     "Stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Before extraction, treat the existing schema suites as immutable characterization: map each current assertion to identity/fresh-database refusal, exact manifest/DDL tamper detection, v1 empty migration and populated refusal, project binding/scope evidence, semantic ledger and sqlite_sequence integrity, too-new/no-mutation behavior, bootstrap COMMIT/rollback ambiguity, busy normalization, and Node strip-types entrypoint loading. Do not edit, skip, reorder, or weaken these tests; no new test is needed because this task changes no behavior and the focused hostile coverage already exercises every moved branch.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Characterization mapped, nothing edited. No test added, per plan — this is a behavior-neutral extraction and the existing hostile suites are the oracle.\n\nBASELINE LOCKED (run before any edit): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exit 0, 18 files / 112 tests. Post-refactor must reproduce exactly this.\n\nCharacterization suites, 42 tests over the moved surface: sqlite-event-store-core (17 tests / 679 lines), store-project-binding-tamper (9 / 413), command-decision-integrity (8 / 568), store-bootstrap-ambiguity (4 / 174), store-project-and-schema-contract (3 / 145), store-runtime-entrypoint (1 / 41).\n\nMove seams confirmed against the real file — `sqlite-schema.ts` is 648 lines with exactly the 5 exports the plan names (canonicalDatabasePath, isFreshDatabaseFileCandidate, compareVersions, isSqliteBusy, bootstrapAndValidateSchema). Line map: imports 1-31; canonicalDatabasePath 33-57; isFreshDatabaseFileCandidate 58-72; isFreshDatabase 73-114; normalizeSchemaSql 115-118; validateExactSchemaObjects 119-163; validateSchemaManifestMetadata 164-182; validateSchema 183-379; resolveProjectBinding 380-485; compareVersions 486-503; migrateLocked 504-583; isSqliteBusy 584-595; bootstrapAndValidateSchema 596-648.\n\nProjected module sizes, all inside the 250-line rail: conformance ~68 (115-182), integrity ~197 (183-379), migration ~80 (504-583), bootstrap ~212 (73-114 + 380-485 + 584-648), residual facade ~110. Integrity and bootstrap are the tight ones — if imports push either past 250 I will report rather than silently split differently.\n\nTHE LOAD-BEARING RISK, quantified: the suites assert error CODES, not messages or check order. Code histogram across all store tests — STORE_CORRUPT 34, STORE_INPUT_INVALID 12, STORE_LIMIT_EXCEEDED 10, STORE_UNAVAILABLE 4, STORE_SCHEMA_INVALID 4, STORE_BUSY 2, STORE_MIGRATION_REQUIRED 1, STORE_CLOSED 1. So a green suite does NOT prove the move was faithful: reordering two checks that both raise STORE_CORRUPT, or altering a message string, passes 112/112 silently. STORE_MIGRATION_REQUIRED with a single assertion means the populated/advanced-sequence refusal path in migrateLocked is the thinnest-covered branch I will touch. Per `gotcha-verbatim-move-refactor-proof` I will prove each move by mechanical body-diff against HEAD in step 6, not by reading, and will not treat the green gate as sufficient evidence.\n\nShim convention verified live: every non-test `.ts` in `packages/store/src` has a tracked sibling `.js` containing exactly `export * from \"./<name>.ts\";`. Only exceptions are `index.js` (package export resolves `./src/index.ts` directly) and the two `*-test-helpers.js`. The 4 new modules therefore need 4 shims in the same commit — omitting one fails neither tsc nor Vitest, only `store-runtime-entrypoint.test.ts` with ERR_MODULE_NOT_FOUND.",
+      "startedAt": "2026-08-07T13:19:50.000Z",
+      "completedAt": "2026-08-07T13:20:52.292Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create `sqlite-schema-conformance.ts` and its one-line `.js` bridge, moving only normalizeSchemaSql, exact sqlite_schema object comparison, and schema_manifest_version metadata validation from sqlite-schema.ts. Preserve normalized SQL comparison, expected/actual name and type ordering, user_version checks, exact DurableStoreError codes/messages, and v1/v2 manifest parameters. Keep sqlite-schema-manifest.ts byte-unchanged and import its frozen DDL objects rather than duplicating any SQL.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/sqlite-schema-conformance.ts",
+        "packages/store/src/sqlite-schema-conformance.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-conformance.ts",
+        "packages/store/src/sqlite-schema-conformance.js"
+      ],
+      "note": "`sqlite-schema-conformance.ts` created (72 lines) with its one-line `.js` bridge. `sqlite-schema.ts` 648 -> 583. Gate green: 18 files / 112 tests, identical to the step-1 baseline.\n\nVERBATIM-MOVE PROOF, mechanical not by eye (per `gotcha-verbatim-move-refactor-proof`). Extracted HEAD lines 115-182 and the new module's three bodies, normalized blank lines, `diff -u`: IDENTICAL, 65 lines vs 65 lines, zero drift. Every character of the moved SQL, the `substr(name, 1, 7) <> 'sqlite_'` predicate, `ORDER BY name`, both STORE_SCHEMA_INVALID messages with their `${}` interpolations, and the `CREATE INDEX` type-inference branch came from HEAD unedited. This matters because the suites assert codes only — a reworded message or reordered check would have passed 112/112 silently.\n\nExport surface deliberately minimal. Usage scan across the package before moving: `normalizeSchemaSql` has callers ONLY inside `validateExactSchemaObjects` (lines 126, 154), so it stays module-private rather than becoming a new export. `validateExactSchemaObjects` and `validateSchemaManifestMetadata` each have two call sites — validateSchema (integrity, steps 3) and migrateLocked (migration, step 4) — so those two are exported. Net new public API: zero.\n\nNo SQL duplicated: both functions already took the manifest as a parameter, so the new module needs no `sqlite-schema-manifest.js` import at all. `git diff --quiet` confirms `sqlite-schema-manifest.ts` is byte-unchanged. Zero test files modified.\n\nOne real catch by the typecheck, worth recording for the next three extractions: moving the bodies orphaned `requireRowString` in `sqlite-schema.ts` and tsc failed with `TS6133: 'requireRowString' is declared but its value is never read`. Verified by occurrence count which store-rows symbols survive in the facade — readScalar 12, requireRowInteger 7, requireStoredIdentifier 2, requireRowString 1 (the import line itself) — and dropped only that one. Expect the same orphaned-import failure after each remaining move; the count check is the quick way to resolve it without guessing.",
+      "startedAt": "2026-08-07T13:21:08.101Z",
+      "completedAt": "2026-08-07T13:22:54.505Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create `sqlite-schema-integrity.ts` and its one-line `.js` bridge, moving validateSchema as the sole full-current-schema integrity responsibility. Preserve the exact check/failure order: conformance, manifest metadata, foreign_key_check, quick_check, receipt/event semantics, aggregate heads, unknown sqlite_sequence names, then dense/exact ledger sequence evidence. Retain STORE_SCHEMA_INVALID versus STORE_CORRUPT distinctions, exact messages, parameter versions, SQL predicates/order, DurableStoreError passthrough, and wrapping of only unexpected failures as `STORE_SCHEMA_INVALID: unable to verify the application schema`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/sqlite-schema-integrity.ts",
+        "packages/store/src/sqlite-schema-integrity.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-integrity.ts",
+        "packages/store/src/sqlite-schema-integrity.js"
+      ],
+      "note": "`sqlite-schema-integrity.ts` created (215 lines) with its `.js` bridge. `sqlite-schema.ts` 583 -> 382. Gate green: 18 files / 112 tests, still exactly the baseline.\n\nVERBATIM PROOF: diffed the new `validateSchema` body against HEAD lines 183-379, blank-normalized — IDENTICAL, 187 lines, zero drift. Generated the module by piping the source range through `sed` rather than retyping, so the move is verbatim by construction, not by careful transcription. This is the highest-risk body in the task: four large multi-line SQL templates (receipt/event semantics with 5 bound parameters, the aggregate-heads UNION ALL, the unknown-sqlite_sequence-name check, and the dense/exact position evidence UNION ALL). Retyping any of those would be a silent corruption risk that the suites cannot see.\n\nOrder and error taxonomy preserved exactly as moved: conformance -> manifest metadata -> foreign_key_check -> quick_check -> receipt/event semantics -> aggregate heads -> unknown sqlite_sequence names -> dense/exact sequence evidence. STORE_SCHEMA_INVALID for the first four, STORE_CORRUPT for the last four, with the trailing catch that rethrows `DurableStoreError` untouched and wraps only unexpected failures as `STORE_SCHEMA_INVALID: unable to verify the application schema` with `{ cause: error }` intact. Bound-parameter order in the semantic query is unchanged: COMMAND_REQUEST_IDENTITY_VERSION, RECEIPT_RESULT_VERSION, COMMAND_EFFECT_IDENTITY_VERSION, EVENT_RECORD_VERSION, OPAQUE_PAYLOAD_CODEC_VERSION.\n\nImport hygiene, same orphan pattern predicted in step 2. Moving the body orphaned five identity-version constants in the facade — COMMAND_EFFECT_IDENTITY_VERSION, COMMAND_REQUEST_IDENTITY_VERSION, EVENT_RECORD_VERSION, OPAQUE_PAYLOAD_CODEC_VERSION, RECEIPT_RESULT_VERSION — all confirmed import-only by occurrence count and removed; DurableStoreError, SQLITE_APPLICATION_ID, and SQLITE_SCHEMA_MANIFEST_VERSION still have real uses and stayed. Added `import { validateSchema } from \"./sqlite-schema-integrity.js\"` for the single remaining call site inside bootstrapAndValidateSchema.\n\nThe conformance import stays in the facade on purpose: `validateExactSchemaObjects` and `validateSchemaManifestMetadata` each still have 2 occurrences there, both inside migrateLocked, which moves in step 4. Expect that import to leave the facade then.\n\nNo import cycle introduced — integrity imports conformance and manifest, neither of which imports integrity. `sqlite-schema-manifest.ts` still byte-unchanged; zero test files modified.",
+      "startedAt": "2026-08-07T13:22:59.209Z",
+      "completedAt": "2026-08-07T13:24:24.056Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Create `sqlite-schema-migration.ts` and its one-line `.js` bridge, moving migrateLocked as the sole version transition responsibility. Preserve newer-version refusal and v2 no-op; fresh creation from insertion-ordered SCHEMA_OBJECT_SQL followed by manifest metadata and application_id then user_version; v1 conformance/metadata/foreign-key/quick-check gates; populated or advanced-sequence STORE_MIGRATION_REQUIRED refusal; exact v2 addition order (command_decisions, store_project_binding, command_receipt_scopes); metadata update; and final user_version write. Do not alter any DDL, pragma, schema version, transaction boundary, or stable error/detail.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/sqlite-schema-migration.ts",
+        "packages/store/src/sqlite-schema-migration.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-migration.ts",
+        "packages/store/src/sqlite-schema-migration.js"
+      ],
+      "note": "`sqlite-schema-migration.ts` created (100 lines) with its `.js` bridge. `sqlite-schema.ts` 382 -> 290. Gate green: 18 files / 112 tests, still exactly the baseline.\n\nVERBATIM PROOF: diffed against HEAD lines 504-583, blank-normalized — IDENTICAL, 75 lines, zero drift. Generated by `sed` range extraction, not retyped.\n\nThis was the branch I flagged in step 1 as the thinnest-covered in the whole task: STORE_MIGRATION_REQUIRED has exactly ONE assertion across all 112 tests, so the populated/advanced-sequence refusal is effectively unguarded by the suite. Mechanical diff is the only real evidence here, and it is clean. Specifically preserved, all verbatim:\n- newer-version refusal message with both `${currentVersion}` and `${SCHEMA_VERSION}` interpolations, and the `currentVersion === SCHEMA_VERSION` no-op return\n- fresh path: `Object.values(SCHEMA_OBJECT_SQL).join(\";\\n\")` insertion order, then the store_metadata INSERT, then `PRAGMA application_id` BEFORE `PRAGMA user_version` in one exec\n- the `currentVersion !== 1` DATABASE_IDENTITY_MISMATCH guard\n- v1 gates in order: conformance against SCHEMA_V1_OBJECT_SQL with literal version arg `1`, metadata against LEGACY_SCHEMA_MANIFEST_VERSION, foreign_key_check, quick_check — note these carry the distinct \"v1\" wording (\"found v1 relationship violations\", \"SQLite v1 quick_check did not pass\") which differs from the near-identical non-v1 strings now living in the integrity module; the two message families are easy to cross-contaminate and are confirmed unswapped\n- the 4-table populated count, `seq > 0` advanced-sequence count, and the `populated !== 0 || advancedSequence !== 0` STORE_MIGRATION_REQUIRED refusal\n- v2 addition order exactly command_decisions, store_project_binding, command_receipt_scopes; then the metadata UPDATE with `(value, key)` bind order; then the final `PRAGMA user_version` write\n\nFacade import cleanup, third occurrence of the predicted orphan pattern. Occurrence count showed eight symbols dropped to import-only: validateExactSchemaObjects, validateSchemaManifestMetadata, SCHEMA_OBJECT_SQL, SCHEMA_V1_OBJECT_SQL, LEGACY_SCHEMA_MANIFEST_VERSION, SQLITE_SCHEMA_MANIFEST_VERSION, SCHEMA_VERSION, and migrateLocked itself. Removed the now-empty conformance and manifest imports entirely and collapsed store-internals to just `stringIsWellFormed`; added the migration import for the one call site in bootstrapAndValidateSchema. The facade no longer imports the manifest at all, which is the right shape — DDL is now reachable only through migration and integrity.\n\nNo cycle: migration imports conformance, manifest, contracts, internals, rows; none of those import migration. `sqlite-schema-manifest.ts` still byte-unchanged; zero test files modified.",
+      "startedAt": "2026-08-07T13:24:27.591Z",
+      "completedAt": "2026-08-07T13:25:36.834Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Create `sqlite-schema-bootstrap.ts` and its one-line `.js` bridge, moving in-transaction freshness/adoption checks, project-binding resolution, isSqliteBusy, and bootstrapAndValidateSchema. Preserve recognized/unidentified database identity rules including the transaction header page allowance; project singleton, durable scope, sequence, requested-project, and insert-change checks; BEGIN IMMEDIATE; migrate -> integrity -> binding -> COMMIT order; commitAttempted/isTransaction ambiguity detection; rollback aggregation; OUTCOME_UNKNOWN precedence; and distinct startup-lock/bootstrap STORE_BUSY and STORE_UNAVAILABLE messages. Reduce sqlite-schema.ts to the cross-platform path/file-candidate/version helpers plus exact re-exports of isSqliteBusy and bootstrapAndValidateSchema, preserving the same five exported names/signatures and leaving sqlite-event-store.ts, store-runtime.ts, index.ts, and package exports untouched.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/sqlite-schema-bootstrap.ts",
+        "packages/store/src/sqlite-schema-bootstrap.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-bootstrap.ts",
+        "packages/store/src/sqlite-schema-bootstrap.js"
+      ],
+      "note": "`sqlite-schema-bootstrap.ts` created (227 lines) with its `.js` bridge. `sqlite-schema.ts` 290 -> 71. Gate green: 18 files / 112 tests, still exactly the baseline.\n\nVERBATIM PROOF: all four moved bodies diffed together against HEAD ranges 73-114, 380-485, 584-648 (isFreshDatabase, resolveProjectBinding, isSqliteBusy, bootstrapAndValidateSchema), blank-normalized — IDENTICAL, 203 lines, zero drift. Original relative order kept, so the file reads in the same sequence as HEAD.\n\nPreserved verbatim in the ambiguity path, which is the subtlest logic in the task: `BEGIN IMMEDIATE` with its STORE_BUSY-vs-STORE_UNAVAILABLE split on the startup lock (\"database startup lock timed out\" / \"unable to acquire database startup lock\"); the `commitAttempted` flag set immediately BEFORE `database.exec(\"COMMIT\")`; `transactionEndedAfterCommitAttempt = commitAttempted && !database.isTransaction`; conditional ROLLBACK guarded by `database.isTransaction` with its own try/catch; the `causes` array built as `[error]` or `[error, rollbackError]`; OUTCOME_UNKNOWN taking precedence over the STORE_BUSY check that follows it; and the distinct bootstrap-phase \"database bootstrap timed out\" message. The two STORE_BUSY messages differ only by phase and are trivially swappable by hand — confirmed unswapped by the diff. Order migrate -> validateSchema -> resolveProjectBinding -> COMMIT unchanged.\n\nEXPORT SURFACE PROVEN IDENTICAL, not assumed: extracted the exported-name set from HEAD and from the new facade (function declarations plus the re-export block) and diffed — identical five names, canonicalDatabasePath, isFreshDatabaseFileCandidate, compareVersions, isSqliteBusy, bootstrapAndValidateSchema. The last two are now `export { ... } from \"./sqlite-schema-bootstrap.js\"` re-exports; signatures are unchanged because the definitions themselves moved untouched.\n\nFacade reduced to its stated responsibility: cross-platform path canonicalization, fresh-file candidacy, version comparison, and the two re-exports. It no longer imports node:sqlite, store-rows, the manifest, integrity, or migration — only node:fs, node:path, DurableStoreError, invalidInput, and stringIsWellFormed.\n\nVerified, not assumed:\n- Sizes all inside the 250 rail: facade 71, conformance 72, integrity 215, migration 100, bootstrap 227. Bootstrap is the tightest at 227 and was the one I flagged in step 1 as at risk of overflow; it fits without resorting to a different split.\n- All four `.js` shims exist with exactly `export * from \"./<name>.ts\";`. Missing any one would fail only store-runtime-entrypoint.test.ts with ERR_MODULE_NOT_FOUND, and that suite is green.\n- No import cycle: facade -> bootstrap -> {integrity, migration} -> conformance -> {contracts, rows}. Strictly one-directional, nothing imports the facade back.\n- `git diff --quiet` confirms sqlite-event-store.ts, store-runtime.ts, index.ts, sqlite-schema-manifest.ts, and package.json are all byte-unchanged. Zero test files modified. No new package-root export.\n\nTotal production lines 648 -> 685 across five files; the +37 is import headers on four new modules, no logic added.",
+      "startedAt": "2026-08-07T13:25:40.764Z",
+      "completedAt": "2026-08-07T13:27:51.128Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review over the nine owned paths: compare every moved function and SQL template against HEAD; trace fresh, v1, v2, too-new, unrelated, corrupt, busy, rejected-COMMIT, acknowledged-COMMIT-loss, rollback-failure, absent/mismatched project, and sha/sequence-tamper paths for first-error drift; check there is no import cycle or new root/protected export; confirm sqlite-schema-manifest.ts and all tests stayed byte-unchanged; and use a cross-platform Node line counter to require every changed/new production or test source <=250 physical lines with one named responsibility. Inspect the shared index, unstage foreign paths with `git restore --staged -- <path>`, commit only the nine explicit paths via a pathspec, and verify `git show --stat` contains nothing else.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-conformance.ts",
+        "packages/store/src/sqlite-schema-conformance.js",
+        "packages/store/src/sqlite-schema-integrity.ts",
+        "packages/store/src/sqlite-schema-integrity.js",
+        "packages/store/src/sqlite-schema-migration.ts",
+        "packages/store/src/sqlite-schema-migration.js",
+        "packages/store/src/sqlite-schema-bootstrap.ts",
+        "packages/store/src/sqlite-schema-bootstrap.js"
+      ],
+      "note": "Adversarial review complete, committed at `9e16dde`, exactly 9 owned paths, +625/-584.\n\nSTRONGEST EVIDENCE — completeness, not just per-function fidelity. Per-function diffs prove each moved body matches HEAD, but they cannot prove nothing was DROPPED or INVENTED between them. Closed that with coverage arithmetic: the five verified ranges (32-56, 58-71, 73-114, 115-182, 183-379, 380-485, 486-503, 504-583, 584-648) claim 615 of HEAD's 617 body lines with ZERO duplicates, and the two unaccounted lines (57, 72) were confirmed by `cat -A` to be blank separators. So every HEAD line of logic lands in exactly one module, and every one of those ranges diffed IDENTICAL. Totals: facade 56, conformance 65, integrity 187, migration 75, bootstrap 203 — 586 non-blank lines verified byte-for-byte.\n\nDiscarded a weaker check honestly: my first attempt was a whole-file sorted logic-line set comparison. It reported differences that were artifacts of my own normalizer (an `export function` -> `function` rewrite applied to one side only, plus one import line the awk stripper leaked). Rather than tune the normalizer until it agreed with me — which would have proved nothing — I replaced it with the coverage-arithmetic proof above, which has no normalizer in the loop.\n\nBranch trace for first-error drift, all preserved by the verbatim moves: fresh creation, v1 with its distinct \"v1\"-worded foreign-key and quick_check messages, v2 no-op, too-new refusal, unrecognized-source DATABASE_IDENTITY_MISMATCH, populated/advanced-sequence STORE_MIGRATION_REQUIRED, unidentified-database adoption refusal with the transaction-header-page allowance, project singleton/scope/sequence/requested-mismatch/insert-change checks, startup-lock vs bootstrap STORE_BUSY, rejected COMMIT, acknowledged-COMMIT-loss, rollback failure with AggregateError, and OUTCOME_UNKNOWN taking precedence over the STORE_BUSY check below it. The two near-identical message families (v1 vs current foreign-key/quick_check, startup-lock vs bootstrap busy) are the easiest things to cross-contaminate in a split like this and are confirmed unswapped.\n\nStructural checks: module graph is a strict DAG — facade -> bootstrap -> {integrity, migration} -> conformance -> {contracts, rows}, nothing imports the facade back. `index.ts` contains no reference to sqlite-schema at all, so no new package-root or protected export. Node line counter (cross-platform, physical lines) — 71 / 72 / 215 / 100 / 227, all inside the 250 rail. `sqlite-schema-manifest.ts` byte-unchanged; zero test files changed; sqlite-event-store.ts, store-runtime.ts, index.ts, package.json all byte-unchanged.\n\nCommit discipline per epic rail 3: index verified clean beforehand, targeted `git add --` for the 8 new files (untracked files are invisible to `git commit -- <path>`), then `git commit -F <msg in $TEMP> -- <9 explicit paths>`. `git show --stat` lists exactly those 9 and nothing else. 21 foreign `.moe/**` daemon-churn entries left dirty and untouched; no non-.moe dirt remains, so no scratch or probe file was left behind.\n\nResidual risk I cannot close and am handing to QA: the suites assert error CODES only (STORE_CORRUPT 34, STORE_SCHEMA_INVALID 4, STORE_MIGRATION_REQUIRED 1), so a green 112/112 is necessary but not sufficient for a faithful move. The mechanical diffs above are the actual evidence; if QA wants independent confirmation, re-running the same range diffs against `9e16dde^` reproduces it in about a minute.",
+      "startedAt": "2026-08-07T13:27:57.281Z",
+      "completedAt": "2026-08-07T13:30:21.453Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "From `D:/projexts/moe-next`, run exactly `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. Preserve the fresh complete output and zero exit as the sole complete_task verification evidence; do not suppress failures or modify existing tests to obtain green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/sqlite-schema.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/sqlite-schema.ts",
+        "packages/store/src/sqlite-schema-conformance.ts",
+        "packages/store/src/sqlite-schema-conformance.js",
+        "packages/store/src/sqlite-schema-integrity.ts",
+        "packages/store/src/sqlite-schema-integrity.js",
+        "packages/store/src/sqlite-schema-migration.ts",
+        "packages/store/src/sqlite-schema-migration.js",
+        "packages/store/src/sqlite-schema-bootstrap.ts",
+        "packages/store/src/sqlite-schema-bootstrap.js"
+      ],
+      "note": "Gate run fresh from `D:/projexts/moe-next` after the commit, exactly as named: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test`. CHAIN_EXIT=0.\n\n`tsc --project tsconfig.json` clean, then `Test Files  18 passed (18)` / `Tests  112 passed (112)`, vitest v4.1.10, 1.01s. Redirected to a file outside the repo so the captured exit code is the chain's own, not a pipeline member's.\n\nIdentical to the step-1 baseline captured before any edit — same 18 files, same 112 tests. For a behavior-neutral extraction that equality IS the expected result: any drift in test or file count would mean a suite stopped loading. Zero test files edited, no failure suppressed, nothing skipped.\n\nAll 4 DoD items satisfied:\n1. Manifest, migration ordering, integrity checks, and bootstrap ambiguity outcomes unchanged — established in step 6 by range diffs (586 non-blank lines byte-identical to HEAD) plus coverage arithmetic showing every HEAD body line claimed exactly once.\n2. No database version, table, index, pragma, or stable error changed — `sqlite-schema-manifest.ts` is byte-unchanged, so no DDL moved at all; all pragma and error sites came across verbatim.\n3. Every production module under 350 (and under the tighter 250 rail): 71 / 72 / 215 / 100 / 227.\n4. Focused store typecheck and test command exits 0, evidenced above.\n\nStanding caveat repeated for the record so it is not lost between steps: the suites assert error codes only, so this green gate is necessary but not sufficient evidence of a faithful move. The step-6 mechanical diffs are the real proof; they are reproducible against `9e16dde^`.",
+      "startedAt": "2026-08-07T13:30:27.827Z",
+      "completedAt": "2026-08-07T13:30:49.041Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch (human requested 10). Owns packages/store/src/sqlite-schema.ts + new sqlite-schema-*.ts. Deps: none. File-disjoint from the other store tasks in this batch.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -28,5 +162,74 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:13.444Z",
-  "updatedAt": "2026-08-07T11:44:13.444Z"
+  "updatedAt": "2026-08-07T13:35:04.022Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:10:10.248Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T13:35:04.022Z",
+    "wallClockMs": 1493774
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T13:15:13.465Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep sqlite-schema.ts as the exact compatibility facade and move existing functions along responsibility seams. Rejected changing sqlite-schema-manifest.ts: its two protected exports and DDL bytes/order are already focused and should remain byte-unchanged. Rejected a single generic schema helper because the 648-line monolith would merely move. Rejected editing the large existing suites; this is a behavior-neutral extraction and the current hostile migration, integrity, project-binding, and ambiguity tests are the locked characterization oracle. Four internal modules plus one-line runtime bridges keep every changed production source <=250 lines and the plan below the 10-path hard cap.",
+    "codebaseInsights": "sqlite-schema.ts exports exactly canonicalDatabasePath, isFreshDatabaseFileCandidate, compareVersions, isSqliteBusy, and bootstrapAndValidateSchema. sqlite-event-store.ts consumes all five; store-runtime.ts consumes isSqliteBusy. The package root does not export them. Existing sqlite-schema-manifest.ts is 178 lines and defines SCHEMA_V1_OBJECT_SQL and insertion-ordered SCHEMA_OBJECT_SQL. Node's strip-types entrypoint follows .js specifiers at runtime, so every new .ts internal requires the repository's one-line `.js` bridge.",
+    "risks": "Observable behavior includes SQL/pragma and integrity-check order, first-error code/message, the exact BEGIN IMMEDIATE -> freshness -> migration -> validation -> project binding -> COMMIT sequence, and commit/rollback ambiguity precedence. Preserve Object.values(SCHEMA_OBJECT_SQL) insertion order, v1 addition order, application_id before user_version, project-binding evidence queries, and raw causes. Do not create cycles or expose new package-root APIs. Keep sqlite-schema-manifest.ts and all existing tests byte-unchanged. Every changed/new production and test source must be <=250 physical lines; no schema version/table/index/pragma/error change is permitted.",
+    "keyFiles": [
+      "packages/store/src/sqlite-schema.ts",
+      "packages/store/src/sqlite-schema-manifest.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "packages/store/src/store-runtime.ts",
+      "packages/store/src/sqlite-event-store-core.test.ts",
+      "packages/store/src/command-decision-integrity.test.ts",
+      "packages/store/src/store-project-and-schema-contract.test.ts",
+      "packages/store/src/store-bootstrap-ambiguity.test.ts",
+      "packages/store/src/store-project-binding-tamper.test.ts",
+      "packages/store/src/store-runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-07T13:15:15.487Z",
+  "contextFetchedBy": [
+    "worker-4dddabde",
+    "qa-200db8e3"
+  ],
+  "workStartedAt": "2026-08-07T13:19:50.000Z",
+  "reviewStartedAt": "2026-08-07T13:32:04.604Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nCHAIN_EXIT=0\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  16:30:33\n   Duration  1.01s (transform 2.11s, setup 0ms, import 3.33s, tests 3.28s, environment 1ms)",
+    "reportedAt": "2026-08-07T13:32:04.604Z"
+  },
+  "filesModified": [
+    "packages/store/src/sqlite-schema.ts",
+    "packages/store/src/sqlite-schema-conformance.ts",
+    "packages/store/src/sqlite-schema-conformance.js",
+    "packages/store/src/sqlite-schema-integrity.ts",
+    "packages/store/src/sqlite-schema-integrity.js",
+    "packages/store/src/sqlite-schema-migration.ts",
+    "packages/store/src/sqlite-schema-migration.js",
+    "packages/store/src/sqlite-schema-bootstrap.ts",
+    "packages/store/src/sqlite-schema-bootstrap.js"
+  ],
+  "completedAt": "2026-08-07T13:35:04.022Z",
+  "reviewCompletedAt": "2026-08-07T13:35:04.022Z",
+  "reviewSummary": "APPROVED. Commit 9e16dde, 9 owned paths, +625/-584 (net 41). 648-line sqlite-schema.ts split into 5 modules.\n\nThe worker correctly flagged that a green 112/112 is NECESSARY BUT NOT SUFFICIENT - the suites assert error CODES only (STORE_CORRUPT 34, STORE_MIGRATION_REQUIRED 1), so a reworded message, altered SQL, or reordered same-code check passes silently. I closed that gap independently instead of accepting the step notes:\n\n1. STRING-LITERAL DIFF, old file vs union of the 5 new modules: 163 literals before, ZERO LOST. All 18 additions are import specifiers. Every SQL template, error message and pragma string byte-identical - including the two cross-contaminable families (v1 vs current foreign-key/quick_check, startup-lock vs bootstrap STORE_BUSY).\n2. LOGIC-LINE MULTISET, imports/blanks stripped, export prefix normalised: 586 before, 586 after, unique 338 vs 338. ZERO dropped, ZERO invented - catches what per-function diffs cannot, nothing lost or fabricated between moved bodies.\n\nRAN MYSELF: `pnpm --filter @moe/store typecheck && test` -> exit 0, 18 files/112 tests, matching recorded evidence AND the step-1 pre-refactor baseline | repo `pnpm typecheck && pnpm test` -> exit 0, 59 files/573 tests.\n\nDoD1+2 PASS via the proofs above; sqlite-schema-manifest.ts byte-unchanged so no DDL moved at all.\nDoD3 PASS: 71/72/215/100/227 - max 227 vs the 350 cap, all inside the stricter 250 epic rail (was 648).\nDoD4 PASS (above).\n\nSTRUCTURE verified not assumed: runtime `node --experimental-strip-types` import of the facade resolves EXACTLY the 5 original names, all functions, no extras. Module graph is a strict DAG - facade -> bootstrap -> {integrity,migration} -> conformance, zero back-edges. 4 .js bridges 1 line each. sqlite-event-store.ts, store-runtime.ts, index.ts, package.json byte-unchanged. ZERO test files touched.\n\nNOTE (not this task): packages/skills/ and pnpm-lock.yaml went dirty mid-review from foreign work. Absent from 9e16dde; repo gate green."
 }

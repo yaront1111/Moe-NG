@@ -1,0 +1,44 @@
+{
+  "id": "task-50874e678c054f62ae0ac0c9a5d397cb",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Versioned event schema and projection commit seam",
+  "description": "Objective: create the schema and transaction foundations that a projection/outbox subsystem needs, which the parent task could not reach from its own subtrees. SPIDR step 1 of 5, split from task-55d5a898264b4880a99bf2c5b3be120b after architect-c4babdf9 blocked it as unplannable. Deliverable: (a) a versioned SQLite migration adding projection, inbox, subscription, and cursor-generation tables that the exact-schema validator accepts as the new expected schema rather than rejecting as added objects; (b) a domain schema/canonicalizer version field on StoredEvent so later upcasters have something real to dispatch on; (c) a commit seam on EventLedgerStore letting a projection apply inside the existing BEGIN/write/COMMIT rather than after it. NOT in scope: the projection engine, upcasters, relay/inbox transaction logic, subscriptions, or CURSOR_GAP — those are steps 2-4 and must have somewhere to land, not be pre-empted here. Hard dependencies: none; task-9e3faf3b (SQLite schema decomposition, commit 9e16dde) already landed and split sqlite-schema.ts by conformance/integrity/migration/bootstrap — read that commit before planning, it is the seam you build against. Owned paths: packages/store/src/sqlite-schema*.ts, packages/store/src/event-ledger*.ts, packages/store/src/store-input*.ts only if the StoredEvent shape requires it, packages/store/src/index.ts for exports, and focused schema/migration/ledger tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "A forward migration adds projection, inbox, subscription, and cursor-generation tables, and the exact-schema validator accepts the migrated database as conformant rather than rejecting the added objects.",
+    "StoredEvent carries a domain schema/canonicalizer version that is written on append, read back unchanged, and is sufficient for a later upcaster to dispatch on without guessing.",
+    "EventLedgerStore exposes a commit seam that runs a caller-supplied apply step inside the same BEGIN/write/COMMIT as the event append, proven by a test where a failing apply rolls back the event.",
+    "Existing store tests pass unchanged, the focused store typecheck and test command exits 0, and only the explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "This task exists because the parent's ownership was too narrow. Do not repeat that error: if the plan needs a path not listed in Owned paths, say so in #architects before submitting rather than faking the capability.",
+    "Build the seam, not the feature. A projection engine, upcaster, relay, or subscription implemented here starves steps 2-4 and rebuilds the oversized task that was just split.",
+    "The exact-schema validator must be updated to expect the new tables, never weakened, bypassed, or made permissive about unknown objects.",
+    "Fail closed with stable reason codes; a failed apply inside the commit seam must roll back the event append, never leave a partial write.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Superseded by a 2-way split. Do NOT plan or claim — traceability shell only. architect-d89636d1 blocked this as unplannable against the post-9e16dde tree: honest file map was 14 vs the 10-file cap, and its DoD was self-contradictory (governor-authored). DoD 4 said \"existing tests pass unchanged\" while the task's own deliverables force edits to command-decision-integrity.test.ts (userVersion pin), store-project-and-schema-contract.test.ts (too-new tamper becomes a no-op at v3), and event-read-model-contract.test.ts (toStrictEqual on the exact StoredEvent key set). That was a governor authoring error, not an architect failure. Replaced by task-2d9b0a74dae2463897fa19c6f031a8b4 (Schema v3 tables + migration, PLANNING) and task-a602b3d4294a44aea1d9d173bf1fdaa7 (StoredEvent domainSchemaVersion + commit seam, BACKLOG, depends on A). Both carry corrected DoD wording: existing tests pass with only the named version-literal and key-set updates the new schema forces, nothing weakened.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "priority": "CRITICAL",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T13:41:28.440Z",
+  "updatedAt": "2026-08-07T15:28:43.917Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T13:41:37.741Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
+}

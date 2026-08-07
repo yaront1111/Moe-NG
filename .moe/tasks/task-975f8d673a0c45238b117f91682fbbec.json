@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG. Verified apps/control-room does not exist in git. Its scaffold (React app shape, build tooling, first frontend dependency set) is owned by Foundation control-room shell, still BACKLOG. The architect was right to refuse: folding the repo's first frontend-architecture decisions into a UI-surface task would pre-empt the shell task's design space. Note Generated control-room client (packages/control-room-client) IS landed — that is a different path and does not satisfy this. Re-queue after Foundation control-room shell lands.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-07T11:55:19.821Z"
+  "updatedAt": "2026-08-07T20:25:56.525Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T19:33:50.977Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

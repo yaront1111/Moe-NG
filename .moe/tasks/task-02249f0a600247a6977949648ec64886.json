@@ -15,13 +15,117 @@
     "Keep each instruction file short; link to deeper docs rather than accumulating a large prompt.",
     "Use TDD for the checker and stage only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-d89636d1",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD red — author the instruction-contract checker test FIRST at tests/instruction-contract/checker.test.ts (root vitest.config.ts already includes tests/**/*.test.ts, so NO config or package-source edits are needed or allowed). Test a pure function checkInstructionContract(input: { agents: string | null, claude: string | null }): Violation[] where Violation = { code, file, detail } and code is one of the stable reason codes: AGENTS_MISSING, CLAUDE_MISSING, CANONICAL_MARKER_MISSING, BRIDGE_MARKER_MISSING, BRIDGE_REFERENCE_MISSING, FILE_OVERSIZED, GENERATED_MARKER_PRESENT, LIVE_STATE_MARKER_PRESENT. Synthetic-fixture cases (mutation-resistant, assert exact code + file): (1) null content -> *_MISSING; (2) AGENTS content without literal marker '<!-- instruction-contract: canonical -->' -> CANONICAL_MARKER_MISSING; (3) CLAUDE content without '<!-- instruction-contract: bridge -->' -> BRIDGE_MARKER_MISSING; (4) CLAUDE content that never mentions 'AGENTS.md' -> BRIDGE_REFERENCE_MISSING; (5) oversize: AGENTS > 120 lines or > 8192 bytes, CLAUDE > 40 lines or > 2048 bytes -> FILE_OVERSIZED (count lines via split(/\\r?\\n/) and bytes via Buffer.byteLength for CRLF/Windows safety); (6) content containing 'moe-generated' -> GENERATED_MARKER_PRESENT; (7) live-state ids: /\\b(task|epic|chan)-[0-9a-f]{32}\\b/, /\\b(worker|architect|qa|governor)-[0-9a-f]{8}\\b/, or literal 'Approval mode:' -> LIVE_STATE_MARKER_PRESENT; (8) fully valid pair -> exactly []. IMPORTANT: a plain mention of the '.moe/' directory in policy prose is ALLOWED — do not ban it; only the id/marker patterns above are forbidden. Also add two integration tests that read real root AGENTS.md and CLAUDE.md from disk (resolve repo root from the test file location, not process.cwd()) and assert zero violations. Run `pnpm exec vitest run tests/instruction-contract` and confirm it FAILS (checker module and md files don't exist yet) — that red run is this step's evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "newFiles": [
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "note": "Added the RED contract suite first, covering every stable reason code, both line/byte caps, all live-ID families, generated markers, allowed .moe prose, empty content, deep freezing, exported caps/patterns, deterministic valid input, and two repo-root integration cases. Fresh RED command `pnpm exec vitest run tests/instruction-contract` exited 1 exactly because `./checker.js` is absent, as planned.",
+      "startedAt": "2026-08-07T12:20:44.223Z",
+      "completedAt": "2026-08-07T12:22:20.580Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement tests/instruction-contract/checker.ts to make the synthetic-fixture tests green. Pure core: checkInstructionContract takes file CONTENTS (string | null), returns frozen Violation[] — no fs, no process access, no writes ever (checker is read-only by contract; it must never rewrite or autofix the md files). Thin loader helper loadInstructionFiles(rootDir) that reads AGENTS.md/CLAUDE.md with utf8 and maps ENOENT (or any read error) to null — fail closed: unreadable means MISSING violation, never a pass. Export the size caps and forbidden-pattern list as named frozen constants so the test asserts against the same values. Keep the file <=250 lines, no dependencies beyond node:fs/node:path. Synthetic tests green after this step; the two real-file integration tests still red (md files absent) — expected.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/instruction-contract/checker.ts"
+      ],
+      "newFiles": [
+        "tests/instruction-contract/checker.ts"
+      ],
+      "modifiedFiles": [
+        "tests/instruction-contract/checker.ts"
+      ],
+      "note": "Implemented a 174-line dependency-free, read-only checker with frozen caps/patterns/results, stable violations, CRLF-safe line counts, UTF-8 byte caps, exact durable/live marker checks, and a fail-closed loader mapping all read errors to null. Focused run: 22 synthetic tests pass; only the two planned real-file integration tests fail with AGENTS_MISSING/CLAUDE_MISSING because the root files are not authored yet.",
+      "startedAt": "2026-08-07T12:22:26.461Z",
+      "completedAt": "2026-08-07T12:23:48.532Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Author root AGENTS.md — canonical, tool-neutral, <=120 lines and <=8192 bytes. Must contain the literal marker '<!-- instruction-contract: canonical -->' near the top. Sections: (1) Purpose — canonical durable project instructions; provider files bridge here. (2) Architecture map — pnpm workspace: packages/contracts (shared types/codecs, no deps), packages/scheduler, packages/store, packages/control-room-model, packages/testkit, apps/daemon (bounded ingress consuming contracts+scheduler); dependency direction flows toward contracts; adapters/* reserved. (3) Verification — `pnpm typecheck`, `pnpm test` (root vitest covers packages/** and tests/**), `pnpm verify:foundation`, `pnpm verify:store`; note apps/daemon tests run only via `pnpm --filter @moe/daemon test` (root gate does not discover apps/**). (4) Git discipline — stage explicit owned paths only; never `git add -A`/`git add .`, push, merge, reset, or stash; no sibling worktrees. (5) Shared-tree ownership — multiple agents work concurrently in this one tree; touch only paths your task owns; preserve foreign work; never edit live .moe/, .codex/, or .claude/settings.local.json state (this section IS the required ownership note — no separate file). (6) Fail-closed truth — stable reason codes; missing/unverifiable evidence stays UNKNOWN and never gains authority; advisory envelopes stay frozen and advisoryOnly. (7) Source-size rails — target <=250 lines per production source, split before 400; TDD for every behavior change; no debug/scratch/generated-evidence files in commits. (8) Pointers — authoritative design doc D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md (read-only, never edit), CONTRIBUTING.md, docs/plans/. HARD exclusions (checker enforces): no task/epic/channel/worker ids, no 'moe-generated' marker, no 'Approval mode:' line, no session/branch state, no secrets. Link deeper docs instead of inlining detail.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "AGENTS.md"
+      ],
+      "newFiles": [
+        "AGENTS.md"
+      ],
+      "modifiedFiles": [
+        "AGENTS.md"
+      ],
+      "note": "Authored the canonical tool-neutral root AGENTS.md with all planned architecture, verification, Git/shared-tree ownership, fail-closed truth, source/TDD rails, and deep-doc pointers. It is 77 lines / 3216 UTF-8 bytes and passes the real AGENTS integration check. Focused suite is now 23/24; only the planned missing CLAUDE bridge remains red.",
+      "startedAt": "2026-08-07T12:23:53.079Z",
+      "completedAt": "2026-08-07T12:24:46.505Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Author root CLAUDE.md — thin Claude-specific bridge, <=40 lines and <=2048 bytes. Must contain the literal marker '<!-- instruction-contract: bridge -->' and an explicit pointer that AGENTS.md is the canonical policy source (read it first). Claude-specific content ONLY: (a) Moe tool-naming note — moe.<name> shorthand resolves to MCP tool mcp__moe__moe_<name> on server 'moe'; Serena tools on server 'serena'; batch-load deferred schemas in one ToolSearch select call; (b) role/runtime instructions are injected per-session by the Moe wrapper — do not duplicate or freeze them here; (c) consult Serena memories for prior task knowledge. NO duplicated normative policy from AGENTS.md (state rules once, canonically), no secrets, no generated assignment content, none of the checker's forbidden markers. After this step run `pnpm exec vitest run tests/instruction-contract` — ALL tests including the two real-file integration tests must now pass.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "CLAUDE.md"
+      ],
+      "newFiles": [
+        "CLAUDE.md"
+      ],
+      "modifiedFiles": [
+        "CLAUDE.md"
+      ],
+      "note": "Added a 20-line / 763-byte Claude-only bridge pointing to canonical AGENTS.md, documenting MCP/Serena resolution, one-shot deferred schema loading, wrapper-injected session context, and Serena memory lookup without duplicating normative policy. Fresh focused run passes all 24/24 tests, including both real-root integrations.",
+      "startedAt": "2026-08-07T12:24:50.531Z",
+      "completedAt": "2026-08-07T12:25:11.699Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate (single concentrated step). Run fresh, in order: (1) focused `pnpm exec vitest run tests/instruction-contract` -> exit 0; (2) repo regression `pnpm typecheck && pnpm test` -> exit 0 (root vitest auto-discovers the new tests/instruction-contract/checker.test.ts via the existing tests/** include — verify its test file appears in the run summary; if it does not, the checker landed in the wrong path — fix the path, do NOT touch vitest.config.ts). Note: tests/ is transpiled by vitest and not covered by `pnpm --recursive typecheck` (no root typecheck script) — keep the checker self-contained and type-clean anyway. Command (2) is the complete_task verification evidence: { command: \"pnpm typecheck && pnpm test\", exitCode: 0, outputTail }.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/instruction-contract/checker.test.ts",
+        "tests/instruction-contract/checker.ts"
+      ],
+      "modifiedFiles": [
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "note": "Focused verification is fresh and green: 1 file / 24 tests, including UTF-8 multibyte byte-cap cases and both real-root integrations. The required repository command was attempted but is temporarily red solely in foreign in-flight task task-12e18265f7a84c7eacdf79a3bef2bdf3 (`packages/contracts/src/runtime` missing mid-TDD exports). Per governor direction, I preserved those paths and defer the exact repository evidence rerun to completion; no success claim is made for that command yet.",
+      "startedAt": "2026-08-07T12:25:18.295Z",
+      "completedAt": "2026-08-07T12:27:51.815Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review + explicit-path commit. Load Skill adversarial-self-review and walk the diff as an attacker: (a) do AGENTS.md/CLAUDE.md themselves pass the checker's own forbidden patterns (easy to accidentally embed a task id or 'Approval mode:' while writing policy prose)? (b) does the checker treat empty-string content as present-but-marker-missing (violations) rather than crashing or passing? (c) CRLF vs LF: do line/byte caps behave identically on Windows checkout (.gitattributes normalization) — split on /\\r?\\n/, bytes via Buffer.byteLength? (d) does the checker ever write? grep the checker for writeFile/appendFile/unlink — must be none; (e) are all reason codes reachable and asserted at least once? (f) no scratch/probe files anywhere under repo root (wrapper auto-commit sweeps the entire dirty tree — delete strays BEFORE the terminal moe call). Then stage and commit ONLY: AGENTS.md, CLAUDE.md, tests/instruction-contract/checker.ts, tests/instruction-contract/checker.test.ts — via explicit `git add <path> <path> <path> <path>`; never add -A/., no push, no merge, no reset, no stash.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "tests/instruction-contract/checker.ts",
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "modifiedFiles": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "tests/instruction-contract/checker.ts",
+        "tests/instruction-contract/checker.test.ts"
+      ],
+      "note": "Adversarial review completed: canonical files pass their own forbidden-state checker; empty strings fail by markers rather than missing/crashing; CRLF line counting and UTF-8 multibyte byte counting are explicit; the checker contains no write/delete APIs; all eight reason codes are asserted; the core is pure/concurrency-safe and loader errors fail closed. No scratch/probe artifacts were introduced. Fresh focused gate is 24/24. Explicitly staged and pathspec-committed only the four owned paths as 82ebebc; `git show` confirms exactly those files and the shared index is otherwise untouched.",
+      "startedAt": "2026-08-07T12:27:59.723Z",
+      "completedAt": "2026-08-07T12:29:09.529Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Approved roadmap addition: dependency-free durable instruction contract should be planned and implemented now; keep generated/live state out of scope.",
+  "reopenReason": "Governor: blocker cleared. task-12e18265f7a84c7eacdf79a3bef2bdf3 completed step 7/7 and packages/contracts is green. Governor confirmed repo-wide `pnpm typecheck` exits 0 as of 12:41 UTC. Unblocking so worker-05d10803 can run the fresh required `pnpm typecheck && pnpm test` and complete on real evidence. Time-sensitive: worker-4dddabde has just started TDD in packages/store, which will turn the repo gate red again shortly.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,11 +133,66 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T12:09:39.132Z",
-  "updatedAt": "2026-08-07T12:16:47.530Z",
+  "updatedAt": "2026-08-07T13:05:44.835Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T12:16:47.263Z"
+    "firstClaimAt": "2026-08-07T12:16:47.263Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T13:05:44.835Z",
+    "wallClockMs": 2937572
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
-  ]
+    "architect-d89636d1",
+    "worker-05d10803",
+    "qa-200db8e3"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T12:19:39.474Z",
+  "planningNotes": {
+    "approachesConsidered": "Checker location: (a) new package under packages/* — rejected, heavyweight (package.json/tsconfig churn, lockfile touch) and violates 'avoid modifying active package sources' spirit; (b) script under scripts/ wired into package.json — rejected, requires editing root package.json (active shared file); (c) tests/instruction-contract/ — CHOSEN: root vitest.config.ts already includes tests/**/*.test.ts, so the checker runs in the repo-wide gate with zero config edits and zero package edits. Checker shape: standalone CLI vs pure-function-plus-test — chose pure function (checkInstructionContract over string contents) with thin fs loader, so all reason codes are TDD-testable against synthetic fixtures without corrupting the real files, plus real-file integration assertions. Ownership note: folded into AGENTS.md shared-tree section rather than a separate file (task allows 'if needed' — not needed).",
+    "codebaseInsights": "Repo has NO AGENTS.md or CLAUDE.md today — both are greenfield creates. Root vitest include = ['packages/**/*.test.ts','tests/**/*.test.ts']; tests/ dir does not exist yet; apps/** is NOT discovered by root gate (daemon's 28 tests run only via pnpm --filter @moe/daemon test) — AGENTS.md verification section must say this. .codex/agent-instructions.md is generated (marker '<!-- moe-generated: sha=... -->', 'Approval mode:' line) — these are exactly the forbidden-marker exemplars the checker bans from durable files. CONTRIBUTING.md carries softer 800/1200 line guidance; epic rails are stricter (250/400) — AGENTS.md states the epic-rail values and links CONTRIBUTING. pnpm typecheck is --recursive (per-package scripts only), so tests/ is never typechecked — vitest transpiles it; keep checker deps to node:fs/node:path.",
+    "risks": "(1) Self-referential trap: while writing AGENTS.md/CLAUDE.md prose it is easy to embed a forbidden marker (a task id, 'Approval mode:', 'moe-generated') — the integration tests catch this; describe forbidden things generically in prose. (2) Over-broad forbidden patterns: banning the literal '.moe' string would make legitimate policy prose ('never edit .moe/ state') impossible — ban only id-shaped regexes and generated markers, never the directory name. (3) CRLF: Windows checkout may deliver CRLF; count lines with /\\r?\\n/ and bytes with Buffer.byteLength or caps drift across platforms. (4) Wrapper auto-commit sweeps the whole dirty tree into a branded commit (see mem:gotcha-moe-wrapper-autocommit) — leave zero stray files before the terminal moe call; worker cannot prevent the sweep itself, do not fight it. (5) process.cwd() differs between root and package-scoped vitest runs — resolve repo root from import.meta / test-file location, not cwd.",
+    "keyFiles": [
+      "vitest.config.ts",
+      "package.json",
+      ".codex/agent-instructions.md",
+      "CONTRIBUTING.md",
+      "tests/instruction-contract/checker.ts",
+      "tests/instruction-contract/checker.test.ts",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T12:19:41.515Z",
+  "workStartedAt": "2026-08-07T12:20:44.223Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Everything except the final verification command. All 6 plan steps COMPLETED. Implementation committed at 82ebebc containing exactly the 4 owned paths: AGENTS.md (77 lines / 3216 bytes, carries '<!-- instruction-contract: canonical -->'), CLAUDE.md (20 lines / 763 bytes, carries '<!-- instruction-contract: bridge -->'), tests/instruction-contract/checker.ts (174 lines, dependency-free and read-only), tests/instruction-contract/checker.test.ts. Focused gate `pnpm exec vitest run tests/instruction-contract` is green at 24/24 including both real-root integration cases. Adversarial self-review completed clean.",
+      "whatRemains": "One command and one call. Run fresh from D:/projexts/moe-next: `pnpm typecheck && pnpm test`. Then moe.complete_task with that output as evidence. Do NOT re-implement, re-review, or re-commit anything — the code is done and on main.",
+      "pitfalls": "Do not edit any path outside AGENTS.md, CLAUDE.md, and tests/instruction-contract/**. This task previously blocked because DoD #4 requires REPOSITORY-wide regression green, and packages/contracts was legitimately mid-TDD at the time; that blocker is resolved (task-12e18265f7a is DONE and QA-approved). worker-c8c01fc6 is live in packages/testkit right now — if the gate fails there, that is foreign in-flight work, so report blocked naming it rather than fixing it. Commit by explicit pathspec only if you somehow need to commit at all; a bare git commit will capture worker-c8c01fc6's staged files. Governor last observed repo-wide `pnpm typecheck` green at exit 0 (12:49).",
+      "openQuestions": "Why worker-05d10803 stopped responding is unknown — it heartbeats but produces no output. If the reclaiming worker sees the same symptom, that points at the wrapper rather than the task. The DoD's repo-wide-green requirement is under review with the human as a structural defect; unchanged for now, so satisfy it as written.",
+      "releasedAt": "2026-08-07T13:01:20.516Z",
+      "releasedBy": "governor-c713986e",
+      "reason": "Governor handoff with human approval. worker-05d10803 is alive and heartbeating but has posted nothing since 12:29:55 and has not responded to three pings (12:47, 12:52, 12:59). It sits IDLE holding this task at 6/6 without running the completion gate. Not a crash-release on idle time — the work is fully committed, so releasing costs nothing and unblocks a trivial finish."
+    }
+  ],
+  "completedAt": "2026-08-07T13:05:44.835Z",
+  "reviewCompletedAt": "2026-08-07T13:05:44.835Z",
+  "reviewSummary": "APPROVED. Commit 82ebebc, 4 files, +430/-0. task.verification was null (worker idled before complete_task), so I ran every gate myself in the foreground rather than accept a claim.\n\nRAN: vitest tests/instruction-contract -> exit 0, 24 tests | pnpm typecheck -> exit 0 | pnpm test -> exit 0, 59 files/573 tests | `pnpm typecheck && pnpm test` (exact DoD cmd) -> exit 0 | verbose reporter confirms checker.test.ts IS discovered by the root gate (step-5 required this; not inferred).\n\nDoD1 PASS: AGENTS.md 77 lines/3216 bytes vs own 120/8192 caps, canonical marker, tool-neutral. Grepped live-state markers independently of the checker: NONE_FOUND.\nDoD2 PASS: CLAUDE.md 20 lines/763 bytes vs 40/2048 caps, bridge marker + \"Read AGENTS.md first\". Read both side by side: exclusively Claude-specific, no rule stated twice.\nDoD3 PASS: checker.ts 174 lines, deps only node:fs/node:path. Grepped clean for writeFile/appendFile/unlink/rm/mkdir/rename/truncate and process.env/cwd/exit - cannot rewrite the files it judges. Loader maps read errors to null -> MISSING, fail-closed per epic rail 4. All 8 reason codes asserted. Regexes use /u but NOT /g, so .test() is stateless - lastIndex trap avoided.\nDoD4 PASS: git show --stat 82ebebc = exactly the 4 owned paths, zero foreign. Owned paths clean, no strays.\n\nTESTS mutation-resistant: toEqual on exact {code,file} arrays, never truthiness. Byte-cap cases use 4-byte emoji, so a .length implementation would pass and Buffer.byteLength is required to fail them. Edges: empty string, all 8 live-id families, frozen result, allowed-\".moe/\"-prose.\n\nDISCLOSED: +430 gross exceeds my 400 LOC threshold on raw count. Split = 174 production + 159 test + 97 markdown. Markdown IS the deliverable, self-capped at 120/40 lines, unsplittable; production 174 is under the rail. Zero drift.\n\nRepo gate green despite packages/testkit dirty with foreign task-4426932e work - BLOCKED cleared."
 }

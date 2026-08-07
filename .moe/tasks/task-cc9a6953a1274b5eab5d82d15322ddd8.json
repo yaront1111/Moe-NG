@@ -15,13 +15,135 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold @moe/control-room-client. package.json: { name: \"@moe/control-room-client\", version: \"0.0.0\", private: true, type: \"module\", exports: { \".\": \"./src/index.ts\" }, dependencies: { \"@moe/contracts\": \"workspace:*\" }, scripts: { typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/control-room-client/src\", generate: \"node --experimental-strip-types generator/generate.ts\" } }. tsconfig.json: extends base, rootDir \".\", include [\"src/**/*.ts\", \"generator/**/*.ts\"] (a top-level generator/ dir outside src is silently UNTYPECHECKED under the mirrored rootDir:src pattern — widen deliberately), tsBuildInfoFile ../../node_modules/.cache/control-room-client.tsbuildinfo, types [node]. src/index.ts placeholder. pnpm install. NO .js shims for src modules (skills precedent — nothing raw-node-imports this package; record the deferral). Do NOT run the package test script before the first test exists (passWithNoTests:false). QA-LOC pre-note for the completion message: generated output is exempt from line caps per CONTRIBUTING.md ('Generated files are exempt') and the @moe/skills new-package precedent (+1412 LOC approved) — cite both so the diff is read as generated, not oversized.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/package.json",
+        "packages/control-room-client/tsconfig.json",
+        "packages/control-room-client/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/control-room-client/package.json",
+        "packages/control-room-client/tsconfig.json",
+        "packages/control-room-client/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/package.json",
+        "packages/control-room-client/tsconfig.json",
+        "packages/control-room-client/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Scaffolded @moe/control-room-client. package.json (exports ./src/index.ts, dep @moe/contracts workspace:*, scripts typecheck/test/generate), tsconfig.json with rootDir \".\" + include [\"src/**/*.ts\",\"generator/**/*.ts\"] (deliberate widening — mirrored rootDir:src would silently untypecheck generator/), placeholder src/index.ts. pnpm install: 12 workspace projects, node_modules/@moe/contracts symlink created. Empirically re-confirmed the raw-node path from THIS package dir: `node --experimental-strip-types -e \"import('@moe/contracts')\"` -> exports 46, cmds 92, queries 16, errors 38 (contracts' committed .js shim set is complete). Focused typecheck exit 0. Did NOT run the package test script (passWithNoTests:false, no test exists yet). NO .js shims added for src modules — deferral recorded: nothing raw-node-imports this package (generator/generate.ts is the only raw-node entry and it lives outside src); if a future consumer needs raw-node import of src, shims must be added then. Lockfile diff at this point contains ONLY the packages/control-room-client importer (6 insertions) — re-check at commit time per lockfile protocol; note a system collision warning already exists vs task-c9a9bf3c on pnpm-lock.yaml. QA-LOC pre-note: generated output is exempt from line caps per CONTRIBUTING.md (\"Generated files are exempt\") and the @moe/skills new-package precedent (+1412 LOC approved).",
+      "startedAt": "2026-08-07T19:35:05.785Z",
+      "completedAt": "2026-08-07T19:35:48.109Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — src/generated-coverage.test.ts + src/generator-determinism.test.ts. Coverage test (mechanical set equality against the LIVE registry): every RUNTIME_COMMAND_KINDS entry has exactly one generated affordance-anchored command builder; every RUNTIME_QUERY_KINDS entry one query builder; every RUNTIME_ERROR_CODES entry one row in the generated error table (retryability/recovery/transport projected via lookupRuntimeError); telemetry kinds re-exported; zero missing, zero extra — this catches STALE COMMITTED OUTPUT after any contracts change. Golden fixtures: inline sha256 constants for the generated file and the contractDigest — a registry change fails loudly (the intentional contract-change ritual: regenerate, review diff, update goldens). Determinism test (DoD 3): run emitGeneratedClient(tmpDir) into os.tmpdir() — NEVER into the repo tree (wrapper auto-commit sweeps transient strays; mem:gotcha-moe-wrapper-autocommit) and NEVER a git-diff oracle (HEAD moves under concurrent workers) — then byte-compare every emitted file against committed src/generated/; run twice, byte-identical; assert ZERO 0x0D bytes in output (emitter hardcodes \\n; .gitattributes forces LF so committed files match). Confirm RED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "packages/control-room-client/src/generator-determinism.test.ts"
+      ],
+      "newFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "packages/control-room-client/src/generator-determinism.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "packages/control-room-client/src/generator-determinism.test.ts"
+      ],
+      "note": "RED confirmed. `pnpm --filter @moe/control-room-client test` -> exit 1, \"Test Files 2 failed (2) / Tests no tests\": \"Cannot find module './generated/generated-client.js'\" and \"Cannot find module '../generator/generate.js'\" — failing for the right reason (generator + generated output do not exist yet).\n\nsrc/generated-coverage.test.ts (12 runtime assertions, all mechanical against the LIVE registry):\n- command builder key set == RUNTIME_COMMAND_KINDS (92), each value a function; query builder key set == RUNTIME_QUERY_KINDS (16); error table key set == RUNTIME_ERROR_CODES (38) with each row deep-equal to lookupRuntimeError(code) — zero missing, zero extra, so STALE COMMITTED OUTPUT after any contracts change fails loudly.\n- telemetry re-export == RUNTIME_TELEMETRY_KINDS verbatim.\n- pins object deep-equal + frozen; golden inline sha256 of the committed generated file; golden contractDigest constant (both placeholder zeros in RED — filled by the regenerate/review/update ritual in step 3).\n- COMMAND_ENVELOPE_KEYS / QUERY_ENVELOPE_KEYS runtime enumeration (the runtime half of the digest blind-spot compensation; the `satisfies`/mutual-extends type assertion is the other half).\n- Affordance-anchoring behaviour: identity fields (commandId/expectedVersion/targetAggregateId/graph+policy revision hashes) copied from a REAL affordance built through buildNextAllowedCommands (no hand-rolled fixture shape); kind-mismatched affordance -> ok:false INPUT_INVALID; undefined/string affordance -> ok:false (no minting); query envelopes carry no authority fields and omit absent optionals.\n\nsrc/generator-determinism.test.ts (3 tests, DoD 3): emitGeneratedClient(tmpDir) into mkdtempSync(os.tmpdir()) twice -> same file list + byte-identical buffers; every emitted file byte-compared against committed src/generated/; zero 0x0D bytes in BOTH emitted and committed bytes. Never writes into the repo tree (mem:gotcha-moe-wrapper-autocommit) and never uses a git-diff oracle (HEAD moves under concurrent workers). tmpdirs removed in finally.\n\nNote: these tests live under packages/*/src so they ARE typechecked (unlike root tests/, mem:gotcha-tests-dir-untypechecked-vitest) — every assertion is still a runtime expect(). Open item for step 3: whether vitest resolves the NodeNext-style \"../generator/generate.js\" specifier to generate.ts; if not, a one-line committed .js shim (contracts precedent) is the fix.",
+      "startedAt": "2026-08-07T19:38:17.544Z",
+      "completedAt": "2026-08-07T19:39:20.403Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — generator/generate.ts (SINGLE FILE — multi-file generator helpers would need committed .js shims for raw-node strip-types execution or die ERR_MODULE_NOT_FOUND, invisible to tsc AND vitest; single file avoids the class entirely; empirically confirmed: node --experimental-strip-types imports @moe/contracts fine from a sibling package — contracts' shim set is complete). Exports emitGeneratedClient(outDir): deterministic emission (sorted iteration, no Date/random, hardcoded \\n) of ONE file src/generated/generated-client.ts containing: (a) AFFORDANCE-ANCHORED per-kind command builders — design 90: UI actions come ONLY from nextAllowedCommands; each builder signature is (affordance: NextAllowedCommand & { commandKind: \"<kind>\" }, caller: { payload: JsonObject; correlationId; sessionCredential; requestDigest }) -> frozen envelope object typed against the EXPORTED RuntimeCommandEnvelope interface, copying commandId/expectedVersion/targetAggregateId/leaseAuthority/graphRevisionHash/policyRevisionHash from the affordance — the client can NEVER mint identity fields (spec CR-CMD-001: every enabled action originates from nextAllowedCommands; NO raw-field builder exists on the public surface); (b) per-kind query builders (queries have no affordance — plain typed builders over RuntimeQueryEnvelope); (c) generated error table: RUNTIME_ERROR_CODES -> frozen rows {code, retryability, recoveryCategory, recoveryOperations, transport:{httpStatus,mcpCode}, validSources} via lookupRuntimeError; (d) telemetry re-export + an EMITTED comment stating the event-stream vocabulary is deferred (spec §13-D3 TBD; no domain-event type exists in contracts — do NOT invent a frame shape, that would be a second competing vocabulary); (e) compatibility pins: RUNTIME_COMMAND_ENVELOPE_VERSION/RUNTIME_QUERY_ENVELOPE_VERSION/RUNTIME_ERROR_REGISTRY_VERSION + contractDigest = sha256 over canonical sorted serialization of the RUNTIME-ENUMERABLE surface (kinds, lifecycles, error rows, versions, limits). HONESTY BOUNDARIES stated in emitted header: payload stays JsonObject (no per-kind payload schemas exist; inputSchemaVersion is an opaque daemon-supplied string); envelope required/optional key arrays are module-private in contracts so the digest CANNOT see envelope-shape drift — compensated by a type-level exhaustive-keys assertion (hardcoded key list `satisfies` keyof RuntimeCommandEnvelope check) that breaks typecheck loudly on interface change. Run pnpm generate; commit the generated file; coverage + determinism tests green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/generator/generate.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "newFiles": [
+        "packages/control-room-client/generator/generate.ts",
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/generator/generate.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "note": "GREEN. `pnpm --filter @moe/control-room-client test` -> exit 0, \"Test Files 2 passed (2) / Tests 15 passed (15)\". Focused typecheck exit 0.\n\ngenerator/generate.ts (332 lines, single file as planned — no helper module, so no .js shim hazard). Exports renderGeneratedClient() (pure) and emitGeneratedClient(outDir) -> readonly string[] of emitted names; CLI guard compares resolve(process.argv[1]) to fileURLToPath(import.meta.url) instead of import.meta.main (no dependency on a Node-version-gated type). `pnpm generate` ran clean through the raw-node --experimental-strip-types path, exit 0.\n\nEmitted src/generated/generated-client.ts (881 lines, generated -> CONTRIBUTING line-cap exemption):\n(a) 92 affordance-anchored command builders. Signature (affordance: CommandAffordance<K> = NextAllowedCommand & {commandKind:K}, caller: {correlationId, payload: JsonObject, requestDigest, sessionCredential}) -> frozen CommandBuildResult. Identity (commandId/expectedVersion/targetAggregateId/leaseAuthority/graphRevisionHash/policyRevisionHash) is copied from the affordance only; optionals are omitted rather than set undefined (exactOptionalPropertyTypes). Runtime kind guard: a non-object or kind-mismatched affordance returns ok:false with INPUT_INVALID via createRuntimeError — fail closed, never mint.\n(b) 16 query builders, total (queries carry no authority so they have no failure mode) returning QueryEnvelopeFor<K> = RuntimeQueryEnvelope & {queryKind:K}.\n(c) 38-row error table typed as Readonly<Record<RuntimeErrorCode, RuntimeErrorDescriptor>>, deep-frozen per row. DEVIATION from the plan's field list: the real contracts field is `recoveryCommands`, not `recoveryOperations`, and the projection emits the FULL descriptor (adds requiredDetailKeys + truthClass) so the test can assert deep equality against lookupRuntimeError with no competing row type.\n(d) telemetry re-export + emitted boundary-5 comment: no event-stream frame vocabulary generated (spec 13-D3 TBD, no domain-event type in contracts).\n(e) pins GENERATED_CONTRACT_PINS {commandEnvelopeVersion, contractDigest, errorRegistryVersion, queryEnvelopeVersion}; contractDigest = sha256 over canonical sorted JSON of the runtime-enumerable surface (aggregates, command/query/telemetry kinds, lifecycles, full error descriptors, safe detail keys, versions, JSON limits) = 1d96f39e6399ce63090405ca6168175540cce1c783154a52007a8905eaa47106.\n\nHonesty boundaries 1-5 are stated in the EMITTED header, including boundary 3 (caller fields pass through unvalidated — the daemon decoder is the single authority; client-side re-validation would be a competing validator, and contracts' guards are module-private) and boundary 4 (digest cannot see envelope-shape drift). Boundary-4 compensation is emitted as COMMAND_ENVELOPE_KEYS/QUERY_ENVELOPE_KEYS with `satisfies readonly (keyof Runtime*Envelope)[]` plus AssertNever<Exclude<keyof Envelope, keys[number]>> exported types — extra key fails the satisfies, missing key fails the AssertNever.\n\nGoldens filled by the intended ritual (generate, review diff, update): file sha256 047871eceb8d7a073df2bbc05d56072587303f43eef62385b7b7b8afa1e9831b.\n\nResolved the step-2 open item: vitest DOES resolve the NodeNext-style \"../generator/generate.js\" and \"./generated/generated-client.js\" specifiers to their .ts files — no .js shim needed, none added. grep for Date.now|Math.random|process.env|os.EOL across generator + generated file: 0 hits. Generator is 332 lines: over the 250 target, under the 400 hard split bar — ~150 of those lines are the emitted static preamble (a data template), not control flow; splitting it out would either need a committed .js shim (the exact ERR_MODULE_NOT_FOUND hazard the single-file decision avoids) or an 11th file over the plan's 10-file cap.",
+      "startedAt": "2026-08-07T19:40:44.766Z",
+      "completedAt": "2026-08-07T19:43:22.085Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red then green — src/client-compat.test.ts + src/client-compat.ts (handwritten infrastructure, NOT business logic). Typed compatibility report per design 834 DistributionManifest vocabulary so the future daemon serves it without reshaping: { contractSchemaHash, apiCompatibilityRange, buildToolVersions, sourceSha?, assetDigest? } — v1 semantics: apiCompatibilityRange is the DEGENERATE EXACT-PIN (the generated contractDigest + version pins; stricter than a range, never admits incompatible; documented). createCompatGate(report | undefined): mismatch on digest, mismatch on any version pin, or MISSING report -> frozen refusal { ok: false, error } with code DISTRIBUTION_MISMATCH (verified present in the registry with transport binding) and ZERO builders exposed — 'fails closed before rendering actions' (DoD 2); match -> frozen client surface exposing the affordance-anchored builders + error table + pins. Tests: full mismatch matrix (digest flip, each version flip, absent report, malformed report -> fail closed, no builder property reachable — assert via Object.keys on the refusal), match path exposes exactly the generated surface, refusal is deep-frozen, no builder can be invoked pre-gate (type-level + runtime). src/index.ts exports ONLY: createCompatGate, report/refusal types, generated types re-export. Focused typecheck + all tests green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/client-compat.test.ts",
+        "packages/control-room-client/src/client-compat.ts",
+        "packages/control-room-client/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/control-room-client/src/client-compat.test.ts",
+        "packages/control-room-client/src/client-compat.ts"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/client-compat.ts",
+        "packages/control-room-client/src/client-compat.test.ts",
+        "packages/control-room-client/src/index.ts"
+      ],
+      "note": "RED then GREEN. RED: \"Cannot find module './client-compat.js'\". GREEN: focused typecheck exit 0; `pnpm --filter @moe/control-room-client test` -> exit 0, \"Test Files 3 passed (3) / Tests 25 passed (25)\".\n\nsrc/client-compat.ts (160 lines) — DistributionCompatibilityReport in design-834 vocabulary {contractSchemaHash, apiCompatibilityRange, buildToolVersions, sourceSha?, assetDigest?}. apiCompatibilityRange is the documented DEGENERATE EXACT-PIN (three exact version strings, never a span): strictly stricter than a range, so it can refuse a compatible build but can never admit an incompatible one. createCompatGate takes `unknown`, not the typed report — the manifest crosses a trust boundary, so missing / non-object / array / missing key / EXTRA key / non-string buildToolVersions value / non-object or extra-key range / empty sourceSha / non-string assetDigest / digest drift / any single version-pin drift all resolve to the same refusal. Match -> frozen surface {commands, errors, pins, queries, telemetryKinds}; the builders are reachable ONLY through it (index.ts exports createCompatGate as the sole VALUE, everything else type-only — asserted at runtime by Object.keys(packageRoot) === [\"createCompatGate\"]).\n\nDESIGN CORRECTION vs the plan (the plan said the refusal should carry a DISTRIBUTION_MISMATCH RuntimeError from createRuntimeError). That is not achievable honestly, and the test caught it: contracts' runtime-error-factory sourceAccepted() requires a lifecycle `source` for any code whose row declares non-empty validSources, and DISTRIBUTION_MISMATCH declares validSources:[\"PROJECT\"]. Omitting it silently downgrades to UNKNOWN_ERROR (INTERNAL_UNKNOWN / 500 / -32603) — no throw. Supplying a PROJECT state the client cannot observe would invent daemon truth, and a RuntimeError also carries truthClass DAEMON_VERIFIED, which a client-side comparison has not earned. Replaced with a local CompatRefusalError {code:\"DISTRIBUTION_MISMATCH\", retryability, recoveryCategory, transport, truthClass:\"OBSERVED\"} whose retryability/recoveryCategory/transport are projected verbatim from GENERATED_ERROR_TABLE[\"DISTRIBUTION_MISMATCH\"] (facts about the CODE, still registry-sourced: NEVER / HUMAN_DECISION / UNPROCESSABLE 422 / -32007, all asserted) and whose truthClass is the honest OBSERVED. Rationale is documented on the type. The stable reason code and the fail-closed behaviour the DoD asks for are unchanged. Recorded as mem:gotcha-create-runtime-error-requires-source since it will bite any edge/adapter code.\n\nFail-closed evidence beyond the mismatch matrix: refusal has exactly keys [\"error\",\"ok\"], prototype is Object.prototype, and \"client\"/\"commands\"/\"queries\"/\"errors\"/\"pins\" are all absent via the `in` operator (prototype-walk safe); refusal and its error are frozen; all refusal paths return ONE shared frozen object (identity asserted with toBe), mirroring the EMPTY_NEXT_ALLOWED_COMMANDS no-authority-identity pattern in contracts. LOC: client-compat.ts 160, index.ts 21 — both well under the 250 target.",
+      "startedAt": "2026-08-07T19:43:56.393Z",
+      "completedAt": "2026-08-07T19:46:45.033Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate (single concentrated step). (1) `wc -l` — handwritten modules (generate.ts, client-compat.ts, index.ts) <=400 hard (target 250); generated-client.ts exempt (generated; cite CONTRIBUTING). (2) Fresh `pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test\", exitCode: 0, outputTail }. (3) Regeneration ritual proof: `pnpm --filter @moe/control-room-client generate` then `git status --porcelain -- packages/control-room-client/src/generated` -> EMPTY (clean diff, DoD 3, via raw-node execution path — also proves the strip-types import chain works outside vitest). (4) Repo gate `pnpm typecheck && pnpm test` with foreign-work attribution. (5) grep generator+src for Date.now|Math.random|process\\.env|os.EOL -> zero (determinism); grep generated file for 0x0D via the test. (6) Run focused suite twice — identical.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/generator/generate.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/client-compat.ts"
+      ],
+      "note": "Verification gate — every item run fresh in the foreground.\n\n(1) LOC. Handwritten: generator/generate.ts 332, src/client-compat.ts 160, src/index.ts 21 — all under the 400 hard split bar (generate.ts is over the 250 target; ~150 of its lines are the emitted static preamble, a data template, not control flow — splitting it needs either a committed .js shim, the ERR_MODULE_NOT_FOUND hazard the single-file decision exists to avoid, or an 11th file over the plan's 10-file cap). Tests: 187 + 124 + 62. src/generated/generated-client.ts 881 — GENERATED, exempt per CONTRIBUTING.md \"Generated files are exempt\" (new-package precedent: @moe/skills, +1412 LOC approved).\n\n(2) Focused gate, fresh: `pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test` -> exit 0, \"Test Files 3 passed (3) / Tests 25 passed (25)\".\n\n(3) Regeneration ritual, via the raw-node --experimental-strip-types path (so the strip-types import chain is proven outside vitest too): sha256 of the generated file BEFORE and AFTER `pnpm --filter @moe/control-room-client generate` are identical — 047871eceb8d7a073df2bbc05d56072587303f43eef62385b7b7b8afa1e9831b both times. Regeneration is a working-tree no-op (DoD 3). NOTE: `git status --porcelain -- packages/control-room-client/src/generated` currently reports \"??\" only because the package is not committed yet; the empty-status form of this proof is re-run after the step-6 commit.\n\n(4) Repo gate, both green, no foreign work disturbed: `pnpm typecheck` exit 0 (all 11 workspace projects Done, including apps/daemon, core, mcp, runner, scheduler, skills, store, testkit); `pnpm test` exit 0, \"Test Files 81 passed (81) / Tests 1064 passed | 1 skipped (1065)\". Also ran the suite the root gate does NOT discover, per AGENTS.md: `pnpm --filter @moe/daemon test` exit 0, 28/28. Zero failures anywhere, so there is no red to attribute to concurrent workers.\n\n(5) Determinism greps: `Date.now|Math.random|process.env|os.EOL|new Date` across generator/ AND src/ -> ZERO hits. CR-byte scan: 0 occurrences of 0x0D in generated-client.ts, client-compat.ts, generate.ts (also asserted at runtime by the determinism test against both emitted and committed bytes).\n\n(6) Focused suite run twice back to back: identical, 25/25 both runs (durations 262ms / 263ms).\n\nWorking tree under the owned path contains only the 9 intended files (git status shows the single untracked package dir) — no scratch, probe, or evidence artifacts.",
+      "startedAt": "2026-08-07T19:46:58.539Z",
+      "completedAt": "2026-08-07T19:47:56.936Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) identity-minting hole — attempt to construct a command envelope WITHOUT a NextAllowedCommand using only the public surface; must be impossible (no raw builder exported, types reject); (b) gate bypass — attempt to reach a builder from the refusal object or via prototype walk; (c) digest blindness honesty — confirm the emitted header documents the envelope-shape blind spot + the satisfies-assertion compensation; flip one key in the hardcoded list and confirm typecheck breaks, restore; (d) stale-generated detection — temporarily imagine a kind added to contracts: coverage test would fail (set inequality) AND golden digest would fail; verify both assertions exist; (e) no invented event vocabulary — grep generated file for interface/type declarations of stream frames -> only re-exports + deferral comment; (f) no scratch files (auto-commit sweep). LOCKFILE PROTOCOL (shared mutable state — mem:gotcha-shared-pnpm-lock-ownership): run pnpm install fresh; inspect `git diff -- pnpm-lock.yaml`; if it contains ONLY this package's importer + resolution entries, include pnpm-lock.yaml in the commit pathspec; if foreign entries are present, commit source paths only, LEAVE the lock dirty for its owners, and record the deviation in the step note. Commit: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/control-room-client/package.json packages/control-room-client/tsconfig.json packages/control-room-client/generator/generate.ts packages/control-room-client/src/generated/generated-client.ts packages/control-room-client/src/client-compat.ts packages/control-room-client/src/index.ts packages/control-room-client/src/generated-coverage.test.ts packages/control-room-client/src/generator-determinism.test.ts packages/control-room-client/src/client-compat.test.ts [pnpm-lock.yaml per protocol]`; `git show --stat` lists exactly the committed set.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/client-compat.ts",
+        "packages/control-room-client/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/generator/generate.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts",
+        "packages/control-room-client/src/client-compat.ts"
+      ],
+      "note": "Adversarial self-review run in full, then committed by explicit pathspec.\n\n(a) IDENTITY-MINTING — one honesty fix landed. No public path mints identity: index.ts exports exactly one value (createCompatGate, asserted at runtime), the generated module is not on the package exports map (only \".\" -> ./src/index.ts, so a deep import is blocked), every builder copies identity from its affordance, and no raw-field builder exists. BUT the emitted header over-claimed \"can never mint command identity\". NextAllowedCommand is a STRUCTURAL type, so TypeScript cannot prove an affordance came from buildNextAllowedCommands — a caller can hand-author one, and gets an envelope the daemon then refuses on its own checks. Rewrote boundary 1 to state that residual plainly (\"this layer removes the mint path; it is not the authority\"). Considered and REJECTED a runtime Object.isFrozen(affordance) heuristic: an attacker can freeze, and it would falsely refuse legitimately structuredClone'd affordances crossing a worker/postMessage boundary — a weak check dressed as a guarantee is worse than an accurate sentence.\n\n(b) GATE BYPASS — no route from a refusal to a builder: keys are exactly [\"error\",\"ok\"], prototype is Object.prototype, `in` checks for client/commands/queries/errors/pins all false, object frozen, and CLIENT_SURFACE/ADMITTED are module-private. Covered by tests.\n\n(c) DIGEST BLINDNESS — demonstrated live, not asserted. Flipped \"graphRevisionHash\" to \"graphRevisionHashX\" in the generated file: typecheck failed with BOTH tripwires, TS1360 on the `satisfies readonly (keyof RuntimeCommandEnvelope)[]` (bogus/extra key) and TS2344 \"Type '\"graphRevisionHash\"' does not satisfy the constraint 'never'\" on the AssertNever exclusion (missing key). Restored by regenerating; hash back to the golden.\n\n(d) STALE-GENERATED DETECTION — three independent assertions exist and one has already been observed firing: the golden file-hash test failed loudly on the placeholder in step 3 and again on the header edit here; contractDigest is computed over commandKinds/queryKinds/errors/etc., so a registry change moves it; and the coverage tests are set-EQUALITY (zero missing, zero extra) against the live registry, so an added kind fails independently of both hashes. Not simulated by editing contracts — that is a foreign owned path.\n\n(e) NO INVENTED EVENT VOCABULARY — grep for interface/type/const declarations matching Event|Frame|Stream|Cursor in the generated file: zero. Telemetry is a bare re-export plus the boundary-5 deferral comment.\n\n(f) NO SCRATCH FILES — determinism tests emit only into mkdtempSync(os.tmpdir()) and rmSync in finally; nothing transient under the repo root.\n\nAdditional checklist findings, both judged theoretical and left as-is rather than silently \"fixed\": (i) a command builder called with a missing/garbage `caller` throws instead of refusing — deliberate, the affordance is what crosses the trust boundary and gets the runtime guard, while caller fields are boundary-3 pass-through supplied by the local UI; (ii) createCompatGate on a hostile Proxy whose getters throw would propagate rather than refuse — the manifest arrives as parsed JSON; note that JSON-parsed prototype-pollution shapes DO fail closed, since an own \"__proto__\" key is rejected by the exact-key check; (iii) writeFileSync in the emitter is not atomic under two concurrent generate runs — developer command, and the tests use unique tmpdirs, so no test-level race.\n\nAlso documented that buildToolVersions/sourceSha/assetDigest are shape-checked only and never gate admission: this client holds no expected value to compare them against, and inventing one would be a fabricated pin.\n\nRE-VERIFICATION after the header + doc edits (goldens updated by the intended ritual; contractDigest unchanged, as expected, since the header is not part of the enumerable surface; file golden now ad292bf487677731431892d3b5af7a09980f0a9cfe480132479b50aa964d741c): focused typecheck exit 0; focused tests 25/25 exit 0; `pnpm typecheck` exit 0; `pnpm test` 81 files / 1064 passed | 1 skipped; regeneration still a byte no-op.\n\nLOCKFILE PROTOCOL — fresh `pnpm install`, then `git diff -- pnpm-lock.yaml`: exactly 6 insertions, a single importer block for packages/control-room-client with '@moe/contracts' link:../contracts. NO foreign entries, so the conditional resolved to INCLUDE pnpm-lock.yaml in the pathspec. (A system collision warning against another task on this file existed at session start; it did not materialise in the diff.)\n\nCOMMIT 9583ab6, explicit pathspec only, index verified empty beforehand. `git show --stat` lists exactly the 10 intended paths, 1814 insertions, nothing else. Post-commit DoD-3 proof re-run in its strong form: `pnpm generate` then `git status --porcelain -- packages/control-room-client/src/generated` -> EMPTY. Foreign untracked work (packages/testkit/src/schedule/schedule-universe-tables.ts, another worker's in-flight file) left untouched.",
+      "startedAt": "2026-08-07T19:47:59.569Z",
+      "completedAt": "2026-08-07T19:51:09.731Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor batch 2. CLEAN — no unmet hard dependencies. Owns packages/control-room-client/** plus generated-source tooling. New package, so it owns its scaffold and pnpm-lock importer. Unlocks four control-room surfaces in epic-923660dc.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +151,73 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:18.865Z",
-  "updatedAt": "2026-08-07T11:55:18.865Z"
+  "updatedAt": "2026-08-07T20:34:06.357Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T19:23:42.322Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T20:34:06.357Z",
+    "wallClockMs": 4224035
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-2edeee3c",
+    "qa-813cd351"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T19:33:31.937Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Raw-field command builders ((fields)->envelope) — REJECTED as the core BLOCKER: the UI would mint commandId/expectedVersion/targetAggregateId, violating design 90 (UI actions come ONLY from nextAllowedCommands) and spec CR-CMD-001; builders are AFFORDANCE-ANCHORED — identity fields copied from a daemon-supplied NextAllowedCommand (contracts runtime-affordance.ts:18-28 carries exactly the needed fields), caller supplies only payload/correlation/credential/digest. (2) Separate JSON/IDL schema artifact — REJECTED: design 982 prescribes no format; a parallel schema file would be a second competing truth (design 82/360); the landed frozen TS registry IS the canonical source and its canonical serialization materializes design 834's contract-schema hash. (3) Five generated output files — REJECTED (14-17 total files > 10-file hard cap): ONE generated-client.ts (telemetry is a single kind; a standalone events file would be near-empty); single-file generator with import.meta.main CLI guard (multi-file generator needs .js shims for raw-node or dies ERR_MODULE_NOT_FOUND invisible to tsc AND vitest). (4) Inventing an event-frame vocabulary — REJECTED: no domain-event type exists in contracts; spec §13-D3 (cursor semantics) is explicitly TBD; generated events section is re-export + deferral comment only. (5) Client-invented compat report shape — replaced with design-834 DistributionManifest vocabulary (contractSchemaHash, apiCompatibilityRange as degenerate exact-pin, buildToolVersions, optional sourceSha/assetDigest) with DISTRIBUTION_MISMATCH refusal. (6) 'UI implementation waits' epic-note conflict — resolved decisively NO conflict: design 100-104/982/834 place the generated client as a distinct layer below the UI; the affordance types it consumes already landed. Verified by 2-agent workflow; 3 BLOCKERs + 4 RISKs folded in.",
+    "codebaseInsights": "Empirically confirmed: node --experimental-strip-types imports @moe/contracts from a sibling package (46 exports / 92 command kinds / 16 query kinds / 38 error codes) — contracts' committed .js shim set is complete; the generator's own helpers are the shim hazard, hence single-file. Envelope key arrays (COMMAND_REQUIRED/OPTIONAL etc.) are MODULE-PRIVATE in runtime-envelope.ts:56-67 — not exported, so contractDigest hashes only the runtime-enumerable surface and CANNOT see envelope-shape drift; compensation = type-level exhaustive-keys satisfies assertion breaking typecheck on interface change. RuntimeCommandEnvelope/RuntimeQueryEnvelope interfaces ARE exported — builders type against them; payload is opaque JsonObject (no per-kind schemas exist; NextAllowedCommand.inputSchemaVersion is an opaque daemon string). tsconfig trap: mirrored rootDir:src would silently UNTYPECHECK a top-level generator/ dir — rootDir '.', include src+generator. Determinism oracle: tmpdir byte-compare vs committed files, never git-diff (wrapper auto-commit moves HEAD mid-session and sweeps repo-tree strays); .gitattributes forces LF (* text=auto eol=lf) — emitter hardcodes \\n, test asserts zero 0x0D. Lockfile is shared mutable state (skills-task precedent: foreign importer present at commit time; partial-staging impossible) — conditional commit protocol in step 6. No package-content boundary scanner exists beyond instruction-contract (AGENTS/CLAUDE only) — keep task-/epic-/chan- id strings out of committed package docs anyway. QA >400-net-LOC bar: cite CONTRIBUTING generated-exemption + skills precedent.",
+    "risks": "(1) Identity-minting is the security-critical hole: any public path to a command envelope without a NextAllowedCommand breaks the no-privileged-mutation-path rule — step 6 red-teams it type- and runtime-level. (2) Digest blind spot: envelope-shape drift invisible to contractDigest — the satisfies assertion is the loud tripwire; document in the emitted header or QA reads the digest as stronger than it is. (3) Golden-fixture churn: EVERY contracts registry change breaks goldens by design — that is the contract-change ritual, not flakiness; completion note must say so. (4) Generator raw-node path only proven for single-file + complete contracts shims; adding a helper file without a shim fails ONLY at pnpm generate (not tsc, not vitest) — step 5's regeneration ritual is the canary. (5) Event vocabulary temptation: inventing frame types would compete with the one source — re-export + deferral only. (6) Shared tree: lockfile conditional protocol; attribute red repo gates to foreign in-flight work first.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-affordance.ts",
+      "packages/contracts/src/runtime/runtime-envelope.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/contracts/src/index.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "CONTRIBUTING.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-07T19:33:33.969Z",
+  "workStartedAt": "2026-08-07T19:35:05.785Z",
+  "reviewStartedAt": "2026-08-07T19:52:12.734Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/control-room-client/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  3 passed (3)\n      Tests  25 passed (25)\n   Start at  22:51:16\n   Duration  263ms (transform 240ms, setup 0ms, import 327ms, tests 65ms, environment 0ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-07T19:52:12.734Z"
+  },
+  "filesModified": [
+    "packages/control-room-client/package.json",
+    "packages/control-room-client/tsconfig.json",
+    "packages/control-room-client/src/index.ts",
+    "pnpm-lock.yaml",
+    "packages/control-room-client/src/generated-coverage.test.ts",
+    "packages/control-room-client/src/generator-determinism.test.ts",
+    "packages/control-room-client/generator/generate.ts",
+    "packages/control-room-client/src/generated/generated-client.ts",
+    "packages/control-room-client/src/client-compat.ts",
+    "packages/control-room-client/src/client-compat.test.ts"
+  ],
+  "completedAt": "2026-08-07T20:34:06.357Z",
+  "reviewCompletedAt": "2026-08-07T20:34:06.357Z",
+  "reviewSummary": "APPROVED. Gates re-run in foreground by QA.\n\ntask.verification, twice: `pnpm --filter @moe/control-room-client typecheck` exit 0; `... test` exit 0, 3 files / 25 tests, identical both runs.\n\nDoD1: counted the committed generated file against the LIVE registry myself — 92 command builders / 16 query builders / 38 error rows vs RUNTIME_COMMAND_KINDS 92, RUNTIME_QUERY_KINDS 16, RUNTIME_ERROR_CODES 38. Exact, zero missing/extra. Rows deep-equal lookupRuntimeError. No event vocabulary invented (none exists in contracts; deferral in emitted header).\n\nDoD2 fails closed structurally: index.ts exports one value (createCompatGate) and package.json exports has only \".\", so no deep-import path to the generated module. Refusal carries only {error, ok}, prototype Object.prototype, deep-frozen, zero builders reachable. Matrix: null/string/array/{}/missing key/extra key/bad range/each of 3 pins flipped/digest flipped/bad buildToolVersions/empty sourceSha.\n\nDoD3: ran `generate` myself, then `git status --porcelain -- packages/control-room-client` EMPTY. Determinism test emits twice to os.tmpdir(), byte-compares to each other and to committed output, asserts zero 0x0D. grep Date.now|Math.random|process.env|new Date: zero hits.\n\nDoD4: green twice; assertions mutation-resistant (sorted set equality, sha256 golden, byte-compare oracle).\n\nRepo gate RED but entirely FOREIGN: `?? packages/mcp/src/http/` untracked, a concurrent worker's TDD-red state (test present, impl absent, TS2307). No overlap with owned paths. Rest green: 89 files, 1220 passed / 1 skipped.\n\nSize +1814/10 files, not oversized: 886 generated (CONTRIBUTING.md:7 \"Generated files are exempt\"), 373 tests, 32 config/lock, 523 handwritten. All modules under the 400-line rail (337/165/21).\n\nRails: lock diff is exactly this package's importer; owned paths only; no scratch files. Grepped every generated export — no raw-field builder, so the client cannot mint command identity."
 }
