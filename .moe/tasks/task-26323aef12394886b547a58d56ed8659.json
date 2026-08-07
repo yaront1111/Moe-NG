@@ -19,7 +19,7 @@
     {
       "stepId": "step-1",
       "description": "Scaffold the dependency-minimal @moe/daemon workspace package with root-only exports, strict NodeNext typechecking, and workspace dependencies on @moe/contracts and @moe/scheduler. Configure its focused test script to run Vitest with apps/daemon as the root so tests under apps/** are discovered without changing the repository-wide Vitest config. Start src/index.ts as the package root, update only the apps/daemon pnpm-lock importer, and expose no internal subpath, HTTP server, persistence, authentication, command, or execution dependency.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "apps/daemon/tsconfig.json",
@@ -31,46 +31,74 @@
         "apps/daemon/tsconfig.json",
         "apps/daemon/src/index.ts"
       ],
-      "startedAt": "2026-08-07T12:00:04.333Z"
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/tsconfig.json",
+        "apps/daemon/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Scaffolded root-only @moe/daemon with strict NodeNext config, exactly @moe/contracts/@moe/scheduler workspace dependencies, app-root Vitest script, empty package entrypoint, and a lockfile-only apps/daemon importer. `pnpm --filter @moe/daemon typecheck` exits 0.",
+      "startedAt": "2026-08-07T12:00:04.333Z",
+      "completedAt": "2026-08-07T12:00:48.601Z"
     },
     {
       "stepId": "step-2",
       "description": "Write RED contract tests before implementation for the selected public function evaluateGraphPreviewRequestBytes(input). Pin the exact decoded request to { schemaVersion: \"moe-graph-preview-request/1\", snapshot, options? }: require schemaVersion and snapshot; reject null/array/scalar envelopes, wrong versions, missing fields, and every extra top-level key as REQUEST_INVALID with one exact stable error code/message. Prove malformed UTF-8/JSON, duplicate keys, non-byte inputs, and MAX_JSON_BODY_BYTES+1 are INPUT_REJECTED while preserving the bounded decoder code/message. Prove valid envelopes are REQUEST_EVALUATED and carry the scheduler result unchanged, including ANALYZED plus malformed graph/options/policy/frontier outcomes, so domain-invalid content is never mislabeled as an envelope failure.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/graph-preview-request.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/graph-preview-request.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/src/graph-preview-request.test.ts"
+      ],
+      "note": "Added 21 RED contract cases covering exact top-level request validation, all required bounded decoder failures with literal codes/messages, and unchanged scheduler ANALYZED/GRAPH_INVALID/OPTIONS_INVALID/POLICY_INVALID/FRONTIER_INVALID results. RED evidence: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src` discovered the app test and failed all 21 because the runtime export is intentionally absent. Updated the focused script to use package.json as a no-test-config Vite config, preventing the repository include glob from hiding apps/** tests.",
+      "startedAt": "2026-08-07T12:00:52.827Z",
+      "completedAt": "2026-08-07T12:03:21.120Z"
     },
     {
       "stepId": "step-3",
       "description": "Extend the same focused test file with mutation-resistant envelope and package-boundary assertions: every branch has exactly ok, outcome, advisoryOnly:true, authority:\"NONE\", and its branch payload; all envelopes and nested error/preview structures are frozen; repeated equivalent bytes serialize identically; no result exposes nextAllowedCommands, mutation, approval, activation, provider, or execution affordances. Add a shell-free child-process smoke using process.execPath, --experimental-strip-types, and --input-type=module from the package root to import @moe/daemon and evaluate a request, then separately assert @moe/daemon/src/index.ts fails with ERR_PACKAGE_PATH_NOT_EXPORTED. Keep argv as an array and derive cwd with URL/path APIs for Windows, macOS, and Linux parity.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/graph-preview-request.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/graph-preview-request.test.ts"
+      ],
+      "note": "Extended the focused RED suite to 27 cases with exact outer-key sets, recursive freeze checks, canonical serialization across equivalent key order, recursive forbidden-affordance checks, sole runtime export assertion, shell-free package-root Node strip-types smoke, and sealed subpath proof using argv arrays and URL-derived cwd. Fresh RED: 26 failed for the missing evaluator and 1 package-export sealing check already passed.",
+      "startedAt": "2026-08-07T12:03:27.675Z",
+      "completedAt": "2026-08-07T12:04:58.340Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the minimum public ingress and readonly result types in one focused source under 250 lines. Call decodeBoundedJsonBytes before inspecting anything; on failure freeze an INPUT_REJECTED outer envelope around the existing frozen decoder error. For decoded values, accept only a null-prototype JSON object with the exact top-level key set, exact schemaVersion literal, required own snapshot, and optional own options; return a shared frozen REQUEST_INVALID envelope for every envelope defect. For a valid request, call previewGraphSnapshot(snapshot, options) exactly once, freeze a REQUEST_EVALUATED outer envelope around its unchanged frozen result, and export only evaluateGraphPreviewRequestBytes at runtime. Document in concise JSDoc that this is zero-authority advisory composition, not a command/admission boundary; add no broader docs because task ownership is limited to apps/daemon and the lock importer.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts"
+      ],
+      "note": "Implemented a 113-line typed root entrypoint. Decode always precedes inspection; decoder failures preserve the original frozen error, envelope defects share one frozen stable REQUEST_INVALID result, and valid exact null-prototype requests invoke previewGraphSnapshot once and retain its frozen result. Only evaluateGraphPreviewRequestBytes is a runtime export; result interfaces/types are erased. Focused typecheck and all 27 tests pass.",
+      "startedAt": "2026-08-07T12:05:01.740Z",
+      "completedAt": "2026-08-07T12:06:10.461Z"
     },
     {
       "stepId": "step-5",
       "description": "Perform the final adversarial diff review before evidence: challenge empty, huge, malformed, duplicate-key, wrong-version, missing/extra-field, null snapshot, and malformed options inputs; verify decode precedes schema reads, each valid request invokes the scheduler exactly once, nested failures retain their original stable codes, all branches remain frozen/deterministic/authority NONE, and no internal subpath or extra runtime export is reachable. Confirm src/index.ts is under 250 physical lines, the package has only the two intended workspace dependencies, tests use no shell-specific quoting, and the lockfile diff contains only the apps/daemon importer. Inspect/stage only these five owned paths and correct any finding before verification.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/package.json",
         "apps/daemon/tsconfig.json",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/graph-preview-request.test.ts",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "startedAt": "2026-08-07T12:06:15.119Z"
     },
     {
       "stepId": "step-6",
@@ -98,17 +126,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.444Z",
-  "updatedAt": "2026-08-07T12:00:04.333Z",
+  "updatedAt": "2026-08-07T12:06:15.119Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T11:52:45.223Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
     "worker-05d10803"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T11:59:02.223Z",
   "planningNotes": {

@@ -3,9 +3,8 @@ project_doc_fallback_filenames = ["CLAUDE.md", ".codex/agent-instructions.md"]
 model_instructions_file = "agent-instructions.md"
 model_reasoning_effort = "xhigh"
 developer_instructions = """
-You are a architect agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly.
+You are a worker agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly.
 """
-
 [mcp_servers.moe]
 command = "node"
 args = ["C:/Users/Yaron/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/proxy/index.js"]
@@ -13,7 +12,6 @@ startup_timeout_sec = 120
 
 [mcp_servers.moe.env]
 MOE_PROJECT_PATH = "D:/projexts/moe-next"
-
 [mcp_servers.serena]
 command = "C:/Users/Yaron/.local/bin/serena.exe"
 args = ["start-mcp-server", "--context", "codex", "--project", "D:/projexts/moe-next", "--enable-web-dashboard", "false", "--enable-gui-log-window", "false"]
