@@ -1,0 +1,96 @@
+{
+  "moeGeneratedSha": "34ceccc7c8f6",
+  "version": 1,
+  "skills": [
+    {
+      "name": "moe-epic-breakdown",
+      "description": "Turn an epic into an ordered set of tasks before planning any of them: where to cut seams, sizing, ordering, per-task DoD, and the mandatory final integration-and-hardening task.",
+      "role": "architect",
+      "triggeredBy": ["epic with no tasks yet", "before moe.create_task", "re-slicing an epic's remaining work"]
+    },
+    {
+      "name": "moe-planning",
+      "description": "8-phase plan template for moe.submit_plan (plan → explore → tests → minimum impl → verify → document → adversarial review → QA loop), with skip rules for trivial work and the verification budget: gate once at the end of a task, at full scope only on the epic's final task.",
+      "role": "architect",
+      "triggeredBy": ["moe.get_context (PLANNING)", "before moe.submit_plan"]
+    },
+    {
+      "name": "explore-before-assume",
+      "description": "Verify every symbol (function, model, attribute, constant) actually exists before referencing it. Eliminates hallucinated-API bugs.",
+      "role": "architect|worker",
+      "triggeredBy": ["architect during planning", "worker on first start_step in unfamiliar code"]
+    },
+    {
+      "name": "writing-plans",
+      "description": "Vendored from superpowers. Multi-step plan structure with checkpoints; output format aligns with moe.submit_plan step lists.",
+      "role": "architect",
+      "triggeredBy": ["before moe.submit_plan"]
+    },
+    {
+      "name": "test-driven-development",
+      "description": "Vendored from superpowers. RED-GREEN-REFACTOR with mutation-resistant assertions (assertEquals, not assert).",
+      "role": "worker",
+      "triggeredBy": ["start_step on test-touching steps"]
+    },
+    {
+      "name": "verification-before-completion",
+      "description": "Vendored from superpowers. Forces running verification commands and confirming output before any complete claim. Evidence before assertions.",
+      "role": "worker",
+      "triggeredBy": ["before moe.complete_task"]
+    },
+    {
+      "name": "systematic-debugging",
+      "description": "Vendored from superpowers. 4-phase root-cause method (root-cause-tracing, defense-in-depth, condition-based-waiting). Use on bugs and test failures, before proposing fixes.",
+      "role": "worker",
+      "triggeredBy": ["set_task_status BLOCKED", "repeated step failure", "qa_reject for a bug"]
+    },
+    {
+      "name": "adversarial-self-review",
+      "description": "Read your own diff as an attacker, not an author. Concurrency / null / embarrassment checklist before final complete_step or complete_task.",
+      "role": "worker",
+      "triggeredBy": ["final step before complete_step", "before complete_task"]
+    },
+    {
+      "name": "regression-check",
+      "description": "Run the test suite the plan named before complete_task — narrow for a mid-epic task, full for the epic's final task. Goal: zero regressions, evidence-based summary.",
+      "role": "worker",
+      "triggeredBy": ["before complete_task"]
+    },
+    {
+      "name": "receiving-code-review",
+      "description": "Vendored from superpowers. Adversarial response to QA feedback — verify, don't capitulate; don't perform agreement.",
+      "role": "worker",
+      "triggeredBy": ["after moe.qa_reject (reopenCount > 0)"]
+    },
+    {
+      "name": "moe-qa-loop",
+      "description": "Structured QA review flow: read plan + diff, verify DoD coverage, decide qa_approve vs qa_reject with actionable rejectionDetails.",
+      "role": "qa",
+      "triggeredBy": ["claim a task in REVIEW status"]
+    },
+    {
+      "name": "using-git-worktrees",
+      "description": "Vendored from superpowers. Isolated workspace per feature so parallel workers don't step on each other's .moe/ state.",
+      "role": "architect|worker",
+      "triggeredBy": ["manual invoke"]
+    },
+    {
+      "name": "cpp",
+      "description": "Modern C++ (C++11+) patterns: smart pointers, RAII, move semantics, templates/concepts, STL, concurrency, error handling, plus a CMake project template. Domain skill — load when the task touches C++.",
+      "role": "architect|worker|qa",
+      "triggeredBy": ["editing or reviewing C++ files (.cpp/.cc/.cxx/.h/.hpp)", "CMake build work", "manual invoke"]
+    },
+    {
+      "name": "system-design",
+      "description": "Scalability, availability, and distributed-systems design: load balancing, caching, sharding, replication, CAP trade-offs, microservices. Domain skill — load for architecture decisions about scale or availability.",
+      "role": "architect|worker|qa",
+      "triggeredBy": ["designing for scale or availability", "distributed-systems architecture decisions", "manual invoke"]
+    },
+    {
+      "name": "ros2-skill",
+      "description": "Control and monitor ROS 2 robots via rclpy CLI scripts: topics, services, actions, parameters, nodes, lifecycle, ros2_control, Nav2 navigation, diagnostics, TF, bags, logs. Domain skill — load for any ROS 2 robot operation.",
+      "role": "architect|worker|qa",
+      "triggeredBy": ["any ROS 2 robot task", "topics/services/actions/Nav2/ros2_control work", "manual invoke"]
+    }
+  ]
+}

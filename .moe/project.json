@@ -1,0 +1,30 @@
+{
+  "id": "proj-dd087108",
+  "schemaVersion": 6,
+  "name": "moe-next",
+  "rootPath": "D:/projexts/moe-next",
+  "globalRails": {
+    "techStack": [],
+    "forbiddenPatterns": [],
+    "requiredPatterns": [],
+    "formatting": "",
+    "testing": "",
+    "customRules": []
+  },
+  "settings": {
+    "approvalMode": "CONTROL",
+    "speedModeDelayMs": 2000,
+    "autoCreateBranch": true,
+    "branchPattern": "moe/{epicId}/{taskId}",
+    "commitPattern": "feat({epicId}): {taskTitle}",
+    "agentCommand": "claude",
+    "enableAgentTeams": false,
+    "columnLimits": {},
+    "chatEnabled": true,
+    "chatMaxAgentHops": 4,
+    "staleWorkerTimeoutMs": 1800000,
+    "reviewStaleTimeoutMs": 1800000
+  },
+  "createdAt": "2026-08-07T10:32:37.002284400Z",
+  "updatedAt": "2026-08-07T10:32:37.002284400Z"
+}

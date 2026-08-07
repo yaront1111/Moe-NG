@@ -1,0 +1,6 @@
+# Moe runtime files (not shared)
+daemon.json
+daemon.lock
+workers/
+teams/
+proposals/
