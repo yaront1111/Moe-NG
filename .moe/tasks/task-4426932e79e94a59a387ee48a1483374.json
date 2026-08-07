@@ -1,0 +1,32 @@
+{
+  "id": "task-4426932e79e94a59a387ee48a1483374",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Phase-zero testkit decomposition",
+  "description": "Objective: split oversized Phase-zero evidence capture and verifier modules by I/O port, canonicalization, and verification responsibility. Deliverable: smaller testkit production modules with identical evidence hashes and verdicts. NOT in scope: changing pinned evidence contracts or confirmatory benchmark data. Hard dependencies: none. Owned paths: packages/testkit/src/phase0-evidence-capture.ts, packages/testkit/src/phase0-evidence-manifest-verifier.ts, new phase0-*.ts internals, and their focused tests. Verification: pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test.",
+  "definitionOfDone": [
+    "Existing fixture hashes, PASS/FAIL/UNKNOWN verdicts, and stable errors remain unchanged.",
+    "No confirmatory BENCH corpus bytes are introduced.",
+    "Every resulting production module is under 350 lines.",
+    "The focused testkit typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.901Z",
+  "updatedAt": "2026-08-07T11:44:13.901Z"
+}

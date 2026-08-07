@@ -1,0 +1,33 @@
+{
+  "id": "task-005c9896f9724ece80b27f44789d0435",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Expansion admission protocol",
+  "description": "Objective: implement bounded expansion request, quality assessment, all-or-none refusal, exact budget preparation, and graph-level approval. Deliverable: core/scheduler expansion modules and race tests. NOT in scope: automatic approval or partial child activation. Hard dependencies: Anti-blocking admission, Fair scheduler production, Policy approval core, and Conserved budget core. Owned paths: packages/core/src/expansion/** and packages/scheduler/src/expansion/**. Verification: pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Expansion is refused unless all quality, scope, budget, capacity, and dependency preconditions pass.",
+    "Approval binds exact proposed revision and prepared resources; a changed delta requires reapproval.",
+    "No child obtains authority from a partially admitted expansion.",
+    "Focused core and scheduler tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:10.623Z",
+  "updatedAt": "2026-08-07T11:53:10.623Z"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "task-a7ba291edeb3461f9c5305bc91f0810f",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Recovery doctor console",
+  "description": "Objective: implement project health, doctor checks, reconciliation inventory, backup/RPO, and exact recovery command surfaces. Deliverable: recovery/doctor modules. NOT in scope: optimistic auto-repair or browser-executed disaster restore. Hard dependencies: Generated control-room client and Crash reconciliation services. Owned paths: apps/control-room/src/recovery/** and apps/control-room/src/doctor/**. Verification: pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "HEALTHY, DEGRADED, and UNKNOWN_TRUTH are distinct and every check exposes stable ID/evidence/affected records.",
+    "Only daemon-supplied recovery commands are actionable; uncertainty disables mutation.",
+    "Backup cursor/RPO and orphan inventory limitations are explicit.",
+    "Focused control-room tests pass."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength.",
+    "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
+    "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:55:21.262Z",
+  "updatedAt": "2026-08-07T11:55:21.262Z"
+}

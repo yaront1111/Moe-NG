@@ -1,0 +1,18 @@
+{
+  "id": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "projectId": "proj-dd087108",
+  "title": "M3 Canonical Control Room - truthful operator journeys",
+  "description": "Build the board, graph, approvals, evidence, recovery, doctor, accessibility, and J1-J6 journey surfaces from generated daemon contracts.",
+  "architectureNotes": "Matches design Phase 6 and the pinned control-room spec. Product decision 2026-08-07: apps/control-room is the canonical standalone React local application, connected to the daemon through generated authenticated HTTP/query contracts and a resumable cursor stream. IDE adapters are optional thin discover/start/open/embed-or-browser-fallback shells; they own no lifecycle, authority, state, or duplicate UI behavior. The committed control-room-model package is presentation-only and must never compute authority. UI implementation waits for durable projections and nextAllowedCommands.",
+  "epicRails": [
+    "Authoritative design: D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it in implementation tasks.",
+    "Development happens only in D:/projexts/moe-next; do not create sibling Git worktrees. Runtime workspace isolation promised by the design remains in scope.",
+    "Preserve foreign work; stage and commit only explicit owned paths. Never use git add -A, implicit push, implicit merge, reset, or stash.",
+    "Fail closed with stable reason codes; missing or unverifiable evidence stays UNKNOWN and never gains authority.",
+    "Use TDD. Keep each production source focused, target <=250 lines, and split before 400 lines. No debug, probe, scratch, or generated evidence files may remain in commits."
+  ],
+  "status": "PLANNED",
+  "order": 30,
+  "createdAt": "2026-08-07T11:41:56.131Z",
+  "updatedAt": "2026-08-07T11:54:32.579Z"
+}

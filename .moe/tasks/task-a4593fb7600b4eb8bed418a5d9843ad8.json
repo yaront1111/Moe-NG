@@ -1,0 +1,33 @@
+{
+  "id": "task-a4593fb7600b4eb8bed418a5d9843ad8",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Deterministic legacy importer",
+  "description": "Objective: import copied frozen old-Moe projects read-only with stable IDs, ordering, provenance, ambiguity classification, and atomic replay. Deliverable: packages/import modules and real-project fixtures. NOT in scope: live legacy reads, write-back, dual write, or activation. Hard dependencies: stable v1 schemas, store migrations, and artifact CAS. Owned paths: packages/import/** and tests/migration/import/**. Verification: pnpm test:migration.",
+  "definitionOfDone": [
+    "Identical source bytes produce identical imported IDs, events, database/export hashes, and counts.",
+    "Unsupported or ambiguous records are preserved with typed provenance and never activate.",
+    "Interrupted import commits wholly or not at all and legacy bytes remain unchanged.",
+    "Migration gate passes."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:15.916Z",
+  "updatedAt": "2026-08-07T11:56:15.916Z"
+}

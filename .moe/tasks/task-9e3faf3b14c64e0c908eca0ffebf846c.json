@@ -1,0 +1,32 @@
+{
+  "id": "task-9e3faf3b14c64e0c908eca0ffebf846c",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "SQLite schema decomposition",
+  "description": "Objective: split SQLite schema management by manifest, migration, integrity, and bootstrap responsibility. Deliverable: focused internal schema modules preserving exact database behavior. NOT in scope: a schema version change or new table. Hard dependencies: none. Owned paths: packages/store/src/sqlite-schema.ts, new sqlite-schema-*.ts, and schema/bootstrap tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Schema manifest, migration ordering, integrity checks, and bootstrap ambiguity outcomes are unchanged.",
+    "No database version, table, index, pragma, or stable error changes.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.444Z",
+  "updatedAt": "2026-08-07T11:44:13.444Z"
+}

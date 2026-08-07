@@ -1,0 +1,33 @@
+{
+  "id": "task-fa96b81c013a49e1b5adadf5662a086c",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Readiness explanation engine",
+  "description": "Objective: turn validated graph, dependency truth, input state, policy, budget, leases, and holds into distinct logical-ready, admission-ready, and dispatchable projections with explanations. Deliverable: scheduler readiness modules over the structural kernel. NOT in scope: queue selection or command application. Hard dependencies: Anti-blocking admission and Predecessor input materializer. Owned paths: packages/scheduler/src/readiness/**. Verification: pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "The three readiness layers never collapse and non-execution nodes receive no execution authority.",
+    "Every blocked or idle node exposes typed reasons and provenance.",
+    "Unknown facts prevent stronger readiness without hiding structurally ready work.",
+    "Focused scheduler tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:10.026Z",
+  "updatedAt": "2026-08-07T11:53:10.026Z"
+}

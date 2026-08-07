@@ -1,0 +1,33 @@
+{
+  "id": "task-05ce9b8f982f448a9cdaa4142a653f32",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Security fault matrix",
+  "description": "Objective: run hostile credentials, stale authority, command replay, corruption, crash-at-boundary, poison, resource, and provider fault schedules across the full system. Deliverable: security/fault fixtures and exact evidence. NOT in scope: host-malicious sandbox claims. Hard dependencies: Schedule coverage checker and all production adapters. Owned paths: tests/security/** and tests/fault/**. Verification: pnpm test:fault && pnpm test:security.",
+  "definitionOfDone": [
+    "Every declared authority and external-effect boundary has hostile before/after/race coverage.",
+    "No unauthorized mutation, duplicate effect, budget mint, hidden skip, or false evidence acceptance occurs.",
+    "Unobservable host behavior is labeled outside-scope or UNKNOWN precisely.",
+    "Fault and security gates pass."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:15.290Z",
+  "updatedAt": "2026-08-07T11:57:15.290Z"
+}

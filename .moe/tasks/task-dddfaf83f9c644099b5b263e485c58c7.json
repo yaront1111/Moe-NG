@@ -1,0 +1,33 @@
+{
+  "id": "task-dddfaf83f9c644099b5b263e485c58c7",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Graph supersession engine",
+  "description": "Objective: implement immutable new revisions, graph epochs, consequence-equivalent carry/change/remove/drain dispositions, and atomic activation. Deliverable: core/scheduler supersession modules with exhaustive race/property tests. NOT in scope: rewriting history or implicit approval carry. Hard dependencies: Fan-in integration pipeline, Same-bug circuit breaker, Lease presence core, and Policy approval core. Owned paths: packages/core/src/supersession/** and packages/scheduler/src/supersession/**. Verification: pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Old and new revisions never hold overlapping authority outside an explicit safe carry binding.",
+    "Every attempt/effect/resource/budget disposition is complete, deterministic, and hash bound.",
+    "Changed or unknown authority/input facts invalidate carry and stale epochs cannot mutate current state.",
+    "Focused core and scheduler tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:10.998Z",
+  "updatedAt": "2026-08-07T11:53:10.998Z"
+}

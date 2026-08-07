@@ -1,0 +1,33 @@
+{
+  "id": "task-1de468316a7f4b499aa39408ec240b88",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Schedule coverage checker",
+  "description": "Objective: generate and verify the complete CORE invariant/scenario schedule universe, reachable transitions, race pairs, and fault boundaries. Deliverable: a headless checker plus versioned ScheduleCoverageManifest. NOT in scope: benchmark competitor claims. Hard dependencies: frozen v1 reducers and commands. Owned paths: packages/testkit/src/schedule/** and tests/property/schedule/**. Verification: pnpm test:property.",
+  "definitionOfDone": [
+    "Every CORE-I1 through CORE-I22 and CORE-S1 through CORE-S14 obligation maps to canonical schedules and frozen minima.",
+    "Missing, duplicate, unreachable, or unhit obligations yield FAIL or UNKNOWN, never PASS.",
+    "Schedule identities canonicalize irrelevant IDs/timestamps/seeds.",
+    "Property gate passes with a complete manifest."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:14.318Z",
+  "updatedAt": "2026-08-07T11:57:14.318Z"
+}

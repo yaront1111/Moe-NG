@@ -1,0 +1,32 @@
+{
+  "id": "task-16909c47419946259d3a6775b7504e41",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Decision ledger decomposition",
+  "description": "Objective: split the command-decision ledger into focused transaction, canonicalization, and replay modules. Deliverable: internal modules preserving atomic idempotent outcomes under races. NOT in scope: new command kinds, schemas, or policy. Hard dependencies: none. Owned paths: packages/store/src/decision-ledger.ts, new decision-ledger-*.ts, and command-decision tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Accepted, rejected, replayed, collision, and ambiguity outcomes remain unchanged.",
+    "Concurrent duplicate and conflicting requests still yield one legal durable decision.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.552Z",
+  "updatedAt": "2026-08-07T11:44:13.552Z"
+}

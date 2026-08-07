@@ -1,0 +1,32 @@
+{
+  "id": "task-286d40ce6867423bae972c07d127d466",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Event ledger decomposition",
+  "description": "Objective: split the event ledger by transaction, append, outbox, and recovery responsibility. Deliverable: focused internal modules preserving atomic order and recovery behavior. NOT in scope: new event schemas or relay behavior. Hard dependencies: none. Owned paths: packages/store/src/event-ledger.ts, new event-ledger-*.ts, and store core/recovery tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Event, aggregate sequence, global cursor, and outbox order remain unchanged.",
+    "Crash and commit-ambiguity cases preserve all-or-none acknowledged behavior.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.664Z",
+  "updatedAt": "2026-08-07T11:44:13.664Z"
+}

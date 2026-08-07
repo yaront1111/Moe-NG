@@ -1,0 +1,32 @@
+{
+  "id": "task-bc7d265f680e4c1db2a08c3c61f47f5f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Store input decomposition",
+  "description": "Objective: split store input validation by record family while retaining one fail-closed normalization boundary. Deliverable: focused store-input modules with stable error outcomes and limits. NOT in scope: accepting new input shapes or weakening checks. Hard dependencies: none. Owned paths: packages/store/src/store-input.ts, new store-input-*.ts, and hostile/boundary tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Every currently invalid hostile input remains rejected with the same stable code.",
+    "No partial normalization or caller-owned mutable reference enters the store.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.788Z",
+  "updatedAt": "2026-08-07T11:44:13.788Z"
+}

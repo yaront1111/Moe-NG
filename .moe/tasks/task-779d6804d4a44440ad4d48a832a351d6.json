@@ -1,0 +1,33 @@
+{
+  "id": "task-779d6804d4a44440ad4d48a832a351d6",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Graph operator journeys",
+  "description": "Objective: add graph, frontier, dependency challenge, expansion approval, fan-in, and supersession surfaces for J2/J6. Deliverable: control-room graph modules using generated daemon facts. NOT in scope: client-derived readiness or free-form agent chat. Hard dependencies: Multi-node daemon composition and Live control-room seam. Owned paths: apps/control-room/src/graph/**. Verification: pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "Every graph fact and action carries truth/provenance and comes from generated contracts.",
+    "Keyboard, narrow-window, degraded, approval-delta, and idle-explanation journeys pass.",
+    "The UI never infers authority or hides UNKNOWN dependencies.",
+    "Focused control-room tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 11,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:11.248Z",
+  "updatedAt": "2026-08-07T11:53:11.248Z"
+}

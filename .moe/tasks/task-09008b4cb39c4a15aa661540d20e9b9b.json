@@ -1,0 +1,33 @@
+{
+  "id": "task-09008b4cb39c4a15aa661540d20e9b9b",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "GA activation record",
+  "description": "Objective: assemble independent technical/product/benchmark reviews and, only after explicit GO_ACTIVATE, execute the one-way v2 activation evidence sequence. Deliverable: signed GA release and activation record for one exact commit/distribution/import generation. NOT in scope: automatic rollback, dual write, or an unscoped best-tool claim. Hard dependencies: every M5 task, successful Legacy quiesce drill, and explicit human GO_ACTIVATE. Owned paths: final release evidence and activation tooling only. Verification: all repository gates plus the release invariant checker.",
+  "definitionOfDone": [
+    "All repository, property, fault, security, migration, integration, E2E, packaging, benchmark, and independent-review gates are PASS or explicitly non-applicable by the permit list.",
+    "GO_ACTIVATE binds the verified quiesce/import/backup/distribution generation and is distinct from GO_QUIESCE.",
+    "First authoritative v2 command occurs only after atomic activation; legacy remains locked/readable.",
+    "Release record permits only scoped claims supported by the exact evidence."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.962Z",
+  "updatedAt": "2026-08-07T11:57:17.962Z"
+}

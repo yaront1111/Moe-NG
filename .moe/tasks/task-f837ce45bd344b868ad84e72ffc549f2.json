@@ -1,0 +1,33 @@
+{
+  "id": "task-f837ce45bd344b868ad84e72ffc549f2",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Session coordination fabric",
+  "description": "Objective: provide daemon-mediated communication among authenticated coder sessions, terminal/effect wrappers, reviewers, and the control room without recreating general chat. Deliverable: a packages/coordination service with typed addressed REQUEST, RESPONSE, EVENT, CONTROL, and HANDOFF envelopes, durable mailboxes, correlation, ordering, dedupe, expiry, backpressure, and replay. NOT in scope: peer-to-peer authority, social channels, arbitrary remote shell, secret forwarding, or treating free-form text as a command. Hard dependencies: Runtime contract registry, Identity session core, and Projection outbox core. Owned paths: packages/coordination/**. Verification: pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test.",
+  "definitionOfDone": [
+    "Every endpoint and envelope is authenticated, capability-scoped, versioned, bounded, addressed, correlated, and durably sequenced.",
+    "At-least-once delivery deduplicates; cursor gaps, expiry, overload, unknown recipients, and restart produce typed outcomes without silent loss.",
+    "Terminal messages bind an existing effect/session identity; advisory text cannot mutate lifecycle or grant authority.",
+    "The focused coordination typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 21,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:14.683Z",
+  "updatedAt": "2026-08-07T11:50:14.683Z"
+}

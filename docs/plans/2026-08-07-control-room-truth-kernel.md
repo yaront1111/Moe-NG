@@ -12,7 +12,8 @@
 
 - UI authority: `2026-08-05-moe-v1-control-room-spec.md` SHA-256 `C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F`, especially §§1.1–1.4, 3.1–3.2, 11.1, and 12.
 - Technical authority: `2026-08-05-moe-rebuild-design.md` SHA-256 `1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191`, especially §§5 and 18.1–18.4.
-- Exact Git base: `e7f2b680fd830c25a4c66cae420bda825fff0792`.
+- Starting Git base: `e7f2b680fd830c25a4c66cae420bda825fff0792`.
+- Delivered commit parent after concurrent main-folder integrations: `63e848269a6b15d4d28c6401df04719ee72bd485`.
 - Delivery correction: work directly on the source checkout's `main`; do not create a worktree, branch, merge, or push.
 - Owned paths only: this plan, `packages/control-room-model/**`, and the dependency-free `packages/control-room-model` importer in `pnpm-lock.yaml`.
 
@@ -85,8 +86,7 @@ Meaning and accessibility strings are copied byte-for-byte from §3.1. Each `ari
 
 **Files:**
 
-- Create: `packages/control-room-model/src/truth-presentation.ts`
-- Modify: `packages/control-room-model/src/index.ts`
+- Modify: `packages/control-room-model/src/index.ts` (the complete kernel remains a focused single module; no separate barrel is needed yet)
 
 1. Define narrow readonly unions and discriminated result types.
 2. Freeze each descriptor before freezing its success envelope. Freeze the error payload before freezing the shared failure envelope.

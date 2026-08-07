@@ -1,0 +1,33 @@
+{
+  "id": "task-0c89476b78044024b07c86c0c8986bd0",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Disaster restore proof",
+  "description": "Objective: prove complete backup generations, two-slot recovery anchors, fresh incarnation/key epochs, orphan inventory, and quiesced recovery after media loss. Deliverable: CORE-S14 restore fixtures and evidence. NOT in scope: ordinary restart or optimistic orphan adoption. Hard dependencies: full store/artifact/effect inventory implementations. Owned paths: tests/fault/disaster-restore/** and backup tooling paths. Verification: pnpm test:fault.",
+  "definitionOfDone": [
+    "Crash at every prepare/install/fsync/switch boundary exposes either old authority or one verified quiesced restore, never a mixture.",
+    "Repeated same-generation restore uses fresh incarnation/key epochs and all stale grants fail.",
+    "Missing inventory or artifact/key proof keeps recovery unavailable with UNKNOWN_TRUTH.",
+    "CORE-S14 restore gate passes."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.013Z",
+  "updatedAt": "2026-08-07T11:57:17.013Z"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "task-79eddf12e51346588cf6f37b96c56391",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Deterministic context journal",
+  "description": "Objective: implement the bounded dead-end journal, deterministic context selector/renderer, typed retry predicates, and release handoff package. Deliverable: packages/context with exact byte/digest manifests and limits. NOT in scope: semantic/vector memory, transcripts as memory, or silently truncating mandatory context. Hard dependencies: Planning graph lifecycle core, Lease presence core, Projection outbox core, and Evidence receipt pipeline. Owned paths: packages/context/**. Verification: pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test.",
+  "definitionOfDone": [
+    "Mandatory context is complete or admission fails CONTEXT_TOO_LARGE; it is never silently truncated.",
+    "Optional selection, journal count/text limits, ordering, renderer versions, exclusions, and exact bytes are deterministic and digest bound.",
+    "Retry unlock requires a typed fact predicate change; reworded prose alone cannot unlock a repeated dead end.",
+    "The focused context typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 26,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:15.596Z",
+  "updatedAt": "2026-08-07T11:50:15.596Z"
+}

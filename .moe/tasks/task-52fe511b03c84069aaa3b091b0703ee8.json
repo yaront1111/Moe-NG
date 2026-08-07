@@ -1,0 +1,143 @@
+{
+  "id": "task-52fe511b03c84069aaa3b091b0703ee8",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Scheduler validator decomposition",
+  "description": "Objective: split the oversized structural graph validator by validation responsibility without changing observable behavior. Deliverable: focused validate-graph modules under packages/scheduler/src with the same public validateGraphSnapshot API and deterministic issue ordering. NOT in scope: new validation rules, graph mutation, or policy changes. Hard dependencies: none. Owned paths: packages/scheduler/src/validate-graph.ts, new validate-graph-*.ts, and validator-focused tests. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "validateGraphSnapshot public types, stable reason codes, issue order, and frozen results are unchanged.",
+    "Every resulting production module is under 350 lines and has one named responsibility.",
+    "Existing hostile, determinism, boundary, and correction tests pass unchanged.",
+    "The focused scheduler typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add characterization coverage before moving production code, without weakening or rewriting existing assertions. Construct a bounded snapshot that triggers multiple record/reference integrity findings and assert the complete issue objects in their current deterministic order (code, message, nodeKeys, edgeKeys), plus deep freezing of the failure envelope, issues array, issue objects, and nested key arrays. Keep the test entirely on validateGraphSnapshot so it protects the public boundary rather than new internal helpers.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "note": "Added 4 characterization tests on the public validateGraphSnapshot boundary only. (1) Multi-issue bounded snapshot pinning the complete issue objects (code/message/nodeKeys/edgeKeys) in canonical order — accumulation order deliberately differs from reported order for the two GRAPH_MISSING_ENDPOINT findings, so a lost sortIssues cannot pass. (2) Deep-freeze of failure envelope, issues array, each issue, and each nested key array, incl. throwing mutation attempts. (3) GRAPH_COMPLETION_NOT_TERMINAL edgeKeys sorted + topology/closure never runs while an integrity issue is outstanding. (4) Raw-slot-count over-limit refusal precedes any element inspection (malformed node/edge present but unreported). No existing assertion weakened or rewritten. Baseline 115 tests -> 119 tests, typecheck exit 0, test exit 0 against unmodified production code.",
+      "startedAt": "2026-08-07T11:54:39.577Z",
+      "completedAt": "2026-08-07T11:56:56.156Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract hostile-safe bounded input parsing and normalization into validate-graph-input.ts. Move the exact own-key/data-property, plain-array/record, graph-key/edge-kind, raw-length ceiling, dense-array, node/edge normalization, duplicate, self-edge, and record-local diagnostic logic without changing messages, codes, read order, or early over-limit refusal. Return an internal discriminated parse result containing only the bounded normalized state and accumulated issues needed downstream; do not freeze results, mutate the caller snapshot, expose the helper from the package root, or perform graph-wide topology checks. Keep the new module under 350 lines with this single responsibility.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/validate-graph-input.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-input.js",
+        "packages/scheduler/src/validate-graph.ts"
+      ],
+      "note": "Created packages/scheduler/src/validate-graph-input.ts (296 lines) owning hostile-safe bounded parsing only: SNAPSHOT_KEYS/NODE_KEYS/EDGE_KEYS, isEdgeKind, own-key + own-data-property schema checks, plain-array/record guards, graph-key completion check, raw-length ceilings BEFORE any indexed read with early over-limit refusal, dense-array shape (short-circuit `!A || !B` preserved so edges are not probed when nodes fail), per-record node/edge normalization, duplicates, and self-edge. Messages, codes, read order, and aliased-condition narrowing on `candidate` copied verbatim. Returns internal discriminated GraphInputParse: {ok:false, issues} for outright refusal, {ok:true, parsed} carrying only bounded normalized state (nodes, edges, completionNodeKey, nodeKeys set, hardEdgeCount, nodeShapeOk) plus accumulated issues in accumulation order — no sorting, no freezing, no snapshot mutation, no topology. Not exported from index.ts. Also added the required validate-graph-input.js re-export shim (repo convention: every internal .ts module has a sibling `export * from \"./<name>.ts\"` shim so Node --experimental-strip-types resolves the .js specifiers used in imports; without it the scheduler-runtime-entrypoint smoke test would fail). validate-graph.ts now delegates parsing. Verified: pnpm --filter @moe/scheduler typecheck exit 0; pnpm --filter @moe/scheduler test exit 0, 16 files / 119 tests passed.",
+      "startedAt": "2026-08-07T11:56:59.335Z",
+      "completedAt": "2026-08-07T11:59:28.991Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract graph-wide validation into validate-graph-structure.ts. From the parsed bounded state, preserve missing-endpoint checks, completion-node presence/terminal-HARD-sink rules, normalized policy limits, and their existing nodeShapeOk guards; if any integrity issue exists, return all of them before topology construction. Otherwise sort nodes and edges identically, build the HARD index once, preserve cycle-core reporting and its immediate failure, run the reverse completion-closure traversal with the optional TraversalCounter updates unchanged, and return either the single topology issue or the validated GraphStructureView. Keep the module internal, pure apart from the supplied counter, and under 350 lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-structure.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/validate-graph-structure.ts"
+      ],
+      "startedAt": "2026-08-07T11:59:32.175Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Reduce validate-graph.ts to the stable public orchestration boundary. Preserve the exact validateGraphSnapshot(snapshot, policyOverride?, counter?) signature and GraphValidationResult types; resolve malformed policy before reading the snapshot; delegate parsing then structure validation; keep one fail helper that applies sortIssues followed by deepFreeze; and on success clone/sort the validated view, copy the resolved policy, compute the same graphIdentity, deep-freeze the complete ValidatedGraph/result, and register provenance exactly once. Do not change index.ts exports, public types, stable text/reason codes, graph mutation behavior, or add documentation/changelog claims for this refactor-only change. Confirm every resulting production module is below 350 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform an adversarial diff review before final evidence: compare each moved branch against the original validation order; challenge null/empty/sparse/over-limit/accessor/proxy/revoked-proxy inputs; verify no indexed read precedes raw ceilings; verify nodeShapeOk gating, multi-issue accumulation, deterministic sorting, cycle/closure short-circuits, counter increments, cloned frozen outputs, and single provenance registration; confirm no new public export and run a PowerShell physical-line count showing each production module is <350. Correct any discrepancy, keep changes within the four owned paths, and inspect the explicit-path diff so no foreign work is staged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single required verification command from D:\\projexts\\moe-next and retain its fresh complete output as complete_task evidence: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test. Do not complete on partial, stale, or failed output. If the adversarial review required any edit, this command must run after the last edit. Stage/commit only the explicit owned paths; never use a worktree, git add -A, reset, stash, push, or merge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-c8c01fc6",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:12.748Z",
+  "updatedAt": "2026-08-07T11:59:32.175Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T11:45:06.592Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "worker-c8c01fc6"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T11:51:12.487Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep one 492-line function was rejected because it violates the decomposition objective. A three-new-helper split was also rejected because it would add an unnecessary fifth touched file. Use two internal modules instead: one owns hostile-safe bounded parsing/normalization and record-local diagnostics; one owns graph-wide structural/topology validation. Keep validate-graph.ts as the sole public facade and result-freezing/provenance boundary.",
+    "codebaseInsights": "validateGraphSnapshot is the only public validator export. Its fail helper deep-freezes failures after sortIssues orders issues by [code,nodeKeys,edgeKeys,message]. The current function deliberately checks raw array lengths before indexed reads, accumulates bounded integrity issues, skips endpoint/completion checks when node shape is untrustworthy, and only runs HARD-cycle/completion-closure traversals after all integrity checks pass. The optional TraversalCounter is observable through package tests and must be threaded unchanged. The authoritative design SHA-256 was verified as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191.",
+    "risks": "Moved code can accidentally invoke hostile getters/proxy traps, traverse over-limit arrays, change which integrity diagnostics co-occur, alter sort/freeze boundaries, increment traversal counters differently, build topology from malformed endpoints, or register provenance more than once. Keep new helpers internal (no index.ts export), preserve exact messages/reason codes/guards/short-circuits, and require every production module to remain below 350 physical lines.",
+    "keyFiles": [
+      "packages/scheduler/src/validate-graph.ts",
+      "packages/scheduler/src/validate-graph.test.ts",
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/scheduler/src/graph-model.ts",
+      "packages/scheduler/src/hostile-input.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T11:52:20.948Z",
+  "workStartedAt": "2026-08-07T11:54:39.577Z"
+}

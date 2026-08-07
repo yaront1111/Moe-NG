@@ -1,0 +1,32 @@
+{
+  "id": "task-9dfd158bbdd5471f8b358eca75ccf23f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Event read-model decomposition",
+  "description": "Objective: split the oversized event read model by decode, query, and materialization responsibility. Deliverable: focused internal modules with byte-budget, cursor, and snapshot semantics preserved. NOT in scope: schema changes, cursor redesign, or new query features. Hard dependencies: none. Owned paths: packages/store/src/event-read-model.ts, new event-read-*.ts, and event read-model tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Public event read APIs and stable errors remain byte-for-byte compatible for existing fixtures.",
+    "Cursor, snapshot, maximum-record, and page-byte limits remain fail closed.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:12.863Z",
+  "updatedAt": "2026-08-07T11:44:12.863Z"
+}

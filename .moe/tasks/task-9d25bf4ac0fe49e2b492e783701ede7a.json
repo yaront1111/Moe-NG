@@ -1,0 +1,32 @@
+{
+  "id": "task-9d25bf4ac0fe49e2b492e783701ede7a",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Decision read-model decomposition",
+  "description": "Objective: split the oversized command-decision read model into focused decode, query, and page-materialization modules. Deliverable: internal modules preserving replay lookup and byte limits. NOT in scope: changing decision semantics or adding query fields. Hard dependencies: none. Owned paths: packages/store/src/decision-read-model.ts, new decision-read-*.ts, and decision page tests. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Decision replay and query results remain compatible for all existing fixtures.",
+    "Snapshot, cursor, maximum-record, and page-byte boundaries remain fail closed.",
+    "Every resulting production module is under 350 lines.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:13.334Z",
+  "updatedAt": "2026-08-07T11:44:13.334Z"
+}

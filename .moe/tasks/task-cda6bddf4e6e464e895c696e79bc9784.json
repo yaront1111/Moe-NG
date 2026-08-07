@@ -1,0 +1,33 @@
+{
+  "id": "task-cda6bddf4e6e464e895c696e79bc9784",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Same-bug circuit breaker",
+  "description": "Objective: fingerprint correlated failed approaches across siblings and hold repeated convergence until a typed fact changes or a human routes it. Deliverable: scheduler breaker modules and counterexample tests. NOT in scope: semantic memory or automatic acceptance. Hard dependencies: Deterministic context journal and Fan-in integration pipeline. Owned paths: packages/scheduler/src/convergence/**. Verification: pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Equivalent active failure fingerprints converge to one bounded hold despite prose changes.",
+    "A retry unlocks only when its authoritative predicate changes or a permitted human decision occurs.",
+    "Unrelated work remains schedulable and every hold is explainable.",
+    "Focused scheduler tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:10.874Z",
+  "updatedAt": "2026-08-07T11:53:10.874Z"
+}

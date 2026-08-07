@@ -1,0 +1,33 @@
+{
+  "id": "task-18c7921fb1f34a8cb1ed39509bf67a31",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Foundation executable specification",
+  "description": "Objective: author development-only held-out models, fakes, fixtures, and fault schedules for J1, J3, J4, stale clients, and the linear effect boundary. Deliverable: packages/testkit/src/foundation and tests/fault/foundation with fixed fixture hashes and honest expected failures. NOT in scope: production implementation or confirmatory BENCH corpus bytes. Hard dependency: Runtime contract registry. Owned paths: packages/testkit/src/foundation/** and tests/fault/foundation/**. Verification: pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test.",
+  "definitionOfDone": [
+    "Fixtures and oracles are deterministic, versioned, hashed, and labeled DEVELOPMENT_ONLY and NOT_CONFIRMATORY.",
+    "Schedules cover stale version/lease, cancel-start, crash boundaries, zero-work false green, and honest UNKNOWN.",
+    "Missing production behavior fails with named stable outcomes rather than import or placeholder errors.",
+    "The focused testkit typecheck and test command exits 0 with expected-red fixtures mechanically distinguished."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 19,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:45.498Z",
+  "updatedAt": "2026-08-07T11:45:45.498Z"
+}

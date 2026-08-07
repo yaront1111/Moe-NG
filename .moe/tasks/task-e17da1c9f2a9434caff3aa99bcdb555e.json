@@ -1,0 +1,33 @@
+{
+  "id": "task-e17da1c9f2a9434caff3aa99bcdb555e",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Predecessor input materializer",
+  "description": "Objective: select exact accepted predecessor results and produce immutable NodeInputManifest trees with revocable witness rechecks. Deliverable: runner materialization modules and fault tests. NOT in scope: provider execution or fan-in integration. Hard dependencies: Dependency contract kernel, Clean workspace foundation, and Evidence receipt pipeline. Owned paths: packages/runner/src/materialization/**. Verification: pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Every selected result, artifact, witness, environment, and graph epoch is digest bound.",
+    "Revoked or changed inputs require a new materialization/attempt and stale trees cannot dispatch.",
+    "Duplicate or ambiguous producer selection fails closed.",
+    "Focused runner tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:09.904Z",
+  "updatedAt": "2026-08-07T11:53:09.904Z"
+}

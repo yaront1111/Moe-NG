@@ -1,0 +1,33 @@
+{
+  "id": "task-2d1f94f91da240c0a3262d2524c127af",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Live control-room seam",
+  "description": "Objective: connect authenticated daemon commands, bounded queries, typed session coordination, and resumable cursor events to the canonical control room. Deliverable: daemon HTTP/stream adapters, generated client bindings, and control-room data adapters. NOT in scope: client-side transition inference, MCP, JetBrains, graph fan-out, or legacy import. Hard dependencies: Projection outbox core, Bootstrap application services, External effect supervisor, Independent review flow, Crash reconciliation services, Session coordination fabric, and Foundation control-room shell. Owned paths: apps/daemon/src/http/**, generated client package paths, and apps/control-room/src/data/**. Verification: pnpm typecheck && pnpm test.",
+  "definitionOfDone": [
+    "Authentication, distribution compatibility, input bounds, command idempotency, and stable errors are enforced at the adapter boundary.",
+    "Cursor gaps and stale snapshots are explicit; one verified snapshot resumes without skipped events.",
+    "The client never computes transitions or truth strength and session/terminal messages cannot bypass command authority.",
+    "Repository typecheck and tests exit 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 30,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:16.051Z",
+  "updatedAt": "2026-08-07T11:50:16.051Z"
+}

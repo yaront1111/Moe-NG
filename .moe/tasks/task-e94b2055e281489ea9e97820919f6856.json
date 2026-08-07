@@ -1,0 +1,33 @@
+{
+  "id": "task-e94b2055e281489ea9e97820919f6856",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "macOS effect conformance",
+  "description": "Objective: prove provider launch, Git/workspace, locks, signals, cancellation, scope resolution, and crash recovery on supported macOS packaging. Deliverable: macOS effect adapters and fault evidence. NOT in scope: weakening Windows/Linux behavior or claiming sandboxing. Hard dependencies: Foundation runner and Codex adapter. Owned paths: packages/runner/src/platform/macos/** and tests/fault/macos/**. Verification: pnpm test:fault.",
+  "definitionOfDone": [
+    "Every declared effect boundary passes crash-before/after activation and cancellation schedules.",
+    "Path, symlink, process, lock, and runtime closure observations are proven or UNKNOWN.",
+    "Packaging uses the pinned engine/runtime and doctor reports exact versions.",
+    "macOS fault gate passes."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:15.243Z",
+  "updatedAt": "2026-08-07T11:56:15.243Z"
+}

@@ -1,0 +1,33 @@
+{
+  "id": "task-b937811e8b72459ea169e5fff1238ce1",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Benchmark telemetry harness",
+  "description": "Objective: emit the machine-readable run, cost-class, timing, effort, settings, evidence-receipt, and reproducibility records required by the pinned benchmark. Deliverable: benchmark harness infrastructure without confirmatory corpus bytes. NOT in scope: competitor scoring or claim decisions. Hard dependencies: stable daemon/provider/control-room instrumentation. Owned paths: packages/benchmark/** excluding confirmatory corpus and campaign outputs. Verification: pnpm --filter @moe/benchmark test.",
+  "definitionOfDone": [
+    "Every required measurement has exact source/basis or explicit UNKNOWN; UNKNOWN is never zero or imputed across arms.",
+    "Run records bind model/profile/runtime/settings/source/evidence identities and all timing split points.",
+    "Harness self-tests cover censoring, cost bases, fixtures, concurrency, and receipt tamper.",
+    "Focused benchmark tests pass."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.328Z",
+  "updatedAt": "2026-08-07T11:57:17.328Z"
+}

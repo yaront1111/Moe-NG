@@ -1,0 +1,33 @@
+{
+  "id": "task-c8b625ddf39c4225903e34284a3affcb",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Canonical goals board",
+  "description": "Objective: implement the full Goals and Board IA with phase projections, truth chips, frontier summaries, blockers, waits, and bounded actions. Deliverable: standalone control-room goals/board modules. NOT in scope: graph canvas or client-derived state. Hard dependencies: Generated control-room client and Live control-room seam. Owned paths: apps/control-room/src/goals/** and apps/control-room/src/board/**. Verification: pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "Board remains the default and maps all phases without losing canonical state.",
+    "Cards show truth/provenance, blockers, waits, budgets, leases, and only supplied actions.",
+    "Narrow-window and keyboard behavior matches the pinned spec.",
+    "Focused control-room tests pass."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength.",
+    "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
+    "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:55:19.355Z",
+  "updatedAt": "2026-08-07T11:55:19.355Z"
+}

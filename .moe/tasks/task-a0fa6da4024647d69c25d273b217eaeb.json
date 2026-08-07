@@ -1,0 +1,33 @@
+{
+  "id": "task-a0fa6da4024647d69c25d273b217eaeb",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Codex runtime adapter",
+  "description": "Objective: add a capability-probed Codex provider with pinned runtime closure, structured/raw events, cancellation, and reconciliation parity. Deliverable: focused runner Codex modules plus golden streams. NOT in scope: Gemini or provider marketplace. Hard dependency: proven Claude adapter contract and Foundation effect supervisor. Owned paths: packages/runner/src/providers/codex/** and packages/testkit/src/providers/codex/**. Verification: pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Probe and runtime closure are immutable and every unproven capability is typed UNSUPPORTED.",
+    "Effect identity, raw events, cwd/process observation, cancellation, and crash reconciliation match the provider contract.",
+    "No provider output grants authority or satisfies verification.",
+    "Focused runner tests pass."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:14.439Z",
+  "updatedAt": "2026-08-07T11:56:14.439Z"
+}

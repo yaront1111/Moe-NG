@@ -1,0 +1,33 @@
+{
+  "id": "task-9fd52b41f3ea4aad8c0c07bbe6fd3025",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Thin JetBrains adapter",
+  "description": "Objective: let JetBrains discover/start the daemon and open/embed or browser-fallback to the standalone control room. Deliverable: a thin adapter with no duplicated product logic. NOT in scope: canonical state, lifecycle transitions, separate board implementation, or VS Code parity. Hard dependencies: standalone Control-room journey gate and Distribution manifest packaging. Owned paths: adapters/jetbrains/**. Verification: adapter-specific tests plus pnpm test:integration.",
+  "definitionOfDone": [
+    "Adapter discovers compatible daemon/control-room distributions and fails closed on mismatch.",
+    "All product actions and rendering come from the standalone app/generated contracts.",
+    "Start, open, embed, browser fallback, reconnect, and uninstall cases pass.",
+    "Adapter and integration tests pass."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:15.804Z",
+  "updatedAt": "2026-08-07T11:56:15.804Z"
+}
