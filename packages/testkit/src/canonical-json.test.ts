@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { CANONICAL_JSON_VERSION, canonicalize } from "./canonical-json.js";
+import { MAX_JSON_DEPTH, MAX_JSON_STRING_UTF8_BYTES } from "@moe/contracts";
 
-const MAX_CANONICAL_DEPTH = 64;
-const MAX_STRING_UTF8_BYTES = 256 * 1024;
+import { CANONICAL_JSON_VERSION, canonicalize } from "./canonical-json.js";
 
 describe("canonicalize", () => {
   it("sorts object keys recursively while preserving array order", async () => {
@@ -66,12 +65,12 @@ describe("canonicalize", () => {
 
   it("accepts canonical depth 64 and rejects depth 65", async () => {
     let depth64: unknown = null;
-    for (let depth = 0; depth < MAX_CANONICAL_DEPTH; depth += 1) {
+    for (let depth = 0; depth < MAX_JSON_DEPTH; depth += 1) {
       depth64 = [depth64];
     }
 
     expect(canonicalize(depth64)).toBe(
-      `${"[".repeat(MAX_CANONICAL_DEPTH)}null${"]".repeat(MAX_CANONICAL_DEPTH)}`,
+      `${"[".repeat(MAX_JSON_DEPTH)}null${"]".repeat(MAX_JSON_DEPTH)}`,
     );
     expect(() => canonicalize([depth64])).toThrowError(
       "Unsupported canonical JSON value: maximum depth 64 exceeded",
@@ -79,9 +78,9 @@ describe("canonicalize", () => {
   });
 
   it("accepts a 256 KiB UTF-8 string and rejects the next byte", async () => {
-    const maximum = "a".repeat(MAX_STRING_UTF8_BYTES);
+    const maximum = "a".repeat(MAX_JSON_STRING_UTF8_BYTES);
 
-    expect(canonicalize(maximum).length).toBe(MAX_STRING_UTF8_BYTES + 2);
+    expect(canonicalize(maximum).length).toBe(MAX_JSON_STRING_UTF8_BYTES + 2);
     expect(() => canonicalize(`${maximum}a`)).toThrowError(
       "Unsupported canonical JSON value: string exceeds 262144 UTF-8 bytes",
     );

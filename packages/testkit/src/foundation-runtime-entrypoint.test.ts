@@ -18,6 +18,9 @@ it("loads the contracts and testkit entrypoints in Node's strip-types runtime", 
   });
 
   expect(result).toEqual({
+    boundedJsonDecoderType: "function",
+    boundedJsonNullPrototype: true,
+    boundedJsonOutcome: "ACCEPTED",
     canonical: '{"a":1,"z":2}',
     contractVersion: "moe-phase0-evidence-manifest/1",
     digest: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",

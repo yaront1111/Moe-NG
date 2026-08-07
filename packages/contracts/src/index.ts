@@ -41,3 +41,19 @@ export type {
   Phase0FreezeEvidenceReference,
   Phase0ReviewReceipt,
 } from "./phase0-freeze-contract.js";
+export { decodeBoundedJsonBytes } from "./bounded-json.js";
+export { BOUNDED_JSON_ERROR_CODES } from "./bounded-json-model.js";
+export type {
+  BoundedJsonDecodeError,
+  BoundedJsonDecodeOk,
+  BoundedJsonDecodeResult,
+  BoundedJsonErrorCode,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue,
+} from "./bounded-json-model.js";
+export {
+  MAX_JSON_BODY_BYTES,
+  MAX_JSON_DEPTH,
+  MAX_JSON_STRING_UTF8_BYTES,
+} from "./input-limits.js";

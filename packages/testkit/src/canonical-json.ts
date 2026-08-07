@@ -1,10 +1,9 @@
 import { Buffer } from "node:buffer";
 import { types } from "node:util";
 
-export { CANONICAL_JSON_VERSION } from "@moe/contracts";
+import { MAX_JSON_DEPTH, MAX_JSON_STRING_UTF8_BYTES } from "@moe/contracts";
 
-const MAX_CANONICAL_DEPTH = 64;
-const MAX_STRING_UTF8_BYTES = 256 * 1024;
+export { CANONICAL_JSON_VERSION } from "@moe/contracts";
 
 function unsupported(reason: string): never {
   throw new TypeError(`Unsupported canonical JSON value: ${reason}`);
@@ -24,8 +23,8 @@ function assertCanonicalString(value: string): void {
     }
   }
 
-  if (Buffer.byteLength(value, "utf8") > MAX_STRING_UTF8_BYTES) {
-    unsupported(`string exceeds ${MAX_STRING_UTF8_BYTES} UTF-8 bytes`);
+  if (Buffer.byteLength(value, "utf8") > MAX_JSON_STRING_UTF8_BYTES) {
+    unsupported(`string exceeds ${MAX_JSON_STRING_UTF8_BYTES} UTF-8 bytes`);
   }
 }
 
@@ -135,8 +134,8 @@ function encode(value: unknown, ancestors: Set<object>, depth: number): string {
       if (types.isProxy(value)) {
         return unsupported("proxy");
       }
-      if (depth >= MAX_CANONICAL_DEPTH) {
-        return unsupported(`maximum depth ${MAX_CANONICAL_DEPTH} exceeded`);
+      if (depth >= MAX_JSON_DEPTH) {
+        return unsupported(`maximum depth ${MAX_JSON_DEPTH} exceeded`);
       }
       if (ancestors.has(value)) {
         return unsupported("cyclic reference");
