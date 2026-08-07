@@ -33,6 +33,7 @@ import {
   core,
   executorFor,
   fixturePayload,
+  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
@@ -199,7 +200,7 @@ const EXECUTORS: FoundationExecutors = {
   "incident:hot-claim-loop-on-gated-work": (entry) => produceAbsenceOutcome(entry),
 
   "schedule:j1-control-plane-overhead": (entry) =>
-    resolveEvidenceOutcome([], entry.outcome.missingEvidence),
+    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
 };
 
 describe("J1 linear journey fault schedules", () => {

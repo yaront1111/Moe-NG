@@ -117,6 +117,19 @@ export function produceAbsenceOutcome(entry: FoundationManifestEntry): Foundatio
     : passExpected();
 }
 
+/**
+ * The missing-evidence string of an entry that declared HONEST_UNKNOWN.
+ *
+ * Same discipline as `produceAbsenceOutcome`: routing an entry of any other
+ * kind here is a bug in the executor map, not a reason to fall back to a pass.
+ */
+export function missingEvidenceOf(entry: FoundationManifestEntry): string {
+  if (entry.outcome.kind !== "HONEST_UNKNOWN") {
+    throw new TypeError(`${entry.entryId} is ${entry.outcome.kind}, not an honest unknown`);
+  }
+  return entry.outcome.missingEvidence;
+}
+
 /** Map a model verdict onto the outcome vocabulary. Refusals become EXPECTED_RED. */
 export function outcomeFromVerdict(verdict: RefusableVerdict): FoundationOutcome {
   return verdict.ok === true ? passExpected() : expectedRed(verdict.refusal);

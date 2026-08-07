@@ -31,6 +31,7 @@ import {
   assertPartitionOwnership,
   executorFor,
   fixturePayload,
+  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
@@ -169,7 +170,7 @@ const EXECUTORS: FoundationExecutors = {
   "incident:timer-callback-reentrancy": (entry) => produceAbsenceOutcome(entry),
 
   "schedule:j3-total-storage-loss-rpo": (entry) =>
-    resolveEvidenceOutcome([], entry.outcome.missingEvidence),
+    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
 };
 
 describe("J3 crash recovery fault schedules", () => {

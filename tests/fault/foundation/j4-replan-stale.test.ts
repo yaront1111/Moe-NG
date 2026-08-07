@@ -38,6 +38,7 @@ import {
   core,
   executorFor,
   fixturePayload,
+  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
@@ -120,8 +121,9 @@ const EXECUTORS: FoundationExecutors = {
   },
 
   "schedule:j4-stale-envelope-version-rejected": () => {
-    const stale = decodeEnvelope({ schemaVersion: "moe-runtime-command/0" });
-    expect(stale.ok).toBe(false);
+    const stale = refused(
+      decodeEnvelope({ schemaVersion: "moe-runtime-command/0" }), "superseded schema version",
+    );
     expect(stale.error.code).toBe("SCHEMA_VERSION_UNSUPPORTED");
     expect(stale.error.details.supportedSchemaVersion).toBe(
       contracts.RUNTIME_COMMAND_ENVELOPE_VERSION,
@@ -131,21 +133,31 @@ const EXECUTORS: FoundationExecutors = {
   },
 
   "schedule:j4-stale-command-shape-rejected": () => {
-    expect(decodeEnvelope({ requestDigest: "not-a-digest" }).error.code).toBe("INPUT_INVALID");
-    expect(decodeEnvelope({ commandId: "" }).error.code).toBe("INPUT_INVALID");
-    expect(decodeEnvelope({ expectedVersion: -1 }).error.code).toBe("INPUT_INVALID");
+    const shapes: readonly CommandEnvelopeOverrides[] = [
+      { requestDigest: "not-a-digest" }, { commandId: "" }, { expectedVersion: -1 },
+    ];
+    for (const shape of shapes) {
+      expect(refused(decodeEnvelope(shape), "malformed command shape").error.code)
+        .toBe("INPUT_INVALID");
+    }
     return passExpected();
   },
 
   "schedule:j4-stale-lease-epoch-classification": () => {
     // The lease epoch is carried and parsed today...
-    const carried = decodeEnvelope({ leaseAuthority: buildLeaseAuthority(7, 3) });
-    expect(carried.ok).toBe(true);
-    expect(carried.envelope.leaseAuthority.epoch).toBe(7);
-    expect(decodeEnvelope({ leaseAuthority: { epoch: 7 } }).error.code).toBe("INPUT_INVALID");
+    const carried = accepted(
+      decodeEnvelope({ leaseAuthority: buildLeaseAuthority(7, 3) }), "lease-bearing envelope",
+    );
+    expect(carried.envelope.leaseAuthority?.epoch).toBe(7);
+    // A lease authority missing its required fields is refused, so the epoch
+    // cannot be carried by a half-built authority block.
+    const malformed = decodeRecord({
+      ...buildCommandEnvelopeRecord("goal.create"), leaseAuthority: { epoch: 7 },
+    });
+    expect(refused(malformed, "malformed lease authority").error.code).toBe("INPUT_INVALID");
 
     // ...and both stale outcomes are registered fail-closed with epoch details.
-    for (const code of ["STALE_LEASE", "STALE_EPOCH"]) {
+    for (const code of ["STALE_LEASE", "STALE_EPOCH"] as const) {
       const descriptor = contracts.lookupRuntimeError(code);
       expect(descriptor.code).toBe(code);
       expect(descriptor.transport.httpStatus).toBe(412);
@@ -162,11 +174,10 @@ const EXECUTORS: FoundationExecutors = {
 
   "schedule:j4-expected-version-stale-client-refused": () => {
     const goal = draftGoal();
-    const stale = core.reduceGoal(goal, {
+    const stale = refused(core.reduceGoal(goal, {
       commandId: "cmd-stale-client", expectedVersion: goal.version - 1, kind: "goal.pause",
       schedulingControl: "DRAIN_AND_PAUSE",
-    });
-    expect(stale.ok).toBe(false);
+    }), "stale-client goal.pause");
     expect(stale.error.code).toBe("EXPECTED_VERSION_CONFLICT");
     expect(stale.error.details.actualVersion).toBe(goal.version);
     expect(stale.error.details.expectedVersion).toBe(goal.version - 1);
@@ -178,15 +189,15 @@ const EXECUTORS: FoundationExecutors = {
   "incident:stale-assets-refuse-handshake": (entry) => produceAbsenceOutcome(entry),
 
   "schedule:j4-review-round-corpus": (entry) =>
-    resolveEvidenceOutcome([], entry.outcome.missingEvidence),
+    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
 };
 
 describe("J4 replan and stale-client fault schedules", () => {
   it("owns exactly the J4 manifest partition", () => {
-    assertPartitionOwnership(expect, PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J4);
+    assertPartitionOwnership(PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J4);
   });
 
   it.each(partitionRows(PARTITION))("%s produces its declared outcome", (entryId, entry) => {
-    expect(EXECUTORS[entryId](entry)).toEqual(entry.outcome);
+    expect(executorFor(EXECUTORS, entryId)(entry)).toEqual(entry.outcome);
   });
 });
