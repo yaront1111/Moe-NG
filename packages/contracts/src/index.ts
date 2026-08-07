@@ -57,3 +57,58 @@ export {
   MAX_JSON_DEPTH,
   MAX_JSON_STRING_UTF8_BYTES,
 } from "./input-limits.js";
+export {
+  RUNTIME_AGGREGATES,
+  RUNTIME_COMMAND_ENVELOPE_VERSION,
+  RUNTIME_COMMAND_KINDS,
+  RUNTIME_ERROR_REGISTRY_VERSION,
+  RUNTIME_LIFECYCLES,
+  RUNTIME_QUERY_ENVELOPE_VERSION,
+  RUNTIME_QUERY_KINDS,
+  RUNTIME_TELEMETRY_KINDS,
+} from "./runtime/runtime-vocabulary.js";
+export type {
+  RuntimeAggregate,
+  RuntimeCommandKind,
+  RuntimeLifecycleSource,
+  RuntimeQueryKind,
+  RuntimeTruthClass,
+} from "./runtime/runtime-vocabulary.js";
+export type { RuntimeLeaseAuthority } from "./runtime/runtime-guards.js";
+export {
+  EMPTY_NEXT_ALLOWED_COMMANDS,
+  buildNextAllowedCommands,
+  freshRuntimeResult,
+  historicalRuntimeResult,
+} from "./runtime/runtime-affordance.js";
+export type {
+  FreshRuntimeResult,
+  HistoricalRuntimeResult,
+  NextAllowedCommand,
+  RuntimeAffordanceResult,
+} from "./runtime/runtime-affordance.js";
+export {
+  RUNTIME_ERROR_CODES,
+  RUNTIME_SAFE_DETAIL_KEYS,
+  lookupRuntimeError,
+} from "./runtime/runtime-error-registry.js";
+export type {
+  RuntimeErrorCode,
+  RuntimeErrorDescriptor,
+  RuntimeRecoveryCategory,
+  RuntimeRetryability,
+  RuntimeSafeDetailKey,
+  RuntimeTransportBinding,
+} from "./runtime/runtime-error-registry.js";
+export { createRuntimeError } from "./runtime/runtime-error-factory.js";
+export type { RuntimeError, RuntimeErrorDetails } from "./runtime/runtime-error-factory.js";
+export {
+  decodeRuntimeCommandEnvelopeBytes,
+  decodeRuntimeQueryEnvelopeBytes,
+} from "./runtime/runtime-envelope.js";
+export type {
+  RuntimeCommandEnvelope,
+  RuntimeCommandEnvelopeResult,
+  RuntimeQueryEnvelope,
+  RuntimeQueryEnvelopeResult,
+} from "./runtime/runtime-envelope.js";
