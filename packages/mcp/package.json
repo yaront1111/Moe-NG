@@ -1,0 +1,17 @@
+{
+  "name": "@moe/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@moe/contracts": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json",
+    "test": "vitest run --root ../.. packages/mcp/src"
+  }
+}
