@@ -136,17 +136,26 @@
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) presence laundering — attempt to reach any lease field from presence.ts's public surface and vice versa (module graph + static scan must both refuse); (b) token leakage — walk every rejection/security record and error path for leaseToken echoes (epochs must be present, token never); (c) epoch laundering — attempt double-successor under concurrent confirmRevoke and stale-epoch renew-after-revoke; (d) drain-reason regression — attempt to remove a reason or downgrade strongest via any op sequence; (e) handoff branch 3 — invalid handoff must leave state untouched (deep-equal before/after) with no partial record; (f) vocabulary drift — assert local lease-state and drain-reason strings equal the design/registry sets by value (documented comparison, cannot import); (g) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths (dependencies/admission files WILL be present — leave them), `git add` + `git commit -- packages/scheduler/src/authority/lease-state.ts packages/scheduler/src/authority/lease-state.js packages/scheduler/src/authority/lease-resource.ts packages/scheduler/src/authority/lease-resource.js packages/scheduler/src/authority/presence.ts packages/scheduler/src/authority/presence.js packages/scheduler/src/authority/lease-state.test.ts packages/scheduler/src/authority/authority-kernel-invariants.test.ts`; `git show --stat` lists exactly these 8 paths (plus amendment-recorded splits).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/authority/lease-state.ts",
         "packages/scheduler/src/authority/lease-resource.ts",
         "packages/scheduler/src/authority/presence.ts"
       ],
-      "startedAt": "2026-08-07T20:32:22.102Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/authority/authority-kernel.ts",
+        "packages/scheduler/src/authority/lease-fencing.ts",
+        "packages/scheduler/src/authority/lease-drain.ts",
+        "packages/scheduler/src/authority/lease-state.ts",
+        "packages/scheduler/src/authority/authority-kernel-invariants.test.ts"
+      ],
+      "note": "Adversarial self-review done, TWO REAL DEFECTS FOUND AND FIXED, then committed by explicit pathspec.\n\nDEFECT 1 — SILENT LEASE BRICKING (integer ceiling). `isCount` accepted `Number.MAX_SAFE_INTEGER`. The reducer then emitted `version + 1`, `epoch + 1`, or `serverWallSeconds + 90`, none of which are safe integers, so the successor record failed the SAME parse on every later command. The lease would become permanently unmutable — it could not even be revoked — and the mutation that created it returned ok:true, so nothing looked wrong. Probed and confirmed: `Number.isSafeInteger(MAX_SAFE_INTEGER + 1) === false`. FIX uses two bounds, because one is not enough (any single ceiling just moves the brick one step later): a PARSE bound `MAX_AUTHORITY_COUNT = MAX_SAFE_INTEGER - 1e6` so a record at the ceiling stays readable and reconcilable, and a strict MUTATION bound in `fenceAuthority` (`version >= MAX` or `epoch >= MAX` refuses) so no successor is ever emitted above the ceiling. `parseClock` caps `serverWallSeconds` at `MAX - RENEWAL_WINDOW_SECONDS` so the derived deadline still parses. Exhaustion is a property of the RECORD, not the attempt, so it yields AUTHORITY_MALFORMED_INPUT with securityRecord null. Three regression tests: a record at MAX_SAFE_INTEGER in any of four counters is refused; a record at the ceiling refuses mutation with no security record; a record one below the ceiling accepts and its successor still parses (asserted through restartReconstruct, which is the read path).\n\nDEFECT 2 — LATENT THROW IN A FAIL-CLOSED KERNEL. `composeDisposition` used `reduce(strongerOf)` with no initial value, which throws TypeError on an empty array. Unreachable from today's two callers, but a pure kernel that must always return a typed rejection had a crash path one careless caller away. Fixed to return null on empty, with every caller mapping that to a typed rejection.\n\nRED-TEAM CHECKLIST (a)-(g), all executed:\n(a) PRESENCE LAUNDERING — presence.ts's public surface is openPresence/acceptPing over {sessionRef, lastSeen, lastPingId}; no lease field is reachable and no lease type is imported. Its import list is asserted to be EXACTLY [\"../runtime-shape.js\"] (not merely \"contains no lease import\"), every lease module is asserted to have zero /presence/ specifier, and a third test asserts the scanned production-file list equals the exact expected set so a NEW module cannot slip past the ban. It even carries its own isRef/isInstant/exactRecord rather than importing the shared kernel.\n(b) TOKEN LEAKAGE — grepped every `leaseToken` occurrence in production: three type-declaration lines, two key-list entries, two parse guards, and one comparison in fenceAuthority. The value is never written into any output. RejectionSecurityRecord has no token field by construction; rejection messages name the failed check, never the value; issues are sorted by JSON.stringify of {code, message} only. Tests sweep four rejected release paths for both the current and the attempted token.\n(c) EPOCH LAUNDERING — two concurrent confirmRevoke calls against the same record both compute the SAME successor (epoch+1, never +2), the input is untouched, and once either is committed the other is refused with AUTHORITY_SUPERSEDED_AUTHORITY. confirmRevoke on an already-REVOKED lease is refused by the legal-state set with the current proof and by the epoch check with the old one. The race harness additionally asserts on all 1200 steps that the epoch delta is 0 or 1, never negative, and that epoch+1 implies the new state is REVOKED.\n(d) DRAIN REGRESSION — strongest is recomputed from the full union on every apply, so no operation sequence can remove a reason or lower the rank; asserted over 5 seeds x 40 random reasons with an aggregate check that all 7 reasons were drawn. A forged disposition whose strongestReason is not in its own reason set is refused. Documented explicitly in the source that the guarantee is per-application and durability of the accumulated set belongs to the persisting transaction.\n(e) HANDOFF BRANCH 3 — handoff validation runs BEFORE any transition is composed. Five invalid handoffs assert record deep-equal-unchanged (structuredClone before/after), no partial handoff in the payload, and no \"DRAINING\" string anywhere in the result; a SUSPECT lease stays SUSPECT.\n(f) VOCABULARY DRIFT — LEASE_STATES, DRAIN_REASONS, the rank set, SLOT_STATES, and ACQUISITION_STATES are all compared by value to the registry/design sets, with an extra assertion that SLOT_STATES contains none of SUSPECT/DRAINING/REVOKED.\n(g) NO SCRATCH FILES — the authority directory contains exactly the 21 committed files. The temporary tally probe used to extract the non-vacuity counts was applied by sed and restored in the same command; verified by git status showing no stray path.\n\nSKILL CHECKLIST ITEMS NOT COVERED ABOVE: concurrency — the package is pure reducers with no shared mutable state and no IO, so there is no check-then-act to lock; the token/epoch/version fencing",
+      "startedAt": "2026-08-07T20:32:22.102Z",
+      "completedAt": "2026-08-07T20:38:43.375Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2edeee3c",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -158,16 +167,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.030Z",
-  "updatedAt": "2026-08-07T20:32:22.102Z",
+  "updatedAt": "2026-08-07T20:49:09.745Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:56:25.099Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T20:49:09.745Z",
+    "wallClockMs": 3164646
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "worker-2edeee3c"
+    "worker-2edeee3c",
+    "qa-813cd351"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -178,7 +190,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T20:07:21.076Z",
@@ -201,5 +214,38 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-07T20:07:23.103Z",
-  "workStartedAt": "2026-08-07T20:08:02.255Z"
+  "workStartedAt": "2026-08-07T20:08:02.255Z",
+  "reviewStartedAt": "2026-08-07T20:40:40.690Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  25 passed (25)\n      Tests  320 passed (320)\n   Start at  23:38:53\n   Duration  472ms (transform 2.71s, setup 0ms, import 3.83s, tests 448ms, environment 2ms)\n\nCOMBINED_EXIT=0",
+    "reportedAt": "2026-08-07T20:40:40.690Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/authority/lease-state.test.ts",
+    "packages/scheduler/src/authority/lease-release.test.ts",
+    "packages/scheduler/src/authority/test-fixtures.ts",
+    "packages/scheduler/src/authority/authority-kernel.ts",
+    "packages/scheduler/src/authority/authority-kernel.js",
+    "packages/scheduler/src/authority/lease-fencing.ts",
+    "packages/scheduler/src/authority/lease-fencing.js",
+    "packages/scheduler/src/authority/lease-state.ts",
+    "packages/scheduler/src/authority/lease-state.js",
+    "packages/scheduler/src/authority/lease-drain.ts",
+    "packages/scheduler/src/authority/lease-drain.js",
+    "packages/scheduler/src/authority/resource-model.ts",
+    "packages/scheduler/src/authority/resource-model.js",
+    "packages/scheduler/src/authority/lease-resource.ts",
+    "packages/scheduler/src/authority/lease-resource.js",
+    "packages/scheduler/src/authority/lease-resource.test.ts",
+    "packages/scheduler/src/authority/presence.ts",
+    "packages/scheduler/src/authority/presence.js",
+    "packages/scheduler/src/authority/presence.test.ts",
+    "packages/scheduler/src/authority/authority-kernel-invariants.test.ts",
+    "packages/scheduler/src/authority/authority-races.test.ts"
+  ],
+  "completedAt": "2026-08-07T20:49:09.745Z",
+  "reviewCompletedAt": "2026-08-07T20:49:09.745Z",
+  "reviewSummary": "APPROVED at c0b564e (21 files, all src/authority/**, +2535/-0, no foreign paths). Gates mine: named typecheck exits 1 FOREIGN-ONLY (6 errors all in src/admission/admission-invariants.test.ts, 0 tracked files per git ls-files, owner task-84e875f9; authority errors 0); isolated typecheck excluding only src/admission = exit 0; focused vitest src/authority twice = 6 files/131 tests identical; whole package 25 of 26 files/320 tests pass, sole failure the foreign RED; zero Date.now|Math.random|process.|@moe/ hits; all files <=250 lines; 7 one-line shims; tree clean. DoD: (1) fenceAuthority is the single gate for all 5 commands in design-749 order — 25 fencing tests assert exact code + record deep-equal-unchanged + exact epochs + no token serialized, plus 8 malformed cases asserting securityRecord===null; (2) presence non-authority by static scan: import list asserted EXACTLY [\"../runtime-shape.js\"], zero presence specifiers in 6 lease modules, production-file set pinned; (3) races 5 seeds x 240 steps over an asserted-good pool, per-step version/epoch delta invariants, non-vacuity by EXACT 18-entry outcome-set equality, bit-identical replay; (4) owned surface green twice. Mutation: 4 mutants, restored each — dropping the leaseToken check kills 7 tests, inverting drain rank kills 5, one lease import in presence.ts kills 1; one SURVIVED (moving parseHandoff after the DRAINING branch stays 131/131: code correct, order unpinned since invalid-handoff tests all use safeBoundaryObserved:true). Residuals in mem:task-task-967769ea801f4fe09944e4fdcc47663e-qa-verdict: that case; DRAINING discards the tentative handoff; adapterFail releases not quarantines other PENDING_ACQUIRE rows; vocabulary clones pinned only by test literals. LOC 6.3x the 400 bar, accepted on the human's permanent <=250 per-file rule; architects should pre-split remaining aggregates."
 }

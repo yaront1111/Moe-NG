@@ -15,8 +15,27 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "ROUTING STEP — ZERO code changes. The implementation is ALREADY LANDED and QA-verified (commit bcdc2f6: 13 files, 189 tests, DoD 1-3 explicitly marked PASS in the rejection details; the sole blocking issue was the 400-net-LOC bar, now covered by human-approved exception prop-2eaa632d2b594efd90efc141e7be2361, scoped one-time to this exact commit). Do NOT edit, revert, split, or re-verify-by-rewriting anything. Actions: (1) confirm the landed state is intact: `git merge-base --is-ancestor bcdc2f6 HEAD` -> exit 0, and `git status --porcelain -- packages/core/src/planning` shows no uncommitted drift; (2) run the task verification FRESH: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 (planning suite included; if red from FOREIGN in-flight files, attribute by path — the six decomposition child tasks must keep root exports unchanged, so planning's own tests must be green); (3) note that root exports remain unchanged per the decomposition children's standing constraint.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Routing verification only — zero bytes authored. (1) `git merge-base --is-ancestor bcdc2f6 HEAD` exit 0; commit bcdc2f6 \"feat(core): add planning graph lifecycle\" is an ancestor of HEAD with all 13 files intact (+3116). (2) `git status --porcelain -- packages/core/src` is EMPTY — no uncommitted drift anywhere in core, so packages/core/src/index.ts root exports are byte-identical to the landed state (decomposition children's standing constraint holds). (3) Fresh gate `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0: tsc clean, 9 test files / 189 tests passed, run twice with identical results. No foreign red touched core — the two untracked in-flight siblings are packages/mcp/src/http and packages/scheduler/src/admission, outside the @moe/core filter.",
+      "startedAt": "2026-08-07T20:42:07.090Z",
+      "completedAt": "2026-08-07T20:42:39.565Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Complete for QA closure under the exception. Call moe.complete_task with verification { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail } and a completion note stating: implementation = commit bcdc2f6 (unchanged); size covered by approved prop-2eaa632d (one-time, this commit only — the permanent size rule stands for future tasks); DoD 1-3 previously QA-confirmed PASS with file:line evidence in the rejection record; DoD 4 evidenced by the fresh gate run. No new bytes were authored in this routing pass. QA should qa_approve under the exception; any NEW defect found belongs to the six decomposition child tasks, not a re-reject of the excepted size.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Adversarial self-review on a zero-byte pass: `git diff -- packages/core/src/planning packages/core/src/index.ts` produced no output, so there is nothing new to attack — the standard concurrency/input/side-effect checklist has no new surface. Instead I re-read the three DoD evidence sites cold rather than taking QA's prior PASS on faith: approvePlan (planning-run-submission.ts:118-125) rejects unless sameHashes matches sealedHashes exactly and treats re-approval as idempotent only on an identical 4-tuple; activate (planning-run-submission.ts:139-152) is the documented atomic J1 and validates graphHash+qualityHash against the same seal before emitting; executionBearingKeys (planning-validation.ts:153-156) derives the admission count from the witness itself, so a caller-supplied count is never trusted. All three read as QA described. Nothing staged, nothing committed — the working tree is untouched by this pass, so no pathspec commit was required. Gate rerun fresh twice: exit 0, 9 files / 189 tests.",
+      "startedAt": "2026-08-07T20:42:48.153Z",
+      "completedAt": "2026-08-07T20:43:09.963Z"
+    }
+  ],
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,70 +48,55 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.807Z",
-  "updatedAt": "2026-08-07T20:33:50.075Z",
+  "updatedAt": "2026-08-07T20:47:50.758Z",
   "contextFetchedBy": [
     "worker-2edeee3c",
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "qa-bdf27860"
   ],
-  "planSizeWarnings": [
-    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
   ],
-  "stepsCompleted": [],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-07T18:51:02.886Z",
+  "planSubmittedAt": "2026-08-07T20:39:52.993Z",
   "metrics": {
-    "plannedStepCount": 7,
-    "plannedDistinctFileCount": 10,
+    "plannedStepCount": 2,
+    "plannedDistinctFileCount": 0,
     "firstClaimAt": "2026-08-07T18:51:07.736Z",
-    "executedStepCount": 7,
+    "executedStepCount": 9,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T20:47:50.758Z",
+    "wallClockMs": 7003022
   },
   "planningNotes": {
-    "approachesConsidered": "(1) Multi-node gate at ACTIVATION — REJECTED by design-fidelity verification: design 291/396/1322 place the admission pass at SUBMISSION VALIDATION (a 2-node graph must never reach PLAN_REVIEW); activation-time check is defense-in-depth only. (2) UNSUPPORTED via registry code — impossible: closed RUNTIME_ERROR_CODES has no UNSUPPORTED family; FANOUT_* codes cannot carry node data (RUNTIME_SAFE_DETAIL_KEYS has no count key); chose a core-local typed third result variant {ok:false, unsupported:true, ...} — precedented (skills/runner domain-local *_UNSUPPORTED codes) and matches the design's literal 'typed UNSUPPORTED'. (3) Caller-computed executionBearingNodeCount — rejected: unverifiable claim, not a provable metric; witness carries the typed node summary list (nodeKey + executionBearing, DAEMON_VERIFIED floor) and the reducer derives the count. (4) REVISION_REBOUND for all hash mismatches — rejected: registry validSources exclude PLANNING_RUN (createRuntimeError silently degrades to UNKNOWN_ERROR); planning-run uses ILLEGAL_TRANSITION, graph-revision may use REVISION_REBOUND/SUPERSEDED_AUTHORITY. (5) bare planning.cancel for INITIAL runs — rejected: design rows 301-302 make planning.cancel expansion-only; INITIAL cancellation requires goal-cancel authorization witness (exactly HUMAN_APPROVED) + terminal proof. (6) @moe/scheduler dependency for NodeSummary — rejected: layering inversion + package.json churn; witness data only. Verified by 2-agent workflow (design-fidelity + conventions); 2 BLOCKERs + 6 RISKs folded in.",
-    "codebaseInsights": "Landed core conventions catalog (verified): result shapes <X>AcceptedResult/<X>RejectedResult/union, deep-frozen; reduce<X>(state|undefined, command); check order snapshot->create->state->expectedVersion(ILLEGAL_TRANSITION)->version(EXPECTED_VERSION_CONFLICT)->commandId(IDEMPOTENCY_CONFLICT only where source-valid)->TRANSITIONS lookup->overflow guard(multi-event versionDelta)->apply; truth floors goal-validation.ts:145-186 (strongTruth=DAEMON_VERIFIED|HUMAN_APPROVED ONLY — OBSERVED rejects; cancel/reopen exactly HUMAN_APPROVED); successor pattern goal-reducer.ts:167-187; compound multi-event version accounting (combined close precedent); goal.activate_initial_graph exists and owns graphEpoch increment (goal-reducer.ts:106-115) — revision activation carries reference data, daemon composes three reducers atomically. Root index exports ONLY project+goal (identity absent — its own anomaly with area index + shims; do not fix as drive-by). Registry validSources (error-registry.ts): ILLEGAL_TRANSITION+EXPECTED_VERSION_CONFLICT valid both aggregates; IDEMPOTENCY_CONFLICT: GOAL/NODE_RUN/PLANNING_RUN/PROJECT (NOT GRAPH_REVISION); REVISION_REBOUND: ATTEMPT/GRAPH_REVISION/NODE_RUN (NOT PLANNING_RUN); SUPERSEDED_AUTHORITY: not PLANNING_RUN; PLANNING_SUBMISSION_FINALIZING: PLANNING_RUN with sourceState detail. Vocabularies confirmed exact: PLANNING_RUN 9 states, GRAPH_REVISION 6 states; PLANNING_FENCE/PLANNING_HOLD are separate aggregates — never conflate. scheduler graph-model.ts:31 has executionBearing per node but is scheduler-internal.",
-    "risks": "(1) Silent error-code degrade: createRuntimeError falls back to UNKNOWN_ERROR on source/code mismatch — every rejection test must assert the INTENDED code so a degrade fails loudly. (2) Admission-gate placement is the DoD2 make-or-break: multi-node refusal at submission finalization with REJECTED+successor, not at activation. (3) Three-reducer J1 composition: reducers stay pure; atomicity is the daemon's job — document the contract, do not reach across aggregates. (4) Epoch authority: goal owns graphEpoch; revision carrying its own counter would fork authority. (5) SUBMISSION_DRAINING facets: live-planner-effect is a state facet, not a lifecycle — don't invent states outside the closed vocabulary. (6) Preview scope: REVISION/EXPANSION/SUPERSEDED paths typed but rejected — QA may flag 'dead states'; contract comments cite design lines + Phase 5. (7) Shared tree: runner task WORKING — attribute red repo gates; explicit-pathspec commit of exactly 8 paths.",
+    "approachesConsidered": "Only one legal shape: the governor's reopenReason explicitly forbids re-planning/re-implementation — BLOCKED -> REVIEW is not a legal daemon transition, so this PLANNING pass exists purely to route the already-landed, already-verified commit to REVIEW under the human-approved size exception. A real plan here would violate the instruction and risk perturbing landed work the decomposition children depend on.",
+    "codebaseInsights": "Commit bcdc2f6 landed 13 files / +3116 LOC in packages/core/src/planning + root index blocks; QA rejection marked DoD 1-3 PASS with file:line evidence (multi-node gate at submission validation with reducer-derived count; atomic J1 dual-event emission; hash-mismatch zero-state-change; graphEpoch authority in goal aggregate) and blocked ONLY on size. prop-2eaa632d approved as one-time historical exception scoped to this exact commit; the permanent rule stands. Six decomposition child tasks own the file-splitting follow-up and must keep root exports unchanged.",
+    "risks": "(1) Foreign red in the shared tree at verification time — attribute by path; planning's own suite must be green. (2) Worker temptation to 'improve' landed code mid-routing — explicitly forbidden; zero new bytes. (3) QA re-rejecting on size despite the exception — the completion note cites prop-2eaa632d scope explicitly.",
     "keyFiles": [
-      "packages/core/src/goal/goal-reducer.ts",
-      "packages/core/src/goal/goal-validation.ts",
-      "packages/core/src/goal/goal-contract.ts",
-      "packages/core/src/index.ts",
-      "packages/contracts/src/runtime/runtime-error-registry.ts",
-      "packages/contracts/src/runtime/runtime-error-factory.ts",
-      "packages/contracts/src/runtime/runtime-vocabulary.ts",
-      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+      "packages/core/src/planning/planning-contract.ts",
+      "packages/core/src/planning/planning-run-submission.ts",
+      "packages/core/src/planning/graph-revision-reducer.ts",
+      "packages/core/src/index.ts"
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 1800000,
+    "warnedAt": "2026-08-07T20:39:23.019Z",
+    "escalatedAt": "2026-08-07T20:41:48.956Z"
   },
-  "planApprovedAt": "2026-08-07T18:51:04.895Z",
+  "planApprovedAt": "2026-08-07T20:39:55.021Z",
   "workStartedAt": "2026-08-07T18:51:19.324Z",
-  "reviewStartedAt": "2026-08-07T19:23:11.881Z",
+  "reviewStartedAt": "2026-08-07T20:43:37.011Z",
   "verification": {
     "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  9 passed (9)\n      Tests  189 passed (189)\n   Start at  22:21:05\n   Duration  493ms (transform 1.01s, setup 0ms, import 1.43s, tests 310ms, environment 0ms)\n\nFINAL_EXIT=0",
-    "reportedAt": "2026-08-07T19:23:11.881Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  9 passed (9)\n      Tests  189 passed (189)\n   Start at  23:42:25\n   Duration  498ms (transform 971ms, setup 0ms, import 1.38s, tests 323ms, environment 0ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-07T20:43:37.011Z"
   },
-  "filesModified": [
-    "packages/core/src/goal/goal-reducer.ts",
-    "packages/core/src/goal/goal-validation.ts",
-    "packages/core/src/planning/planning-run-reducer.test.ts",
-    "packages/core/src/planning/planning-contract.ts",
-    "packages/core/src/planning/planning-snapshot.ts",
-    "packages/core/src/planning/planning-validation.ts",
-    "packages/core/src/planning/planning-results.ts",
-    "packages/core/src/planning/planning-run-submission.ts",
-    "packages/core/src/planning/planning-run-reducer.ts",
-    "packages/core/src/planning/graph-revision-reducer.test.ts",
-    "packages/core/src/planning/graph-revision-contract.ts",
-    "packages/core/src/planning/graph-revision-validation.ts",
-    "packages/core/src/planning/graph-revision-reducer.ts",
-    "packages/core/src/planning/planning-invariants.test.ts",
-    "packages/core/src/index.ts"
-  ],
-  "reviewCompletedAt": "2026-08-07T19:27:08.152Z",
+  "filesModified": [],
+  "reviewCompletedAt": "2026-08-07T20:47:50.758Z",
   "rejectionDetails": {
     "issues": [
       {
@@ -254,5 +258,7 @@
       "releasedBy": "architect-c4babdf9",
       "reason": "Explicit architect handoff after reporting the human-gated size-exception block; user requested planning continue on other tasks."
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T20:47:50.758Z",
+  "reviewSummary": "APPROVED under human exception prop-2eaa632d. Re-verified independently, not on prior QA record.\n\nEXCEPTION AUDITED FIRST: read .moe/proposals/prop-2eaa632d…json directly — APPROVED, resolvedBy \"human\", scoped to landed commit bcdc2f6 only, permanent <=250 rule NOT waived. Genuine.\n\nSTATE: merge-base --is-ancestor bcdc2f6 HEAD exit 0; show --stat 13 files/+3116/-0; status --porcelain packages/core empty.\n\nGATE RE-RUN BY ME: typecheck exit 0; test exit 0, 9 files/189 tests — matches task.verification. Ran 3x identical. DoD4 PASS.\n\nDoD RE-READ COLD:\n- DoD1: approvePlan (planning-run-submission.ts:118) needs sameHashes(sealedHashes); checked sameHashes itself (planning-validation.ts:85) — iterates all 4 HASH_KEYS, true exact 4-tuple, not partial compare. activate (:139-171) atomic J1, one version per event.\n- DoD2: grepped all non-test PLAN_REVIEW sites — assigned at exactly ONE place (:101), multi-node gate at :95-96 directly above. executionBearingKeys (validation:153) derives count from witness; validFinalize (:136-150) rejects empty/duplicate nodeKeys; unsupported() carries no state.\n- DoD3: content identity set once at creation (graph-revision-reducer.ts:130-134), never in clonedState; approvalBinding (:172) + activation (:202-205) rebound on stale bytes with zero state change; graphEpoch stays in goal aggregate; composition contract in header.\n\nMUTATION-TESTED (3, incl. one prior QA skipped): gate >1->>2 = 2 failed; sameHashes 4-key->planHash only = 2 failed; NEW dropped stale-bytes check :202-203 = 3 failed. All reverted; core diff/status empty after; gate green 189/189.\n\nRAILS: purity grep (Date.now|new Date|Math.random|process.|@moe/scheduler) ZERO hits. No scratch files. Owned paths only. Zero bytes authored this pass.\n\nCONDITION MET: all six decomposition children exist, BACKLOG 13.1-13.6.\n\nDEBT (owned by those children): 4 files over 250 at HEAD — 469/402/315/260, all under 400. <=250 stands for future work."
 }

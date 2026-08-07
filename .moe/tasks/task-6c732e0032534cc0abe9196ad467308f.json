@@ -64,7 +64,7 @@
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/http/http-server.test.ts + src/http/http-server.ts. Build against WebStandardStreamableHTTPServerTransport (fetch Request -> Promise<Response>; socket-free tests construct `new Request(...)` directly — the Node wrapper routes through @hono/node-server and is painful to mock; keep any node:http bridging as a thin outermost listener so tests exercise the same code prod uses). Wiring per request: (1) HOST/ORIGIN DEFENSE (BLOCKER from verification — SDK ships enableDnsRebindingProtection DEFAULT OFF): construct transports with enableDnsRebindingProtection: true + allowedHosts/allowedOrigins loopback-only defaults (127.0.0.1/localhost, configurable); tests: evil Origin header and wrong Host header -> refused with stable error, ZERO dispatch calls (design 1132/1139 loopback-only + strict Host/Origin); (2) BODY BOUND: the SDK has NO size limit (req.json() unguarded — verified) — adapter reads the body itself with a hard cap at MAX_JSON_BODY_BYTES (1 MiB), tested at exactly N (accepted) and N+1 (stable refusal, zero dispatch), then hands the parsed value via the parsedBody option so the transport never re-reads; this same pre-read serves initialize detection; (3) AUTH BEFORE handleRequest: bearer check via http-session (there is NO auth hook inside the transport — wrap-before is the only mechanism and gives 'zero dispatch on auth failure' trivially); validated identity flows as authInfo (HandleRequestOptions.authInfo -> extra.authInfo); (4) CallTool handlers: same construction as stdio (shared generated schemas + name map imported from src/stdio/ — read-only import, no edits), thread extra.signal into port.dispatch*Bytes(bytes, signal); (5) parity fixture mode: enableJsonResponse: true (plain JSON body, cleanest byte-compare) + keepAliveMs: 0 (suppresses nondeterministic ': keepalive' frames); (6) DISCONNECT test asserts the VERIFIED SDK semantics: raw SSE disconnect does NOT abort extra.signal and does NOT stop dispatch — the stream unmaps, the handler completes, send() throws into onerror — so assert 'response never delivered + dispatch completed + nothing fabricated', NOT 'dispatch aborted'; explicit notifications/cancelled DOES abort the signal — separate test asserts the signal reaches the fake port; (7) DoD3 no-bypass: assert the HTTP ListTools set is EXACTLY the stdio generated set (import both, deep-equal) and no HTTP-only route exists (the adapter exposes exactly one MCP endpoint; registry rejects unknown session ids).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
@@ -73,40 +73,62 @@
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
       ],
-      "startedAt": "2026-08-07T20:34:36.849Z"
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-server.test.ts",
+        "packages/mcp/src/http/http-server.ts",
+        "packages/mcp/src/http/http-tool-bridge.ts"
+      ],
+      "note": "RED then GREEN. typecheck exit 0; test 4 files / 96 passed (was 76). 20 new cases, all socket-free against WebStandardStreamableHTTPServerTransport via `new Request(...)`.\n\nMUTATION-PROVEN, not just green — flipping one thing at a time and re-running (file restored byte-identical after, verified by diff): enableDnsRebindingProtection true->false = 1 fail; loopback Origin check removed = 1 fail; `signal` dropped from both dispatch calls = 2 fails; body-bound check removed = 1 fail.\n\n(1) Host/Origin: adapter-owned loopback screen runs FIRST (SDK's own is default-OFF, deprecated, and cannot express \"any loopback port\"). Evil Origin -> 403 with mcpCode -32002 (CAPABILITY_DENIED) and zero dispatch; non-loopback Host -> 403 zero dispatch; loopback Origin accepted. Defence in depth: each session's transport is constructed with enableDnsRebindingProtection: true and allowedHosts/allowedOrigins PINNED to the exact values the session initialised with — tested by re-presenting a still-loopback but different Host (localhost:7391 vs 127.0.0.1:7391) and getting 403. (2) Body bound: exactly MAX_JSON_BODY_BYTES accepted (byte length asserted first), N+1 -> 413 with error.data.code INPUT_LIMIT_EXCEEDED and zero dispatch, over-large declared Content-Length refused before buffering, non-JSON -> 400 zero dispatch; parsed value handed over as parsedBody so the SDK never re-reads. (3) Auth before handleRequest: unauthenticated tool call -> 401 zero dispatch; unauthenticated initialize mints NO session id. (4) Signal threading -> extra.signal into port.dispatch*Bytes. (5) Lifecycle: initialize binds inside the awaited onsessioninitialized, DELETE reaps + notifies, post-DELETE call -> 404 zero dispatch, unknown session -> 404, non-initialize POST without a session -> 400, two concurrent adapters cannot see each other's session ids. (6) Cancellation: notifications/cancelled aborts the captured signal (asserted false before, true after). Disconnect asserts the VERIFIED SDK semantics — dropping the SSE body does NOT abort the signal and does NOT stop dispatch; the result is simply lost and nothing is fabricated. (7) No bypass: HTTP_LISTED_TOOLS deep-equals STDIO_TOOL_ENTRIES tools, the over-the-wire tools/list matches, PUT/PATCH -> 405 zero dispatch.\n\nSCOPE DEVIATION (declared): http-server.ts first landed at 409 lines, over the epic's 400-line hard cap, so the tool surface was split into a SEVENTH owned file, packages/mcp/src/http/http-tool-bridge.ts. Step 7's commit list therefore becomes 7 paths, not 6. All production modules are now <=249 lines. The bridge also holds the widened HttpDispatchPort (optional AbortSignal + optional Promise result) — both one-directional supersets of the stdio port, so the shared conformance fake stays assignable.",
+      "startedAt": "2026-08-07T20:34:36.849Z",
+      "completedAt": "2026-08-07T20:40:46.597Z"
     },
     {
       "stepId": "step-5",
       "description": "src/http/http-resume.ts + resume tests inside http-server.test.ts (or a small http-resume.test.ts if cleaner — stay in owned paths). DECISION (verified, do not relitigate): resume is TYPED UNSUPPORTED in v1 — design 982 assigns the 'resumable cursor stream' to the CONTROL ROOM surface, not MCP; command-layer catch-up exists via events.read|wait with section-16.4 cursors. CRITICAL: omitting the SDK EventStore is NOT fail-closed by itself — verified webStandardStreamableHttp.js:238-244: without an eventStore the Last-Event-ID header is NEVER READ and the request silently gets a fresh SSE stream = a client that believes it resumed has a silent gap (fabricated continuity). Therefore http-resume.ts detects the Last-Event-ID header BEFORE transport.handleRequest and returns a typed stable refusal (registry-mapped error, MCP_RESUME_UNSUPPORTED reason in error.data; note: only a broken/hostile client can send it — without an EventStore no SSE event ever carries an id: field); NO EventStore is ever configured. Tests: GET and POST bearing Last-Event-ID -> stable refusal before the SDK sees the request, zero dispatch; normal GET (no header) -> standalone SSE stream works. Document the future path (implement SDK EventStore interface storeEvent/replayEventsAfter; SDK ships InMemoryEventStore under examples/) in a comment for the task that later lifts UNSUPPORTED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-resume.ts",
         "packages/mcp/src/http/http-server.test.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-resume.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-resume.ts",
+        "packages/mcp/src/http/http-server.ts",
+        "packages/mcp/src/http/http-server.test.ts"
+      ],
+      "note": "RED then GREEN: typecheck exit 0, 4 files / 101 passed (was 96). Mutation-proven: bypassing the resume screen in handleRequest fails 3 tests; file restored byte-identical (diff verified).\n\nhttp-resume.ts (62 lines) exports LAST_EVENT_ID_HEADER, MCP_RESUME_UNSUPPORTED, refuseResumption(request): Response | undefined. It is deliberately self-contained (only @moe/contracts) so http-server can import it without a cycle. Resume is TYPED UNSUPPORTED: CAPABILITY_DENIED from the registry (403 / -32002) with `reason: MCP_RESUME_UNSUPPORTED` alongside the frozen error under error.data — the registry's detail keys are a closed allowlist, so the discriminator rides beside the error rather than being smuggled into details. The call site sits immediately after session screening and dominates every transport.handleRequest below it. NO EventStore is constructed anywhere.\n\nThe point of the module is that omitting an EventStore is NOT fail-closed on its own: the SDK only reads Last-Event-ID when a store is present, so without one the header is ignored and the client silently gets a FRESH stream — a client that thinks it resumed has an invisible gap. The module header records that, plus the exact path to lift the restriction later (implement storeEvent/replayEventsAfter, pass as `eventStore`, delete the screen; a durable store is required or resume re-introduces the same fabricated continuity across restarts).\n\nTests (5): no header -> refuseResumption returns undefined; POST and GET bearing Last-Event-ID -> 403 with error.data.code CAPABILITY_DENIED and error.data.reason MCP_RESUME_UNSUPPORTED and ZERO dispatch; the refusal does not echo the bearer; a normal GET with no header still opens a real standalone SSE stream (200, content-type text/event-stream).",
+      "startedAt": "2026-08-07T20:40:47.077Z",
+      "completedAt": "2026-08-07T20:42:27.581Z"
     },
     {
       "stepId": "step-6",
       "description": "Parity gate — src/http/http-parity.test.ts. (1) Import and RUN the shared src/dispatch-conformance.ts suite against the HTTP transport with the same call-recording fake port the stdio side uses — the call-sequence obligation (decode -> authenticate -> dispatch, auth-fail short-circuits) and the full RUNTIME_ERROR_CODES -> mcpCode mapping table must pass unmodified (DoD1 'semantically parity-tested with stdio' as an executable gate, not prose); (2) byte-fidelity: fixture daemon response bytes survive byte-identical through the HTTP path in JSON mode (compare against the same fixtures the stdio test uses; SSE mode: extract the single `data:` line — JSON.stringify never emits raw newlines — and byte-compare the payload); (3) tool/result/error triple-compare stdio-vs-HTTP on identical inputs: same fixture request through both transports -> extracted result bytes identical, error objects identical (code, mcpCode, error.data recovery set); (4) 1 MiB N/N+1 boundary re-asserted through the full stack. Then the focused verification: fresh `pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test\", exitCode: 0, outputTail }. Repo gate `pnpm typecheck && pnpm test` with foreign-work attribution. `wc -l packages/mcp/src/http/*.ts` — every production module <=400 hard (target 250).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-parity.test.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-parity.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-parity.test.ts"
+      ],
+      "note": "Parity gate GREEN. Focused: `pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test` exit 0, 5 files / 122 passed (was 101).\n\n(1) The shared src/dispatch-conformance.ts suite is registered against the HTTP transport with the SAME createRecordingPort fake the stdio side uses, unmodified — so the call-sequence obligation (decode -> authenticate with the verbatim dotted kind -> exactly one dispatch, auth failure short-circuiting with zero dispatch) and the full RUNTIME_ERROR_CODES -> mcpCode table are re-proved for HTTP, not asserted in prose. (2) Byte fidelity both modes: golden command bytes verbatim in JSON mode; golden query bytes verbatim extracted from the single SSE `data:` line. (3) Triple-compare stdio-vs-HTTP in one process on identical inputs, both fed the SAME credential so envelopes are comparable: identical result outcomes, identical error objects for an unmapped tool and for oversized arguments, identical port call ORDER, and an authentication refusal whose recoveryCommands survive as [\"session.open\"] on both. STRONGEST ANTI-DRIFT GUARD (beyond the plan): the dispatched envelope BYTES are compared element-by-element between transports for both a command and a query and are identical — that is what pins the envelope construction this adapter duplicates from the frozen stdio module. (4) 1 MiB boundary re-asserted through the full stack: exactly N is not refused as too large, N+1 -> 413 with error.data.code INPUT_LIMIT_EXCEEDED.\n\nwc -l production: http-server.ts 255, http-session.ts 217, http-tool-bridge.ts 206, http-resume.ts 60 — all far below the 400 hard cap (http-server.ts is 5 over the 250 soft target).\n\nREPO GATE, honest report: `pnpm typecheck` FAILS and `pnpm test` FAILS, entirely on FOREIGN in-flight work, none of it touched by this task. typecheck: packages/store/src/store-schema-v3-migration.test.ts (TS7053, file is UNTRACKED — another worker's in-flight file). test: 3 files fail — that same untracked store test, packages/store/src/command-decision-integrity.test.ts (broken by the foreign MODIFIED packages/store/src/sqlite-schema-manifest.ts), and packages/scheduler/src/authority/lease-release.test.ts (scheduler has untracked foreign work under src/admission/). ATTRIBUTION PROVEN, not asserted: `grep -rl \"@moe/mcp\"` outside packages/mcp returns NOTHING — no package depends on this one — and running `vitest packages/store/src packages/scheduler/src` alone, with @moe/mcp never loaded, reproduces the failures (2 files / 5 tests). The full-run count was 9 failed tests vs 5 in the isolated run, so some of that foreign scheduler redness also looks order-dependent; either way it is not this task's. I did not modify any foreign file.",
+      "startedAt": "2026-08-07T20:42:27.774Z",
+      "completedAt": "2026-08-07T20:45:38.817Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) auth-verdict caching — grep http-session.ts/http-server.ts for any memoization of validateBearer results; per-request revalidation is the rotation-revocation guarantee; (b) bearer leakage — walk every error/log path + serialized Response bodies for credential echoes; (c) Host/Origin defense actually ON — grep transport construction for enableDnsRebindingProtection: true and loopback allowlists; (d) resume hole — confirm no code path constructs an EventStore and the Last-Event-ID check dominates every handleRequest call; (e) no stdio file edited (`git status --porcelain -- packages/mcp/src/stdio` must be clean); (f) signal threading — notifications/cancelled test shows the fake port received the aborted signal; (g) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/mcp/src/http/http-session.ts packages/mcp/src/http/http-server.ts packages/mcp/src/http/http-resume.ts packages/mcp/src/http/http-session.test.ts packages/mcp/src/http/http-server.test.ts packages/mcp/src/http/http-parity.test.ts`; `git show --stat` lists exactly these 6 paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/mcp/src/http/http-session.ts",
         "packages/mcp/src/http/http-server.ts",
         "packages/mcp/src/http/http-resume.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T20:45:39.484Z"
     }
   ],
   "status": "WORKING",
@@ -129,12 +151,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T20:34:36.849Z",
+  "updatedAt": "2026-08-07T20:45:39.484Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -146,7 +168,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T19:23:20.302Z",

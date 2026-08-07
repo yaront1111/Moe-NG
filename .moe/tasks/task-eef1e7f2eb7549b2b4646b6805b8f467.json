@@ -155,8 +155,8 @@
       "completedAt": "2026-08-07T20:24:26.685Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,12 +168,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.652Z",
-  "updatedAt": "2026-08-07T20:34:42.514Z",
+  "updatedAt": "2026-08-07T20:40:22.676Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:34:23.966Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T20:40:22.676Z",
+    "wallClockMs": 3958710
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -232,5 +234,8 @@
     "packages/scheduler/src/dependencies/dependency-witness.js",
     "packages/scheduler/src/dependencies/dependency-analysis.ts",
     "packages/scheduler/src/dependencies/dependency-analysis.js"
-  ]
+  ],
+  "completedAt": "2026-08-07T20:40:22.676Z",
+  "reviewCompletedAt": "2026-08-07T20:40:22.676Z",
+  "reviewSummary": "APPROVED at 7e80186 (8 owned paths, +1281/-0). Gates re-run by me, foreground. Task command exits 1 ONLY on untracked foreign src/admission/** (task-84e875f9, live: error moved TS2307->TS6133 mid-review); excluding that dir tsc exits 0. Focused suite 27 tests/2 files twice, identical. Package: 24 files/278 tests pass. Repo pnpm test: 92 files, 1313 passed, 1 skipped, exit 0 — admission already consumes this kernel (admission-pass.ts:17). DoD1: all 17 contract keys required (test deletes each -> one CONTRACT_MALFORMED), extras refused, >=1 witness with exact ref/version/digest/sourceOperationClass, producer arm 1:1 to edgeKind with own mismatch code, 4 hard->HARD + 4 nonblocking->ADVISORY both ways. DoD2: MONOTONIC survives only on a registry entry matching predicateRef+schemaId+schemaVersion AND every witness sourceOperationClass; no proof -> REVOCABLE, mismatch -> refusal, bare provenMonotonic and proxied registry -> REGISTRY_MALFORMED; invalidation is an explicit typed event, MONOTONIC flips forbidden, 11-gate order checked over all 121 pairs, at-horizon records, one past -> frozen NO_OP_AFTER_HORIZON with no event/history. DoD3: assessContractRedundancy consumes the real analyzeGraphStructure candidate, always literal requiresSemanticProof:true, output asserted free of safeToRemove|removal|activation; forged self-alternate and cross-graph binding refused. Mutation-tested, all killed, tree restored: drop REVOCABLE demotion -> 3 fail; horizon <= to < -> 2 fail; contract allowed on advisory -> 2 fail. Rails: zero hits for Date.now|Math.random|process.|@moe/; imports relative in-package + vitest only; subdir unexported per plan; 3 shims; no scratch files. LOC: 678 production (250/248/180, all under the 400 rail) + 600 tests over the 400 net bar — approved per the 9583ab6 precedent and mem:gotcha-core-aggregate-loc-bar. Hostile input safe: accessors/proxies/symbols/prototypes refused, zero trap invocation."
 }

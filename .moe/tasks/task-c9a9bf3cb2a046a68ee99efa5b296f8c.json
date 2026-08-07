@@ -117,8 +117,8 @@
       "completedAt": "2026-08-07T19:55:13.597Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-bdf27860",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -137,14 +137,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.570Z",
-  "updatedAt": "2026-08-07T20:36:10.388Z",
+  "updatedAt": "2026-08-07T20:42:24.809Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:02:59.140Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T20:42:24.809Z",
+    "wallClockMs": 5965669
   },
   "contextFetchedBy": [
     "qa-91cf5a2f",
@@ -208,7 +210,7 @@
     "packages/mcp/src/stdio/stdio-server.test.ts",
     "packages/mcp/src/stdio/stdio-server.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T19:44:52.869Z",
+  "reviewCompletedAt": "2026-08-07T20:42:24.809Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Tool schemas are generated and bounded; authentication/capability checks match HTTP."
@@ -323,5 +325,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T20:42:24.809Z",
+  "reviewSummary": "APPROVED — reopen-1 gap closed, proven by my own mutation matrix. Detail: mem:task-task-c9a9bf3cb2a046a68ee99efa5b296f8c-qa-verdict.\n\nFIX: 0734ea7, test-only, +43/-4, one path (stdio-server.test.ts). git diff --stat 55ecf7e..HEAD -- packages/mcp/ shows production byte-unchanged, so the prior VERIFIED-PASS surface stands, not re-litigated.\n\nGAP DEAD: field ordering was the only thing binding the kind the adapter AUTHENTICATES (tool label) to the kind the daemon EXECUTES (envelope); hoisting only commandKind survived 48/48. Fix asserts on the DECODED dispatched envelope via selectFields(decoded.envelope, ADAPTER_SUPPLIED_*_FIELDS)+toEqual, driven off the exported registries so later fields are auto-covered (pinned at stdio-schemas.test.ts:111-121). Hostile input is a DIFFERENT VALID kind + schemaVersion 0 + attacker credential/digest, so the vocabulary check cannot mask a missing override.\n\nMUTATIONS I RAN (one field at a time, git checkout between, tree clean after): all 4 command fields, all 3 query fields, plus both whole-block hoists — 9/9 KILLED. Last round's survivor dies for the RIGHT reason: expected commandKind 'goal.create', received 'approval.decide'. Closed on BOTH surfaces.\n\nGATES: vitest packages/mcp/src/stdio -> 2 files/49 tests, twice identical. Declared pnpm --filter @moe/mcp typecheck && test -> both exit 0. Repo pnpm test -> 92 files/1313 passed+1 skipped, exit 0. Max production file 272, under the 400 rail.\n\nFOREIGN: first package typecheck RED, all 5 errors in untracked packages/mcp/src/http/ (git ls-files -> 0), zero in stdio/. Did not stash or move it; proved the owned surface with a throwaway %TEMP% tsconfig -> exit 0, scratch deleted.\n\nDoD 1 satisfied; 2 and 3 unchanged and previously verified; 4 green twice."
 }
