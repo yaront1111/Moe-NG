@@ -136,8 +136,8 @@
       "completedAt": "2026-08-07T21:34:17.427Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -149,17 +149,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.155Z",
-  "updatedAt": "2026-08-07T21:35:12.045Z",
+  "updatedAt": "2026-08-07T21:38:18.887Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:07:44.997Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T21:38:18.887Z",
+    "wallClockMs": 5433890
   },
   "contextFetchedBy": [
-    "worker-2edeee3c"
+    "worker-2edeee3c",
+    "qa-813cd351"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -224,7 +227,7 @@
     "packages/core/src/policy/approval-invalidation.ts",
     "packages/core/src/policy/policy-invariants.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T21:17:57.495Z",
+  "reviewCompletedAt": "2026-08-07T21:38:18.887Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Unknown or missing inputs can never become ALLOW and caller risk labels cannot lower daemon-derived risk."
@@ -291,5 +294,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T21:38:18.887Z",
+  "reviewSummary": "APPROVE — all four issues from reopen #1 fixed. Verified independently, not from the notes.\n\nGATE re-run: typecheck exit 0; `pnpm --filter @moe/core test` exit 0, 13 files / 226 tests — matches the filed outputTail (was 12/221; delta is the new policy-relaxation.test.ts).\n\nMY OWN PROBE, written fresh, run, deleted (`git status --porcelain -- packages/core` clean after):\n- A, prior QA's exact repro (child redeclares rule.audit with requiredFactIds []): was ALLOW, now {\"decision\":\"DENY\",\"reasonCodes\":[\"REQUIRED_FACT_MISSING\",\"SLICE_RELAXATION_DETECTED\"]}.\n- B, duplicate ruleId INSIDE one slice, second declaration empty — an angle their tests miss: DENY + both codes.\n- C, child omits the ancestor rule entirely: HOLD_UNKNOWN/REQUIRED_FACT_MISSING, correctly no relaxation code, fact still required via the chain-wide union.\n- D, three links where the leaf shrinks against the running effective rule: DENY.\n\nMUTATION — did not trust the tests to be load-bearing. Stripped the ancestor.requiredFactIds.some(...) clause from ruleRelaxation: 6 tests failed across 3 files (relaxation, decision-table, invariants). Reverted, tree clean, gate green.\n\nISSUE BY ISSUE: (1) policy-composition.ts:54 treats a shrunken required-fact set as an unconditional, non-waivable relaxation. (2) assessEvidence unions required facts over every slice instead of the fold's last-declaration set — defense in depth, both layers must regress. (3) decision-table gained the shrink case. (4) invariants generator emits the shape with a non-vacuity floor, expect(shrunk).toBeGreaterThanOrEqual(5), comment recording 10/320 — a canary against a silent generator retune.\n\nDoD 2 second half re-checked: a hint raises effectiveTier but never computedTier, usedFactIds or inputFacts. Purity grep: 3 hits, all prose in headers, zero in code. All 11 policy files <=250.\n\nSize: prior QA scoped it out for this task; honored rather than move goalposts mid-fix."
 }

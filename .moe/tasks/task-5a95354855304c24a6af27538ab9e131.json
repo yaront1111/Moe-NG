@@ -19,44 +19,64 @@
     {
       "stepId": "step-1",
       "description": "Characterize the refactor boundary without editing or running a gate: confirm the current 259-line reducer and clean owned paths; inventory the eight contiguous private helpers and every call site; grep the repository to prove no external importer depends on those helpers; record the public reducer exports and preserve the header's three-reducer atomic-composition contract. Treat the unchanged graph reducer and invariant suites as held-out characterization.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.ts"
-      ]
+      ],
+      "note": "Characterized boundary, no edits, no gate. Verified: graph-revision-reducer.ts is 259 physical lines, LF-only (crlf=0 lf=259, trailing newline), owned paths clean in `git status --porcelain -- packages/core/src/planning/`; graph-revision-results.ts does not exist. Hard dependency bcdc2f6 (\"feat(core): add planning graph lifecycle\") confirmed ancestor of HEAD baa8012. Helper block = lines 64-122 (8 private fns): rejected(64), unknownFailure(68), illegal(72), rebound(84, has doc comment), supersededAuthority(91), versionConflict(98), accepted(109), clonedState(117, has \"Content identity is never part of the patch surface.\" comment). Call sites: unknownFailure 128/240/244/248; illegal 146/158/171/193/196/201/223/250/254/256/257; rebound 172/204; supersededAuthority 249; versionConflict 252; accepted 135/151/163/199/212; clonedState 148/160/197/208; `rejected` is called ONLY from inside the moved block (69/76/85/92/102) so the reducer will import 7 of the 8 while the module exports all 8 — same shape as sibling planning-results.ts, which also exports an internally-only-used `rejected`. External importers of graph-revision-reducer.js: packages/core/src/index.ts:123, planning-invariants.test.ts:12, graph-revision-reducer.test.ts:15 — all three import only GRAPH_REVISION_COMMAND_KINDS / GRAPH_REVISION_TRANSITIONS / reduceGraphRevision, so no external dependency on the private helpers. Public reducer surface to preserve exactly: those three symbols. Root index.ts re-exports none of planning-results/planning-snapshot/planning-validation, confirming the new module stays package-internal. Reducer header lines 1-17 (content-identity + three-reducer atomic-composition contract + GRAPH_REVISION registry-source note) stays on the reducer. Sibling planning-results.ts pattern to mirror: `createRuntimeError` from @moe/contracts, types from the contract file, deepFreeze from planning-snapshot.js, plain `export function` per helper. Held-out characterization: graph-revision-reducer.test.ts and planning-invariants.test.ts stay byte-unchanged. Projected sizes: reducer ~206, results ~72, both <=250.",
+      "startedAt": "2026-08-07T21:36:50.545Z",
+      "completedAt": "2026-08-07T21:38:03.696Z"
     },
     {
       "stepId": "step-2",
       "description": "Extract the existing helper block by verbatim move into new `graph-revision-results.ts`. Export exactly the eight package-internal helpers needed by the reducer, preserve their comments, signatures, RuntimeError construction/details/source states, deep-freeze calls, event handling, and content-identity exclusion in `clonedState`; add only minimal value/type imports from `@moe/contracts`, `graph-revision-contract.js`, and `planning-snapshot.js`. Update `graph-revision-reducer.ts` to import those helpers with a NodeNext `.js` specifier and remove only now-unused imports. Keep the reducer header, frozen command/transition exports, per-command handlers, check/call order, and `reduceGraphRevision` signature/value surface byte-semantically unchanged; do not re-export the helpers or edit root index/tests. Both modules must be <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.ts",
         "packages/core/src/planning/graph-revision-results.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/graph-revision-results.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ],
+      "note": "Verbatim move done; no gate run yet (step-3 owns the single gate). New graph-revision-results.ts holds the eight helpers moved byte-for-byte from reducer lines 64-122 with only `function` -> `export function` prepended: rejected, unknownFailure, illegal, rebound, supersededAuthority, versionConflict, accepted, clonedState. Both original comments travelled with their declarations (\"Approval or activation bytes that do not bind this revision's sealed identity.\" on rebound, \"Content identity is never part of the patch surface.\" on clonedState); every RuntimeError code/details/source, deepFreeze call, and clonedState's Omit<..., \"graphContentHash\" | \"planHash\"> patch type is unchanged. Imports added to the new module are minimal and mirror sibling planning-results.ts: value `createRuntimeError` from @moe/contracts, four types (GraphRevisionCommandKind, GraphRevisionEvent, GraphRevisionReducerResult, GraphRevisionState) from ./graph-revision-contract.js, `deepFreeze` from ./planning-snapshot.js. Added a 3-line module doc naming its single responsibility (result/rejection/state-clone construction, no transition logic); no moved comment was edited. Reducer changes are exactly three: dropped the now-unused `import { createRuntimeError } from \"@moe/contracts\";` (0 remaining references, verified), added an alphabetized 9-line named import from \"./graph-revision-results.js\" placed between the contract and validation import blocks per relative-specifier ordering, and deleted the moved block. Reducer imports 7 helpers; `rejected` stays module-internal to the new file because only the moved helpers call it — same shape as planning-results.ts. Untouched: header lines 1-17, GRAPH_REVISION_COMMAND_KINDS, GRAPH_REVISION_TRANSITIONS, create/submit/refuse/approvalBinding/decide/apply/safeToApply, reduceGraphRevision signature and its check order, and all remaining validation/planning-snapshot imports (each still used). Helpers are not re-exported from the reducer or root index; no test or contract file touched. Size/EOL proof via in-memory Node counter: reducer 206 lines, results 73 lines, both crlf=0 cr=0, LF-only, so <=250 under LF/CRLF/CR-equivalent counting.",
+      "startedAt": "2026-08-07T21:38:05.878Z",
+      "completedAt": "2026-08-07T21:38:59.792Z"
     },
     {
       "stepId": "step-3",
       "description": "Run the single exact regression gate once after the extraction: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0 and retain the fresh command, exit code, and output tail as `moe.complete_task` evidence. Any failure is extraction drift in the two owned production paths; do not edit or weaken held-out tests.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.ts",
         "packages/core/src/planning/graph-revision-results.ts"
-      ]
+      ],
+      "note": "Ran the exact plan gate once, fresh, in the foreground: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Exit 0. tsc --project tsconfig.json produced no diagnostics (so the new NodeNext \"./graph-revision-results.js\" specifier resolves and no import went unused/undefined); vitest run --root ../.. packages/core/src reported \"Test Files 13 passed (13) / Tests 226 passed (226)\", duration 621ms. No test or held-out characterization file was edited or weakened — graph-revision-reducer.test.ts and planning-invariants.test.ts ran byte-unchanged against the split modules. No extraction drift surfaced, so no re-run was needed. This exact output tail is retained as moe.complete_task verification evidence.",
+      "startedAt": "2026-08-07T21:39:02.006Z",
+      "completedAt": "2026-08-07T21:39:28.619Z"
     },
     {
       "stepId": "step-4",
       "description": "Perform the one final adversarial review. Compare each moved helper body/comment with the committed pre-split reducer and prove the original block is represented exactly once; inspect for reordered reducer checks/calls, changed stable codes/details/source states, missing deep freezes, changed event/version order, content-hash patchability, accidental root/reducer helper exports, cycles, or lost composition commentary. Use an in-memory cross-platform Node line counter to prove both owned files are <=250 for LF/CRLF/CR, confirm non-owned contracts/index/tests are untouched, and run `git diff --check`. If review requires any edit, rerun the exact gate before completion. Then inspect shared `git status --porcelain`, stage/commit only `packages/core/src/planning/graph-revision-reducer.ts` and `packages/core/src/planning/graph-revision-results.ts` by explicit pathspec (never broad add or bare commit), and verify `git show --stat` lists exactly those two paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.ts",
         "packages/core/src/planning/graph-revision-results.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ],
+      "note": "Adversarial review done; no edit was required, so the step-3 gate result stands as the fresh evidence. Move proof (in-memory Node against `git show HEAD:...reducer.ts`, no scratch file): sorted chunk-set equality is TRUE — 19 declaration-plus-comment chunks on each side, 0 duplicates — after normalizing only the eight moved helpers' added `export` keyword and excluding the one added module doc. That proves every moved body and comment survives exactly once, nothing was retyped, dropped, or added, and no helper was silently duplicated back into the reducer. Independent fingerprints: reduceGraphRevision call order identical to baseline (snapshotCommand, unknownFailure, validRef, unknownFailure, create, snapshotGraphRevisionState, unknownFailure, supersededAuthority, validExpectedVersion, illegal, versionConflict, validRef, illegal, illegal, safeToApply, illegal, apply) so SUPERSEDED_AUTHORITY still precedes the version checks and zero-state-change rejections keep their precedence; deepFreeze call count 12 baseline vs 12 now (reducer+results) and Object.freeze 8 vs 8, so no freeze was lost; header bytes before the old first import are byte-identical, so the three-reducer atomic-composition and GRAPH_REVISION registry-source commentary is intact; clonedState still carries Omit<..., \"graphContentHash\" | \"planHash\">, so content identity stays unpatchable. Surface: reducer exports exactly GRAPH_REVISION_COMMAND_KINDS, GRAPH_REVISION_TRANSITIONS, reduceGraphRevision and contains no `export {`/`export *`, so helpers are not re-exported; results exports the eight helpers only and never references graph-revision-reducer, so there is no import cycle; root index.ts re-exports no *-results module. Adversarial checklist: all moved code is pure and allocation-local (no IO, no shared mutable state, no check-then-act), so concurrency, TOCTOU, retry, and cleanup-on-error paths are unaffected; input handling was not moved (every guard stayed in the reducer) so null/empty/NaN/oversize behaviour is bit-for-bit the prior behaviour; `rejected` is package-internal-only in the new module and unreachable from the package root, matching sibling planning-results.ts. Cross-platform line counter (t.split(/\\r\\n|\\r|\\n/), trailing-empty adjusted): reducer 206, results 73, both LF-only (crlf=0, cr=0), so <=250 under LF/CRLF/CR-equivalent counting. `git diff --check` exit 0. Non-owned paths proven untouched: git status --porcelain for index.ts, graph-revision-reducer.test.ts, planning-invariants.test.ts, graph-revision-contract.ts is empty. Commit: shared tree held 21 foreign modified/untracked entries (.moe/**, packages/store/**, packages/scheduler/**), so I staged by explicit pathspec only, confirmed `git diff --cached --name-only` listed exactly the two owned paths, and committed f406c47 with `git commit -m ... ` after that staging — never a broad add, bare commit, push, merge, reset, or stash. `git show --stat` on f406c47 lists exactly graph-revision-reducer.ts and graph-revision-results.ts (82 insertions, 62 deletions); all foreign work remains uncommitted and preserved.",
+      "startedAt": "2026-08-07T21:39:33.313Z",
+      "completedAt": "2026-08-07T21:41:09.228Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-bdf27860",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -68,17 +88,24 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.600Z",
-  "updatedAt": "2026-08-07T21:27:45.896Z",
+  "updatedAt": "2026-08-07T21:42:14.870Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:20:40.463Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "worker-2edeee3c"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:27:43.866Z",
   "planningNotes": {
@@ -97,5 +124,17 @@
   "budget": {
     "wallClockMs": 1800000
   },
-  "planApprovedAt": "2026-08-07T21:27:45.896Z"
+  "planApprovedAt": "2026-08-07T21:27:45.896Z",
+  "workStartedAt": "2026-08-07T21:36:50.545Z",
+  "reviewStartedAt": "2026-08-07T21:42:12.416Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  13 passed (13)\n      Tests  226 passed (226)\n   Start at  00:39:06\n   Duration  621ms (transform 2.04s, setup 0ms, import 2.82s, tests 456ms, environment 1ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-07T21:42:12.416Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/graph-revision-reducer.ts",
+    "packages/core/src/planning/graph-revision-results.ts"
+  ]
 }

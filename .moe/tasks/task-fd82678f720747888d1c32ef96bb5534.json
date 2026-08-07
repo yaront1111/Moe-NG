@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: both dependencies verified landed. Runtime contract registry DONE; Foundation executable specification's code is committed (packages/testkit/src/foundation tracked — foundation-fakes.ts, foundation-fault-schedule.ts). Highest unlock available: apps/control-room does not exist in git at all, and this task owns that scaffold. Five downstream tasks are waiting on it — Node attempt workspace, Approval decision surfaces, Evidence causal timeline, Recovery doctor console, Canonical goals board — all of which own apps/control-room subpaths and are unplannable until the app exists. ARCHITECT: this is the repo's FIRST frontend package. It owns the React app shape, build tooling, dev server, and first frontend dependency set. Own package.json, tsconfig.json, src root export, AND the pnpm-lock importer explicitly — three packages have shipped missing one of those today.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.939Z",
-  "updatedAt": "2026-08-07T11:50:15.939Z"
+  "updatedAt": "2026-08-07T21:36:42.016Z"
 }

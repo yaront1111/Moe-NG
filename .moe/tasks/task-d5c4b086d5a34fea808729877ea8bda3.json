@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-c4babdf9",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG. Depends on Policy approval core, which has no committed code (packages/core/src/policy absent from git); Policy itself only just returned to PLANNING. Unlike the Planning-graph case, this dependency is not merely blocked-with-code-landed — there is nothing to build against. Re-queue once packages/core/src/policy is committed.",
+  "reopenReason": "Governor: dependencies verified landed. Runtime contract registry DONE; Policy approval core is in REVIEW with its code committed — packages/core/src/policy is tracked (approval-contract.ts, policy-contract.ts, policy-evaluation.ts). I sent this back to BACKLOG earlier today precisely because packages/core/src/policy did not exist; that condition has cleared. Owns packages/scheduler/src/budget/**, file-disjoint from the three sibling scheduler subtrees (authority, dependencies, admission). Plan the budget contract against Policy's committed interface, not against an assumed one.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,12 +29,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.265Z",
-  "updatedAt": "2026-08-07T20:25:48.657Z",
+  "updatedAt": "2026-08-07T21:39:33.670Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:17:26.969Z"
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "architect-c4babdf9"
   ],
   "blockedReason": null,
   "blockedResourceId": null,

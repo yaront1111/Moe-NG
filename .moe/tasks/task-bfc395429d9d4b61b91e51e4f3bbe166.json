@@ -19,30 +19,39 @@
     {
       "stepId": "step-1",
       "description": "Dependency gate: B1 (task-a602b3d4, StoredEvent domainSchemaVersion) SHOULD land first — the only shared file is store-contracts.ts with disjoint edits (B1: field + constant; B2: error-code union entry). Check `git log --oneline -- packages/store/src/store-domain-schema-version.test.ts` (B1's new test) or the task status; if B1 is WORKING-uncommitted in the shared tree, coordinate in #general before editing store-contracts.ts (whole-file staging — a simultaneous edit would sweep their hunk); if B1 is unstarted, proceed — the edits remain disjoint and B1's plan carries the same coordination note. Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN baseline (attribute foreign red by path). Re-read the verified mechanics pinned in this task's own description — they came from two adversarial verification rounds; do not rediscover or deviate silently.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-07T21:35:08.163Z"
+      "note": "Dependency gate + baseline done. FINDINGS (two matter):\n\n(1) B1 (task-a602b3d4) is WORKING and IN-FLIGHT in the shared tree: steps 1-2 COMPLETED, step-3 PENDING. Its write-path edits already landed (sqlite-schema-manifest.ts domain_schema_version column, event-ledger-append.ts insert), its RED test packages/store/src/store-domain-schema-version.test.ts got SWEPT INTO a foreign commit baa8012 (fix(task-556d87c3...)), and packages/store/src/decision-ledger-canonical.ts is currently uncommitted-modified by B1. Coordination note already posted in #general (msg-07952b8a). store-contracts.ts is currently UNMODIFIED, so my union-entry edit starts from a clean file; I will re-check `git diff -- packages/store/src/store-contracts.ts` immediately before staging so a B1 hunk cannot be swept.\n\n(2) BASELINE IS RED, and the red is FOREIGN by path:\n  - `pnpm --filter @moe/store typecheck` -> 5 errors, ALL in src/store-domain-schema-version.test.ts (\"Property 'domainSchemaVersion' does not exist on type 'StoredEvent'\") = B1's committed RED test awaiting its own step-3 contract edit.\n  - `pnpm --filter @moe/store test` -> same 5 + 1 more: command-decision-concurrency.test.ts \"chooses proposal validation from the aggregate version observed under the write lock\" is FLAKY at HEAD, unrelated to both of us. Ran it 3x isolated: 2 failed / 1 failed / 0 failed. Pre-existing nondeterminism, no store src modified.\n  Consequence for step-4: my declared gate cannot exit 0 until B1 lands its step-3. Will re-run at step-4 (a correctly-attributed foreign RED often resolves itself) and escalate there if it has not.\n\n(3) PLAN-DESCRIPTION CORRECTION (verified, forces a scope note at step-3): the task description states \"a new inherited method needs NO decision-ledger.ts edit\". That is FALSE against the current tree. SqliteEventStore holds `#core: DecisionLedgerCore`, and decision-ledger.ts:36-70 defines DecisionLedgerCore as an explicit interface, implemented at :86-125 by a frozen OBJECT LITERAL of arrow delegates (`Object.freeze({ commit: (input) => ledger.commit(input), ... })`) — not the class itself. Class inheritance therefore does NOT reach #core. commitWithApply needs 2 mechanical hunks in decision-ledger.ts (one interface member + one delegate entry) or SqliteEventStore cannot see it. That makes 5 files, not 4. Everything else in the description verified TRUE: recovery.ts:16-41 single COMMIT / commitAttempted=false -> ROLLBACK -> no poison; store-runtime.ts:282-291 normalizeOperationalError renames non-DurableStoreError to STORE_UNAVAILABLE (invocation-site wrap required); union insert point store-contracts.ts:192-207 between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH (ASCII correct: 'I' 0x49 < '_' 0x5F); StoredCommitResult store-internals.ts:57-67 carries eventIds and no positions; projections table exists (projection_name PK, last_applied_position NOT NULL, state_digest).",
+      "startedAt": "2026-08-07T21:35:08.163Z",
+      "completedAt": "2026-08-07T21:38:50.013Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — new packages/store/src/store-projection-seam.test.ts (<=250). Cases: (1) HAPPY PATH: commitWithApply(input, apply) with a succeeding apply — apply observes the SAME open transaction (insert a row into the projections table inside apply, then after commit both the event AND the projection row are durable; reopening the store sees both); apply receives {database, commit summary} where the summary carries commandId/aggregateId/eventIds (NO positions — the callback SELECTs positions by command_id in-transaction when needed; assert that works); (2) ROLLBACK: a THROWING apply rolls back the ENTIRE append — event absent, aggregate head unchanged (assertAggregateTail baseline), receipt absent, projection row absent — and surfaces DurableStoreError PROJECTION_APPLY_FAILED with the original failure message preserved in `${code}: ${message}` format; (3) NO POISON: after the rollback, the SAME store handle accepts a subsequent plain commit successfully (commitAttempted=false + clean ROLLBACK skips quarantine — verified recovery.ts:16-41); (4) REPLAY SKIP: replaying the same commandId+bytes returns REPLAYED and the apply callback is NEVER invoked (call-recording apply; replay flows through the same single COMMIT — the COMMITTED-disposition gate is the skip mechanism); (5) NON-DurableStoreError apply failures are wrapped AT THE INVOCATION SITE (a plain Error thrown in apply surfaces as PROJECTION_APPLY_FAILED, NOT STORE_UNAVAILABLE — the normalizeOperationalError rename is the trap being tested); (6) plain commit() unchanged — signature and behavior identical, zero interaction with the seam. Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-projection-seam.test.ts"
       ],
       "newFiles": [
         "packages/store/src/store-projection-seam.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-projection-seam.test.ts"
+      ],
+      "note": "RED confirmed. `npx vitest run --root . packages/store/src/store-projection-seam.test.ts` -> \"Test Files 1 failed (1) / Tests 6 failed (6)\". Every failure is the missing seam, not a typo: 5 cases die on `TypeError: store.commitWithApply is not a function` and case 6 on `Cannot read properties of undefined (reading 'length')` at `SqliteEventStore.prototype.commitWithApply.length`.\n\n219 lines, all 6 planned cases, mutation-resistant assertions (exact values, no truthiness):\n1. same-transaction happy path on a DURABLE store (mkdtemp + openForProject): apply SELECTs global_position by command_id from the still-open transaction (expects [1]) and INSERTs a real row into the projections table; after close+reopen both the event and the projection row are durable. Summary shape pinned by exact sorted key list, so a later attempt to add positions to it fails the test.\n2. rollback: apply writes a projections row and THEN throws — event absent, aggregate version back to 0, receipt null, AND the projections row absent (partial-write hunt folded in here rather than deferred to step-4).\n3. no poison: same handle after a failed apply accepts a plain commit (COMMITTED, currentVersion 1) and getHealth().quickCheck stays \"ok\".\n4. replay skip: call-recording apply; second identical commitWithApply returns REPLAYED with applyCalls still [\"cmd-1\"].\n5. the STORE_UNAVAILABLE rename trap: a plain Error must surface as code PROJECTION_APPLY_FAILED with message exactly \"PROJECTION_APPLY_FAILED: not a DurableStoreError\".\n6. plain commit unchanged: arity pin `commit.length === 1` (and `commitWithApply.length === 2`) plus unchanged COMMITTED/REPLAYED behaviour.\n\nNo fold/relay/subscription/upcaster abstraction anywhere — the test writes a raw projections row through the seam, per the seam-not-feature rail.",
+      "startedAt": "2026-08-07T21:39:01.044Z",
+      "completedAt": "2026-08-07T21:40:25.229Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — store-contracts.ts + event-ledger-transaction.ts + sqlite-event-store.ts. store-contracts.ts: PROJECTION_APPLY_FAILED joins the closed DurableStoreErrorCode union in ASCII order between OUTCOME_UNKNOWN and PROJECT_SCOPE_MISMATCH (union stays closed; message format `${code}: ${message}` — zero external DurableStoreErrorCode consumers so no exhaustive switch breaks; ONLY the union entry in this file — B1 owns the field/constant edits). event-ledger-transaction.ts: NEW public method commitWithApply(rawInput, apply: (context: { database, summary }) => void) on EventTransactionStore — an inherited method needs NO decision-ledger.ts edit and NO change to the existing one-arg commit; implementation shares the commit body (extract-and-share or delegate with an optional internal apply — whichever keeps the file <=250; the EXISTING commit() public signature must stay one-arg either way); the apply invocation sits on the COMMITTED-disposition branch immediately AFTER writeCommitEffects and BEFORE the shared COMMIT, wrapped try/catch at the invocation site: catch (e) => throw new DurableStoreError('PROJECTION_APPLY_FAILED', originalMessage) so the existing recovery path (rethrows DurableStoreError unchanged, ROLLBACK on failure) handles it — anything unwrapped would be renamed STORE_UNAVAILABLE; writeCommitEffects signature and StoredCommitResult UNTOUCHED (positions ripple through the shared decision-ledger contract). sqlite-event-store.ts: one delegating method commitWithApply over #core mirroring the existing commit delegation. All step-2 tests green; typecheck green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/event-ledger-transaction.ts",
         "packages/store/src/sqlite-event-store.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:40:28.197Z"
     },
     {
       "stepId": "step-4",
@@ -69,13 +78,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:18:21.612Z",
-  "updatedAt": "2026-08-07T21:35:08.163Z",
+  "updatedAt": "2026-08-07T21:40:28.197Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:27:58.705Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 2
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:28:54.739Z",
   "planningNotes": {

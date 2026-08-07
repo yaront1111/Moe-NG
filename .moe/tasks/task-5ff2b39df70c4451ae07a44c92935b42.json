@@ -150,8 +150,8 @@
       "completedAt": "2026-08-07T21:32:38.812Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-bdf27860",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -170,12 +170,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.808Z",
-  "updatedAt": "2026-08-07T21:35:27.146Z",
+  "updatedAt": "2026-08-07T21:40:38.689Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:41:47.787Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T21:40:38.689Z",
+    "wallClockMs": 3530902
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -238,5 +240,8 @@
     "packages/runner/src/providers/claude/claude-render-reconcile.test.ts",
     "packages/runner/src/providers/claude/claude-render.test.ts",
     "packages/runner/src/providers/claude/claude-reconcile.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:40:38.689Z",
+  "reviewCompletedAt": "2026-08-07T21:40:38.689Z",
+  "reviewSummary": "Re-ran verification myself: `pnpm --filter @moe/runner typecheck` exit 0; `test` exit 0, 7 files / 153 tests — matches reported outputTail. `git diff HEAD` for both owned trees is empty, so HEAD is exactly what I tested. All 13 files under the 400 hard bound.\n\nDoD 1: buildProviderRuntimeObservation normalizes, de-duplicates and path-sorts the closure, rejects a hostile port with typed CLAUDE_OBSERVATION_* codes instead of throwing, deep-freezes; observationDigestInput is exported and excludes the digest itself. truthClass is PROVEN only with a digested closure AND a self-reported version. Capabilities fail-closed by construction: record() emits SUPPORTED only with a named proof method, else UNSUPPORTED/NONE, one record per vocabulary member every probe. helpText stored but read nowhere; RESUME hard-wired false; a throwing port degrades to 11/11 UNSUPPORTED.\n\nDoD 2: every event carries ordinal (order), byteLength + lineSha256 (bytes), and effectIntentId/attemptRef/epoch (effect identity), all validated first. Retention keeps a sha256 spanning every byte even on ARTIFACT_REF; recordDigestInput hashes identities and counts, never payloads.\n\nDoD 3: a cut stream with cancelRequested and a clean exit yields HONEST_UNKNOWN, not a clean cancel; \"exited zero but never reported a result\" is HONEST_UNKNOWN, not completion; UNKNOWN_SCHEMA and REFUSED_RESUME_UNSUPPORTED refuse to claim even a crash. Golden corpus has 9 cases (superset of the 6 required), DEVELOPMENT_ONLY, each pinned by a raw-byte sha256 re-verified before any assertion consumes it.\n\nFence: no spawn/kill, no Date.now/Math.random, no cross-package specifiers; ARMED/SUSPECT/effect.activate appear only in comments stating the fence is not crossed.\n\nRaised to the fleet separately (not this worker's doing, not fixable here): this task has NO commit of its own — all 13 owned files were swept into three foreign task-completion commits (4e8ac7c, f8db0a5, d6c7bcf) mid-flight."
 }

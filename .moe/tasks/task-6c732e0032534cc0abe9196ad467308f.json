@@ -19,10 +19,13 @@
     {
       "stepId": "step-1",
       "description": "Dependency gate (do NOT skip): the stdio task (task-c9a9bf3c) owns the @moe/mcp scaffold and shared modules. Verify committed on main: packages/mcp/package.json (+tsconfig with skipLibCheck), src/index.ts, src/dispatch-conformance.ts (transport-agnostic parity suite), src/stdio/stdio-tool-schemas.ts (generated schemas + bijective name map), src/stdio/stdio-dispatch-port.ts — INCLUDING the optional `signal?: AbortSignal` parameter on both dispatch methods (requested via comment-c638d1e8 on the stdio task; cancellation threading is impossible from http/** without it). Check `git log --oneline -- packages/mcp` + read the files. If any artifact is missing or the port lacks the signal param, call moe.report_blocked needsFrom task-c9a9bf3c and STOP — do not re-scaffold, do not edit stdio files (governor rail: the identity-orphan pattern). Also run `pnpm --filter @moe/mcp test` to confirm the stdio suite is green baseline.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/stdio/stdio-dispatch-port.ts"
-      ]
+      ],
+      "note": "Reopen audit carried forward verified commit 37b11e5 without production changes. All seven HTTP paths are clean; stdio remains untouched and retains the narrow dispatch signature as documented. Current physical sizes confirm http-server.test.ts is 551 lines (hard-cap violation); other files are below 400. Fresh baseline MCP suite passed 5 files / 125 tests.",
+      "startedAt": "2026-08-07T21:41:51.957Z",
+      "completedAt": "2026-08-07T21:42:12.544Z"
     },
     {
       "stepId": "step-2",
@@ -94,7 +97,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-875b53a2",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -113,20 +116,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T20:57:06.637Z",
+  "updatedAt": "2026-08-07T21:42:12.544Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7,
+    "executedStepCount": 8,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-875b53a2"
+  ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [
     {
       "item": "TASK RAIL (not a DoD item): 'Keep files below 400 lines' — http-server.test.ts is 505 lines. All four Definition-of-Done items PASS; the block is size/rails only.",
@@ -151,7 +158,8 @@
   },
   "budget": {
     "wallClockMs": 7200000,
-    "warnedAt": "2026-08-07T20:53:03.476Z"
+    "warnedAt": "2026-08-07T20:53:03.476Z",
+    "escalatedAt": "2026-08-07T21:41:23.173Z"
   },
   "planApprovedAt": "2026-08-07T19:23:22.338Z",
   "workStartedAt": "2026-08-07T19:24:29.460Z",

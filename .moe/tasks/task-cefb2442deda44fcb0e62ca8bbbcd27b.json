@@ -60,7 +60,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: dependency satisfied — commit bcdc2f6 is landed. Fifth and last of the decomposition children required by the approved size exception (prop-2eaa632d). Extracts graph-revision-test-fixtures.ts from graph-revision-reducer.test.ts. Once all five land, Planning source size guard becomes plannable — it is the closing gate that enforces the rule directory-wide.",
+  "reopenReason": "Human explicitly requested PLAN; promoting the next ordered graph-revision test decomposition child.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -68,22 +68,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T21:23:47.598Z",
+  "updatedAt": "2026-08-07T21:39:51.518Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:22:56.502Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "architect-c4babdf9"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-07T21:23:45.563Z",
+  "planSubmittedAt": "2026-08-07T21:39:49.492Z",
   "planningNotes": {
-    "approachesConsidered": "Single extraction, pre-named by the task and structurally obvious (verified: fixture surface is the clean 17-93 range — hash helper, six hash constants, five witness constants, BOUND, two factories, three assertion helpers; 288 - ~77 = ~215 <= 250 with margin). No second test file needed — unlike the sibling planning-run task, DoD 1 here requires every case to REMAIN in graph-revision-reducer.test.ts. Mirrors the just-planned planning-run fixture pattern (task-ca32f538) for cross-file consistency: same fixtures-module conventions (deterministic, frozen, expect-bearing assertion helpers legal since non-.test files are never collected as suites). No verification workflow: trivial-class refactor, fifth of five mechanical decomposition children, preserved-exactly-once enforced by the it()-name audit.",
-    "codebaseInsights": "graph-revision-reducer.test.ts = 288 lines / 18 cases in three describes (creation+submission, approval+activation, refusal+terminal); fixture range 17-93; loops over BOUND derive case names — must move with derivation intact. Root vitest include only collects *.test.ts — the fixtures module never runs standalone. Production files untouched; root index frozen (decomposition-children constraint). This is the LAST of the five children — once landed, the governor's 'Planning source size guard' closing-gate task becomes plannable (directory-wide <=250 enforcement).",
-    "risks": "(1) Derived case names (BOUND loops) — hand-unrolling would keep counts plausible while changing execution; the name audit catches it. (2) Fixture module accidentally exporting production-shaped symbols — overlap grep. (3) Cross-task consistency: task-ca32f538 (planning-run fixtures) is in flight in the same directory — file-disjoint, but if both land the same session the directory gains two fixture modules with matching conventions (intended). (4) Scratch baseline outside the repo; two-path explicit commit; foreign-red attribution.",
+    "approachesConsidered": "RESUBMISSION UNCHANGED: this identical 4-step plan was already approved at 2026-08-07T21:23:47Z; the task bounced back to PLANNING via a promotion routing quirk while carrying the approved plan intact — content is byte-equivalent, no re-planning occurred. Original rationale: single extraction, pre-named by the task and structurally obvious (fixture surface is the clean 17-93 range; 288 - ~77 = ~215 <= 250 with margin); no second test file — DoD 1 requires every case to REMAIN in graph-revision-reducer.test.ts; mirrors the planning-run fixture pattern (task-ca32f538) for cross-file consistency; no verification workflow — trivial-class refactor, fifth of five mechanical decomposition children, preserved-exactly-once enforced by the it()-name audit.",
+    "codebaseInsights": "graph-revision-reducer.test.ts = 288 lines / 18 cases in three describes (creation+submission, approval+activation, refusal+terminal); fixture range 17-93; loops over BOUND derive case names — must move with derivation intact. Root vitest include only collects *.test.ts — the fixtures module never runs standalone. Production files untouched; root index frozen (decomposition-children constraint). LAST of the five children — once landed, the 'Planning source size guard' closing-gate task becomes plannable (directory-wide <=250 enforcement).",
+    "risks": "(1) Derived case names (BOUND loops) — hand-unrolling would keep counts plausible while changing execution; the name audit catches it. (2) Fixture module accidentally exporting production-shaped symbols — overlap grep. (3) Cross-task consistency: task-ca32f538 (planning-run fixtures) is in flight in the same directory — file-disjoint; matching conventions intended. (4) Scratch baseline outside the repo; two-path explicit commit; foreign-red attribution.",
     "keyFiles": [
       "packages/core/src/planning/graph-revision-reducer.test.ts",
       "packages/core/src/planning/graph-revision-contract.ts",
@@ -93,5 +94,5 @@
   "budget": {
     "wallClockMs": 1800000
   },
-  "planApprovedAt": "2026-08-07T21:23:47.598Z"
+  "planApprovedAt": "2026-08-07T21:39:51.518Z"
 }

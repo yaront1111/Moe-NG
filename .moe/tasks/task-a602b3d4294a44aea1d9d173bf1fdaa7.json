@@ -46,7 +46,7 @@
     {
       "stepId": "step-3",
       "description": "Green part 1 — types + write path. store-contracts.ts: DOMAIN_EVENT_SCHEMA_VERSION = 'moe-domain-schema/0' beside EVENT_RECORD_VERSION (:11); StoredEvent gains readonly domainSchemaVersion: string; EventDraft gains OPTIONAL domainSchemaVersion?: string (optional-with-default keeps every draft-constructing test compiling). NO index.ts edit — the constant goes public when the upcaster task needs it (deferral noted). store-input.ts: snapshotCommitInput reads the optional field, validates (non-empty string, bounded), defaults to DOMAIN_EVENT_SCHEMA_VERSION; SnapshotEventDraft gains REQUIRED domainSchemaVersion. store-internals.ts: EffectEventDraft becomes extends Omit<SnapshotEventDraft, \"outbox\" | \"domainSchemaVersion\"> (digest neutrality — the spread at event-ledger-append still compiles; spreads skip excess-property checks). event-ledger-append.ts: INSERT gains the domain_schema_version column + binding from the snapshot draft (sole INSERT site). decision-ledger-canonical.ts: the rejection-audit event literal (:225-233, typed SnapshotCommitInput, bypasses snapshotCommitInput) gains explicit domainSchemaVersion: DOMAIN_EVENT_SCHEMA_VERSION. Typecheck green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/store-input.ts",
@@ -54,35 +54,59 @@
         "packages/store/src/event-ledger-append.ts",
         "packages/store/src/decision-ledger-canonical.ts"
       ],
-      "startedAt": "2026-08-07T21:35:27.347Z"
+      "modifiedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/store-internals.ts",
+        "packages/store/src/store-input-commit.ts",
+        "packages/store/src/event-ledger-append.ts",
+        "packages/store/src/decision-ledger-canonical.ts"
+      ],
+      "note": "Green part 1 done — types + write path, 5 production files.\n\n- store-contracts.ts: DOMAIN_EVENT_SCHEMA_VERSION = 'moe-domain-schema/0' beside EVENT_RECORD_VERSION (matches the Task A DDL default exactly); EventDraft gains OPTIONAL domainSchemaVersion?: string; StoredEvent gains REQUIRED domainSchemaVersion: string. No index.ts edit — verified index.ts uses an EXPLICIT named-export list (not `export *`), so the constant stays in-package as planned and does NOT leak to the public API by accident.\n- store-internals.ts: SnapshotEventDraft gains REQUIRED domainSchemaVersion (post-snapshot it is always resolved); EffectEventDraft becomes Omit<SnapshotEventDraft, \"domainSchemaVersion\" | \"outbox\"> with a comment recording WHY.\n- store-input-commit.ts (the real snapshotCommitInput; store-input.ts is a facade): reads the optional property with readOwnDataProperty(..., false), defaults to the constant when undefined, otherwise validates through requireIdentifier.\n- event-ledger-append.ts: sole INSERT gains the domain_schema_version column and its binding, positioned after payload_codec_version to match the DDL column order.\n- decision-ledger-canonical.ts: the rejection-audit literal (bypasses snapshotCommitInput) sets the constant explicitly.\n\nTypecheck: exactly ONE error left, `src/event-read-decode.ts(83,11): Property 'domainSchemaVersion' is missing ... but required in type 'StoredEvent'` — that is step-4's deliverable (mapStoredEvent), not a defect. The plan's step-3 line said \"typecheck green\", which was optimistic about ordering: making StoredEvent's field required necessarily reddens the decoder until step 4 lands. Flagging rather than silently deviating; no scope change.\n\nThe EffectEventDraft Omit is now PROVEN load-bearing by the compiler, and it confirms the correction I filed in step 1: the two files that would have broken are event-read-decode.ts (DecodedReceiptEventBody, derived from EffectEventDraft) and event-read-materialization.ts:156 (the replay literal). Neither errored — so the Omit is doing exactly the work claimed, at the type level. Digest bytes were never the mechanism.",
+      "startedAt": "2026-08-07T21:35:27.347Z",
+      "completedAt": "2026-08-07T21:36:41.605Z"
     },
     {
       "stepId": "step-4",
       "description": "Green part 2 — read path. read-page-queries.ts: add events.domain_schema_version to STORED_EVENT_SELECT_COLUMNS AND to EVENT_DECODED_BYTES_SQL (byte accounting — safe: event-page-byte-budget.test.ts computes its budget dynamically from EVENT_DECODED_BYTES_SQL itself, and fixed 4096-byte pages have ~570 bytes headroom vs +20; verified). event-read-decode.ts: mapStoredEvent reads the column via requireRowString-style validation (NOT requireStoredVersion — caller values are legal, not pinned to one constant). Non-readers stay untouched (verified): RECEIPT_EVENT_QUERY (per the Omit decision), REJECTION_AUDIT_EVENT_QUERY, RESERVED_DECISION_NAMESPACE_QUERY, assertAggregateTail, DECISION_DECODED_BYTES_SQL. Step-2 tests green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/read-page-queries.ts",
         "packages/store/src/event-read-decode.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/read-page-queries.ts",
+        "packages/store/src/event-read-decode.ts"
+      ],
+      "note": "Green part 2 done — read path, 2 production files.\n\n- read-page-queries.ts: events.domain_schema_version added to STORED_EVENT_SELECT_COLUMNS and to EVENT_DECODED_BYTES_SQL, both positioned after payload_codec_version so the select list, the byte accounting and the DDL stay in one order.\n- event-read-decode.ts: mapStoredEvent decodes it with requireRowString, with a comment recording why it is NOT requireStoredVersion — pinning to one constant would make every future upcaster-era value read as STORE_CORRUPT.\n\nResults: `pnpm --filter @moe/store typecheck` exits 0. Focused new test 13/13 GREEN (was 10 failing). Full store suite: 133 passed / 4 failed across exactly 2 files, both predicted key-set pins:\n- event-read-model-contract.test.ts x3 (all three share the single expectedEvent() helper)\n- sqlite-event-store-core.test.ts x1\n\nNo third file broke. In particular event-page-byte-budget.test.ts PASSED, confirming the plan's byte-accounting analysis — it derives its budget dynamically from EVENT_DECODED_BYTES_SQL, so the +20 bytes/row absorbed without touching a fixture. The decision-side byte budget (DECISION_DECODED_BYTES_SQL) and the receipt/rejection-audit/reserved-namespace queries were verified as non-readers in step 1 and stayed untouched; nothing in their tests moved, which corroborates that.\n\nThe 4 remaining failures are step 5's forced key-set edits, not defects.",
+      "startedAt": "2026-08-07T21:36:43.723Z",
+      "completedAt": "2026-08-07T21:37:18.709Z"
     },
     {
       "stepId": "step-5",
       "description": "The TWO forced key-set test edits (announced comment-53b369f7; both are the same forced-literal class — a new StoredEvent key breaks exact-key assertions): (1) event-read-model-contract.test.ts expectedEvent() (:53-68, used via toStrictEqual at :125-137/:152-155/:183-188) gains domainSchemaVersion: 'moe-domain-schema/0'; (2) sqlite-event-store-core.test.ts (:248-283) — the two 12-key StoredEvent literals under toEqual gain the same key (hardcoded requestSha256/effectSha256 digests stay VALID — neither hashes the field; do not touch them). NOTHING else in either file changes; no other test pins the key set (verified). Full gate: fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }. Repo gate `pnpm typecheck && pnpm test` with foreign-red by-path attribution.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/event-read-model-contract.test.ts",
         "packages/store/src/sqlite-event-store-core.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model-contract.test.ts",
+        "packages/store/src/sqlite-event-store-core.test.ts"
+      ],
+      "note": "Both forced key-set edits landed, and they are provably literal-only. `git diff --stat` on the two files: 3 insertions, 0 deletions. Full added-line diff is exactly three identical lines `domainSchemaVersion: \"moe-domain-schema/0\",` — one in event-read-model-contract.test.ts expectedEvent() (which the 3 failing tests share), two in the sqlite-event-store-core.test.ts StoredEvent literals. ZERO deleted lines anywhere, so the hardcoded requestSha256/effectSha256 digests in sqlite-event-store-core.test.ts are untouched and still pass — direct evidence the field is outside both digests. No test weakened, skipped, or relaxed.\n\nDeviation worth recording: the plan's step-5 text and my first keystroke used the imported constant, but index.ts does not export DOMAIN_EVENT_SCHEMA_VERSION (step 3 deliberately kept it in-package), so importing it would have added an import line to a file whose only sanctioned change is the key set. I used the literal \"moe-domain-schema/0\" instead — matching the plan's own literal, keeping the diff to one line per literal, and pinning the wire value, which is what a contract test should assert anyway.\n\nNAMED VERIFICATION GATE, run fresh: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> EXIT 0. 21 test files, 137 passed, 0 failed. Baseline in step 1 was 20 files / 124 tests, so this is +1 file / +13 tests with zero pre-existing tests lost.\n\nREPO GATE, also fresh, both halves:\n- `pnpm typecheck` -> exit 0 across all 9 workspaces (scheduler, daemon, control-room-client, core, mcp, runner, skills, testkit, store).\n- `pnpm test` -> 110 test files, 1569 passed, 1 skipped, 0 failed.\nNo foreign red to attribute by path — the shared tree is fully green right now.",
+      "startedAt": "2026-08-07T21:37:21.195Z",
+      "completedAt": "2026-08-07T21:38:32.625Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Red-team: (a) digest divergence — commit a non-default-version event, reopen the store, loadReceipt + validateAllCommandDecisions must pass (replay-side digest identical); temporarily add domainSchemaVersion to the identifyCommandEffects field list in a scratch check OUTSIDE the repo to confirm it WOULD diverge (proves the Omit is load-bearing), never in the tree; (b) default-vs-explicit — both paths through snapshotCommitInput produce the exact stored bytes read back; (c) audit-event coverage — rejection path stores the default (test 4 re-run); (d) key-set edits are literal-only — diff both test files: exactly one added line per literal, digests untouched; (e) seam fence — grep diff for commitWithApply|PROJECTION_APPLY_FAILED|applyInTransaction -> ZERO (task-bfc39542's vocabulary); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/store-input.ts packages/store/src/store-internals.ts packages/store/src/event-ledger-append.ts packages/store/src/decision-ledger-canonical.ts packages/store/src/read-page-queries.ts packages/store/src/event-read-decode.ts packages/store/src/store-domain-schema-version.test.ts packages/store/src/event-read-model-contract.test.ts packages/store/src/sqlite-event-store-core.test.ts`; `git show --stat` lists exactly these 10 paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/store-internals.ts",
         "packages/store/src/event-ledger-append.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:38:37.788Z"
     }
   ],
   "status": "WORKING",
@@ -105,12 +129,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T21:35:27.347Z",
+  "updatedAt": "2026-08-07T21:38:37.788Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:09:08.735Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -121,7 +145,10 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:20:20.098Z",

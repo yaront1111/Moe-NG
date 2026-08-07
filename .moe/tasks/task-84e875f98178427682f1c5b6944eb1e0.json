@@ -46,7 +46,7 @@
     {
       "stepId": "step-3",
       "description": "Green — src/admission/admission-pass.ts (+ one-line shim admission-pass.js). COMPOSITION MECHANICS (verified): GraphStructureView is package-internal — the reuse surface is validateGraphSnapshot (returns ValidatedGraph | issues), analyzeGraphStructure (REQUIRES in-process provenance — admission runs validateGraphSnapshot itself on BOTH the proposed snapshot AND the sequential-baseline snapshot before analysis, else GraphAnalysisError), partitionFrontier, and analyzeHardEdgeCounterfactuals; findRedundancyCandidates is NOT directly callable (internal params) — structural candidates arrive via GraphStructuralAnalysis.structuralRedundancyCandidates. Admission-local additions implemented with dependencies-local-convention helpers (local ADMISSION_* closed code union, local makeIssue/sortIssues/deepFreeze clones, runtime-shape hostile-input helpers via '../runtime-shape.js'). Inputs: validated proposed graph + baseline + DependencyContracts (kernel validateDependencyContract run per contract first) + caller-supplied truth-classed estimates + optional expansion-lineage facts. Output: deep-frozen AdmissionResult { ok: true, records: {baseline, interfaceFirst[], reduction[], counterfactuals} } | { ok: false, issues } — records are evidence artifacts, distinct from refusals. Target <=250, split before 400 (likely split: admission-records.ts via amendment). Step-2 tests green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
@@ -55,12 +55,19 @@
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
       ],
-      "startedAt": "2026-08-07T21:35:04.284Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/admission/admission-pass.ts",
+        "packages/scheduler/src/admission/admission-fixtures.ts",
+        "packages/scheduler/src/admission/admission-pass.test.ts"
+      ],
+      "note": "GREEN composition fix: admitGraph now computes the landed hard-edge counterfactual analysis once, passes each exact edge record plus the raw explicit necessity witness into evaluateNecessityClaim, and accepts a HARD edge only for an ADMISSIBLE/DAEMON_VERIFIED outcome. Missing, malformed, HELD, REFUSED, DOWNGRADED, UNKNOWN, and mismatched claims fail closed as one edge-bound ADMISSION_HARD_DEPENDENCY_UNPROVEN; validated contracts remain in the map to avoid duplicate generic issues. Removed the synthesized TYPED_CONTRACT default. admission-pass.ts is 240 lines. Fresh scheduler typecheck plus path-scoped admission suite exited 0: 2 files / 86 tests; focused pass suite 1 file / 51 tests.",
+      "startedAt": "2026-08-07T21:35:04.284Z",
+      "completedAt": "2026-08-07T21:36:08.946Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/admission/admission-necessity.ts (+ shim) + tests folded into admission-pass.test.ts or a focused block. RESOLVED (no open questions in an approved plan): positive controls are a TEST-TIME obligation (design 409 'Admission PROPERTIES include matched positive controls'; running consumer oracles is impossible in a pure pass, design 392) — admission NEVER refuses a graph for missing counterexample bundles. What admission-necessity DOES: (1) typed per-edge outcomes for agent-claimed necessity (design 407): AGENT_REPORTED 'why necessary' NEVER admits a hard edge — outcomes are (a) ADMISSIBLE via daemon-verifiable witness (truthClass floor DAEMON_VERIFIED), (b) ADMISSION_HELD_FOR_HUMAN_DECISION — the typed HELD outcome DoD 1 requires ('rejected or HELD with stable reasons'): a pure RECORD carrying the pending edge-specific human decision ref + the would-be POLICY_SEQUENCE conversion (with added stages/critical-path cost from the landed structural analysis) — NO lifecycle transitions, no Blocker/PlanningHold states (kernel fence); (c) REFUSED or DOWNGRADED-to-advisory; human approval records the decision but does not upgrade the underlying fact's truth class (design 398); (2) AdmissionCounterexample as an OPTIONAL validated evidence SHAPE (digest-bound fixture refs, matched per-edge, false-edge fixtures) consumed by the TEST matrix — shape validation only, outcome truth stays at supplied truthClass; (3) reuse landed analyzeHardEdgeCounterfactuals (dependencyNecessity UNKNOWN, requiresSemanticProof, reviewOnly) as the structural counterfactual record — never redefined. Property obligations in tests: for every admitted graph fixture, removing each known-required edge flips the counterfactual/readiness evidence; every false-edge fixture refuses — the positive-control matrix lives HERE in the tests (CORE-S13/J6), not as runtime input demands.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-necessity.js"
@@ -68,12 +75,18 @@
       "newFiles": [
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-necessity.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/admission/admission-invariants.test.ts"
+      ],
+      "note": "Re-verified the existing admission-necessity outcome model and kept it unchanged: DAEMON_VERIFIED is the sole ADMISSIBLE outcome; AGENT_REPORTED can only HELD/REFUSED; OBSERVED/HUMAN_APPROVED downgrade; UNKNOWN and claim/contract mismatches refuse; HELD remains the exact pure record with no lifecycle keys. Replaced the helper-only seeded truth-floor property with a real admitGraph property over 96 claim/contract permutations, including non-vacuous AGENT_REPORTED, UNKNOWN, and admitted DAEMON_VERIFIED cases. Focused invariants exited 0 (35 tests); full admission suite exited 0 (2 files / 86 tests).",
+      "startedAt": "2026-08-07T21:36:29.060Z",
+      "completedAt": "2026-08-07T21:37:06.245Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD red then green — src/admission/admission-wait.ts (+ shim) + src/admission/admission-invariants.test.ts. admission-wait SHARPENED FENCE (representation + admission-time validation ONLY): IntentionalWait record per design 235 (explicit owner/reason, typed predicate, affected scope, recheckAt/deadline, escalation policy, graph/fact binding) with shape validation; bounded blocker-challenge admission records reusing kernel DependencyChallenge types (dedup by contract/edge hash + graph epoch + source-fact versions; SEMANTIC_PREREQUISITE must reference an existing current hard contract — design 419 puts that reference 'in the same cycle, redundancy, freshness, and completion-closure admission as the graph', which IS this module); time-only-suppression expressed ONLY as a pure predicate helper over supplied facts (isTimeChallengeSuppressed(wait, now, newEvidenceFlag) — new evidence always wins, design 415). EXPLICITLY OUT (named in module header): challenge enqueueing and timer/transaction re-evaluation (readiness engine task-fa96b81c consumes these types), Blocker record lifecycle (design 234), supersession carry of wait/blocker projections (graph supersession task), any readiness computation (landed frontier.ts). admission-invariants.test.ts (seeded xorshift properties): no admission path ever auto-removes an edge (outputs are refusals/records only); AGENT_REPORTED never admits a hard edge across random truth-class permutations; partial contract equivalence NEVER refuses (only full identity does); UNKNOWN estimates never become zero; HELD outcomes carry no state-transition fields; deterministic frozen outputs; hostile inputs refused.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-wait.ts",
         "packages/scheduler/src/admission/admission-wait.js",
@@ -83,27 +96,45 @@
         "packages/scheduler/src/admission/admission-wait.ts",
         "packages/scheduler/src/admission/admission-wait.js",
         "packages/scheduler/src/admission/admission-invariants.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/admission/admission-invariants.test.ts"
+      ],
+      "note": "The reopened fix leaves admission-wait's representation-only fence unchanged. Re-ran the complete seeded invariant suite after moving the truth-floor property to admitGraph: no removal affordance, partial equivalence stays review-only, UNKNOWN estimates remain null, HELD has no lifecycle/state/scheduling fields, deterministic frozen outputs, and hostile inputs refuse. Fresh focused invariants exited 0: 1 file / 35 tests; full admission suite exited 0: 2 files / 86 tests.",
+      "startedAt": "2026-08-07T21:37:11.730Z",
+      "completedAt": "2026-08-07T21:37:23.766Z"
     },
     {
       "stepId": "step-6",
       "description": "Verification gate (single concentrated step). (1) RE-RUN the step-1 dependency gate in full (kernel status DONE + git-landed + symbol probe — stale-dependency rule; if the kernel was QA-rejected and its surface changed, adapt or report_blocked, never paper over). (2) `wc -l packages/scheduler/src/admission/*.ts` — every production module <=400 hard (target 250). (3) Fresh FOCUSED `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` -> green, then the full task-specified `pnpm --filter @moe/scheduler test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/scheduler test\", exitCode: 0, outputTail }; if the package filter is red from OTHER subtrees' in-flight work, attribute precisely (path + owning task) in the completion note — admission's own suite must be green regardless. (4) `pnpm --filter @moe/scheduler typecheck` green. (5) grep admission/ for Date.now|Math.random|process\\.|@moe/ -> ZERO (determinism + package-local rail); confirm zero edits outside admission/**. (6) Run focused suite twice — identical.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-wait.ts"
-      ]
+      ],
+      "note": "Fresh verification gate passed. Dependency task remains DONE; dependency path is committed at 7e80186, clean, and all five required symbols resolve. Production line counts: fixtures 112, model 227, necessity 165, pass 240, records 192, wait 157 (all <=250). Forbidden Date.now|Math.random|process.|@moe scan: zero. Diff check clean. Focused admission suite ran twice with identical 2 files / 86 tests summaries. Fresh `pnpm --filter @moe/scheduler typecheck; pnpm --filter @moe/scheduler test` exited 0: 26 files / 364 tests. Note: a concurrent Moe worker's broad auto-commit baa8012 swept the three already-completed admission fix paths into its commit; no reset/rewrite was performed. Only admission-invariants.test.ts remains uncommitted for this task.",
+      "startedAt": "2026-08-07T21:37:28.820Z",
+      "completedAt": "2026-08-07T21:38:44.400Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) edge-removal laundering — walk every output type for any field readable as edge-removal authorization; reduction refusals must carry the full-identity evidence and the kernel assessment unmodified; (b) truth-class laundering — try to reach ADMISSIBLE from AGENT_REPORTED via the human-decision path (must yield POLICY_SEQUENCE conversion record, never a fact upgrade); (c) duplicate-code audit — grep ADMISSION_* codes against landed GRAPH_* codes and frontier HARD_DEPENDENCY_* codes for semantic overlap (step-8 and step-1 structural facts must be pass-throughs, not re-coded); (d) HELD outcome contains no lifecycle machinery (no status transitions, no recheck scheduling); (e) baseline-snapshot provenance — confirm both snapshots run through validateGraphSnapshot before analysis (GraphAnalysisError otherwise); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths (kernel/other subtree files WILL be present — leave them), `git add` + `git commit -- packages/scheduler/src/admission/admission-pass.ts packages/scheduler/src/admission/admission-pass.js packages/scheduler/src/admission/admission-necessity.ts packages/scheduler/src/admission/admission-necessity.js packages/scheduler/src/admission/admission-wait.ts packages/scheduler/src/admission/admission-wait.js packages/scheduler/src/admission/admission-pass.test.ts packages/scheduler/src/admission/admission-invariants.test.ts`; `git show --stat` lists exactly these 8 paths (plus amendment-recorded splits).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-wait.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/admission/admission-pass.ts",
+        "packages/scheduler/src/admission/admission-pass.test.ts",
+        "packages/scheduler/src/admission/admission-fixtures.ts",
+        "packages/scheduler/src/admission/admission-invariants.test.ts"
+      ],
+      "note": "Adversarial review complete. Traced null/proxy/missing/extra/large inputs through bounded hostile-safe projections; confirmed both snapshots validate before any analysis; each HARD edge evaluates its exact landed counterfactual once; only matching DAEMON_VERIFIED claim+contract can admit; absent/malformed/non-daemon/mismatched/HELD claims add one edge-scoped unproven issue with no duplicate final scan. No removal/activation/lifecycle fields or duplicate GRAPH/frontier codes; HELD remains a pure separate evaluator record while binary admitGraph conservatively refuses it. Independent reviewer found no blocker and reran 2 files/86 tests green. No scratch/forbidden hits. Explicit commit b27de86 contains only admission-invariants.test.ts; concurrent baa8012 had already swept the other three owned fix paths, documented in #general. Owned admission path is clean.",
+      "startedAt": "2026-08-07T21:38:56.937Z",
+      "completedAt": "2026-08-07T21:41:53.554Z"
     }
   ],
   "status": "WORKING",
@@ -119,12 +150,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T21:35:04.284Z",
+  "updatedAt": "2026-08-07T21:41:53.554Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 9,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -136,7 +167,12 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {

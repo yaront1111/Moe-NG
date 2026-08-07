@@ -15,12 +15,12 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: dependency verified landed. This task dispatches upcasters on the StoredEvent domain schema version, and that field is now COMMITTED at HEAD — git grep confirms domainSchemaVersion in packages/store/src/store-contracts.ts, event-ledger-append.ts, and store-input-commit.ts, with store-domain-schema-version.test.ts alongside. Its parent task (StoredEvent domain schema version and projection commit seam) is WORKING 2/6, but the field it owed this task has already landed, so there is real committed code to dispatch on. Note its stated dependency names the superseded parent shell task-50874e67 rather than the real Task B — resolved manually, do not be misled by that string. Owns packages/store/src/projections/** which is greenfield. Purity is the deliverable: no SQLite handle, transaction, clock read, or filesystem call in that subtree.",
   "createdBy": "WORKER",
   "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
   "priority": "HIGH",
@@ -28,5 +28,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:45.149Z",
-  "updatedAt": "2026-08-07T13:41:45.149Z"
+  "updatedAt": "2026-08-07T21:37:00.496Z"
 }

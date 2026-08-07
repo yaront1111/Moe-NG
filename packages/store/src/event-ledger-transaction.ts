@@ -1,3 +1,5 @@
+import type { DatabaseSync } from "node:sqlite";
+
 import {
   CommandIdConflictError,
   DurableStoreError,
@@ -21,9 +23,37 @@ interface TransactionOutcome {
   readonly stored: StoredCommitResult;
 }
 
+/**
+ * Handed to a {@link CommitApply} while the command transaction is still open.
+ * The summary carries no positions; select them by `command_id` when needed.
+ */
+export interface CommitApplyContext {
+  readonly database: DatabaseSync;
+  readonly summary: CommitResult;
+}
+
+/** Caller-supplied work durable with the event append or not at all. */
+export type CommitApply = (context: CommitApplyContext) => void;
+
 /** Internal command transaction layer behind the public event-ledger facade. */
 export class EventTransactionStore extends EventRecoveryStore {
   public commit(rawInput: CommitInput): CommitResult {
+    return this.runCommandTransaction(rawInput, null);
+  }
+
+  /**
+   * Commits the append and `apply` as one transaction. A throwing `apply`
+   * rolls the whole append back as PROJECTION_APPLY_FAILED; a replayed
+   * command never reaches it.
+   */
+  public commitWithApply(rawInput: CommitInput, apply: CommitApply): CommitResult {
+    return this.runCommandTransaction(rawInput, apply);
+  }
+
+  private runCommandTransaction(
+    rawInput: CommitInput,
+    apply: CommitApply | null,
+  ): CommitResult {
     this.requireOpen();
     if (this.projectId === null || !this.writeProjectAsserted) {
       throw new DurableStoreError(
@@ -35,7 +65,7 @@ export class EventTransactionStore extends EventRecoveryStore {
     assertExternalCommitIdentifiers(input);
     const requestSha256 = identifyCommandRequest(input);
     return this.withCommandTransaction(
-      () => this.resolveCommand(input, requestSha256),
+      () => this.resolveCommand(input, requestSha256, apply),
       (outcome) => toCommitResult(outcome.stored, outcome.disposition),
     );
   }
@@ -43,6 +73,7 @@ export class EventTransactionStore extends EventRecoveryStore {
   private resolveCommand(
     input: SnapshotCommitInput,
     requestSha256: string,
+    apply: CommitApply | null,
   ): TransactionOutcome {
     this.assertDurableProjectBinding();
     const receipt = this.loadReceipt(input.commandId);
@@ -67,9 +98,25 @@ export class EventTransactionStore extends EventRecoveryStore {
         previousVersion,
       );
     }
-    return {
-      disposition: "COMMITTED",
-      stored: this.writeCommitEffects(input, requestSha256, previousVersion),
-    };
+    const stored = this.writeCommitEffects(input, requestSha256, previousVersion);
+    if (apply !== null) {
+      this.applyWithinCommit(apply, stored);
+    }
+    return { disposition: "COMMITTED", stored };
+  }
+
+  private applyWithinCommit(apply: CommitApply, stored: StoredCommitResult): void {
+    try {
+      apply({
+        database: this.database,
+        summary: toCommitResult(stored, "COMMITTED"),
+      });
+    } catch (error) {
+      throw new DurableStoreError(
+        "PROJECTION_APPLY_FAILED",
+        error instanceof Error ? error.message : String(error),
+        { cause: error },
+      );
+    }
   }
 }

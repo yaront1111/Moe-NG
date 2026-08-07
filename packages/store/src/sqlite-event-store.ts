@@ -20,6 +20,7 @@ import type {
 } from "./store-contracts.js";
 import { createDecisionLedgerCore } from "./decision-ledger.js";
 import type { DecisionLedgerCore } from "./decision-ledger.js";
+import type { CommitApply, CommitApplyContext } from "./event-ledger-transaction.js";
 import { requireIdentifier } from "./store-input.js";
 import { readScalar, requireRowString } from "./store-rows.js";
 import {
@@ -32,6 +33,7 @@ import {
 
 export * from "./store-contracts.js";
 export { RECEIPT_OUTBOX_QUERY } from "./event-ledger.js";
+export type { CommitApply, CommitApplyContext };
 
 const journalModeRetrySignal = new Int32Array(new SharedArrayBuffer(4));
 const JOURNAL_MODE_RETRY_COUNT = 500;
@@ -255,6 +257,10 @@ export class SqliteEventStore {
     input: CommitExpectedVersionDecisionInput,
   ): CommandDecisionResponse {
     return this.#core.commitExpectedVersionDecision(input);
+  }
+
+  public commitWithApply(input: CommitInput, apply: CommitApply): CommitResult {
+    return this.#core.commitWithApply(input, apply);
   }
 
   public getAggregateVersion(aggregateId: string): number {

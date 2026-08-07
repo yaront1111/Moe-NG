@@ -13,6 +13,7 @@ import type {
   StoredEvent,
   StoreHealth,
 } from "./store-contracts.js";
+import type { CommitApply } from "./event-ledger-transaction.js";
 import { DecisionTransactionStore } from "./decision-ledger-transaction.js";
 
 class DecisionLedgerStore extends DecisionTransactionStore {
@@ -39,6 +40,7 @@ export interface DecisionLedgerCore {
   readonly commitExpectedVersionDecision: (
     input: CommitExpectedVersionDecisionInput,
   ) => CommandDecisionResponse;
+  readonly commitWithApply: (input: CommitInput, apply: CommitApply) => CommitResult;
   readonly getAggregateVersion: (aggregateId: string) => number;
   readonly getCommandDecision: (key: CommandDecisionKey) => CommandDecisionRecord | null;
   readonly getCommandReceipt: (commandId: string) => CommandReceipt | null;
@@ -88,6 +90,8 @@ export function createDecisionLedgerCore(
     commit: (input: CommitInput) => ledger.commit(input),
     commitExpectedVersionDecision: (input: CommitExpectedVersionDecisionInput) =>
       ledger.commitExpectedVersionDecision(input),
+    commitWithApply: (input: CommitInput, apply: CommitApply) =>
+      ledger.commitWithApply(input, apply),
     getAggregateVersion: (aggregateId: string) => ledger.getAggregateVersion(aggregateId),
     getCommandDecision: (key: CommandDecisionKey) => ledger.getCommandDecision(key),
     getCommandReceipt: (commandId: string) => ledger.getCommandReceipt(commandId),
