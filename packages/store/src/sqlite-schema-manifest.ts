@@ -84,7 +84,7 @@ export const SCHEMA_V1_OBJECT_SQL = Object.freeze({
   `,
 });
 
-export const SCHEMA_OBJECT_SQL = Object.freeze({
+export const SCHEMA_V2_OBJECT_SQL = Object.freeze({
   ...SCHEMA_V1_OBJECT_SQL,
   command_decisions: `
     CREATE TABLE command_decisions (
@@ -173,6 +173,62 @@ export const SCHEMA_OBJECT_SQL = Object.freeze({
       project_id TEXT NOT NULL,
       FOREIGN KEY (receipt_command_id)
         REFERENCES command_receipts(command_id) ON DELETE RESTRICT
+    ) STRICT
+  `,
+});
+
+export const SCHEMA_OBJECT_SQL = Object.freeze({
+  ...SCHEMA_V2_OBJECT_SQL,
+  domain_events: `
+    CREATE TABLE domain_events (
+      global_position INTEGER PRIMARY KEY AUTOINCREMENT CHECK (global_position > 0),
+      event_id TEXT NOT NULL UNIQUE,
+      aggregate_id TEXT NOT NULL,
+      aggregate_sequence INTEGER NOT NULL CHECK (aggregate_sequence > 0),
+      command_id TEXT NOT NULL,
+      command_event_index INTEGER NOT NULL CHECK (command_event_index >= 0),
+      record_version TEXT NOT NULL,
+      payload_codec_version TEXT NOT NULL,
+      request_sha256 TEXT NOT NULL CHECK (
+        length(request_sha256) = 64 AND request_sha256 NOT GLOB '*[^0-9a-f]*'
+      ),
+      event_type TEXT NOT NULL,
+      payload BLOB NOT NULL,
+      metadata BLOB NOT NULL,
+      committed_at TEXT NOT NULL,
+      domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0',
+      UNIQUE (aggregate_id, aggregate_sequence),
+      UNIQUE (command_id, command_event_index),
+      FOREIGN KEY (command_id) REFERENCES command_receipts(command_id) ON DELETE RESTRICT
+    ) STRICT
+  `,
+  projections: `
+    CREATE TABLE projections (
+      projection_name TEXT PRIMARY KEY NOT NULL,
+      last_applied_position TEXT NOT NULL,
+      state_digest TEXT
+    ) STRICT
+  `,
+  inbox_receipts: `
+    CREATE TABLE inbox_receipts (
+      consumer_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      receipt_digest TEXT NOT NULL,
+      PRIMARY KEY (consumer_id, message_id)
+    ) STRICT
+  `,
+  event_subscriptions: `
+    CREATE TABLE event_subscriptions (
+      subscriber_id TEXT PRIMARY KEY NOT NULL,
+      filter_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    ) STRICT
+  `,
+  cursor_generations: `
+    CREATE TABLE cursor_generations (
+      generation INTEGER PRIMARY KEY NOT NULL,
+      created_at TEXT NOT NULL,
+      reason TEXT NOT NULL
     ) STRICT
   `,
 });
