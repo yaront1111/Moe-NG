@@ -7,13 +7,12 @@ import { describe, expect, it } from "vitest";
 
 import { DurableStoreError, SqliteEventStore } from "./index.js";
 import type { CommitInput, CommitResult } from "./index.js";
+import type { CommitApply } from "./sqlite-event-store.js";
 import { bytes } from "./sqlite-event-store-test-helpers.js";
 
 const PROJECTION_NAME = "seam-probe";
-const INSERT_PROJECTION = `
-  INSERT INTO projections (projection_name, last_applied_position, state_digest)
-  VALUES (?, ?, ?)
-`;
+const INSERT_PROJECTION =
+  "INSERT INTO projections (projection_name, last_applied_position, state_digest) VALUES (?, ?, ?)";
 
 function commitInput(suffix: string, expectedVersion: number): CommitInput {
   return {
@@ -45,6 +44,15 @@ function withDurableStore(run: (open: () => SqliteEventStore, path: string) => v
   }
 }
 
+function withEphemeralStore(run: (store: SqliteEventStore) => void): void {
+  const store = SqliteEventStore.openEphemeralForTest();
+  try {
+    run(store);
+  } finally {
+    store.close();
+  }
+}
+
 function readProjectionNames(databasePath: string): readonly string[] {
   const database = new DatabaseSync(databasePath);
   try {
@@ -55,6 +63,15 @@ function readProjectionNames(databasePath: string): readonly string[] {
   } finally {
     database.close();
   }
+}
+
+function captureThrow(run: () => void): DurableStoreError {
+  try {
+    run();
+  } catch (error) {
+    return error as DurableStoreError;
+  }
+  throw new Error("expected the projection seam to throw");
 }
 
 function selectPositions(database: DatabaseSync, commandId: string): readonly number[] {
@@ -86,22 +103,13 @@ describe("projection commit seam", () => {
       }
 
       const observed = summary as CommitResult | null;
-      expect(observed).not.toBeNull();
       expect(observed?.commandId).toBe("cmd-1");
       expect(observed?.aggregateId).toBe("goal-1");
       expect(observed?.eventIds).toEqual(["evt-1"]);
-      expect(Object.keys(observed ?? {}).sort()).toEqual([
-        "aggregateId",
-        "commandId",
-        "currentVersion",
-        "disposition",
-        "effectIdentityVersion",
-        "effectSha256",
-        "eventIds",
-        "outboxMessageIds",
-        "previousVersion",
-        "requestSha256",
-      ]);
+      expect(Object.keys(observed ?? {}).sort().join(",")).toBe(
+        "aggregateId,commandId,currentVersion,disposition,effectIdentityVersion," +
+          "effectSha256,eventIds,outboxMessageIds,previousVersion,requestSha256",
+      );
       expect(positionsSeenInsideApply).toEqual([1]);
 
       const reopened = open();
@@ -120,20 +128,17 @@ describe("projection commit seam", () => {
       const store = open();
       try {
         expect(store.getAggregateVersion("goal-1")).toBe(0);
-        let thrown: unknown;
-        try {
+        const failure = captureThrow(() => {
           store.commitWithApply(commitInput("1", 0), (context) => {
             context.database
               .prepare(INSERT_PROJECTION)
               .run(PROJECTION_NAME, "1", "digest-1");
             throw new Error("projection fold rejected the commit");
           });
-        } catch (error) {
-          thrown = error;
-        }
-        expect(thrown).toBeInstanceOf(DurableStoreError);
-        expect((thrown as DurableStoreError).code).toBe("PROJECTION_APPLY_FAILED");
-        expect((thrown as DurableStoreError).message).toBe(
+        });
+        expect(failure).toBeInstanceOf(DurableStoreError);
+        expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
+        expect(failure.message).toBe(
           "PROJECTION_APPLY_FAILED: projection fold rejected the commit",
         );
 
@@ -148,75 +153,98 @@ describe("projection commit seam", () => {
   });
 
   it("leaves the store handle usable after a failed apply", () => {
-    const store = SqliteEventStore.openEphemeralForTest();
-    try {
-      expect(() =>
+    withEphemeralStore((store) => {
+      const failure = captureThrow(() => {
         store.commitWithApply(commitInput("1", 0), () => {
           throw new Error("apply exploded");
-        }),
-      ).toThrowError(/PROJECTION_APPLY_FAILED/);
-
+        });
+      });
+      expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
       const recovered = store.commit(commitInput("2", 0));
       expect(recovered.disposition).toBe("COMMITTED");
       expect(recovered.currentVersion).toBe(1);
       expect(store.getHealth().quickCheck).toBe("ok");
-    } finally {
-      store.close();
-    }
+    });
   });
 
   it("never invokes the apply for a replayed command", () => {
-    const store = SqliteEventStore.openEphemeralForTest();
-    try {
+    withEphemeralStore((store) => {
       const applyCalls: string[] = [];
-      const first = store.commitWithApply(commitInput("1", 0), (context) => {
+      const record: CommitApply = (context) => {
         applyCalls.push(context.summary.commandId);
-      });
-      expect(first.disposition).toBe("COMMITTED");
-
-      const replayed = store.commitWithApply(commitInput("1", 0), (context) => {
-        applyCalls.push(context.summary.commandId);
-      });
-      expect(replayed.disposition).toBe("REPLAYED");
+      };
+      expect(store.commitWithApply(commitInput("1", 0), record).disposition).toBe("COMMITTED");
+      expect(store.commitWithApply(commitInput("1", 0), record).disposition).toBe("REPLAYED");
       expect(applyCalls).toEqual(["cmd-1"]);
-    } finally {
-      store.close();
-    }
+    });
   });
 
   it("wraps a plain apply failure at the invocation site instead of renaming it", () => {
-    const store = SqliteEventStore.openEphemeralForTest();
-    try {
-      let thrown: unknown;
-      try {
+    withEphemeralStore((store) => {
+      const failure = captureThrow(() => {
         store.commitWithApply(commitInput("1", 0), () => {
           throw new Error("not a DurableStoreError");
         });
-      } catch (error) {
-        thrown = error;
-      }
-      expect((thrown as DurableStoreError).code).toBe("PROJECTION_APPLY_FAILED");
-      expect((thrown as DurableStoreError).code).not.toBe("STORE_UNAVAILABLE");
-      expect((thrown as DurableStoreError).message).toBe(
-        "PROJECTION_APPLY_FAILED: not a DurableStoreError",
+      });
+      expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
+      expect(failure.message).toBe("PROJECTION_APPLY_FAILED: not a DurableStoreError");
+    });
+  });
+
+  it("keeps the stable code when the apply throws an undescribable value", () => {
+    withEphemeralStore((store) => {
+      const failure = captureThrow(() => {
+        store.commitWithApply(commitInput("1", 0), () => {
+          throw Symbol("unspeakable");
+        });
+      });
+      expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
+      expect(store.getAggregateVersion("goal-1")).toBe(0);
+    });
+  });
+
+  it("refuses an asynchronous apply instead of committing behind it", () => {
+    withEphemeralStore((store) => {
+      const failure = captureThrow(() => {
+        store.commitWithApply(commitInput("1", 0), () => Promise.resolve());
+      });
+      expect(failure.message).toBe(
+        "PROJECTION_APPLY_FAILED: the commit apply must be synchronous; " +
+          "this transaction cannot await a thenable",
       );
-    } finally {
-      store.close();
-    }
+      expect(store.readEvents("goal-1")).toEqual([]);
+      expect(store.getAggregateVersion("goal-1")).toBe(0);
+      expect(store.getCommandReceipt("cmd-1")).toBeNull();
+    });
+  });
+
+  it("never invokes the apply on a conflicting command", () => {
+    withEphemeralStore((store) => {
+      const applyCalls: string[] = [];
+      const record: CommitApply = (context) => {
+        applyCalls.push(context.summary.commandId);
+      };
+      store.commit(commitInput("1", 0));
+      const reused = { ...commitInput("1", 0), commandBytes: bytes("{}") };
+      expect(captureThrow(() => store.commitWithApply(reused, record)).code).toBe(
+        "COMMAND_ID_CONFLICT",
+      );
+      expect(captureThrow(() => store.commitWithApply(commitInput("2", 0), record)).code).toBe(
+        "EXPECTED_VERSION_CONFLICT",
+      );
+      expect(applyCalls).toEqual([]);
+    });
   });
 
   it("keeps the plain commit entry point unchanged", () => {
     expect(SqliteEventStore.prototype.commit.length).toBe(1);
     expect(SqliteEventStore.prototype.commitWithApply.length).toBe(2);
-    const store = SqliteEventStore.openEphemeralForTest();
-    try {
+    withEphemeralStore((store) => {
       const committed = store.commit(commitInput("1", 0));
       expect(committed.disposition).toBe("COMMITTED");
       expect(committed.eventIds).toEqual(["evt-1"]);
       expect(store.getAggregateVersion("goal-1")).toBe(1);
       expect(store.commit(commitInput("1", 0)).disposition).toBe("REPLAYED");
-    } finally {
-      store.close();
-    }
+    });
   });
 });

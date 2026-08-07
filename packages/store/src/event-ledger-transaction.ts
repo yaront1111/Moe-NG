@@ -127,16 +127,21 @@ export class EventTransactionStore extends EventRecoveryStore {
   }
 
   private applyWithinCommit(apply: CommitApply, stored: StoredCommitResult): void {
+    let returned: unknown;
     try {
-      apply({
+      returned = apply({
         database: this.database,
         summary: toCommitResult(stored, "COMMITTED"),
       });
     } catch (error) {
+      throw new DurableStoreError("PROJECTION_APPLY_FAILED", describeApplyFailure(error), {
+        cause: error,
+      });
+    }
+    if (isThenable(returned)) {
       throw new DurableStoreError(
         "PROJECTION_APPLY_FAILED",
-        error instanceof Error ? error.message : String(error),
-        { cause: error },
+        "the commit apply must be synchronous; this transaction cannot await a thenable",
       );
     }
   }
