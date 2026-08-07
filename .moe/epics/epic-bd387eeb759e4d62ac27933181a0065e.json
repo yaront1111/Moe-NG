@@ -3,7 +3,7 @@
   "projectId": "proj-dd087108",
   "title": "M1 Foundation Preview - durable linear self-hosting",
   "description": "Complete the transactional authority core and a Windows+Claude single-node vertical slice that can safely coordinate one low-risk moe-next task end to end. This is the cutover gate for limited self-hosting, not graph fan-out or a best-tool claim.",
-  "architectureNotes": "Current main contains phase-zero evidence tooling, SQLite event/decision foundations, structural graph preview, bounded JSON ingress, a truth-presentation kernel, and a DEVELOPMENT_ONLY fairness reference. Build remaining Phase 2-4 contracts in shallow parallel tracks, then one integration/hardening gate. Multi-node activation is typed UNSUPPORTED throughout this epic. Product decision 2026-08-07: replace general agent chat with a daemon-owned typed session coordination fabric connecting coder sessions, terminal/effect wrappers, reviewers, and the control room. It carries bounded addressed REQUEST/RESPONSE/EVENT/CONTROL/HANDOFF envelopes with auth, sequence, dedupe, backpressure, expiry, and replay; free-form text is advisory and can never bypass command authority.",
+  "architectureNotes": "Current main contains phase-zero evidence tooling, SQLite event/decision foundations, structural graph preview, bounded JSON ingress, a truth-presentation kernel, and a DEVELOPMENT_ONLY fairness reference. Build remaining Phase 2-4 contracts in shallow parallel tracks, then one integration/hardening gate. Multi-node activation is typed UNSUPPORTED throughout this epic. Product decision 2026-08-07: replace general agent chat with a daemon-owned typed session coordination fabric connecting coder sessions, terminal/effect wrappers, reviewers, and the control room. It carries bounded addressed REQUEST/RESPONSE/EVENT/CONTROL/HANDOFF envelopes with auth, sequence, dedupe, backpressure, expiry, and replay; free-form text is advisory and can never bypass command authority. Product decision 2026-08-07: root AGENTS.md is the canonical tool-neutral repository instruction contract; root CLAUDE.md is a minimal Claude-specific bridge and generated session prompts are never authoritative. Skills are versioned content-addressed advisory bundles selected explicitly and snapshotted into context/input/evidence manifests; skill content can never grant commands, capabilities, policy, lease, approval, or execution authority.",
   "epicRails": [
     "Authoritative design: D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it in implementation tasks.",
     "Development happens only in D:/projexts/moe-next; do not create sibling Git worktrees. Runtime workspace isolation promised by the design remains in scope.",
@@ -14,5 +14,5 @@
   "status": "ACTIVE",
   "order": 10,
   "createdAt": "2026-08-07T11:41:55.622Z",
-  "updatedAt": "2026-08-07T11:51:59.232Z"
+  "updatedAt": "2026-08-07T12:09:39.010Z"
 }

@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 8,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f853b5e307f94b62b7f87040b5af7e4e",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: copied legacy .moe/skills content may be imported only through the new versioned skill contract. Preserve source paths and exact bytes/digests; classify malformed, ambiguous, missing-license, unsupported-script, or escaping assets without blessing or executing them.",
+      "timestamp": "2026-08-07T12:10:20.704Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-07T11:56:15.916Z"
+  "updatedAt": "2026-08-07T12:10:20.704Z"
 }

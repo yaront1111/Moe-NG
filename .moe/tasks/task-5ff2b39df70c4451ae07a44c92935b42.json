@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 22,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-77d8eae4f1e0499b828e46632e624d58",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: the Claude adapter must consume the provider-neutral validated skill snapshot from task-eca1a82ffa844c679d25a60ad8bd165e and the durable project instruction contract from task-02249f0a600247a6977949648ec64886. Rendering must be deterministic, capability-probed, digest-recorded, and unable to convert advisory text into command/effect authority.",
+      "timestamp": "2026-08-07T12:10:20.331Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.808Z",
-  "updatedAt": "2026-08-07T11:50:14.808Z"
+  "updatedAt": "2026-08-07T12:10:20.331Z"
 }

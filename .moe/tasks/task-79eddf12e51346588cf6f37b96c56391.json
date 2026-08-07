@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 26,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-410cd255b5064cf888af0c1ce9cdede3",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: consume only validated immutable skill snapshots from task-eca1a82ffa844c679d25a60ad8bd165e. The context manifest must record ordered skill IDs, versions, exact digests, provenance, selected files/assets, rendered-byte digest, omissions, and limit/refusal facts. Skill text remains advisory and cannot alter command authority.",
+      "timestamp": "2026-08-07T12:10:20.068Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.596Z",
-  "updatedAt": "2026-08-07T11:50:15.596Z"
+  "updatedAt": "2026-08-07T12:10:20.068Z"
 }

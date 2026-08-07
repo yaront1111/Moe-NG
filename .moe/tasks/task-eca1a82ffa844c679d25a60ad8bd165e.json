@@ -1,0 +1,33 @@
+{
+  "id": "task-eca1a82ffa844c679d25a60ad8bd165e",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Versioned skill bundle runtime",
+  "description": "Objective: make skills a first-class deterministic input to Moe-next rather than copied old-Moe workspace scaffolding. Deliverable: a focused provider-neutral skill package that validates a closed versioned manifest, resolves only explicitly requested skill IDs and exact digests, enforces bounded file/byte/path limits, snapshots exact skill bytes/assets/provenance into the immutable context/input manifest, and exposes a safe renderer input for provider adapters. Skills are advisory context only and cannot create commands, capabilities, approvals, leases, policy, budgets, effects, or execution authority. Existing .moe/skills files are migration input, not the new runtime contract. Hard dependencies: Runtime contract registry. Owned paths: a new packages/skills/** package and skill-focused tests; adapter wiring and legacy import consume this public contract in their own tasks.",
+  "definitionOfDone": [
+    "The skill manifest, identity, provenance, requested version/digest, file list, and limits are closed, versioned, immutable, and canonical.",
+    "Traversal, symlink escape, duplicate or ambiguous identity, unknown fields, oversized counts/bytes, invalid Unicode, missing files, and digest mismatch fail closed with stable errors.",
+    "Resolution is explicit and deterministic; exact selected bytes and digests enter context/input/evidence manifests so replay can prove which skill material was used.",
+    "Tests prove skill text cannot grant or mutate command, capability, approval, lease, policy, budget, effect, or execution authority; focused typecheck/tests and repository regression checks exit 0."
+  ],
+  "taskRails": [
+    "Do not blindly vendor or bless the current .moe/skills tree; treat it as legacy input with recorded provenance.",
+    "Provider adapters may render a validated snapshot but must not reinterpret skill text as authority.",
+    "Keep contracts, filesystem loading, hashing/canonicalization, and tests in focused modules; target <=250 lines and split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 20,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T12:09:39.256Z",
+  "updatedAt": "2026-08-07T12:09:39.256Z"
+}

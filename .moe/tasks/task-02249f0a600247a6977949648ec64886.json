@@ -1,0 +1,33 @@
+{
+  "id": "task-02249f0a600247a6977949648ec64886",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable project instruction contract",
+  "description": "Objective: establish concise durable project instructions for every provider without copying generated assignments or live Moe state into source control. Deliverables: canonical root AGENTS.md, a minimal root CLAUDE.md bridge, one focused instruction-contract checker/test, and a short ownership note if needed. AGENTS.md owns tool-neutral architecture boundaries, verification commands, explicit-path staging, shared-tree ownership, fail-closed truth, and source-size rails. CLAUDE.md contains only Claude-specific bootstrap/runtime guidance and points to AGENTS.md rather than duplicating it. NOT in scope: task-specific prompts, session transcripts, worker IDs, provider credentials, live .moe state, or generated .codex instructions. Hard dependencies: none. Owned paths: AGENTS.md, CLAUDE.md, and a new isolated checker/test path selected by the architect; avoid modifying active package sources.",
+  "definitionOfDone": [
+    "Root AGENTS.md is concise, canonical, tool-neutral, and contains no live task, worker, branch, or session state.",
+    "Root CLAUDE.md is a thin Claude bridge to AGENTS.md with no duplicated normative policy and no secrets or generated assignment content.",
+    "A deterministic checker fails on missing bridge/canonical markers, oversized files, or forbidden generated/live-state markers without rewriting either file.",
+    "Fresh focused verification and repository regression checks exit 0; only explicit owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Keep durable project policy separate from generated provider/session instructions.",
+    "Do not edit or delete live .moe, .codex, .claude/settings.local.json, role, skill, task, message, channel, or agent state.",
+    "Keep each instruction file short; link to deeper docs rather than accumulating a large prompt.",
+    "Use TDD for the checker and stage only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T12:09:39.132Z",
+  "updatedAt": "2026-08-07T12:09:39.132Z"
+}

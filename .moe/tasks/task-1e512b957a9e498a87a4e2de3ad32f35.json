@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 25,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-dbb59bb7a2fa4bd6b952a5143f137897",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: evidence/input receipts must bind the exact validated skill snapshot and rendered-context digest used for the attempt. Missing, mismatched, ambiguous, or unverifiable skill evidence is UNKNOWN/fail-closed; agent claims about skills are not proof.",
+      "timestamp": "2026-08-07T12:10:20.186Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.486Z",
-  "updatedAt": "2026-08-07T11:50:15.486Z"
+  "updatedAt": "2026-08-07T12:10:20.186Z"
 }

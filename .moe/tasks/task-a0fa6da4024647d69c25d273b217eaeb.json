@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-e88a4b06f3e84f58a610a38edde2395a",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: the Codex adapter must consume the same provider-neutral validated skill snapshot and canonical AGENTS.md contract as Claude, record exact rendered bytes/digest, respect scoped instruction precedence, and never let skill or prompt text grant command/effect authority.",
+      "timestamp": "2026-08-07T12:10:20.457Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-07T11:56:14.439Z"
+  "updatedAt": "2026-08-07T12:10:20.457Z"
 }

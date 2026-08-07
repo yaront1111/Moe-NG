@@ -26,8 +26,15 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ec1dbb96b0c447eaba3243365ec878eb",
+      "author": "human",
+      "content": "Roadmap amendment 2026-08-07: signed distribution manifests must enumerate every shipped built-in skill bundle and durable instruction template by canonical ID/version/digest. Runtime/user/project skills remain external inputs with provenance; packaging must not silently substitute or mutate them.",
+      "timestamp": "2026-08-07T12:10:20.581Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.684Z",
-  "updatedAt": "2026-08-07T11:56:15.684Z"
+  "updatedAt": "2026-08-07T12:10:20.581Z"
 }
