@@ -20,6 +20,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/control-room-model: {}
+
   packages/scheduler: {}
 
   packages/store: {}
