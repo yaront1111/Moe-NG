@@ -19,31 +19,42 @@
     {
       "stepId": "step-1",
       "description": "Characterization baseline (read-only): graph-revision-reducer.test.ts is 288 lines / 18 it() cases; fixture surface = lines 17-93 (hash(), GRAPH_HASH..STALE_HASH constants, BINDING/SUBMISSION/APPROVAL/ACTIVATION/REJECTION witnesses, BOUND, state(), commandFor(), expectError(), expectIllegal(), accepted() — ~77 lines) — extracting it brings the test to ~215 lines, comfortably <=250, with ALL 18 cases STAYING in the test file (no second test file; DoD 1 demands every name remain HERE and execute exactly once). Record the it()-name baseline list to a scratchpad file OUTSIDE the repo. Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN before starting (shared tree — attribute foreign red by path).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.test.ts"
-      ]
+      ],
+      "note": "Baseline (read-only): graph-revision-reducer.test.ts = 288 physical lines, exactly 18 it() cases across 4 describes (creation+submission 3, approval+activation 6, refusal+terminal 4, concurrency 5 — plan said 3 describes; count of 18 matches). it()-name list captured to scratchpad OUTSIDE repo: C:/Users/Yaron/AppData/Local/Temp/grx-baseline-its.txt. Fixture surface confirmed at lines 17-93 (hash, GRAPH/PLAN/QUALITY/BUDGET/POLICY/STALE_HASH, BINDING/SUBMISSION/APPROVAL/ACTIVATION/REJECTION, BOUND, state, commandFor, expectError, expectIllegal, accepted) = 77 lines; 288-78 (incl. blank 94) + 1 fixture import ≈ 211 <= 250. Verified all 5 contract types are exported from graph-revision-contract.ts. Root vitest include = packages/**/*.test.ts only, so a *-test-fixtures.ts module is never collected as a suite. Sibling planning-run-test-fixtures.ts does NOT exist on disk yet (task-ca32f538 still in flight) — conventions matched by intent, not by copy. Fresh baseline `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0, 13 files / 226 tests passed.",
+      "startedAt": "2026-08-07T21:44:50.388Z",
+      "completedAt": "2026-08-07T21:45:49.225Z"
     },
     {
       "stepId": "step-2",
       "description": "Extract packages/core/src/planning/graph-revision-test-fixtures.ts BY RANGE: move lines 17-93 verbatim with exactly their current imports (RUNTIME_LIFECYCLES if used by the moved code, expect from vitest for the assertion helpers — legal test infrastructure: the module is *.ts non-.test so the root vitest include never collects it as a suite, it is only imported FROM the test; contract types via `import type` from './graph-revision-contract.js'); export every moved symbol; NodeNext '.js' specifiers; prune the test file's now-unused imports (noUnusedLocals) and import the fixtures via './graph-revision-test-fixtures.js'. RAIL CHECK: deterministic only (hash() is seed-based; no Date/random), no shared mutable state (frozen consts + pure factories), exports nothing production-shaped (zero overlap with packages/core/src/index.ts exports — DoD 2). Test file body: ZERO case edits, zero renames, zero skip/only/todo.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-test-fixtures.ts",
         "packages/core/src/planning/graph-revision-reducer.test.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/graph-revision-test-fixtures.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-test-fixtures.ts",
+        "packages/core/src/planning/graph-revision-reducer.test.ts"
+      ],
+      "note": "Extraction done. NEW graph-revision-test-fixtures.ts = 96 lines: 4-line module doc, `import { expect } from \"vitest\"`, type-only import of GraphRevisionCommand/CommandKind/Lifecycle/ReducerResult/State from './graph-revision-contract.js' (all 5 confirmed exported), then baseline lines 17-93 moved with only `export` added. RUNTIME_LIFECYCLES is NOT imported by fixtures — the moved code never used it (it is used only in test bodies, which keep their own import). Two lines were re-wrapped, semantics identical, because `export ` pushed them past the repo's observed 100-col ceiling: APPROVAL (now 2 lines, exactly the ACTIVATION wrap style already in the file) and commandFor's signature (params one-per-line, the same style as state()). Everything else is byte-identical. Test file: header only — pruned GraphRevisionCommandKind and GraphRevisionReducerResult (unused after the move; the other 3 types still used in test bodies), added the 12-name fixture import ('./graph-revision-test-fixtures.js', ASCII-sorted like the sibling import). Zero edits below the import block: all 4 describes and all 18 it() bodies untouched. Sizes: test 288 -> 222 lines, fixtures 96 — both <=250. `pnpm --filter @moe/core typecheck` exit 0; `pnpm --filter @moe/core test` exit 0 with 13 files / 226 tests — file count unchanged, so the fixtures module is not collected as a suite.",
+      "startedAt": "2026-08-07T21:45:51.435Z",
+      "completedAt": "2026-08-07T21:47:36.563Z"
     },
     {
       "stepId": "step-3",
       "description": "Verification gate + audit: (1) `wc -l` both files — each <=250 physical lines (expect ~215 test / ~85 fixtures); (2) case audit — `grep -c \"it(\"` in the test file === 18 AND the sorted it()-name list equals the step-1 baseline exactly (loops over BOUND move with derivation intact — derived names must match too); grep skip|only|todo -> zero; (3) fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 with production files untouched (`git status --porcelain -- packages/core/src/planning` shows only the two owned paths) — complete_task evidence: { command: \"pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\", exitCode: 0, outputTail }; assertions pass count unchanged vs baseline; (4) isolation run of the test file alone -> green; repo gate with foreign-red attribution; run twice — identical.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.test.ts",
         "packages/core/src/planning/graph-revision-test-fixtures.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:47:38.637Z"
     },
     {
       "stepId": "step-4",
@@ -56,7 +67,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-c8bf9f6b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -68,17 +79,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T21:39:51.518Z",
+  "updatedAt": "2026-08-07T21:47:38.637Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:22:56.502Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "worker-c8bf9f6b"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:39:49.492Z",
   "planningNotes": {
@@ -92,7 +108,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 1800000
+    "wallClockMs": 1800000,
+    "warnedAt": "2026-08-07T21:47:36.580Z"
   },
-  "planApprovedAt": "2026-08-07T21:39:51.518Z"
+  "planApprovedAt": "2026-08-07T21:39:51.518Z",
+  "workStartedAt": "2026-08-07T21:44:50.388Z"
 }

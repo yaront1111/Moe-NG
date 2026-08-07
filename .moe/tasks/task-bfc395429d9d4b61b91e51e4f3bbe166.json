@@ -64,18 +64,27 @@
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` edited production files <=400 hard (target 250; event-ledger-transaction split point via amendment if needed). (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 with ZERO existing-test edits (DoD 4) — complete_task evidence: { command: \"pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test\", exitCode: 0, outputTail }; repo gate with foreign-red attribution; focused suite twice — identical. Adversarial (Skill adversarial-self-review): (a) partial-write hunt — crash the apply AFTER it wrote a projection row: rollback must remove the row too (same transaction — assert absent); (b) seam-bypass hunt — confirm plain commit() byte-identical behavior (diff its body path against HEAD); (c) replay double-check — apply recorder shows zero invocations across REPLAYED and IDEMPOTENCY_CONFLICT paths; (d) grep for projection-FOLD logic (fold/subscribe/relay/upcast identifiers) -> ZERO (the seam-not-feature rail); (e) union-entry ASCII position + no other store-contracts hunk (B1 fence); (f) no scratch files. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/store-contracts.ts packages/store/src/event-ledger-transaction.ts packages/store/src/sqlite-event-store.ts packages/store/src/store-projection-seam.test.ts`; `git show --stat` lists exactly these 4 paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/store-contracts.ts",
         "packages/store/src/event-ledger-transaction.ts",
         "packages/store/src/sqlite-event-store.ts",
         "packages/store/src/store-projection-seam.test.ts"
       ],
-      "startedAt": "2026-08-07T21:42:38.064Z"
+      "modifiedFiles": [
+        "packages/store/src/store-contracts.ts",
+        "packages/store/src/event-ledger-transaction.ts",
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/store-projection-seam.test.ts"
+      ],
+      "note": "Gate GREEN, adversarial review found and fixed two real footguns, committed by explicit pathspec.\n\nVERIFICATION (fresh, foreground, post-commit): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, \"Test Files 22 passed (22) / Tests 146 passed (146)\". Run three times, identical. Zero existing-test files edited (`git show --stat` on both commits touching my work lists no pre-existing test).\nRepo gate `npx vitest run`: 111/112 files, 1577 passed / 1 failed. The single failure is FOREIGN by path — packages/scheduler/src/package-boundary.test.ts flagging packages/core/src/planning/planning-run-test-fixtures.ts; no store path involved. Separately, the pre-existing command-decision-concurrency.test.ts flakiness I reported at step-1 did not reproduce in any of today's later runs.\n\nADVERSARIAL REVIEW — 2 REAL DEFECTS FOUND IN MY OWN DIFF, both fixed with tests before commit:\n1. ASYNC APPLY SILENTLY COMMITTED BEHIND UNFINISHED WORK. `CommitApply` returns void, and TypeScript's void-return rule accepts an `async` callback without complaint. The seam would have invoked it, ignored the pending promise, COMMITted, and returned success while the caller's projection work had not run — the exact partial-write class this task exists to prevent, with no error anywhere. Fixed: `isThenable(returned)` check after the call throws PROJECTION_APPLY_FAILED (\"the commit apply must be synchronous; this transaction cannot await a thenable\"), so the append rolls back. Test pins the message and asserts event/receipt/version all absent.\n2. UNDESCRIBABLE THROW VALUES DEFEATED THE STABLE CODE. My first wrap used `String(error)`, which itself THROWS for a Symbol or a null-prototype object. That TypeError would escape the catch block, reach withCommandTransaction as a non-DurableStoreError, and get renamed STORE_UNAVAILABLE by normalizeOperationalError — i.e. the precise trap the task flagged, reintroduced through the error formatter. Fixed: total `describeApplyFailure` helper with its own try/catch fallback. Test throws a Symbol and pins PROJECTION_APPLY_FAILED.\nAlso added: conflict-path coverage (a call-recording apply stays at zero invocations across COMMAND_ID_CONFLICT and EXPECTED_VERSION_CONFLICT), proving the seam runs on no non-COMMITTED exit rather than only on the REPLAYED one.\nConsidered and rejected as out of scope: an apply that runs its own COMMIT/ROLLBACK. It already fails closed — the outer COMMIT then throws with commitAttempted=true and !isTransaction, which is exactly the poison + OUTCOME_UNKNOWN branch. Documented as a contract in the CommitApply doc comment rather than policed at runtime.\n\nPLANNED CHECKS: (a) partial-write hunt — covered by the rollback test, which writes a projections row and then throws; the row is absent afterwards on a durable reopen. (b) seam-bypass — `git diff 273f417 -- event-ledger-transaction.ts` shows the commit body moved into runCommandTransaction as unchanged context lines; the only in-body delta is the extra resolveCommand argument, and commit() is `runCommandTransaction(rawInput, null)`. Arity pinned by test. (c) replay + conflict recorders both at zero. (d) grep for fold|subscribe|subscription|relay|upcast across all five paths: only hit is a pre-existing B1 doc comment in store-contracts.ts, none in my hunks. (e) store-contracts.ts: exactly 1 changed line, ASCII-correct slot. (f) no scratch files under my paths.\n\nSIZES: seam test 250, event-ledger-transaction 148, decision-ledger 130 — all <=250. store-contracts 297 and sqlite-event-store 338 are pre-existing sizes (+1 and +6 from me), both under the 400 hard bar.\n\nCOMMIT / FOREIGN-SWEEP DISCLOSURE — QA needs this to find the work. Mid-task, sibling commit a81aedd \"feat(task-5a9535485...): Graph revision reducer decomposition\" swept in ALL FIVE of my store paths under its own message (store-contracts.ts, decision-ledger.ts, sqlite-event-store.ts, event-ledger-transaction.ts, store-projection-seam.test.ts). Per the epic rails and mem:gotcha-shared-tree-broad-add-sweep I did NOT revert, reset, or amend it — it carries live foreign work. My own commit a45b161 therefore carries only the post-sweep delta: the two hardening fixes above (event-ledger-transaction.ts + the reworked seam test). Review the SEAM as the union of a81aedd and a45b161 over those five paths. Staging was verified clean before committing (`git status --porcelain` showed only my two paths staged) and `git show --stat` confirms a45b161 contains exactly those two.",
+      "startedAt": "2026-08-07T21:42:38.064Z",
+      "completedAt": "2026-08-07T21:47:43.361Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29a7f3a3",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -87,17 +96,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:18:21.612Z",
-  "updatedAt": "2026-08-07T21:42:38.064Z",
+  "updatedAt": "2026-08-07T21:49:04.529Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:27:58.705Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:28:54.739Z",
@@ -120,5 +130,19 @@
   "contextFetchedBy": [
     "worker-29a7f3a3"
   ],
-  "workStartedAt": "2026-08-07T21:35:08.163Z"
+  "workStartedAt": "2026-08-07T21:35:08.163Z",
+  "reviewStartedAt": "2026-08-07T21:49:04.529Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  22 passed (22)\n      Tests  146 passed (146)\n   Start at  00:47:13\n   Duration  1.30s (transform 4.01s, setup 0ms, import 6.33s, tests 4.58s, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T21:49:04.529Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-projection-seam.test.ts",
+    "packages/store/src/store-contracts.ts",
+    "packages/store/src/event-ledger-transaction.ts",
+    "packages/store/src/decision-ledger.ts",
+    "packages/store/src/sqlite-event-store.ts"
+  ]
 }

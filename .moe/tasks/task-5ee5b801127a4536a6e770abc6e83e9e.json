@@ -1,0 +1,33 @@
+{
+  "id": "task-5ee5b801127a4536a6e770abc6e83e9e",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Usage measurement truth",
+  "description": "Objective: normalize provider-neutral usage evidence without laundering incomplete metering. Deliverable: packages/scheduler/src/budget/budget-measurement.ts, its one-line .js bridge, and focused tests for COMPLETE, PARTIAL, and UNKNOWN coverage; exact measurement-source provenance; monotonic event-id/sequence handling; immutable pricebook binding for derived list price; and a structurally PolicyFactInput-compatible budget fact. NOT in scope: provider parsing, billing APIs, quotes as spend, account mutation, reservation settlement, policy evaluation, persistence, or package-root export. Hard dependency: task-7dc2e4870d7d4096a1be7b5991e50e94 must be DONE unchanged; design against the committed PolicyFactInput shape {factId,tier,truthClass} without importing @moe/core. Owned paths: budget-measurement.ts, budget-measurement.js, budget-measurement.test.ts. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-measurement.test.ts.",
+  "definitionOfDone": [
+    "Accepted measurements retain meter, integer quantity when known, COMPLETE|PARTIAL|UNKNOWN coverage, exact source, provider run ID, source/parser version, sequence, raw receipt digest, and observed interval in a deeply frozen detached record.",
+    "UNKNOWN requires a null quantity and projects an UNKNOWN required budget fact; it is never normalized to zero, ALLOW, COMPLETE, or an actual-cost claim. PARTIAL retains its exact lower bound and remains unresolved.",
+    "Only the six pinned measurement sources are accepted; derived list-price measurements require an immutable pricebook revision and cannot claim ACTUAL_BILLED.",
+    "Duplicate same-identity same-bytes observations are deterministic no-ops, while gaps, counter regression, same identity with different bytes, malformed provenance, truncation, and unknown schema versions fail closed or remain UNKNOWN under frozen deterministic issues.",
+    "Both TypeScript files are <=250 physical lines, the bridge is one exact re-export line, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Do not import @moe/core/@moe/contracts or duplicate policy evaluation; emit only the committed PolicyFactInput-compatible fact for a future composition boundary.",
+    "No floating point, guessed cost, quote commitment, discount/credit/tax inference, or uncorrelated billing claim.",
+    "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "priority": "HIGH",
+  "order": 17.04,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:47:39.175Z",
+  "updatedAt": "2026-08-07T21:47:39.175Z"
+}

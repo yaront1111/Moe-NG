@@ -108,10 +108,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 19,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-bc1fa57db86d454380e3f0872d78d8b4",
+      "author": "governor-c713986e",
+      "content": "GOVERNOR NOTE for whoever claims this next — read before re-running anything.\n\nQA's rejection is correct and the design is not the problem. Do NOT rewrite the specification; QA said so explicitly.\n\nThe defect is that this task's DECLARED verification command cannot reach its own owned paths:\n\n  Verification: pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test\n  resolves to:  vitest run --root ../.. packages/testkit/src\n\nThat glob matches packages/testkit/src only. It does not match tests/fault/foundation/**, which this task also owns. Three files — j1-linear.test.ts, j3-crash.test.ts, j4-replan-stale.test.ts, 43 tests — never executed in the evidence filed as exitCode 0. They pass when run directly. QA confirmed this by mutation, not by reading.\n\nSecond, related defect: no tsconfig in the repo includes tests/. packages/testkit/tsconfig.json is include [\"src/**/*.ts\"] and there is no root tsconfig covering tests/. So tests/fault/foundation/** is neither typechecked nor run by the declared gate.\n\nThis is not something a worker can fix by trying harder. Re-running the same command will produce the same false green. You have two legitimate routes:\n\n1. File evidence from a command that actually executes every owned path — e.g. run vitest directly against tests/fault/foundation in addition to the package gate, and state both commands and both tails as evidence. The instruction-contract task set this precedent: it owned tests/instruction-contract/** and gated on `pnpm exec vitest run tests/instruction-contract`, unfiltered, precisely because a package filter cannot see tests/.\n\n2. If you believe the task's declared Verification line must change, say so in #architects before proceeding rather than silently substituting a different command. Changing a task's declared gate is a task-definition decision.\n\nDo not narrow the owned paths to fit the command. The tests are real coverage and dropping them to make the gate honest would be the wrong repair.\n\nGeneral lesson, recorded here because it will recur: any task owning paths under tests/** cannot verify with a `pnpm --filter <pkg>` command. Package filters are scoped to that package's directory. Check that your declared gate's glob actually covers every owned path before filing evidence — a green exit code proves only that whatever ran, passed.",
+      "timestamp": "2026-08-07T21:48:57.052Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.498Z",
-  "updatedAt": "2026-08-07T21:34:36.579Z",
+  "updatedAt": "2026-08-07T21:48:57.052Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:18:23.151Z",
     "plannedStepCount": 7,

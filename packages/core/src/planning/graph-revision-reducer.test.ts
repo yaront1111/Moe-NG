@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   GraphRevisionCommand,
-  GraphRevisionCommandKind,
   GraphRevisionLifecycle,
-  GraphRevisionReducerResult,
   GraphRevisionState,
 } from "./graph-revision-contract.js";
 import {
@@ -13,84 +11,20 @@ import {
   GRAPH_REVISION_TRANSITIONS,
   reduceGraphRevision,
 } from "./graph-revision-reducer.js";
-
-function hash(seed: string): string {
-  return seed.repeat(64).slice(0, 64);
-}
-
-const GRAPH_HASH = hash("22");
-const PLAN_HASH = hash("11");
-const QUALITY_HASH = hash("33");
-const BUDGET_HASH = hash("55");
-const POLICY_HASH = hash("66");
-const STALE_HASH = hash("99");
-
-const BINDING = { budgetHash: BUDGET_HASH, expectedGoalVersion: 3, graphHash: GRAPH_HASH,
-  policyHash: POLICY_HASH, qualityHash: QUALITY_HASH } as const;
-const SUBMISSION = { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" } as const;
-const APPROVAL = { ...BINDING, approvalRef: "approval-1", truthClass: "HUMAN_APPROVED" } as const;
-const ACTIVATION = { ...BINDING, activationRef: "activation-1",
-  truthClass: "HUMAN_APPROVED" } as const;
-const REJECTION = { findingsRef: "findings-1", truthClass: "DAEMON_VERIFIED" } as const;
-
-const BOUND: readonly GraphRevisionLifecycle[] = ["APPROVED", "ACTIVE", "SUPERSEDED"];
-
-function state(
-  lifecycle: GraphRevisionLifecycle,
-  overrides: Partial<GraphRevisionState> = {},
-): GraphRevisionState {
-  return {
-    boundHashes: BOUND.includes(lifecycle) ? { ...BINDING } : null,
-    goalRef: "goal-1",
-    graphContentHash: GRAPH_HASH,
-    lifecycle,
-    planHash: PLAN_HASH,
-    revisionId: "graph-revision-1",
-    submissionRef: lifecycle === "DRAFT" ? null : "submission-1",
-    version: 7,
-    ...overrides,
-  };
-}
-
-function commandFor(kind: GraphRevisionCommandKind, expectedVersion = 7): GraphRevisionCommand {
-  const base = { commandId: `cmd-${kind}`, expectedVersion };
-  switch (kind) {
-    case "graph_revision.create":
-      return { ...base, goalRef: "goal-1", graphContentHash: GRAPH_HASH, kind,
-        planHash: PLAN_HASH, revisionId: "graph-revision-1" };
-    case "graph_revision.submit": return { ...base, kind, witness: SUBMISSION };
-    case "graph.approve": return { ...base, approval: APPROVAL, kind };
-    case "graph_revision.reject": return { ...base, kind, witness: REJECTION };
-    case "graph.supersede": return { ...base, kind, witness: REJECTION };
-  }
-}
-
-function expectError(
-  result: GraphRevisionReducerResult,
-  code: string,
-  details?: Readonly<Record<string, unknown>>,
-): void {
-  expect(result.ok).toBe(false);
-  if (result.ok) throw new Error(`expected ${code} rejection`);
-  expect(result.error.code).toBe(code);
-  if (details !== undefined) expect({ ...result.error.details }).toEqual(details);
-}
-
-function expectIllegal(
-  result: GraphRevisionReducerResult,
-  commandKind: GraphRevisionCommandKind,
-  sourceState: GraphRevisionLifecycle,
-): void {
-  expectError(result, "ILLEGAL_TRANSITION", {
-    aggregateKind: "GRAPH_REVISION", commandKind, sourceState,
-  });
-}
-
-function accepted(result: GraphRevisionReducerResult): GraphRevisionState {
-  expect(result.ok).toBe(true);
-  if (!result.ok) throw new Error("expected accepted result");
-  return result.state;
-}
+import {
+  ACTIVATION,
+  APPROVAL,
+  BINDING,
+  GRAPH_HASH,
+  PLAN_HASH,
+  STALE_HASH,
+  SUBMISSION,
+  accepted,
+  commandFor,
+  expectError,
+  expectIllegal,
+  state,
+} from "./graph-revision-test-fixtures.js";
 
 describe("graph revision creation and submission", () => {
   it("creates an immutable draft whose content identity is fixed forever", () => {

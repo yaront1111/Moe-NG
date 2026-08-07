@@ -1,0 +1,32 @@
+{
+  "id": "task-7dc2e4870d7d4096a1be7b5991e50e94",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Budget contract vocabulary",
+  "description": "Objective: define the dependency-free scheduler-local budget vocabulary and hostile-input boundary required by design section 11 without granting mutation authority. Deliverable: packages/scheduler/src/budget/budget-contract.ts, its one-line .js bridge, and focused contract tests covering frozen account states, buckets, reserve purposes, measurement coverage/sources, immutable record/result shapes, safe nonnegative integer/ref/version validation, and deterministic local issue ordering. NOT in scope: allocating accounts, reserving work, settling usage, policy evaluation, runtime-error mapping, persistence, or package-root export. Hard dependencies: Runtime contract registry and Policy approval core are DONE; copy only documented string-identical truth/policy vocabulary because @moe/scheduler intentionally has no @moe/core dependency. Owned paths: packages/scheduler/src/budget/budget-contract.ts, budget-contract.js, budget-contract.test.ts. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts.",
+  "definitionOfDone": [
+    "Frozen account-state, bucket, reserve-purpose, measurement-coverage, measurement-source, and policy/truth compatibility vocabularies equal the pinned design and committed Policy contract values exercised by the focused tests.",
+    "Prototype-hostile, accessor, extra-key, negative, fractional, unsafe-integer, malformed-ref, malformed-version, and oversized-list inputs fail closed under a frozen module-local issue code with deterministic ordering.",
+    "Accepted records and nested collections are detached, deeply frozen, and repeat calls over equal bytes are deep-equal.",
+    "budget-contract.ts and budget-contract.test.ts are each at most 250 physical lines, the .js bridge is one exact re-export line, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Internal kernel only: do not edit scheduler package.json, pnpm-lock.yaml, src/index.ts, or import @moe/core/@moe/contracts.",
+    "Local stable reason spellings are implementation choices, not claims of design-pinned runtime codes; freeze them in tests and defer runtime mapping.",
+    "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "priority": "HIGH",
+  "order": 17.01,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:46:52.656Z",
+  "updatedAt": "2026-08-07T21:46:52.656Z"
+}

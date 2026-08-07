@@ -19,54 +19,73 @@
     {
       "stepId": "step-1",
       "description": "Characterize the exact pre-split proof without editing or running a gate. Confirm prerequisite task-866713137aee4794a51973fe4e6e3f44 is DONE, the 514-line source and three owned paths are clean, and the committed baseline contains exactly 32 `it()` names. Inventory the contiguous helper region and the 20/12 describe-block partition, including all derived loops/matrices, imports, and helper consumers. Use the committed `bcdc2f6` file as the no-loss/no-rename oracle; create no scratch or generated evidence file.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts"
       ],
-      "startedAt": "2026-08-07T21:43:17.816Z"
+      "note": "Characterization only; no edits, no gate run, no scratch files.\n\nPrereq: task-866713137aee4794a51973fe4e6e3f44 DONE (planning-contract.ts type-only facade, commit 3431a56). Owned paths clean: planning-run-reducer.test.ts tracked at baseline bcdc2f6; planning-run-test-fixtures.ts and planning-run-authority.test.ts do not exist. Only foreign .moe/** metadata is dirty.\n\nOracle: disk file is BYTE-IDENTICAL to `git show bcdc2f6:packages/core/src/planning/planning-run-reducer.test.ts`. 514 physical lines, exactly 32 `it()` names, 6 describes, no skip/only/todo, no module-level `let`.\n\nRegion map (baseline line numbers): 1-17 imports; 18-153 contiguous deterministic helper region; 155-360 describes 1-4 (creation and readiness 4, ownership 4, submission 5, submission finalization 7 = 20 cases); 362-514 describes 5-6 (approval and activation 7, cancellation and concurrency 5 = 12 cases). 20+12=32.\n\nSymbol matrix (word-boundary scan of each region) fixes the per-file imports:\n- fixtures must EXPORT: hash, SUBMISSION_HASH, HASHES, READINESS, RESUME, RECOVERY, EFFECT_TERMINAL, REVISION_SEAL, REFUSAL, PLAN_APPROVAL, REVISE, ACTIVATION, CANCELLATION, finalizeWitness, state, commandFor, expectError, expectIllegal, accepted.\n- fixtures keep PRIVATE (each still consumed internally, so noUnusedLocals is satisfied): PLAN_HASH, GRAPH_HASH, QUALITY_HASH, DEPENDENCY_HASH, BUDGET_HASH, POLICY_HASH, CLAIM, RELEASE, SUBMISSION, summaries, SEALED.\n- reducer half needs value `reducePlanningRun` + type `PlanningRunCommand` only (NOT PlanningRunState/PlanningRunLifecycle/PLANNING_RUN_* /RUNTIME_LIFECYCLES).\n- authority half needs values RUNTIME_LIFECYCLES, reducePlanningRun, PLANNING_RUN_COMMAND_KINDS, PLANNING_RUN_TRANSITIONS + types PlanningRunCommand, PlanningRunLifecycle, PlanningRunState.\n- fixtures need types PlanRevisionHashes, PlanningRunCommand, PlanningRunCommandKind, PlanningRunLifecycle, PlanningRunReducerResult, PlanningRunState.\n\nConstraints that shape the move: tsconfig.base.json sets noUnusedLocals, noUnusedParameters, verbatimModuleSyntax (type-only imports must say `import type`), exactOptionalPropertyTypes, isolatedModules, declaration. vitest.config.ts include is `packages/**/*.test.ts`, so the fixture module is NOT collected as a suite. Precedent for src-resident fixture modules exists (packages/scheduler/src/test-fixtures.ts, authority/test-fixtures.ts, admission/admission-fixtures.ts); planning/ carries no `.js` shims (only identity/ does), so none is needed. No line-limit or file-inventory guard test exists in the repo.\n\nProjected sizes: fixtures ~150, reducer test ~217, authority test ~168 — all <=250.",
+      "startedAt": "2026-08-07T21:43:17.816Z",
+      "completedAt": "2026-08-07T21:45:47.135Z"
     },
     {
       "stepId": "step-2",
       "description": "Create `planning-run-test-fixtures.ts` by moving the deterministic helper region verbatim: hash constants and witness values, `summaries`, `finalizeWitness`, `SEALED`, `state`, `commandFor`, `expectError`, `expectIllegal`, and `accepted`. Export only symbols consumed by the two test files; use type-only imports from the stable `planning-contract.js` facade and keep Vitest `expect` solely for the moved assertion helpers. Do not change object shapes, literals, error expectations, casts, or factory behavior; introduce no module-level `let`, random/time source, production re-export, or test registration. Keep the fixture <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-test-fixtures.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/planning-run-test-fixtures.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
+      ],
+      "note": "Created planning-run-test-fixtures.ts (156 physical lines, <=250) as a verbatim move of baseline lines 18-153.\n\nMechanical proof, not eyeballing: stripped the `export ` keyword from exactly the 19 intended names and byte-compared the module body (everything after the `planning-contract.js` type import block) against `git show bcdc2f6:...planning-run-reducer.test.ts` lines 18-153. Result: byte-identical `true`. Un-exporting by explicit name list (per mem:gotcha-export-keyword-defeats-chunk-equality) means an accidental extra export would surface as a diff rather than be normalized away.\n\nExport set is exactly the 19 symbols the two test halves consume: hash, SUBMISSION_HASH, HASHES, READINESS, RESUME, RECOVERY, EFFECT_TERMINAL, REVISION_SEAL, REFUSAL, PLAN_APPROVAL, REVISE, ACTIVATION, CANCELLATION, finalizeWitness, state, commandFor, expectError, expectIllegal, accepted. Unexpected exports: none. Missing: none. PLAN_HASH, GRAPH_HASH, QUALITY_HASH, DEPENDENCY_HASH, BUDGET_HASH, POLICY_HASH, CLAIM, RELEASE, SUBMISSION, summaries, SEALED stay private and are still consumed internally, so noUnusedLocals holds.\n\nImports are `import { expect } from \"vitest\"` (used only by expectError/expectIllegal/accepted) plus one `import type { ... } from \"./planning-contract.js\"` block through the stable facade. No production API is exported and no `.js` shim is needed (planning/ has none; only identity/ does).\n\nOrdering safety re-confirmed on the written file: no describe/it/test registration, no module-level `let`, no skip/only/todo, no Date/Math.random/performance.now. Every value is `const`; state/commandFor/summaries/finalizeWitness return fresh objects and spread HASHES rather than aliasing it.\n\nNo gate run in this step; the single exact gate is step-4.",
+      "startedAt": "2026-08-07T21:45:51.867Z",
+      "completedAt": "2026-08-07T21:47:02.631Z"
     },
     {
       "stepId": "step-3",
       "description": "Split describe blocks by verbatim move. Keep the 20 creation/readiness, ownership, proposal, and submission-finalization cases in `planning-run-reducer.test.ts`; move the 12 approval/activation, cancellation, concurrency, version-ceiling, and exhaustive lifecycle cases into new `planning-run-authority.test.ts`, together with their required `RUNTIME_LIFECYCLES`/reducer-constant imports. Both tests import shared helpers through `./planning-run-test-fixtures.js`. Preserve every `describe`/`it` name, assertion body, loop-derived matrix, ordering within each block, and exact error/result expectation; add no skip/only/todo and no cross-file mutable writes. Keep all three owned files <=250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
         "packages/core/src/planning/planning-run-authority.test.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/planning-run-authority.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts",
+        "packages/core/src/planning/planning-run-authority.test.ts"
+      ],
+      "note": "Split done by slicing the committed bcdc2f6 baseline directly, so the describe bodies could not drift by hand-transcription. Only the two owned test paths were written; no scratch or generated evidence file exists.\n\nResult: planning-run-reducer.test.ts 228 lines, planning-run-authority.test.ts 180 lines, planning-run-test-fixtures.ts 156 lines — all <=250.\n\nVerbatim proof (byte compare against `git show bcdc2f6:...`): reducer body == baseline lines 155-360 `true`; authority body == baseline lines 362-514 `true`. Everything below each import block is untouched baseline bytes, so every assertion, cast, loop-derived matrix, and error/result expectation is preserved with its original ordering.\n\nNo-loss proof: baseline 32 `it()` names split 20 (reducer) + 12 (authority); sorted combined multiset equals the baseline multiset `true`, so each name appears exactly once. Describe multiset also equal, in baseline order: creation and readiness / ownership / submission / submission finalization stayed; approval and activation / cancellation and concurrency moved.\n\nImports are exactly what each half uses (noUnusedLocals + verbatimModuleSyntax): reducer takes `describe, expect, it`, type `PlanningRunCommand`, value `reducePlanningRun`, and 15 fixture symbols; authority additionally takes `RUNTIME_LIFECYCLES`, `PLANNING_RUN_COMMAND_KINDS`, `PLANNING_RUN_TRANSITIONS`, and types `PlanningRunLifecycle`/`PlanningRunState`, since the version-ceiling and exhaustive command-kind-by-lifecycle matrix live there and need the transition table next to them.\n\nRescanned both files: no skip/only/todo, no module-level `let`, no Date/Math.random/performance.now, and neither file writes to an imported fixture binding.\n\nGate not run in this step; step-4 runs the single exact gate.",
+      "startedAt": "2026-08-07T21:47:05.086Z",
+      "completedAt": "2026-08-07T21:47:59.522Z"
     },
     {
       "stepId": "step-4",
       "description": "Run the single exact regression gate once after the complete split: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0 and retain the fresh command, exit code, and output tail for `moe.complete_task`. Any failure is a move/import defect in the three owned test paths; production files and assertions remain off-limits.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
         "packages/core/src/planning/planning-run-test-fixtures.ts",
         "packages/core/src/planning/planning-run-authority.test.ts"
-      ]
+      ],
+      "note": "Ran the exact named gate once, in the foreground, after the complete split.\n\nCommand: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`\nExit code: 0\n\nOutput tail:\n  $ tsc --project tsconfig.json\n  $ vitest run --root ../.. packages/core/src\n   RUN  v4.1.10 D:/projexts/moe-next\n   Test Files  14 passed (14)\n        Tests  226 passed (226)\n     Duration  523ms\n\ntsc is clean under noUnusedLocals/noUnusedParameters/verbatimModuleSyntax, which is the real check on the per-file import sets: an over-broad or missing import in either half would have failed here rather than passing silently. Test count is unchanged at 226 because the split moves 32 cases and creates none; file count rises by exactly one (the new authority suite). The fixture module is not counted as a suite, matching `vitest.config.ts` include `packages/**/*.test.ts`.\n\nNo production file was touched and no assertion was altered, so no failure had to be diagnosed. Retaining this fresh command/exit code/output tail for moe.complete_task.",
+      "startedAt": "2026-08-07T21:48:02.093Z",
+      "completedAt": "2026-08-07T21:48:27.399Z"
     },
     {
       "stepId": "step-5",
       "description": "Perform the one final adversarial review. Mechanically compare the combined post-split `it()` name multiset with all 32 committed baseline names and diff every moved helper/describe body against `bcdc2f6` to prove each appears exactly once with no rename/assertion/loop drift; scan for skip/only/todo, module-level `let`, writes to imported fixture values, nondeterministic APIs, or package-root exports. Use an in-memory cross-platform Node counter to prove each owned file is <=250 under LF/CRLF/CR, confirm production/index/other tests are untouched, and run `git diff --check`. If review causes any edit, rerun the exact gate. Then inspect shared `git status --porcelain`, stage/commit only the three explicit owned paths (never broad add or bare commit), and verify `git show --stat` lists exactly those paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-reducer.test.ts",
         "packages/core/src/planning/planning-run-test-fixtures.ts",
         "packages/core/src/planning/planning-run-authority.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:48:30.185Z"
     }
   ],
   "status": "WORKING",
@@ -82,18 +101,24 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.867Z",
-  "updatedAt": "2026-08-07T21:43:17.816Z",
+  "updatedAt": "2026-08-07T21:48:30.185Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:21:51.046Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "architect-c4babdf9",
     "worker-2edeee3c"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T21:31:27.825Z",
   "planningNotes": {

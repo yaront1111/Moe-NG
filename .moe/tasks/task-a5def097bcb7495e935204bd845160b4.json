@@ -1,0 +1,33 @@
+{
+  "id": "task-a5def097bcb7495e935204bd845160b4",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Hierarchical budget ledger",
+  "description": "Objective: implement immutable hierarchical account allocation and return over the contract from task-7dc2e4870d7d4096a1be7b5991e50e94. Deliverable: packages/scheduler/src/budget/budget-account.ts, its one-line .js bridge, and focused tests for root snapshots, parent-to-child allocation, child-to-current-parent return, balanced ledger entries, optimistic version fencing, derived subtree roll-up, replay, and legal closure. NOT in scope: work reservations, admission policy, usage measurements, settlement/quarantine, persistence, root authorization issuance, or package-root export. Hard dependency: task-7dc2e4870d7d4096a1be7b5991e50e94 must be DONE and its tests remain unchanged. Owned paths: budget-account.ts, budget-account.js, budget-account.test.ts. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-account.test.ts.",
+  "definitionOfDone": [
+    "Every accepted child allocation moves exactly the same integer units from parent AVAILABLE to child AVAILABLE, and every legal return performs the inverse without copying or sibling borrowing.",
+    "After each transition and replay, the derived root-plus-descendants AVAILABLE+RESERVED+QUARANTINED+COMMITTED total equals the authorized root amount plus explicit recorded overrun, with all direct buckets nonnegative safe integers.",
+    "Stale expected versions, missing/current-parent mismatches, insufficient AVAILABLE, duplicate identities, and illegal close states return deterministic frozen local issues with zero state or ledger-entry change.",
+    "A child closes only after returning direct AVAILABLE and proving direct RESERVED and QUARANTINED are zero; replay of canonical entries reconstructs the same deeply frozen state.",
+    "Both TypeScript files are <=250 physical lines, the bridge is one exact re-export line, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Depends on task-7dc2e4870d7d4096a1be7b5991e50e94; do not modify its files or tests.",
+    "The root authorized amount is an already-authorized input fact, not minted by this kernel; no transition may raise it.",
+    "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "priority": "HIGH",
+  "order": 17.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:47:06.892Z",
+  "updatedAt": "2026-08-07T21:47:06.892Z"
+}

@@ -137,7 +137,7 @@
       "completedAt": "2026-08-07T21:41:53.554Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -150,17 +150,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T21:43:55.217Z",
+  "updatedAt": "2026-08-07T21:48:59.109Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T21:48:59.109Z",
+    "wallClockMs": 7471972
   },
   "contextFetchedBy": [
-    "worker-05d10803"
+    "worker-05d10803",
+    "qa-bdf27860"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -198,7 +201,8 @@
   },
   "budget": {
     "wallClockMs": 7200000,
-    "warnedAt": "2026-08-07T21:26:43.091Z"
+    "warnedAt": "2026-08-07T21:26:43.091Z",
+    "escalatedAt": "2026-08-07T21:45:10.183Z"
   },
   "planApprovedAt": "2026-08-07T19:56:05.344Z",
   "workStartedAt": "2026-08-07T19:56:25.129Z",
@@ -221,7 +225,7 @@
     "packages/scheduler/src/admission/admission-necessity.ts",
     "packages/scheduler/src/admission/admission-wait.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T21:01:48.259Z",
+  "reviewCompletedAt": "2026-08-07T21:48:59.109Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Unnecessary hard edges are rejected or held with stable reasons."
@@ -300,5 +304,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T21:48:59.109Z",
+  "reviewSummary": "Re-review after reject #1. Re-probed by execution the two properties the prior rejection promised to re-probe, using the task's own fixtures; probe written, run, deleted (scheduler tree clean after).\n\nPROPERTY 1 — omitted witness. Verbatim: OMITTED_WITNESS {\"ok\":false,\"codes\":[\"ADMISSION_HARD_DEPENDENCY_UNPROVEN\",\"ADMISSION_HARD_DEPENDENCY_UNPROVEN\"]}. One edge-bound issue per hard edge; the fail-open default at :108 is gone.\n\nPROPERTY 2 — per-truth-class through admitGraph, all five: DAEMON_VERIFIED {\"ok\":true,\"codes\":[]}; HUMAN_APPROVED / OBSERVED / AGENT_REPORTED / UNKNOWN each {\"ok\":false} with ADMISSION_HARD_DEPENDENCY_UNPROVEN x2. Both cases the rejection quoted as ok:true now refuse. Gate wired at admission-pass.ts:172 — checkContract calls evaluateNecessityClaim and admits only outcome.kind === \"ADMISSIBLE\"; an absent counterfactual also refuses. My own addition: a forged DAEMON_VERIFIED witness over an AGENT_REPORTED contract still refuses, so the witness cannot outrank the contract.\n\nMUTATION CHECK: deleting `|| necessity.outcome.kind !== \"ADMISSIBLE\"` from :173 fails 6 tests across both admission suites — the gate is load-bearing and this regression cannot return silently. Reverted; tree clean; re-verified.\n\nFixtures no longer lean on the omitted-witness default; admitGraph is exercised 51 times across the two suites.\n\nGate: typecheck exit 0; admission's own suites 86 tests green. `pnpm --filter @moe/scheduler test` is 1 failed / 363 passed, attributed and NOT to this task: package-boundary.test.ts:48 scans the whole repo and flags the untracked foreign file packages/core/src/planning/planning-run-test-fixtures.ts (`??`), which appeared after this task's evidence was recorded.\n\nProduction sizes 100/152/183/203/229, all <=250. DoD 2/3 re-confirmed via the 35-test invariants suite.\n\nCARRIED FORWARD, architect-owned: the oversize finding from reject #1. No covering exception exists. Not chargeable to this worker; escalated separately."
 }

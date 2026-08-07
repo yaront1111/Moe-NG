@@ -1,0 +1,34 @@
+{
+  "id": "task-3602672fd0c74de6b6fc72f90e1745c8",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Budget settlement reconciliation",
+  "description": "Objective: settle active reservations with the honest measurement records from task-5ee5b801127a4536a6e770abc6e83e9e while preserving the hierarchical ledger from task-a5def097bcb7495e935204bd845160b4. Deliverable: packages/scheduler/src/budget/budget-settlement.ts, its one-line .js bridge, and focused tests for exact settlement/refund, partial or unknown quarantine, never-started proof, conservative write-off, explicit overrun, reconciliation, and legal account closure. NOT in scope: provider adapters, billing APIs, policy decisions after unknown liability, supersession funding, persistence, or package-root export. Hard dependencies: tasks task-a5def097bcb7495e935204bd845160b4, task-318c0732094c417f96932b5c83e7388b, and task-5ee5b801127a4536a6e770abc6e83e9e must be DONE unchanged. Owned paths: budget-settlement.ts, budget-settlement.js, budget-settlement.test.ts. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-settlement.test.ts.",
+  "definitionOfDone": [
+    "A complete correlated measurement commits exact use, refunds only the proven remainder, and is duplicate-safe; measured use above reservation creates explicit overrun liability and OVERDRAWN state without negative buckets or sibling funding.",
+    "PARTIAL commits only its proven lower bound and quarantines the unresolved remainder; UNKNOWN quarantines the reservation and never writes zero committed usage.",
+    "Proof that an effect never started refunds every refundable reservation while any already-committed attempt.count remains committed.",
+    "Conservative settlement commits the full held reservation as CONSERVATIVE_WRITE_OFF; when no enforceable upper bound existed it also records persistent UNKNOWN_EXTERNAL_LIABILITY and closes only as CLOSED_WITH_UNKNOWN_LIABILITY.",
+    "No account closes with RESERVED or QUARANTINED units; stale, out-of-order, conflicting, or illegal reconciliation has zero effect with frozen deterministic issues.",
+    "Both TypeScript files are <=250 physical lines, the bridge is one exact re-export line, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Do not modify predecessor modules/tests; compose only their public internal-budget exports.",
+    "The four design quarantine exits are closed; no generic refund/forgive path and no conversion of unknown external liability to exact spend.",
+    "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "priority": "HIGH",
+  "order": 17.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:47:58.147Z",
+  "updatedAt": "2026-08-07T21:47:58.147Z"
+}

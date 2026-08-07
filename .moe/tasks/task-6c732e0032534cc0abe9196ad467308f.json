@@ -58,7 +58,7 @@
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/http/http-server.test.ts + src/http/http-server.ts. Build against WebStandardStreamableHTTPServerTransport (fetch Request -> Promise<Response>; socket-free tests construct `new Request(...)` directly — the Node wrapper routes through @hono/node-server and is painful to mock; keep any node:http bridging as a thin outermost listener so tests exercise the same code prod uses). Wiring per request: (1) HOST/ORIGIN DEFENSE (BLOCKER from verification — SDK ships enableDnsRebindingProtection DEFAULT OFF): construct transports with enableDnsRebindingProtection: true + allowedHosts/allowedOrigins loopback-only defaults (127.0.0.1/localhost, configurable); tests: evil Origin header and wrong Host header -> refused with stable error, ZERO dispatch calls (design 1132/1139 loopback-only + strict Host/Origin); (2) BODY BOUND: the SDK has NO size limit (req.json() unguarded — verified) — adapter reads the body itself with a hard cap at MAX_JSON_BODY_BYTES (1 MiB), tested at exactly N (accepted) and N+1 (stable refusal, zero dispatch), then hands the parsed value via the parsedBody option so the transport never re-reads; this same pre-read serves initialize detection; (3) AUTH BEFORE handleRequest: bearer check via http-session (there is NO auth hook inside the transport — wrap-before is the only mechanism and gives 'zero dispatch on auth failure' trivially); validated identity flows as authInfo (HandleRequestOptions.authInfo -> extra.authInfo); (4) CallTool handlers: same construction as stdio (shared generated schemas + name map imported from src/stdio/ — read-only import, no edits), thread extra.signal into port.dispatch*Bytes(bytes, signal); (5) parity fixture mode: enableJsonResponse: true (plain JSON body, cleanest byte-compare) + keepAliveMs: 0 (suppresses nondeterministic ': keepalive' frames); (6) DISCONNECT test asserts the VERIFIED SDK semantics: raw SSE disconnect does NOT abort extra.signal and does NOT stop dispatch — the stream unmaps, the handler completes, send() throws into onerror — so assert 'response never delivered + dispatch completed + nothing fabricated', NOT 'dispatch aborted'; explicit notifications/cancelled DOES abort the signal — separate test asserts the signal reaches the fake port; (7) DoD3 no-bypass: assert the HTTP ListTools set is EXACTLY the stdio generated set (import both, deep-equal) and no HTTP-only route exists (the adapter exposes exactly one MCP endpoint; registry rejects unknown session ids).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
@@ -67,43 +67,69 @@
         "packages/mcp/src/http/http-server.test.ts",
         "packages/mcp/src/http/http-server.ts"
       ],
-      "startedAt": "2026-08-07T21:42:52.358Z"
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-server.test.ts",
+        "packages/mcp/src/http/http-server-lifecycle.test.ts",
+        "packages/mcp/src/http/http-server-test-helpers.ts"
+      ],
+      "note": "Applied the sole worker-fixable QA request as a behavior-neutral test split: host/origin, body-bound, and auth screening remain in http-server.test.ts (194 lines); session lifecycle, bypass, cancellation/disconnect, and resume moved to http-server-lifecycle.test.ts (287 lines); common Request/adapter helpers moved to a 100-line test helper. All HTTP files are now below 400 lines. Production bytes are unchanged and the exact MCP gate passes 6 files / 125 tests, preserving every case.",
+      "startedAt": "2026-08-07T21:42:52.358Z",
+      "completedAt": "2026-08-07T21:44:52.980Z"
     },
     {
       "stepId": "step-5",
       "description": "src/http/http-resume.ts + resume tests inside http-server.test.ts (or a small http-resume.test.ts if cleaner — stay in owned paths). DECISION (verified, do not relitigate): resume is TYPED UNSUPPORTED in v1 — design 982 assigns the 'resumable cursor stream' to the CONTROL ROOM surface, not MCP; command-layer catch-up exists via events.read|wait with section-16.4 cursors. CRITICAL: omitting the SDK EventStore is NOT fail-closed by itself — verified webStandardStreamableHttp.js:238-244: without an eventStore the Last-Event-ID header is NEVER READ and the request silently gets a fresh SSE stream = a client that believes it resumed has a silent gap (fabricated continuity). Therefore http-resume.ts detects the Last-Event-ID header BEFORE transport.handleRequest and returns a typed stable refusal (registry-mapped error, MCP_RESUME_UNSUPPORTED reason in error.data; note: only a broken/hostile client can send it — without an EventStore no SSE event ever carries an id: field); NO EventStore is ever configured. Tests: GET and POST bearing Last-Event-ID -> stable refusal before the SDK sees the request, zero dispatch; normal GET (no header) -> standalone SSE stream works. Document the future path (implement SDK EventStore interface storeEvent/replayEventsAfter; SDK ships InMemoryEventStore under examples/) in a comment for the task that later lifts UNSUPPORTED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-resume.ts",
         "packages/mcp/src/http/http-server.test.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-resume.ts"
-      ]
+      ],
+      "note": "Reopen audit only: resume coverage moved intact into the lifecycle test file; its focused suite passes 15/15. refuseResumption still dominates every SDK handleRequest call, and no EventStore is constructed (only the existing future-path comment mentions InMemoryEventStore). No production bytes changed.",
+      "startedAt": "2026-08-07T21:44:58.594Z",
+      "completedAt": "2026-08-07T21:45:15.362Z"
     },
     {
       "stepId": "step-6",
       "description": "Parity gate — src/http/http-parity.test.ts. (1) Import and RUN the shared src/dispatch-conformance.ts suite against the HTTP transport with the same call-recording fake port the stdio side uses — the call-sequence obligation (decode -> authenticate -> dispatch, auth-fail short-circuits) and the full RUNTIME_ERROR_CODES -> mcpCode mapping table must pass unmodified (DoD1 'semantically parity-tested with stdio' as an executable gate, not prose); (2) byte-fidelity: fixture daemon response bytes survive byte-identical through the HTTP path in JSON mode (compare against the same fixtures the stdio test uses; SSE mode: extract the single `data:` line — JSON.stringify never emits raw newlines — and byte-compare the payload); (3) tool/result/error triple-compare stdio-vs-HTTP on identical inputs: same fixture request through both transports -> extracted result bytes identical, error objects identical (code, mcpCode, error.data recovery set); (4) 1 MiB N/N+1 boundary re-asserted through the full stack. Then the focused verification: fresh `pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test\", exitCode: 0, outputTail }. Repo gate `pnpm typecheck && pnpm test` with foreign-work attribution. `wc -l packages/mcp/src/http/*.ts` — every production module <=400 hard (target 250).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-parity.test.ts"
       ],
       "newFiles": [
         "packages/mcp/src/http/http-parity.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-server.test.ts",
+        "packages/mcp/src/http/http-server-lifecycle.test.ts",
+        "packages/mcp/src/http/http-server-test-helpers.ts"
+      ],
+      "note": "All HTTP files now satisfy the <400 hard cap (max 372; split files 194/287 with 100-line helper). Fresh exact MCP typecheck and 6 files / 125 tests pass, retaining the verified parity count. Root gate is currently red solely in foreign store-projection-seam.test.ts due an unused in-flight helper; reported without expanding scope.",
+      "startedAt": "2026-08-07T21:45:20.340Z",
+      "completedAt": "2026-08-07T21:45:47.107Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) auth-verdict caching — grep http-session.ts/http-server.ts for any memoization of validateBearer results; per-request revalidation is the rotation-revocation guarantee; (b) bearer leakage — walk every error/log path + serialized Response bodies for credential echoes; (c) Host/Origin defense actually ON — grep transport construction for enableDnsRebindingProtection: true and loopback allowlists; (d) resume hole — confirm no code path constructs an EventStore and the Last-Event-ID check dominates every handleRequest call; (e) no stdio file edited (`git status --porcelain -- packages/mcp/src/stdio` must be clean); (f) signal threading — notifications/cancelled test shows the fake port received the aborted signal; (g) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/mcp/src/http/http-session.ts packages/mcp/src/http/http-server.ts packages/mcp/src/http/http-resume.ts packages/mcp/src/http/http-session.test.ts packages/mcp/src/http/http-server.test.ts packages/mcp/src/http/http-parity.test.ts`; `git show --stat` lists exactly these 6 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/mcp/src/http/http-session.ts",
         "packages/mcp/src/http/http-server.ts",
         "packages/mcp/src/http/http-resume.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/mcp/src/http/http-server.test.ts",
+        "packages/mcp/src/http/http-server-lifecycle.test.ts",
+        "packages/mcp/src/http/http-server-test-helpers.ts"
+      ],
+      "note": "Adversarial review confirmed the split introduces no shared mutable state, remains safe under Vitest file concurrency, preserves all 26 test declarations and the total 125-test gate, and changes no production or stdio bytes. All nine HTTP sources/tests are below 400 lines (max 372). Commit 8ef39d9 contains exactly the three owned test paths with net +30 lines; fresh post-commit MCP typecheck and 6 files / 125 tests pass.",
+      "startedAt": "2026-08-07T21:45:51.452Z",
+      "completedAt": "2026-08-07T21:47:00.146Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-875b53a2",
   "branch": null,
   "prLink": null,
@@ -123,12 +149,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.993Z",
-  "updatedAt": "2026-08-07T21:42:52.358Z",
+  "updatedAt": "2026-08-07T21:48:27.568Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:14:54.569Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 10,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -141,7 +167,11 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -172,10 +202,10 @@
   },
   "planApprovedAt": "2026-08-07T19:23:22.338Z",
   "workStartedAt": "2026-08-07T19:24:29.460Z",
-  "blockedReason": null,
+  "blockedReason": "The sole worker-fixable QA issue is resolved in 8ef39d9: every HTTP file is below 400 lines, production/stdio bytes are unchanged, and the exact MCP gate passes 125/125. The remaining rejection blocker is explicitly architect/governance-side: original commit 37b11e5 is +2013 LOC against the 400 task bar, no scoped exception exists, and QA instructed the worker not to revert or rewrite the verified implementation. Safe completion cannot be proven until governance records a scoped exception or re-scopes the already-landed task. The root regression gate also currently has one unrelated package-boundary failure in foreign packages/core/src/planning/planning-run-test-fixtures.ts.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-07T21:48:27.568Z",
   "reviewStartedAt": "2026-08-07T20:53:32.905Z",
   "verification": {
     "command": "pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test",

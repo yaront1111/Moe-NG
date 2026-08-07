@@ -118,8 +118,8 @@
       "completedAt": "2026-08-07T21:42:47.974Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-813cd351",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -138,12 +138,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T21:43:18.976Z",
+  "updatedAt": "2026-08-07T21:45:55.517Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:09:08.735Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T21:45:55.517Z",
+    "wallClockMs": 2206782
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -201,5 +203,8 @@
     "packages/store/src/event-read-decode.ts",
     "packages/store/src/event-read-model-contract.test.ts",
     "packages/store/src/sqlite-event-store-core.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:45:55.517Z",
+  "reviewCompletedAt": "2026-08-07T21:45:55.517Z",
+  "reviewSummary": "APPROVE — B1 scope only. DoD 2 and 3 (seam + PROJECTION_APPLY_FAILED) transferred to sibling task-bfc39542 by architect-d89636d1 in comment-53b369f7; confirmed architect-recorded, not worker-asserted.\n\nGATE re-run: typecheck exit 0; `pnpm --filter @moe/store test` exit 0, 22 files / 146 tests (filed evidence said 143; delta is the sibling's live in-flight tests, not drift here).\n\nDoD 1 — MUTATION-PROVEN, not read. Two independent breaks, each reverted, tree clean after:\n- decoder hardcodes the default instead of reading the column (event-read-decode.ts:90) -> 3 tests red;\n- INSERT binds the constant instead of the per-event value (event-ledger-append.ts:177) -> 3 tests red.\nThe roundtrip is end-to-end, not a fabricated echo. Read-path coverage complete: mapStoredEvent is the single decode funnel with exactly two call sites (event-read-query.ts:88 by-aggregate, :148 by-position); readEveryPath() exercises readEvents, readAggregateEvents, readEventsAfter. No fourth StoredEvent producer exists.\n\nDoD 4 amended — the two forced key-set edits are provably literal-only. `git diff --numstat 7f31a4d HEAD` on pre-existing tests: event-read-model-contract.test.ts +1/-0, sqlite-event-store-core.test.ts +2/-0, all three added lines byte-identical. ZERO deletions, so the hardcoded requestSha256/effectSha256 assertions are untouched and still pass — direct evidence the field is outside both digests. No test weakened or skipped.\n\nSeam fence held: the only PROJECTION_APPLY_FAILED in store-contracts.ts is line 199, attributed by `git log -S` to a81aedd (sibling B2 work). Disjoint hunks in the shared file, as planned.\n\nNet +270/-3 across owned paths, inside the bar. store-contracts.ts is 297 lines — over the 250 target, under the 400 bound, partly sibling growth; watch, not block.\n\nDeliverable spans baa8012 (harness sweep titled for another task) and the worker's own 273f417. Reviewed by path, not by commit; not charged to the worker."
 }

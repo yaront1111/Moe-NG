@@ -1,0 +1,33 @@
+{
+  "id": "task-318c0732094c417f96932b5c83e7388b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Protected budget reservations",
+  "description": "Objective: add atomic executor admission reservations on the conserved ledger from task-a5def097bcb7495e935204bd845160b4. Deliverable: packages/scheduler/src/budget/budget-reservation.ts, its one-line .js bridge, and focused tests for reserve-or-refuse, one-use activation, and proven-never-started cancellation across caller-supplied EXECUTION, VERIFICATION, INDEPENDENT_REVIEW, FINAL_ACCEPTANCE, and CONTINGENCY amounts. NOT in scope: choosing reserve amounts, policy evaluation or approval validation, provider quotes, measurements, settlement/quarantine, fan-out materialization/integration, persistence, or package-root export. Hard dependencies: task-7dc2e4870d7d4096a1be7b5991e50e94 and task-a5def097bcb7495e935204bd845160b4 must be DONE unchanged. Owned paths: budget-reservation.ts, budget-reservation.js, budget-reservation.test.ts. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-reservation.test.ts.",
+  "definitionOfDone": [
+    "Admission atomically reserves the complete caller-supplied execution, verification, independent-review, final-acceptance, and contingency set or returns a frozen refusal with no state or ledger-entry change.",
+    "The exact available boundary succeeds, one unit short refuses, and no operation can spend or reclassify a protected purpose through an EXECUTION reservation.",
+    "A reservation activates at most once; stale-version activate/cancel competitors yield one legal winner and a zero-effect loser, while cancellation refunds only a proven-never-started refundable reservation.",
+    "Malformed/duplicate purpose entries, zero or unsafe quantities, missing protected purposes, closed/overdrawn accounts, and policy outcomes other than an already-validated allowance or current human approval fail closed in deterministic precedence.",
+    "Both TypeScript files are <=250 physical lines, the bridge is one exact re-export line, and the focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Reserve minima are caller-supplied immutable facts; do not guess token, currency, verification, review, acceptance, or contingency amounts.",
+    "Consume only a narrow already-validated policy/approval gate structurally aligned with the committed core interface; do not forge approvals, duplicate evaluatePolicy, or import @moe/core.",
+    "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "priority": "HIGH",
+  "order": 17.03,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T21:47:24.020Z",
+  "updatedAt": "2026-08-07T21:47:24.020Z"
+}

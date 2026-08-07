@@ -75,8 +75,8 @@
       "completedAt": "2026-08-07T21:41:09.228Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-bdf27860",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -88,12 +88,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.600Z",
-  "updatedAt": "2026-08-07T21:42:17.410Z",
+  "updatedAt": "2026-08-07T21:44:47.097Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:20:40.463Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-07T21:44:47.097Z",
+    "wallClockMs": 1446634
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -137,5 +139,8 @@
   "filesModified": [
     "packages/core/src/planning/graph-revision-reducer.ts",
     "packages/core/src/planning/graph-revision-results.ts"
-  ]
+  ],
+  "completedAt": "2026-08-07T21:44:47.097Z",
+  "reviewCompletedAt": "2026-08-07T21:44:47.097Z",
+  "reviewSummary": "Re-ran the gate myself: `pnpm --filter @moe/core typecheck` exit 0; `test` exit 0, 13 files / 226 tests — matches reported outputTail. Commit f406c47 = exactly the two owned paths (+82/-62). Sizes via CR/CRLF/LF-equivalent split: reducer 206, results 73, CR=0 in both.\n\nMOVE PROOF (mechanical, not read-and-agree): for each of the eight helpers I extracted the declaration from graph-revision-results.ts, stripped the added `export `, and tested containment against `git show f406c47^:...graph-revision-reducer.ts`. All 8 are byte-verbatim substrings of the pre-split reducer, and all 8 are absent from the post-split reducer — nothing retyped, nothing duplicated back. Stable codes/details/source states, deepFreeze calls, and clonedState's content-identity exclusion hold by byte identity rather than by inspection.\n\nREDUCER DELTA: the only additions are the 9-line named import from \"./graph-revision-results.js\"; the only non-helper removal is the now-unused `import { createRuntimeError }`. No reordered checks, no edited handler, no touched header. Exports are exactly GRAPH_REVISION_COMMAND_KINDS, GRAPH_REVISION_TRANSITIONS, reduceGraphRevision — helpers not re-exported. results never imports the reducer (no cycle); root index.ts does not re-export it.\n\nHELD-OUT TESTS: `git diff f406c47^ HEAD` on graph-revision-reducer.test.ts and planning-invariants.test.ts is empty — byte-unchanged, so \"tests pass unchanged\" is literally true.\n\nMUTATION CHECK (mine, to prove the unchanged suite still has teeth on the moved code): first deepFreeze -> identity passthrough => 12 tests failed; \"ILLEGAL_TRANSITION\" -> \"UNKNOWN_ERROR\" => 9 failed. Both reverted on that single owned path; `git status --porcelain -- packages/core` empty afterwards, full suite re-run green at 226.\n\nNote: f406c47 carries the wrapper title form yet contains ONLY owned paths — a counterexample to the title-form discriminator posted in #general. Neither proposed rail is affected; both key on staged paths, not titles."
 }
