@@ -75,23 +75,18 @@ function buildInput(rand: () => number): PolicyEvaluationInput {
     requiredFactIds: FACT_IDS.filter(() => rand() < 0.7),
     scope: [NODE],
     sliceChain: rand() < 0.5 ? [root] : [root, child],
-    waivers: rand() < 0.4
-      ? [{
-        expiresAtEpochMs: 9_000, humanApprovalRef: "approval:soft",
-        namedObligationId: "obligation.named", scope: [NODE], waiverRef: "waiver:1",
-      }]
-      : [],
+    waivers: rand() < 0.4 ? [{
+      expiresAtEpochMs: 9_000, humanApprovalRef: "approval:soft",
+      namedObligationId: "obligation.named", scope: [NODE], waiverRef: "waiver:1",
+    }] : [],
   };
 }
 
-const strongTruth = (value: string): boolean =>
-  value === "DAEMON_VERIFIED" || value === "HUMAN_APPROVED";
+const strongTruth = (v: string): boolean => v === "DAEMON_VERIFIED" || v === "HUMAN_APPROVED";
 
-/**
- * A required fact is unusable when it is absent, UNKNOWN, or a tier claim below the floor. The
- * set is unioned over every slice's rules as well as the top-level list, so a fact any link in
- * the chain demanded still counts even if a later link stopped demanding it.
- */
+/** A required fact is unusable when absent, UNKNOWN, or a tier claim below the floor. The set is
+ * unioned over every slice's rules as well as the top-level list, so a fact any link in the chain
+ * demanded still counts even if a later link stopped demanding it. */
 function hasUnusableRequiredFact(input: PolicyEvaluationInput): boolean {
   const required = new Set(input.requiredFactIds);
   for (const slice of input.sliceChain) {
@@ -110,8 +105,6 @@ function shrinksRequiredFacts(input: PolicyEvaluationInput): boolean {
   const redeclared = input.sliceChain[1]?.rules[0]?.requiredFactIds;
   return redeclared !== undefined && ancestor.some((id) => !redeclared.includes(id));
 }
-
-const SWEEP = 320;
 
 describe("policy invariants", () => {
   it("never reaches ALLOW with an unusable required fact, across the whole sweep", () => {
@@ -135,7 +128,8 @@ describe("policy invariants", () => {
       expect(result.record.reasonCodes.length).toBeGreaterThan(0);
     }
     expect(unusable).toBeGreaterThan(0);
-    expect(shrunk).toBeGreaterThan(0);
+    /** Observed 10/320 at this tuning; the floor is a canary against a generator retune. */
+    expect(shrunk).toBeGreaterThanOrEqual(5);
     for (const outcome of POLICY_OUTCOMES) expect(seen.get(outcome) ?? 0).toBeGreaterThan(0);
   });
 
@@ -150,10 +144,7 @@ describe("policy invariants", () => {
       expect(computedTier).toBe(bare.record.riskAssessment.computedTier);
       expect(hinted.record.riskAssessment.usedFactIds).toEqual(bare.record.riskAssessment.usedFactIds);
       expect(hinted.record.inputFacts).toEqual(bare.record.inputFacts);
-      if (computedTier === null) {
-        expect(effectiveTier).toBeNull();
-        continue;
-      }
+      if (computedTier === null) { expect(effectiveTier).toBeNull(); continue; }
       tiers.add(computedTier);
       expect(effectiveTier).not.toBeNull();
       expect(POLICY_RISK_TIERS.indexOf(effectiveTier as PolicyRiskTier))
