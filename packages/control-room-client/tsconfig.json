@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "tsBuildInfoFile": "../../node_modules/.cache/control-room-client.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "generator/**/*.ts"]
+}

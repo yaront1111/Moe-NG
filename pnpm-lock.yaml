@@ -29,6 +29,12 @@ importers:
 
   packages/contracts: {}
 
+  packages/control-room-client:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/control-room-model: {}
 
   packages/core:
