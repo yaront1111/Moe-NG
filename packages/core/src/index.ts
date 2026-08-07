@@ -146,3 +146,76 @@ export type {
   GraphRevisionSupersedeCommand,
   GraphSubmissionWitness,
 } from "./planning/graph-revision-contract.js";
+
+export { evaluatePolicy } from "./policy/policy-evaluation.js";
+export {
+  CORE_DECISION_REASON_OBLIGATION,
+  CORE_STEP_UP_OBLIGATION,
+  POLICY_AUTO_APPROVAL_TIERS,
+  POLICY_OBLIGATION_KINDS,
+  POLICY_OUTCOMES,
+  POLICY_OUTCOME_DOMINANCE,
+  POLICY_REASON_CODES,
+  POLICY_RISK_TIERS,
+  POLICY_RULE_EFFECTS,
+} from "./policy/policy-contract.js";
+export type {
+  PolicyAutoApprovalOptIn,
+  PolicyAutoApprovalTier,
+  PolicyDecisionRecord,
+  PolicyEvaluationAcceptedResult,
+  PolicyEvaluationInput,
+  PolicyEvaluationRejectedResult,
+  PolicyEvaluationResult,
+  PolicyFactInput,
+  PolicyObligation,
+  PolicyObligationKind,
+  PolicyOutcome,
+  PolicyReasonCode,
+  PolicyRecordedFact,
+  PolicyRiskAssessment,
+  PolicyRiskTier,
+  PolicyRule,
+  PolicyRuleEffect,
+  PolicySlice,
+  PolicyWaiver,
+} from "./policy/policy-contract.js";
+
+export {
+  applyApprovalCommand,
+  applyApprovalInvalidation,
+  evaluateCarryForward,
+} from "./policy/approval-invalidation.js";
+export {
+  APPROVAL_ACTOR_KINDS,
+  APPROVAL_COMMAND_KINDS,
+  CARRY_FORWARD_REASON_CODES,
+} from "./policy/approval-contract.js";
+export type {
+  ApprovalAcceptedResult,
+  ApprovalActorKind,
+  ApprovalCommand,
+  ApprovalCommandKind,
+  ApprovalDecideCommand,
+  ApprovalDecision,
+  ApprovalDecisionRecord,
+  ApprovalDependencyChanges,
+  ApprovalImpactSet,
+  ApprovalInvalidationInput,
+  ApprovalLifecycle,
+  ApprovalRejectedResult,
+  ApprovalResult,
+  ApprovalSuccessorLink,
+  ApprovalValidity,
+  ApprovalWithdrawCommand,
+  CarryForwardInput,
+  CarryForwardReasonCode,
+  CarryForwardVerdict,
+} from "./policy/approval-contract.js";
+
+/**
+ * Identity is re-exported through its own curated area seam rather than as per-module blocks:
+ * `./identity/index.ts` already curates the three identity modules, so duplicating its surface
+ * here would create a second place to keep in sync. Nothing else in this file collides with it.
+ */
+export * from "./identity/index.js";
