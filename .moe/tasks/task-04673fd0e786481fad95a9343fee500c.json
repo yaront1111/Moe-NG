@@ -1,0 +1,33 @@
+{
+  "id": "task-04673fd0e786481fad95a9343fee500c",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Control-room shell frame and J1 board slice",
+  "description": "Task B of the control-room shell pre-split (architect-d89636d1; honest combined file map was 18-20 vs the caps — split before code exists per the size-governance memories). Objective: the shell FRAME plus the minimal operable J1 slice over the Task-A scaffold. Deliverable, using the verification findings pinned here (do not rediscover): src/shell/ = frame ONLY (nav rail + main outlet + inspector + status strip per spec line 51; the BOARD is a surface, spec §2.2) + provenance drill-down panel consuming the shell-local DEVELOPMENT_ONLY provenance fixture type (spec §3.2 popover shape: event seq+ID, actor/session, lease epoch, timestamp, typed link — no repo-wide provenance type exists; follow the testkit FOUNDATION_FAKE_KIND marker pattern); minimal J1 slices placed in the CANONICAL DOWNSTREAM DIRECTORIES (spec §6.1 lines 499-509: goals form 503; board columns cr.board.column.* with name/phase/chip cards, NO joinstrip/silence-timer/terminated-filter; approval detail with cr.action.approval-decide.approve for plan+acceptance kinds; node inspector chipped facts only, no §10.5 attempt detail; evidence receipt exit-0 + base/head SHAs; doctor = cr.health.status summary only) — the five downstream surface tasks own those dirs and BUILD OVER these slices, never duplicate them (the rejected alternative was src/surfaces/ stubs that become undeletable dead duplicates). ACTION-GATING SEMANTICS (spec-verified, the earlier draft was WRONG): disconnected fixture => ALL cr.action.* DISABLED (not hidden) + banner (spec 524/530, role=status/alert per 687); LAG/STALE fixture => stale display LABELED, commands NOT blocked (spec 614, CR-LAG-001 739); daemon-reason-coded-disabled is a SEPARATE provisional DEVELOPMENT_ONLY fixture channel (NextAllowedCommand carries no reason field; §13-D2 registry unratified — no daemon reason => control ABSENT, never disabled-with-guessed-text, spec 588-590); actions render ONLY from supplied readonly NextAllowedCommand[] (@moe/contracts buildNextAllowedCommands/EMPTY_NEXT_ALLOWED_COMMANDS). Graph tab renders as a NON-MOUNTING placeholder and a test asserts cr.graph.* is NEVER mounted during the J1 flow (spec 509/CR-J1-002 722). Triple encoding comes from the Task-A kernel adapter (describeTruthClass re-export with the absent-class→UNKNOWN mapping); every cr.fact.* has a cr.chip.* descendant (spec 742 bar 3), 24px hit target + aria-label composition + UNKNOWN dashed border (spec 176). Keyboard/a11y for THIS task: jsdom-testable roles/labels/focus-order/keyboard basics via @testing-library (spec 684/687/691 — Enter/p provenance); NO axe dep; WCAG/monochrome/latency + Playwright journeys belong to Accessibility latency hardening and Control-room journey gate. FIXTURE CONTENT TRIPWIRE: no fixture string may contain 'packages/scheduler/src/' or '@moe/scheduler/' or 'scheduler/src/' literals (scheduler package-boundary test scans apps/** .tsx CONTENTS at the root gate) and no fixture module imports a path containing 'foundation/' (testkit foundation-spec scans apps/** .ts import specifiers). Named import { userEvent } (default-import fails tsc under NodeNext — proven). Hard dependency: Task A (Foundation control-room shell, task-fd82678f) — scaffold, kernel adapter, fixtures, and the frontend dependency set must be landed first; block if absent. Owned paths: apps/control-room/src/shell/**, apps/control-room/src/board/**, apps/control-room/src/goals/**, apps/control-room/src/approvals/**, apps/control-room/src/nodes/**, apps/control-room/src/evidence/**, apps/control-room/src/doctor/**, and app-level test files for these slices. Keep total files <=10 (merge tests: one gating+keyboard test, one board/J1 flow test) and every file <=250 lines. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "The shell frame renders nav/outlet/inspector/status-strip with the Graph tab as a never-mounted placeholder, proven by a test asserting no cr.graph.* mounts during the J1 flow.",
+    "The J1 slice is operable end-to-end on fixtures: goals form, board columns with chip cards, approval decide action, node inspector chipped facts, evidence receipt line, doctor status summary — each in its canonical downstream directory.",
+    "Action gating matches the spec exactly: disconnected disables all actions with a banner; lag labels stale without blocking; absent daemon reason renders no control; actions derive only from supplied NextAllowedCommand[].",
+    "Keyboard reachability, roles/labels, and provenance drill-down (Enter/p) pass jsdom tests; the focused control-room typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Frame-and-slice only: the five downstream surface tasks own the full surfaces and build over the J1 slices in place — do not pre-build their scope and do not create src/surfaces/, src/a11y/, or src/performance/.",
+    "Never mutate from the client: no client-derived authority; disabled/absent semantics per spec 524/530/588-590/614; no guessed disabled-reason text.",
+    "Fixture strings must never contain scheduler path literals; fixture modules must never import 'foundation/' paths.",
+    "Every file <=250 lines; <=10 files total; explicit-pathspec commit only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-fd82678f720747888d1c32ef96bb5534",
+  "priority": "MEDIUM",
+  "order": 33,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T22:15:02.258Z",
+  "updatedAt": "2026-08-07T22:15:02.258Z"
+}

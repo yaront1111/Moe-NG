@@ -15,9 +15,95 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-d89636d1",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "SCOPE: this task is now Task A of a pre-split (sibling task-04673fd0 owns the shell frame + J1 slices; honest combined map was 18-20 files — split before code exists per the size-governance memories). Task A = the repo's FIRST frontend scaffold + kernel adapter + fixture module + smoke test. EMPIRICALLY PROVEN STACK (scratchpad-verified on node 24.16.0 / pnpm 11.0.8 under repo-strict settings — install + tsc + jsdom vitest + vite build ALL exit 0; pin EXACTLY, saveExact): react 19.2.8, react-dom 19.2.8, vite 8.2.1, @vitejs/plugin-react 6.0.5 (requires vite ^8 ONLY — vite 7 pairing FAILS strict peers), vitest 4.1.10 (root pin; accepts vite ^6||^7||^8), jsdom 30.0.1 (engines satisfied; jsdom over happy-dom), @testing-library/react 16.3.2, @testing-library/dom 10.4.1 (MANDATORY explicit devDependency — non-optional peer of testing-library/react; without it install FAILS under strictPeerDependencies+autoInstallPeers:false — reproduced both directions), @testing-library/user-event 14.6.3, @types/react 19.2.18, @types/react-dom 19.2.4, typescript 7.0.2 (repo pin). Baseline reads: packages/control-room-model/src/index.ts (describeTruthClass + TruthPresentationDescriptor {glyph, shortLabel, semanticTone, meaning, borderStyle, ariaLabel, chipTestId, provenanceAffordance}); packages/control-room-client landed at 9583ab6 (createCompatGate + CommandAffordance — declare workspace:* dep NOW, the five surface tasks own no package.json).",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Step 1 (scope + baseline reads) complete — zero code changes. VERIFIED FACTS, not assumptions:\n\n(1) apps/control-room does NOT exist (`ls apps/` -> daemon only). Tree clean of foreign source work at claim time; HEAD 326e146.\n(2) Kernel API confirmed at packages/control-room-model/src/index.ts:150 — describeTruthClass(input: unknown) returns a RESULT UNION (TruthPresentationSuccess {ok:true, descriptor} | TruthPresentationFailure {ok:false, error:{code:\"TRUTH_CLASS_INVALID\"}}), NOT a bare descriptor. The plan's step-1 prose said \"describeTruthClass(undefined) returns TRUTH_CLASS_INVALID\" — correct in substance (default branch), but the shell wrapper must unwrap `.ok` first. Descriptor fields confirmed exactly as planned (glyph, shortLabel, semanticTone, meaning, borderStyle, provenanceAffordance, ariaLabel, chipTestId) and every result is Object.freeze'd.\n(3) @moe/contracts root DOES export buildNextAllowedCommands + EMPTY_NEXT_ALLOWED_COMMANDS + type NextAllowedCommand (index.ts:79-87). For a NON-EMPTY fixture affordance set, buildNextAllowedCommands needs BOTH a known lifecycle source {aggregate,state} closed against RUNTIME_LIFECYCLES and entries with exact keys — commandEnvelopeVersion \"moe-runtime-command/1\", commandId, commandKind from RUNTIME_COMMAND_KINDS, expectedVersion, inputSchemaVersion, targetAggregateId. Any malformed/duplicate entry collapses the WHOLE set to frozen empty (runtime-affordance.ts:94) — fixtures must be exact or the \"connected\" state silently becomes the disconnected one.\n(4) @moe/control-room-client LANDED: exports createCompatGate + affordance/compat types. Dep declared now, consumed by the live-seam task.\n(5) TRIPWIRE SCOPES MEASURED (they differ — the plan treated them as one shape):\n    - scheduler package-boundary.test.ts:9-10 scans adapters/apps/packages file CONTENTS for /(?:@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/])/ over extension set INCLUDING .tsx/.jsx/.test files. Applies to every file I write.\n    - testkit foundation-spec.test.ts:33-34,51 scans only /\\.[cm]?ts$/ files EXCLUDING *.test.ts for /(?:from|import|require)\\s*\\(?\\s*[\"'][^\"']*foundation[\\\\/][^\"']*[\"']/. So it reaches src/fixtures.ts but NOT any .tsx and NOT the test file. Second constraint in the same file: /BENCH[-_]/ must not appear.\n(6) Toolchain confirmed live: node v24.16.0, pnpm 11.0.8, root pins typescript 7.0.2 + vitest 4.1.10. pnpm-workspace.yaml carries autoInstallPeers:false + strictPeerDependencies:true + saveExact:true + engineStrict:true, and already globs apps/* (no workspace edit needed). tsconfig.base.json lib is [\"ES2024\"] with NodeNext + verbatimModuleSyntax + exactOptionalPropertyTypes + noUncheckedIndexedAccess — so the app tsconfig must add jsx + DOM libs, and fixture code must survive exactOptionalPropertyTypes (optional affordance keys are omit-or-valid, never undefined).\n(7) Spec re-read at source: §3.1 chip = glyph+label, 24px min hit target, aria-label = class + meaning + \"press Enter for provenance.\"; UNKNOWN is the ONLY dashed border. §3.2 popover = event seq+ID, actor/session, lease epoch, timestamp, typed link (receipt/decision/report/finding by class). §3.3 \"A fact whose class the payload omits renders UNKNOWN with provenance 'class missing from payload' — never silently defaulted upward.\" §12 bar 3: every cr.fact.* has a cr.chip.* descendant.\n\nFILE-BUDGET DECISION recorded now (plan's 9 owned paths are fixed and a worker cannot amend plan steps): the minimal mountable app root lives in kernel.tsx as a placeholder that Task B (task-04673fd0, owns the shell frame) replaces; main.tsx stays a thin bootstrap exporting mountControlRoom(container) plus a guarded auto-mount, so the real entry is testable in jsdom instead of untested side-effect code. No new files beyond the planned nine.\n\nMemories consulted: gotcha-vitest-app-root-config (root config include is packages/**+tests/** — the '--config package.json' trick loads an EMPTY vite config, which is exactly why it cannot carry jsdom+react; local vite.config.ts instead), gotcha-shared-pnpm-lock-ownership, gotcha-shared-index-commit-capture (verify size DoD against HEAD, not the working tree), gotcha-scheduler-boundary-check-reads-comments, gotcha-moe-wrapper-autocommit (no scratch files under the repo root).",
+      "startedAt": "2026-08-07T22:16:36.431Z",
+      "completedAt": "2026-08-07T22:18:31.478Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Scaffold apps/control-room. package.json: { name: \"@moe/control-room\", version: \"0.0.0\", private: true, type: \"module\", dependencies: { react, react-dom, \"@moe/contracts\": \"workspace:*\", \"@moe/control-room-model\": \"workspace:*\", \"@moe/control-room-client\": \"workspace:*\" }, devDependencies: the step-1 proven set incl. @testing-library/dom, scripts: { dev: \"vite\", build: \"vite build\", typecheck: \"tsc --project tsconfig.json\", test: \"vitest run\" } — PLAIN `vitest run`: the daemon's '--config package.json' trick CANNOT carry jsdom+plugins (package.json loads as an EMPTY vite config — that is the trick's whole point); instead vite.config.ts DOUBLES as the vitest config (vitest reads vite.config.ts natively — proven: one file served vitest run + vite build + plugin-react) with { plugins: [react()], test: { environment: 'jsdom' } }; a local config WINS outright over the ancestor root vitest.config.ts (no merge — empirically proven; ancestor discovery only happens with NO local config). tsconfig.json: extends ../../tsconfig.base.json, KEEP NodeNext (do NOT switch to bundler resolution — .tsx + NodeNext './x.js'-specifier imports resolve to x.tsx in tsc AND vite/vitest, proven), override ONLY jsx: \"react-jsx\", lib: [\"ES2024\", \"DOM\", \"DOM.Iterable\"] (base lib lacks DOM), tsBuildInfoFile ../../node_modules/.cache/control-room.tsbuildinfo, include src/** ONLY (vite.config.ts stays OUT of the tsc project — daemon precedent, else node types needed). index.html + src/main.tsx minimal entry mounting the app root. Run `pnpm install` — lockfile importer owned HERE explicitly (governor order). `pnpm --filter @moe/control-room typecheck` green (test script NOT yet — no test file).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/package.json",
+        "apps/control-room/tsconfig.json",
+        "apps/control-room/vite.config.ts",
+        "apps/control-room/index.html",
+        "apps/control-room/src/main.tsx",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "apps/control-room/package.json",
+        "apps/control-room/tsconfig.json",
+        "apps/control-room/vite.config.ts",
+        "apps/control-room/index.html",
+        "apps/control-room/src/main.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/package.json",
+        "apps/control-room/tsconfig.json",
+        "apps/control-room/vite.config.ts",
+        "apps/control-room/index.html",
+        "apps/control-room/src/main.tsx",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Step 2 complete — apps/control-room scaffolded, installed, typecheck exit 0.\n\nCreated: package.json, tsconfig.json, vite.config.ts, index.html, src/main.tsx. Lockfile importer landed.\n\nVERIFIED RESULTS (fresh runs, not claims):\n- `pnpm install` -> exit 0. \"Scope: all 13 workspace projects ... Packages: +62 -3 ... Done in 942ms using pnpm v11.0.8\". No workspace-glob edit was needed: pnpm-workspace.yaml already globs apps/*. The entire pinned set installed clean under strictPeerDependencies:true + autoInstallPeers:false, confirming the plan's peer analysis (plugin-react 6.0.5 with vite 8.2.1; @testing-library/dom declared explicitly).\n- `pnpm --filter @moe/control-room typecheck` -> exit 0.\n- `pnpm --filter @moe/control-room build` -> exit 0, \"14 modules transformed\", dist/assets/index-BoollKO2.js 190.45 kB. Ran the build a step early on purpose: it is the scaffold's riskiest unknown, and a broken app shape is much cheaper to find before the kernel and fixtures are written on top of it.\n\nTWO FINDINGS WORTH THE NEXT AGENT'S TIME:\n\n(1) LOCKFILE \"-3\" IS A DEDUPE, NOT A FOREIGN DELETION — I checked rather than assumed. `git diff -- pnpm-lock.yaml | grep '^-'` shows every removed line belongs to the transitive `vite@8.2.0(@types/node@24.13.3)` entry that root vitest 4.1.10 had pulled; my explicit `vite: 8.2.1` pin dedupes it to a single 8.2.1 node. Consequence beyond this package: the ROOT vitest now resolves vite 8.2.1 too. That is a patch bump inside vitest's own accepted range, but it is a repo-wide effect of an app-local pin, so step 4's full `pnpm typecheck && pnpm test` covers it rather than assuming it is inert. No foreign importer was added or removed; net +570/-20 lines is the react/vite/jsdom/testing-library subtree only.\n\n(2) NO .gitignore NEEDED, AND I CONFIRMED IT INSTEAD OF ADDING A TENTH FILE. `vite build` emits apps/control-room/dist/; `git check-ignore -v apps/control-room/dist/index.html` -> `.gitignore:4:dist/`, exit 0. The root rule already covers it, so the build artifact cannot reach a commit or the wrapper's auto-commit sweep, and the owned-path list stays at the planned nine.\n\nDEVIATIONS FROM THE PLAN TEXT, both deliberate:\n- tsconfig `include` is [\"src/**/*.ts\", \"src/**/*.tsx\"], not the plan's shorthand \"src/** ONLY\". Same intent (vite.config.ts stays outside the tsc project, so no node types are required, per the apps/daemon precedent) but written as explicit extension globs — a bare src/** would pull index-adjacent non-source files into the program if any ever appear.\n- src/main.tsx currently mounts a local placeholder component instead of importing the kernel's app root. The kernel does not exist until step 3, and I will not write an import against a file I have not created — step 2's \"typecheck green\" gate has to be real, not a promise. Step 3 moves the root into kernel.tsx and rewires main.tsx to it, which is also where the smoke test starts biting. main.tsx exports mountControlRoom(container) and only auto-mounts when #root actually exists, so the real production entry is exercised in jsdom rather than left as untested side-effect code.\n\nVitest config: local vite.config.ts doubles as the vitest config with { plugins: [react()], test: { environment: \"jsdom\", include: src/**/*.test.ts(x), passWithNoTests: false } }. passWithNoTests:false is deliberate — it makes a future empty or mis-globbed app suite fail loudly instead of reporting a green run over zero tests. The `test` script is plain `vitest run` (no --config package.json; that trick loads an EMPTY vite config by design and cannot carry jsdom or the react plugin).",
+      "startedAt": "2026-08-07T22:18:34.103Z",
+      "completedAt": "2026-08-07T22:20:10.137Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD — src/kernel.tsx + src/fixtures.ts + src/scaffold.test.tsx (each <=250). src/kernel.tsx: the triple-encoding adapter over the LANDED kernel — re-export describeTruthClass and render a TruthChip component from TruthPresentationDescriptor (text=shortLabel + icon=glyph + color=semanticTone token + dashed border for UNKNOWN + ariaLabel + chipTestId + 24px hit target per spec 176; every cr.fact.* wrapper guarantees a cr.chip.* descendant — spec 742 bar 3); CRITICAL MAPPING DECISION (spec 187 vs kernel API): an ABSENT truth class renders the UNKNOWN descriptor with provenance note 'class missing from payload' — describeTruthClass(undefined) returns TRUTH_CLASS_INVALID, so the wrapper explicitly maps absent->UNKNOWN and reserves TRUTH_CLASS_INVALID for present-but-malformed values; never reimplement kernel truth logic. src/fixtures.ts: deterministic DEVELOPMENT_ONLY fixture data for the J1 states Task B consumes — goal/node/approval/evidence/doctor snapshots + THREE distinct affordance states (connected: readonly NextAllowedCommand[] via @moe/contracts buildNextAllowedCommands; disconnected; lag/stale-labeled) + the shell-local provenance fixture type (spec §3.2 popover shape: event seq+ID, actor/session, lease epoch, timestamp, typed link) with a DEVELOPMENT_ONLY marker (testkit FOUNDATION_FAKE_KIND pattern); CONTENT TRIPWIRES: zero 'scheduler/src' / '@moe/scheduler/' literals in any string (scheduler boundary test scans apps/** .tsx CONTENTS at the ROOT gate — a fixture path string turns main red), zero import specifiers containing 'foundation/' (testkit foundation-spec scans apps/** .ts imports). src/scaffold.test.tsx: smoke — app mounts in jsdom; TruthChip renders all five truth classes + the absent->UNKNOWN mapping (text+icon+color triple asserted via testId/aria); fixture determinism (two builds deep-equal); fixture-content tripwire self-test (grep-style assertion over the fixture module source). NAMED import { userEvent } if used (default-import FAILS tsc under NodeNext — proven TS2339).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/kernel.tsx",
+        "apps/control-room/src/fixtures.ts",
+        "apps/control-room/src/scaffold.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/kernel.tsx",
+        "apps/control-room/src/fixtures.ts",
+        "apps/control-room/src/scaffold.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/kernel.tsx",
+        "appsts/control-room/src/fixtures.ts",
+        "apps/control-room/src/scaffold.test.tsx",
+        "apps/control-room/src/main.tsx",
+        "apps/control-room/tsconfig.json"
+      ],
+      "note": "Step 3 complete — TDD red then green. 22 tests pass, typecheck exit 0. Files: src/kernel.tsx (182), src/fixtures.ts (240), src/scaffold.test.tsx (245), src/main.tsx rewired (24) — all under 250.\n\nRED FIRST, PROVEN: wrote scaffold.test.tsx before either module existed and ran it — \"Test Files 1 failed (1) / Tests no tests\", failing in Vite's transform on the missing ./fixtures.js and ./kernel.js specifiers. Then implemented to green.\n\nTHE TEST FOUND A REAL DEFECT IN MY OWN CODE, and the fix went into production, not the test. First green run failed: \"expected 36 to be 12\". I had named the wrapper `cr.fact.<id>` and its inner spans `cr.fact.label` / `cr.fact.value`, so the spec's own audit selector `[data-testid^='cr.fact.']` matched 3 elements per fact instead of 1. That is worse than a wrong count: the spec §12 bar is \"every cr.fact.* element has a cr.chip.* descendant\", and every downstream surface task will write that selector. Under the old naming, label and value spans would have been counted as fact claims and — being chip-less — the audit would have failed for the wrong reason, or if written as a find-first, passed without ever inspecting a claim. Renamed the inner parts to `cr.label` / `cr.value`, reserving the `cr.fact.` prefix for wrappers alone, documented it in the Fact docblock, and added a pinning assertion that one Fact yields exactly one `cr.fact.*` element. Five surface tasks inherit this.\n\nHONESTY SEAM (the named mapping decision), implemented and red-teamed both directions: presentTruthClass(input) distinguishes three origins where the kernel offers two. ABSENT (undefined/null) -> UNKNOWN descriptor + \"class missing from payload\" per spec §3.3. INVALID (present but unsupported) -> UNKNOWN descriptor + a note carrying the stable TRUTH_CLASS_INVALID code. PRESENT -> the kernel's descriptor, empty note. Both failure paths render UNKNOWN so nothing is ever defaulted upward, but they never look alike to an operator or a test. Hostile inputs asserted: {truthClass:\"DAEMON_VERIFIED\"}, \"daemon_verified\", \"DAEMON_VERIFIED \" (trailing space), \"\", 0, false, [\"HUMAN_APPROVED\"] — all INVALID, all high-contrast magenta. The truth mapping itself is never reimplemented: the UNKNOWN descriptor is obtained from describeTruthClass(\"UNKNOWN\") behind a guard that throws if the kernel ever stops describing it, so a kernel contract change fails loudly instead of silently degrading the shell.\n\nTRIPLE ENCODING: chip is a <button> carrying text (shortLabel), icon (glyph), colour (data-tone = semanticTone), plus data-border, data-origin, data-provenance-note, data-truth-class, aria-label, chipTestId, and a 24px min hit target. Tests assert the three channels independently, prove all five classes are distinguishable by glyph AND label alone (set size 5 each — the forced-monochrome bar), prove UNKNOWN is the only dashed border, and prove the chip is focusable, Enter/click-activatable, and advertises \"press Enter for provenance.\".\n\nDoD-vs-SPEC DIVERGENCE — QA PLEASE READ, I did not silently pick a side. DoD 2 says \"disconnected/stale fixtures disable mutation\". The approved plan resolved this as a spec-verified BLOCKER: CR-LAG-001 requires stale display to be LABELLED with \"commands not blocked by UI\", so treating lag as a disable would be a UI-invented refusal. I satisfied both by modelling FOUR states instead of the planned three, and the extra one is not an invention — it is daemon-sourced. CONNECTED: affordances, mutations on. LAGGING: same affordances, mutations on, statusLabel names the staleness. DISCONNECTED: EMPTY_NEXT_ALLOWED_COMMANDS, mutations off, banner text. HISTORICAL: built from contracts' own historicalRuntimeResult(), which returns empty affordances with requiresAffordanceRefresh true — that is the daemon's own \"a replayed view carries no current authority\" rule, and it is the genuine \"stale disables mutation\" case DoD 2 asks for. Crucially mutationsEnabled is DERIVED, never authored: connection !== \"DISCONNECTED\" && !requiresAffordanceRefresh && nextAllowedCommands.length > 0. A fixture author cannot hand-write an enabled action, and the test recomputes the rule for every snapshot rather than asserting four hardcoded booleans.\n\nFIXTURES: six surfaces (goals, board, node, approval, evidence, doctor), 12 facts, each with a full §3.2 provenance record (event sequence + id, actor, session, lease epoch, ISO timestamp, typed link kind + ref). Two facts carry deliberately dishonest payloads — board.readiness omits its class entirely, doctor.relay supplies {class:\"OBSERVED\"} — so the ABSENT and INVALID paths are exercised by shipped fixture data, not only by test-only inputs. Marked CONTROL_ROOM_FIXTURE_KIND = \"DEVELOPMENT_ONLY/NOT_CONFIRMATORY\". Determinism is structural: no clock, no random, every value a literal; buildControlRoomFixtures() is JSON-identical across calls and the result is frozen. The connected affordance set goes through @moe/contracts buildNextAllowedCommands with a closed NODE_RUN/WORK_R",
+      "startedAt": "2026-08-07T22:20:12.559Z",
+      "completedAt": "2026-08-07T22:27:41.547Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate. (1) `wc -l apps/control-room/src/*.tsx apps/control-room/src/*.ts` — every file <=250. (2) Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> exit 0 — complete_task evidence with that exact command. (3) `pnpm --filter @moe/control-room build` -> exit 0 (vite build proves the scaffold is a real app, not a test rig). (4) REPO GATE with the two blind-spot notes: root `pnpm test` does NOT run app tests (include = packages/** + tests/** — same daemon blind spot, record in the completion note) BUT the scheduler package-boundary test DOES scan the new app's file contents at root — run full `pnpm typecheck && pnpm test` and attribute any red by path (foreign in-flight work vs own tripwire hit). (5) grep fixtures/kernel for Date.now|Math.random -> zero. (6) Run the focused suite twice — identical.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/kernel.tsx",
+        "apps/control-room/src/fixtures.ts"
+      ],
+      "startedAt": "2026-08-07T22:27:43.836Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Red-team: (a) authority hunt — no fixture or kernel export can express a mutation (no envelope construction, no client dispatch — the compat-gated builders stay unconsumed until the live-seam task; grep for createCompatGate usage -> type-only import at most); (b) absent-vs-malformed truth mapping — feed undefined AND a hostile object: undefined -> UNKNOWN chip with the missing-class provenance note, garbage -> TRUTH_CLASS_INVALID path; (c) tripwire self-test actually bites — temporarily add a scheduler path literal to a fixture string locally, watch the self-test AND the root boundary suite go red, revert; (d) lockfile audit — importer present, every dep exact-pinned, no unexpected transitive approvals; (e) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- apps/control-room/package.json apps/control-room/tsconfig.json apps/control-room/vite.config.ts apps/control-room/index.html apps/control-room/src/main.tsx apps/control-room/src/kernel.tsx apps/control-room/src/fixtures.ts apps/control-room/src/scaffold.test.tsx pnpm-lock.yaml`; `git show --stat` lists exactly these 9 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/kernel.tsx",
+        "apps/control-room/src/fixtures.ts",
+        "pnpm-lock.yaml"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-2edeee3c",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,11 +115,44 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.939Z",
-  "updatedAt": "2026-08-07T22:02:45.321Z",
+  "updatedAt": "2026-08-07T22:27:43.836Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T22:02:33.226Z"
+    "firstClaimAt": "2026-08-07T22:02:33.226Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
-  ]
+    "architect-d89636d1",
+    "worker-2edeee3c"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T22:16:12.713Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) One task for scaffold + frame + six surfaces — REJECTED (BLOCKER): honest map 18-20 files vs the caps; pre-split before code exists (size-governance memories: post-hoc splits require governance; two landed tasks were rejected at +3116/+2013 despite green gates). Task B (task-04673fd0) carries the frame + J1 slices with every spec finding pinned in its description. (2) src/surfaces/ stubs — REJECTED (BLOCKER): the five downstream tasks own the canonical dirs (goals/board/nodes/attempts/approvals/evidence/timeline/recovery/doctor) and their rails forbid staging outside them — stubs would become undeletable dead duplicates; Task B places J1 slices IN the canonical dirs for downstream tasks to build over. (3) stale-disables-actions — REJECTED (BLOCKER, spec-verified): disconnected disables ALL (not hide) + banner; lag labels stale WITHOUT blocking; absent daemon reason renders NO control (never guessed disabled text; NextAllowedCommand has no reason field; §13-D2 unratified). (4) daemon '--config package.json' vitest trick — REJECTED (BLOCKER, empirically proven): it loads an EMPTY config and cannot express jsdom+plugins; vite.config.ts doubles as vitest config and a local config WINS outright over the root one (proven, no merge). (5) moduleResolution bundler — REJECTED: NodeNext + .tsx + './x.js' specifiers proven working in tsc AND vite/vitest; only jsx/lib/include overridden. (6) React 18 — no reason: React 19.2.8 proven with testing-library 16.3.2 (peers ^18||^19). (7) Omitting @testing-library/dom — install HARD-FAILS under strictPeerDependencies+autoInstallPeers:false (reproduced); explicit exact pin. Verified by 2-agent workflow (spec-scope + toolchain with scratchpad installs); 4 BLOCKERs + 6 RISKs folded across the split.",
+    "codebaseInsights": "Landed kernel: control-room-model exports ONLY describeTruthClass returning frozen TruthPresentationDescriptor — the shell BUILDS the chip renderer over it; spec 187 demands absent-class -> UNKNOWN which the kernel does NOT perform (describeTruthClass(undefined) = TRUTH_CLASS_INVALID) — the wrapper mapping is the named decision. control-room-client LANDED (9583ab6): createCompatGate + affordance types — dep declared now, consumed by the live-seam task. No repo provenance type exists (client honesty boundary refuses event vocabulary) — shell-local DEVELOPMENT_ONLY fixture type per spec §3.2. Boundary scans: scheduler package-boundary walks apps/** contents incl. .tsx (raw-text literals, comments included — live incident memory) and runs at the ROOT gate; testkit foundation-spec scans apps/** .ts import specifiers for 'foundation/'; root vitest include covers packages/**+tests/** only — app tests run solely via the app script (daemon-precedent blind spot, noted for the epic hardening task). pnpm strict settings live in pnpm-workspace.yaml (a project .npmrc is IGNORED by pnpm 11 — proven). Exact proven version set recorded in step 1.",
+    "risks": "(1) The dependency set is the repo's first frontend surface — one wrong pin fails strict peers (plugin-react 6 requires vite ^8 ONLY; @testing-library/dom mandatory); the set is scratchpad-proven, pin verbatim. (2) Fixture-content tripwires fail the ROOT gate, not the app gate — the self-test + full-repo run catch it before QA. (3) Absent-vs-malformed truth mapping is the honesty seam — red-teamed both directions. (4) Lockfile blast radius (~react/vite subtree) lands in one commit — importer owned here per the governor's explicit order; conditional protocol if foreign importers appear. (5) App tests invisible to root pnpm test — completion note flags the blind spot for the epic hardening task (daemon precedent). (6) Task B and five surface tasks build over this scaffold — kernel/fixtures API stability matters; keep exports minimal and typed.",
+    "keyFiles": [
+      "packages/control-room-model/src/index.ts",
+      "packages/control-room-client/src/index.ts",
+      "packages/contracts/src/runtime/runtime-affordance.ts",
+      "apps/daemon/package.json",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/testkit/src/foundation/foundation-spec.test.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-07T22:16:14.745Z",
+  "workStartedAt": "2026-08-07T22:16:36.431Z"
 }

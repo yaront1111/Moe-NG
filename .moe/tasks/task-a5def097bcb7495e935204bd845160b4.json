@@ -15,13 +15,83 @@
     "The root authorized amount is an already-authorized input fact, not minted by this kernel; no transition may raise it.",
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Read the dependency and pin the seam; no code. Read all 250 lines of packages/scheduler/src/budget/budget-contract.ts and confirm by inspection: BudgetAccountRecord and BudgetMeterBuckets field lists, that buckets are per-meter, that MAX_BUDGET_METERS is 64, that validateBudgetAccount is exported, and that BUDGET_ISSUE_CODES is a closed union of eight SHAPE codes with no transition code among them — this is why budget-account.ts must declare its own local issue-code union rather than extend the contract, which task rail 1 forbids editing. Note that deepFreeze/makeIssue/isCount/isRef/oneOf are module-private and must be cloned locally. Read packages/scheduler/src/authority/lease-fencing.ts as the fencing precedent, specifically the first-failing-check-decides-the-code ordering (lines 87-95) and the exhausted-counter refusal (lines 111-118). Confirm the bridge form from budget-contract.js is `export * from \"./budget-contract.ts\";`. Do not modify budget-contract.ts, budget-contract.test.ts, or packages/scheduler/src/index.ts.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/authority/lease-fencing.ts"
+      ],
+      "startedAt": "2026-08-07T22:32:32.927Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, part 1 of 2 — write the conservation and happy-path tests in budget-account.test.ts. It will not compile yet; that is the expected red. Add compact fixtures: a root authorization of one or two meters and a helper that asserts the per-meter derived total. Cover: (a) opening a root produces a snapshot whose single account has parentRef null, version 0, state OPEN, and per-meter AVAILABLE equal to the authorized amount with RESERVED, QUARANTINED and COMMITTED zero; (b) a parent-to-child allocation moves exactly the requested integer units out of parent AVAILABLE and into child AVAILABLE for that meter, leaving every other bucket and every other meter byte-identical — assert both sides explicitly, not just the child; (c) a child-to-current-parent return performs the exact inverse; (d) the emitted ledger entry is balanced — for ALLOCATED, fromRef is the parent and toRef is the child with one shared integer amount, and RETURNED is the mirror image; (e) after EVERY transition the derived root-plus-descendants roll-up per meter satisfies AVAILABLE+RESERVED+QUARANTINED+COMMITTED === authorized + overrun with overrun still 0, and every direct bucket is a nonnegative safe integer; (f) derived roll-up is computed, never stored — assert no account record carries a roll-up field and that a grandchild's units are counted in the root's derived total but not in the root's direct AVAILABLE; (g) allocation and return each bump the version of BOTH the parent and the child.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, part 2 of 2 — write the rejection, closure and replay tests. Cover, each asserting a frozen local issue AND that the returned state is reference-identical (toBe) to the prior state with the ledger entry list unchanged in length — reference identity, because deep equality would still pass if the kernel rebuilt an identical object after mutating: (a) a stale expectedParentVersion and, separately, a stale expectedChildVersion; (b) an unknown parent accountId and an unknown child accountId; (c) a child whose stored parentRef is not the parent named in the command (current-parent mismatch), including the sibling case that would otherwise let one child borrow from another; (d) an allocation exceeding the parent's direct AVAILABLE for that meter by exactly one unit; (e) a meter present on the child but not the parent, and a meter on neither, both failing closed without autovivifying a bucket; (f) a duplicate child accountId, and a duplicate meter within one command; (g) a zero-unit allocation rejected as malformed so the ledger never carries an inert entry; (h) illegal closes — nonzero direct AVAILABLE, nonzero RESERVED, nonzero QUARANTINED, an already-CLOSED account, and an account with a non-CLOSED child; (i) a legal close after the child returns its AVAILABLE, with nonzero COMMITTED still permitted, the account retained in state rather than removed, and its COMMITTED units still counted in the root's derived total; (j) determinism — one rejected command reports exactly one issue code even when several checks would fail, matching the published check order; (k) replay — build a multi-level tree through transitions, capture the canonical entries, replay them into a fresh state and assert deep equality with the incrementally built state, plus Object.isFrozen on the state, on an account record, on its meters array and on an individual meter bucket, so a shallow freeze cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the type surface, local helpers and derived roll-up in budget-account.ts. Import from \"./budget-contract.js\": validateBudgetAccount, MAX_BUDGET_METERS, and the types BudgetAccountRecord, BudgetMeterBuckets, BudgetAccountState, BudgetIssue. Clone locally only what the contract keeps private — deepFreeze, makeIssue, and isCount (Number.isSafeInteger(v) && v >= 0 && !Object.is(v, -0)) — and add a module doc comment stating that the clone exists because BUDGET_ISSUE_CODES is a closed shape-only union that cannot admit transition codes and the contract is not editable from this task. Declare a local frozen issue-code union covering: malformed command, unknown account, stale version, parent mismatch, insufficient available, unknown meter, duplicate identity, illegal close, and counter exhausted. Declare BudgetLedgerEntry {sequence, kind: \"ROOT_OPENED\" | \"ALLOCATED\" | \"RETURNED\" | \"CLOSED\", meter, amount, fromRef: string | null, toRef: string | null} and BudgetLedgerState {rootAccountId, authorized (per meter), overrun (per meter, 0 here), accounts, entries}. Declare the transition result union {ok:true, state} | {ok:false, issues}. Implement openBudgetRoot(authorization) and the derived roll-up that walks root plus descendants summing all four buckets per meter and returns the per-meter total — never store a roll-up on a record. Define a local version ceiling and treat a record at it as unmutatable, mirroring lease-fencing.ts:111-118.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement allocate, return and close in budget-account.ts. Validate every precondition BEFORE constructing any successor: resolve parent and child, fence expectedParentVersion and expectedChildVersion, confirm the child's stored parentRef equals the named parent, confirm the meter exists on both sides, confirm the amount is a positive safe integer within the parent's direct AVAILABLE, and confirm identities are not duplicated. Check in one published fixed order and let the FIRST failing check decide the single reported code, per lease-fencing.ts:87-95, so a rejection is deterministic. On any rejection return the prior state object itself — the same reference, with no entry appended — so no partial mutation is observable. On success build both successor records with their versions bumped, append exactly one balanced entry (ALLOCATED from parent to child, RETURNED from child to parent), and deep-freeze the new state before returning it; never mutate an existing record in place. closeBudgetAccount permits closure only when direct AVAILABLE, RESERVED and QUARANTINED are all zero and every child is already CLOSED; COMMITTED may be nonzero and the account is retained in state with state CLOSED so its committed units keep counting toward the derived total. Keep the child's meter list within MAX_BUDGET_METERS. Then add replayBudgetLedger(authorization, entries), which folds the canonical entries through the same transition core so replay cannot drift from live application, and create budget-account.js containing exactly the single line `export * from \"./budget-account.ts\";`.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.ts",
+        "packages/scheduler/src/budget/budget-account.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verify. Run the task's exact focused gate: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-account.test.ts` and capture the fresh output verbatim as the complete_task evidence — it must exit 0. Then run `pnpm --filter @moe/scheduler test` as the package regression; this is required rather than optional here because packages/scheduler owns package-boundary.test.ts and the authority and admission invariant suites, and it also re-runs budget-contract.test.ts, proving the hard dependency's tests are still passing and unmodified. Confirm with `git diff --stat -- packages/scheduler/src/budget/budget-contract.ts packages/scheduler/src/budget/budget-contract.test.ts` that both are byte-unchanged (task rail 1). Enforce the size DoD with `wc -l packages/scheduler/src/budget/budget-account.ts packages/scheduler/src/budget/budget-account.test.ts` (PowerShell: `(Get-Content <file>).Count`), asserting each is <=250, and confirm budget-account.js is exactly one line. If the production file will not fit under 250 without dropping a DoD item, stop and call moe.report_blocked to request a split rather than deleting a validation or a test.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.ts",
+        "packages/scheduler/src/budget/budget-account.js",
+        "packages/scheduler/src/budget/budget-account.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and attack the diff: can any rejection path leave a bumped version, an appended entry, or a half-updated parent? Is the rejected state returned by reference, and does a test actually prove it with toBe? Can a sibling ever fund another sibling through any sequence of legal calls? Does conservation still hold across a three-level tree after allocate, allocate, return, close in that order, and after replay of the same entries? Does closing a subtree keep its COMMITTED units counted in the root roll-up? Is the freeze deep enough that an individual meter bucket cannot be mutated? Does a zero-unit or -0 amount reach the ledger? Can a version at the ceiling produce a record that no longer parses? Confirm budget-contract.ts, budget-contract.test.ts and index.ts are all untouched and no package-root export was added. Then commit by explicit pathspec only, per epic rail 3: `git add -- packages/scheduler/src/budget/budget-account.ts packages/scheduler/src/budget/budget-account.js packages/scheduler/src/budget/budget-account.test.ts`, run `git status --porcelain` and confirm every staged entry is one of those three, unstaging any foreign path with `git restore --staged -- <path>`, then `git commit -- <the three paths>` and verify with `git show --stat` that the commit contains exactly those three files. Never a bare `git commit`, never -a, never add -A. Leave no debug, probe or scratch file behind.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-account.ts",
+        "packages/scheduler/src/budget/budget-account.js",
+        "packages/scheduler/src/budget/budget-account.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-c8bf9f6b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: sole hard dependency task-7dc2e487 (Budget contract vocabulary) is now DONE with tests unchanged. Next in architect-c4babdf9's pinned SPIDR order (17.01 -> 17.02). Owns budget-account.* only — disjoint from the 17.04 sibling promoted alongside it, so no file collision.",
   "createdBy": "WORKER",
   "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
   "priority": "HIGH",
@@ -29,5 +99,33 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:06.892Z",
-  "updatedAt": "2026-08-07T21:47:06.892Z"
+  "updatedAt": "2026-08-07T22:32:32.927Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T22:26:16.769Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 5
+  },
+  "contextFetchedBy": [
+    "architect-bf90be5d",
+    "worker-c8bf9f6b"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T22:29:59.083Z",
+  "planningNotes": {
+    "approachesConsidered": "LEDGER MODEL — chosen: strict double-entry. Every BudgetLedgerEntry carries {sequence, kind, meter, amount, fromRef, toRef}. ALLOCATED is from=parent,to=child; RETURNED is from=child,to=parent; ROOT_OPENED is from=null,to=root (the external authorization named in task rail 2). \"Balanced\" then means literally: every entry debits exactly one account and credits exactly one account for the same integer amount, so per-meter conservation is a theorem of the entry shape rather than a check bolted on afterwards, and \"no copying or sibling borrowing\" is structurally impossible — there is no entry shape that credits without debiting.\nRejected — entries holding a post-state snapshot per account: replay becomes trivial but the entries stop being canonical movement facts, and conservation degrades to an assertion over snapshots.\nRejected — a scalar (non-per-meter) ledger: contradicts BudgetMeterBuckets, which is per-meter.\n\nISSUE REPORTING — mirror lease-fencing.ts:87-95: check in a published fixed order and let the FIRST failing check decide the code, so one rejected command never reports two causes and the outcome is deterministic. Reuse the contract's BudgetIssue {code, message} *shape* with a locally-declared code union.\n\nCLOSURE — close requires direct available === 0, reserved === 0, quarantined === 0. COMMITTED may be nonzero: spent units are a real recorded fact and must keep counting toward the subtree total, so **closed accounts are never removed from state**. Also treat closing an account that still has non-CLOSED children as illegal; DoD says \"illegal close states\" without enumerating, and permitting it would strand a funded subtree. Flagged here so the approver can strike it if they consider it scope creep.\n\nOVERRUN — settlement is explicitly out of scope, so no transition in this kernel can create overrun. Model it as an explicit per-meter `overrun` field initialised to 0 at root open and never raised here, and carry it as a term in the conservation equation (total === authorized + overrun). DoD item 2 names it, so it is in scope; keeping it explicit-but-inert is what lets the later settlement child raise it without reopening this file.",
+    "codebaseInsights": "VERIFIED AT HEAD, do not re-derive:\n(1) budget-contract.ts is landed, tracked, clean and exactly 250 lines. The `?? packages/scheduler/src/budget/` in an older git snapshot was stale — `git ls-files` shows all three files tracked.\n(2) Exported and reusable FROM the contract: BudgetAccountRecord {accountId, ownerRef, parentRef: string|null, graphRevisionRef, version, state, meters}, BudgetMeterBuckets {meter, available, reserved, quarantined, committed}, BudgetAccountState, BudgetBucket, BUDGET_ACCOUNT_STATES, BUDGET_BUCKETS, MAX_BUDGET_METERS = 64, validateBudgetAccount(), BudgetValidationResult<T>, BudgetIssue.\n(3) **BUDGET_ISSUE_CODES is a closed frozen 8-member union and every member is a SHAPE-validation code.** None of this task's transition failures (stale version, parent mismatch, insufficient AVAILABLE, duplicate identity, illegal close) fit it, and task rail 1 forbids editing the contract. Therefore budget-account.ts declares its OWN local issue-code union. This is the established pattern, not a workaround — budget-contract.ts:24-26 documents that each subtree re-declares its own makeIssue/sortIssues/deepFreeze precisely because a closed sibling union cannot admit new codes.\n(4) deepFreeze/makeIssue/isCount/isRef/oneOf are module-PRIVATE in budget-contract.ts — not exported. Clone the few you need locally (isCount is 2 lines: Number.isSafeInteger && >= 0 && !Object.is(v, -0)). Prefer calling validateBudgetAccount() for untrusted record parsing instead of re-implementing field validation; that is the main line-budget saving in this task.\n(5) Buckets are PER METER (BudgetMeterBuckets), so conservation is a per-meter property, not a scalar one. Roll-ups are derived and never stored (contract line 65, design 607).\n(6) packages/scheduler/src/package-boundary.test.ts skips schedulerRoot outright (`if (path === schedulerRoot ...) continue`), so the prose-grep trap that bites other packages does NOT apply to files inside packages/scheduler. Comments here may name paths freely.\n(7) Bridge form verified: `export * from \"./budget-contract.ts\";` — one line, .ts extension.\n(8) Nothing anywhere references budget-account / BudgetLedger yet, and index.ts does not mention budget. The seam is unclaimed and internal; the 17.04 sibling is disjoint.",
+    "risks": "1. LINE BUDGET IS THE REAL RISK. 250 lines must hold types, cloned helpers, openRoot, allocate, return, close, derived roll-up and replay. My estimate is ~230-255, i.e. it can genuinely overflow. Compress the way budget-contract.ts already does — several declarations per physical line, one-line interface members — and lean on validateBudgetAccount() instead of re-validating fields. If it still will not fit WITHOUT dropping a DoD item, call moe.report_blocked and ask for a split. Do NOT silently drop a validation, a transition, or a test case to make the number.\n2. Version fencing must bump BOTH sides. An allocation mutates parent and child, so the command carries expectedParentVersion AND expectedChildVersion and both must match before anything moves. Fencing only the parent is the obvious bug here.\n3. Counter exhaustion: apply the lease-fencing.ts:111-118 idiom — refuse a mutation when a version is at the ceiling, because emitting a successor above it produces a record that never parses again. Define a local MAX ceiling; do not assume version can grow forever.\n4. \"Zero state or ledger-entry change\" on rejection means validate EVERYTHING before mutating anything. Build the successor records first, and only then swap them into the new state — never mutate the parent and then discover the child is stale. The test must assert the rejected state is reference-identical (toBe) to the prior state, not merely deep-equal; deep equality would pass even if a fresh identical object had been rebuilt, and it would not catch a mutated-then-restored state.\n5. -0 and unsafe integers: the contract's isCount deliberately rejects -0, NaN, Infinity and fractions. An allocation of 0 units is a legal no-op amount by isCount but is almost certainly not intended as a ledger entry — decide explicitly and freeze the decision in a test. Recommend rejecting a zero-amount allocation as a malformed command so the ledger never carries inert entries.\n6. Per-meter, not scalar. A meter present on the child but absent on the parent, and a meter absent on both, are distinct cases and both must fail closed rather than autovivify a bucket. Allocating an unknown meter must not silently create it on the parent.\n7. Replay must produce a DEEPLY frozen state and must equal the incrementally built state. Test it by constructing via transitions, capturing the entries, replaying them into a fresh state and asserting deep equality plus Object.isFrozen at more than the top level — a shallow freeze passes a lazy check and still lets a caller mutate a meter bucket.\n8. MAX_BUDGET_METERS is 64 and the contract enforces it on parse. Do not let allocation grow a child's meter list past it.\n9. Shared working directory: stage only the three owned paths. Do not touch budget-contract.* (task rail 1) and do not add anything to packages/scheduler/src/index.ts.",
+    "keyFiles": [
+      "packages/scheduler/src/budget/budget-contract.ts (the DONE dependency — read all 250 lines before writing anything; do not modify it or its test)",
+      "packages/scheduler/src/authority/lease-fencing.ts (the repo's optimistic-fencing precedent: first-failing-check-decides-the-code, exhausted-counter refusal, ok/rejection union)",
+      "packages/scheduler/src/budget/budget-contract.js (exact one-line bridge form)",
+      "packages/scheduler/src/runtime-shape.ts (hostile-input readers, already re-exported through the contract's own use)"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-07T22:30:01.107Z",
+  "workStartedAt": "2026-08-07T22:32:32.927Z"
 }

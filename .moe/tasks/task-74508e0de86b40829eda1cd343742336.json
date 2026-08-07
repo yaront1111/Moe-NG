@@ -15,13 +15,54 @@
     "Use Node path/file APIs portably across Windows, macOS, and Linux; leave no generated/scratch files.",
     "Commit only the explicit owned path; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline (read-only): confirm all five decomposition children landed (`git log --oneline -- packages/core/src/planning` shows the split commits; `wc -l packages/core/src/planning/*.ts` — EVERY file must already be <=250 or the guard cannot go green; if any file exceeds 250 the predecessor work is incomplete: report_blocked naming the file rather than adding an exception, per the no-exception rail). Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` GREEN (shared tree — attribute foreign red by path).",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline, read-only. No files created.\n\nPREDECESSORS LANDED, confirmed from git rather than from the governor's assertion: `git log --oneline -- packages/core/src/planning` shows bcdc2f6 (planning graph lifecycle), 3431a56 (contract split into command and event leaves), f406c47 (graph revision reducer decomposition), 5a57b2a and d2b1d77 (planning run test decomposition, which I did earlier this session), and a929e11 (planning invariant test decomposition). All five decomposition children plus their parent are in history.\n\nTHE GUARD CAN GO GREEN. Measured every .ts in the directory with the exact algorithm the guard will use (split on /\\r\\n|\\r|\\n/, drop the final empty segment so a trailing terminator adds no phantom line, strip a leading BOM): 20 files, ZERO over 250. So there is nothing to report_blocked — the no-exception rail is satisfiable as written, and I will add no allowlist.\n\nSizes, low to high: planning-contract 63, graph-revision-results 73, planning-invariant-fixtures 88, graph-revision-test-fixtures 96, graph-revision-validation 115, planning-results 121, planning-invariants.test 129, planning-snapshot 145, graph-revision-contract 156, planning-run-test-fixtures 156, planning-event-contract 163, planning-run-authority.test 180, planning-run-submission 186, planning-run-reducer 192, graph-revision-reducer 206, planning-command-contract 216, graph-revision-reducer.test 222, planning-run-reducer.test 228, planning-invariant-drivers 235, planning-validation 250.\n\nBOUNDARY CASE ALREADY IN-TREE, worth naming because it decides an operator choice: planning-validation.ts is EXACTLY 250. The threshold must therefore be `> 250` (fail) and not `>= 250`, or the guard would red a compliant file on day one. The DoD's \"250 passes, 251 fails\" wording agrees, and the synthetic boundary proof in step 2 will pin both sides so the comparison operator cannot silently drift.\n\nThe count is 20 files, comfortably above the plan's minimum-count floor of 15, so the vacuity assertion will not be tight against reality.\n\nFRESH GATE GREEN before I write anything: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> typecheck exit 0, then \"Test Files 14 passed (14) / Tests 226 passed (226)\", exit 0. No foreign red to attribute this time. `git status --porcelain -- packages/core/src/planning/` is empty, so the two invariant-support files that were untracked earlier in this session (planning-invariant-drivers.ts, planning-invariant-fixtures.ts) are now committed by their owner and will be swept by the guard like every other file — 235 and 88 lines respectively, both compliant.\n\nOne consequence to flag now rather than at review: once this guard lands it sweeps the whole directory, so a FOREIGN task landing a planning file over 250 turns this test red. That is the guard working as specified, not a defect in it; the fix is always in the offending file, never an exception here.",
+      "startedAt": "2026-08-07T22:27:12.805Z",
+      "completedAt": "2026-08-07T22:27:44.136Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD — packages/core/src/planning/planning-source-size.test.ts (itself <=250 and INCLUDED in its own sweep — no basename/suffix/current-file exception per the rail). Structure: (1) countPhysicalLines(text: string): number — split on /\\r\\n|\\r|\\n/ (LF, CRLF, and lone CR all count as one terminator); a trailing terminator does not add a phantom line (final empty segment dropped); define BOM-safe read (utf8, strip leading BOM before counting). (2) SYNTHETIC boundary proof (DoD 3, no generated files): feed in-memory strings — 250 lines with LF -> 250 (passes threshold), 251 with LF -> 251 (fails), same content with CRLF -> identical counts, same with lone CR -> identical, trailing-newline variant -> identical — assert the counter, not the filesystem. (3) DIRECTORY SWEEP: resolve the planning dir from import.meta.url (NEVER process.cwd() — vitest root is the repo root; fileURLToPath + dirname, forward/backslash-safe via node:path), readdirSync, filter /\\.ts$/ (production, tests, fixtures, drivers, support — everything; NO allowlist), readFileSync utf8, count; offenders = files > 250 collected as {file, lines}, sorted by filename (deterministic); expect(offenders).toEqual([]) so a failure prints the COMPLETE sorted offender list; also assert the sweep found a sane minimum file count (>= 15 — guards against a silently-empty readdir making the test vacuous) and that THIS test's own filename appears in the swept set (self-inclusion proof). Threshold is the literal 250, named const.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-source-size.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-source-size.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-source-size.test.ts"
+      ],
+      "note": "Guard written. packages/core/src/planning/planning-source-size.test.ts, 136 physical lines, 9 tests. Typecheck exit 0; focused run \"Test Files 1 passed (1) / Tests 9 passed (9)\", exit 0.\n\nTDD SHAPE, stated honestly. This test passed on first run, and that is the correct outcome rather than a skipped red phase: step 1 established every planning file is already <=250, so the subject under guard is compliant by construction. The red phase that matters for a guard is \"does it actually fail when a file is too big\", and I did not leave that to assertion — it is encoded permanently in the suite (see offender detection below) and re-proved by live mutation in step 3.\n\nCOUNTER, and the definition it pins. countPhysicalLines splits on /\\r\\n|\\r|\\n/, so LF, CRLF, and lone CR each terminate exactly one line; a trailing terminator ends the last line instead of starting a phantom empty one (final empty segment dropped); a leading BOM is stripped and is not a line; an empty file is 0. Proved on SYNTHETIC in-memory strings, never on temp files, so the DoD's no-generated-files rule holds and nothing can be swept into a foreign commit. Cases: counts 1/250/251 identical across all three terminators; trailing and non-trailing variants identical for all three; BOM-prefixed and empty inputs; and the ceiling itself asserted from both sides — 250 is <= MAX and 251 is > MAX for every terminator and both trailing variants, which pins the comparison as `> 250` and not `>= 250`.\n\nTHAT OPERATOR IS NOT COSMETIC HERE: planning-validation.ts is currently exactly 250 lines, so `>=` would have redded a compliant file the moment this landed. The boundary test makes that drift impossible.\n\nNO ALLOWLIST, proved rather than asserted in prose. The sweep filters only on /\\.ts$/, and a test compares the swept filenames against an independent readdir of the same directory — if any exclusion were ever added, the two lists diverge and that test fails. There is no basename, suffix, or current-file exception, and a separate test asserts this file's own name is in the swept set, so the guard is subject to its own ceiling.\n\nVACUITY, closed two ways. A minimum-count assertion requires >= 15 swept files (20 are present, so the floor is not tight against reality), and because the sweep takes the directory as a parameter, a second assertion proves sweepTypeScriptSources throws on a nonexistent directory. A mis-resolved path therefore fails loudly instead of returning an empty offender list that looks like a pass.\n\nOFFENDER DETECTION IS NOT VACUOUS, and this is the permanent form of the plan's manual red-team: one test re-runs the same sweep at a deliberately strict threshold of 100, asserts the offender list is non-empty, and asserts it comes out sorted by filename. An implementation that always returned [] would fail it. The real assertion then uses expect(offenders).toStrictEqual([]) so a genuine failure prints the complete sorted list of {file, lines}, not just a count.\n\nPORTABILITY: the directory is resolved with fileURLToPath(import.meta.url) + dirname, never process.cwd() — vitest is rooted at the repository, so cwd would resolve wrong. All joins go through node:path, and sorting uses an explicit comparator instead of locale-dependent default sort.\n\nTWO SMALL CORRECTIONS made while writing, noted so review is not surprised: the BOM constant initially held a literal invisible U+FEFF character in source and is now the escape \"﻿\"; and a module-level helper named `body` shadowed a local of the same name inside countPhysicalLines, so it was renamed `syntheticLines`.\n\nOPERATIONAL CONSEQUENCE for whoever sees this red next: a failure here almost always names a FOREIGN planning file that outgrew the ceiling. That is the guard working. The fix belongs in the offending file; adding an exception here would defeat the task's whole purpose. The file header says so in place.",
+      "startedAt": "2026-08-07T22:27:47.397Z",
+      "completedAt": "2026-08-07T22:29:36.309Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Verification + adversarial + commit. (1) `wc -l packages/core/src/planning/planning-source-size.test.ts` <= 250 (the guard passes over itself). (2) Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> exit 0 — complete_task evidence with that exact command. (3) Adversarial (Skill adversarial-self-review): (a) vacuity red-team — temporarily lower the threshold to 100 locally: the guard must go red with the full sorted offender list, restore; (b) temporarily point the sweep at a nonexistent dir: the minimum-count assertion must fail (not silently pass), restore; (c) CRLF red-team — the synthetic CRLF/CR cases already prove equivalence; confirm no fs write anywhere (grep writeFile|mkdir -> zero; DoD: no generated/scratch files); (d) confirm no exception paths (grep the test for the word 'skip'/allowlist patterns -> zero). (4) Repo gate `pnpm typecheck && pnpm test` with foreign-red attribution; run focused suite twice — identical. Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/core/src/planning/planning-source-size.test.ts`; `git show --stat` lists exactly this 1 path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-source-size.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-source-size.test.ts"
+      ],
+      "note": "Verification, adversarial review, and explicit-pathspec commit.\n\nSIZE: the guard is 136 lines at HEAD (`git show HEAD:<path> | wc -l`, measured from the commit rather than the working tree after the sweep incident on my previous task). It passes over itself.\n\nNAMED GATE, fresh: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` -> typecheck 0, \"Test Files 15 passed (15) / Tests 235 passed (235)\", exit 0. That is +1 file and +9 tests over the 14/226 baseline from step 1, which is exactly this guard and nothing else.\n\nREPO GATE: `pnpm typecheck` exit 0 across every package, `pnpm test` -> \"Test Files 117 passed (117) / Tests 1629 passed | 1 skipped\", exit 0. No foreign red to attribute.\n\nDETERMINISM: focused suite run twice, \"Tests 9 passed (9)\" both times, identical.\n\nMUTATION RED-TEAM, run live rather than reasoned about — this is the red phase the guard could not have on first write, since every planning file already complied. Lowered the ceiling in place, ran, restored, and verified restoration by git hash both times.\n- Ceiling 100 -> RED, 2 failed.\n- Ceiling 240 -> RED, and the failure output names the offender precisely: `[{\"file\": \"planning-validation.ts\", \"lines\": 250}]`. That is the diagnostic a future reader gets — file and exact count, not a bare count — and it confirms the sorted {file, lines} shape works end to end.\n- Both failing tests are the right ones: the offender assertion, plus the 250/251 boundary assertion (correctly red once the ceiling moves off 250).\n- Restore verified with `git hash-object` before and after: 9f556b98… both times, byte-identical. The file was never left mutated.\n\nVACUITY RED-TEAM is encoded permanently rather than performed once: because the sweep takes its directory as a parameter, a test asserts it THROWS on a nonexistent directory, and a second asserts at least 15 files were swept (20 exist). A mis-resolved path can therefore never return an empty offender list that reads as a pass.\n\nNO-EXCEPTION AUDIT: grep for `.skip|.only|.todo|allowlist|whitelist|exclude|ignoreList|EXEMPT` returns two hits, both prose — the header sentence stating there is no allowlist, and a test NAME \"sweeps every TypeScript file in the directory, with no allowlist\". No executable exception exists. The no-allowlist claim is not merely asserted in prose either: a test compares the swept filenames against an independent readdir, so adding any exclusion later breaks it.\n\nNO WRITES: grep for `writeFile|mkdir|rm|rmSync|unlink|appendFile|createWriteStream|cpSync|renameSync` -> ZERO. The only fs imports are readdirSync and readFileSync. The DoD's 250/251 proof runs entirely on synthetic in-memory strings, so nothing generated can be swept into a foreign commit.\n\nPORTABILITY: `process.cwd()` and `__dirname` appear ZERO times except in a comment explaining cwd is deliberately not used; resolution is fileURLToPath(import.meta.url) + dirname, all joins via node:path, sorting via an explicit comparator rather than locale-dependent default sort. Also grepped `scheduler/src|@moe/scheduler/` -> ZERO, applying the lesson from the boundary-scanner reject earlier in this session.\n\nADVERSARIAL, beyond the plan's list. The subtle failure mode for a guard like this is passing for the wrong reason, so each way that could happen is closed by a test: empty sweep (minimum count + throw-on-missing-dir), silent exclusion (independent readdir comparison), a detector that always returns [] (strict-threshold test proving offenders are found and sorted), self-exemption (self-inclusion test), and operator drift from `>` to `>=` (two-sided boundary test — which matters concretely, since planning-validation.ts sits exactly on 250 today).\n\nCOMMIT: index verified empty first, then `git add` of the single owned path and `git commit -- packages/core/src/planning/planning-source-size.test.ts`. Never bare, never -a, never add -A. Result `508b118`; `git show --stat` lists exactly one file, 136 insertions, create mode. No sweep interfered this time. No scratch, probe, or evidence file remains — the mutation red-team edited only the owned file in place and restored it byte-identically.",
+      "startedAt": "2026-08-07T22:29:39.479Z",
+      "completedAt": "2026-08-07T22:31:24.338Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: hard dependency satisfied. This task requires \"the five planning decomposition children of task-1ade51c0 must land first\" — all five are DONE (13.1 Planning run contract, 13.2 Graph revision reducer, 13.3 Planning run test, 13.4 Graph revision test fixture, 13.5 Planning invariant test), as is the parent 1ade51c0. Nothing else gates it. It also mechanically enforces the per-file <=250-line rule, which is the real rail (see prop-58a455c0).",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -29,8 +70,48 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.668Z",
-  "updatedAt": "2026-08-07T21:39:16.005Z",
+  "updatedAt": "2026-08-07T22:32:18.350Z",
   "contextFetchedBy": [
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "architect-d89636d1",
+    "worker-c8bf9f6b"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-07T22:26:09.350Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 3
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T22:26:59.850Z",
+  "planningNotes": {
+    "approachesConsidered": "Single-file mechanical guard — no verification workflow (trivial class; every hazard is a known repo pattern). Design choices: (1) counter tested on SYNTHETIC in-memory strings for the 250/251 boundary (DoD 3 forbids generated files; a temp-file mutation fixture would trip the auto-commit sweep); (2) import.meta.url dir resolution, never cwd (vitest root = repo root — the instruction-contract checker precedent); (3) minimum-file-count assertion guards sweep vacuity (empty-readdir silently passing is the classic hole); (4) self-inclusion asserted by filename membership (the rail forbids current-file exceptions — and the guard being over 250 itself would be caught by its own sweep anyway); (5) physical-line definition pinned: terminators LF|CRLF|CR each end one line, trailing terminator adds no phantom line, BOM stripped — matches the task's LF/CRLF/CR-equivalent demand.",
+    "codebaseInsights": "All five decomposition children DONE per the governor; planning dir currently ~15+ .ts files all <=250 (baseline re-verifies — if any regressed, block naming the file rather than excepting it). Root vitest include packages/**/*.test.ts auto-discovers the new guard; no package.json/tsconfig edits. Precedents: tests/instruction-contract/checker.test.ts resolves repo paths from import.meta.url; scheduler package-boundary.test.ts does readdir+content sweeps with deterministic assertions.",
+    "risks": "(1) Sweep vacuity (empty/wrong dir) — minimum-count assertion + red-team (b). (2) Phantom-line off-by-one on trailing newlines — synthetic variants pin it. (3) A concurrently-landing planning file >250 turns the guard red for a FOREIGN reason — that is the guard WORKING; attribute and route to the offending task, never except. (4) One-path explicit commit; no scratch files.",
+    "keyFiles": [
+      "packages/core/src/planning",
+      "tests/instruction-contract/checker.test.ts",
+      "packages/scheduler/src/package-boundary.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000
+  },
+  "planApprovedAt": "2026-08-07T22:27:01.879Z",
+  "workStartedAt": "2026-08-07T22:27:12.805Z",
+  "reviewStartedAt": "2026-08-07T22:32:15.249Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  15 passed (15)\n      Tests  235 passed (235)\n   Start at  01:30:29\n   Duration  1.23s (transform 2.17s, setup 0ms, import 2.83s, tests 414ms, environment 1ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T22:32:15.249Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-source-size.test.ts"
   ]
 }

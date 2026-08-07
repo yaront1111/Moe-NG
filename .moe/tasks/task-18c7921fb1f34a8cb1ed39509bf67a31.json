@@ -141,7 +141,7 @@
       "completedAt": "2026-08-07T22:07:44.732Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -161,17 +161,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.498Z",
-  "updatedAt": "2026-08-07T22:09:29.353Z",
+  "updatedAt": "2026-08-07T22:12:08.462Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:18:23.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-07T22:12:08.462Z",
+    "wallClockMs": 6825311
   },
   "contextFetchedBy": [
-    "worker-2edeee3c"
+    "worker-2edeee3c",
+    "qa-813cd351"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -234,7 +237,7 @@
     "tests/fault/foundation/j4-replan-stale.test.ts",
     "packages/testkit/src/foundation/foundation-incident-schedules.ts"
   ],
-  "reviewCompletedAt": "2026-08-07T21:34:36.579Z",
+  "reviewCompletedAt": "2026-08-07T22:12:08.462Z",
   "rejectionDetails": {
     "failedDodItems": [
       "The focused testkit typecheck and test command exits 0 with expected-red fixtures mechanically distinguished."
@@ -313,5 +316,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-07T22:12:08.462Z",
+  "reviewSummary": "APPROVE — reopen #1 blocker closed, better than I asked for. I asked for the gate to cover every owned path; they did that AND added a ratchet so it cannot silently narrow again.\n\nFILED CHAIN, re-run by me end to end, exit 0:\n`pnpm --filter @moe/testkit typecheck && pnpm --filter @moe/testkit test && pnpm exec tsc --project tests/fault/foundation/tsconfig.json && pnpm exec vitest run tests/fault/foundation`\n-> 18 files / 234 tests, tsc clean, 3 files / 43 tests. The 667 lines that previously ran under no command and no tsconfig are now inside the filed evidence.\n\nTHREE MUTATIONS, because a coverage fix that is itself unverified is the same defect one level up. All reverted, tree clean, chain green after:\n- MUT-1, is the new tests/ typecheck real: injected a type error into foundation-harness.ts -> TS2322 at :204. Genuine static checking, not a decorative tsconfig.\n- MUT-2, is the coverage ratchet load-bearing: narrowed tests/fault/foundation/tsconfig.json include to a non-matching glob -> foundation-gate-coverage.test.ts went 1 failed / 4 passed. Catches exactly the regression that caused the reject.\n- MUT-3, did the refactor break the absence ratchet: re-added a real export (partitionFrontier) to probe:scheduler-authority-lease -> 1 failed / 42 passed. DoD 3 still genuinely proven.\n\nfoundation-gate-coverage.test.ts is the right shape: reads real tool config off disk (package script, vitest include, both tsconfig projects) rather than asserting prose, lives inside the narrow filter so the checker cannot fall outside what it checks, and carries a non-vacuity guard so an empty scan cannot fake a pass.\n\nAll owned .ts files remain <=250.\n\nSIZE recorded as architect carry-forward per governor-95f824a1's ruling that post-commit size is never a solo rejection reason: 2539 owned lines, up from 2228 — the +311 is the coverage ratchet and tsconfig I required. Split stays per journey or testkit-modules vs fault-tests. Not charged to this worker."
 }

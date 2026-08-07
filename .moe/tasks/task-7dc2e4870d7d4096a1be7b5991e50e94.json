@@ -44,7 +44,7 @@
     {
       "stepId": "step-3",
       "description": "Green — packages/scheduler/src/budget/budget-contract.ts (<=250 physical lines HARD) + budget-contract.js (exactly `export * from \"./budget-contract.ts\";`). Implement step-2's vocabularies, record types, validators with the step-1 conventions; UNKNOWN-coverage quantity is null and can never be zero (the schedule-checker UNKNOWN-never-zero precedent, design 11.3 'unknown estimates never become zero'); no Date/random/imports beyond '../runtime-shape.js' and local clones; all exports frozen; module doc-comment marks LOCAL vocabularies vs design-pinned ones and carries the consolidation + divergence-risk notes. Focused tests green; `pnpm --filter @moe/scheduler typecheck` green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-contract.ts",
         "packages/scheduler/src/budget/budget-contract.js"
@@ -53,21 +53,35 @@
         "packages/scheduler/src/budget/budget-contract.ts",
         "packages/scheduler/src/budget/budget-contract.js"
       ],
-      "startedAt": "2026-08-07T22:06:30.596Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/budget/budget-contract.js"
+      ],
+      "note": "Green. Created packages/scheduler/src/budget/budget-contract.ts (250 physical lines) and budget-contract.js (1 line, exactly `export * from \"./budget-contract.ts\";`).\n\nRESULTS: `pnpm --filter @moe/scheduler typecheck` exit 0; focused suite \"Test Files 1 passed (1) / Tests 19 passed (19)\", exit 0. Red-to-green is genuine — the same command failed to collect before this file existed.\n\nSIZE, stated plainly: the module is 250 lines, which satisfies <=250 but leaves zero margin. First draft was 276. I removed no behaviour and no documentation content to get there — the cuts were purely formatting: the header block was rewritten from an itemised list into flowing paragraphs (same facts, same citations), array literals took their closing bracket onto the last content line, and short single-expression helpers (compareStrings, makeIssue, accept, isDigest, isCount, one-field interfaces) went onto one line each, matching the density dependency-contract.ts already uses. Flagging the zero margin because the next person to touch this file must split rather than append.\n\nEXPORT SURFACE, deliberately zero-authority: nine frozen vocabularies, MAX_BUDGET_METERS, the record/result types, and exactly three pure validators — validateBudgetAccount, validateUsageMeasurement, validateReserveDeclaration. There is no allocate, settle, transfer, refund, or commit function, and no function that returns a mutated account. Movement semantics stay with the ledger, reservations, and settlement children.\n\nVOCABULARY as established in step 1: design-pinned account states, buckets, and coverage; the six design-1260 measurement sources (NOT the plan's guessed \"adapter-reported / billing receipt / daemon observation\" — a test refuses \"ADAPTER_REPORTED\" so the guess cannot return); LOCAL reserve purposes explicitly marked as this module's spelling of design 587's prose; policy/truth vocabularies as string-identical mirrors with the canonical file:line named in the header and a note that they cannot be imported and must be re-diffed by value. Meter stays an open bounded identifier because design 11.2 admits provider-specific meters.\n\nHOSTILE-INPUT ORDER follows mem:convention-scheduler-validator-invariants: isPlainRecord (proxy-rejecting) -> hasOnlyOwnStringKeys (closed key set) -> readOwnDataProperty per key (accessor descriptors return {ok:false}), and for lists readPlainArrayLength -> ceiling -> hasExactDenseArrayShape -> element reads. The MAX_BUDGET_METERS ceiling is applied BEFORE any element is read, so an oversized or accessor-backed list refuses without traversal.\n\nTWO-PHASE ACCUMULATION is what makes deterministic ordering observable: a structurally malformed record returns a single terminal *_MALFORMED issue, but a well-shaped record accumulates one *_FIELD_INVALID per bad field in source order and only then reports through sortIssues. Messages were chosen so the canonical sort is NOT the emission order for the tested pair (\"...state is not a known account state\" sorts before \"...version must be a safe nonnegative integer\" while state is checked second), so dropping sortIssues fails the suite instead of passing silently.\n\nUNKNOWN-NEVER-ZERO is one biconditional at design 11.3: `coverage === \"UNKNOWN\" ? quantity !== null : quantity === null` raises BUDGET_MEASUREMENT_COVERAGE_QUANTITY_MISMATCH. UNKNOWN with 0 and UNKNOWN with 1200 both refuse; COMPLETE or PARTIAL with null refuses; PARTIAL with a genuine measured 0 is accepted, since a measured zero is a different fact from an unknown.\n\nIMMUTABILITY/DETACHMENT: accepted records are rebuilt field by field from validated values — never spread from the caller's object — so mutating the input array, a nested bucket, a top-level field, or the nested observedInterval after acceptance cannot reach the record. Everything returned goes through deepFreeze. Meters are sorted by meter name and duplicate meters refuse, so equal inputs give deep-equal outputs.\n\nRAILS: imports are exactly one, `../runtime-shape.js`; no @moe/core, no @moe/contracts, no node:crypto, no Date, no Math.random. The .js bridge ships in this same step per mem:gotcha-scheduler-js-shims, since omitting it fails neither tsc nor vitest and would surface only as ERR_MODULE_NOT_FOUND in the worker_threads entrypoint smoke test.",
+      "startedAt": "2026-08-07T22:06:30.596Z",
+      "completedAt": "2026-08-07T22:10:37.193Z"
     },
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250 physical (LF/CRLF equivalently); bridge is ONE line. (2) Fresh task verification: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts` -> exit 0 — complete_task evidence with that exact command; ALSO run the full `pnpm --filter @moe/scheduler test` for regression awareness (three sibling subtrees in flight — attribute foreign red by path, own suite green regardless). (3) Greps: '@moe/core\\|@moe/contracts' in budget/ -> ZERO (task rail); Date.now|Math.random -> zero; 'scheduler/src\\|@moe/scheduler/' -> zero. Adversarial (Skill adversarial-self-review): (a) authority hunt — no exported function mutates or allocates (types+validators only; grep for any function whose name implies movement: allocate|reserve|settle|commit -> zero); (b) vocabulary drift — diff each local copy against its canonical source file by value; (c) detachment red-team — mutate every nested input array/object post-acceptance, accepted record bit-stable; (d) UNKNOWN-never-zero — attempt to construct coverage:UNKNOWN with quantity 0 -> refused; (e) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/budget/budget-contract.ts packages/scheduler/src/budget/budget-contract.js packages/scheduler/src/budget/budget-contract.test.ts`; `git show --stat` lists exactly these 3 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-contract.ts",
         "packages/scheduler/src/budget/budget-contract.js",
         "packages/scheduler/src/budget/budget-contract.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-contract.ts",
+        "packages/scheduler/src/budget/budget-contract.js",
+        "packages/scheduler/src/budget/budget-contract.test.ts"
+      ],
+      "note": "Verification gate, adversarial review, and explicit-pathspec commit.\n\nSIZES AT HEAD, measured from git rather than the working tree: budget-contract.ts 250, budget-contract.test.ts 246, budget-contract.js 1 (exactly `export * from \"./budget-contract.ts\";`). All within the hard 250 cap; the module has zero margin, which the next editor must treat as split-before-append.\n\nFRESH TASK GATE: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts` -> typecheck 0, \"Test Files 1 passed (1) / Tests 19 passed (19)\", exit 0. REGRESSION AWARENESS: full `pnpm --filter @moe/scheduler test` -> 27 files / 383 tests, exit 0. No foreign red to attribute; notably package-boundary.test.ts is green, so the new budget files trip no cross-package scanner.\n\nRAIL GREPS, all clean: `@moe/core|@moe/contracts` in budget/ -> ZERO; `Date.|Date(|Math.random|performance.` -> ZERO; `scheduler/src|@moe/scheduler/` -> ZERO (deliberately checked after the boundary-scanner incident on my previous task). The module's only import is `../runtime-shape.js`.\n\nAUTHORITY HUNT, reported honestly rather than as a clean \"zero\". `export function` yields exactly three symbols, all `validate*`. Movement-verb DECLARATIONS (allocate/settle/transfer/refund/debit/credit as function or const names) -> ZERO. But the plan's literal case-insensitive grep for allocate|reserve|settle|commit does NOT return zero — it returns 37 hits, and claiming otherwise would be false. Every hit is one of: the RESERVED/COMMITTED bucket vocabulary (design-pinned), the reserve-purpose vocabulary, the ReserveDeclaration type and its validator name, or the header sentences that state no allocate/settle/transfer/refund is exported. None is a function that moves units. The plan's grep is over-broad against a module whose subject matter IS reservations; the substantive invariant it was protecting holds.\n\nVOCABULARY DRIFT diffed by value, not by eye — extracted each local array and its canonical counterpart and compared JSON: POLICY_OUTCOMES, POLICY_RISK_TIERS (vs packages/core/src/policy/policy-contract.ts) and TRUTH_CLASSES (vs packages/contracts/src/runtime/runtime-vocabulary.ts) are IDENTICAL including order. Measurement sources equal the six design-1260 strings.\n\nADVERSARIAL PROBE run against the loaded module (inline `node --experimental-strip-types -e`, no file created) to test behaviour the suite does not: already-frozen input is accepted AND still detached (returned meters is a different array); a ref of 513 chars refuses FIELD_INVALID; an array with length 1e9 refuses METER_BUCKETS_MALFORMED without traversal, confirming the ceiling really precedes element reads; the returned issues array is frozen; mutating an accepted record THROWS under module strict mode; two calls on the same input object return independent, deep-equal results; UNKNOWN coverage with quantity 0 refuses with COVERAGE_QUANTITY_MISMATCH; pushing to an exported vocabulary throws.\n\nChecklist arms with no surface here, stated rather than skipped: no IO, no handles, no network, no persistence, so there are no error-path cleanup or partial-write concerns. Concurrency is safe by construction — the module is pure, every accumulator (issues array, dedup Set) is per-call, and the only module-level state is frozen vocabulary.\n\nONE DELIBERATE DECISION worth QA's eye: an account with an EMPTY meters list is accepted. Design 607 stores only direct buckets and does not require an account to have any meter at creation, and this module grants no authority, so accepting is not fail-open. If the ledger child needs at-least-one, it should enforce it where the funding decision lives.\n\nSWEEP INCIDENT, second occurrence this session. `e97250e fix(task-18c7921fb1f34a8cb1ed39509bf67a31): Foundation executable specification (retry after qa_reject #1)` swept all three of my in-flight budget files, together with .moe state and other tasks' records, under another task's title — 11 files. It captured budget-contract.ts at the intermediate 258-line state, which VIOLATES this task's hard cap; had I not checked HEAD rather than my working tree, the task would have shipped over the ceiling. Per epic rail 3 I did not reset, revert, rebase, or amend that commit.\n\nCOMMIT: my remaining delta only, by explicit pathspec — `git commit -- packages/scheduler/src/budget/budget-contract.ts`, never bare, never -a, never add -A. The index was verified empty beforehand so nothing foreign could be captured. Result `326e146`, `git show --stat` lists exactly one file (7 insertions / 15 deletions), and it is the change that brings HEAD to 250. The other two owned paths are already at their final content in e97250e and are clean in the working tree. `git diff --check` exit 0. No scratch, probe, or evidence file was created at any point — the red-team probe ran entirely through `node -e`.",
+      "startedAt": "2026-08-07T22:10:39.678Z",
+      "completedAt": "2026-08-07T22:13:34.039Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-c8bf9f6b",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -79,20 +93,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:46:52.656Z",
-  "updatedAt": "2026-08-07T22:06:30.596Z",
+  "updatedAt": "2026-08-07T22:18:17.731Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T22:01:02.258Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 2
+    "executedStepCount": 4,
+    "doneAt": "2026-08-07T22:18:17.731Z",
+    "wallClockMs": 1035473
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "worker-c8bf9f6b"
+    "worker-c8bf9f6b",
+    "qa-813cd351"
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T22:02:27.204Z",
@@ -111,5 +130,20 @@
     "wallClockMs": 2700000
   },
   "planApprovedAt": "2026-08-07T22:02:29.237Z",
-  "workStartedAt": "2026-08-07T22:02:38.386Z"
+  "workStartedAt": "2026-08-07T22:02:38.386Z",
+  "reviewStartedAt": "2026-08-07T22:14:52.697Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-contract.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  1 passed (1)\n      Tests  19 passed (19)\n   Start at  01:12:37\n   Duration  140ms (transform 30ms, setup 0ms, import 41ms, tests 6ms, environment 0ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-07T22:14:52.697Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/budget/budget-contract.test.ts",
+    "packages/scheduler/src/budget/budget-contract.ts",
+    "packages/scheduler/src/budget/budget-contract.js"
+  ],
+  "completedAt": "2026-08-07T22:18:17.731Z",
+  "reviewCompletedAt": "2026-08-07T22:18:17.731Z",
+  "reviewSummary": "APPROVE. All four DoD items met. Gate re-run by me: typecheck 0, focused suite 1 file / 19 tests exit 0, full scheduler 27 files / 383 tests exit 0.\n\nDoD 1 — the cross-package claim only QA can check, since the scheduler cannot import core. Compared copied vocabularies by value against canonical sources: BUDGET_POLICY_OUTCOMES == POLICY_OUTCOMES [\"ALLOW\",\"REQUIRE_HUMAN_APPROVAL\",\"HOLD_UNKNOWN\",\"DENY\"] (policy-contract.ts:17-18), BUDGET_POLICY_RISK_TIERS == POLICY_RISK_TIERS (:25), truth classes match the 5-string union used across core and scheduler. Identical including order.\n\nDoD 2/3 — MUTATION-TESTED, both reverted, tree clean:\n- Removed the nested recursion from deepFreeze -> 3 tests red. Deep freezing pinned.\n- Removed sortIssues -> 1 test red. Issue ordering pinned, and the messages were chosen so canonical sort differs from emission order, which is what makes it catchable.\nDetachment verified structurally, not only by test: accept() receives a fresh object literal built from validated fields and readMeters builds fresh objects, so the caller's input is never aliased. I aliased readRecord's output as a probe; all 19 still passed — correct, not a gap, because detachment holds at the accept literal.\n\nDoD 4 — 250 / 246 / 1 lines; bridge is exactly `export * from \"./budget-contract.ts\";`.\n\nRAILS: no @moe/core or @moe/contracts import (only ../runtime-shape.js); package.json, pnpm-lock.yaml, src/index.ts untouched; not exported from index; zero Date/Math.random/process.\n\nFINDING for the three dependent children, not blocking: readMeters sorts by meter name but nothing pins it — I removed the sort and all 383 scheduler tests still passed. The \"deterministic over equal bytes\" test uses identical input, so it cannot see order normalisation across differently-ordered inputs. Correct but unproven, droppable by a future refactor. Ledger/reservations/settlement should pin it."
 }

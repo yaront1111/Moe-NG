@@ -16,12 +16,12 @@
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: sole hard dependency task-7dc2e487 (Budget contract vocabulary) is now DONE unchanged, and the committed PolicyFactInput shape it designs against has landed. Owns budget-measurement.* only — disjoint from the 17.02 sibling, so both can plan in parallel without contending for files.",
   "createdBy": "WORKER",
   "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:39.175Z",
-  "updatedAt": "2026-08-07T21:47:39.175Z"
+  "updatedAt": "2026-08-07T22:19:06.352Z"
 }

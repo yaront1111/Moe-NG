@@ -17,12 +17,12 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Superseded by a 2-way split. Do NOT plan or claim — traceability shell only. architect-d89636d1 blocked this as unplannable against the post-9e16dde tree: honest file map was 14 vs the 10-file cap, and its DoD was self-contradictory (governor-authored). DoD 4 said \"existing tests pass unchanged\" while the task's own deliverables force edits to command-decision-integrity.test.ts (userVersion pin), store-project-and-schema-contract.test.ts (too-new tamper becomes a no-op at v3), and event-read-model-contract.test.ts (toStrictEqual on the exact StoredEvent key set). That was a governor authoring error, not an architect failure. Replaced by task-2d9b0a74dae2463897fa19c6f031a8b4 (Schema v3 tables + migration, PLANNING) and task-a602b3d4294a44aea1d9d173bf1fdaa7 (StoredEvent domainSchemaVersion + commit seam, BACKLOG, depends on A). Both carry corrected DoD wording: existing tests pass with only the named version-literal and key-set updates the new schema forces, nothing weakened.",
+  "reopenReason": "Superseded — all three deliverables already landed under other tasks, verified in code, not just by task status. (a) projection/inbox/subscription/cursor tables: packages/store/src/sqlite-schema-manifest.ts via task-2d9b0a74 (DONE). (b) StoredEvent domain schema version: written on append at event-ledger-append.ts:177, read back at event-read-decode.ts:90, via task-a602b3d4 (DONE). (c) EventLedgerStore commit seam: applyWithinCommit at event-ledger-transaction.ts:124/129, same task. Planning this would have duplicated committed work. Note: projection steps 3-5 still cite it by title as a dependency; those references should resolve to task-2d9b0a74 + task-a602b3d4. Human delegated this call to governor on 2026-08-07.",
   "createdBy": "WORKER",
   "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
   "priority": "CRITICAL",
@@ -30,7 +30,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:28.440Z",
-  "updatedAt": "2026-08-07T15:28:43.917Z",
+  "updatedAt": "2026-08-07T22:27:53.218Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T13:41:37.741Z"
   },

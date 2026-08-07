@@ -9,10 +9,11 @@
     "Development happens only in D:/projexts/moe-next; do not create sibling Git worktrees. Runtime workspace isolation promised by the design remains in scope.",
     "Preserve foreign work; stage and commit only explicit owned paths. Never use git add -A, implicit push, implicit merge, reset, or stash. Because epic rail 2 pins every agent to the single working directory D:/projexts/moe-next, the staged index is shared state and a bare `git commit` will capture another task's staged files. Therefore: commit by explicit pathspec only — `git commit -- <owned path> [<owned path>...]` — never a bare `git commit` or `git commit -a`. Before committing, run `git status --porcelain` and confirm every staged entry is an owned path of the current task; if a foreign path is staged, unstage it with `git restore --staged -- <path>` and leave it for its owner. After committing, verify with `git show --stat` that the commit contains only owned paths.",
     "Fail closed with stable reason codes; missing or unverifiable evidence stays UNKNOWN and never gains authority.",
-    "Use TDD. Keep each production source focused, target <=250 lines, and split before 400 lines. No debug, probe, scratch, or generated evidence files may remain in commits."
+    "Use TDD. Keep each production source focused, target <=250 lines, and split before 400 lines. THIS CAP IS PER FILE, NOT PER TASK. There is no per-task net-LOC budget and never was; a task whose total diff is large but whose individual files are small is fully compliant. Task size is bounded by plan shape — <=12 plan steps and <=10 distinct affectedFiles — never by summed lines changed. Do not split a task, reject a task, or route a size exception on task-level LOC; per-file violations remain real and are fixed by splitting the file. No debug, probe, scratch, or generated evidence files may remain in commits.",
+    "Assert the reason code, not just the outcome. A test covering a failure, refusal, or rejection path must assert the specific stable reason code — and, where more than one layer can refuse, which layer refused — never merely that the operation did not succeed. A generated or swept case must assert that the case was actually generated; a sweep that silently produces zero cases passes while testing nothing. A property must be asserted against the production surface, not against a test helper that reimplements it. These defects are invisible to a green suite: verify a failure-path test by mutating the production surface and confirming the test goes red."
   ],
   "status": "ACTIVE",
   "order": 10,
   "createdAt": "2026-08-07T11:41:55.622Z",
-  "updatedAt": "2026-08-07T12:20:58.999Z"
+  "updatedAt": "2026-08-07T22:28:42.914Z"
 }
