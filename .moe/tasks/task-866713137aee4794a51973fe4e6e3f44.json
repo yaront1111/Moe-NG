@@ -19,57 +19,84 @@
     {
       "stepId": "step-1",
       "description": "Characterize the compatibility boundary before editing. From the committed `bcdc2f6` contract, inventory the exact 51 exported type/interface names and confirm the unchanged `packages/core/src/index.ts` planning export block names the same set; inspect every `./planning-contract.js` consumer and record that it is type-only. Treat the existing focused typecheck, planning-run reducer tests, and planning invariants as held-out characterization: do not edit root index, importers, reducers, or tests, and do not run the package gate yet.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-contract.ts"
-      ]
+      ],
+      "note": "Characterized compatibility boundary, no edits. planning-contract.ts (369 lines, commit bcdc2f6) exports exactly 51 type/interface names; packages/core/src/index.ts lines 65-117 re-export the identical 51-name set via `export type {...} from \"./planning/planning-contract.js\"`. All 7 consumers of ./planning-contract.js are type-only: index.ts (export type), planning-validation.ts, planning-results.ts, planning-run-submission.ts, planning-run-reducer.ts, planning-run-reducer.test.ts, planning-invariants.test.ts (all import type). No runtime symbol is re-exported from the module today. tsconfig.base.json sets verbatimModuleSyntax+isolatedModules+exactOptionalPropertyTypes+noUnusedLocals, so the facade must use `export type { ... } from \"./x.js\"` form and leaves must keep `.js` NodeNext specifiers. Only @moe/contracts types needed: RuntimeTruthClass (command leaf), RuntimeError + value import RUNTIME_LIFECYCLES (event leaf). Held-out characterization (root index, importers, reducers, tests) left untouched; package gate deferred to step-4.",
+      "startedAt": "2026-08-07T21:12:58.280Z",
+      "completedAt": "2026-08-07T21:13:44.649Z"
     },
     {
       "stepId": "step-2",
       "description": "Create `planning-command-contract.ts` by moving declarations without semantic edits: `PlanningRunKind`, `PlanningRunCommandKind`, all readiness/claim/release/recovery/submission/refusal/approval/activation/cancellation witnesses and proofs, `NodeSummary`, `PlanRevisionHashes`/`PlanRevisionSeal`, the private `PlanningRunCommandBase`, all twelve concrete commands, and `PlanningRunCommand`. Preserve exact readonly/optional fields, literal discriminants, union-member order, comments, and private visibility; import only the required `@moe/contracts` type(s). Keep the module <=250 physical lines and do not import the facade or event leaf.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-command-contract.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/planning-command-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "note": "Created planning-command-contract.ts (206 lines) by moving declarations verbatim from baseline lines 6-219: PlanningRunKind (with its forward-compatibility comment), PlanningRunCommandKind, private PlanningRunCommandBase, all ten witnesses/proofs (PlanningReadinessWitness, PlanningClaimWitness, PlanningResumeProof, PlanningReleaseWitness, PlanningAbsenceRecoveryWitness, PlanSubmissionWitness, PlanningEffectTerminalProof, PlanningRefusalWitness, PlanApprovalWitness, PlanningActivationWitness, PlanningCancellationWitness), NodeSummary, SubmissionFinalizeWitness, PlanRevisionHashes/PlanRevisionSeal, all twelve concrete commands, and the PlanningRunCommand union in unchanged member order. Property names/order, readonly modifiers, optional markers (resumeProof?, effectTerminalProof?, refusal?, revision?, planApproval?), literal discriminants, `extends` bases, and all three doc comments are byte-identical to baseline. PlanningRunCommandBase stays non-exported. Only import is `import type { RuntimeTruthClass } from \"@moe/contracts\";` — no import of the facade or the event leaf, so the leaf has no inbound cycle. Gate deferred to step-4 per plan.",
+      "startedAt": "2026-08-07T21:13:44.987Z",
+      "completedAt": "2026-08-07T21:14:19.198Z"
     },
     {
       "stepId": "step-3",
       "description": "Create `planning-event-contract.ts` for the observable lifecycle contract: move `PlanningRunLifecycle`, facets/state/successor data, the private event base, all eleven events and their union, and accepted/rejected/typed-UNSUPPORTED result types. Import required command-leaf types with a `.js` specifier and `RuntimeError`/`RUNTIME_LIFECYCLES` from contracts, yielding the one-way event->command dependency. Replace `planning-contract.ts` with an explicit type-only compatibility facade that names all 51 baseline exports from the two leaves—no wildcard or runtime re-export—and leave every existing consumer/root export unchanged. Keep both files <=250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-contract.ts",
         "packages/core/src/planning/planning-event-contract.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/planning-event-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-contract.ts"
+      ],
+      "note": "Created planning-event-contract.ts (159 lines) with the observable lifecycle contract moved verbatim from baseline lines 4 and 221-368: PlanningRunLifecycle, PlanningRunFacets (with its facets-not-lifecycle comment), PlanningRunState, PlanningRunSuccessorData, the non-exported PlanningRunEventBase, all eleven events, the PlanningRunEvent union in unchanged order, PlanningRunAcceptedResult/PlanningRunRejectedResult, PlanningUnsupportedReason, the full typed-UNSUPPORTED doc comment plus PlanningUnsupportedResult, and PlanningRunReducerResult in unchanged member order. Imports are `import { RUNTIME_LIFECYCLES }` (value form preserved exactly as baseline, used only in the typeof position), `import type { RuntimeError }`, and eight command-leaf types via the NodeNext `./planning-command-contract.js` specifier — a one-way event->command edge; neither leaf imports the facade. Rewrote planning-contract.ts (61 lines) as an explicit type-only facade: two `export type { ... } from \"./<leaf>.js\"` blocks naming exactly the 30 command-leaf plus 21 event-leaf names = the same 51 baseline exports, no wildcard and no runtime re-export. Root index.ts, all six other consumers, reducers, and tests untouched. Gate runs in step-4.",
+      "startedAt": "2026-08-07T21:14:19.924Z",
+      "completedAt": "2026-08-07T21:15:17.808Z"
     },
     {
       "stepId": "step-4",
       "description": "Run the single shared-contract regression gate once after all moves: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0; retain the fresh command, exit code, and output tail as `moe.complete_task` evidence. A failure is contract drift to diagnose in the three owned paths, not permission to edit or weaken existing tests.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-contract.ts",
         "packages/core/src/planning/planning-command-contract.ts",
         "packages/core/src/planning/planning-event-contract.ts"
-      ]
+      ],
+      "note": "Ran the shared-contract regression gate fresh after all three moves. `pnpm --filter @moe/core typecheck` exit 0 (tsc --project tsconfig.json, no diagnostics) and `pnpm --filter @moe/core test` exit 0 (vitest run --root ../.. packages/core/src): Test Files 12 passed (12), Tests 221 passed (221), duration 901ms. No contract drift — the unchanged root index.ts export block and all six type-only consumers still resolve every one of the 51 names through the facade, so the focused typecheck served as the public-export sentinel. No test file was edited, skipped, or weakened. The exact `typecheck && test` chained form is re-run in step-5 as the complete_task evidence.",
+      "startedAt": "2026-08-07T21:15:17.978Z",
+      "completedAt": "2026-08-07T21:15:33.712Z"
     },
     {
       "stepId": "step-5",
       "description": "Perform the one final adversarial review scoped to this refactor. Mechanically compare the facade's explicit name set with the 51-name `bcdc2f6` baseline and unchanged root index; inspect moved declarations for changed readonly/optional fields, discriminants, union order, private-base visibility, comments, runtime exports, or a facade cycle; use a cross-platform in-memory Node line counter to prove each owned TS file is <=250 for LF/CRLF/CR; confirm all non-owned importers/tests and root index are untouched and `git diff --check` is clean. If any byte is corrected, rerun the exact gate before completion. Then inspect `git status --porcelain`, stage/commit only the three explicit owned paths using an explicit pathspec (never broad add or bare commit), and verify `git show --stat` contains nothing else.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-contract.ts",
         "packages/core/src/planning/planning-command-contract.ts",
         "packages/core/src/planning/planning-event-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-contract.ts",
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts"
+      ],
+      "note": "Adversarial review passed, no bytes corrected. Mechanical node check against `git show bcdc2f6:...planning-contract.ts`: baseline 51 names, leaves 51, facade 51, root index 51; leaves==baseline true, facade==baseline true, rootIndex==baseline true (exact sorted-set equality, not just counts). Stronger than a name check: split every file into blank-line-delimited chunks, dropped import chunks, and compared sorted chunk arrays — 53 baseline blocks vs 53 leaf blocks byte-identical, which proves no changed readonly/optional modifier, property name/order, literal discriminant, `extends` base, union-member order, or doc comment anywhere in the move. Facade has no `export` that is not `export type` and no imports at all; neither leaf references planning-contract.js (no cycle); PlanningRunCommandBase and PlanningRunEventBase both present and both unexported. Cross-platform in-memory line count (split on /\\r\\n|\\r|\\n/, trailing-newline aware, so LF/CRLF/CR count equal): planning-contract.ts 63, planning-command-contract.ts 216, planning-event-contract.ts 163 — all <=250. Repo-wide grep confirms the only planning-contract consumers are packages/core (none in apps/ or tests/); `git status --porcelain` on all seven non-owned consumers is empty, and `git diff --check` exits 0. Considered and dismissed one behavioral risk: the facade lost the baseline's runtime `import { RUNTIME_LIFECYCLES }` (it now lives in the event leaf). Unobservable, because all seven consumers use `import type` and the root uses `export type`, so planning-contract.js was never on a runtime path and never had a loadable side effect to lose. Reran the exact gate `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` fresh: exit 0, 12 files / 221 tests passed. Staged by explicit pathspec only; `git status --porcelain` showed foreign runner/tests-fault paths unstaged and untouched. Committed 3431a56 with an explicit three-path pathspec (no bare commit, no broad add); `git show --stat` lists exactly the three owned files, 440 insertions / 366 deletions.",
+      "startedAt": "2026-08-07T21:15:34.540Z",
+      "completedAt": "2026-08-07T21:17:18.700Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-813cd351",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -81,16 +108,24 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.327Z",
-  "updatedAt": "2026-08-07T20:58:11.232Z",
+  "updatedAt": "2026-08-07T21:18:03.277Z",
   "contextFetchedBy": [
-    "architect-c4babdf9"
+    "architect-c4babdf9",
+    "worker-2edeee3c"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-07T20:53:50.659Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 5
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T20:58:09.199Z",
   "planningNotes": {
@@ -109,5 +144,18 @@
   "budget": {
     "wallClockMs": 2700000
   },
-  "planApprovedAt": "2026-08-07T20:58:11.232Z"
+  "planApprovedAt": "2026-08-07T20:58:11.232Z",
+  "workStartedAt": "2026-08-07T21:12:58.280Z",
+  "reviewStartedAt": "2026-08-07T21:18:00.788Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  12 passed (12)\n      Tests  221 passed (221)\n   Start at  00:16:47\n   Duration  531ms (transform 1.46s, setup 0ms, import 2.08s, tests 402ms, environment 1ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-07T21:18:00.788Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-contract.ts",
+    "packages/core/src/planning/planning-command-contract.ts",
+    "packages/core/src/planning/planning-event-contract.ts"
+  ]
 }

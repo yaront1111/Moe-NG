@@ -1,0 +1,200 @@
+/**
+ * J1 (small Tuesday bug) fault schedules — design section 18.2.
+ *
+ * Every entry of the J1 manifest partition is executed here and its produced
+ * outcome is compared with the ONE outcome the manifest declared. Nothing is
+ * skipped and nothing is hand-picked: the executor map is asserted to equal the
+ * partition, so a schedule cannot be dropped without turning this file red.
+ */
+
+import { describe, expect, it } from "vitest";
+
+import {
+  FOUNDATION_PARTITION_COUNTS,
+  foundationPartition,
+  resolveEvidenceOutcome,
+} from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
+import { evaluateJ1Journey } from "../../../packages/testkit/src/foundation/foundation-model-j1.js";
+import { passExpected } from "../../../packages/testkit/src/foundation/foundation-outcomes-fixtures.js";
+import {
+  assertPartitionOwnership,
+  core,
+  fixtureById,
+  outcomeFromVerdict,
+  partitionRows,
+  produceAbsenceOutcome,
+} from "./foundation-harness.js";
+
+const PARTITION = foundationPartition("J1");
+const HASH_A = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+
+function accepted(result, label) {
+  if (result.ok !== true) {
+    throw new Error(`${label} was refused with ${result.error.code}`);
+  }
+  return result;
+}
+
+/** Drives the landed reducers along the linear J1 path and returns the final goal. */
+function driveLinearPath() {
+  const registered = accepted(core.reduceProject(undefined, {
+    commandId: "cmd-register", expectedVersion: 0, kind: "project.register",
+    owner: "owner-1", projectId: "project-1",
+  }), "project.register");
+
+  const bound = accepted(core.reduceProject(registered.state, {
+    commandId: "cmd-bind", expectedVersion: registered.state.version,
+    kind: "project.bind_repository",
+    observation: {
+      baseRevisionHash: HASH_A, repositoryRef: "repo-1", scopeRef: "scope-1",
+      truthClass: "OBSERVED",
+    },
+  }), "project.bind_repository");
+
+  const active = accepted(core.reduceProject(bound.state, {
+    commandId: "cmd-activate", expectedVersion: bound.state.version, kind: "project.activate",
+    witness: {
+      artifactPathRef: "artifacts", backupPathRef: "backups", credentialRef: "credential-1",
+      distributionManifestHash: HASH_A, policyRevisionHash: HASH_B,
+      providerMinimumProfileRef: "profile-1", signingKeyRef: "key-1",
+      storeDriverRef: "sqlite", truthClass: "DAEMON_VERIFIED",
+    },
+  }), "project.activate");
+  expect(active.state.lifecycle).toBe("READY");
+
+  const created = accepted(core.reduceGoal(undefined, {
+    budgetAccountRef: "budget-1", commandId: "cmd-goal-create", expectedVersion: 0,
+    goalId: "goal-1", kind: "goal.create", planningRunRef: "planning-1",
+    projectId: "project-1",
+    witness: { projectReadyRef: "project-1", truthClass: "DAEMON_VERIFIED" },
+  }), "goal.create");
+  expect(created.state.lifecycle).toBe("DRAFT");
+
+  const enabled = accepted(core.reduceGoal(created.state, {
+    commandId: "cmd-activate-graph", expectedVersion: created.state.version,
+    kind: "goal.activate_initial_graph",
+    witness: {
+      activeGraphRevisionRef: "revision-1", graphApprovalRef: "approval-1",
+      truthClass: "HUMAN_APPROVED",
+    },
+  }), "goal.activate_initial_graph");
+  expect(enabled.state.lifecycle).toBe("EXECUTION_ENABLED");
+  return enabled.state;
+}
+
+/** The exact plan/initial-graph approval, through the landed revision reducer. */
+function driveGraphApproval() {
+  const created = accepted(core.reduceGraphRevision(undefined, {
+    commandId: "cmd-revision-create", expectedVersion: 0, goalRef: "goal-1",
+    graphContentHash: HASH_A, kind: "graph_revision.create", planHash: HASH_B,
+    revisionId: "revision-1",
+  }), "graph_revision.create");
+
+  const submitted = accepted(core.reduceGraphRevision(created.state, {
+    commandId: "cmd-revision-submit", expectedVersion: created.state.version,
+    kind: "graph_revision.submit",
+    witness: { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" },
+  }), "graph_revision.submit");
+  expect(submitted.state.lifecycle).toBe("PENDING_APPROVAL");
+
+  const approved = accepted(core.reduceGraphRevision(submitted.state, {
+    approval: {
+      approvalRef: "approval-1", budgetHash: HASH_A, expectedGoalVersion: 1,
+      graphHash: HASH_A, policyHash: HASH_B, qualityHash: HASH_B,
+      truthClass: "HUMAN_APPROVED",
+    },
+    commandId: "cmd-revision-approve", expectedVersion: submitted.state.version,
+    kind: "graph.approve",
+  }), "graph.approve");
+  expect(approved.state.lifecycle).toBe("APPROVED");
+  return approved.state;
+}
+
+const EXECUTORS = {
+  "fixture:j1-linear-happy-path": () =>
+    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-linear-happy-path").payload)),
+  "fixture:j1-zero-work-false-green": () =>
+    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-zero-work-false-green").payload)),
+  "fixture:j1-agent-text-as-gate": () =>
+    outcomeFromVerdict(evaluateJ1Journey(fixtureById("fixture:j1-agent-text-as-gate").payload)),
+
+  "schedule:j1-linear-approval-path-executes": () => {
+    const goal = driveLinearPath();
+    const revision = driveGraphApproval();
+    expect(goal.activeGraphRevisionRef).toBe("revision-1");
+    expect(revision.lifecycle).toBe("APPROVED");
+    return passExpected();
+  },
+
+  "schedule:j1-zero-work-false-green-refused": () => {
+    const worked = fixtureById("fixture:j1-linear-happy-path").payload;
+    const noop = {
+      ...worked,
+      attempt: {
+        agentClaimsGreen: true, artifactRefs: [], attemptRef: "attempt/none",
+        changedPaths: [], receipts: [],
+      },
+    };
+    expect(evaluateJ1Journey(noop)).toEqual({ ok: false, refusal: "J1_ZERO_WORK_FALSE_GREEN" });
+    expect(evaluateJ1Journey(worked).ok).toBe(true);
+    return passExpected();
+  },
+
+  "schedule:j1-agent-text-cannot-satisfy-gate": () => {
+    const narrated = fixtureById("fixture:j1-agent-text-as-gate").payload;
+    expect(evaluateJ1Journey(narrated)).toEqual({ ok: false, refusal: "J1_AGENT_TEXT_AS_GATE" });
+    return passExpected();
+  },
+
+  "schedule:j1-acceptance-requires-proof": () => {
+    const worked = fixtureById("fixture:j1-linear-happy-path").payload;
+    const unproven = { ...worked, acceptanceProofRef: null };
+    expect(evaluateJ1Journey(unproven)).toEqual({
+      ok: false, refusal: "J1_ACCEPTANCE_WITHOUT_PROOF",
+    });
+    return passExpected();
+  },
+
+  "schedule:j1-cancel-start-race-aggregate-arbitration": () => {
+    const enabled = driveLinearPath();
+    const cancelled = accepted(core.reduceGoal(enabled, {
+      commandId: "cmd-cancel", expectedVersion: enabled.version, kind: "goal.cancel",
+      witness: {
+        authorizationRef: "authorization-1", subordinateAuthorityFenced: true,
+        truthClass: "HUMAN_APPROVED",
+      },
+    }), "goal.cancel");
+    expect(cancelled.state.lifecycle).toBe("CANCELLED");
+
+    const late = core.reduceGoal(cancelled.state, {
+      commandId: "cmd-late-start", expectedVersion: cancelled.state.version,
+      kind: "goal.activate_initial_graph",
+      witness: {
+        activeGraphRevisionRef: "revision-2", graphApprovalRef: "approval-2",
+        truthClass: "HUMAN_APPROVED",
+      },
+    });
+    expect(late.ok).toBe(false);
+    expect(late.error.code).toBe("ILLEGAL_TRANSITION");
+    expect(late.error.details.sourceState).toBe("CANCELLED");
+    return passExpected();
+  },
+
+  "schedule:j1-cancel-start-race-inflight-attempt": (entry) => produceAbsenceOutcome(entry),
+  "schedule:j1-execution-dispatch-composition": (entry) => produceAbsenceOutcome(entry),
+  "incident:hot-claim-loop-on-gated-work": (entry) => produceAbsenceOutcome(entry),
+
+  "schedule:j1-control-plane-overhead": (entry) =>
+    resolveEvidenceOutcome([], entry.outcome.missingEvidence),
+};
+
+describe("J1 linear journey fault schedules", () => {
+  it("owns exactly the J1 manifest partition", () => {
+    assertPartitionOwnership(expect, PARTITION, EXECUTORS, FOUNDATION_PARTITION_COUNTS.J1);
+  });
+
+  it.each(partitionRows(PARTITION))("%s produces its declared outcome", (entryId, entry) => {
+    expect(EXECUTORS[entryId](entry)).toEqual(entry.outcome);
+  });
+});

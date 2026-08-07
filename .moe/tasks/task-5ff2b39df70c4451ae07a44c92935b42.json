@@ -72,7 +72,7 @@
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/providers/claude/claude-stream.ts + claude-stream.test.ts. Dual record with BOUNDED retention (the raw-bytes-verbatim-unbounded sketch violated the limit contract): raw structured provider output preserved BY DIGEST always (unbounded digest coverage — design 684 'adapters preserve raw structured provider output by digest'); verbatim inline retention bounded per design 1135 (16 MiB stdout/stderr + 64 KiB inspectable tail; overflow -> typed quota-bound ARTIFACT REF outcome, never an unbounded buffer, never silent truncation); structured JSON-lines parsing alongside; every event bound to the caller-supplied stable Moe effect identity. CLOSED anomaly detection per design 684 (the three-item sketch was incomplete): gaps, duplicate events, out-of-order, counter regression, truncation, malformed records, resume discontinuity; unknown schema versions -> UNKNOWN-family typed outcome (design 684 'reject unknown schema versions as UNKNOWN' — deliberately DISTINCT from PROVIDER_CAPABILITY_CHANGED, which is the WRAPPER's pre-activation comparison refusal at 798; the two failure points must stay distinguishable). Tests: fs-read the testkit golden corpus via new URL relative paths, re-verify pinned digests with runner's sha256Hex BEFORE use (a drifted fixture fails loudly), then drive every corpus case to its exact typed outcome; order/byte preservation asserted byte-for-byte on the base64-decoded payloads (DoD 2).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-stream.ts",
         "packages/runner/src/providers/claude/claude-stream.test.ts"
@@ -81,12 +81,19 @@
         "packages/runner/src/providers/claude/claude-stream.ts",
         "packages/runner/src/providers/claude/claude-stream.test.ts"
       ],
-      "startedAt": "2026-08-07T21:11:04.814Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-stream.ts",
+        "packages/runner/src/providers/claude/claude-stream-anomalies.ts",
+        "packages/runner/src/providers/claude/claude-stream.test.ts"
+      ],
+      "note": "TDD red then green. RED: `Cannot find module './claude-stream.js'`, \"no tests\". GREEN: 15 stream tests pass; `pnpm exec vitest run --root . packages/runner/src/providers` -> 2 files / 28 passed; `pnpm --filter @moe/runner typecheck` -> exit 0. Split at the plan's second named split point: claude-stream.ts 202 (dual record, retention, effect binding, digest) + claude-stream-anomalies.ts 248 (framing, parsing, anomaly vocabulary, disposition) + 303 test. All under the 400 bound.\n\nFIXTURE CONSUMPTION — the interchange contract from step 3 works end to end. The test fs-reads packages/testkit/src/providers/claude/claude-golden-streams.ts via `new URL(\"../../../../../packages/testkit/...\", import.meta.url)`, slices the marker-delimited block, JSON.parses it, and for EVERY case re-verifies `sha256Hex(decoded) === declared sha256` AND `decoded.byteLength === declared byteLength` at module load, throwing before any test body runs. A fixture that drifted by one byte fails loudly here rather than silently changing what these tests mean (this is what step 7(c) will probe by flipping a byte). Zero cross-package imports; runner typecheck stays clean.\n\nDISPOSITION MATRIX — all nine golden cases driven to an exact typed outcome, asserted with caseId-prefixed strings so a failure names the case: complete -> COMPLETED []; cancelled -> CANCELLED []; crashed -> INCOMPLETE []; duplicated -> COMPLETED [DUPLICATE_EVENT]; reordered -> COMPLETED [OUT_OF_ORDER]; malformed -> UNKNOWN [MALFORMED_RECORD]; truncated -> UNKNOWN [TRUNCATION]; resumed -> REFUSED_RESUME_UNSUPPORTED [RESUME_DISCONTINUITY]; version-mismatched -> UNKNOWN_SCHEMA [UNKNOWN_SCHEMA_VERSION].\n\nPrecedence is explicit and documented, strongest first: RESUME_DISCONTINUITY -> REFUSED_RESUME_UNSUPPORTED (v1 refuses a resumed stream outright, since RESUME is UNSUPPORTED); UNKNOWN_SCHEMA_VERSION -> UNKNOWN_SCHEMA; any DESTRUCTIVE anomaly (GAP, COUNTER_REGRESSION, MALFORMED_RECORD, TRUNCATION) -> UNKNOWN; only then may a terminal `result` record speak, cancelled subtype -> CANCELLED else COMPLETED; otherwise INCOMPLETE. DUPLICATE_EVENT and OUT_OF_ORDER are deliberately NON-destructive: a byte-identical redelivery and a late arrival both leave the full evidence intact, so downgrading them to UNKNOWN would manufacture doubt. UNKNOWN_SCHEMA is a distinct disposition from the wrapper's PROVIDER_CAPABILITY_CHANGED and a test asserts that string appears nowhere in a serialized record — the two failure points stay distinguishable.\n\nTHREE DETECTION SUBTLETIES that a naive record-by-record scanner gets wrong; each is documented in-source and pinned by a test:\n1. GAP is computed over the SET of observed sequences, not delivery order. Out-of-order delivery looks exactly like a gap followed by a late arrival, so per-record judging would report a hole the next record fills — the `reordered` fixture (1,3,2,4) would falsely raise GAP. Set analysis: span = max-min+1 compared against distinct count + malformed count.\n2. A malformed record still OCCUPIED a slot, so it counts toward that comparison and advances the expected counter. Otherwise the `malformed` fixture (1, unreadable, 3) invents a GAP for a record that was delivered and merely unreadable.\n3. COUNTER_REGRESSION suppresses gap analysis entirely — across a counter restart, contiguity is undefined, so guessing it would be noise. COUNTER_REGRESSION (a sequence at or below the stream's ORIGIN) is separated from OUT_OF_ORDER (a sequence below the previous one but still above the origin); dedicated test drives 5,6,1 -> [COUNTER_REGRESSION] and 1,3,2 -> [OUT_OF_ORDER]. The first record establishes the origin and is never gap-checked: the adapter does not know what sequence number a provider starts at, and assuming 1 would flag every resumed or offset stream. RESUME_DISCONTINUITY therefore keys on an explicit `resumedFrom` declaration, NOT on \"first seq != 1\".\n\nORDER AND BYTE PRESERVATION (DoD 2), asserted directly: events keep DELIVERY order, never sorted by declared sequence — the reordered fixture yields declaredSequence [1,3,2,4] against ordinals [0,1,2,3]. Framing splits on \\n and strips one trailing \\r, so a Windows CRLF capture yields the same records as a POSIX one while the raw bytes stay untouched for the digest; the test reconstructs the entire `complete` fixture by rejoining event payloads with \\r\\n and comparing to the original text, and asserts each event's lineSha256 matches a fresh sha256Hex of its bytes and that no retained line contains a stray 0x0D. A cut trailing segment is TRUNCATION and is deliberately NOT emitted as an event — emitting a half-written line would let a partial record be read as content (the `truncated` fixture reports only TRUNCATION, never MALFORMED_RECORD). The malformed line IS emitted, with declaredSequence and type null, so it is recorded without pretending it parsed.\n\nBOUNDED RETENTION vs UNBOUNDED COVERAGE (design 19.1 vs 11.5) — the distinction the plan called out, with a real over-limit test,",
+      "startedAt": "2026-08-07T21:11:04.814Z",
+      "completedAt": "2026-08-07T21:16:35.512Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD red then green — src/providers/claude/claude-render.ts + claude-cancel-reconcile.ts + claude-render-reconcile.test.ts. claude-render.ts: deterministic render over {local structural SkillRendererInput mirror (step-1 shape, literal advisoryOnly:true / authority:'NONE', pinned version literal rejected on mismatch), agentsContractBytes (supplied), taskContext} -> {renderedBytes, providerInputDigest (adapter-observed, DISTINCT from contextDigest — design 872-874), rendererEnvelopeVersion (included in digest input — design 257), layerManifest, advisoryOnly: true}; CLOSED minimal layer enum PROJECT_INSTRUCTIONS_CANONICAL > TASK_CONTEXT > SKILLS_ADVISORY recorded in the digest-bound layer manifest (design defines NO richer precedence vocabulary — inventing one would exceed both design and amendment; every advisory layer carries authority:'NONE'); CONTEXT-LIMIT behavior (design 864): if mandatory bytes exceed the probe-declared limit -> typed CONTEXT_TOO_LARGE-family outcome, NO render; tokenizer unavailable -> conservative byte bound enforced and token count recorded UNKNOWN (design 876). Determinism: byte-identical output across runs and input key orders; NO authority: output type has no command/effect fields (structural impossibility + test). claude-cancel-reconcile.ts: PURE typed-outcome vocabulary + stream-tail reconciliation over injected observations (zero process control/signals/leases — supervisor fence): CANCELLED_CLEAN, CANCELLED_UNKNOWN_TAIL, CRASHED, COMPLETED_BEFORE_CANCEL, PROVEN_RESULT, HONEST_UNKNOWN; mid-stream schema/version drift -> the UNKNOWN-family outcome from claude-stream (never invented completion; DoD 3 'proven result or honest UNKNOWN'). Tests: render determinism + limit matrix + authority-absence walk; reconciliation over every golden crash/truncate/cancel/version case; hostile snapshot inputs (wrong version literal, authority !== 'NONE', advisoryOnly !== true) all refused.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-render.ts",
         "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
@@ -96,7 +103,8 @@
         "packages/runner/src/providers/claude/claude-render.ts",
         "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
         "packages/runner/src/providers/claude/claude-render-reconcile.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-07T21:16:39.554Z"
     },
     {
       "stepId": "step-6",
@@ -139,12 +147,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.808Z",
-  "updatedAt": "2026-08-07T21:11:04.814Z",
+  "updatedAt": "2026-08-07T21:16:39.554Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:41:47.787Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -156,7 +164,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T20:56:07.445Z",
