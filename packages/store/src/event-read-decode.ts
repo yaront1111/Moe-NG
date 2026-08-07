@@ -85,6 +85,9 @@ export class EventReadDecodeStore extends StoreRuntime {
       aggregateSequence: requireStoredIntegerAtLeast(row, "aggregate_sequence", 1),
       commandId: requireRowString(row, "command_id"),
       committedAt: requireStoredTimestamp(row, "committed_at"),
+      // Deliberately not requireStoredVersion: any recorded version is legal
+      // here, because upcasters dispatch on whatever the producer stamped.
+      domainSchemaVersion: requireRowString(row, "domain_schema_version"),
       eventId: requireRowString(row, "event_id"),
       eventType: requireRowString(row, "event_type"),
       globalPosition: requireStoredPositiveBigIntText(row, "global_position"),

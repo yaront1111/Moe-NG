@@ -56,6 +56,7 @@ function expectedEvent(index: number, requestSha256: string): unknown {
     aggregateSequence: index,
     commandId: COMMAND_ID,
     committedAt: COMMITTED_AT,
+    domainSchemaVersion: "moe-domain-schema/0",
     eventId: `event-contract-${index}`,
     eventType: `goal.contract-${index}`,
     globalPosition: BigInt(index),

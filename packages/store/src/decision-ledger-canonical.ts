@@ -1,4 +1,7 @@
-import { DurableStoreError } from "./store-contracts.js";
+import {
+  DOMAIN_EVENT_SCHEMA_VERSION,
+  DurableStoreError,
+} from "./store-contracts.js";
 import type {
   CommandDecisionRecord,
   CommitExpectedVersionDecisionInput,
@@ -224,6 +227,7 @@ function rejectionAuditCommitInput(input: RejectionAuditInput): SnapshotCommitIn
     committedAt: decidedAt,
     events: [
       {
+        domainSchemaVersion: DOMAIN_EVENT_SCHEMA_VERSION,
         eventId: auditEventId,
         eventType: "command.expected-version-rejected",
         metadata: EMPTY_BYTES,

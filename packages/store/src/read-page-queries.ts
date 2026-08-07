@@ -16,6 +16,7 @@ export const STORED_EVENT_SELECT_COLUMNS = `
   decisions.request_sha256 AS decision_request_sha256,
   events.record_version,
   events.payload_codec_version,
+  events.domain_schema_version,
   events.request_sha256,
   events.event_id,
   events.event_type,
@@ -42,6 +43,7 @@ export const EVENT_DECODED_BYTES_SQL = `(
   + ${bytes("decisions.request_sha256")}
   + ${bytes("events.record_version")}
   + ${bytes("events.payload_codec_version")}
+  + ${bytes("events.domain_schema_version")}
   + ${bytes("events.request_sha256")}
   + ${bytes("events.event_id")}
   + ${bytes("events.event_type")}
