@@ -33,6 +33,12 @@ importers:
 
   packages/scheduler: {}
 
+  packages/skills:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/store: {}
 
   packages/testkit:
