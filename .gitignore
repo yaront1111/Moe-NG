@@ -9,3 +9,49 @@ dist/
 !.env.example
 .DS_Store
 Thumbs.db
+
+# --- Transitional Moe runtime scaffolding -----------------------------------
+# Policy: docs/REPOSITORY_HYGIENE.md
+#
+# The repository-root `.moe/` directory mixes DURABLE project metadata with
+# REGENERABLE daemon scaffolding. Durable records stay tracked and are never
+# listed here: project.json, epics/, tasks/, channels/, messages/, roles/,
+# agents/, skills/.
+#
+# This block is allow-by-omission: it names individual regenerable leaves and
+# never uses a blanket `.moe/` or `.moe/**` rule. No moe-next source writes
+# `.moe/` — the producer is the external transitional daemon — so a new leaf
+# name cannot be predicted from this repo. Anything unlisted therefore stays
+# visible to `git status` and defaults to tracked until a human classifies it.
+# That fails closed: an unclassified durable record is noisy, never silently
+# hidden.
+#
+# Every pattern is root-anchored with a leading `/` so it matches only the
+# repository-root `.moe/` and never a fixture directory such as
+# `packages/testkit/fixtures/**/.moe/`. Trailing `/` restricts a rule to
+# directories. Forward slashes are Git-native and behave identically on
+# Windows, macOS, and Linux.
+#
+# Ignoring a path does NOT untrack bytes already committed, and this block
+# deletes nothing. See the policy document before removing any `.moe/` file.
+
+# Daemon process state and lock
+/.moe/daemon.json
+/.moe/daemon.lock
+
+# Activity log plus rotations. The generic `*.log` rule above catches
+# `activity.log` only; rotated suffixes such as `activity.log.1` need this.
+/.moe/activity.log
+/.moe/activity.log.*
+
+# Ephemeral fleet records, rebuilt by the daemon on restart
+/.moe/workers/
+/.moe/teams/
+/.moe/proposals/
+/.moe/sessions/
+
+# Derived, debug, and scratch output
+/.moe/cache/
+/.moe/debug/
+/.moe/tmp/
+/.moe/scratch/
