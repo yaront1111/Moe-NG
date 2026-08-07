@@ -16,9 +16,11 @@ import { createHash } from "node:crypto";
 import {
   RUNTIME_COMMAND_ENVELOPE_VERSION,
   RUNTIME_COMMAND_KINDS,
+  RUNTIME_QUERY_ENVELOPE_VERSION,
   RUNTIME_QUERY_KINDS,
   createRuntimeError,
   decodeRuntimeCommandEnvelopeBytes,
+  decodeRuntimeQueryEnvelopeBytes,
 } from "@moe/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -32,12 +34,17 @@ import {
   CONFORMANCE_COMMAND_LABEL,
   CONFORMANCE_COMMAND_RESPONSE_TEXT,
   CONFORMANCE_QUERY_ARGS,
+  CONFORMANCE_QUERY_KIND,
   CONFORMANCE_QUERY_LABEL,
   createRecordingPort,
   registerDispatchConformanceSuite,
 } from "../dispatch-conformance.js";
 import type { ConformanceOutcome, ConformanceSubject } from "../dispatch-conformance.js";
-import { STDIO_TOOL_ENTRIES } from "./stdio-tool-schemas.js";
+import {
+  ADAPTER_SUPPLIED_COMMAND_FIELDS,
+  ADAPTER_SUPPLIED_QUERY_FIELDS,
+  STDIO_TOOL_ENTRIES,
+} from "./stdio-tool-schemas.js";
 import {
   MOE_SESSION_CREDENTIAL_ENV,
   createStdioMcpServer,
@@ -71,6 +78,10 @@ function textOf(result: unknown): string {
   if (typeof first !== "object" || first === null) return "";
   const text = (first as { readonly text?: unknown }).text;
   return typeof text === "string" ? text : "";
+}
+
+function selectFields(value: object, fields: readonly string[]): Readonly<Record<string, unknown>> {
+  return Object.fromEntries(fields.map((field) => [field, Reflect.get(value, field)]));
 }
 
 const subject: ConformanceSubject = {
@@ -131,18 +142,46 @@ describe("stdio server envelope assembly", () => {
     expect(decoded.envelope.commandId).toBe(CONFORMANCE_COMMAND_ARGS["commandId"]);
   });
 
-  it("refuses a client attempt to smuggle its own credential or digest", async () => {
+  it("overwrites every adapter-supplied command field", async () => {
     const port = createRecordingPort();
+    const hostileKind = RUNTIME_COMMAND_KINDS.find((kind) => kind !== CONFORMANCE_COMMAND_KIND);
     await subject.invoke(port, CONFORMANCE_COMMAND_LABEL, {
       ...CONFORMANCE_COMMAND_ARGS,
+      commandKind: hostileKind,
       requestDigest: "f".repeat(64),
+      schemaVersion: 0,
       sessionCredential: "attacker-supplied",
     });
     const decoded = decodeRuntimeCommandEnvelopeBytes(port.dispatched[0]);
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) return;
-    expect(decoded.envelope.sessionCredential).toBe(CREDENTIAL);
-    expect(decoded.envelope.requestDigest).not.toBe("f".repeat(64));
+    expect(selectFields(decoded.envelope, ADAPTER_SUPPLIED_COMMAND_FIELDS)).toEqual({
+      commandKind: CONFORMANCE_COMMAND_KIND,
+      requestDigest: createHash("sha256")
+        .update(new TextEncoder().encode(JSON.stringify(CONFORMANCE_COMMAND_ARGS["payload"])))
+        .digest("hex"),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+    });
+  });
+
+  it("overwrites every adapter-supplied query field", async () => {
+    const port = createRecordingPort();
+    const hostileKind = RUNTIME_QUERY_KINDS.find((kind) => kind !== CONFORMANCE_QUERY_KIND);
+    await subject.invoke(port, CONFORMANCE_QUERY_LABEL, {
+      ...CONFORMANCE_QUERY_ARGS,
+      queryKind: hostileKind,
+      schemaVersion: 0,
+      sessionCredential: "attacker-supplied",
+    });
+    const decoded = decodeRuntimeQueryEnvelopeBytes(port.dispatched[0]);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(selectFields(decoded.envelope, ADAPTER_SUPPLIED_QUERY_FIELDS)).toEqual({
+      queryKind: CONFORMANCE_QUERY_KIND,
+      schemaVersion: RUNTIME_QUERY_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+    });
   });
 
   it("fails closed when a client sends an argument outside the envelope key set", async () => {
