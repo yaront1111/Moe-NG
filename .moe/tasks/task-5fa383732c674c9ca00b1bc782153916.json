@@ -1,0 +1,33 @@
+{
+  "id": "task-5fa383732c674c9ca00b1bc782153916",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Identity session core",
+  "description": "Objective: implement principal, session, credential, capability, and command-authentication models. Deliverable: packages/core identity modules with hostile spoof, expiry, replay, and scope tests. NOT in scope: transport authentication, leases, presence, provider credentials, or multi-user RBAC. Hard dependency: Runtime contract registry. Owned paths: packages/core/src/identity/**. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "Missing, expired, spoofed, wrong-scope, and replayed credentials have zero business effect.",
+    "Capabilities are exact, immutable, least-authority records with stable rejection codes.",
+    "Authentication facts never upgrade agent-reported evidence or presence.",
+    "The focused core typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 14,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:44.919Z",
+  "updatedAt": "2026-08-07T11:45:44.919Z"
+}

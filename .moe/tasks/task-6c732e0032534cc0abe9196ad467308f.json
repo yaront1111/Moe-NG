@@ -1,0 +1,33 @@
+{
+  "id": "task-6c732e0032534cc0abe9196ad467308f",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Streamable HTTP adapter",
+  "description": "Objective: expose the same generated MCP surface over official Streamable HTTP for long-lived clients. Deliverable: packages/mcp HTTP modules and parity tests. NOT in scope: custom WebSocket protocol or browser UI APIs. Hard dependency: Official MCP stdio adapter. Owned paths: packages/mcp/src/http/**. Verification: pnpm --filter @moe/mcp test.",
+  "definitionOfDone": [
+    "Tool/result/error bytes are semantically parity-tested with stdio.",
+    "Session authentication, bounds, resume, cancellation, and disconnect behavior fail closed.",
+    "No transport-specific command bypass exists.",
+    "Focused MCP tests pass."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:14.993Z",
+  "updatedAt": "2026-08-07T11:56:14.993Z"
+}

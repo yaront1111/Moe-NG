@@ -1,0 +1,33 @@
+{
+  "id": "task-4e1fe69630da494eb313e27a4543c5c8",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Legacy quiesce drill",
+  "description": "Objective: preview, authorize, prove, and rehearse GO_QUIESCE over every legacy writer/process/access path, immutable snapshot, import, backup, and abort restoration. Deliverable: a non-production cutover drill with exact manifests. NOT in scope: activating v2. Hard dependencies: Deterministic legacy importer, Portability shadow gate, Disaster restore proof, and explicit human GO_QUIESCE. Owned paths: tests/migration/cutover/** and cutover evidence only. Verification: pnpm test:migration.",
+  "definitionOfDone": [
+    "All known daemon, IDE, launcher, watcher, scheduled start, process, handle, and access paths are inventoried and stopped/denied.",
+    "Two complete manifests at least ten seconds apart match before import.",
+    "Abort restores pre-cutover access safely and legacy bytes remain readable/unchanged.",
+    "Migration cutover drill passes."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.811Z",
+  "updatedAt": "2026-08-07T11:57:17.811Z"
+}

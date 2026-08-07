@@ -1,0 +1,33 @@
+{
+  "id": "task-3a34adcabd03489e84f8dfbec913633a",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Confirmatory corpus freeze",
+  "description": "Objective: freeze implementation, mechanically audit namespaces/constants/gates, then seal the confirmatory BENCH corpus and comparator manifests without developer exposure. Deliverable: signed corpus/configuration manifests and preregistration record. NOT in scope: changing implementation after freeze or running claims early. Hard dependencies: every implementation/release gate and Benchmark telemetry harness. Owned paths: restricted benchmark corpus/manifests and campaign configuration only. Verification: benchmark mechanical pre-freeze audit.",
+  "definitionOfDone": [
+    "Implementation commit, design/benchmark hashes, constants, gates, comparators, model matching, and hardware are frozen and printed.",
+    "Corpus is sealed only after the commit freeze and developers do not receive confirmatory contents.",
+    "Any later implementation change invalidates the campaign mechanically.",
+    "Pre-freeze audit reports zero unresolved namespace, constant, gate, or reference errors."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.495Z",
+  "updatedAt": "2026-08-07T11:57:17.495Z"
+}

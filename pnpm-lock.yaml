@@ -18,6 +18,15 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@24.13.3)
 
+  apps/daemon:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@moe/scheduler':
+        specifier: workspace:*
+        version: link:../../packages/scheduler
+
   packages/contracts: {}
 
   packages/control-room-model: {}

@@ -1,0 +1,33 @@
+{
+  "id": "task-84e875f98178427682f1c5b6944eb1e0",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Anti-blocking admission",
+  "description": "Objective: enforce dependency necessity, approved-interface alternatives, semantic reduction, plan quality, and bounded blocker challenge before multi-node activation. Deliverable: scheduler admission modules with counterexamples. NOT in scope: execution dispatch or automatic graph rewrite. Hard dependencies: Dependency contract kernel. Owned paths: packages/scheduler/src/admission/**. Verification: pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Unnecessary hard edges are rejected or held with stable reasons.",
+    "Interface-first alternatives and intentional waits are represented without inventing readiness.",
+    "Admission is deterministic and never auto-removes a semantic edge.",
+    "Focused scheduler tests pass."
+  ],
+  "taskRails": [
+    "Graph Beta cannot activate until the proven Foundation runner contracts it consumes are green.",
+    "A dependency, readiness, fairness, or semantic claim without daemon-verifiable evidence is UNKNOWN or refused.",
+    "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
+    "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:53:09.789Z",
+  "updatedAt": "2026-08-07T11:53:09.789Z"
+}

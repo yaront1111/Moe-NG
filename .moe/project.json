@@ -12,7 +12,7 @@
     "customRules": []
   },
   "settings": {
-    "approvalMode": "CONTROL",
+    "approvalMode": "SPEED",
     "speedModeDelayMs": 2000,
     "autoCreateBranch": true,
     "branchPattern": "moe/{epicId}/{taskId}",
@@ -26,5 +26,5 @@
     "reviewStaleTimeoutMs": 1800000
   },
   "createdAt": "2026-08-07T10:32:37.002284400Z",
-  "updatedAt": "2026-08-07T10:32:37.002284400Z"
+  "updatedAt": "2026-08-07T11:52:26.447Z"
 }

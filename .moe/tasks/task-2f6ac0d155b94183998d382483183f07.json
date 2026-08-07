@@ -1,0 +1,33 @@
+{
+  "id": "task-2f6ac0d155b94183998d382483183f07",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Bootstrap application services",
+  "description": "Objective: compose store and pure cores for project register, repository bind, provider probe, policy install/validate, project activate, goal create, plan propose, and approval. Deliverable: bounded application services in apps/daemon. NOT in scope: network transport, work execution, graph fan-out, or UI. Hard dependencies: Project goal lifecycle core, Planning graph lifecycle core, Policy approval core, Projection outbox core, and Claude runtime adapter. Owned paths: apps/daemon/src/bootstrap/**, apps/daemon/src/goals/**, and apps/daemon/src/planning/**. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The exact bootstrap sequence is command-driven and no hand-edited state can activate a project.",
+    "Each parsed command produces one durable terminal decision and exact idempotent replay result.",
+    "Stale version, wrong hash, missing probe, and unknown policy inputs commit no unauthorized mutation.",
+    "The focused daemon typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 23,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:15.266Z",
+  "updatedAt": "2026-08-07T11:50:15.266Z"
+}

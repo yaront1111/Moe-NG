@@ -1,0 +1,33 @@
+{
+  "id": "task-9449ce65fae544ef9809691ec079f599",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Release supply-chain gate",
+  "description": "Objective: build reproducible supported packages, lockfile integrity, signed manifests, SBOMs, vulnerability/license reports, and doctor compatibility evidence. Deliverable: release packaging pipeline at one source commit. NOT in scope: publishing a release before all gates pass. Hard dependencies: Distribution manifest packaging and supported OS conformance. Owned paths: release tooling, packaging configs, and release evidence paths. Verification: pnpm test:integration plus reproducible packaging command.",
+  "definitionOfDone": [
+    "Fresh frozen-lockfile builds succeed on every supported OS with pinned engine/tool versions.",
+    "Repeated builds verify manifests/assets and record any intentionally non-reproducible platform bytes honestly.",
+    "SBOM, dependency, license, signature, and compatibility evidence binds the exact commit.",
+    "Packaging and integration gates pass."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.170Z",
+  "updatedAt": "2026-08-07T11:57:17.170Z"
+}

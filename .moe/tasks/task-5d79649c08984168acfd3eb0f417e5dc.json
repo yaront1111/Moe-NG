@@ -1,0 +1,32 @@
+{
+  "id": "task-5d79649c08984168acfd3eb0f417e5dc",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Repository hygiene policy",
+  "description": "Objective: define the transitional old-Moe metadata boundary so the production repository stays free of session, cache, debug, and scratch bytes. Deliverable: focused root ignore rules plus a short hygiene document that distinguishes durable project/task metadata from regenerable runtime scaffolding. NOT in scope: deleting live daemon state, editing task/epic JSON by hand, or changing product behavior. Hard dependencies: none. Owned paths: .gitignore and docs/REPOSITORY_HYGIENE.md. Verification: git status --short plus pnpm test.",
+  "definitionOfDone": [
+    "Root ignore rules exclude daemon/session/cache/debug artifacts without hiding source, epics, or task records.",
+    "A hygiene document names durable versus regenerable .moe content and the safe cleanup procedure.",
+    "No live daemon, task, epic, role, skill, or agent process data is deleted by this task.",
+    "git diff --check and pnpm test both exit 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:12.613Z",
+  "updatedAt": "2026-08-07T11:44:12.613Z"
+}

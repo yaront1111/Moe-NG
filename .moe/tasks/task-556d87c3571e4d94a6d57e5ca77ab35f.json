@@ -1,0 +1,33 @@
+{
+  "id": "task-556d87c3571e4d94a6d57e5ca77ab35f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Policy approval core",
+  "description": "Objective: implement four-outcome policy evaluation, R0-R3 risk tiers, exact-hash approval decisions, and selective invalidation. Deliverable: packages/core policy modules with decision-table and property tests. NOT in scope: mutable UI policy editing, budgets, provider execution, or global speed modes. Hard dependencies: Runtime contract registry and Planning graph lifecycle core. Owned paths: packages/core/src/policy/**. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "Policy produces ALLOW, REQUIRE_APPROVAL, DENY, or HOLD_UNKNOWN with stable reason codes.",
+    "Unknown or missing inputs can never become ALLOW and caller risk labels cannot lower daemon-derived risk.",
+    "Approvals bind exact hashes/scope/policy/actor and invalidate only the proven impact set.",
+    "The focused core typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 16,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:45.155Z",
+  "updatedAt": "2026-08-07T11:45:45.155Z"
+}

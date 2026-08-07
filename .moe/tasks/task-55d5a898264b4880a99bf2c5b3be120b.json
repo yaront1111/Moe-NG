@@ -1,0 +1,33 @@
+{
+  "id": "task-55d5a898264b4880a99bf2c5b3be120b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Projection outbox core",
+  "description": "Objective: add normalized domain projections, upcasters, atomic outbox/inbox receipts, and resumable cursor reads over the existing SQLite foundation. Deliverable: focused store modules for projections, relay state, and subscriptions. NOT in scope: network transport, external effects, UI, or business reducer logic. Hard dependency: Runtime contract registry. Owned paths: packages/store/src/projections/**, packages/store/src/outbox-relay/**, and packages/store/src/subscriptions/**. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Event, projection, and outbox rows commit atomically and duplicate delivery deduplicates by durable inbox receipt.",
+    "Projection rebuild equals the live canonical projection for generated histories.",
+    "Unknown versions, poison events, missing cursors, and generation mismatch yield typed hold or CURSOR_GAP without silent skip.",
+    "The focused store typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:45.387Z",
+  "updatedAt": "2026-08-07T11:45:45.387Z"
+}

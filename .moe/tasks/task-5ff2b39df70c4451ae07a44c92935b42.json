@@ -1,0 +1,33 @@
+{
+  "id": "task-5ff2b39df70c4451ae07a44c92935b42",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Claude runtime adapter",
+  "description": "Objective: implement the Foundation Claude capability probe and runtime adapter contract. Deliverable: focused runner provider modules plus development-only golden streams for complete, crash, truncate, reorder, cancel, and version-change cases. NOT in scope: Codex, billing assumptions, automatic authority, or provider resume unless capability-proven. Hard dependency: Runtime contract registry. Owned paths: packages/runner/src/providers/claude/** and packages/testkit/src/providers/claude/**. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Probe records an immutable runtime closure and returns typed UNSUPPORTED for every unproven capability.",
+    "Structured and raw events preserve exact order/bytes and bind the stable Moe effect identity.",
+    "Cancellation, crash, truncation, reordering, and runtime drift reconcile to proven result or honest UNKNOWN.",
+    "The focused runner typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 22,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:14.808Z",
+  "updatedAt": "2026-08-07T11:50:14.808Z"
+}

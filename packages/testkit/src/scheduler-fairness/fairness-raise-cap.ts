@@ -5,18 +5,25 @@ import type {
 import {
   deepFreeze,
   fail,
-  isNonEmptyString,
-  isRecord,
   makeIssue,
   sortTickets,
 } from "./fairness-internal.js";
-import { isNonNegativeInteger } from "./fairness-policy.js";
+import {
+  arrayLengthExceeds,
+  hasExactKeys,
+  isFairnessId,
+  readDataArray,
+  readDataRecord,
+} from "./fairness-input.js";
+import { DEFAULT_M_D, isNonNegativeInteger } from "./fairness-policy.js";
 import { boundFor } from "./fairness-selection.js";
 
 interface Migration {
   readonly ticketId: string;
   readonly boundAtMost: number;
 }
+
+const MIGRATION_KEYS = ["ticketId", "boundAtMost"] as const;
 
 /** Validate the optional migration list; returns issues or a normalized map. */
 function readMigrations(
@@ -30,21 +37,30 @@ function readMigrations(
   if (raw === undefined) {
     return { ok: true, map };
   }
-  if (!Array.isArray(raw)) {
+  if (arrayLengthExceeds(raw, DEFAULT_M_D)) {
+    return {
+      ok: false,
+      result: fail(makeIssue("FAIRNESS_EVENT_LIMIT_EXCEEDED", "migration evidence exceeds the project ceiling")),
+    };
+  }
+  const entries = readDataArray(raw, DEFAULT_M_D);
+  if (entries === null) {
     return {
       ok: false,
       result: fail(makeIssue("FAIRNESS_MALFORMED_EVENT", "migrations must be an array")),
     };
   }
-  for (const entry of raw) {
-    if (!isRecord(entry)) {
+  const ticketsById = new Map(state.tickets.map((ticket) => [ticket.ticketId, ticket]));
+  for (const rawEntry of entries) {
+    const entry = readDataRecord(rawEntry);
+    if (entry === null || !hasExactKeys(entry, MIGRATION_KEYS)) {
       return {
         ok: false,
         result: fail(makeIssue("FAIRNESS_MALFORMED_EVENT", "migration must be a record")),
       };
     }
     const { ticketId, boundAtMost } = entry as Partial<Migration>;
-    if (!isNonEmptyString(ticketId) || !isNonNegativeInteger(boundAtMost)) {
+    if (!isFairnessId(ticketId) || !isNonNegativeInteger(boundAtMost)) {
       return {
         ok: false,
         result: fail(makeIssue("FAIRNESS_MALFORMED_EVENT", "migration fields are malformed")),
@@ -58,7 +74,7 @@ function readMigrations(
         ),
       };
     }
-    const target = state.tickets.find((t) => t.ticketId === ticketId);
+    const target = ticketsById.get(ticketId);
     if (target === undefined || !target.dispatchable) {
       return {
         ok: false,
@@ -86,6 +102,11 @@ export function applyRaiseCap(state: FairnessState, ev: Record<string, unknown>)
   const newMd = ev["newMd"];
   if (!isNonNegativeInteger(newMd) || newMd < 1) {
     return fail(makeIssue("FAIRNESS_MALFORMED_EVENT", "newMd must be a positive integer"));
+  }
+  if (newMd > state.projectCeilingMd) {
+    return fail(
+      makeIssue("FAIRNESS_PROJECT_CEILING_EXCEEDED", "newMd exceeds the project ceiling"),
+    );
   }
   if (newMd < state.dispatchableCount) {
     return fail(
@@ -123,10 +144,18 @@ export function applyRaiseCap(state: FairnessState, ev: Record<string, unknown>)
     }
   }
 
-  // Copy the tickets array (do not alias the input's) for isolation parity with
-  // every other reducer path.
+  const tickets = state.tickets.map((ticket) => {
+    const migrated = migrations.map.get(ticket.ticketId);
+    if (migrated === undefined) return ticket;
+    return {
+      ...ticket,
+      migratedBoundAtMost: ticket.migratedBoundAtMost === null
+        ? migrated
+        : Math.min(ticket.migratedBoundAtMost, migrated),
+    };
+  });
   return deepFreeze({
     ok: true,
-    state: { ...state, tickets: sortTickets(state.tickets), policyMd: newMd },
+    state: { ...state, tickets: sortTickets(tickets), policyMd: newMd },
   });
 }

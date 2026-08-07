@@ -5,7 +5,7 @@ import type {
   SelectedTicket,
 } from "./fairness-model.js";
 import { compareStrings, deepFreeze } from "./fairness-internal.js";
-import { PRIORITY_LADDER, bucketsToForced } from "./fairness-policy.js";
+import { BYPASSES_PER_LEVEL, PRIORITY_LADDER, bucketsToForced } from "./fairness-policy.js";
 
 function priorityRank(priority: FairnessTicket["priority"]): number {
   return PRIORITY_LADDER.indexOf(priority);
@@ -89,12 +89,20 @@ export function boundFor(
   if (ticket.forced) {
     const order = forcedCohortOrder(state);
     const fAhead = order.findIndex((t) => t.ticketId === ticketId);
-    return deepFreeze({ ticketId, kind: "EXACT_FORCED", value: fAhead + 1 });
+    const derived = fAhead + 1;
+    const value = ticket.migratedBoundAtMost === null
+      ? derived
+      : Math.min(derived, ticket.migratedBoundAtMost);
+    return deepFreeze({ ticketId, kind: "EXACT_FORCED", value });
   }
   const buckets = bucketsToForced(ticket.priority, false);
+  const derived = BYPASSES_PER_LEVEL * buckets + state.policyMd;
+  const value = ticket.migratedBoundAtMost === null
+    ? derived
+    : Math.min(derived, ticket.migratedBoundAtMost);
   return deepFreeze({
     ticketId,
     kind: "CONSERVATIVE",
-    value: 8 * buckets + state.policyMd,
+    value,
   });
 }

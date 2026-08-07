@@ -66,11 +66,9 @@ describe("selection — forced precedes ordinary", () => {
 
 describe("selection — forced cohort FIFO", () => {
   it("orders the active cohort by forcedCohortEntryEvent (earliest first)", () => {
-    const state = mustReduce([
-      fxAdmit("first"),
-      ...fxForce("first"),
-      fxAdmit("second"),
-      ...fxForce("second"),
+    const state = fxForcedCohortState([
+      { ticketId: "first", workItemId: "wi-first", forcedCohortEntryEvent: 1 },
+      { ticketId: "second", workItemId: "wi-second", forcedCohortEntryEvent: 2 },
     ]);
     const order = forcedCohortOrder(state).map((t) => t.ticketId);
     expect(order).toEqual(["first", "second"]);
@@ -119,11 +117,9 @@ describe("selection — bound evidence (opportunity counts, never time)", () => 
   });
 
   it("gives forced tickets the exact remainder F_ahead + 1", () => {
-    const state = mustReduce([
-      fxAdmit("a"),
-      ...fxForce("a"),
-      fxAdmit("b"),
-      ...fxForce("b"),
+    const state = fxForcedCohortState([
+      { ticketId: "a", workItemId: "wi-a", forcedCohortEntryEvent: 1 },
+      { ticketId: "b", workItemId: "wi-b", forcedCohortEntryEvent: 2 },
     ]);
     expect(boundFor(state, "a")).toEqual({ ticketId: "a", kind: "EXACT_FORCED", value: 1 });
     expect(boundFor(state, "b")).toEqual({ ticketId: "b", kind: "EXACT_FORCED", value: 2 });

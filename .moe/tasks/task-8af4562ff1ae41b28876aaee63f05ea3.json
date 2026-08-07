@@ -1,0 +1,33 @@
+{
+  "id": "task-8af4562ff1ae41b28876aaee63f05ea3",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Comparative benchmark campaign",
+  "description": "Objective: execute the blinded paired campaign, usability study, cost accounting, and permit-list claim decisions exactly as preregistered. Deliverable: reproducible per-run records, analyses, and scoped release template. NOT in scope: marketing reinterpretation or cross-basis imputation. Hard dependency: Confirmatory corpus freeze. Owned paths: immutable campaign outputs and release evidence only. Verification: benchmark decision-rule checker.",
+  "definitionOfDone": [
+    "All required Moe/comparator arms, repetitions, oracles, receipts, raters, and user-study cases complete or are classified by the frozen censoring rules.",
+    "Every L1-L5 gate prints PASS/FAIL/UNKNOWN with correct tails, multiplicity, margins, and comparator indexing.",
+    "Cost, acceptance, effort, speed, quality, overhead, and safety statements remain within the permit list.",
+    "Independent decision-rule checker passes."
+  ],
+  "taskRails": [
+    "Pinned benchmark: D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md SHA-256 A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C.",
+    "Claims follow the benchmark permit-list; missing, partial, cross-basis, or unverifiable evidence is UNKNOWN, never PASS.",
+    "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
+    "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:57:17.652Z",
+  "updatedAt": "2026-08-07T11:57:17.652Z"
+}

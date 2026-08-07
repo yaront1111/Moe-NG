@@ -1,0 +1,33 @@
+{
+  "id": "task-8f14038c848b462d864db9a2e038c021",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Project goal lifecycle core",
+  "description": "Objective: implement pure immutable Project and Goal lifecycle reducers over the runtime contracts. Deliverable: packages/core project and goal modules with typed commands, events, results, and property tests. NOT in scope: planning graphs, leases, budgets, persistence, providers, or UI. Hard dependency: Runtime contract registry. Owned paths: packages/core/src/project/** and packages/core/src/goal/**. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "Only design-authorized lifecycle transitions are reachable and every rejection has a stable code.",
+    "Expected-version and idempotency inputs are represented; stale mutations produce zero state change.",
+    "Reducers are deterministic, side-effect free, and return deeply immutable results.",
+    "The focused core typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 12,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:44.698Z",
+  "updatedAt": "2026-08-07T11:45:44.698Z"
+}

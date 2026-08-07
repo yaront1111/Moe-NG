@@ -1,0 +1,33 @@
+{
+  "id": "task-fddc6a201a5344a1bd596e76b9e110b0",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Approval decision surfaces",
+  "description": "Objective: implement exact-hash plan, expansion, delta-reapproval, acceptance, confirmation, and cutover decision surfaces. Deliverable: approval modules with reason-coded disabled states. NOT in scope: mutable policy editing or implicit approval. Hard dependencies: Generated control-room client and Policy approval core. Owned paths: apps/control-room/src/approvals/**. Verification: pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "Every decision shows exact subject hash, scope, risk, budget, policy, delta, and consequences.",
+    "Disabled actions expose stable reason codes and no stale approval can submit.",
+    "Manual default and audited default-off automation are represented accurately.",
+    "Focused control-room tests pass."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength.",
+    "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
+    "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:55:20.321Z",
+  "updatedAt": "2026-08-07T11:55:20.321Z"
+}

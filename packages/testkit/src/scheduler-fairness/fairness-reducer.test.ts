@@ -62,7 +62,7 @@ describe("reducer — admission", () => {
     const r = reduceEvents([fxAdmit("x"), fxAdmit("y", "wi-y", "other")]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(codesOf(r.issues)).toContain("FAIRNESS_MALFORMED_EVENT");
+      expect(codesOf(r.issues)).toContain("FAIRNESS_DIMENSION_MISMATCH");
     }
   });
 });
@@ -94,13 +94,13 @@ describe("reducer — aging and promotion", () => {
 
 describe("reducer — dispatch validity", () => {
   it("removes the dispatched winner", () => {
-    const state = mustReduce([fxAdmit("x"), fxAdmit("y"), fxDispatch("y", ["x"])]);
-    expect(findTicket(state.tickets, "y")).toBeUndefined();
-    expect(findTicket(state.tickets, "x")!.bypassesInLevel).toBe(1);
+    const state = mustReduce([fxAdmit("x"), fxAdmit("y"), fxDispatch("x", ["y"])]);
+    expect(findTicket(state.tickets, "x")).toBeUndefined();
+    expect(findTicket(state.tickets, "y")!.bypassesInLevel).toBe(1);
   });
 
   it("rejects a dispatch whose winner is unknown", () => {
-    const r = reduceEvents([fxAdmit("x"), fxDispatch("ghost", ["x"])]);
+    const r = reduceEvents([fxAdmit("x"), fxDispatch("ghost", [])]);
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(codesOf(r.issues)).toContain("FAIRNESS_UNKNOWN_TICKET");
@@ -111,8 +111,8 @@ describe("reducer — dispatch validity", () => {
     const r = reduceEvents([
       fxAdmit("x"),
       fxAdmit("y"),
-      fxLose("x"),
-      fxDispatch("y", ["x"]),
+      fxLose("y"),
+      fxDispatch("x", ["y"]),
     ]);
     expect(r.ok).toBe(false);
     if (!r.ok) {

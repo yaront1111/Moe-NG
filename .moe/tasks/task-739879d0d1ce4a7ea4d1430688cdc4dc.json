@@ -1,0 +1,33 @@
+{
+  "id": "task-739879d0d1ce4a7ea4d1430688cdc4dc",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Distribution manifest packaging",
+  "description": "Objective: embed and verify signed distribution manifests across daemon, control room, MCP, IDE, and provider adapters. Deliverable: packaging modules and byte-rebuild tests. NOT in scope: release publication. Hard dependencies: all built distribution components. Owned paths: packages/contracts/src/distribution/** and packaging tooling paths. Verification: pnpm test:integration.",
+  "definitionOfDone": [
+    "Every artifact embeds source SHA, schema hash, compatibility range, tool/build versions, and asset digests.",
+    "Startup rejects incompatible or stale component sets with DISTRIBUTION_MISMATCH.",
+    "Rebuild tests byte-compare embedded manifests from one source tree.",
+    "Integration gate passes."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:15.684Z",
+  "updatedAt": "2026-08-07T11:56:15.684Z"
+}

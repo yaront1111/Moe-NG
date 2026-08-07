@@ -1,0 +1,193 @@
+{
+  "id": "task-52fe511b03c84069aaa3b091b0703ee8",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Scheduler validator decomposition",
+  "description": "Objective: split the oversized structural graph validator by validation responsibility without changing observable behavior. Deliverable: focused validate-graph modules under packages/scheduler/src with the same public validateGraphSnapshot API and deterministic issue ordering. NOT in scope: new validation rules, graph mutation, or policy changes. Hard dependencies: none. Owned paths: packages/scheduler/src/validate-graph.ts, new validate-graph-*.ts, and validator-focused tests. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "validateGraphSnapshot public types, stable reason codes, issue order, and frozen results are unchanged.",
+    "Every resulting production module is under 350 lines and has one named responsibility.",
+    "Existing hostile, determinism, boundary, and correction tests pass unchanged.",
+    "The focused scheduler typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Refactor-only tasks preserve public contracts and stable errors.",
+    "Do not weaken or rewrite tests to make the split pass.",
+    "Stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Add characterization coverage before moving production code, without weakening or rewriting existing assertions. Construct a bounded snapshot that triggers multiple record/reference integrity findings and assert the complete issue objects in their current deterministic order (code, message, nodeKeys, edgeKeys), plus deep freezing of the failure envelope, issues array, issue objects, and nested key arrays. Keep the test entirely on validateGraphSnapshot so it protects the public boundary rather than new internal helpers.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "note": "Added 4 characterization tests on the public validateGraphSnapshot boundary only. (1) Multi-issue bounded snapshot pinning the complete issue objects (code/message/nodeKeys/edgeKeys) in canonical order — accumulation order deliberately differs from reported order for the two GRAPH_MISSING_ENDPOINT findings, so a lost sortIssues cannot pass. (2) Deep-freeze of failure envelope, issues array, each issue, and each nested key array, incl. throwing mutation attempts. (3) GRAPH_COMPLETION_NOT_TERMINAL edgeKeys sorted + topology/closure never runs while an integrity issue is outstanding. (4) Raw-slot-count over-limit refusal precedes any element inspection (malformed node/edge present but unreported). No existing assertion weakened or rewritten. Baseline 115 tests -> 119 tests, typecheck exit 0, test exit 0 against unmodified production code.",
+      "startedAt": "2026-08-07T11:54:39.577Z",
+      "completedAt": "2026-08-07T11:56:56.156Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extract hostile-safe bounded input parsing and normalization into validate-graph-input.ts. Move the exact own-key/data-property, plain-array/record, graph-key/edge-kind, raw-length ceiling, dense-array, node/edge normalization, duplicate, self-edge, and record-local diagnostic logic without changing messages, codes, read order, or early over-limit refusal. Return an internal discriminated parse result containing only the bounded normalized state and accumulated issues needed downstream; do not freeze results, mutate the caller snapshot, expose the helper from the package root, or perform graph-wide topology checks. Keep the new module under 350 lines with this single responsibility.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/validate-graph-input.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-input.js",
+        "packages/scheduler/src/validate-graph.ts"
+      ],
+      "note": "Created packages/scheduler/src/validate-graph-input.ts (296 lines) owning hostile-safe bounded parsing only: SNAPSHOT_KEYS/NODE_KEYS/EDGE_KEYS, isEdgeKind, own-key + own-data-property schema checks, plain-array/record guards, graph-key completion check, raw-length ceilings BEFORE any indexed read with early over-limit refusal, dense-array shape (short-circuit `!A || !B` preserved so edges are not probed when nodes fail), per-record node/edge normalization, duplicates, and self-edge. Messages, codes, read order, and aliased-condition narrowing on `candidate` copied verbatim. Returns internal discriminated GraphInputParse: {ok:false, issues} for outright refusal, {ok:true, parsed} carrying only bounded normalized state (nodes, edges, completionNodeKey, nodeKeys set, hardEdgeCount, nodeShapeOk) plus accumulated issues in accumulation order — no sorting, no freezing, no snapshot mutation, no topology. Not exported from index.ts. Also added the required validate-graph-input.js re-export shim (repo convention: every internal .ts module has a sibling `export * from \"./<name>.ts\"` shim so Node --experimental-strip-types resolves the .js specifiers used in imports; without it the scheduler-runtime-entrypoint smoke test would fail). validate-graph.ts now delegates parsing. Verified: pnpm --filter @moe/scheduler typecheck exit 0; pnpm --filter @moe/scheduler test exit 0, 16 files / 119 tests passed.",
+      "startedAt": "2026-08-07T11:56:59.335Z",
+      "completedAt": "2026-08-07T11:59:28.991Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract graph-wide validation into validate-graph-structure.ts. From the parsed bounded state, preserve missing-endpoint checks, completion-node presence/terminal-HARD-sink rules, normalized policy limits, and their existing nodeShapeOk guards; if any integrity issue exists, return all of them before topology construction. Otherwise sort nodes and edges identically, build the HARD index once, preserve cycle-core reporting and its immediate failure, run the reverse completion-closure traversal with the optional TraversalCounter updates unchanged, and return either the single topology issue or the validated GraphStructureView. Keep the module internal, pure apart from the supplied counter, and under 350 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-structure.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/validate-graph-structure.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph-structure.js",
+        "packages/scheduler/src/validate-graph.ts"
+      ],
+      "note": "Created packages/scheduler/src/validate-graph-structure.ts (238 lines) + its .js re-export shim. Owns graph-wide validation only: missingEndpointIssues (nodeShapeOk guard), completionIssues (presence then terminal-HARD-sink, same guard; verified equivalent to the original if/else-if across all three nodeShapeOk/presence cases), policyLimitIssues over normalized counts, then topology. Issue accumulation order preserved exactly: parsed record-local issues, then missing endpoints, then completion, then limits; if any exist all are returned before any topology is constructed. On the clean path it sorts nodes/edges with the identical comparators, builds the HARD index once, runs topologicalOrder, and on a cycle returns the findCycleCore issue immediately; otherwise runs the reverse completion-closure BFS with byte-identical TraversalCounter increments and returns either the single closure issue or the validated GraphStructureView. Module is internal (not in index.ts), pure apart from the supplied counter, freezes nothing. validate-graph.ts reduced to the delegating facade in the same pass so the extraction is actually exercised. Verified: pnpm --filter @moe/scheduler typecheck exit 0; pnpm --filter @moe/scheduler test exit 0, 16 files / 119 tests passed.",
+      "startedAt": "2026-08-07T11:59:32.175Z",
+      "completedAt": "2026-08-07T12:00:55.886Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Reduce validate-graph.ts to the stable public orchestration boundary. Preserve the exact validateGraphSnapshot(snapshot, policyOverride?, counter?) signature and GraphValidationResult types; resolve malformed policy before reading the snapshot; delegate parsing then structure validation; keep one fail helper that applies sortIssues followed by deepFreeze; and on success clone/sort the validated view, copy the resolved policy, compute the same graphIdentity, deep-freeze the complete ValidatedGraph/result, and register provenance exactly once. Do not change index.ts exports, public types, stable text/reason codes, graph mutation behavior, or add documentation/changelog claims for this refactor-only change. Confirm every resulting production module is below 350 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph.ts"
+      ],
+      "note": "validate-graph.ts is now the 76-line public boundary. Signature validateGraphSnapshot(snapshot: unknown, policyOverride?: unknown, counter?: TraversalCounter): GraphValidationResult and all public types unchanged. Order: resolveGraphPolicy first (malformed policy refuses before the snapshot is read), then parseGraphInput, then validateGraphStructure. Exactly one fail() helper remains, still sortIssues followed by deepFreeze, and it is the only path that produces a failure envelope. Success path clones the sorted view (view.nodes/view.edges .map spread), copies the resolved policy, computes graphIdentity from the same uncloned view, deep-freezes the ValidatedGraph and the {ok:true, graph} envelope, and calls registerValidatedGraph exactly once. index.ts exports, stable message text, reason codes, and graph-mutation behavior are untouched (git shows no diff for index.ts); no docs/changelog claims added for this refactor-only change. Physical line counts: validate-graph-input.ts 317, validate-graph-structure.ts 230, validate-graph.ts 76 — all below 350. Verified after the last edit: pnpm --filter @moe/scheduler typecheck exit 0; pnpm --filter @moe/scheduler test exit 0, 16 files / 119 tests passed.",
+      "startedAt": "2026-08-07T12:01:03.650Z",
+      "completedAt": "2026-08-07T12:01:37.603Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform an adversarial diff review before final evidence: compare each moved branch against the original validation order; challenge null/empty/sparse/over-limit/accessor/proxy/revoked-proxy inputs; verify no indexed read precedes raw ceilings; verify nodeShapeOk gating, multi-issue accumulation, deterministic sorting, cycle/closure short-circuits, counter increments, cloned frozen outputs, and single provenance registration; confirm no new public export and run a PowerShell physical-line count showing each production module is <350. Correct any discrepancy, keep changes within the four owned paths, and inspect the explicit-path diff so no foreign work is staged.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "note": "Adversarial diff review complete. Mechanical block-by-block comparison against git HEAD (whitespace/comment-normalized): node+edge parse loops IDENTICAL modulo pure renames (nodeKeySet->nodeKeys, normalizedNodes->nodes, nodeShapeOk->shapeOk, normalizedEdges->edges); missing-endpoint loop IDENTICAL; policy-limit blocks IDENTICAL (+return); closure BFS IDENTICAL (+return), so counter increments are unchanged; cycle block IDENTICAL except fail([...]) -> {ok:false, issues:[...]} because sort/freeze moved to the facade; sort comparators identical.\n\nOnly non-mechanical change: the completion `if/else if (nodeShapeOk)` became two guarded early returns. Exhaustive case analysis (shapeOk+missing / shapeOk+present / !shapeOk) proves equivalence, and it is now LOCKED by a new characterization test asserting that a malformed node record suppresses BOTH the unknown-endpoint and absent-completion findings (exactly one GRAPH_MALFORMED_NODE issue). 120 tests.\n\nHostile-input challenges re-verified: null/undefined snapshot, empty collections, sparse holes, expando/symbol keys, inherited array slots and inherited records, throwing snapshot/node/edge accessors (never invoked - getOwnPropertyDescriptor only), length-trapping proxy, revoked-proxy policy. No indexed read precedes the raw slot ceilings; the over-limit early return still refuses before dense-shape or element inspection (locked by test). Empty-nodes + missing completion still short-circuits before buildHardGraphIndex, so completionIndex can never be undefined. Concurrency: pure function, no new module-level mutable state (only frozen key-const arrays); provenance WeakSet unchanged and registerValidatedGraph still called exactly once on the single success path. No new public export: index.ts has zero diff, package.json exports still only \".\" -> ./src/index.ts, and the two new modules are referenced only inside packages/scheduler/src.\n\nRepo convention verified: every non-test production .ts in scheduler/src has a sibling `export * from \"./<name>.ts\"` .js shim (only test-fixtures.ts lacks one); the two new shims follow it and are exercised by scheduler-runtime-entrypoint.test.ts under Node --experimental-strip-types.\n\nLine counts: validate-graph-input.ts 317, validate-graph-structure.ts 230, validate-graph.ts 76 - all <350. NOTE for QA: 317 clears the 350 DoD gate but exceeds the epic's 250-line target; splitting further would add a fifth touched file, which planning explicitly rejected.\n\nTest diff is additive only: 185 insertions, 0 deletions - no existing assertion weakened or rewritten. Regression check beyond the focused command: pnpm typecheck (recursive, 6 projects) exit 0 and pnpm test (whole repo) exit 0 with 54 files / 430 tests passed. Working tree contains foreign work (.codex/, .moe/, pnpm-lock.yaml, untracked apps/); only the six owned scheduler paths will be staged.",
+      "startedAt": "2026-08-07T12:01:46.175Z",
+      "completedAt": "2026-08-07T12:05:08.261Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single required verification command from D:\\projexts\\moe-next and retain its fresh complete output as complete_task evidence: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test. Do not complete on partial, stale, or failed output. If the adversarial review required any edit, this command must run after the last edit. Stage/commit only the explicit owned paths; never use a worktree, git add -A, reset, stash, push, or merge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/validate-graph.ts",
+        "packages/scheduler/src/validate-graph.test.ts",
+        "packages/scheduler/src/validate-graph-input.ts",
+        "packages/scheduler/src/validate-graph-input.js",
+        "packages/scheduler/src/validate-graph-structure.ts",
+        "packages/scheduler/src/validate-graph-structure.js"
+      ],
+      "note": "Ran the required verification fresh from D:\\projexts\\moe-next AFTER the last edit (the step-5 characterization test): `pnpm --filter @moe/scheduler typecheck` exit 0, then `pnpm --filter @moe/scheduler test` exit 0 with \"Test Files 16 passed (16) / Tests 120 passed (120)\". No partial, stale, or failed output used.\n\nCommitted 4840573 on main staging ONLY the six explicit owned paths via `git add --` with each path named: validate-graph.ts, validate-graph.test.ts, validate-graph-input.ts, validate-graph-input.js, validate-graph-structure.ts, validate-graph-structure.js (6 files changed, 780 insertions, 433 deletions). No worktree, no `git add -A`, no reset, stash, push, or merge. Foreign work confirmed still unstaged and intact: .codex/agent-instructions.md, .codex/config.toml, three .moe/messages jsonl files, three .moe/tasks json files, pnpm-lock.yaml, and untracked apps/. No debug, probe, scratch, or generated evidence files are in the commit.",
+      "startedAt": "2026-08-07T12:05:12.358Z",
+      "completedAt": "2026-08-07T12:05:50.506Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-200db8e3",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:44:12.748Z",
+  "updatedAt": "2026-08-07T12:06:28.461Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T11:45:06.592Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 6
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9",
+    "worker-c8c01fc6",
+    "qa-200db8e3"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T11:51:12.487Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep one 492-line function was rejected because it violates the decomposition objective. A three-new-helper split was also rejected because it would add an unnecessary fifth touched file. Use two internal modules instead: one owns hostile-safe bounded parsing/normalization and record-local diagnostics; one owns graph-wide structural/topology validation. Keep validate-graph.ts as the sole public facade and result-freezing/provenance boundary.",
+    "codebaseInsights": "validateGraphSnapshot is the only public validator export. Its fail helper deep-freezes failures after sortIssues orders issues by [code,nodeKeys,edgeKeys,message]. The current function deliberately checks raw array lengths before indexed reads, accumulates bounded integrity issues, skips endpoint/completion checks when node shape is untrustworthy, and only runs HARD-cycle/completion-closure traversals after all integrity checks pass. The optional TraversalCounter is observable through package tests and must be threaded unchanged. The authoritative design SHA-256 was verified as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191.",
+    "risks": "Moved code can accidentally invoke hostile getters/proxy traps, traverse over-limit arrays, change which integrity diagnostics co-occur, alter sort/freeze boundaries, increment traversal counters differently, build topology from malformed endpoints, or register provenance more than once. Keep new helpers internal (no index.ts export), preserve exact messages/reason codes/guards/short-circuits, and require every production module to remain below 350 physical lines.",
+    "keyFiles": [
+      "packages/scheduler/src/validate-graph.ts",
+      "packages/scheduler/src/validate-graph.test.ts",
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/scheduler/src/graph-model.ts",
+      "packages/scheduler/src/hostile-input.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T11:52:20.948Z",
+  "workStartedAt": "2026-08-07T11:54:39.577Z",
+  "reviewStartedAt": "2026-08-07T12:06:19.930Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nEXIT_TYPECHECK=0\n$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  16 passed (16)\n      Tests  120 passed (120)\n   Start at  15:05:17\n   Duration  351ms (transform 1.34s, setup 0ms, import 1.93s, tests 246ms, environment 1ms)\n\nEXIT_TEST=0\n\n--- repo-wide regression check (beyond the required command) ---\n$ pnpm typecheck  (pnpm --recursive typecheck, 6 projects)  -> EXIT 0\n$ pnpm test       (vitest run, whole repo)\n Test Files  54 passed (54)\n      Tests  430 passed (430)\n   Duration  8.95s\n -> EXIT 0",
+    "reportedAt": "2026-08-07T12:06:19.930Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/validate-graph.test.ts",
+    "packages/scheduler/src/validate-graph-input.ts",
+    "packages/scheduler/src/validate-graph-input.js",
+    "packages/scheduler/src/validate-graph.ts",
+    "packages/scheduler/src/validate-graph-structure.ts",
+    "packages/scheduler/src/validate-graph-structure.js"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "task-6ce92e5d2bd743b8b02b61ffa214b76a",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Clean workspace foundation",
+  "description": "Objective: implement content-addressed artifact staging, canonical path/scope observations, explicit Git attribution, and input/result manifest construction. Deliverable: focused runner artifact, scope, and workspace modules. NOT in scope: provider launch, automatic staging, merge, push, or host-level sandbox claims. Hard dependency: Runtime contract registry. Owned paths: packages/runner/src/artifacts/**, packages/runner/src/scope/**, and packages/runner/src/workspace/**. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Escaped, symlinked/junction, foreign, dirty, staged, untracked, or undeclared candidate bytes fail closed.",
+    "Exact base, scope observation, input tree, authored paths, and result tree are digest bound and reproducible.",
+    "Artifact staging is flush/rename/verify safe and uncertain references prevent deletion.",
+    "The focused runner typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 20,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:45.622Z",
+  "updatedAt": "2026-08-07T11:45:45.622Z"
+}

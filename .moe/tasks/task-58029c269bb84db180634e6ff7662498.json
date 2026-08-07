@@ -1,0 +1,33 @@
+{
+  "id": "task-58029c269bb84db180634e6ff7662498",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Independent review flow",
+  "description": "Objective: implement reviewer eligibility/calibration, clean review packages, structured findings, rejection lineage, escalation, and acceptance qualification. Deliverable: packages/review application/core modules. NOT in scope: reviewer edits, self-review, transcript exposure, or waiving missing evidence. Hard dependencies: Planning graph lifecycle core, Policy approval core, Projection outbox core, Evidence receipt pipeline, and Deterministic context journal. Owned paths: packages/review/**. Verification: pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test.",
+  "definitionOfDone": [
+    "Authors and prior mutating lease holders cannot satisfy independent review; ineligible capacity yields UNKNOWN_REVIEWER_INDEPENDENCE.",
+    "The clean package excludes worker transcripts, self-assessment, and journal while binding exact criteria, hashes, tree, receipts, rubric, and submitted bytes.",
+    "Failed or unknown proof cannot accept; repeat findings route to replan and three unsuccessful rounds require human escalation.",
+    "The focused review typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 27,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:50:15.708Z",
+  "updatedAt": "2026-08-07T11:50:15.708Z"
+}

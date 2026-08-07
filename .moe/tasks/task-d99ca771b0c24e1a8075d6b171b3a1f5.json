@@ -1,0 +1,33 @@
+{
+  "id": "task-d99ca771b0c24e1a8075d6b171b3a1f5",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Evidence causal timeline",
+  "description": "Objective: implement evidence, artifact, rejection, session-coordination, and causal timeline inspection with cursor provenance. Deliverable: evidence/timeline modules. NOT in scope: altering or upgrading evidence. Hard dependencies: Generated control-room client and Session coordination fabric. Owned paths: apps/control-room/src/evidence/** and apps/control-room/src/timeline/**. Verification: pnpm --filter @moe/control-room test.",
+  "definitionOfDone": [
+    "Every rendered fact links to provenance, cursor, actor/session/effect, and exact digest where applicable.",
+    "Rejected commands, cursor gaps, recovery markers, and typed session messages remain visible without becoming authority.",
+    "Large timelines paginate and resume without silent gaps.",
+    "Focused control-room tests pass."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength.",
+    "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
+    "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:55:20.787Z",
+  "updatedAt": "2026-08-07T11:55:20.787Z"
+}

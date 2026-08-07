@@ -1,0 +1,33 @@
+{
+  "id": "task-c9a9bf3cb2a046a68ee99efa5b296f8c",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Official MCP stdio adapter",
+  "description": "Objective: expose generated safe commands and queries through the official stable MCP TypeScript SDK over stdio. Deliverable: packages/mcp stdio modules and protocol fixtures. NOT in scope: lifecycle logic, custom WebSocket MCP, or IDE-specific behavior. Hard dependency: stable generated daemon contracts. Owned paths: packages/mcp/src/stdio/**. Verification: pnpm --filter @moe/mcp test.",
+  "definitionOfDone": [
+    "Tool schemas are generated and bounded; authentication/capability checks match HTTP.",
+    "Command IDs, stable errors, truth, cursors, and recovery commands preserve parity.",
+    "Malformed, oversized, stale, and disconnected clients fail closed.",
+    "Focused MCP tests pass."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:14.570Z",
+  "updatedAt": "2026-08-07T11:56:14.570Z"
+}

@@ -15,6 +15,7 @@ import {
   fxBypass,
   fxDispatch,
   fxForce,
+  fxForcedCohortState,
   fxLose,
   fxRegain,
   fxStateWithNDispatchable,
@@ -37,7 +38,7 @@ function codesOf(issues: readonly { readonly code: FairnessReasonCode }[]): stri
 
 describe("counterexample — incompatible dispatch storm never ages a bystander", () => {
   it("ages only the caller-confirmed bypassed ticket, never an inferred one", () => {
-    const state = mustReduce([fxAdmit("x"), fxAdmit("y"), ...fxBypass("y", 40)]);
+    const state = mustReduce([fxAdmit("x"), fxAdmit("y"), ...fxForce("y")]);
     expect(findTicket(state.tickets, "y")!.forced).toBe(true);
     const x = findTicket(state.tickets, "x")!;
     expect(x.priority).toBe("P3");
@@ -66,11 +67,9 @@ describe("counterexample — continual new arrivals cannot delay or overtake for
 
 describe("counterexample — dormant forced ticket keeps history, rejoins at the tail", () => {
   it("drops from the active cohort on lose and re-enters behind newer forced tickets", () => {
-    const state = mustReduce([
-      fxAdmit("a"),
-      ...fxForce("a"),
-      fxAdmit("b"),
-      ...fxForce("b"),
+    const state = fxForcedCohortState([
+      { ticketId: "a", workItemId: "wi-a", forcedCohortEntryEvent: 1 },
+      { ticketId: "b", workItemId: "wi-b", forcedCohortEntryEvent: 2 },
     ]);
     expect(forcedCohortOrder(state).map((t) => t.ticketId)).toEqual(["a", "b"]);
 
@@ -106,8 +105,12 @@ describe("counterexample — churn and re-entry never improve priority", () => {
 
 describe("counterexample — restart mid-stream is transparent", () => {
   it("continuing on a round-tripped state matches continuing on the original", () => {
-    const prefix = [fxAdmit("a"), ...fxForce("a"), fxAdmit("b"), ...fxBypass("b", 5)];
-    const suffix: FairnessEvent[] = [fxAdmit("c"), ...fxBypass("b", 4), fxDispatch("c", ["b"])];
+    const prefix = [fxAdmit("a"), ...fxForce("a"), fxAdmit("b")];
+    const suffix: FairnessEvent[] = [
+      fxDispatch("a", ["b"]),
+      fxAdmit("c"),
+      ...fxBypass("b", 9),
+    ];
 
     const original = mustReduce([...prefix, ...suffix]);
 
@@ -121,7 +124,7 @@ describe("counterexample — restart mid-stream is transparent", () => {
       if (!step.ok) throw new Error(`resume failed: ${JSON.stringify(step.issues)}`);
       cur = step.state;
     }
-    expect(toCanonicalBytes(cur)).toBe(toCanonicalBytes(original));
+    expect(toCanonicalBytes(cur)).toEqual(toCanonicalBytes(original));
   });
 });
 

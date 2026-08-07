@@ -1,0 +1,33 @@
+{
+  "id": "task-d5c4b086d5a34fea808729877ea8bda3",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Conserved budget core",
+  "description": "Objective: implement hierarchical accounts, reservations, protected proof/review reserves, usage settlement, and explicit measurement coverage. Deliverable: packages/scheduler budget modules with conservation and concurrent-admission property tests. NOT in scope: billing APIs, guessed token costs, scheduler fairness, or UI charts. Hard dependencies: Runtime contract registry and Policy approval core. Owned paths: packages/scheduler/src/budget/**. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Randomized reserve, activate, settle, cancel, and restart schedules never mint or overspend budget.",
+    "UNKNOWN measurement remains UNKNOWN, never zero, and blocks policy when required.",
+    "Verification and independent-review reserves are protected before execution admission.",
+    "The focused scheduler typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 17,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:45.265Z",
+  "updatedAt": "2026-08-07T11:45:45.265Z"
+}

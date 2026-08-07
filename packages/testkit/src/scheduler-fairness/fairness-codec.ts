@@ -1,4 +1,5 @@
 import { canonicalize } from "../canonical-json.js";
+import { decodeBoundedJsonBytes } from "@moe/contracts";
 import {
   FAIRNESS_REFERENCE_KIND,
   type FairnessResult,
@@ -8,12 +9,19 @@ import {
 import {
   deepFreeze,
   fail,
-  isNonEmptyString,
   isRecord,
   makeIssue,
   sortTickets,
 } from "./fairness-internal.js";
-import { BYPASSES_PER_LEVEL, isFairnessPriority, isNonNegativeInteger } from "./fairness-policy.js";
+import { hasExactKeys, isFairnessId } from "./fairness-input.js";
+import {
+  BYPASSES_PER_LEVEL,
+  DEFAULT_M_D,
+  isFairnessPriority,
+  isNonNegativeInteger,
+} from "./fairness-policy.js";
+
+const encoder = new TextEncoder();
 
 const TICKET_KEYS = [
   "ticketId",
@@ -25,24 +33,29 @@ const TICKET_KEYS = [
   "forcedCohortEntryEvent",
   "dispatchable",
   "continuousEligibilityEvent",
+  "migratedBoundAtMost",
 ] as const;
-const STATE_KEYS = ["kind", "policyMd", "eventSeq", "dispatchableCount", "tickets"] as const;
-
-/** Exactly the allowed keys — no missing, no extra (strict, non-lenient decode). */
-function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]): boolean {
-  const own = Object.keys(record);
-  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(record, k));
-}
+const STATE_KEYS = [
+  "kind",
+  "dimension",
+  "projectCeilingMd",
+  "policyMd",
+  "eventSeq",
+  "dispatchableCount",
+  "tickets",
+] as const;
 
 /** Canonical, deterministic serialization of a reduced state (restart evidence). */
-export function toCanonicalBytes(state: FairnessState): string {
-  return canonicalize({
+export function toCanonicalBytes(state: FairnessState): Uint8Array {
+  return encoder.encode(canonicalize({
     kind: FAIRNESS_REFERENCE_KIND,
+    dimension: state.dimension,
+    projectCeilingMd: state.projectCeilingMd,
     policyMd: state.policyMd,
     eventSeq: state.eventSeq,
     dispatchableCount: state.dispatchableCount,
     tickets: sortTickets(state.tickets),
-  });
+  }));
 }
 
 /** Read one ticket, returning a normalized frozen ticket or null when malformed. */
@@ -60,18 +73,20 @@ function readTicket(raw: unknown): FairnessTicket | null {
     forcedCohortEntryEvent,
     dispatchable,
     continuousEligibilityEvent,
+    migratedBoundAtMost,
   } = raw;
   if (
-    !isNonEmptyString(ticketId) ||
-    !isNonEmptyString(workItemId) ||
-    !isNonEmptyString(dimension) ||
+    !isFairnessId(ticketId) ||
+    !isFairnessId(workItemId) ||
+    !isFairnessId(dimension) ||
     !isFairnessPriority(priority) ||
     !isNonNegativeInteger(bypassesInLevel) ||
     bypassesInLevel >= BYPASSES_PER_LEVEL ||
     typeof forced !== "boolean" ||
     typeof dispatchable !== "boolean" ||
     !isNonNegativeInteger(continuousEligibilityEvent) ||
-    !(forcedCohortEntryEvent === null || isNonNegativeInteger(forcedCohortEntryEvent))
+    !(forcedCohortEntryEvent === null || isNonNegativeInteger(forcedCohortEntryEvent)) ||
+    !(migratedBoundAtMost === null || isNonNegativeInteger(migratedBoundAtMost))
   ) {
     return null;
   }
@@ -95,27 +110,51 @@ function readTicket(raw: unknown): FairnessTicket | null {
     forcedCohortEntryEvent,
     dispatchable,
     continuousEligibilityEvent,
+    migratedBoundAtMost,
   };
 }
 
 /** Strict, fail-closed reconstruction; round-trips to byte-identical output. */
-export function fromCanonicalBytes(text: string): FairnessResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "not valid JSON"));
+export function fromCanonicalBytes(input: unknown): FairnessResult {
+  const decoded = decodeBoundedJsonBytes(input);
+  if (!decoded.ok) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", `bounded JSON rejected: ${decoded.code}`));
   }
+  let snapshot: Uint8Array;
+  try {
+    snapshot = Reflect.apply(Uint8Array.prototype.slice, input, []) as Uint8Array;
+  } catch {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "input is not stable canonical bytes"));
+  }
+  const canonicalInput = encoder.encode(canonicalize(decoded.value));
+  if (
+    snapshot.byteLength !== canonicalInput.byteLength ||
+    snapshot.some((byte, index) => byte !== canonicalInput[index])
+  ) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "input is not canonical JSON bytes"));
+  }
+  const parsed: unknown = decoded.value;
   if (!isRecord(parsed) || !hasExactKeys(parsed, STATE_KEYS)) {
     return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "payload must be an object with exactly the state keys"));
   }
-  const { kind, policyMd, eventSeq, dispatchableCount, tickets } = parsed;
+  const {
+    kind,
+    dimension: stateDimension,
+    projectCeilingMd,
+    policyMd,
+    eventSeq,
+    dispatchableCount,
+    tickets,
+  } = parsed;
   if (kind !== FAIRNESS_REFERENCE_KIND) {
     return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "unexpected or missing kind tag"));
   }
   if (
+    !(stateDimension === null || isFairnessId(stateDimension)) ||
+    projectCeilingMd !== DEFAULT_M_D ||
     !isNonNegativeInteger(policyMd) ||
     policyMd < 1 ||
+    policyMd > projectCeilingMd ||
     !isNonNegativeInteger(eventSeq) ||
     !isNonNegativeInteger(dispatchableCount) ||
     !Array.isArray(tickets)
@@ -136,7 +175,7 @@ export function fromCanonicalBytes(text: string): FairnessResult {
       return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "duplicate ticketId", [ticket.ticketId]));
     }
     ids.add(ticket.ticketId);
-    // A state is scoped to a single compatibility dimension.
+    // A state is scoped to one persisted compatibility dimension.
     if (dimension === undefined) {
       dimension = ticket.dimension;
     } else if (ticket.dimension !== dimension) {
@@ -153,6 +192,9 @@ export function fromCanonicalBytes(text: string): FairnessResult {
     }
     normalized.push(ticket);
   }
+  if ((dimension !== undefined && dimension !== stateDimension) || (dimension !== undefined && stateDimension === null)) {
+    return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "ticket dimension differs from state identity"));
+  }
   if (live !== dispatchableCount || dispatchableCount > policyMd) {
     return fail(makeIssue("FAIRNESS_MALFORMED_STATE", "dispatchableCount is inconsistent"));
   }
@@ -165,6 +207,8 @@ export function fromCanonicalBytes(text: string): FairnessResult {
   return deepFreeze({
     ok: true,
     state: {
+      dimension: stateDimension,
+      projectCeilingMd,
       policyMd,
       eventSeq,
       dispatchableCount,

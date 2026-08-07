@@ -1,0 +1,33 @@
+{
+  "id": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability shadow gate",
+  "description": "Objective: run read-only shadow comparisons across old/new projections, both providers, transports, supported OSes, JetBrains, and copied real projects. Deliverable: portability evidence at one exact commit. NOT in scope: production cutover or best-tool claims. Hard dependencies: every M4 task. Owned paths: tests/integration/portability/** and release evidence paths only. Verification: pnpm test:integration && pnpm test:migration.",
+  "definitionOfDone": [
+    "Shadow comparison reads frozen snapshots and emits mismatches without dual writes or mutation.",
+    "Claude/Codex, stdio/HTTP, Windows/Linux/macOS, JetBrains, and importer matrices report exact PASS/FAIL/UNKNOWN.",
+    "All distribution handshakes and fixture hashes bind one source commit.",
+    "Integration and migration gates pass."
+  ],
+  "taskRails": [
+    "Portability consumes frozen daemon/core contracts; adapters cannot fork lifecycle or authority semantics.",
+    "Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.",
+    "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
+    "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:56:16.304Z",
+  "updatedAt": "2026-08-07T11:56:16.304Z"
+}

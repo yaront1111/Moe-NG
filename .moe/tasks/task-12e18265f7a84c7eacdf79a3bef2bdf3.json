@@ -1,0 +1,39 @@
+{
+  "id": "task-12e18265f7a84c7eacdf79a3bef2bdf3",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Runtime contract registry",
+  "description": "Objective: define the versioned command/query envelopes, lifecycle enums, nextAllowedCommands shape, and closed ErrorRegistry required by later application services. Deliverable: focused modules under packages/contracts/src/runtime with public package exports. NOT in scope: applying commands, persistence, HTTP, UI, or provider behavior. Hard dependencies: none. Owned paths: packages/contracts/src/runtime/** and packages/contracts/src/index.ts. Verification: pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test.",
+  "definitionOfDone": [
+    "Command/query envelopes are versioned, bounded, immutable, and reject unknown fields or versions.",
+    "Lifecycle enums and nextAllowedCommands are closed; unknown state or error grants no mutation affordance.",
+    "Every stable error maps to truth, retryability, and an exact recovery category without leaking input bytes.",
+    "The focused contracts typecheck and test command exits 0."
+  ],
+  "taskRails": [
+    "Follow the pinned design; this task cannot create authority beyond its named contract.",
+    "Fail closed with stable codes and immutable deterministic outputs.",
+    "Keep production modules focused, target <=250 lines, split before 400.",
+    "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-c4babdf9",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 11,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-07T11:45:44.572Z",
+  "updatedAt": "2026-08-07T12:01:03.414Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T12:00:57.283Z"
+  },
+  "contextFetchedBy": [
+    "architect-c4babdf9"
+  ]
+}

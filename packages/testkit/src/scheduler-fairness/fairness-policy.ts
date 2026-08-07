@@ -7,6 +7,12 @@ import type { FairnessPriority } from "./fairness-model.js";
  */
 export const DEFAULT_M_D = 10_000 as const;
 
+/** Maximum events accepted by one in-memory reference reduction. */
+export const MAX_FAIRNESS_EVENTS_PER_REDUCTION = 100_000 as const;
+
+/** Maximum UTF-8 bytes in ticket, work-item, or dimension identities. */
+export const MAX_FAIRNESS_ID_UTF8_BYTES = 256 as const;
+
 /** Highest to lowest. Aging PROMOTES a ticket toward P0 (lower index). */
 export const PRIORITY_LADDER: readonly FairnessPriority[] = Object.freeze([
   "P0",
@@ -57,5 +63,5 @@ export function promotedPriority(priority: FairnessPriority): FairnessPriority |
 }
 
 export function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

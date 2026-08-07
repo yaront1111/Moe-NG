@@ -35,9 +35,15 @@ export interface FairnessTicket {
   readonly dispatchable: boolean;
   /** Display-only continuous-eligibility event; never a selection key. */
   readonly continuousEligibilityEvent: number;
+  /** Durable remaining opportunity ceiling installed by cap migration, if any. */
+  readonly migratedBoundAtMost: number | null;
 }
 
 export interface FairnessState {
+  /** Permanent compatibility-dimension identity, retained even when drained. */
+  readonly dimension: string | null;
+  /** Persisted identity of the project-wide ceiling used to validate this state. */
+  readonly projectCeilingMd: number;
   readonly policyMd: number;
   /** Monotonic counter for eligibility / forced-entry events. */
   readonly eventSeq: number;
@@ -113,6 +119,10 @@ export type FairnessReasonCode =
   | "FAIRNESS_UNKNOWN_TICKET"
   | "FAIRNESS_STALE_EVENT"
   | "FAIRNESS_INVALID_PRIORITY"
+  | "FAIRNESS_DISPATCH_ORDER_VIOLATION"
+  | "FAIRNESS_DIMENSION_MISMATCH"
+  | "FAIRNESS_EVENT_LIMIT_EXCEEDED"
+  | "FAIRNESS_PROJECT_CEILING_EXCEEDED"
   | "FAIRNESS_TICKET_CAP_EXCEEDED"
   | "CAP_RAISE_REQUIRES_DRAIN_OR_TIGHTER_MIGRATION";
 
