@@ -16,12 +16,12 @@
     "Use TDD for the checker and stage only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-d89636d1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Approved roadmap addition: dependency-free durable instruction contract should be planned and implemented now; keep generated/live state out of scope.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T12:09:39.132Z",
-  "updatedAt": "2026-08-07T12:09:39.132Z"
+  "updatedAt": "2026-08-07T12:16:47.530Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T12:16:47.263Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ]
 }

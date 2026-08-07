@@ -90,7 +90,7 @@
     {
       "stepId": "step-5",
       "description": "Perform the final adversarial diff review before evidence: challenge empty, huge, malformed, duplicate-key, wrong-version, missing/extra-field, null snapshot, and malformed options inputs; verify decode precedes schema reads, each valid request invokes the scheduler exactly once, nested failures retain their original stable codes, all branches remain frozen/deterministic/authority NONE, and no internal subpath or extra runtime export is reachable. Confirm src/index.ts is under 250 physical lines, the package has only the two intended workspace dependencies, tests use no shell-specific quoting, and the lockfile diff contains only the apps/daemon importer. Inspect/stage only these five owned paths and correct any finding before verification.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "apps/daemon/tsconfig.json",
@@ -98,23 +98,35 @@
         "apps/daemon/src/graph-preview-request.test.ts",
         "pnpm-lock.yaml"
       ],
-      "startedAt": "2026-08-07T12:06:15.119Z"
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/tsconfig.json",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/graph-preview-request.test.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Adversarial review completed against the full staged diff. Added explicit empty-body coverage and deep-freeze checks for every scheduler outcome. Confirmed pure/concurrency-safe behavior, decoder-first control flow, one scheduler call on the sole valid path, stable nested decoder codes, exact top-level keys, null snapshot/options domain classification, deterministic frozen NONE-authority envelopes, root-only runtime export, cross-platform argv/cwd smoke, 111-line production source, 287-line test, exactly two workspace dependencies, and a lock diff containing only apps/daemon. Staged exactly the five owned paths; `git diff --cached --check`, typecheck, and 28 tests pass.",
+      "startedAt": "2026-08-07T12:06:15.119Z",
+      "completedAt": "2026-08-07T12:07:23.886Z"
     },
     {
       "stepId": "step-6",
       "description": "From D:\\projexts\\moe-next, run the single required final evidence command after the last edit and retain its fresh complete output for complete_task: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test. Do not complete on stale, partial, skipped, or failed output; do not create a worktree or use broad add, reset, stash, push, or merge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "apps/daemon/tsconfig.json",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/graph-preview-request.test.ts",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "note": "Fresh final evidence from D:\\projexts\\moe-next: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exited 0; TypeScript completed and Vitest reported 1 file passed, 28 tests passed.",
+      "startedAt": "2026-08-07T12:07:28.635Z",
+      "completedAt": "2026-08-07T12:07:42.991Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-05d10803",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -126,22 +138,28 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.444Z",
-  "updatedAt": "2026-08-07T12:06:15.119Z",
+  "updatedAt": "2026-08-07T12:16:53.853Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T11:52:45.223Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T12:15:59.427Z",
+    "wallClockMs": 1394204
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
-    "worker-05d10803"
+    "worker-05d10803",
+    "qa-200db8e3",
+    "governor-c713986e"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T11:59:02.223Z",
@@ -161,5 +179,22 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-07T11:59:04.257Z",
-  "workStartedAt": "2026-08-07T12:00:04.333Z"
+  "workStartedAt": "2026-08-07T12:00:04.333Z",
+  "reviewStartedAt": "2026-08-07T12:09:02.910Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  28 passed (28)\n   Start at  15:07:34\n   Duration  441ms (transform 147ms, setup 0ms, import 185ms, tests 147ms, environment 0ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src",
+    "reportedAt": "2026-08-07T12:09:02.910Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "apps/daemon/tsconfig.json",
+    "apps/daemon/src/index.ts",
+    "pnpm-lock.yaml",
+    "apps/daemon/src/graph-preview-request.test.ts"
+  ],
+  "completedAt": "2026-08-07T12:15:59.427Z",
+  "reviewCompletedAt": "2026-08-07T12:15:59.427Z",
+  "reviewSummary": "APPROVED. Re-ran verification myself: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` -> exit 0, 1 file / 28 tests passed (matches worker claim). Regression: repo-wide `pnpm typecheck` clean, `pnpm test` -> 54 files / 430 tests passed. DoD1 (fails closed): verified in diff plus independent runtime probes — `__proto__` extra key -> REQUEST_INVALID with no prototype pollution; 200-deep nesting -> INPUT_REJECTED/JSON_DEPTH_LIMIT_EXCEEDED; SharedArrayBuffer-backed view -> JSON_INPUT_TYPE_INVALID; MAX_JSON_BODY_BYTES+1, malformed UTF-8, duplicate keys, empty body all preserve the decoder's literal code+message; decode provably precedes any schema read (index.ts:85). DoD2: every branch Object.isFrozen true at runtime incl. nested scheduler results; exact outer key sets asserted; recursive check finds no nextAllowedCommands/mutation/approval/activation/provider/execution; `\"options\": null` -> REQUEST_EVALUATED + OPTIONS_INVALID, so domain failures are never mislabeled as envelope failures. DoD3: independently confirmed package-root import works (Node Buffer request -> ANALYZED) and `import(\"@moe/daemon/src/index.ts\")` throws ERR_PACKAGE_PATH_NOT_EXPORTED. DoD4: focused command exits 0. Rails: src/index.ts = 111 lines (<=250); deps exactly @moe/contracts + @moe/scheduler; no HTTP/auth/persistence/mutation/activation/approval/provider/execution surface; pnpm-lock diff contains only the apps/daemon importer; no scratch/generated files. Diff = 433 LOC over the 5 owned paths, but 287 is the TDD-mandated contract test file; production + config is 146 LOC, so not oversized in substance. FOLLOW-UP for architect (not a defect here, outside owned paths): root vitest.config.ts includes only packages/** and tests/**, so repo-wide `pnpm test` does NOT run these 28 daemon tests; a future task owning the root Vitest config should add apps/**/*.test.ts or daemon regressions stay invisible to the repo-wide gate."
 }

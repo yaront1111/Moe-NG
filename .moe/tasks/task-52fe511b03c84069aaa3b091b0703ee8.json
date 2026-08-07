@@ -123,8 +123,8 @@
       "completedAt": "2026-08-07T12:05:50.506Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-200db8e3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -136,12 +136,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:44:12.748Z",
-  "updatedAt": "2026-08-07T12:06:28.461Z",
+  "updatedAt": "2026-08-07T12:12:37.041Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T11:45:06.592Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-07T12:12:37.041Z",
+    "wallClockMs": 1650449
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
@@ -189,5 +191,8 @@
     "packages/scheduler/src/validate-graph.ts",
     "packages/scheduler/src/validate-graph-structure.ts",
     "packages/scheduler/src/validate-graph-structure.js"
-  ]
+  ],
+  "completedAt": "2026-08-07T12:12:37.041Z",
+  "reviewCompletedAt": "2026-08-07T12:12:37.041Z",
+  "reviewSummary": "APPROVED. Re-ran required command myself: typecheck exit 0, test exit 0 (16 files/120 tests), matching claimed evidence. Repo-wide `pnpm -r --filter '@moe/*' test` also green (store 89, testkit 164, daemon 28) — no cross-package regression.\n\nDoD1: compared block-by-block vs the 492-line pre-refactor file (4840573^), not the step notes. Signature, result types, all codes/messages, single fail()=sortIssues->deepFreeze equivalent. Policy resolves before any snapshot read; raw length ceilings still precede every indexed read; accumulation order preserved (dense-shape, malformed-node, dup-node, malformed-edge, dup-edge, self-edge, missing-endpoint, completion, limits); nodeShapeOk still suppresses dependent findings; topology only after integrity clears; cycle short-circuits before closure; counter increments identical; identity on same sorted view; registerValidatedGraph once. Highest-risk transform (completionIssues if/else-if -> guarded early returns) verified equivalent across all three states.\n\nDoD2: physical lines 76/230/317, all <350. index.ts untouched; grep confirms helpers imported only by validate-graph.ts, no new public export.\n\nDoD3: test diff +185/-0, nothing weakened. New tests mutation-resistant: full toEqual on complete issue objects in canonical order (accumulation order deliberately differs from reported order, so a lost sort fails loudly), frozen-envelope asserts backed by toThrow, node-shape guard, raw-ceiling refusal.\n\nDoD4: exit 0 fresh. Scope: commit 4840573 touched exactly the 6 owned paths; net +347 LOC (433 deletions pure movement).\n\nArchitect items, not the worker's doing, not blocking: (1) harness auto-commit bc8e4f5 landed after the worker's clean commit on branch moe/work-2026-08-07 and swept the dirty tree — apps/daemon/** (foreign, task-26323aef), .codex/**, .moe/** — into a commit labeled THIS task ID; breaks the owned-paths rail. (2) Pre-existing: frontier.ts 399, graph-internal.ts 385 near the 400 split rail."
 }

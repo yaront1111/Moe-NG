@@ -15,9 +15,89 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-c4babdf9",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD first: add one table-driven package-root contract test file (keep it <=250 physical lines) that pins the selected literals `moe-runtime-command/1`, `moe-runtime-query/1`, and `moe-runtime-error-registry/1`; the complete closed lifecycle/operation tuples; the immutable deterministic nextAllowedCommands shape; and the full ErrorRegistry key set. Add red tests for exact command/query root and nested keys, missing/wrong fields, old/future schema versions, command/query kind separation, nonnegative-safe version/epoch fields, optional leased-authority all-or-none validation, N and N+1 of the existing JSON byte/depth/string limits, deep freezing, canonical affordance ordering/deduplication, historical results omitting affordances with `requiresAffordanceRefresh=true`, unknown lifecycle/error returning an empty frozen mutation set, and registry/detail sanitization that cannot echo raw bytes, payloads, credentials, tokens, digests, stack, or SQL. Include a raw Node `--experimental-strip-types` package-root import smoke assertion so missing runtime bridges fail.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/contracts/src/runtime/runtime-contracts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create the closed runtime model and affordance vocabulary. Define frozen tuple-derived unions for the canonical TruthClass plus Project, Goal and scheduling control, GraphRevision, PlanningRun and drain overlay, NodeRun, Attempt, Lease, Effect, Integration, Approval state/decision/validity, QualificationRecovery, PlanningHold, supersession funding/fence, provider-slot, and Cutover states from design sections 6/8/12/16. Ratify the section-17 surface into disjoint operation tuples: queries are exactly `project.get`, `goal.get`, `goal.list`, `graph.get`, `graph.preview`, `dependency.explain`, `frontier.get`, `scheduler.readiness_explain`, `work.get_context`, `budget.get`, `evidence.get`, `quarantine.get`, `reconciliation.get`, `events.read`, `events.wait`, and `doctor.get`; `presence.ping` is telemetry and not a mutation affordance; every other listed v1 operation is a command. Define `NextAllowedCommand` as `{commandKind, commandId, commandEnvelopeVersion, inputSchemaVersion, targetAggregateId, expectedVersion, leaseAuthority?, graphRevisionHash?, policyRevisionHash?}` and a fresh-versus-historical result union. Implement a pure builder that accepts a tagged known lifecycle source, rejects malformed/unknown entries without partial authority, permits command kinds only, rejects duplicate command IDs, sorts by commandKind then commandId, deeply freezes the result, and returns the shared frozen empty array for any unknown source state. Keep the module <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/contracts/src/runtime/runtime-model.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create the closed versioned ErrorRegistry. Define the stable codes `INPUT_INVALID`, `INPUT_LIMIT_EXCEEDED`, `SCHEMA_VERSION_UNSUPPORTED`, `AUTHENTICATION_FAILED`, `CAPABILITY_DENIED`, `SESSION_EXPIRED`, `SESSION_REPLAYED`, `STALE_LEASE`, `STALE_EPOCH`, `EXPECTED_VERSION_CONFLICT`, `IDEMPOTENCY_CONFLICT`, `ILLEGAL_TRANSITION`, `HARD_DEPENDENCY_UNPROVEN`, `DEPENDENCY_REDUNDANT`, `FRONTIER_STALLED`, `FANOUT_SCOPE_REFUSED`, `FANOUT_ORACLE_REFUSED`, `FANOUT_BUDGET_REFUSED`, `FANOUT_FLOW_REFUSED`, `PLANNING_SUBMISSION_FINALIZING`, `SUPERSESSION_PREPARED`, `PLANNING_DISPOSITION_UNKNOWN`, `SUPERSESSION_CONSEQUENCE_CHANGED`, `SUPERSEDED_AUTHORITY`, `REVISION_REBOUND`, `PROVIDER_CAPABILITY_CHANGED`, `METERING_UNAVAILABLE`, `INTEGRATION_PROVENANCE_INVALID`, `INPUT_PROVENANCE_INVALID`, `JOURNAL_LIMIT_REACHED`, `CONTEXT_TOO_LARGE`, `STORAGE_DEGRADED`, `DISTRIBUTION_MISMATCH`, `RESTORE_REQUIRED`, `CUTOVER_STATE_INVALID`, `NEEDS_RECONCILIATION`, `OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN`, and `UNKNOWN_ERROR`. For every code, provide one frozen exhaustive descriptor with TruthClass, retryability (`NEVER|AFTER_REFRESH|AFTER_FACT_CHANGE|AFTER_RECOVERY`), recovery category (`NONE|CORRECT_REQUEST|REAUTHENTICATE|REFRESH|WAIT_OR_OBSERVE|REPLAN|RECONCILE|HUMAN_DECISION|INSPECT_OR_EXPORT|CANCEL`), exact recovery operation tuple, HTTP/MCP transport category/status/code, exact valid lifecycle sources, and an allowlist of required safe scalar detail keys. Implement exhaustive lookup/error construction: known codes copy only allowlisted scalar details into a frozen null-prototype record; missing required details are omitted rather than guessed; unknown code or unknown source resolves to `UNKNOWN_ERROR`, TruthClass UNKNOWN, no details, and the shared frozen empty recovery/affordance set while retaining only a validated correlation ID. Keep the registry <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/contracts/src/runtime/error-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the byte ingress decoders by composing `decodeBoundedJsonBytes`, preserving its exact 1 MiB/depth-64/string-256-KiB N/N+1 behavior and immutable snapshot semantics. `decodeRuntimeCommandEnvelopeBytes` must accept only `{schemaVersion, commandKind, commandId, correlationId, requestDigest, sessionCredential, targetAggregateId, expectedVersion, leaseAuthority?, graphRevisionHash?, policyRevisionHash?, payload}` where `leaseAuthority`, when present, has exactly `{leaseToken, epoch, authorityHash, graphEpoch, attemptBindingVersion}`; require nonempty strings, lowercase 64-hex digests/hashes, safe nonnegative integer versions/epochs, a plain JSON-object payload, a closed command kind, all-or-none lease fields, and no unknown/symbol/accessor keys. `decodeRuntimeQueryEnvelopeBytes` must accept only `{schemaVersion, queryKind, correlationId, sessionCredential, targetAggregateId?, cursor?, payload}`, use the exact closed query tuple, and reject mutation-only version/lease/revision/command fields. Validate in deterministic order: decoded record, schemaVersion, exact key set, kind, identifiers/digests, numeric bindings, then payload. Map body/depth/string limit errors to `INPUT_LIMIT_EXCEEDED`, unsupported versions to `SCHEMA_VERSION_UNSUPPORTED`, and all other syntax/shape failures to `INPUT_INVALID`; construct errors through the registry so no attacker bytes or secrets are reflected. Return only deeply frozen discriminated results and keep the module <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/contracts/src/runtime/runtime-envelopes.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Make the contracts reachable only through the existing package root. Add the repository-required one-line strip-types bridges for each new production module, and update `packages/contracts/src/index.ts` with explicit value/type exports from the `.js` bridge specifiers; do not add package subpath exports or expose internal validation helpers. Ensure the TDD file imports only `@moe/contracts` and the raw Node smoke can load and execute the public decoders/registry through these bridges. Keep the barrel and every bridge <=250 lines (bridges should remain one line).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/runtime/runtime-model.js",
+        "packages/contracts/src/runtime/error-registry.js",
+        "packages/contracts/src/runtime/runtime-envelopes.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarially review only the owned diff before the final gate: attack null/empty/huge/malformed bytes, wrong or future versions, duplicate/unknown operations, partial lease bindings, unsafe integers, mutation of every nested result, replayed historical results, unknown lifecycle/error/source combinations, and secret/raw-input injection into details; confirm every such path fails closed with zero mutation affordance and stable deterministic output. Check command/query vocabularies against the pinned design and confirm `graph.preview`/wait/get operations never enter nextAllowedCommands. Run a cross-platform Node line-count assertion over `packages/contracts/src/index.ts`, all `packages/contracts/src/runtime/*.ts`, and the three bridge files and fail if any production or test source exceeds 250 physical lines. Inspect `git diff --` for exactly these owned paths, no scratch/generated evidence, and no edits to authoritative docs; if review changes bytes, repeat the affected tests before proceeding.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/runtime/runtime-model.ts",
+        "packages/contracts/src/runtime/error-registry.ts",
+        "packages/contracts/src/runtime/runtime-envelopes.ts",
+        "packages/contracts/src/runtime/runtime-contracts.test.ts",
+        "packages/contracts/src/runtime/runtime-model.js",
+        "packages/contracts/src/runtime/error-registry.js",
+        "packages/contracts/src/runtime/runtime-envelopes.js"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the single fresh completion gate from `D:/projexts/moe-next`: `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test`. Require exit code 0 and retain the fresh output tail as `moe.complete_task` evidence. Stage/commit only the explicit owned paths named in this plan; never use a worktree, broad add, push, merge, reset, or stash.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/runtime/runtime-model.ts",
+        "packages/contracts/src/runtime/error-registry.ts",
+        "packages/contracts/src/runtime/runtime-envelopes.ts",
+        "packages/contracts/src/runtime/runtime-contracts.test.ts",
+        "packages/contracts/src/runtime/runtime-model.js",
+        "packages/contracts/src/runtime/error-registry.js",
+        "packages/contracts/src/runtime/runtime-envelopes.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-c8c01fc6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,11 +109,36 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:44.572Z",
-  "updatedAt": "2026-08-07T12:01:03.414Z",
+  "updatedAt": "2026-08-07T12:13:26.073Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T12:00:57.283Z"
+    "firstClaimAt": "2026-08-07T12:00:57.283Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
   },
   "contextFetchedBy": [
-    "architect-c4babdf9"
-  ]
+    "architect-c4babdf9",
+    "worker-c8c01fc6"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T12:13:20.773Z",
+  "planningNotes": {
+    "approachesConsidered": "A single runtime registry file was rejected because it would mix wire parsing, lifecycle/affordance vocabulary, and error policy and would violate the user's no-large-files rail. The plan uses three focused TypeScript modules plus the repository-required one-line .js strip-types bridges. A separate schema generator is out of scope for this slice. The design does not pin common query fields or version literals, so this plan explicitly chooses minimal fail-closed v1 shapes rather than leaving those choices to the worker.",
+    "codebaseInsights": "The @moe/contracts package is root-export-only and uses explicit .js specifiers backed by tracked one-line `export * from \"./name.ts\"` bridges. Existing decodeBoundedJsonBytes already snapshots hostile byte inputs, enforces 1,048,576-byte bodies, depth 64, and 262,144-byte UTF-8 strings, rejects duplicate keys/non-interoperable numbers, and deeply freezes decoded JSON. Runtime envelope parsing must compose after it, not duplicate or relax it. Existing store request identity uses `moe-command-request/1`, expectedVersion, commandKind, targetAggregateId, correlationId, and historical `requiresAffordanceRefresh`; runtime contracts must preserve the rule that historical replay carries no current affordances.",
+    "risks": "The authoritative design intentionally leaves the common query envelope, nextAllowedCommands JSON shape, retry/recovery enums, and version literals unspecified. Use the exact decisions in the steps below. Never reflect payload, credential, lease token, request bytes/digest, stack, SQL, or arbitrary attacker detail into errors. Unknown operation/state/error/version must fail closed and expose no mutation affordance. Keep every touched production or test source at or below 250 physical lines; use compact table-driven data/tests rather than weakening coverage.",
+    "keyFiles": [
+      "packages/contracts/src/index.ts",
+      "packages/contracts/src/bounded-json.ts",
+      "packages/contracts/src/bounded-json-model.ts",
+      "packages/contracts/src/input-limits.ts",
+      "packages/store/src/store-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-07T12:13:22.806Z"
 }
