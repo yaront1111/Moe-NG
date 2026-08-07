@@ -31,6 +31,12 @@ importers:
 
   packages/control-room-model: {}
 
+  packages/core:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/scheduler: {}
 
   packages/skills:
