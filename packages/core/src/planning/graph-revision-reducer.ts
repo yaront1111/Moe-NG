@@ -15,8 +15,6 @@
  * `IDEMPOTENCY_CONFLICT`, so a missing command identity rejects `ILLEGAL_TRANSITION` here
  * instead of cloning the goal reducer verbatim into a silent `UNKNOWN_ERROR` degrade.
  */
-import { createRuntimeError } from "@moe/contracts";
-
 import type {
   GraphActivationBinding,
   GraphRevisionApproveCommand,
@@ -30,6 +28,15 @@ import type {
   GraphRevisionState,
   GraphRevisionSubmitCommand,
 } from "./graph-revision-contract.js";
+import {
+  accepted,
+  clonedState,
+  illegal,
+  rebound,
+  supersededAuthority,
+  unknownFailure,
+  versionConflict,
+} from "./graph-revision-results.js";
 import {
   bindingOf,
   sameBinding,
@@ -60,66 +67,6 @@ export const GRAPH_REVISION_TRANSITIONS = Object.freeze({
   "graph_revision.reject": Object.freeze(["DRAFT", "PENDING_APPROVAL", "APPROVED"]),
   "graph.supersede": Object.freeze([]),
 } as const satisfies Readonly<Record<GraphRevisionCommandKind, readonly GraphRevisionLifecycle[]>>);
-
-function rejected(error: ReturnType<typeof createRuntimeError>): GraphRevisionReducerResult {
-  return Object.freeze({ error, ok: false });
-}
-
-function unknownFailure(): GraphRevisionReducerResult {
-  return rejected(createRuntimeError({ code: "UNKNOWN_ERROR" }));
-}
-
-function illegal(
-  state: GraphRevisionState,
-  kind: GraphRevisionCommandKind,
-): GraphRevisionReducerResult {
-  return rejected(createRuntimeError({
-    code: "ILLEGAL_TRANSITION",
-    details: { aggregateKind: "GRAPH_REVISION", commandKind: kind, sourceState: state.lifecycle },
-    source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
-  }));
-}
-
-/** Approval or activation bytes that do not bind this revision's sealed identity. */
-function rebound(state: GraphRevisionState): GraphRevisionReducerResult {
-  return rejected(createRuntimeError({
-    code: "REVISION_REBOUND",
-    source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
-  }));
-}
-
-function supersededAuthority(state: GraphRevisionState): GraphRevisionReducerResult {
-  return rejected(createRuntimeError({
-    code: "SUPERSEDED_AUTHORITY",
-    source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
-  }));
-}
-
-function versionConflict(
-  state: GraphRevisionState,
-  expectedVersion: number,
-): GraphRevisionReducerResult {
-  return rejected(createRuntimeError({
-    code: "EXPECTED_VERSION_CONFLICT",
-    details: { actualVersion: state.version, expectedVersion },
-    source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
-  }));
-}
-
-function accepted(
-  state: GraphRevisionState,
-  events: readonly GraphRevisionEvent[],
-): GraphRevisionReducerResult {
-  return deepFreeze({ events, ok: true as const, state });
-}
-
-/** Content identity is never part of the patch surface. */
-function clonedState(
-  state: GraphRevisionState,
-  patch: Partial<Omit<GraphRevisionState, "graphContentHash" | "planHash">>,
-): GraphRevisionState {
-  return deepFreeze({ ...state, ...patch });
-}
 
 function create(command: GraphRevisionCreateCommand): GraphRevisionReducerResult {
   if (command.expectedVersion !== 0 || !validRef(command.revisionId)
