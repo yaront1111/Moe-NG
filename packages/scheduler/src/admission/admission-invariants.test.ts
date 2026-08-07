@@ -263,27 +263,38 @@ describe("seeded admission invariants", () => {
     }
   });
 
-  it("never admits a hard edge from an AGENT_REPORTED necessity across truth-class permutations", () => {
+  it("admits through admitGraph only when claim and contract are both DAEMON_VERIFIED", () => {
     const next = xorshift32(0x5eed0002);
     let agentCases = 0;
+    let unknownCases = 0;
+    let admittedCases = 0;
     for (let index = 0; index < 96; index += 1) {
       const claimed = TRUTH_CLASSES[next() % TRUTH_CLASSES.length]!;
       const contracted = TRUTH_CLASSES[next() % TRUTH_CLASSES.length]!;
       const held = next() % 2 === 0 ? { humanDecisionRef: "decision:1" } : {};
-      const result = evaluateNecessityClaim(
-        { edgeKey: EDGE, truthClass: claimed, ...held },
-        contractWith(contracted),
-        counterfactualFor(chain(), EDGE),
-      );
-      expect(result.ok).toBe(true);
-      const outcome = result.ok ? result.outcome : null;
+      const snapshot = chain();
+      const contracts = snapshot.edges.map((edge) => ({
+        ...entryFor(edge, {
+          necessity: {
+            failedConsumerCriterionRef: `criterion:${edge.consumerNodeKey}`,
+            failureKind: "MISSING_ARTIFACT",
+            truthClass: contracted,
+          },
+        }),
+        necessityWitness: { edgeKey: edge.edgeKey, truthClass: claimed, ...held },
+      }));
+      const result = admitGraph(inputFor(snapshot, { contracts }));
+      const shouldAdmit = claimed === "DAEMON_VERIFIED" && contracted === "DAEMON_VERIFIED";
+      expect(result.ok).toBe(shouldAdmit);
       if (claimed === "AGENT_REPORTED" || contracted === "AGENT_REPORTED") {
         agentCases += 1;
-        expect(outcome?.kind).not.toBe("ADMISSIBLE");
       }
-      if (outcome?.kind === "ADMISSIBLE") expect(outcome.truthClass).toBe("DAEMON_VERIFIED");
+      if (claimed === "UNKNOWN" || contracted === "UNKNOWN") unknownCases += 1;
+      if (shouldAdmit) admittedCases += 1;
     }
     expect(agentCases).toBeGreaterThan(0);
+    expect(unknownCases).toBeGreaterThan(0);
+    expect(admittedCases).toBeGreaterThan(0);
   });
 
   it("never refuses on partial contract equivalence and never fabricates a zero estimate", () => {
