@@ -79,8 +79,8 @@
       "completedAt": "2026-08-07T21:51:34.824Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-c8bf9f6b",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -92,7 +92,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T21:51:34.824Z",
+  "updatedAt": "2026-08-07T21:52:32.566Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:22:56.502Z",
     "plannedStepCount": 4,
@@ -127,5 +127,16 @@
     "warnedAt": "2026-08-07T21:47:36.580Z"
   },
   "planApprovedAt": "2026-08-07T21:39:51.518Z",
-  "workStartedAt": "2026-08-07T21:44:50.388Z"
+  "workStartedAt": "2026-08-07T21:44:50.388Z",
+  "reviewStartedAt": "2026-08-07T21:52:32.566Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  14 passed (14)\n      Tests  226 passed (226)\n   Start at  00:51:01\n   Duration  542ms (transform 1.75s, setup 0ms, import 2.51s, tests 441ms, environment 1ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-07T21:52:32.566Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/graph-revision-reducer.test.ts",
+    "packages/core/src/planning/graph-revision-test-fixtures.ts"
+  ]
 }

@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-c4babdf9",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.265Z",
-  "updatedAt": "2026-08-07T21:48:23.218Z",
+  "updatedAt": "2026-08-07T21:52:37.640Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:17:26.969Z"
   },
@@ -47,5 +47,16 @@
   "blockedReason": "SPIDR split required: the original five-responsibility budget core cannot meet the enforced <=400 net-LOC and 1–3-file task size without oversized production/tests. Five bounded child tasks now own contract, ledger, protected reservation, measurement, and settlement slices. Planning this parent before those interfaces land would be speculative and could dispatch integration tests ahead of their producers.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-07T21:48:23.218Z"
+  "blockedAt": "2026-08-07T21:48:23.218Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified design/policy/scheduler constraints, split the oversized scope into five bounded BACKLOG children, documented ordering and final-hardening role in task comment and Serena memories.",
+      "whatRemains": "Promote/plan/complete child tasks 7dc2e487, a5def097, 318c0732, 5ee5b801, 3602672f; then unblock parent and plan two held-out hardening tests.",
+      "pitfalls": "Do not submit the original 1.8-2.0k LOC scope as one plan; preserve <=250 production and test files and <=400 per child.",
+      "openQuestions": "Direct @moe/core composition remains impossible under budget/**-only ownership; a later boundary task needs package.json/lock/index ownership if required.",
+      "releasedAt": "2026-08-07T21:52:37.639Z",
+      "releasedBy": "architect-c4babdf9",
+      "reason": "Explicit handoff after SPIDR breakdown; parent remains BLOCKED pending five children so architect can plan another eligible task."
+    }
+  ]
 }
