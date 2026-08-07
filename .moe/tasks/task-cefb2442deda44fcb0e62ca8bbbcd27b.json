@@ -16,12 +16,12 @@
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: dependency satisfied — commit bcdc2f6 is landed. Fifth and last of the decomposition children required by the approved size exception (prop-2eaa632d). Extracts graph-revision-test-fixtures.ts from graph-revision-reducer.test.ts. Once all five land, Planning source size guard becomes plannable — it is the closing gate that enforces the rule directory-wide.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:12.133Z",
-  "updatedAt": "2026-08-07T19:56:12.133Z"
+  "updatedAt": "2026-08-07T20:53:02.935Z"
 }

@@ -16,12 +16,12 @@
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: dependency satisfied — commit bcdc2f6 is landed. Second of the five decomposition children required by the approved size exception (prop-2eaa632d). Splits graph-revision-reducer.ts and graph-revision-results.ts under the permanent <=250-line rule. Behavior-preserving move only.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.600Z",
-  "updatedAt": "2026-08-07T19:56:11.600Z"
+  "updatedAt": "2026-08-07T20:52:39.931Z"
 }

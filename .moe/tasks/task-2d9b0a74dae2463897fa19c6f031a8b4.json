@@ -121,7 +121,7 @@
       "completedAt": "2026-08-07T20:50:34.517Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-875b53a2",
   "branch": null,
   "prLink": null,
@@ -141,7 +141,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:13.030Z",
-  "updatedAt": "2026-08-07T20:50:34.517Z",
+  "updatedAt": "2026-08-07T20:56:55.600Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T18:40:29.422Z",
     "plannedStepCount": 6,
@@ -153,10 +153,10 @@
     "architect-d89636d1",
     "worker-875b53a2"
   ],
-  "blockedReason": "The task cannot satisfy its own exact verification gate under the current ownership and test-edit rail. Raising PRAGMA user_version from 2 to 3 necessarily makes packages/store/src/sqlite-event-store-core.test.ts:26 fail (`expect(health.userVersion).toBe(2)`), but the task permits version-literal edits only in command-decision-integrity.test.ts and store-project-and-schema-contract.test.ts and does not own sqlite-event-store-core.test.ts. Repo-wide audit found this is the only additional current-version pin. Required amendment: add packages/store/src/sqlite-event-store-core.test.ts to owned paths and permit only line 26's literal 2→3; no assertion weakening. Without that amendment, either the focused gate fails or the worker violates explicit rails.",
+  "blockedReason": "Implementation is committed as 7f31a4d and the exact store gate passes 124/124, but the required repository delivery gate cannot run green in the shared checkout. Active policy task task-556d87c3571e4d94a6d57e5ca77ab35f has untracked packages/core/src/policy/policy-decision-table.test.ts importing missing policy-contract.js and policy-evaluation.js; @moe/core typecheck remained red across 30 foreground polls over 5 minutes. Preserving foreign TDD RED and waiting for its owner to finish.",
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-07T18:44:49.261Z",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-07T20:56:55.599Z",
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],

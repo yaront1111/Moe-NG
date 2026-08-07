@@ -19,33 +19,24 @@
     {
       "stepId": "step-1",
       "description": "HARDENED dependency gate (do NOT skip; kernel task-eef1e7f2 is WORKING in this shared tree right now; its owned paths packages/scheduler/src/dependencies/** do not exist on disk yet). Landedness = ALL of: (1) moe task status DONE for task-eef1e7f2 (a commit alone is insufficient — the kernel commits at its final step, and QA-reject rework can change the surface after an early commit); (2) `git log --oneline -- packages/scheduler/src/dependencies` non-empty AND `git status --porcelain -- packages/scheduler/src/dependencies` clean (files on disk uncommitted mid-work = NOT landed); (3) SYMBOL-KEYED surface probe — grep the landed modules for validateDependencyContract, ContractRedundancyAssessment, DependencyChallenge, and the horizon rank/isWithinHorizon helpers — key on exported symbols, NEVER a file census (the kernel plan reserves an amendment split into dependency-predicate-registry.ts; a file-list gate would false-block on a legitimate split). Any check fails -> moe.report_blocked needsFrom task-eef1e7f2 and STOP. During ALL later steps, focused gates run `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` (path-scoped BELOW the package filter — the kernel worker's legitimate TDD RED tests share `pnpm --filter @moe/scheduler test` and would fail it); the full package filter runs only at the final verification step with foreign-work attribution. RE-RUN this whole gate at the final verification step (stale-dependency gotcha: conditional probes must be re-checked at completion).",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "note": "Hardened dependency gate RE-RUN (fresh session). (1) Kernel task-eef1e7f2 status=WORKING with 7/7 plan steps COMPLETED (mid-complete_task), NOT DONE — governor's reopenReason for this task explicitly licensed continuing on committed-code symbol resolution instead of the DONE leg. (2) `git log --oneline -- packages/scheduler/src/dependencies` = `7e80186 feat(scheduler): add dependency kernel`; `git status --porcelain` on that path = EMPTY (clean, tracked). (3) SYMBOL-KEYED probe (`grep -rln <symbol> | grep -v .test.`) — validateDependencyContract -> dependency-contract.ts/dependency-analysis.ts/dependency-witness.ts; ContractRedundancyAssessment -> dependency-analysis.ts; DependencyChallenge -> dependency-analysis.ts; isWithinHorizon -> dependency-witness.ts. All resolve from committed PRODUCTION modules (no test-only hits, the failure mode from the previous session). Surface read in full and matches the plan's pins: validateDependencyContract(input, registry), assessContractRedundancy -> ContractRedundancyAssessment{contractComparison:{producerArmEquivalent,satisfactionPredicateEquivalent,consumptionHorizonEquivalent},requiresSemanticProof:true}, validateDependencyChallenge(input, context), isWithinHorizon(gate, horizon), DEPENDENCY_GATES 11-gate total order. Landed reuse surface also re-verified: validateGraphSnapshot, analyzeGraphStructure (provenance-required), partitionFrontier, analyzeHardEdgeCounterfactuals, GraphStructuralAnalysis.structuralRedundancyCandidates, INTERFACE_FIRST_REVIEW_REQUIRED diagnostics, GRAPH_NODE_LIMIT_EXCEEDED/GRAPH_HARD_EDGE_LIMIT_EXCEEDED. Gate PASSES; proceeding to step-2. Will re-run at step-6.",
-      "startedAt": "2026-08-07T19:56:25.129Z",
-      "completedAt": "2026-08-07T20:29:26.100Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-2",
       "description": "TDD red — src/admission/admission-pass.test.ts. The 8-step design-396 matrix, with EXPLICIT step allocation (QA-verifiable, no silent drops): STEP 1 — structural members (self-edge, cycle, missing endpoint, duplicates, completion codes) are REUSED from validateGraphSnapshot verbatim (assert pass-through of GRAPH_* issues, no re-implementation, no duplicate ADMISSION_* codes for the same facts); genuinely admission-local step-1 additions each get a stable ADMISSION_* code + test: cross-snapshot input, incompatible contract (contract fields vs edge endpoints/kind disagree), stale fact (source-fact versions older than declared current), duplicate contract (two contracts for one edge); STEP 2 — ADMISSION_HARD_DEPENDENCY_UNPROVEN when a hard edge lacks its current typed contract (no collision with landed frontier HARD_DEPENDENCY_UNSATISFIED/UNKNOWN codes); same-epic/prose-order/same-repo/ownership/resource-scarcity witnesses each REJECTED as proof (design 399); STEP 3 — minimum-milestone: depending on full ACCEPTED is INVALID when the contract's minimumQualifyingMilestone + an INTERFACE_AVAILABLE/FIXTURE_AVAILABLE ruling shows an earlier milestone satisfies the consumer (design 400); STEP 4 — EXPLICIT: contract-level semantic transitive reduction with the PINNED LICENSING CONDITION — a proposal-refusal (ADMISSION_EDGE_SEMANTICALLY_REDUNDANT) is licensed ONLY when the kernel ContractRedundancyAssessment shows FULL identity along the alternate path: producer-arm identity AND predicate identity AND invalidation/horizon identity (design 396.4 'identical input/predicate and invalidation semantics'); ANY partial equivalence -> reviewOnly RECORD, never refusal; refusing a PROPOSAL is distinct from removing a landed edge, so the kernel's requiresSemanticProof:true fence is never contradicted — assert the assessment object passes through unmodified; a direct artifact edge an intermediate does not reproduce stays VALID; STEP 5 — completion closure reused (COMPLETION_CLOSURE_INCOMPLETE pass-through); STEP 6 — baseline comparison: structural half DERIVED from analyzeGraphStructure outputs (structuralStageCount, criticalPathHardEdges, hardDescendantCount, null-not-zero widths — assert admission NEVER recomputes its own critical path); estimate half = VALIDATED caller-supplied truth-classed duration/cost fields (planner proposes, core validates — design 392/447/457); UNKNOWN stays UNKNOWN, never zero, never a speed claim; STEP 7 — interface-first record = composition of landed INTERFACE_FIRST_REVIEW_REQUIRED StructuralDiagnostic edges × kernel alternative ruling × design-404 stub constraints (non-production, hash-bound to approved interface contract, producer+consumer conformance recipes, replaced/verified at integration) — RECORD only, no stub generation, no second serial-edge detector; STEP 8 — 24-node/64-hard-edge limits REUSED from landed GRAPH_NODE_LIMIT_EXCEEDED/GRAPH_HARD_EDGE_LIMIT_EXCEEDED (assert pass-through, no new codes); depth-3/child-width-6/nine-per-expansion are expansion-LINEAGE facts owned by the Expansion admission protocol task — admission ships ONLY a pure checker parameterized by caller-supplied expansion-lineage facts plus an R2-raise reference record. J6/CORE-S13 shapes: naked A->B->C->D refused with corrected-frontier evidence via landed analyzeHardEdgeCounterfactuals output; interface-first variant admits with the milestone edge retained. Determinism: same inputs -> byte-identical frozen results. Confirm RED.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/admission/admission-pass.test.ts"
-      ],
-      "modifiedFiles": [
-        "packages/scheduler/src/admission/admission-pass.test.ts"
-      ],
-      "note": "TDD RED. admission-pass.test.ts written with the full 8-step design-396 matrix, explicitly allocated: STEP 1 = 5 pass-through assertions (GRAPH_SELF_EDGE / GRAPH_MISSING_ENDPOINT / GRAPH_DUPLICATE_NODE / GRAPH_COMPLETION_NOT_TERMINAL / GRAPH_CYCLE) each additionally asserting ZERO ADMISSION_* codes for the same fact, plus 6 admission-local codes (ADMISSION_CROSS_SNAPSHOT_INPUT x2 — baseline node-set divergence and split graphBindingDigest; ADMISSION_CONTRACT_INCOMPATIBLE x2 — endpoint disagreement and advisory-kind-on-HARD-edge; ADMISSION_STALE_FACT; ADMISSION_DUPLICATE_CONTRACT; ADMISSION_INPUT_MALFORMED). STEP 2 = ADMISSION_HARD_DEPENDENCY_UNPROVEN for a contract-less HARD edge (asserting edgeKeys pinpoints the edge), it.each over all 5 rejected necessity-witness kinds (PROSE_ORDER/RESOURCE_SCARCITY/SAME_EPIC/SAME_REPOSITORY/SHARED_OWNERSHIP), and an explicit non-collision assertion against the landed frontier codes HARD_DEPENDENCY_UNSATISFIED/UNKNOWN. STEP 3 = ADMISSION_MINIMUM_MILESTONE_OVERSTATED for ACCEPTED+INTERFACE_AVAILABLE, admitted for earlier milestone + FIXTURE_AVAILABLE, admitted for ACCEPTED+NOT_APPLICABLE. STEP 4 = full-identity diamond refused (ADMISSION_EDGE_SEMANTICALLY_REDUNDANT on dev-edge-ac only), partial predicate equivalence RECORDED not refused with the kernel ContractRedundancyAssessment asserted deep-equal to a directly-computed assessContractRedundancy result (pass-through unmodified), and a direct artifact edge the intermediate does not reproduce staying valid. STEP 5 = COMPLETION_CLOSURE_INCOMPLETE pass-through. STEP 6 = baseline structural fields asserted EQUAL to analyzeGraphStructure outputs (never recomputed), widths null not zero, durationEstimate null, absent estimates -> {value:null,truthClass:UNKNOWN}, supplied estimates unmodified, UNKNOWN-carrying-0 refused with ADMISSION_ESTIMATE_MALFORMED. STEP 7 = interfaceFirst diagnostics deep-equal analysis.diagnostics, design-404 stub constraints exact object, stubConstraints null when no alternative ruled available. STEP 8 = GRAPH_NODE_LIMIT_EXCEEDED and GRAPH_HARD_EDGE_LIMIT_EXCEEDED pass-through (zero ADMISSION_* codes), 3 expansion-lineage refusal codes, R2 raise-reference record, pure checkExpansionLineage checker. Plus J6/CORE-S13 (naked A->B->C->D refused on prose order, corroborated by landed analyzeHardEdgeCounterfactuals structuralStageReduction=1 on the middle edge; interface-first variant admits with all 3 edges retained and dependencyNecessity still UNKNOWN) and determinism (byte-identical JSON + frozen). RED verified fresh: `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` -> \"Test Files 1 failed (1)\", \"Error: Cannot find module './admission-pass.js'\" — fails for the intended reason (production module absent), not a typo.",
-      "startedAt": "2026-08-07T20:29:32.506Z",
-      "completedAt": "2026-08-07T20:33:38.795Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "Green — src/admission/admission-pass.ts (+ one-line shim admission-pass.js). COMPOSITION MECHANICS (verified): GraphStructureView is package-internal — the reuse surface is validateGraphSnapshot (returns ValidatedGraph | issues), analyzeGraphStructure (REQUIRES in-process provenance — admission runs validateGraphSnapshot itself on BOTH the proposed snapshot AND the sequential-baseline snapshot before analysis, else GraphAnalysisError), partitionFrontier, and analyzeHardEdgeCounterfactuals; findRedundancyCandidates is NOT directly callable (internal params) — structural candidates arrive via GraphStructuralAnalysis.structuralRedundancyCandidates. Admission-local additions implemented with dependencies-local-convention helpers (local ADMISSION_* closed code union, local makeIssue/sortIssues/deepFreeze clones, runtime-shape hostile-input helpers via '../runtime-shape.js'). Inputs: validated proposed graph + baseline + DependencyContracts (kernel validateDependencyContract run per contract first) + caller-supplied truth-classed estimates + optional expansion-lineage facts. Output: deep-frozen AdmissionResult { ok: true, records: {baseline, interfaceFirst[], reduction[], counterfactuals} } | { ok: false, issues } — records are evidence artifacts, distinct from refusals. Target <=250, split before 400 (likely split: admission-records.ts via amendment). Step-2 tests green.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
@@ -53,24 +44,12 @@
       "newFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-pass.js"
-      ],
-      "modifiedFiles": [
-        "packages/scheduler/src/admission/admission-model.ts",
-        "packages/scheduler/src/admission/admission-model.js",
-        "packages/scheduler/src/admission/admission-records.ts",
-        "packages/scheduler/src/admission/admission-records.js",
-        "packages/scheduler/src/admission/admission-pass.ts",
-        "packages/scheduler/src/admission/admission-pass.js",
-        "packages/scheduler/src/admission/admission-pass.test.ts"
-      ],
-      "note": "GREEN: 42/42 focused tests pass, `pnpm --filter @moe/scheduler typecheck` exit 0.\n\nMODULE SPLIT (the one the plan reserved in step-3 \"likely split: admission-records.ts via amendment\" and step-7 \"plus amendment-recorded splits\"). moe.amend_plan_step was ATTEMPTED and REFUSED: \"[NOT_ALLOWED] amend_plan_step not allowed: architect or governor role required\" — so it is recorded here instead. Single-file admission-pass.ts would have been ~560 lines, past the 400 hard limit. Split three ways, each under the 250 target: admission-model.ts (223) closed ADMISSION_* code union + record/result types + dependencies-local-convention helpers (deepFreeze/makeIssue/sortIssues/record/dense, hostile-input primitives re-used from '../runtime-shape.js'); admission-records.ts (189) evidence-record builders (summarizeStructure, parseEstimates, buildInterfaceFirstRecords, buildReductionRecords, evaluateExpansionLineage); admission-pass.ts (232) input parse + per-contract admission checks + orchestration. Step-7's commit pathspec therefore needs 12 paths, not 8 (the 4 added: admission-model.ts/.js, admission-records.ts/.js).\n\nCOMPOSITION, as the plan specified: admission runs validateGraphSnapshot ITSELF on BOTH the proposed and the sequential-baseline snapshot (in-process provenance) before any analyzeGraphStructure/analyzeHardEdgeCounterfactuals call, so GraphAnalysisError is structurally unreachable. findRedundancyCandidates is never called directly — candidates arrive via GraphStructuralAnalysis.structuralRedundancyCandidates and are handed to the kernel's assessContractRedundancy. Every contract goes through validateDependencyContract first; a HARD refusal maps to ADMISSION_CONTRACT_INVALID carrying the kernel's own DEPENDENCY_* code in the message rather than re-coding it.\n\nPASS-THROUGH DISCIPLINE (asserted in tests, not just claimed): proposed-graph validation failure returns validateGraphSnapshot's issues verbatim, so GRAPH_SELF_EDGE / GRAPH_MISSING_ENDPOINT / GRAPH_DUPLICATE_NODE / GRAPH_COMPLETION_NOT_TERMINAL / GRAPH_CYCLE / COMPLETION_CLOSURE_INCOMPLETE / GRAPH_NODE_LIMIT_EXCEEDED / GRAPH_HARD_EDGE_LIMIT_EXCEEDED reach the caller with zero ADMISSION_* companions.\n\nREDUCTION LICENSING: refusal (ADMISSION_EDGE_SEMANTICALLY_REDUNDANT) fires ONLY when producerArmEquivalent && satisfactionPredicateEquivalent && consumptionHorizonEquivalent are all true in the kernel ContractRedundancyAssessment; anything less becomes a PARTIAL_EQUIVALENCE reviewOnly record carrying the kernel assessment object by reference (already deep-frozen by the kernel; the local deepFreeze early-returns on frozen objects so it is provably unmodified). Missing/invalid contracts on the alternate path yield ASSESSMENT_UNAVAILABLE, never a refusal.\n\nTwo of my own step-2 fixture expectations were wrong and were corrected (production code unchanged): the cycle fixture's completion node had an outgoing edge so GRAPH_COMPLETION_NOT_TERMINAL preempted GRAPH_CYCLE (completion moved to a terminal third node); and cutting the middle edge of a 4-stage chain splits it into two 2-stage halves, so structuralStageReduction is 2, not 1 — the assertion now also pins completionClosureIntactWithoutEdge=false.",
-      "startedAt": "2026-08-07T20:33:41.222Z",
-      "completedAt": "2026-08-07T20:39:08.283Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "TDD red then green — src/admission/admission-necessity.ts (+ shim) + tests folded into admission-pass.test.ts or a focused block. RESOLVED (no open questions in an approved plan): positive controls are a TEST-TIME obligation (design 409 'Admission PROPERTIES include matched positive controls'; running consumer oracles is impossible in a pure pass, design 392) — admission NEVER refuses a graph for missing counterexample bundles. What admission-necessity DOES: (1) typed per-edge outcomes for agent-claimed necessity (design 407): AGENT_REPORTED 'why necessary' NEVER admits a hard edge — outcomes are (a) ADMISSIBLE via daemon-verifiable witness (truthClass floor DAEMON_VERIFIED), (b) ADMISSION_HELD_FOR_HUMAN_DECISION — the typed HELD outcome DoD 1 requires ('rejected or HELD with stable reasons'): a pure RECORD carrying the pending edge-specific human decision ref + the would-be POLICY_SEQUENCE conversion (with added stages/critical-path cost from the landed structural analysis) — NO lifecycle transitions, no Blocker/PlanningHold states (kernel fence); (c) REFUSED or DOWNGRADED-to-advisory; human approval records the decision but does not upgrade the underlying fact's truth class (design 398); (2) AdmissionCounterexample as an OPTIONAL validated evidence SHAPE (digest-bound fixture refs, matched per-edge, false-edge fixtures) consumed by the TEST matrix — shape validation only, outcome truth stays at supplied truthClass; (3) reuse landed analyzeHardEdgeCounterfactuals (dependencyNecessity UNKNOWN, requiresSemanticProof, reviewOnly) as the structural counterfactual record — never redefined. Property obligations in tests: for every admitted graph fixture, removing each known-required edge flips the counterfactual/readiness evidence; every false-edge fixture refuses — the positive-control matrix lives HERE in the tests (CORE-S13/J6), not as runtime input demands.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-necessity.js"
@@ -78,23 +57,12 @@
       "newFiles": [
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-necessity.js"
-      ],
-      "modifiedFiles": [
-        "packages/scheduler/src/admission/admission-necessity.ts",
-        "packages/scheduler/src/admission/admission-necessity.js",
-        "packages/scheduler/src/admission/admission-invariants.test.ts",
-        "packages/scheduler/src/admission/admission-fixtures.ts",
-        "packages/scheduler/src/admission/admission-fixtures.js",
-        "packages/scheduler/src/admission/admission-pass.test.ts"
-      ],
-      "note": "TDD RED then GREEN. RED verified first: `Cannot find module './admission-necessity.js'`. GREEN now: 62/62 focused tests across both admission test files, `pnpm --filter @moe/scheduler typecheck` exit 0.\n\nevaluateNecessityClaim(claim, validatedContract, landedCounterfactual) -> AdmissionNecessityResult. Effective truth class = claim.truthClass when it equals contract.necessity.truthClass, else fail-closed UNKNOWN (never the higher of the two — that would be laundering by max). Outcome table, total over the 5-class vocabulary: DAEMON_VERIFIED -> ADMISSIBLE; AGENT_REPORTED -> HELD when a humanDecisionRef is pending, REFUSED otherwise; OBSERVED/HUMAN_APPROVED -> DOWNGRADED_ADVISORY (real but not daemon-verifiable, so never a hard blocker); UNKNOWN -> REFUSED. AGENT_REPORTED therefore has NO path to ADMISSIBLE — the human-decision path yields HELD carrying truthClass AGENT_REPORTED unchanged plus the POLICY_SEQUENCE conversion cost, exactly the design-398 rule that a decision is recorded but never upgrades the fact.\n\nHELD is a pure record: test pins its key set exactly to [code, counterexample, edgeKey, humanDecisionRef, kind, policySequenceConversion, structuralCounterfactual, truthClass] and asserts zero keys matching /status|state|transition|recheck|schedul|blocker/ on both the outcome and the conversion — no Blocker/PlanningHold lifecycle is re-invented.\n\nPOLICY_SEQUENCE conversion cost is DERIVED from the landed analyzeHardEdgeCounterfactuals record (structuralStageReduction, alternateHardPathPresent, completionClosureIntactWithoutEdge); the counterfactual itself is passed through by reference with dependencyNecessity UNKNOWN and requiresSemanticProof intact — never redefined.\n\nAdmissionCounterexample is OPTIONAL shape validation only (digest-bound fixture refs, edge-matched, false-edge fixture): supplying a valid bundle leaves outcome kind and truth class identical to the no-bundle case (asserted by a matched pair), and no code path refuses a graph for a MISSING bundle. Malformed bundles, an edge-mismatched bundle, and a claim whose edge disagrees with the supplied counterfactual all yield ADMISSION_NECESSITY_CLAIM_MALFORMED.\n\nPositive-control matrix lives in the tests (design 409): every known-required edge of the admitted fixture flips its structural counterfactual evidence when removed, and each of the 5 rejected witness kinds is asserted as a MATCHED PAIR — the same graph admitted with TYPED_CONTRACT witnesses (positive control, zero issues) and refused with the rejected kind (negative control).\n\nEXTRA FILE, same recorded-split rationale as step-3: admission-fixtures.ts (107 lines, DEVELOPMENT_ONLY, mirroring the landed src/test-fixtures.ts precedent) holds the shared graph/contract fixtures both test files need. Importing helpers from one .test.ts into another would re-register its describe blocks in the importing file, so a non-test fixture module is the only correct option; the alternative was ~60 duplicated lines. admission-pass.test.ts shrank 407 -> 318 lines as a result. Step-7's commit pathspec now needs 14 paths (the plan's 8, plus admission-model.ts/.js, admission-records.ts/.js, admission-fixtures.ts/.js). moe.amend_plan_step remains refused for the worker role.",
-      "startedAt": "2026-08-07T20:39:55.003Z",
-      "completedAt": "2026-08-07T20:43:20.831Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "TDD red then green — src/admission/admission-wait.ts (+ shim) + src/admission/admission-invariants.test.ts. admission-wait SHARPENED FENCE (representation + admission-time validation ONLY): IntentionalWait record per design 235 (explicit owner/reason, typed predicate, affected scope, recheckAt/deadline, escalation policy, graph/fact binding) with shape validation; bounded blocker-challenge admission records reusing kernel DependencyChallenge types (dedup by contract/edge hash + graph epoch + source-fact versions; SEMANTIC_PREREQUISITE must reference an existing current hard contract — design 419 puts that reference 'in the same cycle, redundancy, freshness, and completion-closure admission as the graph', which IS this module); time-only-suppression expressed ONLY as a pure predicate helper over supplied facts (isTimeChallengeSuppressed(wait, now, newEvidenceFlag) — new evidence always wins, design 415). EXPLICITLY OUT (named in module header): challenge enqueueing and timer/transaction re-evaluation (readiness engine task-fa96b81c consumes these types), Blocker record lifecycle (design 234), supersession carry of wait/blocker projections (graph supersession task), any readiness computation (landed frontier.ts). admission-invariants.test.ts (seeded xorshift properties): no admission path ever auto-removes an edge (outputs are refusals/records only); AGENT_REPORTED never admits a hard edge across random truth-class permutations; partial contract equivalence NEVER refuses (only full identity does); UNKNOWN estimates never become zero; HELD outcomes carry no state-transition fields; deterministic frozen outputs; hostile inputs refused.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-wait.ts",
         "packages/scheduler/src/admission/admission-wait.js",
@@ -104,47 +72,35 @@
         "packages/scheduler/src/admission/admission-wait.ts",
         "packages/scheduler/src/admission/admission-wait.js",
         "packages/scheduler/src/admission/admission-invariants.test.ts"
-      ],
-      "modifiedFiles": [
-        "packages/scheduler/src/admission/admission-wait.ts",
-        "packages/scheduler/src/admission/admission-wait.js",
-        "packages/scheduler/src/admission/admission-invariants.test.ts"
-      ],
-      "note": "TDD RED then GREEN. RED verified: `Cannot find module './admission-wait.js'`. GREEN now: 77/77 focused tests (42 pass matrix + 35 invariants), `pnpm --filter @moe/scheduler typecheck` exit 0.\n\nadmission-wait.ts (157 lines) — representation + admission-time validation ONLY. validateIntentionalWait: design-235 shape (waitRef, ownerNodeKey, reason, typed predicate, affectedScope, recheckAtGate, deadlineGate, escalation kind+ref, graph/fact binding) with ADMISSION_WAIT_MALFORMED on shape violations (empty scope, duplicate scope entries, blank reason, unknown escalation kind, unknown gate — each asserted) and ADMISSION_WAIT_HORIZON_INVALID when the recheck gate is beyond the deadline, computed with the LANDED isWithinHorizon rather than a re-implemented gate order. admitDependencyChallenge delegates entirely to the landed validateDependencyChallenge and passes its DEPENDENCY_CHALLENGE_* codes through UNCHANGED — asserted for DEPENDENCY_CHALLENGE_CONTRACT_NOT_CURRENT (the design-419 SEMANTIC_PREREQUISITE current-contract reference) and DEPENDENCY_CHALLENGE_FOREIGN_HOLD; dedup identity, mutual-hold refusal and graph-epoch/source-fact binding stay the kernel's rules, never re-coded here. isTimeChallengeSuppressed(wait, currentGate, hasNewEvidence) is a pure predicate: it returns false for ANY non-`false` evidence flag (new evidence always wins, design 415), false for an unvalidated wait, false for a non-gate \"now\", and true only inside the declared deadline — it fails OPEN, never silently suppressing.\n\nThere is NO clock in the module: \"now\" is the caller's current consumption gate, so the determinism rail holds. The module header names the four out-of-scope areas explicitly (challenge enqueueing and timer/transaction re-evaluation -> readiness engine task-fa96b81c; Blocker lifecycle design 234; supersession carry -> graph supersession engine; readiness computation -> landed partitionFrontier).\n\nadmission-invariants.test.ts (333 lines) — 5 seeded xorshift32 property blocks, same helper style as the landed dependency-kernel-invariants test: (1) 64 admitted results scanned for any key readable as edge-removal authority (/remove|removal|delete|drop|prune|rewrite|mutate|apply/ in key position) -> zero; (2) 96 random claim x contract truth-class permutations with a random pending human decision — every case where either side is AGENT_REPORTED is asserted NOT ADMISSIBLE (with a guard that the branch was actually exercised), and every ADMISSIBLE outcome is asserted to carry DAEMON_VERIFIED; (3) 48 randomized single-facet divergences (predicate / producer arm / consumption horizon) on the diamond's alternate path — always PARTIAL_EQUIVALENCE, never a refusal, with UNKNOWN estimates asserted null not zero in the same loop; (4) 48 determinism + hostile-input rounds (byte-identical JSON, frozen result, 6 hostile values injected into proposedSnapshot or contracts, all refused); (5) 32 rounds asserting every emitted refusal code stays inside the ADMISSION_/GRAPH_/COMPLETION_ vocabularies.\n\nLine counts, all under the 400 hard limit and the production modules under the 250 target: admission-model 223, admission-pass 232, admission-records 189, admission-necessity 165, admission-wait 157, admission-fixtures 107; tests 318 and 333.",
-      "startedAt": "2026-08-07T20:44:09.876Z",
-      "completedAt": "2026-08-07T20:47:30.780Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "Verification gate (single concentrated step). (1) RE-RUN the step-1 dependency gate in full (kernel status DONE + git-landed + symbol probe — stale-dependency rule; if the kernel was QA-rejected and its surface changed, adapt or report_blocked, never paper over). (2) `wc -l packages/scheduler/src/admission/*.ts` — every production module <=400 hard (target 250). (3) Fresh FOCUSED `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` -> green, then the full task-specified `pnpm --filter @moe/scheduler test` -> exit 0 — complete_task evidence: { command: \"pnpm --filter @moe/scheduler test\", exitCode: 0, outputTail }; if the package filter is red from OTHER subtrees' in-flight work, attribute precisely (path + owning task) in the completion note — admission's own suite must be green regardless. (4) `pnpm --filter @moe/scheduler typecheck` green. (5) grep admission/ for Date.now|Math.random|process\\.|@moe/ -> ZERO (determinism + package-local rail); confirm zero edits outside admission/**. (6) Run focused suite twice — identical.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-wait.ts"
-      ],
-      "note": "Verification gate, all six checks run fresh in this session.\n\n(1) STEP-1 DEPENDENCY GATE RE-RUN IN FULL (the stale-dependency rule). Since the step-1 run it has STRENGTHENED, not weakened: kernel task-eef1e7f2 is now status DONE (7/7 steps, no QA reject, assignedWorkerId released) — the one leg the governor had waived at step-1 is now satisfied on its own terms. `git log --oneline -- packages/scheduler/src/dependencies` = 7e80186 (unchanged); `git status --porcelain` on that path = EMPTY. Symbol probe over non-test files, extended to every kernel symbol admission actually imports: validateDependencyContract, ContractRedundancyAssessment, DependencyChallenge, isWithinHorizon, assessContractRedundancy, validateDependencyChallenge — each resolves from packages/scheduler/src/dependencies/*.ts (production, committed). Surface did not drift; nothing papered over.\n\n(2) LINE COUNTS `wc -l packages/scheduler/src/admission/*.ts`: admission-fixtures 107, admission-model 223, admission-necessity 165, admission-records 189, admission-wait 157, admission-pass 232 — every production module under the 250 TARGET, far under the 400 hard limit. Tests admission-pass.test 318, admission-invariants.test 333, also under 400.\n\n(3) TESTS. Fresh focused `pnpm exec vitest run --root ../.. packages/scheduler/src/admission` -> \"Test Files 2 passed (2) / Tests 77 passed (77)\". Then the full task-specified `pnpm --filter @moe/scheduler test` -> \"Test Files 26 passed (26) / Tests 355 passed (355)\", captured exit code EXIT=0. NO foreign-work attribution is needed: the whole package is green, including the dependency kernel's own suites — the shared-tree hazard the plan anticipated did not materialise because the kernel finished and landed first.\n\n(4) `pnpm --filter @moe/scheduler typecheck` (tsc --project) exit 0, no diagnostics, under the repo's strict base (exactOptionalPropertyTypes, noUncheckedIndexedAccess, noUnusedLocals, verbatimModuleSyntax).\n\n(5) RAILS. `grep -rnE \"Date\\.now|Math\\.random|process\\.|@moe/\" packages/scheduler/src/admission/` -> ZERO hits: no clock, no RNG, no ambient process state, no cross-package import (admission reaches the kernel through relative ../ paths only, so the package-boundary test stays green). Randomness in the property tests is a seeded xorshift32, not Math.random. `git status --porcelain -- packages/scheduler` shows exactly one entry, `?? packages/scheduler/src/admission/` — ZERO edits anywhere outside the owned path. Directory contains exactly the 8 .ts modules and their 6 .js shims; no debug, probe, scratch, or generated evidence files.\n\n(6) DETERMINISM. Focused suite run twice back to back: identical \"Test Files 2 passed (2) / Tests 77 passed (77)\" both times, on top of the in-suite byte-identical-JSON assertions.",
-      "startedAt": "2026-08-07T20:47:33.954Z",
-      "completedAt": "2026-08-07T20:48:28.641Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Extra red-team: (a) edge-removal laundering — walk every output type for any field readable as edge-removal authorization; reduction refusals must carry the full-identity evidence and the kernel assessment unmodified; (b) truth-class laundering — try to reach ADMISSIBLE from AGENT_REPORTED via the human-decision path (must yield POLICY_SEQUENCE conversion record, never a fact upgrade); (c) duplicate-code audit — grep ADMISSION_* codes against landed GRAPH_* codes and frontier HARD_DEPENDENCY_* codes for semantic overlap (step-8 and step-1 structural facts must be pass-throughs, not re-coded); (d) HELD outcome contains no lifecycle machinery (no status transitions, no recheck scheduling); (e) baseline-snapshot provenance — confirm both snapshots run through validateGraphSnapshot before analysis (GraphAnalysisError otherwise); (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths (kernel/other subtree files WILL be present — leave them), `git add` + `git commit -- packages/scheduler/src/admission/admission-pass.ts packages/scheduler/src/admission/admission-pass.js packages/scheduler/src/admission/admission-necessity.ts packages/scheduler/src/admission/admission-necessity.js packages/scheduler/src/admission/admission-wait.ts packages/scheduler/src/admission/admission-wait.js packages/scheduler/src/admission/admission-pass.test.ts packages/scheduler/src/admission/admission-invariants.test.ts`; `git show --stat` lists exactly these 8 paths (plus amendment-recorded splits).",
-      "status": "IN_PROGRESS",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/scheduler/src/admission/admission-pass.ts",
         "packages/scheduler/src/admission/admission-necessity.ts",
         "packages/scheduler/src/admission/admission-wait.ts"
-      ],
-      "startedAt": "2026-08-07T20:48:31.631Z"
+      ]
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-29a7f3a3",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Governor: block is stale, dependency satisfied. Dependency contract kernel landed at commit 7e80186 — packages/scheduler/src/dependencies is committed on main with dependency-contract.ts, dependency-analysis.ts and their .js bridges. The step-1 gate failed at 22:56 when that subtree was untracked and mid-write; it is now tracked. Re-run the gate before proceeding: if validateDependencyContract and the kernel types resolve from committed code, continue; if the surface still does not match, block again with the specific missing symbol.",
+  "reopenCount": 1,
+  "reopenReason": "REJECT — DoD 1 fails at the admission entry point. Proven by execution.\n\nVERIFIED MYSELF: typecheck exit 0; `pnpm --filter @moe/scheduler test` exit 0, 26 files / 357 tests, twice identical — your evidence reproduces. f221eb1 landed, scheduler tree clean. Production modules 107/157/165/192/227/237 lines, all <=250. Zero Date.now|Math.random|process.|new Date in admission/**. Zero cross-package imports. Six .js shims are one-line re-exports.\n\nPASS: DoD 2 (admission-records.ts:73-101 records kernel ruling + design-404 stub obligations, generates no stub; admission-wait.ts:117-119 refuses recheck-past-deadline; :153 fails open on non-false evidence). DoD 3 (admission-records.ts:136-154 refuses only on full identity). DoD 4.\n\nBLOCKING: probed admitGraph with your own chain()/entriesFor() fixtures, ran it, deleted the probe. Verbatim:\n  AGENT_REPORTED necessity -> {\"ok\":true,\"codes\":[]}\n  UNKNOWN necessity+contract -> {\"ok\":true,\"codes\":[]}\nEvery hard edge with AGENT_REPORTED necessity admits, zero issues; same for UNKNOWN+UNKNOWN. Two causes in admission-pass.ts — absent-witness default at :108-110, and checkContract never reading contract.necessity.truthClass at :165-188 — see structured issues. The rule at admission-necessity.ts:4 is correct and tested, but lives only in evaluateNecessityClaim (:123): admitGraph never calls it, index.ts never exports it, nothing forces a caller through it. Violates DoD 1, the task rail (no daemon-verifiable evidence -> UNKNOWN or refused), and the epic rail (missing evidence never gains authority).\n\nFIX — two properties I will re-probe: absent witness yields ADMISSION_HARD_DEPENDENCY_UNPROVEN; admitGraph routes every hard edge through the necessity gate so DAEMON_VERIFIED admits, AGENT_REPORTED is REFUSED or HELD, UNKNOWN never admits. HELD stays a pure record. Add admitGraph-level per-truth-class tests; drop the omitted-witness default from fixtures.\n\nSIZE: separate, architect-owned — see last issue. Fix DoD 1 first.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -152,29 +108,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.789Z",
-  "updatedAt": "2026-08-07T20:48:31.631Z",
+  "updatedAt": "2026-08-07T21:01:48.259Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:44:27.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
-  "contextFetchedBy": [
-    "architect-d89636d1",
-    "worker-29a7f3a3"
-  ],
+  "contextFetchedBy": [],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6"
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "Unnecessary hard edges are rejected or held with stable reasons.",
+      "rejectedAt": "2026-08-07T21:01:48.259Z",
+      "rejectedBy": "qa-813cd351"
+    }
   ],
-  "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T19:56:03.313Z",
   "planningNotes": {
     "approachesConsidered": "(1) Blocking now like Codex — REJECTED: unlike Codex, the kernel's contract surface exists in versioned approved-plan form (symbols pinned: validateDependencyContract, ContractRedundancyAssessment, DependencyChallenge, horizon helpers), and the hardened step-1 gate (task DONE + git-landed + symbol probe, re-run at completion) converts residual risk into a clean block. Gate keys on SYMBOLS not files — the kernel reserves an amendment file split. (2) New ADMISSION_* codes for node/edge limits and structural checks — REJECTED (divergent-duplicate-code hazard): 24/64 limits already land as GRAPH_NODE_LIMIT_EXCEEDED/GRAPH_HARD_EDGE_LIMIT_EXCEEDED (graph-policy.ts pins the constants citing design 405); structural step-1 members and completion closure are validateGraphSnapshot pass-throughs. Depth/width/per-expansion budgets are expansion-LINEAGE facts owned by the Expansion admission protocol task (CORE-S8) — admission ships only a pure checker over caller-supplied lineage facts. (3) Refusing admission without caller-supplied positive-control bundles — DELETED as an invented requirement: design 409 makes matched positive controls a TEST property (running consumer oracles is impossible in a pure pass, design 392); the control matrix lives in the test files; AdmissionCounterexample survives only as an optional validated evidence shape. (4) Computing duration/cost estimates — REJECTED: core cannot prove true duration (392); planner proposes truth-classed estimates, admission validates; structural half reuses analyzeGraphStructure (landed kernel hard-codes durationEstimate: null). (5) Second serial-edge detector for step 7 — REJECTED: compose landed INTERFACE_FIRST_REVIEW_REQUIRED diagnostics × kernel ruling union × design-404 stub constraints. (6) Untyped 'held' — resolved with ADMISSION_HELD_FOR_HUMAN_DECISION as a pure record (DoD 1 'rejected or held'), no lifecycle. Verified by 2-agent workflow (design-fidelity + consistency, which read the kernel task json + landed scheduler code + repo gotcha memories); 3 BLOCKERs + 6 RISKs folded in.",
@@ -198,5 +152,108 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-07T20:53:44.719Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  26 passed (26)\n      Tests  357 passed (357)\n   Start at  23:52:58\n   Duration  919ms (transform 3.47s, setup 0ms, import 4.64s, tests 557ms, environment 2ms)",
+    "reportedAt": "2026-08-07T20:53:44.719Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/admission/admission-pass.test.ts",
+    "packages/scheduler/src/admission/admission-model.ts",
+    "packages/scheduler/src/admission/admission-model.js",
+    "packages/scheduler/src/admission/admission-records.ts",
+    "packages/scheduler/src/admission/admission-records.js",
+    "packages/scheduler/src/admission/admission-pass.ts",
+    "packages/scheduler/src/admission/admission-pass.js",
+    "packages/scheduler/src/admission/admission-necessity.ts",
+    "packages/scheduler/src/admission/admission-necessity.js",
+    "packages/scheduler/src/admission/admission-invariants.test.ts",
+    "packages/scheduler/src/admission/admission-fixtures.ts",
+    "packages/scheduler/src/admission/admission-fixtures.js",
+    "packages/scheduler/src/admission/admission-wait.ts",
+    "packages/scheduler/src/admission/admission-wait.js"
+  ],
+  "reviewCompletedAt": "2026-08-07T21:01:48.259Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Unnecessary hard edges are rejected or held with stable reasons."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/scheduler/src/admission/admission-pass.ts",
+        "line": 108,
+        "description": "Fail-open default: an entry omitting necessityWitness gets { kind: PROVING_WITNESS_KIND } (\"TYPED_CONTRACT\"), the only class checkContract accepts at :172-175. Omitting evidence beats supplying it. Proven: admitGraph returned {\"ok\":true,\"codes\":[]} for a chain() graph whose contracts had no necessityWitness. Breaks the epic rail that missing evidence never gains authority. Absent witness must yield ADMISSION_HARD_DEPENDENCY_UNPROVEN."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/scheduler/src/admission/admission-pass.ts",
+        "line": 165,
+        "description": "checkContract never reads contract.necessity.truthClass, and the kernel does not gate it either (dependency-contract.ts:210 validates union membership only). Proven by probe: hard edges with necessity.truthClass AGENT_REPORTED admitted with zero issues; truthClass UNKNOWN + necessity.truthClass UNKNOWN also admitted. DoD 1 requires these be rejected or HELD with stable reasons."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/scheduler/src/admission/admission-necessity.ts",
+        "line": 123,
+        "description": "evaluateNecessityClaim implements the DoD-1 rule correctly but admitGraph never calls it and index.ts never exports it, so no caller is structurally forced through it. Wire it into the pass (or add an equivalent in-pass gate) so the guarantee in the module docstring at :4 holds for the entry point. Keep HELD a pure record with no lifecycle transition."
+      },
+      {
+        "type": "test_failure",
+        "file": "packages/scheduler/src/admission/admission-invariants.test.ts",
+        "line": 266,
+        "description": "The AGENT_REPORTED-never-admits property is asserted only against evaluateNecessityClaim, never against admitGraph, and every admission-pass.test.ts happy path relies on entryFor() omitting necessityWitness -- so the suite structurally cannot catch the fail-open. Add per-truth-class admitGraph tests and stop depending on that default in fixtures."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/admission/admission-pass.ts",
+        "line": 1,
+        "description": "Oversized task, architect-owned, not a mid-fix action: f221eb1 is +1757/-0 across 14 files, 4.4x the 400-net-LOC bar. No covering exception -- .moe/proposals holds only prop-2eaa632d (commit bcdc2f6 only) and prop-734f1da5 (pathspec rail). Per-file sizes are fine (max 237); the task scope is the problem. Architect should decompose into file-disjoint children (13.1-13.6 pattern) or file a human proposal. The +1412/+1621 precedents are agent-asserted, not honored."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT — DoD 1 fails at the admission entry point. Proven by execution.\n\nVERIFIED MYSELF: typecheck exit 0; `pnpm --filter @moe/scheduler test` exit 0, 26 files / 357 tests, twice identical — your evidence reproduces. f221eb1 landed, scheduler tree clean. Production modules 107/157/165/192/227/237 lines, all <=250. Zero Date.now|Math.random|process.|new Date in admission/**. Zero cross-package imports. Six .js shims are one-line re-exports.\n\nPASS: DoD 2 (admission-records.ts:73-101 records kernel ruling + design-404 stub obligations, generates no stub; admission-wait.ts:117-119 refuses recheck-past-deadline; :153 fails open on non-false evidence). DoD 3 (admission-records.ts:136-154 refuses only on full identity). DoD 4.\n\nBLOCKING: probed admitGraph with your own chain()/entriesFor() fixtures, ran it, deleted the probe. Verbatim:\n  AGENT_REPORTED necessity -> {\"ok\":true,\"codes\":[]}\n  UNKNOWN necessity+contract -> {\"ok\":true,\"codes\":[]}\nEvery hard edge with AGENT_REPORTED necessity admits, zero issues; same for UNKNOWN+UNKNOWN. Two causes in admission-pass.ts — absent-witness default at :108-110, and checkContract never reading contract.necessity.truthClass at :165-188 — see structured issues. The rule at admission-necessity.ts:4 is correct and tested, but lives only in evaluateNecessityClaim (:123): admitGraph never calls it, index.ts never exports it, nothing forces a caller through it. Violates DoD 1, the task rail (no daemon-verifiable evidence -> UNKNOWN or refused), and the epic rail (missing evidence never gains authority).\n\nFIX — two properties I will re-probe: absent witness yields ADMISSION_HARD_DEPENDENCY_UNPROVEN; admitGraph routes every hard edge through the necessity gate so DAEMON_VERIFIED admits, AGENT_REPORTED is REFUSED or HELD, UNKNOWN never admits. HELD stays a pure record. Add admitGraph-level per-truth-class tests; drop the omitted-witness default from fixtures.\n\nSIZE: separate, architect-owned — see last issue. Fix DoD 1 first.",
+      "rejectedAt": "2026-08-07T21:01:48.259Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Unnecessary hard edges are rejected or held with stable reasons."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/scheduler/src/admission/admission-pass.ts",
+          "line": 108,
+          "description": "Fail-open default: an entry omitting necessityWitness gets { kind: PROVING_WITNESS_KIND } (\"TYPED_CONTRACT\"), the only class checkContract accepts at :172-175. Omitting evidence beats supplying it. Proven: admitGraph returned {\"ok\":true,\"codes\":[]} for a chain() graph whose contracts had no necessityWitness. Breaks the epic rail that missing evidence never gains authority. Absent witness must yield ADMISSION_HARD_DEPENDENCY_UNPROVEN."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/scheduler/src/admission/admission-pass.ts",
+          "line": 165,
+          "description": "checkContract never reads contract.necessity.truthClass, and the kernel does not gate it either (dependency-contract.ts:210 validates union membership only). Proven by probe: hard edges with necessity.truthClass AGENT_REPORTED admitted with zero issues; truthClass UNKNOWN + necessity.truthClass UNKNOWN also admitted. DoD 1 requires these be rejected or HELD with stable reasons."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/scheduler/src/admission/admission-necessity.ts",
+          "line": 123,
+          "description": "evaluateNecessityClaim implements the DoD-1 rule correctly but admitGraph never calls it and index.ts never exports it, so no caller is structurally forced through it. Wire it into the pass (or add an equivalent in-pass gate) so the guarantee in the module docstring at :4 holds for the entry point. Keep HELD a pure record with no lifecycle transition."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/scheduler/src/admission/admission-invariants.test.ts",
+          "line": 266,
+          "description": "The AGENT_REPORTED-never-admits property is asserted only against evaluateNecessityClaim, never against admitGraph, and every admission-pass.test.ts happy path relies on entryFor() omitting necessityWitness -- so the suite structurally cannot catch the fail-open. Add per-truth-class admitGraph tests and stop depending on that default in fixtures."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/admission/admission-pass.ts",
+          "line": 1,
+          "description": "Oversized task, architect-owned, not a mid-fix action: f221eb1 is +1757/-0 across 14 files, 4.4x the 400-net-LOC bar. No covering exception -- .moe/proposals holds only prop-2eaa632d (commit bcdc2f6 only) and prop-734f1da5 (pathspec rail). Per-file sizes are fine (max 237); the task scope is the problem. Architect should decompose into file-disjoint children (13.1-13.6 pattern) or file a human proposal. The +1412/+1621 precedents are agent-asserted, not honored."
+        }
+      ]
+    }
+  ]
 }

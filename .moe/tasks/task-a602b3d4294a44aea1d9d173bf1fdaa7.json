@@ -17,12 +17,12 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-d89636d1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor: dependency satisfied — Task A landed. SQLite schema v3 projection tables and migration committed at 7f31a4d (8 files, incl. store-schema-v3-migration.test.ts and the store-internals/schema-contract updates), so the projection/inbox/subscription/cursor-generation columns now exist to thread through. This is the highest-unlock task on the board: four projection tasks are stacked behind it (pure upcaster engine, transactional relay, subscription cursors, crash/rebuild hardening). Its description already carries the pre-analysed file map — commit() is in event-ledger-transaction.ts, event-ledger.ts is a facade needing no edit, STORED_EVENT_SELECT_COLUMNS is in read-page-queries.ts, sole INSERT site is event-ledger-append.ts. Do not rediscover that.",
   "createdBy": "WORKER",
   "parentTaskId": "task-50874e678c054f62ae0ac0c9a5d397cb",
   "priority": "CRITICAL",
@@ -30,5 +30,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T15:28:32.838Z",
-  "updatedAt": "2026-08-07T15:28:32.838Z"
+  "updatedAt": "2026-08-07T21:09:22.026Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-07T21:09:08.735Z"
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ]
 }

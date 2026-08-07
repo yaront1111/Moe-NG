@@ -15,13 +15,65 @@
     "Every changed or new production/test TypeScript file in this task must be <=250 physical lines with LF/CRLF counted equivalently.",
     "Use TDD/characterization and commit only explicit owned paths; no worktree, broad add, push, merge, reset, or stash."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Characterize the compatibility boundary before editing. From the committed `bcdc2f6` contract, inventory the exact 51 exported type/interface names and confirm the unchanged `packages/core/src/index.ts` planning export block names the same set; inspect every `./planning-contract.js` consumer and record that it is type-only. Treat the existing focused typecheck, planning-run reducer tests, and planning invariants as held-out characterization: do not edit root index, importers, reducers, or tests, and do not run the package gate yet.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create `planning-command-contract.ts` by moving declarations without semantic edits: `PlanningRunKind`, `PlanningRunCommandKind`, all readiness/claim/release/recovery/submission/refusal/approval/activation/cancellation witnesses and proofs, `NodeSummary`, `PlanRevisionHashes`/`PlanRevisionSeal`, the private `PlanningRunCommandBase`, all twelve concrete commands, and `PlanningRunCommand`. Preserve exact readonly/optional fields, literal discriminants, union-member order, comments, and private visibility; import only the required `@moe/contracts` type(s). Keep the module <=250 physical lines and do not import the facade or event leaf.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create `planning-event-contract.ts` for the observable lifecycle contract: move `PlanningRunLifecycle`, facets/state/successor data, the private event base, all eleven events and their union, and accepted/rejected/typed-UNSUPPORTED result types. Import required command-leaf types with a `.js` specifier and `RuntimeError`/`RUNTIME_LIFECYCLES` from contracts, yielding the one-way event->command dependency. Replace `planning-contract.ts` with an explicit type-only compatibility facade that names all 51 baseline exports from the two leaves—no wildcard or runtime re-export—and leave every existing consumer/root export unchanged. Keep both files <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-event-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the single shared-contract regression gate once after all moves: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require exit 0; retain the fresh command, exit code, and output tail as `moe.complete_task` evidence. A failure is contract drift to diagnose in the three owned paths, not permission to edit or weaken existing tests.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-contract.ts",
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform the one final adversarial review scoped to this refactor. Mechanically compare the facade's explicit name set with the 51-name `bcdc2f6` baseline and unchanged root index; inspect moved declarations for changed readonly/optional fields, discriminants, union order, private-base visibility, comments, runtime exports, or a facade cycle; use a cross-platform in-memory Node line counter to prove each owned TS file is <=250 for LF/CRLF/CR; confirm all non-owned importers/tests and root index are untouched and `git diff --check` is clean. If any byte is corrected, rerun the exact gate before completion. Then inspect `git status --porcelain`, stage/commit only the three explicit owned paths using an explicit pathspec (never broad add or bare commit), and verify `git show --stat` contains nothing else.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-contract.ts",
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human explicitly requested PLAN after being told this BACKLOG task required promotion; promoting the first ordered planning-file decomposition child.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1ade51c0dc104181a67adde741295fd5",
   "priority": "HIGH",
@@ -29,5 +81,33 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T19:56:11.327Z",
-  "updatedAt": "2026-08-07T19:56:11.327Z"
+  "updatedAt": "2026-08-07T20:58:11.232Z",
+  "contextFetchedBy": [
+    "architect-c4babdf9"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-07T20:53:50.659Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-07T20:58:09.199Z",
+  "planningNotes": {
+    "approachesConsidered": "Use two explicit type leaves behind the existing facade. Rejected `export type *` because it would let future leaf exports silently expand the public surface; the facade must explicitly pin all 51 current names. Rejected rewriting the seven existing importers or root index because the task requires compatibility through planning-contract.js and owns only three paths. Rejected adding a new test file because existing reducer/invariant suites plus the unchanged root index already characterize the shared type surface, and test decomposition is a separate child task. Rejected any declaration cleanup/renaming while moving because this is a byte/shape-preserving refactor, not a contract redesign.",
+    "codebaseInsights": "planning-contract.ts currently exports exactly 51 types/interfaces, and packages/core/src/index.ts explicitly re-exports the identical 51-name set from planning-contract.js; leaving index.ts untouched makes the focused typecheck a compile-time public-export sentinel. Every direct consumer uses `import type`, and the root uses `export type`, so the facade must remain type-only and add no runtime surface. The acyclic leaf direction is planning-event-contract.ts -> planning-command-contract.ts -> @moe/contracts; neither leaf may import the facade. planning-command-contract owns kinds, witnesses/proofs/hashes/node summaries, private command base, concrete commands and command union. planning-event-contract owns lifecycle, facets/state/successor, private event base, events/event union and accepted/rejected/unsupported result union.",
+    "risks": "Accidental public-name loss/addition, a leaf<->facade cycle, runtime re-exports, changed optional/readonly/discriminant/union-member structure, or moving private command/event bases into the public surface would violate the refactor contract. Preserve declaration bodies, property and union ordering, comments that explain typed UNSUPPORTED, and `.js` NodeNext specifiers. Count physical lines portably for LF/CRLF/CR and keep all three files <=250. Existing oversized tests are intentionally untouched here; their separate decomposition tasks own them.",
+    "keyFiles": [
+      "packages/core/src/planning/planning-contract.ts",
+      "packages/core/src/index.ts",
+      "packages/core/src/planning/planning-validation.ts",
+      "packages/core/src/planning/planning-run-reducer.ts",
+      "packages/core/src/planning/planning-run-reducer.test.ts",
+      "packages/core/src/planning/planning-invariants.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-07T20:58:11.232Z"
 }
