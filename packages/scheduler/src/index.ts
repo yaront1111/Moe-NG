@@ -6,6 +6,7 @@
  *  - analyzeGraphStructure: deterministic structural facts about a ValidatedGraph.
  *  - analyzeHardEdgeCounterfactuals: review-only source-edge pressure facts.
  *  - partitionFrontier: readiness partition from caller-supplied frontier facts.
+ *  - previewGraphSnapshot: zero-authority validation/frontier/analysis composition.
  *
  * The kernel is contract-neutral: it reports exact structural facts and never
  * invents independence, deletes edges, infers semantic dependency truth, or
@@ -17,6 +18,7 @@ export { analyzeGraphStructure } from "./analyze-graph.js";
 export { analyzeHardEdgeCounterfactuals } from "./hard-edge-counterfactual.js";
 export { GraphAnalysisError } from "./graph-analysis-error.js";
 export { partitionFrontier } from "./frontier.js";
+export { previewGraphSnapshot } from "./graph-preview.js";
 export {
   ABSOLUTE_MAX_GRAPH_HARD_EDGES,
   ABSOLUTE_MAX_GRAPH_NODES,
@@ -62,6 +64,16 @@ export type {
   TraversalCounter,
   ValidatedGraph,
 } from "./graph-model.js";
+export type {
+  GraphPreviewAdvisoryEnvelope,
+  GraphPreviewAnalyzed,
+  GraphPreviewFrontierInvalid,
+  GraphPreviewGraphInvalid,
+  GraphPreviewOptions,
+  GraphPreviewOptionsInvalid,
+  GraphPreviewPolicyInvalid,
+  GraphPreviewResult,
+} from "./graph-preview-model.js";
 export type { GraphAnalysisErrorCode } from "./graph-analysis-error.js";
 export type {
   HardEdgeCounterfactual,

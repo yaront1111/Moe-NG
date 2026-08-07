@@ -49,6 +49,7 @@ declare const frontierPartitionBrand: unique symbol;
 
 /** Stable, machine-checkable reason codes. Never reworded silently. */
 export type GraphIssueCode =
+  | "GRAPH_PREVIEW_MALFORMED_OPTIONS"
   | "GRAPH_MALFORMED_POLICY"
   | "GRAPH_MALFORMED_SNAPSHOT"
   | "GRAPH_MALFORMED_NODE"
