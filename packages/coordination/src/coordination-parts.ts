@@ -7,7 +7,8 @@ import type {
   CoordinationAddress, CoordinationAdvisory, CoordinationCode, CoordinationHandoff,
 } from "./coordination-contracts.js";
 import {
-  hasExactOwnKeys, isBoundedText, isIdentifier, isPlainRecord, readList, readOwnDataProperty,
+  hasExactOwnKeys, isBoundedText, isIdentifier, isPlainRecord, readBoundedList,
+  readOwnDataProperty,
 } from "./coordination-shape.js";
 
 export type PartResult<Value> =
@@ -83,20 +84,22 @@ export function decodeAdvisory(value: unknown): PartResult<CoordinationAdvisory 
   return good(Object.freeze({ advisoryOnly: true as const, text }));
 }
 
+/** A prototype-tampered, accessor-backed, sparse, or record-posing-as-array value is a SHAPE
+ *  failure; only a genuine over-count is a LIMIT failure. Conflating them would let a
+ *  smuggling attempt read as a harmless size complaint. */
 function decodeTextList(value: unknown, label: string): PartResult<readonly string[]> {
-  if (!Array.isArray(value)) {
-    return bad("COORDINATION_INPUT_INVALID", `${label} must be an array of strings`);
+  const read = readBoundedList(value, COORDINATION_LIMITS.maxHandoffEntries);
+  if (!read.ok) {
+    return read.tooLong
+      ? bad("COORDINATION_LIMIT_EXCEEDED", `${label} exceeds the supported entry count`)
+      : bad("COORDINATION_INPUT_INVALID", `${label} must be a plain array of strings`);
   }
-  const entries = readList(value, COORDINATION_LIMITS.maxHandoffEntries);
-  if (entries === null) {
-    return bad("COORDINATION_LIMIT_EXCEEDED", `${label} exceeds the supported entry count`);
-  }
-  for (const entry of entries) {
+  for (const entry of read.value) {
     if (!isBoundedText(entry, COORDINATION_LIMITS.maxTextUtf8Bytes)) {
       return bad("COORDINATION_INPUT_INVALID", `${label} entries must be bounded text`);
     }
   }
-  return good(Object.freeze([...entries] as string[]));
+  return good(Object.freeze([...read.value] as string[]));
 }
 
 export function decodeHandoff(value: unknown): PartResult<CoordinationHandoff> {
@@ -141,12 +144,14 @@ function decodeJsonValue(value: unknown, depth: number): PartResult<JsonValue> {
 }
 
 function decodeJsonList(value: unknown, depth: number): PartResult<JsonValue> {
-  const entries = readList(value, COORDINATION_LIMITS.maxHandoffEntries);
-  if (entries === null) {
-    return bad("COORDINATION_LIMIT_EXCEEDED", "a data array exceeds the supported entry count");
+  const read = readBoundedList(value, COORDINATION_LIMITS.maxHandoffEntries);
+  if (!read.ok) {
+    return read.tooLong
+      ? bad("COORDINATION_LIMIT_EXCEEDED", "a data array exceeds the supported entry count")
+      : bad("COORDINATION_INPUT_INVALID", "a data array is not a plain bounded array");
   }
   const out: JsonValue[] = [];
-  for (const entry of entries) {
+  for (const entry of read.value) {
     const decoded = decodeJsonValue(entry, depth + 1);
     if (!decoded.ok) return decoded;
     out.push(decoded.value);

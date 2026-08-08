@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 
 import {
   COORDINATION_CODES, COORDINATION_CONTROL_KINDS, COORDINATION_ENDPOINTS,
@@ -85,14 +85,22 @@ function allCapabilities(sessionId: string): string[] {
   return grants;
 }
 
+function defaultRecipientAnswer(address: CoordinationAddress): unknown {
+  return Object.freeze({ known: true, role: address.role });
+}
+
+function defaultEffectAnswer(effectId: string, sessionId: string): unknown {
+  return Object.freeze({ bound: true, effectId, sessionId });
+}
+
 function openHarness(wrap: (store: SqliteEventStore) => CoordinationEventStore = passthrough): Harness {
   const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
   const controls: Controls = {
     authAnswer: (_endpoint, _digest) => undefined,
     capabilities: allCapabilities(CODER.sessionId),
-    effectAnswer: (effectId, sessionId) => Object.freeze({ bound: true, effectId, sessionId }),
+    effectAnswer: defaultEffectAnswer,
     now: NOW,
-    recipientAnswer: (address) => Object.freeze({ known: true, role: address.role }),
+    recipientAnswer: defaultRecipientAnswer,
     seenDigests: [],
     sessionId: CODER.sessionId,
   };
@@ -264,6 +272,20 @@ describe("coordination envelope codec", () => {
         "COORDINATION_FORBIDDEN_FIELD"],
       ["argv field", draft("EVENT", { data: { argv: ["rm", "-rf"] } }),
         "COORDINATION_FORBIDDEN_FIELD"],
+      ["revoked proxy", revokedProxy(), "COORDINATION_INPUT_INVALID"],
+      ["subclassed handoff list", draft("HANDOFF", { handoff: hostileHandoff("subclass") }),
+        "COORDINATION_INPUT_INVALID"],
+      ["accessor handoff element", draft("HANDOFF", { handoff: hostileHandoff("accessor") }),
+        "COORDINATION_INPUT_INVALID"],
+      ["record posing as a list", draft("HANDOFF", { handoff: hostileHandoff("lengthy") }),
+        "COORDINATION_INPUT_INVALID"],
+      ["over-long handoff list", draft("HANDOFF", { handoff: hostileHandoff("overlong") }),
+        "COORDINATION_LIMIT_EXCEEDED"],
+      ["multibyte data string",
+        draft("EVENT", {
+          data: { note: "é".repeat(COORDINATION_LIMITS.maxTextUtf8Bytes) },
+        }),
+        "COORDINATION_LIMIT_EXCEEDED"],
     ];
     expect(cases.length).toBeGreaterThan(0);
     for (const [label, input, code] of cases) {
@@ -293,6 +315,30 @@ function omit(record: Draft, key: string): Draft {
 function accessorDraft(): Draft {
   const base = draft("EVENT");
   return Object.defineProperty(base, "messageId", { configurable: true, get: () => "msg-event" });
+}
+
+function revokedProxy(): unknown {
+  const revocable = Proxy.revocable(draft("EVENT"), {});
+  revocable.revoke();
+  return revocable.proxy;
+}
+
+/** Four ways to smuggle a value past a naive `Array.isArray` + `for...of` list reader. */
+function hostileHandoff(mode: "accessor" | "lengthy" | "overlong" | "subclass"): Draft {
+  const base = handoff();
+  if (mode === "subclass") {
+    base["scopes"] = Object.setPrototypeOf(["ok"], Object.create(Array.prototype));
+  }
+  if (mode === "accessor") {
+    base["scopes"] = Object.defineProperty([], "0", {
+      configurable: true, enumerable: true, get: () => "ok",
+    });
+  }
+  if (mode === "lengthy") base["scopes"] = { 0: "ok", length: 1 };
+  if (mode === "overlong") {
+    base["scopes"] = new Array<string>(COORDINATION_LIMITS.maxHandoffEntries + 1).fill("ok");
+  }
+  return base;
 }
 
 function deepData(): Draft {
@@ -457,21 +503,27 @@ describe("coordination addressing", () => {
   });
 });
 
+/** Observation helper. It restores the DEFAULT registry and effect answers for the duration
+ *  of the read, so a test that broke a port to force a send refusal can still inspect the
+ *  mailbox and prove the refusal left no durable trace. */
 function readOwn(
   harness: Harness, mailbox: CoordinationAddress,
 ): readonly CoordinationDelivery[] {
-  const previousSession = harness.controls.sessionId;
-  const previousCapabilities = harness.controls.capabilities;
+  const previous = { ...harness.controls };
   harness.controls.sessionId = mailbox.sessionId;
   harness.controls.capabilities = allCapabilities(mailbox.sessionId);
+  harness.controls.recipientAnswer = defaultRecipientAnswer;
+  harness.controls.effectAnswer = defaultEffectAnswer;
   try {
     const page = harness.service.read(mailboxArgs(mailbox));
     expect(page.outcome).toBe("PAGE");
     if (page.outcome !== "PAGE") return [];
     return page.items;
   } finally {
-    harness.controls.sessionId = previousSession;
-    harness.controls.capabilities = previousCapabilities;
+    harness.controls.sessionId = previous.sessionId;
+    harness.controls.capabilities = previous.capabilities;
+    harness.controls.recipientAnswer = previous.recipientAnswer;
+    harness.controls.effectAnswer = previous.effectAnswer;
   }
 }
 
@@ -725,7 +777,7 @@ describe("coordination store failure mapping", () => {
     ];
     expect(cases.length).toBeGreaterThan(0);
     for (const [storeCode, code] of cases) {
-      const harness = openHarness((store) => failingCommit(store, storeCode));
+      const harness = openHarness((store) => failingCommit(store, storeCode, false));
       try {
         const refused = refusal(send(harness, draft("EVENT")));
         expect(refused.code, storeCode).toBe(code);
@@ -742,11 +794,37 @@ function passthrough(store: SqliteEventStore): CoordinationEventStore {
   return store;
 }
 
+describe("coordination store failure mapping against the real error class", () => {
+  it("reads the code off a genuine DurableStoreError, not just a hand-shaped stub", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["OUTCOME_UNKNOWN", "COORDINATION_OUTCOME_UNKNOWN"],
+      ["STORE_BUSY", "COORDINATION_STORE_BUSY"],
+      ["COMMAND_ID_CONFLICT", "COORDINATION_IDEMPOTENCY_CONFLICT"],
+    ];
+    expect(cases.length).toBeGreaterThan(0);
+    for (const [storeCode, code] of cases) {
+      const harness = openHarness((store) => failingCommit(store, storeCode, true));
+      try {
+        const refused = refusal(send(harness, draft("EVENT")));
+        expect(refused.code, storeCode).toBe(code);
+        expect(refused.layer, storeCode).toBe("STORE");
+      } finally {
+        harness.store.close();
+      }
+    }
+  });
+});
+
 /** Delegates every read to the real store and fails only the write, so the mapping is
  *  exercised against genuine durable state rather than a fully stubbed seam. */
-function failingCommit(store: SqliteEventStore, code: string): CoordinationEventStore {
+function failingCommit(
+  store: SqliteEventStore, code: string, real: boolean,
+): CoordinationEventStore {
   return {
     commit: () => {
+      if (real) {
+        throw new DurableStoreError(code as "OUTCOME_UNKNOWN", "injected by the adversarial pass");
+      }
       const error = new Error(`${code}: injected`);
       (error as { code?: string }).code = code;
       error.name = "DurableStoreError";

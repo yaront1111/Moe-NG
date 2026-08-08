@@ -68,19 +68,31 @@ export function isSafeCount(value: unknown): value is number {
  * an overridden `Symbol.iterator`, an accessor element, or a sparse hole cannot smuggle a
  * value past the length bound. Never invokes the iterator.
  */
-export function readList(value: unknown, maximum: number): readonly unknown[] | null {
-  if (!Array.isArray(value) || types.isProxy(value)) return null;
-  if (Object.getPrototypeOf(value) !== Array.prototype) return null;
+export type ListRead =
+  | { readonly ok: false; readonly tooLong: boolean }
+  | { readonly ok: true; readonly value: readonly unknown[] };
+
+const MALFORMED_LIST: ListRead = Object.freeze({ ok: false, tooLong: false });
+const OVERLONG_LIST: ListRead = Object.freeze({ ok: false, tooLong: true });
+
+export function readBoundedList(value: unknown, maximum: number): ListRead {
+  if (!Array.isArray(value) || types.isProxy(value)) return MALFORMED_LIST;
+  if (Object.getPrototypeOf(value) !== Array.prototype) return MALFORMED_LIST;
   const length = readOwnDataProperty(value, "length");
-  if (!length.ok || !length.present || !isSafeCount(length.value)) return null;
-  if (length.value > maximum) return null;
+  if (!length.ok || !length.present || !isSafeCount(length.value)) return MALFORMED_LIST;
+  if (length.value > maximum) return OVERLONG_LIST;
   const out: unknown[] = [];
   for (let index = 0; index < length.value; index += 1) {
     const entry = readOwnDataProperty(value, String(index));
-    if (!entry.ok || !entry.present) return null;
+    if (!entry.ok || !entry.present) return MALFORMED_LIST;
     out.push(entry.value);
   }
-  return out;
+  return Object.freeze({ ok: true as const, value: Object.freeze(out) });
+}
+
+export function readList(value: unknown, maximum: number): readonly unknown[] | null {
+  const read = readBoundedList(value, maximum);
+  return read.ok ? read.value : null;
 }
 
 export function utf8ByteLength(value: string): number {

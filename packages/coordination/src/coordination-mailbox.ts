@@ -162,14 +162,6 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
         "no durable message matches that sequence, id, and digest",
       );
     }
-    const cursor = reader.ackCursor(mailbox);
-    if (cursor === null) return corruptRecord();
-    if (input.sequence <= cursor) {
-      return refuse(
-        "COORDINATION_ACK_REGRESSION", "MAILBOX",
-        "the acknowledged sequence is not ahead of the durable cursor",
-      );
-    }
     const committedAt = toCommitTimestamp(input.now);
     if (committedAt === null) {
       return refuse("COORDINATION_INPUT_INVALID", "MAILBOX", "the server clock is not usable");
@@ -177,6 +169,17 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
     return persistAck(mailbox, input, committedAt);
   }
 
+  function regressed(): CoordinationAckResult {
+    return refuse(
+      "COORDINATION_ACK_REGRESSION", "MAILBOX",
+      "the acknowledged sequence is not ahead of the durable cursor",
+    );
+  }
+
+  /**
+   * The monotonicity check is re-read on EVERY attempt, not once before the loop. A second
+   * writer that lands a higher ack while this one is retrying must not be walked backwards.
+   */
   function persistAck(
     mailbox: string, input: MailboxAckInput, committedAt: string,
   ): CoordinationAckResult {
@@ -185,6 +188,9 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
       digest: input.digest, messageId: input.messageId, sequence: input.sequence,
     });
     for (let attempt = 0; attempt < COORDINATION_LIMITS.maxSendAttempts; attempt += 1) {
+      const cursor = reader.ackCursor(mailbox);
+      if (cursor === null) return corruptRecord();
+      if (input.sequence <= cursor) return regressed();
       const outcome = commitOnce({
         aggregateId: aggregate, commandBytes: payload,
         commandId: ackCommandId(aggregate, input.sequence), committedAt,
