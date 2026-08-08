@@ -19,73 +19,107 @@
     {
       "stepId": "step-1",
       "description": "Pin the surfaces and settle the package edge before writing anything. Confirm on disk that `packages/runner/src/recovery/` and `apps/daemon/src/recovery/` do not exist (this task creates both). Re-read `providers/claude/claude-cancel-reconcile.ts` — ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED), CLAUDE_RECONCILED_OUTCOMES as a frozen closed list, reconcileClaudeRun — because it is the in-package precedent this task's classifier must follow and IMPORT rather than mirror. Confirm the @moe/scheduler lease/authority surface for epoch and fencing facts, and @moe/store for durable records. THEN CHECK apps/daemon/package.json: it currently declares only @moe/contracts and @moe/scheduler, but sibling tasks in this same batch may already have added @moe/core, @moe/store or @moe/runner. If what the daemon half needs is already there, take it and add nothing. If it is genuinely missing, request the ownership amendment in #governors naming the exact dependency and citing the precedent already approved for child 3 (task-ba3a45f9: '+@moe/runner, single lock hunk'), and WAIT for confirmation — do not self-approve. Produce no code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "note": "Surfaces pinned; NO package amendment needed (no code written).\n\n1. Both owned dirs confirmed ABSENT: packages/runner/src/recovery/, apps/daemon/src/recovery/. This task creates both.\n2. providers/claude/claude-cancel-reconcile.ts re-read: ClaudeProcessExit (EXITED{code}|SIGNALLED{signal}|UNOBSERVED), frozen CLAUDE_RECONCILED_OUTCOMES (6 kinds), reconcileClaudeRun. Will IMPORT, not mirror.\n3. PLAN ASSUMPTION NOW STALE, IN OUR FAVOUR: the External effect supervisor dependency has LANDED and is fully committed. `git ls-files packages/runner/src/supervisor/` returns 32 tracked files and `git status --porcelain` under it is EMPTY — the plan's \"11 untracked foreign files\" warning no longer holds. Directly usable in-package surface: reconstructAfterRestart/RESTART_POST_STATES (restart-reconstruction.ts), resolveDrainRow (drain-reconciliation.ts), upgradeDisposition/isMonotonicDisposition (drain-disposition.ts, \"enforced at ONE source\"), fenceMirroredLease (lease-mirror.ts, epoch/token fence with LEASE_MIRROR_STALE_EPOCH + LEASE_MIRROR_SUPERSEDED_AUTHORITY), admitPostActivationMutation (drain-fence.ts), effect-kernel.ts (EFFECT_STATES, SUPERVISOR_ERROR_CODES, supervisorFailure, SupervisorFailure), drain-table.ts (RESOURCE_FACTS = PROVEN_RELEASED|ACTIVE|UNKNOWN — the exact predecessor lattice step 3 names), effect-shape.ts parsers, effect-test-fixtures.ts builders. Recovery COMPOSES these; it must not re-derive drain monotonicity or the 786/787 table.\n4. @moe/runner dependencies = @moe/contracts ONLY. It cannot import @moe/scheduler or @moe/store, so lease epoch/token facts enter as the in-package MirroredLeaseRecord/MirroredLeaseProof and are fenced by fenceMirroredLease.\n5. apps/daemon/package.json ALREADY carries @moe/contracts + @moe/core + @moe/scheduler + @moe/store (a sibling landed core+store). @moe/runner is still absent AND IS NOT NEEDED: the doctor half is ingress only — decodeBoundedJsonBytes + RUNTIME_COMMAND_KINDS/RUNTIME_QUERY_KINDS from @moe/contracts, which already declares the exact vocabulary to propose (recovery.complete, recovery.inspect_external, recovery.reconcile_external, effect.confirm_absent, resource.confirm_released, safe_boundary.observe, quarantine.export_forensic, work.resume, doctor.get). NO governance amendment requested; package.json and pnpm-lock.yaml will NOT be touched by this task (step 10 amended accordingly).\n6. Daemon ingress pattern read from apps/daemon/src/index.ts: decodeBoundedJsonBytes -> exact-shape check vs frozen key list + pinned schemaVersion literal -> frozen discriminated union.\n7. Constraint noted: packages/scheduler/src/package-boundary.test.ts scans every source under packages/ for an internal scheduler path — a comment spelling one out trips it exactly like an import. Recovery comments will name @moe/scheduler only by package name.",
+      "startedAt": "2026-08-08T22:11:53.666Z",
+      "completedAt": "2026-08-08T22:14:37.221Z"
     },
     {
       "stepId": "step-2",
       "description": "Define the closed recovery vocabulary as exported frozen data. Create packages/runner/src/recovery/recovery-contract.ts holding: the CLOSED outcome-kind list that DoD 2 turns on — ADOPTED, ABSENT, SUSPECT, QUARANTINED, and RECONCILIATION_COMMAND — with no sixth kind and deliberately no 'RESUMED' arm, because 'nothing silently resumes' is enforced by the vocabulary rather than by a check; the closed error-code list; the predecessor release-status lattice PROVEN_RELEASED | ACTIVE | UNKNOWN; the crash-observation input shape, built on the imported ClaudeProcessExit rather than a local copy; and the shape validators for the opaque references this task carries (effect identity, journal digest, review-package digest — 64-hex, shape only). Everything is data and types; no logic. Later steps and their tests both read this one source, so the expected outcome-set in the test is the exported list rather than a restatement of it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/recovery-contract.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery/recovery-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/recovery-contract.ts"
+      ],
+      "note": "Created packages/runner/src/recovery/recovery-contract.ts (161 lines). Frozen exported data + types only, plus the vocabulary's own constructors (precedent: supervisorFailure lives in effect-kernel.ts, the vocabulary file, not in a separate one).\n\n- RECOVERY_OUTCOME_KINDS: exactly five — ADOPTED, ABSENT, SUSPECT, QUARANTINED, RECONCILIATION_COMMAND. No sixth kind, no RESUMED arm; \"nothing silently resumes\" is a missing arm, not a check.\n- RECOVERY_ERROR_CODES: nine, all reachable. PREDECESSOR_ACTIVE and PREDECESSOR_RELEASE_UNKNOWN are deliberately separate codes (DoD 1 / step 3).\n- RECOVERY_LAYERS = SAFE_BOUNDARY | CLASSIFICATION.\n- RecoveryFailure.code/.layer are UNIONS with SupervisorErrorCode/SupervisorLayer, and carriedFailure() passes a delegated supervisor refusal through VERBATIM rather than restamping it. That is what lets a test pin WHICH layer refused (epic rail 6), e.g. LEASE_MIRROR_STALE_EPOCH@LEASE_MIRROR vs RECOVERY_STALE_OBSERVATION_REFUSED@CLASSIFICATION.\n- PREDECESSOR_RELEASES = PROVEN_RELEASED|ACTIVE|UNKNOWN, hand-transcribed as its own type rather than aliasing the supervisor's RESOURCE_FACTS (different subject: one whole boundary vs one held resource). Step 3's test pins the two string-equal so drift is caught.\n- RECOVERY_EFFECT_STATUSES = PROVEN_ABSENT|PROVEN_ACTIVE|UNESTABLISHED.\n- CrashObservation is built on the IMPORTED ClaudeProcessExit, carries presenceLooksLive named as an appearance not a proof, and holds journalDigest/reviewPackageDigest as opaque 64-hex references validated for shape only.\n- Shape validators isEffectRef/isJournalDigest/isReviewPackageDigest/isPredecessorRelease/isRecoveryEffectStatus delegate to the supervisor's isRef/isDigest/oneOf; no parser is cloned.\n\nVerified: npx tsc --project packages/runner/tsconfig.json --noEmit exits 0.",
+      "startedAt": "2026-08-08T22:14:43.479Z",
+      "completedAt": "2026-08-08T22:16:35.404Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD red for the safe-boundary rule — DoD 1, the one that corrupts data if it is wrong. Create packages/runner/src/recovery/safe-boundary.test.ts before the module. Assert all three predecessor states explicitly, because an optimistic implementation gets exactly one of them wrong: a predecessor PROVEN_RELEASED admits the successor; a predecessor still ACTIVE blocks it; and a predecessor whose release status is UNKNOWN also BLOCKS it, with its own stable refusal code distinct from the ACTIVE case — 'we cannot tell whether it released' and 'we know it has not' are different facts and must not collapse. Then release/resume: a resume is admissible only across a proven boundary, and a resume attempted without one refuses rather than proceeding. Assert the specific code and the refusing layer on every negative arm. Red.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/safe-boundary.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery/safe-boundary.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/safe-boundary.test.ts"
+      ],
+      "note": "RED confirmed for the right reason. `npx vitest run --root . packages/runner/src/recovery` →\n\"Error: Cannot find module './safe-boundary.js'\" / \"Test Files 1 failed (1)\". The module does not exist yet; no assertion was satisfied by accident.\n\n19 cases across four suites in packages/runner/src/recovery/safe-boundary.test.ts (210 lines):\n- Vocabulary: PREDECESSOR_RELEASES deep-equals a HAND-TRANSCRIBED three-member list (not read from the subject, per mem:gotcha-fixture-derived-from-export-under-test-hides-every-assertion), and is asserted string-identical to the supervisor's RESOURCE_FACTS so the two lattices cannot drift apart silently.\n- DoD 1, all three predecessor states asserted separately: PROVEN_RELEASED admits; ACTIVE blocks with RECOVERY_PREDECESSOR_ACTIVE@SAFE_BOUNDARY; UNKNOWN blocks with RECOVERY_PREDECESSOR_RELEASE_UNKNOWN@SAFE_BOUNDARY. A fifth case asserts the two codes are NOT equal, so \"we cannot tell whether it released\" can never quietly become \"we know it has not\".\n- Sweep over the lattice asserts length === 3 AND length > 0 (epic rail 6: a sweep that generates nothing passes while testing nothing), and pins the per-state verdict sequence [ADMITTED, BLOCKED, BLOCKED].\n- Ingress: an undeclared release value and an undeclared extra key (`elapsedMs`, chosen because a time field is precisely what a timer-based theft would smuggle in) both refuse with RECOVERY_BOUNDARY_MALFORMED.\n- Resume: admissible only across a proven boundary; ACTIVE, UNKNOWN, and PROVEN_RELEASED-with-no-exact-handoff all refuse with RECOVERY_RESUME_BOUNDARY_UNPROVEN@SAFE_BOUNDARY; a malformed request refuses with RECOVERY_BOUNDARY_MALFORMED.\n- Drain monotonicity, with the two-layer distinction epic rail 6 demands: a walked-back strongest reason refuses RECOVERY_DRAIN_DOWNGRADE_REFUSED@SAFE_BOUNDARY; a dropped reason refuses RECOVERY_DRAIN_REASON_DROPPED@SAFE_BOUNDARY; a RETARGETED disposition is the supervisor's single monotonicity source answering, so the test pins DRAIN_DISPOSITION_NOT_MONOTONIC@DRAIN carried through verbatim — asserting the code alone would not distinguish the layers. A final case asserts a downgrade is a REFUSAL and not a silent no-op that returns the held disposition.\n\nEvery negative arm asserts both the specific code and the refusing layer; no case asserts only \"did not succeed\".",
+      "startedAt": "2026-08-08T22:16:38.066Z",
+      "completedAt": "2026-08-08T22:18:20.660Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement packages/runner/src/recovery/safe-boundary.ts to green — safe-boundary drain plus release/resume. A successor may overlap a predecessor only when the predecessor's safe release boundary is PROVEN; ACTIVE and UNKNOWN both block, with distinct codes. Drain is monotonic: a drain disposition may be upgraded by a later reason but never downgraded, and an attempted downgrade is a refusal rather than a silent no-op, so a weaker later signal cannot walk back a stronger earlier one. Every fact is caller-supplied — lease epoch and token from the lease core, effect status as a classification, process exit as the imported ClaudeProcessExit. There is no clock and no randomness in this module: no Date.now, no Math.random, no elapsed-time reasoning of any kind, which is also what makes DoD 3's timer-based ownership theft unwritable. Target under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/safe-boundary.ts",
         "packages/runner/src/recovery/safe-boundary.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery/safe-boundary.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/safe-boundary.ts"
+      ],
+      "note": "GREEN. `npx vitest run --root . packages/runner/src/recovery` → \"Test Files 1 passed (1) / Tests 22 passed (22)\". `npx tsc --project packages/runner/tsconfig.json --noEmit` exits 0.\n\nCreated packages/runner/src/recovery/safe-boundary.ts (230 lines, under the 250 target).\n\n- admitSuccessorOverlap: PROVEN_RELEASED is the ONLY admitting value and is tested by positive equality, so a later member added to the lattice blocks by default instead of falling through to an admission. ACTIVE and UNKNOWN block under distinct codes.\n- admitResume: admissible only when the boundary is PROVEN_RELEASED **and** carries its exact safe handoff; anything else refuses RECOVERY_RESUME_BOUNDARY_UNPROVEN rather than resuming from whatever is on disk.\n- advanceRecoveryDrain: the two recovery-layer rules a crash makes possible — a DROPPED held reason and a WALKED-BACK strongest reason — are refusals under their own codes, never a silent no-op returning the held disposition. The union itself is DELEGATED to the supervisor's upgradeDisposition (the single declared source of drain monotonicity); nothing is re-derived here. Any other self-inconsistency is refused BY that source and carried through verbatim via carriedFailure, so the DRAIN layer stays visible in the failure.\n  Ordering note, deliberate: the recovery downgrade/drop checks run BEFORE the observed disposition's isMonotonicDisposition check. Both orders refuse, but this order gives the specific, actionable diagnosis (\"a reason was walked back\") instead of the generic \"not monotonic\", and it keeps RECOVERY_DRAIN_DOWNGRADE_REFUSED reachable — under the reverse order the supervisor would always answer first and that code could never be produced, which is the vacuous-refusal shape epic rail 6 warns about.\n- Ingress uses the supervisor's exactRecord/isRef/oneOf, so accessor and prototype smuggling are refused by the same hardened readers the rest of the package uses; no parser is cloned.\n- Clock/randomness/process fence verified now, not deferred: `grep -rn \"Date\\.now|Math\\.random|child_process|spawn|kill(\"` over packages/runner/src/recovery/ returns ZERO hits. The module doc comment was reworded so it does not name those APIs literally — a comment spelling one out trips the grep exactly like a call would, and step 8 needs the sweep to mean what it says.",
+      "startedAt": "2026-08-08T22:18:22.702Z",
+      "completedAt": "2026-08-08T22:19:39.053Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD red for crash classification — DoD 2 and DoD 3. Create packages/runner/src/recovery/crash-classification.test.ts. DoD 2 is a set property: sweep a table of injected crash situations — process exited cleanly, exited non-zero, signalled, unobserved; effect absent, active, or unknown; lease epoch current or stale — and assert the observed outcome kinds EQUAL the exported closed list, with per-kind counts recorded in the output so a sweep that only ever produces one kind is visible rather than passing. Assert the injected case count is non-zero, since a sweep that generates nothing passes while testing nothing. Assert explicitly that NO input produces a silent resume. DoD 3, two separate fixtures: QUIET PRESENCE — an observation showing a live-looking process with no epoch advance must NOT transfer ownership, refusing with its stable code; and LATE OBSERVATION — an observation carrying an older epoch than the durable record must be REFUSED with its own code, not merged and not silently dropped, since silently dropping it would pass a weak test while losing the refusal. Red.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/crash-classification.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery/crash-classification.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/crash-classification.test.ts"
+      ],
+      "note": "RED confirmed for the right reason. `npx vitest run --root . packages/runner/src/recovery` → \"Error: Cannot find module './crash-classification.js'\" / \"Test Files 1 failed | 1 passed (2)\". The safe-boundary suite stayed green (22 passed), so the red is only the new subject.\n\npackages/runner/src/recovery/crash-classification.test.ts (390 lines), 5 suites.\n\nDoD 2, as a SET property:\n- CRASHES is an 11-entry hand-written table of injected crash situations spanning process exited cleanly / exited non-zero / signalled / unobserved, effect PROVEN_ABSENT / PROVEN_ACTIVE / UNESTABLISHED, and lease epoch current / stale / advanced. Expectations are hand-written per row, not derived from the classifier.\n- Case count asserted non-zero AND pinned at 11, with unique labels (epic rail 6: a sweep that generates nothing passes while testing nothing).\n- The observed kind set is asserted EQUAL to a HAND-TRANSCRIBED five-member list, and RECOVERY_OUTCOME_KINDS is asserted equal to that same hand-transcribed list. Both directions: a sixth kind and a silently dropped kind each fail. Deriving the expectation from the export alone would have let the vocabulary and the classifier drift together.\n- Per-kind counts are asserted exactly ({ADOPTED:1, ABSENT:2, SUSPECT:3, QUARANTINED:2, RECONCILIATION_COMMAND:3}) and each is separately asserted > 0, so a classifier that collapses to one kind is visible instead of passing.\n- \"Nothing silently resumes\" asserted three ways: RECOVERY_OUTCOME_KINDS contains no RESUMED; no swept outcome has kind RESUMED; no swept outcome carries a `resumed` property.\n- RECONCILIATION_COMMAND is asserted to carry an EXACT command (`recovery.inspect_external`), and QUARANTINED to name what remains held ([\"resource:UNKNOWN\", \"effect:intent-1\"]) rather than saying only that something is held.\n\nDoD 3, separate fixtures, every negative arm pinning code AND layer:\n- QUIET PRESENCE, three arms: presenceLooksLive with no authority at all; an authority whose epoch never advanced; and an advanced epoch replaying the OLD token. All refuse RECOVERY_OWNERSHIP_TRANSFER_UNPROVEN@CLASSIFICATION. A fourth arm proves the positive path still exists once the fence really advanced, so the refusal is not vacuous.\n- LATE OBSERVATION: an observedEpoch below the durable record refuses RECOVERY_STALE_OBSERVATION_REFUSED@CLASSIFICATION, and a second case asserts the stale result's kind is NOT a member of RECOVERY_OUTCOME_KINDS — that is what distinguishes \"refused\" from \"silently dropped into an ordinary outcome\", which a weaker test would have missed.\n- Fixture-drift guard: COMMIT.intent.leaseBinding.epoch and .leaseToken are asserted equal to the hand-transcribed HELD_EPOCH/HELD_TOKEN the stale cases are measured against, so a fixture change cannot quietly turn a stale-epoch case into a current one.\n- SUSPECT is asserted never optimistically adopted: an UNESTABLISHED effect stays SUSPECT even under a fully advanced fence and a live-looking presence, and even over tombstoned records with everything released; a companion case proves the same records DO leave SUSPECT once the effect is proven absent, so the SUSPECT arm is not swallowing everything.",
+      "startedAt": "2026-08-08T22:19:41.097Z",
+      "completedAt": "2026-08-08T22:23:12.878Z"
     },
     {
       "stepId": "step-6",
       "description": "Implement packages/runner/src/recovery/crash-classification.ts to green — absent-process recovery and suspect effect handling. Given durable records plus a caller-supplied crash observation, classify into exactly one of the five closed outcome kinds. The rules that matter: an effect whose status cannot be established is SUSPECT, never optimistically adopted, and a SUSPECT effect is never auto-resumed; a process proven absent with all resources proven released is ABSENT; anything with an unreconciled resource is QUARANTINED with what remains held named explicitly; and where no local decision is safe, emit an exact RECONCILIATION_COMMAND describing precisely what an operator or adapter must do, rather than guessing. Ownership transfer requires a proven epoch or token advance from the lease core — quiescence is never authority. A stale-epoch observation is refused, never merged. Import ClaudeProcessExit and the reconciled-outcome vocabulary from providers/claude rather than restating them. Target under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/crash-classification.ts",
         "packages/runner/src/recovery/crash-classification.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery/crash-classification.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/crash-classification.ts",
+        "packages/runner/src/recovery/crash-classification.test.ts"
+      ],
+      "note": "GREEN. `npx vitest run --root . packages/runner/src/recovery` → \"Test Files 2 passed (2) / Tests 52 passed (52)\". `npx tsc --project packages/runner/tsconfig.json --noEmit` exits 0. Clock/randomness/process grep over the owned directory: 0 hits.\n\nCreated packages/runner/src/recovery/crash-classification.ts (209 lines).\n\nDesign: the classifier RE-DERIVES NOTHING the supervisor already owns. reconstructAfterRestart carries the 786/787 table and the ambiguity rules; this layer adds only the two questions recovery itself must answer — may ownership move, and may a late observation speak.\n\nClassification order IS the safety order, and each ordering choice is load-bearing:\n- SUSPECT before adoption, so an UNESTABLISHED effect is never optimistically adopted and never auto-resumed, even under a fully advanced fence.\n- Quarantine before absence, so a run still holding a resource or a proven-active effect can never be reported as gone.\n- ABSENT requires a POSITIVE death observation: processExit.kind !== \"UNOBSERVED\", plus PROVEN_ABSENT effect status and a terminal/tombstoned post state. Not seeing life is not seeing death; an UNOBSERVED exit falls through to a reconciliation command instead.\n- QUARANTINED names what remains held as explicit strings (\"resource:UNKNOWN\", \"effect:<ref>\"), not a count or a boolean.\n- The fallthrough emits an EXACT command typed as RuntimeCommandKind from @moe/contracts (\"recovery.inspect_external\" for records no local decision can settle, \"recovery.reconcile_external\" otherwise) — a typo is a type error rather than a bad instruction to an operator.\n\nDoD 3, ownershipProven(): requires the claimed authority's epoch to be STRICTLY GREATER than the durable lease epoch AND its token to differ from the held one. A proof at the held epoch is the crashed process's own authority replayed. `presenceLooksLive` is parsed and validated but is CONSULTED NOWHERE in the decision — the only durable way to keep \"quiet presence is not authority\" true is to leave it no place to be read.\n\nTwo deliberate rejections recorded for review:\n- An earlier draft exported RECOVERY_PROPOSED_COMMANDS built with `.filter(kind => RUNTIME_COMMAND_KINDS.includes(kind))`. Removed: a filter fails OPEN — a command that drifted out of the vocabulary would silently vanish from the list and the export would still look healthy. The `RuntimeCommandKind` type annotation already fails the build on drift, which is the fail-closed form.\n- CLAUDE_RECONCILED_OUTCOMES is deliberately NOT imported here despite the step text. Binding a provider-specific outcome list into a provider-neutral classifier would be the wrong seam; the durable records carry the neutral SettlementEvidence.outcomeClass, and the provider-owned ClaudeProcessExit type IS imported and used in provenAbsent(). The test suite does pin CLAUDE_RECONCILIATION_VERSION in its fixture.\n\nTest correction made while going green: the \"reaches ABSENT once the effect is proven absent\" case had `attempt: makeAttempt({state:\"LAUNCH_REQUESTED\"})` against `attemptState:\"ABSENT\"`, which recordsDisagree refuses — so the case was exercising the incoherent-records path while asserting only `not.toBe(\"SUSPECT\")`, which would have passed for the wrong reason. Now `attempt: null` and the assertion is the exact `toBe(\"ABSENT\")`.",
+      "startedAt": "2026-08-08T22:23:16.771Z",
+      "completedAt": "2026-08-08T22:25:40.129Z"
     },
     {
       "stepId": "step-7",
       "description": "Doctor recovery commands on the daemon side, TDD. Create apps/daemon/src/recovery/doctor-commands.test.ts then apps/daemon/src/recovery/doctor-commands.ts. Follow the daemon's established ingress pattern already visible in apps/daemon/src/index.ts — bounded decode via decodeBoundedJsonBytes, then an EXACT-shape check against a frozen key list and a pinned schemaVersion literal, then compose — returning a frozen discriminated union. Doctor commands REPORT and PROPOSE; they do not silently repair. Every command that would change durable state must produce the exact reconciliation command for confirmation rather than applying it, which is the daemon-side half of 'nothing silently resumes'. Assert: a malformed or extra-key payload refuses with the exact-shape code; a doctor command targeting a record whose authority is stale refuses with the stale-authority code; and the command surface's kind list is asserted by SET EQUALITY so a repair-without-confirmation command cannot appear unnoticed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/doctor-commands.ts",
         "apps/daemon/src/recovery/doctor-commands.test.ts"
@@ -93,34 +127,61 @@
       "newFiles": [
         "apps/daemon/src/recovery/doctor-commands.ts",
         "apps/daemon/src/recovery/doctor-commands.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/doctor-commands.test.ts",
+        "apps/daemon/src/recovery/doctor-commands.ts"
+      ],
+      "note": "TDD red then green. RED: \"Error: Cannot find module './doctor-commands.js'\" / \"Test Files 1 failed (1)\". GREEN: `npx vitest run --root . --config package.json src/recovery` (from apps/daemon) → \"Test Files 1 passed (1) / Tests 22 passed (22)\". `npx tsc --project apps/daemon/tsconfig.json --noEmit` exits 0. Clock/process grep over apps/daemon/src/recovery/: 0 hits.\n\nCreated apps/daemon/src/recovery/doctor-commands.ts (217 lines) and its suite (205 lines). No package.json or lock change — step 1 established the daemon half needs only @moe/contracts, which it already declares.\n\nIngress follows apps/daemon/src/index.ts exactly: decodeBoundedJsonBytes, then an exact-shape check against a frozen key list plus the pinned schemaVersion literal, then compose, returning a frozen discriminated union.\n\nReport-and-propose is enforced STRUCTURALLY, not by a check:\n- The only success shapes are REPORTED and PROPOSED; both carry `appliesChange: false` and every proposal carries `confirmationRequired: true`. A repair-without-confirmation command would have to add a new arm to the union rather than slip through an existing one.\n- Proposals are looked up in a frozen kind→RuntimeCommandKind map rather than derived from the kind's NAME, so a kind with no declared runtime operation reports instead of inventing an operation to propose.\n\nAssertions, all pinning code AND layer:\n- Command surface asserted by SET EQUALITY against a hand-transcribed five-member list, plus a second rule-level assertion that every kind begins with `doctor.report_` or `doctor.propose_` — so a repair command cannot appear even under an innocuous name — plus a non-zero cardinality guard so the loop cannot pass vacuously.\n- Every declared kind is executed and asserted to leave appliesChange false; the proposal subset is asserted to have exactly PROPOSALS.length members, so a proposal silently degrading to a report is caught.\n- Two-layer refusals kept distinct: a non-bytes payload and malformed JSON refuse at BOUNDED_JSON with the decoder's own codes (JSON_INPUT_TYPE_INVALID, JSON_SYNTAX_INVALID); extra key, missing key, wrong schemaVersion, undeclared kind (`doctor.apply_recovery`) and a negative epoch all refuse DOCTOR_REQUEST_SHAPE_INVALID@DOCTOR; a behind-record observedEpoch refuses DOCTOR_AUTHORITY_STALE@DOCTOR.\n- Ordering pinned explicitly: a request that is BOTH malformed and stale must answer with the SHAPE refusal, so a shape check that started letting malformed input reach the epoch comparison shows up as a red test rather than staying green on \"it refused\".\n- Positive controls included (equal epoch and beyond-record epoch both admit), so the stale-authority refusal is not vacuously refusing everything.",
+      "startedAt": "2026-08-08T22:25:42.984Z",
+      "completedAt": "2026-08-08T22:27:45.919Z"
     },
     {
       "stepId": "step-8",
       "description": "Prove the assertions are load-bearing and sweep the fence. MUTATION DRILL at each mechanism's single source: the UNKNOWN-blocks-successor branch, the drain monotonicity guard, the epoch-advance requirement for ownership transfer, the stale-epoch refusal, the SUSPECT-never-adopted branch, and the doctor confirm-before-apply gate. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the red test names that guard's code. The epoch mutation is the one to watch: if replacing the epoch-advance requirement with a constant true leaves the suite green, then DoD 3's ownership-theft protection is untested no matter how the suite looks. Back each file up out-of-tree and verify restores with git hash-object. Then grep both owned directories for child_process, spawn, kill, Date.now and Math.random and confirm ZERO hits — a single clock read here would make timer-based ownership theft writable.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/safe-boundary.ts",
         "packages/runner/src/recovery/crash-classification.ts",
         "apps/daemon/src/recovery/doctor-commands.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/doctor-commands.ts",
+        "apps/daemon/src/recovery/doctor-commands.test.ts",
+        "packages/runner/src/recovery/crash-classification.test.ts",
+        "packages/runner/src/recovery/crash-authority.test.ts",
+        "packages/runner/src/recovery/recovery-test-fixtures.ts"
+      ],
+      "note": "MUTATION DRILL: 24 mutants across three rounds. 23 KILLED, 1 SURVIVED — the survivor was a real defect and was fixed, then its replacement guards were drilled and killed. Method: every mutant NEUTRALISES an operand with a constant; no line was ever deleted (a deleted line out of a multi-line condition is a syntax error that reddens zero tests and reads as \"survived\"). Each file was backed up OUT OF TREE (C:/Users/.../Temp/moe-drill-52ec) and every restore was verified by git hash-object against the pre-drill hash; all 24 restores printed restored-ok.\n\nROUND 1 (12 mutants, 11 killed). Suite counts as well as test counts recorded:\n- M1 UNKNOWN-blocks-successor (=== \"PROVEN_RELEASED\" -> !== \"ACTIVE\") KILLED, 2 failed/50 passed: \"blocks a successor over a predecessor whose release cannot be established\" + the lattice sweep. DoD 1's optimistic-implementation arm is genuinely covered.\n- M2 drain downgrade guard -> false: KILLED, 1 failed. M3 dropped-reason guard -> false: KILLED, 1 failed. M4 resume boundary gate -> false: KILLED, 3 failed.\n- M5 EPOCH-ADVANCE REQUIREMENT (claimed.epoch > held.epoch -> true) KILLED, 1 failed: \"refuses to adopt on an authority whose epoch never advanced\". This was the one to watch — DoD 3's ownership-theft protection is demonstrably tested, not merely present.\n- M6 token-advance operand -> true: KILLED. M7 stale-observation refusal -> false: KILLED, 2 failed including \"does not silently drop the stale observation\". M8 SUSPECT-never-adopted -> false: KILLED, 5 failed across 1 suite. M9 proven-death requirement -> true: KILLED, 3 failed.\n- M10 doctor confirm-before-apply gate -> false: KILLED, 5 failed. M11 doctor stale-authority gate -> false: KILLED, 2 failed.\n- **M12 doctor exact-key-count check (keys.length !== REQUEST_KEYS.length -> false) SURVIVED: all 22 tests still passed.** Real finding, not a missing test: for any input the bounded decoder can produce, the length check is FULLY SUBSUMED — an extra key is caught by the unknown-key check, and a missing key by that field's own validator. No input can redden it. FIX: removed the unpinnable line and widened the field validators from `JsonValue` to `unknown` so an absent key is refused by the SAME guard that refuses a wrong-typed one, which also let the redundant `=== undefined` pre-checks go (they were subsumed the same way). Two new tests added so operands sharing a guard are separable (mem:gotcha-redundant-operand-mutants-survive-inside-one-guard): an empty subjectRef and a non-integer recordEpoch.\n\nROUND 2 (6 mutants on the rewritten doctor ingress, all KILLED): extra-key check, pinned schemaVersion, and each of the four field operands drilled INDIVIDUALLY inside their shared guards — kind, subjectRef, recordEpoch, observedEpoch. Each reddened its own named test; the observedEpoch operand reddened both the missing-key and the negative-epoch tests, confirming the merged guard really carries both facts.\n\nROUND 3 (7 mutants, re-drilled after a test-file split, all KILLED): UNKNOWN-blocks-successor, epoch-advance, token-advance, stale-observation, and BOTH operands of the SUSPECT guard separately (post-state and effect-status), plus the quarantine-before-absence gate. Re-drilling was necessary because moving assertions between files can silently detach them from the guard they were written for; every guard still reddens a named test.\n\nFENCE SWEEP: `grep -rnE \"child_process|spawn\\(|\\bkill\\(|Date\\.now|Math\\.random|new Date\\(|performance\\.now|setTimeout|hrtime\"` over BOTH owned directories returns ZERO hits — the pattern is wider than the step asked for (it also covers new Date, performance.now, setTimeout and hrtime, any of which would reopen timer-based ownership theft). The one earlier hit was the word \"killed\" inside a test label and was renamed to \"signalled\".\n\nFILE SIZES, verified with wc -l (not PowerShell Measure-Object -Line, per mem): every file is now under the 250 target — production 209/171/230/226, tests 222/172/240/224, fixtures 108. crash-classification.test.ts had reached 449, above the largest existing suite in the package (408), so it was split into crash-classification.test.ts (DoD 2 sweep) and crash-authority.test.ts (DoD 3), with the seeds extracted to recovery-test-fixtures.ts following the supervisor's own test-fixture precedent. The fixture module reads nothing from a module under test, so a broken recovery export still fails by NAME rather than aborting collection.\n\nSuite after the split: `npx vitest run --root . packages/runner/src/recovery` → 3 files, 53 passed. Daemon → 1 file, 24 passed. Both typechecks exit 0. The drill driver was written to .moe-drill.mjs and DELETED; `git status --porcelain` shows only the two owned untracked directories plus .moe bookkeeping — no scratch or evidence file remains.",
+      "startedAt": "2026-08-08T22:27:49.431Z",
+      "completedAt": "2026-08-08T22:33:29.069Z"
     },
     {
       "stepId": "step-9",
       "description": "Run BOTH gates and attribute failures honestly. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/runner test && pnpm --filter @moe/daemon test. Both must exit 0 — this task spans two packages and a change on one side can redden the other, so never report one gate as if it were both. Also run the typechecks for both packages. Attribute red by path, never by a remembered count: `packages/runner/src/supervisor/` is SHARED and currently holds another task's 11 untracked files with a second task working there, so red under `supervisor/` is almost certainly foreign — check before claiming or fixing it, and never edit a foreign test to make your suite green. The `scope-observation` real-git test has a known 5s-timeout flake: re-run once, report, do not chase. Anything red under the two `recovery/` directories is unambiguously yours. Confirm every production file is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/recovery-contract.ts"
-      ]
+      ],
+      "note": "BOTH gates run fresh from the repo root; both exit 0. No red to attribute.\n\n`pnpm --filter @moe/runner test && pnpm --filter @moe/daemon test` → COMBINED_EXIT=0.\n- @moe/runner (`vitest run --root ../.. packages/runner/src`): \"Test Files 25 passed (25) / Tests 852 passed (852)\".\n- @moe/daemon (`vitest run --root . --config package.json src`): \"Test Files 6 passed (6) / Tests 98 passed (98)\".\nRun separately as well, same results: RUNNER_EXIT=0, DAEMON_EXIT=0. Neither gate is being reported as if it were the other.\n\nTypechecks, both packages: `pnpm --filter @moe/runner typecheck` → RUNNER_TC=0; `pnpm --filter @moe/daemon typecheck` → DAEMON_TC=0.\n\nAttribution notes, checked rather than assumed:\n- packages/runner/src/supervisor/ is fully GREEN and, contrary to the step's expectation, is no longer shared in-flight work: all 32 files there are TRACKED and `git status --porcelain` under it is empty (established at step 1). Nothing foreign was touched and no foreign test was edited.\n- The scope-observation real-git 5s-timeout flake did not occur; the whole runner gate completed in 611ms of test time. Nothing to re-run or chase.\n- Everything under the two recovery/ directories is green: 3 runner suites (53 tests) and 1 daemon suite (24 tests), all mine.\n\nFILE SIZE CAP, measured with `wc -l` (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room):\n  crash-classification.ts 209, recovery-contract.ts 171, safe-boundary.ts 230, doctor-commands.ts 226.\nAll four production files are under the 250 TARGET, well inside the 400 hard cap. Test/fixture files: 222, 172, 240, 224, 108 — also all under 250.",
+      "startedAt": "2026-08-08T22:33:34.852Z",
+      "completedAt": "2026-08-08T22:34:06.275Z"
     },
     {
       "stepId": "step-10",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can a successor start while a predecessor's release is merely unproven; can quiet presence, elapsed time, or a retry count transfer ownership anywhere; can a late observation advance authority; is there ANY path that resumes without an explicit outcome kind; can a drain disposition be downgraded; does a doctor command apply a repair without confirmation; is any unbuilt module's shape guessed at rather than carried as an opaque reference. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and NEVER a directory pathspec under packages/runner/src/, because a sibling task's untracked supervisor files sit in the same working directory and would be swept in. Run git status --porcelain first and unstage any foreign path with git restore --staged. apps/daemon/package.json and pnpm-lock.yaml are committed here ONLY if step 1 established that an amendment was needed and granted; if a sibling already landed the dependency, commit neither. Verify with git show --stat that only owned paths landed.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/crash-classification.ts",
+        "apps/daemon/src/recovery/doctor-commands.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW, then commit cec2b65 by explicit per-file pathspec.\n\nAttack questions from the step, each answered against the code:\n- Can a successor start while a predecessor's release is merely unproven? No. admitSuccessorOverlap admits ONLY on positive equality with PROVEN_RELEASED, so a member added to the lattice later blocks by default. Drilled: flipping it to `!== \"ACTIVE\"` reddens the named UNKNOWN test.\n- Can quiet presence, elapsed time, or a retry count transfer ownership anywhere? No. presenceLooksLive is parsed and validated but read NOWHERE in any decision. There is no clock, no counter that grows while nothing happens, and no elapsed-time quantity in scope; the extended fence grep (child_process, spawn(, kill(, Date.now, Math.random, new Date(, performance.now, setTimeout, hrtime) is zero over both owned directories.\n- Can a late observation advance authority? No — refused with RECOVERY_STALE_OBSERVATION_REFUSED, and a separate test asserts the refused kind is outside RECOVERY_OUTCOME_KINDS so \"refused\" cannot degrade into \"silently dropped\".\n- Any path that resumes without an explicit outcome kind? No. The classifier has no RESUMED arm; admitResume demands a proven boundary carrying its exact handoff; the daemon's doctor.propose_resume proposes work.resume for confirmation and never applies it.\n- Can a drain disposition be downgraded? No — dropped-reason and walked-back-strongest each refuse under their own code, and a retargeted record is refused by the supervisor's single monotonicity source with its layer preserved.\n- Does a doctor command apply a repair without confirmation? Structurally impossible: the only success arms are REPORTED and PROPOSED, both carry appliesChange:false, every proposal carries confirmationRequired:true, and the kind list is asserted by set equality plus a naming rule.\n- Is any unbuilt module's shape guessed at? No. Journal and review-package digests are opaque 64-hex references validated for shape only and never interpreted; effect identity is an opaque ref. Neither the context journal nor the review flow is imported.\n\nTWO DEFECTS FOUND AND FIXED IN THIS PASS:\n1. crash-classification.ts parsed `input[\"records\"]` TWICE — once via parseRestartRecords for the epoch the stale-observation refusal is measured against, and again inside reconstructAfterRestart. The hardened readers make a divergent read unreachable today (accessors and proxies are refused), so this was a latent seam rather than a live bug: two independent parses of one caller object could let the epoch come from a record set the reconstruction did not accept. Now reconstructAfterRestart is called with the PARSED record set, so one parse is the authority. Re-drilled after the change: the stale-observation guard, the epoch-advance guard, and the reconstruction input itself are all still KILLED (2, 1 and 19 tests red respectively), so the change detached nothing.\n2. doctor-commands.ts had a bare 400 literal bounding subjectRef. Named MAX_SUBJECT_REF_CHARS with a comment recording that it matches the runner's bound and that the daemon cannot import it.\n\nConsidered and deliberately NOT changed (noted for QA): the ABSENT branch does not re-test resourceFact === \"PROVEN_RELEASED\", because the quarantine gate above it already guarantees it. Adding the conjunct would create exactly the redundant operand that mutant M12 proved no test can redden. The ordering is what carries the guarantee, and drill R7 confirms the quarantine gate is load-bearing (5 tests red when neutralised).\n\nCOMMIT cec2b65, by EXPLICIT PER-FILE pathspec — `git commit -F - -- <9 files>`. No bare commit, no -a, no add -A, no directory pathspec. `git status --porcelain` was checked before staging and only the 9 owned files were staged; the four modified .moe bookkeeping files were left unstaged and no foreign path needed unstaging. `git show --stat` confirms exactly 9 files, 1809 insertions, all under packages/runner/src/recovery/ and apps/daemon/src/recovery/. apps/daemon/package.json and pnpm-lock.yaml were NOT committed — step 1 established no amendment was needed, since the daemon half uses only @moe/contracts, which it already declares.\n\nPost-commit verification, fresh: `pnpm --filter @moe/runner test && pnpm --filter @moe/daemon test` → EXIT=0, runner 25 files / 852 tests, daemon 6 files / 98 tests. Scratch drill directory removed; the tree holds no probe or evidence file.",
+      "startedAt": "2026-08-08T22:34:11.610Z",
+      "completedAt": "2026-08-08T22:36:40.911Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -133,17 +194,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.830Z",
-  "updatedAt": "2026-08-08T20:30:25.795Z",
+  "updatedAt": "2026-08-08T22:39:03.549Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:28:53.368Z",
     "plannedStepCount": 10,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 10
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:30:23.753Z",
   "planningNotes": {
@@ -162,5 +235,29 @@
   "budget": {
     "wallClockMs": 21600000
   },
-  "planApprovedAt": "2026-08-08T20:30:25.795Z"
+  "planApprovedAt": "2026-08-08T20:30:25.795Z",
+  "contextFetchedBy": [
+    "worker-964ae3f0"
+  ],
+  "workStartedAt": "2026-08-08T22:11:53.666Z",
+  "reviewStartedAt": "2026-08-08T22:39:03.549Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner test && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  25 passed (25)\n      Tests  852 passed (852)\n   Start at  01:36:49\n   Duration  605ms (transform 3.05s, setup 0ms, import 4.43s, tests 919ms, environment 2ms)\n\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  6 passed (6)\n      Tests  98 passed (98)\n   Start at  01:36:50\n   Duration  753ms (transform 1.48s, setup 0ms, import 1.88s, tests 552ms, environment 0ms)\n\nCOMBINED_EXIT=0",
+    "reportedAt": "2026-08-08T22:39:03.549Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "pnpm-lock.yaml",
+    "packages/runner/src/recovery/recovery-contract.ts",
+    "packages/runner/src/recovery/safe-boundary.test.ts",
+    "packages/runner/src/recovery/safe-boundary.ts",
+    "packages/runner/src/recovery/crash-classification.test.ts",
+    "packages/runner/src/recovery/crash-classification.ts",
+    "apps/daemon/src/recovery/doctor-commands.test.ts",
+    "apps/daemon/src/recovery/doctor-commands.ts",
+    "packages/runner/src/recovery/crash-authority.test.ts",
+    "packages/runner/src/recovery/recovery-test-fixtures.ts"
+  ]
 }

@@ -212,7 +212,7 @@
       "completedAt": "2026-08-08T22:07:42.418Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -225,12 +225,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.708Z",
-  "updatedAt": "2026-08-08T22:10:58.751Z",
+  "updatedAt": "2026-08-08T22:17:51.340Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:26:48.554Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-08T22:17:51.340Z",
+    "wallClockMs": 6662786
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -270,7 +272,8 @@
   },
   "planApprovedAt": "2026-08-08T20:28:37.663Z",
   "contextFetchedBy": [
-    "worker-964ae3f0"
+    "worker-964ae3f0",
+    "qa-cbad3a29"
   ],
   "workStartedAt": "2026-08-08T21:40:21.280Z",
   "reviewStartedAt": "2026-08-08T22:10:58.751Z",
@@ -292,5 +295,8 @@
     "packages/review/src/review-flow.test.ts",
     "packages/review/src/review-package.ts",
     "packages/review/src/review-findings.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T22:17:51.340Z",
+  "reviewCompletedAt": "2026-08-08T22:17:51.340Z",
+  "reviewSummary": "APPROVED. Gate re-run by QA: pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test exits 0, \"Test Files 2 passed (2) / Tests 90 passed (90)\" - non-zero, so no filter miss on a new package. Root pnpm typecheck exits 0, includes packages/review.\n\nDoD1: 3-valued lattice. Author and prior mutating lease holder each get own code; unresolvable fact -> UNKNOWN_REVIEWER_INDEPENDENCE with no qualification, asserted apart from NOT_INDEPENDENT. Positive arm present: read-only lease, and mutating lease over another subject, stay INDEPENDENT.\nDoD2: allow-list by construction; 4 forbidden kinds refuse PACKAGE_ITEM_KIND_FORBIDDEN at PACKAGE layer. Six bound fields by set equality twice (hand-written DoD list AND production REVIEW_PACKAGE_BOUND_FIELDS); digest sweep asserts count 6. No journal/transcript/self-assessment import.\nDoD3: PROOF_FAILED and PROOF_UNKNOWN distinct; repeats key on typed subject+rule -> REJECT_PLAN, both directions; escalation tested AT 2/3/4; clean round after cap still ESCALATEs. Refusals pin their layer.\n\nQA ran its OWN drill, not the worker's 23: 12 mutants, 12 killed, 0 survivors; files restored and verified by git hash-object. Killed: accept-all allow-list, disabled deny-list, fingerprint keyed on prose, repeat detection off, authorship always-known, every-lease-disqualifies, limit 3->4, lineage attestation off, digest dropping bound, PROOF_UNKNOWN->PROOF_FAILED, policy codes not verbatim, singleton ambiguity ignored.\n\nRails: wc -l 247/220/160/144/71/70, under 250. Zero Date.now/Math.random. No .js bridges. No NUL left (review-package.ts diffs as 144 text insertions, not Bin). Lock gained one importer stanza. Commits 15b5cf9 + a0a883b carry only owned paths. Policy consumed from @moe/core evaluatePolicy, reasonCodes verbatim.\n\nNo regression: the one root-suite red (j4-replan-stale) has cause 239aa4f confirmed an ancestor of this task's first commit, foreign to packages/review. Notes in mem:task-58029c26-qa-verdict."
 }
