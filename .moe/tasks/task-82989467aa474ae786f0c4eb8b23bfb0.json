@@ -80,7 +80,7 @@
       "completedAt": "2026-08-08T08:21:30.918Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -106,17 +106,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:45.149Z",
-  "updatedAt": "2026-08-08T08:22:29.020Z",
+  "updatedAt": "2026-08-08T08:32:29.690Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:52:41.182Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-08T08:32:29.690Z",
+    "wallClockMs": 38388508
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
     "architect-d89636d1",
-    "worker-40cb4878"
+    "worker-40cb4878",
+    "qa-6fd67108"
   ],
   "blockedReason": "SPIDR interface split required: combining exact schema-route validation/upcasting with ordered frozen-state folding and mutation-resistant tests would exceed the <=400 net-LOC task rail. The producer interface is now isolated in child task-14ba8b74f05f458d94591e02ce851e29; planning the fold before its exact landed API would force speculative function/type names.",
   "blockedResourceId": null,
@@ -158,5 +161,8 @@
     "packages/store/src/projections/projection-fold.test.ts",
     "packages/store/src/projections/projection-fold.ts",
     "packages/store/src/projections/projection-fold.js"
-  ]
+  ],
+  "completedAt": "2026-08-08T08:32:29.690Z",
+  "reviewCompletedAt": "2026-08-08T08:32:29.690Z",
+  "reviewSummary": "APPROVED — 4/4 DoD verified against HEAD content, not the worker's summary.\n\nGATE RE-RUN BY QA: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, 24 files / 184 tests (baseline 23/165 + 1/19 here). Worktree blobs byte-identical to HEAD for all 3 paths.\n\nDoD1 purity: greps on `git show HEAD:<path>` — zero hits for node:/DatabaseSync/readFile/writeFile/Date./Math.random/process.; no DB constructed in the suite. In-suite guard pins module specifiers to exactly [\"../store-contracts.js\",\"./projection-upcast.js\"].\nDoD2: PROJECTION_FOLD_UPCAST_REFUSED + layer UPCAST + upcast.code SCHEMA_VERSION_UNSUPPORTED asserted; fold codes disjoint from UpcastFailureCode so which-layer is assertable.\nDoD3: equal per-aggregate sequence across DIFFERENT eventIds -> DUPLICATE; lower sequence under interleaved aggregates -> OUT_OF_ORDER; midstream start at seq 7 folds. Preflight-before-reduction proven by a call-recording reducer asserted to zero calls.\nDoD4: `git show --stat c27029a` = exactly the 3 owned paths, +501, no scratch files. Sizes at HEAD: .ts 250, .test.ts 250, bridge 1. Rail 5 is per-FILE; no per-task LOC bar applied.\n\nDid not trust the worker's mutation claims — ran 5 of my own, each red on the named assertion, each restored to blob 95fbb9bc: bypass upcaster -> 2 red; `<=`->`<` on globalPosition -> 1 red; echo accumulator not input state -> 1 red; drop Object.hasOwn on reducers -> 1 red; return caller object not frozen clone -> 3 red.\n\nROUTED TO CHANNEL, not defects here: (1) relay footgun — both union arms carry checkpoint/state so `result.checkpoint` typechecks unnarrowed, and the entry-catch arm (projection-fold.ts:244-247) echoes EMPTY_STATE/ORIGIN 0n reachable with a valid state; fail-closed, files at cap, belongs with task-071173ab. See gotcha-union-refusal-echo-unnarrowed. (2) sweep commit ac61db2 captured 6 foreign control-room paths — runtime issue, not agent behaviour."
 }

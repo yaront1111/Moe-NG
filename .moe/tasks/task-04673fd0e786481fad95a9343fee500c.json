@@ -19,25 +19,33 @@
     {
       "stepId": "step-1",
       "description": "Baseline + COLLISION GATE (governor watch): Task A (task-fd82678f) is at 4/5 and still owns the shared entry files — this task NEVER touches apps/control-room/src/main.tsx, src/kernel.tsx, src/fixtures.ts, package.json, tsconfig.json, vite.config.ts, index.html, or pnpm-lock.yaml. The frame is wired for the DoD via TESTS (jsdom renders ShellFrame directly); the one-line main.tsx mount of the frame is deferred to a follow-up after A closes (record in the completion note for the governor — do NOT edit main.tsx even if A finishes mid-task). Verify A's artifacts present: src/kernel.tsx (TruthChip + describeTruthClass re-export + absent->UNKNOWN mapping), src/fixtures.ts (J1 snapshots + three affordance states + provenance fixture type + DEVELOPMENT_ONLY markers), dependency set installed. If kernel/fixtures exports differ from the description's assumptions, adapt consumption — never edit A's files; if fundamentally absent, report_blocked needsFrom task-fd82678f. Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` GREEN baseline. Re-read this task's own description — it pins every spec decision (gating semantics 524/530/588-590/614, J1 slice per surface §6.1, tripwires, never-mounted Graph, canonical downstream dirs); NEW EPIC RAILS also apply: per-file 250 cap (no per-task LOC bar) and assert-the-reason/testid, mutation-red-check failure paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-08T08:22:00.708Z"
+      "note": "Baseline + collision gate done. VERIFIED PRESENT (Task A, commits 83144cc/c46965c): kernel.tsx exports TruthChip/Fact/presentTruthClass/describeTruthClass re-export + absent->UNKNOWN via TRUTH_ABSENT_PROVENANCE; fixtures.ts exports CONTROL_ROOM_FIXTURES (6 surfaces, FixtureProvenance = eventSequence/eventId/actor/sessionId/leaseEpoch/timestamp/linkKind/linkRef == spec 3.2 exactly), 4 affordance snapshots, MUTATION_BLOCK_ISOLATION, DEVELOPMENT_ONLY marker. Frontend dep set installed. Task A gate NOT blocking.\n\nBASELINE IS RED AND PROVABLY FOREIGN — attribution recorded now, before I write a line: `pnpm --filter @moe/control-room typecheck` exit 1 and `test` exit 1, failures 100% in src/attempts/: attempt-detail.test.tsx + review-surface.test.tsx import './attempt-detail.js' and './review-surface.js', which do not exist. \"Test Files 2 failed | 4 passed (6), Tests 55 passed (55)\" — zero test CASES fail; both failures are unresolved-import collection errors. A second agent is mid-TDD on the node/attempt workspace (decision-control-room-node-attempt-spidr) in this shared tree: node-authority.tsx/node-context.tsx/node-evidence.tsx landed 11:14-11:21, red test files are already COMMITTED ahead of their production files. My steps 2-4 have zero dependency on src/attempts/**, so I proceed and re-gate at step 5 rather than block prematurely.\n\nCOLLISION (new, not in plan): src/nodes/** is nominally my owned path but is being written concurrently by that task (node-authority/node-context/node-evidence + their tests, some tracked, two untracked). My slice file node-inspector-j1.tsx does not collide by name. I will not touch their files. Their node surface is building in PARALLEL with, not over, my J1 slice — flagging for the governor.\n\nPer plan: NOT touching main.tsx/kernel.tsx/fixtures.ts/configs. Frame proven by direct jsdom render; main.tsx mount deferred.\n\nADAPTATION (plan step-1 authorizes it): the description assumed a separate DEVELOPMENT_ONLY reason-coded-disabled fixture channel. Task A shipped none, and NextAllowedCommand (packages/contracts/src/runtime/runtime-affordance.ts:18-28) has NO reason field. So the spec-8.1 rule is provable as a structural absence instead: no reason source exists anywhere, therefore no control can ever render disabled-with-guessed-text. I assert that negative rather than invent a fixture channel.\n\nSPEC PINS RE-READ AND CORRECTED vs description: (a) nav rail (line 58) is Goals/Approvals/Runs-Leases/Resources/Health/Policy — Graph is NOT a rail item; it is a projection tab in the context bar (line 51). Placeholder goes on the tab. (b) CR-J1-002 bar text is `cr.graph.canvas` never mounted; I assert the stronger `cr.graph.*`. (c) Columns are exactly cr.board.column.{plan|ready|executing|review|accepted} (line 95). (d) Enablement authority = snapshot.mutationsEnabled (daemon-derived in fixture), never client-recomputed: DISCONNECTED+commands -> false (renders disabled), LAGGING+commands -> true (renders enabled, CR-LAG-001).\n(e) CRITICAL for the disabled-not-hidden proof: the canonical DISCONNECTED snapshot carries EMPTY_NEXT_ALLOWED_COMMANDS, so it renders ZERO controls and cannot prove \"disabled, not hidden\". MUTATION_BLOCK_ISOLATION[0] (DISCONNECTED + real commands) is the only fixture that can. Using it.\n(f) Spec 3.2 names the provenance popover `cr.chip.provenance`, which collides with convention-control-room-test-id-prefixes (\"cr.chip.* counts chips exactly\"). Resolution: keep the spec id but render the panel at shell level, never inside a cr.fact.* wrapper, and assert the bar-3 audit per-wrapper so it is immune to the panel.\nToolchain: named `import { userEvent }`; NO jest-dom in the dep set, so no toBeInTheDocument — use toBeTruthy/.disabled/getAttribute.",
+      "startedAt": "2026-08-08T08:22:00.708Z",
+      "completedAt": "2026-08-08T08:25:13.870Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — src/shell/gating-keyboard.test.tsx (<=250; NAMED import { userEvent }). The action-gating matrix (spec-exact, all via Task A fixtures): (1) CONNECTED fixture: actions render ONLY from the supplied readonly NextAllowedCommand[] — for each affordance an enabled control with its cr.action.* testid; EMPTY affordances -> ZERO action controls in the DOM (absent, not disabled); (2) DISCONNECTED fixture: banner with role=status/alert (spec 687) AND every cr.action.* control DISABLED (present, not hidden — spec 524); assert the banner and enabled-action states never coexist (spec 530); (3) LAG/STALE fixture: stale display LABELED (visible stale marker testid) while controls stay ENABLED — commands NOT blocked (spec 614 / CR-LAG-001); (4) REASON-CODED-DISABLED provisional channel: only the separate DEVELOPMENT_ONLY fixture channel may render disabled-with-reason; a fixture affordance WITHOUT a daemon reason renders NO control ever disabled-with-guessed-text (spec 588-590); (5) KEYBOARD: every rendered control reachable in DOM order (tab traversal via userEvent), roles/labels present; provenance drill-down opens via Enter and 'p' (spec 691) showing the §3.2 popover fields from the fixture provenance type; focus returns on close. Each assertion targets the spec testid taxonomy (cr.action.*, cr.chip.*, cr.banner.*). Confirm RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/shell/gating-keyboard.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/shell/gating-keyboard.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ],
+      "note": "src/shell/gating-keyboard.test.tsx written, 242 lines, RED confirmed (Failed to resolve import \"./frame.js\" — production surface does not exist yet). Named `import { userEvent }` per the proven NodeNext constraint.\n\n12 cases covering the spec-exact matrix. Non-vacuity is guarded everywhere a loop or a fixture lookup could silently test nothing:\n- CONNECTED: control count === supplied nextAllowedCommands.length (so an extra client-invented action fails), each enabled, plus an explicit assert that actionTestId(approval.decide) === the spec-pinned \"cr.action.approval-decide.approve\".\n- EMPTY commands (MUTATION_BLOCK_ISOLATION[2], CONNECTED+none): ZERO controls — absent, not disabled.\n- DISCONNECTED: uses MUTATION_BLOCK_ISOLATION[0] deliberately, and the test comments why — the canonical DISCONNECTED snapshot carries EMPTY_NEXT_ALLOWED_COMMANDS, so it renders zero controls and literally cannot distinguish \"disabled\" from \"hidden\". Only the drop-while-holding-affordances leg proves spec 524. Asserts banner role is status|alert, control count === command count (present), every one disabled.\n- Banner/enabled coexistence (spec 530 / CR-J3-001) swept over all 7 snapshots with a bannersSeen counter asserted > 0, so the sweep cannot pass by never meeting a banner.\n- LAGGING: statusstrip data-stale=true + lag banner carrying the fixture statusLabel, disconnected banner absent, every control ENABLED (CR-LAG-001).\n- No-invented-reason: sweeps every snapshot asserting each DISABLED control has no data-reason-code, no title, no \"Unavailable\" text, with a disabledSeen counter asserted > 0; plus a source scan of frame.tsx for the literals \"Unavailable\"/\"REASON_CODE\", since with no reason field on NextAllowedCommand a hard-coded string is the only way one could reach the DOM.\n- Keyboard: real userEvent.tab() traversal collecting focus order and asserting it equals DOM order exactly (not merely \"all reachable\"), aria-label present on each; landmarks present; zero cr.graph.* mounted.\n- Provenance: Enter on a focused chip opens cr.chip.provenance showing all seven §3.2 fields (uses goals[1], a receipt-linked fact whose leaseEpoch is non-null, asserted non-null first so the epoch assertion is real) + cr.timeline.jump; Escape closes AND focus returns to the chip. Separate case for the 'p' shortcut (spec 691). Separate case pins absent-class -> cr.chip.unknown with dashed border and the TRUTH_ABSENT_PROVENANCE aria text.\n\nAsserted reason codes/testids, not bare outcomes, per the new epic rail.",
+      "startedAt": "2026-08-08T08:25:16.960Z",
+      "completedAt": "2026-08-08T08:27:22.099Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — src/shell/frame.tsx + src/shell/provenance-panel.tsx (each <=250). frame.tsx: nav rail + main outlet + inspector + status strip ONLY (spec line 51 — the board is a SURFACE, not shell); nav includes the Graph tab as a NON-MOUNTING placeholder (a nav entry that renders no cr.graph.* subtree — spec 509/CR-J1-002); the disconnected banner + gating context provider (affordance state flows down; surfaces consume via context/props — no client-derived authority, actions only from supplied NextAllowedCommand[]); stale-label plumbing per the lag fixture. provenance-panel.tsx: drill-down panel rendering the shell-local DEVELOPMENT_ONLY provenance fixture shape (event seq+ID, actor/session, lease epoch, timestamp, typed link — spec §3.2), opened via chip interaction (Enter/'p'), keyboard-dismissable, focus-restoring. Both consume Task A's kernel TruthChip — never reimplement truth logic. Step-2 tests green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/shell/frame.tsx",
         "apps/control-room/src/shell/provenance-panel.tsx"
@@ -45,12 +53,20 @@
       "newFiles": [
         "apps/control-room/src/shell/frame.tsx",
         "apps/control-room/src/shell/provenance-panel.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/frame.tsx",
+        "apps/control-room/src/shell/provenance-panel.tsx",
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ],
+      "note": "GREEN: 13/13 in gating-keyboard.test.tsx. frame.tsx 219 lines, provenance-panel.tsx 151, test 247 — all <=250.\n\nframe.tsx: nav rail (6 spec-line-58 items) + context bar with the three projection tabs + main outlet + inspector + status strip. Frame only; no board. GatingContext publishes {actionsEnabled, commands, stale} straight from the supplied snapshot — actionsEnabled IS affordance.mutationsEnabled, never recomputed client-side; the context default is fail-closed (actionsEnabled false, EMPTY_NEXT_ALLOWED_COMMANDS) so a surface rendered outside a frame gets zero authority. ActionButton renders one control per supplied NextAllowedCommand and has NO onClick and no envelope construction — render-only. Graph tab selects a placeholder carrying testid cr.shell.graphplaceholder, deliberately NOT a cr.graph.* id.\nprovenance-panel.tsx: ProvenanceProvider captures document.activeElement BEFORE the panel mounts and restores it on close (keyboard trap avoidance); ProvenancePanel is role=dialog, self-focusing, Escape-dismissable, renders all seven §3.2 fields + cr.timeline.jump. FactWithProvenance delegates the claim to the kernel's Fact (truth logic never reimplemented) and adds only the affordance: kernel onProvenance for click/Enter, plus a bubbled 'p' keydown. Panel renders at shell level, never inside a cr.fact.* wrapper.\n\nMUTATION RED-CHECKS (backup out of tree, restore verified by git hash-object -> identical 1234b79b both sides):\n- disabled={!actionsEnabled} -> disabled={false}: 3 failed / 10 passed. Disconnected-disables and coexistence both catch it.\n- disconnected banner removed: 2 failed / 11 passed — and critically one of those is the coexistence sweep failing on bannersSeen === 0, proving that guard stops the sweep passing vacuously.\n- data-stale forced \"false\": 1 failed / 12 passed.\nAll three go red; none was a test that only asserts an outcome.\n\nTOOLCHAIN GOTCHA FOUND (new, worth a memory): @vitejs/plugin-react rewrites import.meta.url inside .tsx to an http://localhost:3000/ URL, so the scaffold's readOwnSource(fileURLToPath(new URL(f, import.meta.url))) pattern throws \"TypeError: The URL must be of scheme file\" when copied into a nested .tsx test. Source scans must resolve from process.cwd() (the Vitest root) instead. I added a positive marker assert (source contains \"export function ShellFrame\") so the two not.toContain checks cannot pass by reading an empty or wrong file — a silent-empty read would otherwise make this test permanently, invisibly green.",
+      "startedAt": "2026-08-08T08:27:25.587Z",
+      "completedAt": "2026-08-08T08:31:56.040Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red then green — the six J1 slices in their CANONICAL DOWNSTREAM DIRECTORIES (each <=250; the five surface tasks BUILD OVER these in place — minimal J1 only, spec §6.1 lines 499-509): src/goals/goals-j1.tsx (goal creation form fields per 503 — fixture-submit only, no network); src/board/board-j1.tsx (five columns cr.board.column.* with name/phase/chip cards — NO joinstrip, NO silence timer, NO terminated filter); src/approvals/approval-j1.tsx (approval detail + cr.action.approval-decide.approve for plan+acceptance kinds from affordances); src/nodes/node-inspector-j1.tsx (chipped facts only — no §10.5 attempt detail); src/evidence/evidence-j1.tsx (receipt exit-0 + base/head SHAs line); src/doctor/doctor-j1.tsx (cr.health.status summary only). Every fact rendered through the kernel TruthChip (cr.fact.* wrapper guarantees a cr.chip.* descendant — spec 742 bar 3; 24px hit target, aria-label, UNKNOWN dashed border via the kernel descriptor). Plus src/shell/j1-flow.test.tsx (<=250): the J1 operable-flow test — render frame + surfaces on the connected fixture, walk goal->board->node->approval->evidence->doctor, assert the three-human-action J1 shape is reachable, AND the never-mounted assertion: no element with a cr.graph.* testid exists at ANY point of the flow (mutation-red-check: temporarily render a cr.graph.* stub locally, watch it fail, revert). FIXTURE TRIPWIRES re-checked: no scheduler path literals in any string, no 'foundation/' import specifiers.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/goals/goals-j1.tsx",
         "apps/control-room/src/board/board-j1.tsx",
@@ -68,7 +84,8 @@
         "apps/control-room/src/evidence/evidence-j1.tsx",
         "apps/control-room/src/doctor/doctor-j1.tsx",
         "apps/control-room/src/shell/j1-flow.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-08T08:31:59.200Z"
     },
     {
       "stepId": "step-5",
@@ -102,16 +119,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T22:15:02.258Z",
-  "updatedAt": "2026-08-08T08:22:00.708Z",
+  "updatedAt": "2026-08-08T08:31:59.200Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:39:03.367Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 3
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:40:26.537Z",
   "planningNotes": {

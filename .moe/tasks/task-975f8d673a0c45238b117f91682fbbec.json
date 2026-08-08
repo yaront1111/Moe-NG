@@ -99,7 +99,7 @@
     {
       "stepId": "step-5",
       "description": "Implement attempt-detail.tsx and review-surface.tsx as separate trust boundaries and take their tests green. AttemptDetail renders explicit immutable attempt/binding/outcome, receipts, journal, and recovery facts through Fact/TruthChip; transcript content is operational narrative only, inside a collapsed <details> with the exact label, and no receipt/evidence fact is derived from it. ReviewSurface accepts only clean-package presentation inputs (criteria/constraints, graph/plan hashes, exact base/head/diff paths, receipts, findings, reviewer eligibility/calibration), structurally omits transcript/journal/self-assessment/handoff props and DOM, renders a diff only when both SHAs are supplied, flags supplied out-of-scope paths, and shows UNKNOWN for missing proof rather than inferring acceptance. Do not add review commands, evidence reruns, fetching, routing, persistence, or lifecycle logic. Use NodeNext .js imports and keep both production files <=250 lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/attempts/attempt-detail.tsx",
         "apps/control-room/src/attempts/review-surface.tsx"
@@ -108,12 +108,19 @@
         "apps/control-room/src/attempts/attempt-detail.tsx",
         "apps/control-room/src/attempts/review-surface.tsx"
       ],
-      "startedAt": "2026-08-08T08:22:18.324Z"
+      "modifiedFiles": [
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx",
+        "apps/control-room/src/nodes/node-authority.tsx"
+      ],
+      "note": "GREEN for both trust boundaries: attempt-detail 10/10, review-surface 10/10; whole app now 6 files / 75 tests passing and `tsc --project tsconfig.json` exits 0. attempt-detail.tsx (151 lines) keeps the attempt's immutable source identity (number/outcome/startedRevision/inputBindingHash) in a separate region from the binding that fences it now (graph epoch/lease epoch/binding version), reuses ReceiptList for receipts, renders the daemon-bounded journal without slicing, and quarantines narrative in TranscriptDisclosure — a native <details> collapsed by default, exact label \"💬 AGENT_REPORTED — narrative, not evidence\", rendered as a sibling of every Panel (never inside one), containing no fact wrapper, chip, link, or action, and omitted entirely when no lines were supplied. review-surface.tsx (173) renders exactly cr.review.{diff,criteria,receipts,findings,context}; the contamination firewall is both type-level (no transcript/journal/self-assessment/handoff prop is declared) and structural (only named fields are destructured, so hostile extra keys die at the boundary rather than in a filter). Diff paths render only when isSupplied(baseSha) && isSupplied(headSha) — otherwise the stable line NO_DIFF_WITHOUT_SHAS with no accept/approve wording. Scope flagging fails toward warning: `entry.outOfScope !== false`, so an unreadable verdict flags rather than quietly clears a path. Absent calibration uses the spec copy \"calibration not yet measured\" while its chip still reads UNKNOWN/ABSENT. isSupplied was added to node-authority.tsx so the SHA-anchoring predicate is production code the test exercises, not a test replica. No fetch, route, store, runner, clock, randomness, or mutation handler in either module. Line counts: 239/123/219/151/173 production, 204/201/179/186/210 test — all <=250.",
+      "startedAt": "2026-08-08T08:22:18.324Z",
+      "completedAt": "2026-08-08T08:24:13.272Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarially review the complete ten-file diff before final evidence. Verify every displayed claim flows through Fact/TruthChip with text/icon/color encoding and a keyboard provenance button; exact IDs/copy and DOM order match the pinned spec; no component derives authority, readiness, legal transitions, reviewer eligibility, recovery actions, or evidence strength; no lease token/session credential/transcript contamination can enter clean review; missing and malformed values cannot become success; arrays are rendered without mutation; and production imports contain no filesystem, network, clock, randomness, transport, store, runner, or scheduler internals. Use a cross-platform Node one-liner over the explicit ten paths to enforce every TS/TSX file <=250 CRLF/LF-normalized physical lines. Mutation-check a real failure path by temporarily changing the production missing-receipt fallback to a verified/success presentation, run node-evidence.test.tsx and confirm the exact UNKNOWN assertion goes red, then undo that exact owned-file edit (no reset/stash) and rerun the focused test green. Leave no probe/scratch output and inspect only explicit owned paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/nodes/node-authority.tsx",
         "apps/control-room/src/nodes/node-authority.test.tsx",
@@ -125,12 +132,24 @@
         "apps/control-room/src/attempts/attempt-detail.test.tsx",
         "apps/control-room/src/attempts/review-surface.tsx",
         "apps/control-room/src/attempts/review-surface.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx",
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx",
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ],
+      "note": "Adversarial review of the ten-file diff. TWO REAL DEFECTS FOUND AND FIXED, each with a new test:\n\n(1) Whitespace-only value rendered as a confident blank. readValue only rejected \"\", so {truthClass:\"DAEMON_VERIFIED\", value:\"   \"} rendered an empty value beside a green VER chip — the exact \"never blank\" presentation §10.3 forbids, and it read as an answered question. Fixed to value.trim() !== \"\"; isSupplied inherits it, so a whitespace-only base SHA now also refuses the diff. Covered by a new node-authority test and by flipping the review-surface base-SHA case from \"\" to \"   \" (the \"\" leg stays covered by the approvalHash case).\n\n(2) Duplicate React keys could silently drop an evidence row. Every list keyed on the record identity, so two records that both lost their identity collapsed to key \"UNKNOWN\" — React explicitly leaves duplicate-key children undefined, i.e. evidence can vanish rather than surface as UNKNOWN. All six collections (receipts/artifacts/findings/blockers/journal/diff paths/criteria) now key on `${index}:${id}`; test asserts two anonymous artifacts both render.\n\nMUTATION PROOF the UNKNOWN path is load-bearing: backed node-authority.tsx up out-of-tree (git hash-object d9dc919b...), changed FactRow's missing-value fallback to `truthClass \"DAEMON_VERIFIED\"` / `value \"exit 0\"`, ran node-evidence.test.tsx -> 2 failed / 8 passed with \"AssertionError: expected 'exit 0' to be 'UNKNOWN'\". Restored by cp (not text re-replace), hash re-verified identical, backup deleted, focused test re-run 10/10 green. No reset/stash used.\n\nGATES: cross-platform Node one-liner over the explicit ten paths, CRLF-normalized — 246/221/123/201/218/198/151/186/173/210, all <=250. Production import scan is clean of node:, fetch, XHR, WebSocket, storage, Date.now/new Date, Math.random, process., setTimeout/Interval, useState/useEffect, @moe/scheduler, @moe/store. No sort/reverse/splice/push/pop/shift/fill in production. No {...spread} into DOM, no innerHTML. Evidence hrefs are always \"#\"-prefixed fragments, so a hostile provenanceRef cannot become a javascript: URL. Scope flagging fails toward warning (outOfScope !== false). All components are pure props-in/JSX-out with no state or IO, so the concurrency and cleanup arms of the checklist are structurally N/A. Theoretical residue for QA: a payload could supply duplicate record ids, which yields duplicate data-testids (a selector ambiguity, not an evidence loss — both rows render); and an unbounded supplied array renders unbounded rows, since bounding is the daemon's job.\n\nSHARED-TREE INCIDENT (not caused by this task, needs governor awareness): two sibling agents committed with a broad add and swept my in-progress owned files into THEIR commits — 633422f \"Protected budget reservations\" (task-318c0732) and ac61db2 \"Pure projection upcaster engine\" (task-82989467) together contain all ten of my files. Attribution in history is therefore wrong for this task. I did NOT reset, revert, or rewrite shared history; step 7 commits my remaining delta under this task's own message with explicit pathspecs. Working tree under apps/control-room holds exactly 7 modified owned files and zero untracked scratch/probe output. Full app suite: 6 files / 77 tests passing, tsc exit 0.",
+      "startedAt": "2026-08-08T08:24:15.701Z",
+      "completedAt": "2026-08-08T08:27:16.299Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the single final verification command fresh from D:\\projexts\\moe-next after the last edit and retain its complete output as complete_task evidence: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`. Do not complete on partial, stale, skipped, or failed output. Confirm the five new test files were discovered and report their counts; assert every failure/UNKNOWN test checks the exact existing presentation reason (including TRUTH_CLASS_INVALID where applicable) rather than only a negative outcome. Stage and commit only the ten explicit owned paths with pathspecs; never use git add -A, reset, stash, push, merge, or touch kernel.tsx/main.tsx/generated contracts. The QA handoff must state that these are unmounted presentation modules over already-projected/preclassified facts, not a live transport/route or authoritative response schema.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/nodes/node-authority.tsx",
         "apps/control-room/src/nodes/node-authority.test.tsx",
@@ -142,11 +161,26 @@
         "apps/control-room/src/attempts/attempt-detail.test.tsx",
         "apps/control-room/src/attempts/review-surface.tsx",
         "apps/control-room/src/attempts/review-surface.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx",
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx",
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ],
+      "note": "Final gate green from D:\\projexts\\moe-next, fresh after the last owned-file edit: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> exit 0, 7 test files / 90 tests passed.\n\nAll five new files were discovered (verbose reporter): node-authority.test.tsx 12, node-context.test.tsx 10, node-evidence.test.tsx 10, attempt-detail.test.tsx 10, review-surface.test.tsx 10 = 52 mine, plus 25 pre-existing scaffold and 13 from a sibling's src/shell suite. Every failure/UNKNOWN test asserts the exact existing presentation reason, not merely a negative outcome: absent values assert data-truth-class UNKNOWN + data-origin ABSENT + data-provenance-note === TRUTH_ABSENT_PROVENANCE; malformed classes assert data-origin INVALID + TRUTH_INVALID_PROVENANCE and that the note contains the literal TRUTH_CLASS_INVALID (all five suites carry that leg); the review refusal asserts the exact NO_DIFF_WITHOUT_SHAS string plus zero rendered diff rows; empty command lists assert the exact NO_COMMANDS_SUPPLIED copy. Step 6's mutation run proved the UNKNOWN leg reddens.\n\nCommit 8dbe3df, made with a path-limited `git commit -- <10 explicit pathspecs>` (no add -A, no reset, stash, push, or merge; kernel.tsx/main.tsx/fixtures.ts/generated contracts untouched). Its stat is exactly 7 owned files — the other three were byte-identical to what a sibling's broad commit had already swept in. Owned tree is clean; the only remaining entry under apps/control-room is `?? src/shell/`, a sibling's untracked work.\n\nTIMELINE NOTE FOR QA: the gate was blocked twice by a sibling's in-flight work in the same package — first `src/shell/gating-keyboard.test.tsx` importing not-yet-written ./frame.js and ./provenance-panel.js (TS2307, package typecheck exit 1), then that suite failing on `TypeError: The URL must be of scheme file`. Neither touches my modules. I polled the real command in the foreground until it went green rather than substituting a scoped run; the exit-0 evidence above is a single unmodified invocation of the plan's named command.\n\nQA HANDOFF: these are five unmounted presentation modules over already-projected, already-preclassified facts. They are NOT a live transport, a route, a mounted page, or an authoritative daemon response schema — the generated client still exposes only request-envelope builders, and no node/attempt/evidence/review DTO exists. Nothing here fetches, routes, persists, holds state, reads a clock, or constructs a command; legal and recovery command kinds render as labels drawn only from the supplied list. Composition into a real route (and the resulting testid collisions if node-evidence and attempt-detail ever mount together) belongs to a later task.",
+      "startedAt": "2026-08-08T08:27:19.744Z",
+      "completedAt": "2026-08-08T08:32:41.644Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-7e037598",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -171,12 +205,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-08T08:22:18.324Z",
+  "updatedAt": "2026-08-08T08:33:27.834Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:33:50.977Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 4
+    "executedStepCount": 7
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -184,7 +218,8 @@
   "blockedAt": null,
   "contextFetchedBy": [
     "architect-c4babdf9",
-    "worker-7e037598"
+    "worker-7e037598",
+    "governor-95f824a1"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -193,7 +228,10 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T08:01:59.899Z",
@@ -215,5 +253,24 @@
     "escalatedAt": "2026-08-08T08:10:07.031Z"
   },
   "planApprovedAt": "2026-08-08T08:02:01.923Z",
-  "workStartedAt": "2026-08-08T08:11:16.409Z"
+  "workStartedAt": "2026-08-08T08:11:16.409Z",
+  "reviewStartedAt": "2026-08-08T08:33:27.834Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n\n Test Files  7 passed (7)\n      Tests  90 passed (90)\n   Start at  11:31:58\n   Duration  1.56s (transform 501ms, setup 0ms, import 1.42s, tests 1.92s, environment 3.03s)\n\nEXIT=0\n\nPer-file discovery (verbose reporter): src/nodes/node-authority.test.tsx 12, src/nodes/node-context.test.tsx 10, src/nodes/node-evidence.test.tsx 10, src/attempts/attempt-detail.test.tsx 10, src/attempts/review-surface.test.tsx 10 (52 new), plus src/scaffold.test.tsx 25 and a sibling's src/shell/gating-keyboard.test.tsx 13.",
+    "reportedAt": "2026-08-08T08:33:27.834Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/nodes/node-authority.test.tsx",
+    "apps/control-room/src/nodes/node-context.test.tsx",
+    "apps/control-room/src/nodes/node-evidence.test.tsx",
+    "apps/control-room/src/attempts/attempt-detail.test.tsx",
+    "apps/control-room/src/attempts/review-surface.test.tsx",
+    "apps/control-room/src/nodes/node-authority.tsx",
+    "apps/control-room/src/nodes/node-context.tsx",
+    "apps/control-room/src/nodes/node-evidence.tsx",
+    "apps/control-room/src/attempts/attempt-detail.tsx",
+    "apps/control-room/src/attempts/review-surface.tsx"
+  ]
 }

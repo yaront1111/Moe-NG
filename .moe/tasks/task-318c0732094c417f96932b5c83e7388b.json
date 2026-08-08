@@ -69,8 +69,8 @@
       "completedAt": "2026-08-08T08:19:47.539Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f4052923",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -82,12 +82,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:24.020Z",
-  "updatedAt": "2026-08-08T08:21:20.949Z",
+  "updatedAt": "2026-08-08T08:26:25.114Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:40:32.651Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-08T08:26:25.114Z",
+    "wallClockMs": 2752463
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -131,5 +133,8 @@
     "packages/scheduler/src/budget/budget-reservation.test.ts",
     "packages/scheduler/src/budget/budget-reservation.ts",
     "packages/scheduler/src/budget/budget-reservation.js"
-  ]
+  ],
+  "completedAt": "2026-08-08T08:26:25.114Z",
+  "reviewCompletedAt": "2026-08-08T08:26:25.114Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: scheduler typecheck exit 0; task command (vitest budget-reservation.test.ts) exit 0, 40/40; full scheduler suite 30 files / 473 tests exit 0.\n\nDiff = 3 owned paths / 500 insertions (worker commit 05b0dbf). Sizes at HEAD via `git show HEAD:<p> | wc -l`: .ts 249, .test.ts 250, .js 1, bridge exactly `export * from \"./budget-reservation.ts\";`. Greps: @moe/core -> only a comment saying it is deliberately not imported; Date./Math.random -> zero. Rails hold (no hardcoded amounts, gate is a narrow already-validated mirror, 3 paths).\n\nDoD1: any short line refuses the whole set; tests assert the SAME view reference + JSON snapshot + reservation===null. DoD2: [MS 90, AT 1] succeeds to zero available, [89,1] and [90,0] refuse; protected lines deep-equal after EXECUTION activation, both relabel attacks refuse with distinct codes. DoD3: second activate at fresh version -> ALREADY_SETTLED; stale competitor on the winner's successor -> STALE_VERSION, zero effect; cancel refunds only with a never-started proof, restoring pre-reserve buckets. DoD4: all 15 refusal rows pass NO gate yet assert their own code, proving each beats the last-checked gate rule; gate rows cover wrong outcome, stale validity, absent, extra key, prototype chain, accessor. DoD5 above. Closing test asserts observed codes == all 18 published.\n\nDid not trust the worker's mutation claim — ran 6 myself (out-of-tree backup, trap-restore, replacement-count asserted): available fence 3 failed, one-use marker 4, protected fence 4, never-started 2, refund direction 1, stale-version fence 2. 6/6 red; file restored byte-identical (hash b87bda64, clean status).\n\nNoted, not blocking: commit 633422f carries this task's ID but is the wrapper's session sweep (\"Completed via Moe worker session.\") with ZERO of this task's files; same body on 0ece364, so systemic. Documented limitations (at-most-one deferred to persistence, fail() freezes the caller's view, gate checked last) break no DoD."
 }

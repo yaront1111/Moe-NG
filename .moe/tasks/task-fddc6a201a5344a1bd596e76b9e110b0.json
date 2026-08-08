@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "DEPENDENCY GATE + baseline. Task B (task-04673fd0, WORKING) commits apps/control-room/src/approvals/approval-j1.tsx among exactly 10 paths — gate: `git log --diff-filter=A -- apps/control-room/src/approvals/approval-j1.tsx` non-empty (file committed) OR Task B DONE; absent -> moe.report_blocked needsFrom task-04673fd0. approval-j1.tsx is NEVER renamed, deleted, or edited — this task extends with NEW sibling files, keeps j1's plan+acceptance slice mounted so Task B's j1-flow test stays green, and its file does NOT count against this task's budget. Baseline reads: apps/control-room/src/kernel.tsx (TruthChip/Fact — never reimplement), src/fixtures.ts (CONTROL_ROOM_FIXTURE_KIND marker + FixtureAffordanceSnapshot — NOTE: it has NO reason channel; the reason channel is approvals-LOCAL, see step 2), packages/core/src/policy/approval-contract.ts:43-62 (ApprovalDecisionRecord field list to mirror STRUCTURALLY — control-room cannot import @moe/core; enums do NOT need mirroring: APPROVAL/APPROVAL_DECISION/APPROVAL_VALIDITY/CUTOVER/TRUTH_CLASS all come from @moe/contracts RUNTIME_LIFECYCLES already in deps). Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` GREEN baseline.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T08:24:25.852Z"
     },
     {
       "stepId": "step-2",
@@ -81,7 +82,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40cb4878",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -93,9 +94,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.321Z",
-  "updatedAt": "2026-08-08T07:52:26.072Z",
+  "updatedAt": "2026-08-08T08:32:58.620Z",
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "worker-40cb4878",
+    "governor-95f824a1",
+    "governor-afcd0846"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -105,7 +109,8 @@
   "planSubmittedAt": "2026-08-08T07:52:24.028Z",
   "metrics": {
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "firstClaimAt": "2026-08-08T08:24:13.255Z"
   },
   "planningNotes": {
     "approachesConsidered": "Verified by a targeted spec agent before planning; key rulings folded: (1) CUTOVER surfaces have ZERO spec basis (grep = 0 hits) — rendered as design-derived PROVISIONAL UI from design 1007's exact field list under the §9 destructive-modal + step-up pattern, never claiming spec testids; (2) the DoD's 'reason-coded disabled states' vs spec 588-590's no-guessed-text rule resolves via an approvals-LOCAL DEVELOPMENT_ONLY reason channel (the landed shared fixtures.ts has NO reason channel — Task B's notes misdescribe it) reusing RATIFIED RuntimeErrorCode spellings with APPROVAL/CUTOVER sources + mirrored CARRY_FORWARD_* codes, provisional pending §13-D2; (3) escalation + reconciliation are INBOX ITEMS with §8.10 idle lines and affordance-only choices (spec 121/123/537/CR-J4-002) — full detail surfaces would be unspecified UI; soft-policy waiver stays a fixture union member only; (4) delta-reapproval is a MODE of the plan detail (§8.4 banner + cr.approvals.delta.unchanged), not a separate surface; (5) expansion approval routes via cr.action.graph-approve, not approval-decide (§4.8; §13-D1 routing note documented provisional); (6) manual-default/audited-automation = the two spec devices exactly (collapsed cr.approvals.auto group + POL chip records, EMPTY under the default-off fixture) — an invented per-kind badge would be unspecified; (7) sibling coordination: extend BESIDE approval-j1.tsx (never touch it), gate on its commit, keep j1-flow green.",
@@ -124,5 +129,10 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-08T07:52:26.072Z"
+  "planApprovedAt": "2026-08-08T07:52:26.072Z",
+  "workStartedAt": "2026-08-08T08:24:25.852Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
