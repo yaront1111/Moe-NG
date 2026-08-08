@@ -83,7 +83,12 @@ export interface DrillEvent {
 }
 export interface DrillCommit {
   readonly aggregateId: string; readonly commandId: string;
-  readonly events: readonly DrillEvent[]; readonly messageId: string;
+  readonly events: readonly DrillEvent[];
+  /** Identity of the INBOUND message, when it must differ from the outbox ids — a redelivery
+   *  needs fresh command/event/outbox ids but the same inbound envelope, or the command
+   *  receipt dedupes first and the inbox is never consulted. Defaults to `messageId`. */
+  readonly inboundId?: string;
+  readonly messageId: string;
 }
 export interface DurableProjection {
   readonly digest: string | null; readonly position: bigint;
@@ -94,6 +99,12 @@ export interface DatabaseInvariants {
 export interface IncrementalBuild {
   readonly checkpoint: bigint; readonly digest: string;
   readonly deliveries: number; readonly state: ProjectionState;
+  /** Per-aggregate current version, so a later run can resume at the right expectedVersion. */
+  readonly versions: Readonly<Record<string, number>>;
+}
+export interface RelayHistoryOptions {
+  readonly reducers?: Readonly<Record<string, ProjectionReducer>>;
+  readonly start?: IncrementalBuild;
 }
 
 export function drillDigest(state: ProjectionState): string {
@@ -212,6 +223,13 @@ export function drillCommitInput(commit: DrillCommit, expectedVersion: number): 
   };
 }
 
+/** Every field of the envelope derives from the inbound id, so two deliveries sharing that id
+ *  produce the same receipt digest and dedupe rather than conflict. */
+function inboundMessage(commit: DrillCommit): OutboxRelayRequest["message"] {
+  const inboundId = commit.inboundId ?? commit.messageId;
+  return { messageId: inboundId, payload: bytes(`inbound-${inboundId}`), topic: "goal.inbound" };
+}
+
 export function drillRelayRequest(
   commit: DrillCommit, expectedVersion: number, checkpoint: bigint, state: ProjectionState,
   reducers: Readonly<Record<string, ProjectionReducer>> = DRILL_REDUCERS,
@@ -219,10 +237,7 @@ export function drillRelayRequest(
   return {
     commit: drillCommitInput(commit, expectedVersion),
     consumerId: DRILL_CONSUMER,
-    message: {
-      messageId: commit.messageId, payload: bytes(`inbound-${commit.messageId}`),
-      topic: "goal.inbound",
-    },
+    message: inboundMessage(commit),
     projection: {
       checkpoint: { globalPosition: checkpoint }, name: DRILL_PROJECTION,
       reducers, state, upcaster: DRILL_UPCASTER,
@@ -237,12 +252,15 @@ export function drillRelayRequest(
  */
 export function relayHistory(
   store: RelayCommitSeam, commits: readonly DrillCommit[],
-  reducers: Readonly<Record<string, ProjectionReducer>> = DRILL_REDUCERS,
+  options: RelayHistoryOptions = {},
 ): IncrementalBuild {
-  const versions = new Map<string, number>();
-  let checkpoint = 0n;
-  let state = DRILL_ORIGIN_STATE;
-  let digest = DRILL_ORIGIN_DIGEST;
+  const reducers = options.reducers ?? DRILL_REDUCERS;
+  const start = options.start;
+  const versions = new Map(Object.entries(start?.versions ?? {}));
+  let checkpoint = start?.checkpoint ?? 0n;
+  let deliveries = start?.deliveries ?? 0;
+  let digest = start?.digest ?? DRILL_ORIGIN_DIGEST;
+  let state = start?.state ?? DRILL_ORIGIN_STATE;
   for (const commit of commits) {
     const version = versions.get(commit.aggregateId) ?? 0;
     const result = relayMessage(
@@ -255,10 +273,30 @@ export function relayHistory(
     }
     versions.set(commit.aggregateId, version + commit.events.length);
     checkpoint = result.checkpoint.globalPosition;
+    deliveries += 1;
     digest = result.stateDigest;
     state = result.state;
   }
-  return Object.freeze({ checkpoint, deliveries: commits.length, digest, state });
+  return Object.freeze({
+    checkpoint, deliveries, digest, state, versions: Object.fromEntries(versions),
+  });
+}
+
+/** The history the crash worker relays, shared so the parent drill and the child agree on
+ *  every identifier without either re-deriving it. */
+export const CRASH_AGGREGATE = "goal-crash";
+
+export function crashCommit(index: number): DrillCommit {
+  return {
+    aggregateId: CRASH_AGGREGATE,
+    commandId: `cmd-crash-${index}`,
+    events: [{
+      eventId: `evt-crash-${index}`,
+      eventType: index % 2 === 0 ? PLAIN_EVENT : UPCAST_EVENT,
+      payload: `crash-${index}`,
+    }],
+    messageId: `msg-crash-${index}`,
+  };
 }
 
 /** A four-commit curated history: two aggregates, a multi-event commit, and one event type

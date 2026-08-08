@@ -4,8 +4,8 @@ import type { ProjectionReducer, ProjectionState } from "./projection-fold.js";
 import type { StoredEventUpcaster } from "./projection-upcast.js";
 import {
   DRILL_ORIGIN_DIGEST, DRILL_ORIGIN_STATE, DRILL_PROJECTION, DRILL_REDUCERS, DRILL_UPCASTER,
-  PLAIN_EVENT, countRows, curatedHistory, readDurableProjection, relayHistory, withDrillDatabase,
-  withDrillDirectory, withDrillStore,
+  PLAIN_EVENT, countRows, crashCommit, curatedHistory, drillCommitInput, readDurableProjection,
+  relayHistory, withDrillDatabase, withDrillDirectory, withDrillStore,
 } from "./projection-drill-test-helpers.js";
 import { rebuildProjection } from "./projection-rebuild.js";
 import type {
@@ -148,6 +148,49 @@ describe("rebuildProjection", () => {
       expect(result.fold).toBeNull();
       expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
         .toStrictEqual({ digest: FOREIGN_DIGEST, position: incremental.checkpoint });
+    });
+  });
+
+  it("verifies the durable digest even when one page spans it", () => {
+    withDrillDirectory((path) => {
+      const relayed = withDrillStore(path, (store) => {
+        const carried = relayHistory(store, [crashCommit(0), crashCommit(1)]);
+        for (let index = 2; index < 5; index += 1) {
+          store.commit(drillCommitInput(crashCommit(index), index));
+        }
+        return carried;
+      });
+      expect(relayed.checkpoint).toBe(2n);
+      tamper(path, "2", FOREIGN_DIGEST);
+
+      // The whole five-event ledger fits in one page, so only clamping the walk at the
+      // durable checkpoint can make it land there and compare digests instead of folding
+      // straight past a row it never verified.
+      const result = refused(rebuild(path, { pageLimit: 100 }));
+
+      expect(result.code).toBe("PROJECTION_REBUILD_STATE_CONFLICT");
+      expect(result.layer).toBe("STATE");
+      expect(result.detail).toContain("position 2");
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
+        .toStrictEqual({ digest: FOREIGN_DIGEST, position: 2n });
+    });
+  });
+
+  it("walks a page past an intact durable checkpoint to the end of the ledger", () => {
+    withDrillDirectory((path) => {
+      withDrillStore(path, (store) => {
+        relayHistory(store, [crashCommit(0), crashCommit(1)]);
+        for (let index = 2; index < 5; index += 1) {
+          store.commit(drillCommitInput(crashCommit(index), index));
+        }
+      });
+
+      const result = rebuilt(rebuild(path, { pageLimit: 100 }));
+
+      expect(result.checkpoint.globalPosition).toBe(5n);
+      expect(result.state["count"]).toBe(5);
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
+        .toStrictEqual({ digest: result.stateDigest, position: 5n });
     });
   });
 

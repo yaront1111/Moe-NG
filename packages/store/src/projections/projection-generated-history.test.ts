@@ -208,7 +208,7 @@ describe("canonicalization under a rebuild", () => {
         messageId: `msg-exotic-${index}`,
       }));
       const incremental = withDrillStore(path, (store) =>
-        relayHistory(store, commits, EXOTIC_REDUCERS));
+        relayHistory(store, commits, { reducers: EXOTIC_REDUCERS }));
 
       const rebuilt = rebuild(path, EXOTIC_REDUCERS);
 

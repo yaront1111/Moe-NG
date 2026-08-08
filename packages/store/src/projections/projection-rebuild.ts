@@ -213,7 +213,10 @@ function walk(database: DatabaseSync, plan: RebuildPlan): ProjectionRebuildResul
       expected = persist(database, plan, expected, carried.position, carried.digest);
       persisted = true;
     }
-    if (!page.hasMore) {
+    // A clamped page dropped events the source had already returned, so there is more to
+    // fold whatever the UNCLAMPED page reported — trusting `hasMore` here would silently
+    // end the rebuild at the durable checkpoint and report it as complete.
+    if (!page.hasMore && events.length === page.items.length) {
       break;
     }
   }
