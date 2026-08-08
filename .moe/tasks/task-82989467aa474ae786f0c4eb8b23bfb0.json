@@ -18,24 +18,33 @@
     {
       "stepId": "step-1",
       "description": "Baseline (read-only): landed child surface verified — packages/store/src/projections/projection-upcast.ts exports UpcastPatch/UpcastHandler/UpcastRoute/UpcastDefinition, UpcastFailureCode incl. SCHEMA_VERSION_UNSUPPORTED, UpcastOutcome, StoredEventUpcaster {upcast(event: StoredEvent): UpcastOutcome}, compileStoredEventUpcaster (commit landed at HEAD). ADOPT the sibling architect's pinned fold contract VERBATIM (comment-70c6d93f + the CORRECTION comment-0da58bdf): this task owns EXACTLY projection-fold.ts / .js bridge / .test.ts; per-aggregate sequence is STRICTLY increasing within the supplied batch — EQUAL sequence = duplicate, LOWER = out-of-order, NO contiguity requirement and NO sequence-1 requirement (incremental pages/checkpoints start midstream). Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GREEN baseline (shared tree — attribute foreign red by path).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline verified read-only. (1) Child surface at HEAD (commit 40eda60) confirmed on screen: packages/store/src/projections/projection-upcast.ts exports UpcastPatch/UpcastHandler/UpcastRoute/UpcastDefinition, UpcastDefinitionCode, UpcastFailureCode (\"SCHEMA_VERSION_UNSUPPORTED\"|\"UPCAST_HANDLER_FAILED\"|\"UPCAST_OUTPUT_INVALID\"), UpcastFailure, UpcastOutcome ({ok:true,event}|{ok:false,failure}), StoredEventUpcaster {upcast(event)}, UpcastDefinitionError, compileStoredEventUpcaster. Bridge precedent confirmed: projection-upcast.js is exactly `export * from \"./projection-upcast.ts\";`. (2) StoredEvent (store-contracts.ts:151-173) verified field-by-field: aggregateId string, aggregateSequence number, commandId string, committedAt string, decisionTrace OPTIONAL object, domainSchemaVersion string, eventId string, eventType string, globalPosition BIGINT, metadata/payload Uint8Array, payloadCodecVersion = \"moe-opaque-bytes/1\" (a STRING const, not a number), recordVersion = \"moe-event-record/1\", requestSha256 string. Persisted checkpoint precedent is `last_applied_position` in the projections table, so the fold checkpoint carries globalPosition: bigint. (3) tsconfig.base.json: ES2024 target/lib, strict, exactOptionalPropertyTypes, noUncheckedIndexedAccess, verbatimModuleSyntax, noUnusedLocals — Object.hasOwn/.at() are available. packages/store/tsconfig.json includes src/**/*.ts so the new .test.ts is typechecked. (4) Sibling architect's pinned contract ADOPTED VERBATIM incl. the correction: per-aggregate sequence STRICTLY INCREASING within the supplied batch, equal = DUPLICATE, lower = OUT_OF_ORDER, no contiguity and no sequence-1 requirement (midstream pages legal). (5) Fresh baseline `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, 23 files / 165 tests passed. Working tree carries no foreign source edits (only .moe metadata).",
+      "startedAt": "2026-08-08T07:58:14.831Z",
+      "completedAt": "2026-08-08T08:02:30.492Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — packages/store/src/projections/projection-fold.test.ts (<=250 physical; NO database construction anywhere — purity is the deliverable; assert-the-reason-code rail with mutation red-checks named per refusal). Cases: (1) HAPPY FOLD: foldProjection({checkpoint, state, events, upcaster, reducers}) over in-memory StoredEvent values — returns frozen {checkpoint', state'} with recursive plain-data state (no class instances, no functions); same input twice -> deep-equal frozen results (determinism, fixed fixtures); (2) PREFLIGHT ORDERING (all refusals BEFORE any reducer runs — assert the offending reducer was never invoked via a call-recording reducer): batch globalPosition strictly increasing and above the supplied checkpoint (at-or-below checkpoint -> stale code; non-increasing within batch -> out-of-order code); eventId uniqueness within batch (dup -> duplicate code); per-aggregate sequence STRICTLY increasing within batch (equal -> DUPLICATE code, lower -> OUT_OF_ORDER code — the correction's exact semantics; midstream start LEGAL: a batch beginning at sequence 7 with no prior context passes preflight); (3) UPCAST DISPATCH: every event runs through the supplied StoredEventUpcaster BEFORE its reducer; an unknown/future domainSchemaVersion surfaces the child's SCHEMA_VERSION_UNSUPPORTED outcome as a fold failure (layer-tagged: upcast layer, not fold layer) — the event is NEVER silently passed through unmodified (mutation red-check: bypass the upcaster in a scratch copy, the version test must go red) and NEVER dropped (failure aborts the fold); (4) NO PARTIAL STATE: a reducer throw or upcast failure mid-batch returns a frozen failure carrying the UNCHANGED input state + checkpoint (deep-equal to inputs; nothing folded from the failing batch survives); (5) reducer results deep-frozen + detached (mutating a reducer's returned object post-fold does not alter engine state); (6) hostile inputs (proxy/accessor/extra-key events) refused at preflight with the input-layer code. Confirm RED via `pnpm exec vitest run --root ../.. packages/store/src/projections/projection-fold.test.ts`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-fold.test.ts"
       ],
       "newFiles": [
         "packages/store/src/projections/projection-fold.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-fold.test.ts"
+      ],
+      "note": "TDD RED landed: packages/store/src/projections/projection-fold.test.ts, 249 physical lines (cap 250). `pnpm exec vitest run --root ../.. packages/store/src/projections/projection-fold.test.ts` -> \"Test Files 1 failed (1) / Tests no tests\" — the failure is `Failed to load url ./projection-fold.js`, i.e. red because the engine does not exist yet, not because of a typo. NO database is constructed anywhere in the file (no DatabaseSync, no sqlite import). 21 assertions-of-record across 19 tests, each naming the exact stable reason code AND the refusing layer: (1) happy fold -> frozen {checkpoint,state}, nested array frozen, checkpoint advances to the last globalPosition; (2) determinism -> two folds of the same batch deep-equal; (3) empty batch is a legal no-op; (4) PROJECTION_FOLD_STALE_POSITION at AND below the checkpoint; (5) PROJECTION_FOLD_OUT_OF_ORDER on non-increasing globalPosition; (6) PROJECTION_FOLD_DUPLICATE_EVENT on repeated eventId; (7) PROJECTION_FOLD_DUPLICATE_EVENT on EQUAL per-aggregate sequence carried by a DIFFERENT eventId (the correction's exact case); (8) PROJECTION_FOLD_OUT_OF_ORDER on a lower sequence with goal-1/goal-2 INTERLEAVED while globalPosition still strictly increases (the ordering red-team case); (9) midstream start legal — sequences 7 then 9, positions 40n/44n, gaps in both, no contiguity and no sequence-1 requirement; (10) upcast-before-reduce proven by VALUE not by spying: the v1->v2 handler adds 10 to payload[0], so the folded total is 11 and versions is [\"v2\"] — bypassing the upcaster yields 1/[\"v1\"] and reddens it; (11) unsupported version -> code PROJECTION_FOLD_UPCAST_REFUSED, layer \"UPCAST\", upcast.code \"SCHEMA_VERSION_UNSUPPORTED\", upcast.fromVersion \"v9\"; (12) no partial state — the same test asserts seen === [\"evt-1\"] (event 1 WAS reduced) yet the returned state deep-equals the input START and the checkpoint stays 5n; (13) reducer throw mid-batch -> PROJECTION_FOLD_REDUCER_FAILED layer REDUCER with unchanged frozen state; (14) non-plain reducer result -> PROJECTION_FOLD_STATE_INVALID; (15) DETACHMENT — the reducer returns a captured object, the test mutates it after the fold (total=99, versions.push) and the folded state is unchanged, so freeze alone cannot pass, only a deep clone; (16) missing reducer -> PROJECTION_FOLD_REDUCER_MISSING (an event is never silently dropped); (17) eventType \"constructor\" with an empty reducers map must ALSO be REDUCER_MISSING — a prototype-chain lookup would call Object's constructor instead; (18) hostile shapes table (accessor property / unknown extra key / Proxy whose ownKeys trap THROWS) all -> PROJECTION_FOLD_INPUT_INVALID layer INPUT with zero reducer calls, and the table's key list is itself asserted so a silently emptied case list cannot pass; (19) purity guard greps the production source for node:/DatabaseSync/readFile/writeFile/\"Date.\"/Math.random/require(/process. and asserts the module-specifier list is exactly [\"../store-contracts.js\",\"./projection-upcast.js\"]. Every preflight refusal asserts the recording reducer was never invoked, which is how \"refusals precede reduction\" is proven rather than assumed.",
+      "startedAt": "2026-08-08T08:02:35.337Z",
+      "completedAt": "2026-08-08T08:07:43.751Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — packages/store/src/projections/projection-fold.ts (target ~155 lines per the sibling sizing, <=250 HARD) + projection-fold.js (exactly `export * from \"./projection-fold.ts\";` — store subtree keeps committed bridges). Pure function shape: foldProjection(input: {checkpoint: {globalPosition: bigint|string per StoredEvent convention}, state: PlainProjectionState, events: readonly StoredEvent[], upcaster: StoredEventUpcaster, reducers: Readonly<Record<eventType, ProjectionReducer>>}) -> frozen {ok:true, checkpoint, state} | {ok:false, code, detail, checkpoint: input, state: input}; preflight pass FIRST over the whole batch (ordering/uniqueness/sequence rules), then per-event upcast->reduce with fail-closed abort; fold-layer issue codes as frozen local union (PROJECTION_FOLD_* — distinct from the upcast layer's codes so the which-layer assertion holds); no imports beyond './projection-upcast.js', '../store-contracts.js' (StoredEvent type), and store-internals validation helpers if needed — ZERO node: imports (no sqlite/fs/crypto/clock — purity rail; grep-enforced); no Date/random. All step-2 tests green; typecheck green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-fold.ts",
         "packages/store/src/projections/projection-fold.js"
@@ -43,21 +52,29 @@
       "newFiles": [
         "packages/store/src/projections/projection-fold.ts",
         "packages/store/src/projections/projection-fold.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-fold.ts",
+        "packages/store/src/projections/projection-fold.js"
+      ],
+      "note": "GREEN. projection-fold.ts 250 physical (cap 250), projection-fold.js exactly `export * from \"./projection-fold.ts\";` (1 line). `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, 24 files / 184 tests (baseline was 23/165; this task adds 1 file / 19 tests, zero regressions). Shape: foldProjection({checkpoint:{globalPosition:bigint}, events, reducers, state, upcaster}) -> frozen ProjectionFolded {ok:true, checkpoint, state} | frozen ProjectionFoldRefusal {ok:false, code, layer, detail, eventId, upcast, checkpoint, state}. Design decisions worth QA attention: (1) PREFLIGHT RUNS OVER THE WHOLE BATCH FIRST — every ordering rule is settled before reduceAll is entered, so a refused batch provably never folded its leading events; (2) the fold-layer codes are a local union PROJECTION_FOLD_* and are deliberately DISJOINT from the child's UpcastFailureCode, and the refusal additionally carries layer:\"INPUT\"|\"REDUCER\"|\"UPCAST\" plus the child's verbatim UpcastFailure in `upcast`, so a test can assert WHICH layer refused, not merely that something did; (3) every failure echoes `start` — the cloned INPUT state — never the partially folded accumulator, which is what makes no-partial-state structural rather than incidental; (4) normalizeEvent REBUILDS each event from values captured through Object.getOwnPropertyDescriptor, so an accessor is refused rather than invoked and a proxy gets exactly one chance to answer — the reducer and the upcaster then see the validated copy, never the caller's object; byte fields are re-wrapped with `new Uint8Array(value)` (never .slice(), which would share the ArrayBuffer per the sibling's finding); (5) plainClone deep-copies AND freezes, refusing class instances, functions, symbol keys, array holes, extra array properties, and cycles (path Set) — the clone is what gives detachment, freezing alone would not; (6) the reducer lookup uses Object.hasOwn, so eventType \"constructor\"/\"__proto__\" cannot resolve to an inherited function and get invoked; (7) reducer invocation and the plainness inspection of its result sit INSIDE THE SAME try, per mem:gotcha-output-inspection-outside-the-trycatch — a hostile getter on the returned object cannot escape as a throw; the upcaster call is likewise guarded even though its contract says it never throws; (8) an unregistered eventType is PROJECTION_FOLD_REDUCER_MISSING, not a silent skip — a projection that ignores a type must register an identity reducer, so no event is ever silently dropped. Purity holds: exactly two module specifiers, \"../store-contracts.js\" and \"./projection-upcast.js\"; zero node: imports; no clock, no randomness, no filesystem, no SQLite. One typecheck defect was caught and fixed here rather than shipped: upcastOne originally returned UpcastOutcome|Issue and `!(\"ok\" in outcome)` does NOT narrow to the ok:true arm, so `outcome.event` failed TS2339 — note that vitest was GREEN with that error because vitest does not typecheck. It now returns StoredEvent|Issue and the caller discriminates on \"code\" in current, which narrows correctly because StoredEvent has no `code` field.",
+      "startedAt": "2026-08-08T08:07:45.953Z",
+      "completedAt": "2026-08-08T08:15:26.356Z"
     },
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250; bridge one line. (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 — complete_task evidence verbatim (the DoD names the full store gate, not just the focused file); attribute foreign red by path (projection siblings may be in flight). (3) PURITY GREP (the rail's teeth): `grep -n \"node:\\|DatabaseSync\\|readFile\\|writeFile\\|Date\\.\\|Math\\.random\" packages/store/src/projections/projection-fold.ts` -> ZERO hits; test file constructs NO database (grep DatabaseSync in the test -> zero). (4) MUTATION RED-CHECKS (scratch copy OUTSIDE the repo): bypass upcaster -> version test red; skip preflight -> out-of-order test red; let a partial batch commit -> no-partial-state test red; unfreeze the result -> detachment test red. (5) Ordering red-team: craft a batch that is globalPosition-ordered but per-aggregate out-of-order (interleaved aggregates) — must refuse with the aggregate-layer code; equal-sequence duplicate across DIFFERENT eventIds -> duplicate code (the correction's exact case). (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/projections/projection-fold.ts packages/store/src/projections/projection-fold.js packages/store/src/projections/projection-fold.test.ts`; `git show --stat` lists exactly these 3 paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/projections/projection-fold.ts",
         "packages/store/src/projections/projection-fold.js",
         "packages/store/src/projections/projection-fold.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-08T08:15:32.951Z"
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40cb4878",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -82,21 +99,27 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:45.149Z",
-  "updatedAt": "2026-08-08T07:43:40.706Z",
+  "updatedAt": "2026-08-08T08:15:32.951Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:52:41.182Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "worker-40cb4878"
   ],
   "blockedReason": "SPIDR interface split required: combining exact schema-route validation/upcasting with ordered frozen-state folding and mutation-resistant tests would exceed the <=400 net-LOC task rail. The producer interface is now isolated in child task-14ba8b74f05f458d94591e02ce851e29; planning the fold before its exact landed API would force speculative function/type names.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-07T22:00:06.408Z",
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:43:38.673Z",
   "planningNotes": {
@@ -110,7 +133,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-08T07:58:01.161Z",
+    "escalatedAt": "2026-08-08T07:58:01.161Z"
   },
-  "planApprovedAt": "2026-08-08T07:43:40.706Z"
+  "planApprovedAt": "2026-08-08T07:43:40.706Z",
+  "workStartedAt": "2026-08-08T07:58:14.831Z"
 }

@@ -15,9 +15,130 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-c4babdf9",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED — specify the node authority and context presentation contracts before production modules exist. In node-authority.test.tsx, render explicit daemon-projected facts and assert the exact identity/phase/lease/plan section IDs; distinct objective, criteria, write scope, nodeAuthorityHash, lease principal/epoch/expiry, activity silence versus renewal silence, plan/approval hashes, reopen count, and only the supplied legal command kinds. Assert an empty supplied command list stays empty regardless of phase, no lease token/credential value reaches the DOM, every fact contains a TruthChip, clicking provenance identifies the originating fact, absent truth renders UNKNOWN, and malformed truth exposes the existing TRUTH_CLASS_INVALID provenance reason. In node-context.test.tsx, assert started revision/graph epoch/binding version, inputBindingHash, input manifest/tree, result manifest/tree, contextDigest, providerInputDigest, and token/byte coverage remain separately labelled; assert supplied NEEDS_RECONCILIATION state/reason/commands are displayed without inference and missing digests/measurements render UNKNOWN rather than zero, verified, current, or successful. Keep each test file <=250 physical lines and make assertions against the production components, not helper replicas.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx"
+      ],
+      "note": "RED confirmed: node-authority.test.tsx (10 tests) and node-context.test.tsx (10 tests) fail to resolve ./node-authority.js and ./node-context.js — production modules do not exist yet. Both files pin exact section IDs (cr.inspector.section.{identity,phase,lease,plan,binding,input,result,context,recovery}), the full ordered cr.fact.* id list, distinct activity-vs-renewal silence, distinct input/result/context/providerInput digests, supplied-only cr.action.* kinds (empty stays empty in EXECUTING), one chip per fact, provenance callback carrying the originating factId, UNKNOWN + TRUTH_ABSENT_PROVENANCE for missing values, and TRUTH_CLASS_INVALID for malformed classes. Lease secret channel is guarded structurally (type-level Extract must be never) plus a hostile-extra-key render assertion.",
+      "startedAt": "2026-08-08T08:11:16.409Z",
+      "completedAt": "2026-08-08T08:15:23.993Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — specify node evidence and attempt operational-history behavior. In node-evidence.test.tsx, pin stable findings/artifacts/blockers section IDs and cr.inspector.receipt.* IDs; distinguish receipt result, artifact identity/type/full digest, structured finding, and blocker owner/state; assert deterministic supplied order, text/icon/color truth encoding, and that a missing receipt, artifact digest, or provenance renders UNKNOWN with no success wording or active evidence link. In attempt-detail.test.tsx, assert immutable attempt identity/outcome, current binding and lease epoch as supplied, receipts, bounded journal entries, and recovery state occupy separate regions; require the transcript to exist only under cr.inspector.transcript.{attemptId}, use a native disclosure collapsed by default, carry the exact “💬 AGENT_REPORTED — narrative, not evidence” label, remain keyboard operable, and never appear inside the receipt/evidence region. Assert malformed truth reports TRUTH_CLASS_INVALID and missing operational proof stays UNKNOWN. Keep each test <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx"
+      ],
+      "note": "RED confirmed: 4 of 5 test files now fail to resolve their production modules (\"Failed to resolve import ./node-authority.js / ./node-evidence.js / ./attempt-detail.js\"). node-evidence.test.tsx pins cr.inspector.section.{receipts,artifacts,findings,blockers}, cr.inspector.receipt.{id}/artifact.{id} ids, full (untruncated) artifact digest, per-kind glyph/shortlabel/tone triple encoding, supplied order preserved over a frozen array, \"none\" copy for empty collections, UNKNOWN + TRUTH_ABSENT_PROVENANCE with no success wording for a missing receipt, evidence links only when identity AND provenance exist, TRUTH_CLASS_INVALID for a malformed class, and zero mutation affordances (button count == chip count). attempt-detail.test.tsx pins cr.attemptdetail.section.{identity,binding,receipts,journal,recovery}, immutable source hash vs current graph/lease epoch, bounded journal in supplied order, transcript existing exactly once as a collapsed native <details> under cr.inspector.transcript.att-2 with exact label \"💬 AGENT_REPORTED — narrative, not evidence\", never inside any evidence region, no fact/chip/link inside the narrative, omitted entirely when empty, plus UNKNOWN/TRUTH_CLASS_INVALID paths.",
+      "startedAt": "2026-08-08T08:15:26.801Z",
+      "completedAt": "2026-08-08T08:18:02.873Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — specify the clean-review contamination firewall in review-surface.test.tsx. Require cr.review.surface to contain exactly the five named descendants cr.review.diff, criteria, receipts, findings, and context; assert its public prop type and rendered DOM expose no transcript, journal, worker self-assessment, or persuasive handoff channel, including when a hostile object with extra operational-history keys is passed through an unknown boundary. Pin exact base and head SHA display, out-of-scope path flags, graph/plan hashes, reviewer identity/eligibility/calibration, receipts, criteria, and findings. If either base/head SHA or any required proof/eligibility fact is absent, assert an UNKNOWN chip and no diff-success/accept presentation; malformed truth must expose TRUTH_CLASS_INVALID. Keep the test <=250 lines and do not test a reimplemented sanitizer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ],
+      "note": "RED confirmed: all 5 new test files fail to resolve their production modules (5 failed / 1 passed test files; the 25 passing are the pre-existing scaffold suite). review-surface.test.tsx pins: cr.review.surface containing exactly cr.review.{diff,criteria,receipts,findings,context} — asserted twice, once by single-segment regex and once by \"nothing else under cr.review.* except declared cr.review.row.* list rows\", so a sixth component cannot slip in; exact 40-char base/head SHAs; per-path data-out-of-scope flag with \"out of declared write scope\" copy; graph/plan hashes; reviewer principal/independence/calibration; criteria/receipts/findings values. Contamination firewall asserted at both boundaries — a type-level Extract over transcript/journal/selfAssessment/handoff/handoffNote/narrative/workerReport must be never (fails typecheck if a channel is added), plus a hostile object with all four keys rendering no leak and no cr.inspector.transcript/journal element. Missing either SHA renders zero cr.review.row.* and the stable line \"No diff without both base and head SHAs.\" with an UNKNOWN/ABSENT chip and no accepted/approved wording; absent calibration renders the spec's \"calibration not yet measured\" with an UNKNOWN chip rather than blank; malformed class reports TRUTH_CLASS_INVALID. Test file lengths: 204/201/179/186/210 lines, all <=250.",
+      "startedAt": "2026-08-08T08:18:05.109Z",
+      "completedAt": "2026-08-08T08:19:40.459Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the three focused node inspector panels, taking the node tests green without defining daemon wire/query schemas. node-authority.tsx accepts a closed, presentation-only prop shape containing explicit preclassified facts and supplied legal command kinds; it renders semantic sections/lists using the existing Fact/TruthChip from ../kernel.js, maps missing values to literal UNKNOWN with an absent truth class, passes provenance callbacks per fact, and never accepts/renders leaseToken, credentials, transition tables, fetchers, or mutation handlers. node-context.tsx uses the same fail-closed presentation pattern but keeps source/current authority binding, input/result manifests and trees, worker context/provider input digests, measurement coverage, and daemon-supplied recovery facts distinct; it computes no hash/currentness/readiness/recovery. node-evidence.tsx renders only supplied receipts, artifacts, findings, and blockers in deterministic array order, with full identities/provenance, no evidence mutation/rerun, and no link when identity/provenance is missing. Use semantic headings and stable spec IDs, NodeNext .js imports, no Node-only APIs, and keep every production file <=250 physical lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx"
+      ],
+      "startedAt": "2026-08-08T08:19:42.568Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement attempt-detail.tsx and review-surface.tsx as separate trust boundaries and take their tests green. AttemptDetail renders explicit immutable attempt/binding/outcome, receipts, journal, and recovery facts through Fact/TruthChip; transcript content is operational narrative only, inside a collapsed <details> with the exact label, and no receipt/evidence fact is derived from it. ReviewSurface accepts only clean-package presentation inputs (criteria/constraints, graph/plan hashes, exact base/head/diff paths, receipts, findings, reviewer eligibility/calibration), structurally omits transcript/journal/self-assessment/handoff props and DOM, renders a diff only when both SHAs are supplied, flags supplied out-of-scope paths, and shows UNKNOWN for missing proof rather than inferring acceptance. Do not add review commands, evidence reruns, fetching, routing, persistence, or lifecycle logic. Use NodeNext .js imports and keep both production files <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarially review the complete ten-file diff before final evidence. Verify every displayed claim flows through Fact/TruthChip with text/icon/color encoding and a keyboard provenance button; exact IDs/copy and DOM order match the pinned spec; no component derives authority, readiness, legal transitions, reviewer eligibility, recovery actions, or evidence strength; no lease token/session credential/transcript contamination can enter clean review; missing and malformed values cannot become success; arrays are rendered without mutation; and production imports contain no filesystem, network, clock, randomness, transport, store, runner, or scheduler internals. Use a cross-platform Node one-liner over the explicit ten paths to enforce every TS/TSX file <=250 CRLF/LF-normalized physical lines. Mutation-check a real failure path by temporarily changing the production missing-receipt fallback to a verified/success presentation, run node-evidence.test.tsx and confirm the exact UNKNOWN assertion goes red, then undo that exact owned-file edit (no reset/stash) and rerun the focused test green. Leave no probe/scratch output and inspect only explicit owned paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx",
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx",
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the single final verification command fresh from D:\\projexts\\moe-next after the last edit and retain its complete output as complete_task evidence: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`. Do not complete on partial, stale, skipped, or failed output. Confirm the five new test files were discovered and report their counts; assert every failure/UNKNOWN test checks the exact existing presentation reason (including TRUTH_CLASS_INVALID where applicable) rather than only a negative outcome. Stage and commit only the ten explicit owned paths with pathspecs; never use git add -A, reset, stash, push, merge, or touch kernel.tsx/main.tsx/generated contracts. The QA handoff must state that these are unmounted presentation modules over already-projected/preclassified facts, not a live transport/route or authoritative response schema.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-authority.test.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-context.test.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx",
+        "apps/control-room/src/nodes/node-evidence.test.tsx",
+        "apps/control-room/src/attempts/attempt-detail.tsx",
+        "apps/control-room/src/attempts/attempt-detail.test.tsx",
+        "apps/control-room/src/attempts/review-surface.tsx",
+        "apps/control-room/src/attempts/review-surface.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-7e037598",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,19 +153,58 @@
       "author": "architect-c4babdf9",
       "content": "SPIDR breakdown chosen after repo/spec audit: the original node/attempt workspace would be ~2k LOC and cannot satisfy the <=400/task, 1–3-file, or <=250-file rails.\n\nCreated five file-disjoint presentation slices, all accepting already-projected/preclassified daemon facts rather than inventing query-response schemas:\n- task-a40fb298e38e484e939e83a06e80c290 — node authority/plan inspector\n- task-c978268baa014ee88a12d45ad41b4421 — node input/result/context/recovery inspection\n- task-c625fafc012c49339a07de2c35fb4237 — receipts/artifacts/findings/blockers\n- task-65e010557f284f46838e68f9e591cb5a — attempt operational detail and collapsed narrative transcript\n- task-bed245f5ec4c430fb472e07aeb3bc272 — clean-review firewall\n\nAll five are independent and own exactly one component plus one focused test. The generated client currently supplies envelope builders only, not authoritative query-response/view types, so no child may invent transport schemas, fetching, or authority normalization. The current ownership also excludes kernel.tsx/main.tsx/router wiring; these are intentionally unmounted modules.\n\nAfter the five children land, unblock this parent and plan it only as final node/attempt composition and hardening in apps/control-room/src/nodes/node-attempt-workspace.tsx plus node-attempt-workspace.test.tsx. That final slice should compose the child modules, prove all DoD facts remain distinguishable, exercise a realistic missing-evidence UNKNOWN case, assert clean review has zero transcript/journal while attempt detail retains collapsed operational history, enforce every touched TS/TSX <=250, and own the exact full gate `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`. Do not edit root shell/router/docs under this task.",
       "timestamp": "2026-08-08T07:48:02.700Z"
+    },
+    {
+      "id": "comment-3539c69631354872923e237ab7939c94",
+      "author": "architect-c4babdf9",
+      "content": "Live epic rails were amended after the earlier SPIDR pass: file size is the constraint (target <=250, split before 400), while one task may own up to 10 distinct files/12 steps and must not be split solely on summed LOC. I therefore archived the five untouched BACKLOG children created in comment-07d4a008c7e942aeb17840db5ed748bb to prevent duplicate ownership. This parent will now be planned as exactly five focused component/test pairs (10 files), retaining the same trust boundaries inside one plan. The contract/ownership caveat remains: modules accept already-projected/preclassified facts and are not live-mounted transport/query schemas.",
+      "timestamp": "2026-08-08T07:59:57.152Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-08T07:53:20.635Z",
+  "updatedAt": "2026-08-08T08:19:42.568Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T19:33:50.977Z"
+    "firstClaimAt": "2026-08-07T19:33:50.977Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 3
   },
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
   "contextFetchedBy": [
-    "architect-c4babdf9"
-  ]
+    "architect-c4babdf9",
+    "worker-7e037598"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T08:01:59.899Z",
+  "planningNotes": {
+    "approachesConsidered": "The earlier five-child SPIDR was archived after the epic rail was explicitly amended to state that size is per-file and one plan may own up to 10 distinct files; retaining those children would duplicate ownership. A single giant component/test was rejected because it would violate the per-file focus cap and collapse clean-review and operational-history trust boundaries. Adding a shared local wire/view schema or mounting router was rejected: the generated client currently provides query-envelope builders only, and ownership excludes kernel.tsx/main.tsx. The selected plan uses exactly five focused component/test pairs (10 files), each <=250 lines, accepting already-projected/preclassified presentation props.",
+    "codebaseInsights": "apps/control-room is React 19 + Testing Library/Vitest/jsdom. kernel.tsx already exports Fact, TruthChip, presentTruthClass, ShellTruthPresentation, and the UNKNOWN/TRUTH_CLASS_INVALID behavior; reuse them rather than duplicating truth mapping. Fact values are strings and each wrapper structurally owns its truth chip. The generated client exposes command/query request builders and static error descriptors but no node/attempt/evidence/review response DTOs. UI spec sections 2.5, 4.10, 10.1-10.5 and design sections 6.2-6.3, 12.2, 14-15, 18 require immutable source/current authority distinctions, exact context/evidence hashes, attempt-only narrative transcript, and a transcript/journal-free clean review package. Production imports use .js specifiers; app modules do not need .js bridge files.",
+    "risks": "The main risks are silently inventing a daemon response contract, deriving actions/currentness from lifecycle enums or static recovery metadata, leaking lease tokens/credentials, conflating source input identity with current authority binding, treating missing digest/receipt as success or zero, rendering transcript/journal in clean review, using generic rendering that admits hostile extra keys, and exceeding the 250-line target. Keep prop surfaces closed and presentation-only, destructure only named fields, render legal/recovery commands only from explicit supplied data, reuse the existing truth kernel, make missing values UNKNOWN, and state honestly that routing/fetching/live daemon composition are outside ownership.",
+    "keyFiles": [
+      "apps/control-room/src/kernel.tsx",
+      "apps/control-room/src/scaffold.test.tsx",
+      "packages/control-room-client/src/index.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-08T08:10:07.031Z",
+    "escalatedAt": "2026-08-08T08:10:07.031Z"
+  },
+  "planApprovedAt": "2026-08-08T08:02:01.923Z",
+  "workStartedAt": "2026-08-08T08:11:16.409Z"
 }

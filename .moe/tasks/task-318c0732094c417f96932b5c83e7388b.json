@@ -19,25 +19,30 @@
     {
       "stepId": "step-1",
       "description": "Baseline (read-only): landed surfaces verified — ledger shipped as budget-account.ts (NOT budget-ledger.ts): BudgetLedgerState/BudgetAuthorization/BudgetLedgerEntry (kinds ROOT_OPENED|ALLOCATED|RETURNED|CLOSED), openBudgetRoot/allocateToChild/returnToParent/closeBudgetAccount/replayBudgetLedger, BudgetLedgerResult, BudgetMeterAmount, MAX_BUDGET_VERSION (commit 406eb95); budget-contract.ts vocabularies incl. BUDGET_RESERVE_PURPOSES = VERIFICATION|REVIEW|ACCEPTANCE_PROCESSING|CONTINGENCY|INPUT_MATERIALIZATION|INTEGRATION. VOCABULARY NOTE the worker must encode: the task's five caller-supplied ADMISSION amounts (EXECUTION, VERIFICATION, INDEPENDENT_REVIEW, FINAL_ACCEPTANCE, CONTINGENCY) are an ADMISSION-set vocabulary local to this module — EXECUTION is the admitted work itself (not a contract reserve purpose), and the protected lines map onto contract purposes (INDEPENDENT_REVIEW->REVIEW, FINAL_ACCEPTANCE->ACCEPTANCE_PROCESSING, VERIFICATION/CONTINGENCY identity) — document the mapping in a module comment; verify exact landed spellings before typing. Committed core gate shapes to mirror STRUCTURALLY (no @moe/core import): policy allowance {decisionRef, outcome:'ALLOW'} and current human approval {approvalRef, decision:'APPROVE', validity:'CURRENT'} — narrow already-validated facts, never re-evaluated. Fresh `pnpm --filter @moe/scheduler typecheck` green baseline; sibling 17.04 is WORKING — file-disjoint, attribute foreign red by path.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-08T07:52:01.911Z"
+      "note": "Baseline verified read-only. Landed surfaces confirmed by reading, not assumption: budget-account.ts exports openBudgetRoot/allocateToChild/returnToParent/closeBudgetAccount/replayBudgetLedger/deriveSubtreeTotals, BUDGET_ACCOUNT_ISSUE_CODES (9), MAX_BUDGET_VERSION, BudgetLedgerState/BudgetLedgerEntry/BudgetMeterAmount. budget-contract.ts exports BUDGET_RESERVE_PURPOSES = VERIFICATION|REVIEW|ACCEPTANCE_PROCESSING|CONTINGENCY|INPUT_MATERIALIZATION|INTEGRATION, BUDGET_POLICY_OUTCOMES, BUDGET_ACCOUNT_STATES, BudgetMeterBuckets, BudgetAccountRecord. runtime-shape.ts exports isPlainRecord/isPlainArray/readOwnDataProperty/hasOnlyOwnStringKeys/readPlainArrayLength/hasExactDenseArrayShape/readOwnArrayElement. Core gate shapes CORRECTED against the actual files: PolicyDecisionRecord (policy-contract.ts:139) spells the outcome field `decision: PolicyOutcome` and has NO decisionRef; the ref is ApprovalDecisionRecord.policyDecisionRef (approval-contract.ts:57). ApprovalDecisionRecord does carry approvalRef/decision/validity exactly, and RUNTIME_LIFECYCLES.APPROVAL_DECISION = APPROVE|REJECT, APPROVAL_VALIDITY = CURRENT|INVALIDATED|SUPERSEDED (runtime-vocabulary.ts:10-11) — so the approval half is an exact structural mirror and the allowance half will carry a module comment naming the core field it mirrors. Design re-read: 601 attempt admission moves child AVAILABLE to RESERVED, 603 proven unused returns RESERVED to AVAILABLE, 660 proof-never-started refunds every refundable reservation, 587 execution spend cannot consume proof, 615 OVERDRAWN holds new work. Fresh `pnpm --filter @moe/scheduler typecheck` exit 0. Sibling 17.04 is budget-measurement.* (3 untracked files) — file-disjoint from budget-reservation.*, so foreign red attributes by path.",
+      "startedAt": "2026-08-08T07:52:01.911Z",
+      "completedAt": "2026-08-08T07:58:46.469Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red — packages/scheduler/src/budget/budget-reservation.test.ts (<=250 physical HARD; assert-the-reason-code rail: every refusal asserts its exact code AND which layer refused; mutation red-checks named). Cases: (1) ALL-OR-NONE ADMISSION: reserveForAdmission over a caller-supplied five-purpose amount set against a ledger-derived available view — success returns a frozen ReservationRecord (per-purpose lines, deterministic reservationId from accountId+admissionRef, state RESERVED, version) + the updated frozen bucket view; ANY shortfall returns a frozen refusal with ZERO state/ledger change (deep-equal before/after — the no-partial-set rule, design 12.2/587); (2) EXACT BOUNDARY: reserving exactly the available amount succeeds; one unit more refuses (per meter, per purpose — both boundary directions asserted); (3) PURPOSE PROTECTION: no operation path can spend or reclassify a protected-purpose line through the EXECUTION line — attempt activation/cancel calls that reference a protected line via the execution entry -> refusal with exact code; protected lines remain untouched after EXECUTION activation (deep-equal on the protected entries); (4) ONE-USE ACTIVATION: activateReservation succeeds at most once (RESERVED->ACTIVATED with version bump); a second activate and a concurrent stale-expectedVersion activate/cancel competitor pair yield ONE legal winner and a ZERO-EFFECT loser (exact stale code; the exactly-one-successor discipline); (5) CANCELLATION: refunds ONLY a proven-never-started refundable reservation (neverStartedProof ref required; activated -> refuse; missing proof -> refuse; refund restores the bucket view deep-equal to pre-reserve); (6) FAIL-CLOSED PRECEDENCE (deterministic order asserted): malformed input (contract layer) > duplicate purpose entries > zero/unsafe quantities > missing protected purposes (all four protected lines REQUIRED — absent -> refuse; caller-supplied amounts are facts, zero-amount protected line is a refusal not a default) > closed/overdrawn account state > gate rejection (policy outcome other than validated ALLOW / current human approval — wrong outcome string, stale validity, absent gate each with distinct codes); (7) hostile inputs via '../runtime-shape.js'. Confirm RED via the task's focused command.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-reservation.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-reservation.test.ts"
-      ]
+      ],
+      "note": "budget-reservation.test.ts written, 250 physical lines (at the hard cap). RED confirmed by the task's focused command: \"Error: Cannot find module './budget-reservation.js'\", Test Files 1 failed, Tests: no tests — failing because the production surface is absent, not because of a typo. Covers all seven planned families: (1) all-or-none — a one-unit shortfall on a single MS line refuses with zero state change (result.view `toBe` the input reference AND a JSON snapshot deep-equal) and the failure arm's reservation is null, so no partial set can be minted; (2) exact boundary — reserving exactly 90/1 drives both meters to available 0, and 89 MS or 0 AT each refuse (both directions, both meters); (3) purpose protection — a protected line relabelled EXECUTION refuses PROTECTED_PURPOSE_MISSING, an EXECUTION line relabelled onto a protected purpose refuses DUPLICATE_PURPOSE, and after activation the protected lines deep-equal their pre-activation selves; (4) one-use activation — RESERVED->ACTIVATED with a version bump and the view returned by REFERENCE (activation moves no units), a second activate at the fresh version refuses ALREADY_SETTLED, and a stale-expectedVersion activate/cancel competitor PAIR each refuse STALE_VERSION with a byte-identical view; (5) cancellation — refund restores the meters deep-equal to the pre-reserve snapshot; activated, no-proof, over-refund and unknown-meter refunds each refuse with their own code; (6) fail-closed precedence — a 15-row table where EVERY row supplies NO gate at all, so each row proves its own code beats the gate check rather than merely reaching some refusal, plus a 7-row gate-layer table; (7) hostile inputs — forged gate with an extra key, gate reached through the prototype chain, and a gate allowance behind an accessor all refuse GATE_MALFORMED. Guarding the case list per pattern-guard-the-case-list-not-just-the-cases: every refusal funnels through one `codes()` helper that records the code into an `observed` set, and the final test asserts observed EQUALS BUDGET_RESERVATION_ISSUE_CODES exactly, so a published code with no case fails the suite and no code is excluded as unreachable. Vocabulary is asserted against the production surface (deriveReservationId is exported and tested for a length-prefixed non-colliding identity, and the ADMISSION_PURPOSE_RESERVE_CONTRACT mapping is checked to land inside the landed BUDGET_RESERVE_PURPOSES), not against a test-local reimplementation.",
+      "startedAt": "2026-08-08T07:58:52.613Z",
+      "completedAt": "2026-08-08T08:04:17.721Z"
     },
     {
       "stepId": "step-3",
       "description": "Green — packages/scheduler/src/budget/budget-reservation.ts (<=250 physical HARD) + budget-reservation.js (exactly `export * from \"./budget-reservation.ts\";`). Pure functions over caller-supplied state (NO internal registries): reserveForAdmission(availableView, admission {admissionRef, amounts per purpose per meter}, gate) -> {ok, reservation, updatedView} | {ok:false, issues}; activateReservation(reservation, {expectedVersion, attemptRef}) -> one-use transition; cancelReservation(reservation, {expectedVersion, neverStartedProofRef}) -> refund result; ADMISSION_PURPOSES local five-tuple with the contract-purpose mapping comment; reservation-layer issue codes as frozen local BUDGET_RESERVATION_* union (distinct from contract BUDGET_* and account BUDGET_ACCOUNT_* codes — three-layer assertion possible); integers only; deepFreeze/sortIssues clone conventions; no Date/random; imports only './budget-contract.js', './budget-account.js' (types/validators — in-package), '../runtime-shape.js'. All step-2 tests green; typecheck green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-reservation.ts",
         "packages/scheduler/src/budget/budget-reservation.js"
@@ -45,21 +50,27 @@
       "newFiles": [
         "packages/scheduler/src/budget/budget-reservation.ts",
         "packages/scheduler/src/budget/budget-reservation.js"
-      ]
+      ],
+      "note": "GREEN. budget-reservation.ts 249 lines, budget-reservation.js is the exact one-line re-export, budget-reservation.test.ts 250 lines. `pnpm --filter @moe/scheduler typecheck` exit 0; focused vitest 40/40 passed. Pure functions over caller-supplied state, no registries, no Date/random: reserveForAdmission(view, admission, gate), activateReservation(view, reservation, {expectedVersion, attemptRef}), cancelReservation(view, reservation, {expectedVersion, neverStartedProofRef}), deriveReservationId(accountId, admissionRef). Imports only ../runtime-shape.js, ./budget-account.js (MAX_BUDGET_VERSION) and ./budget-contract.js — no @moe/core, no @moe/contracts. THREE PLAN DEVIATIONS, each forced and each an improvement: (1) cancelReservation takes the VIEW as its first argument, which the plan's signature omitted — a pure function cannot restore the bucket view on refund without it, and the DoD explicitly requires the refund to restore the view; activateReservation takes the view too and returns it BY REFERENCE, which turns \"activation moves no units\" into a `toBe` assertion instead of a deep-equal one. (2) checkTransition's precedence puts STALE_VERSION ahead of ALREADY_SETTLED so the stale competitor reports the stale code as the plan asked, while a second activate at the FRESH version reports ALREADY_SETTLED — both losers are covered with distinct codes. (3) Issue messages are derived from the code (`code.slice(\"BUDGET_RESERVATION_\".length)` humanised) rather than hand-written per site; this was the compaction that fit 18 codes and ~20 guard rows under the hard 249-line cap without dropping a single guard, and it makes prose drift from the code structurally impossible. THE STALE-COMPETITOR SEMANTICS ARE WORTH THE NEXT AGENT'S ATTENTION: with pure functions and no registry, two competitors that both hold the version-0 record would BOTH succeed — one-use is only enforced when the loser is applied to the successor the winner produced. My first test asserted the wrong thing and passed the pre-activation record, so it caught the loser succeeding; the fixed test applies the loser to winner.reservation with its stale expectedVersion 0 and gets STALE_VERSION. That is the compare-and-swap discipline this module supplies the fence for; the persistence layer is what refuses the second write. Two other test expectations were wrong and the production code was right: relabelling VERIFICATION@MS to EXECUTION collides with the existing EXECUTION@MS line so it reports DUPLICATE_PURPOSE, not PROTECTED_PURPOSE_MISSING (the test now drops the original execution line first, isolating the reclassification), and remapping every line onto one absent meter duplicated (EXECUTION, meter:absent) so it reported DUPLICATE_PURPOSE, not UNKNOWN_METER (the test now moves only the uniquely-purposed CONTINGENCY line). Both are instances of pattern-one-fixture-per-predicate-leg: an over-determined fixture was being blocked by the wrong leg.",
+      "startedAt": "2026-08-08T08:04:23.044Z",
+      "completedAt": "2026-08-08T08:16:31.300Z"
     },
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250; bridge one line. (2) Fresh focused command from the task -> exit 0 — complete_task evidence verbatim; full `pnpm --filter @moe/scheduler test` for regression awareness (17.04 sibling WORKING — attribute by path). (3) Greps: '@moe/core\\|@moe/contracts' -> zero; float/Math\\.|Date.now|Math.random -> zero; 'scheduler/src\\|@moe/scheduler/' -> zero. (4) MUTATION RED-CHECKS (scratch copy OUTSIDE the repo): disable the all-or-none guard -> partial-set test red; disable the one-use marker -> double-activation test red; disable the protected-line fence -> reclassify test red; disable the never-started requirement -> refund test red. (5) Laundering red-team: forge a gate {outcome:'ALLOW'} with extra hostile keys / wrong validity / prototype tricks -> refused with gate-layer code; attempt reservation mutation post-freeze -> throws/no-op; boundary refusal leaves the view BIT-identical. (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/budget/budget-reservation.ts packages/scheduler/src/budget/budget-reservation.js packages/scheduler/src/budget/budget-reservation.test.ts`; `git show --stat` lists exactly these 3 paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-reservation.ts",
         "packages/scheduler/src/budget/budget-reservation.js",
         "packages/scheduler/src/budget/budget-reservation.test.ts"
-      ]
+      ],
+      "note": "Verified and committed as 05b0dbf, exactly the three owned paths. (1) SIZES MEASURED AT HEAD, not the working tree (mem:gotcha-shared-index-commit-capture): `git show HEAD:<path> | wc -l` gives 249 / 250 / 1, and the bridge at HEAD is exactly `export * from \"./budget-reservation.ts\";`. (2) Fresh task command `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-reservation.test.ts` -> EXIT 0, \"Test Files 1 passed (1) / Tests 40 passed (40)\". Full package `pnpm --filter @moe/scheduler test` -> 30 files / 473 tests, exit 0, zero regressions; the 17.04 sibling landed its budget-measurement files mid-session and its suite is inside that green run. (3) Greps: no `@moe/core` or `@moe/contracts` IMPORT (the only textual hits are prose in the header explaining why core is not imported); zero Date/Math.random/Math./performance; zero `scheduler/src` or `@moe/scheduler/` prose (mem:gotcha-package-boundary-test-matches-comments); zero float literals outside design section numbers in comments. (4) MUTATION RED-CHECKS — ELEVEN mutations, all ELEVEN red, then the file restored by out-of-tree copy and re-verified by `git hash-object` (mem:gotcha-mutation-testing-restore-safety; the file was untracked at the time so git could not have restored it): all-or-none available guard 3 red, one-use activation marker 4 red, protected-purpose fence 4 red, never-started proof requirement 2 red, reservation stale-version fence 2 red, gate authority check 5 red, refund sign flip 1 red, duplicate purpose+meter guard 3 red, insufficient-reserved refund fence 2 red, account-not-open guard 3 red, gate hostile-shape reader 2 red. Baseline restored to hash b87bda64 and green at 40/40. My first harness crashed mid-mutation on a cp1252 decode of vitest output and left the file MUTATED; I caught it, restored by copy, and verified the hash before continuing — decode subprocess output as utf-8 with errors=\"replace\" on Windows. (5) Laundering red-team: a forged gate with an extra `forced: true` key, a gate reached through the prototype chain, and an allowance behind an accessor all refuse GATE_MALFORMED; a frozen reservation throws TypeError on assignment; a boundary refusal returns the caller's view BY REFERENCE and a JSON snapshot proves it byte-identical. (6) No scratch files; the mutation backup lived outside the repo and is deleted. ADVERSARIAL REVIEW — three limitations I want on the record rather than hidden. (a) AT-MOST-ONE RESERVATION PER ADMISSION IS NOT ENFORCED HERE. With no registry, a caller who passes the already-shifted view with its matching expectedVersion can reserve the same admissionRef twice and mint the same deterministic reservationId twice. That is exactly why the identity is deterministic and length-prefixed: persistence (explicitly out of scope) enforces at-most-one by inserting on reservationId. The same applies to one-use activation — this module supplies the compare-and-swap fence, the store must reject the second write. (b) `fail()` deep-freezes the result, which holds the caller's view by reference, so a refusal freezes the caller's view object. This is the landed sibling's behaviour (budget-account.ts) and is deliberate, but it is a visible side effect on a refusal path. (c) The gate is checked LAST by the plan's pinned precedence, so an unauthorized caller with a shortfall learns INSUFFICIENT_AVAILABLE before being refused for authority. Minor and intentional; flagged because a reviewer will notice. Also noted: an empty amounts array refuses as MALFORMED rather than PROTECTED_PURPOSE_MISSING, since an admission with no lines has no shape to evaluate.",
+      "startedAt": "2026-08-08T08:16:37.531Z",
+      "completedAt": "2026-08-08T08:19:47.539Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40ee2326",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -71,17 +82,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:24.020Z",
-  "updatedAt": "2026-08-08T07:52:01.911Z",
+  "updatedAt": "2026-08-08T08:21:04.669Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:40:32.651Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "worker-40ee2326"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:42:17.208Z",
   "planningNotes": {
@@ -97,8 +114,21 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-08T08:16:37.552Z"
   },
   "planApprovedAt": "2026-08-08T07:42:19.235Z",
-  "workStartedAt": "2026-08-08T07:52:01.911Z"
+  "workStartedAt": "2026-08-08T07:52:01.911Z",
+  "reviewStartedAt": "2026-08-08T08:21:04.669Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-reservation.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  1 passed (1)\n      Tests  40 passed (40)\n   Start at  11:18:39\n   Duration  161ms (transform 47ms, setup 0ms, import 63ms, tests 7ms, environment 0ms)",
+    "reportedAt": "2026-08-08T08:21:04.669Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/budget/budget-reservation.test.ts",
+    "packages/scheduler/src/budget/budget-reservation.ts",
+    "packages/scheduler/src/budget/budget-reservation.js"
+  ]
 }

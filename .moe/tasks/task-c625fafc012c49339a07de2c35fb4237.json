@@ -15,7 +15,7 @@
     "Own and stage only apps/control-room/src/nodes/node-evidence.tsx and node-evidence.test.tsx."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,5 +28,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T07:47:46.998Z",
-  "updatedAt": "2026-08-08T07:47:46.998Z"
+  "updatedAt": "2026-08-08T07:58:50.181Z"
 }

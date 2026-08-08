@@ -15,7 +15,7 @@
     "Own and stage only apps/control-room/src/nodes/node-authority.tsx and node-authority.test.tsx."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,5 +28,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T07:47:46.339Z",
-  "updatedAt": "2026-08-08T07:47:46.339Z"
+  "updatedAt": "2026-08-08T07:58:49.522Z"
 }

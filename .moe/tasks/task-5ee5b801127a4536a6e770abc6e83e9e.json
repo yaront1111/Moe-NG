@@ -81,8 +81,8 @@
       "completedAt": "2026-08-08T07:55:27.263Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f4052923",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,12 +94,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:39.175Z",
-  "updatedAt": "2026-08-08T07:56:42.340Z",
+  "updatedAt": "2026-08-08T08:01:58.596Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:35:51.932Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-08T08:01:58.596Z",
+    "wallClockMs": 1566664
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -141,5 +143,8 @@
     "packages/scheduler/src/budget/budget-measurement.test.ts",
     "packages/scheduler/src/budget/budget-measurement.ts",
     "packages/scheduler/src/budget/budget-measurement.js"
-  ]
+  ],
+  "completedAt": "2026-08-08T08:01:58.596Z",
+  "reviewCompletedAt": "2026-08-08T08:01:58.596Z",
+  "reviewSummary": "APPROVED. Re-ran the exact gate (typecheck + focused vitest) -> exit 0, 18/18. Full `pnpm --filter @moe/scheduler test` -> 29 files / 433 tests, exit 0, no foreign red. Commit 1125ed6 = exactly the 3 owned paths (+501), no package-root export. Sizes from HEAD not working tree: .ts 250, .test.ts 250, .js exactly 1 re-export line. No scratch files left.\n\nDoD1: nine fields via toStrictEqual, frozen three levels deep, caller-mutation-after-accept proves detachment. DoD2: UNKNOWN+0 and +1200 refuse at CONTRACT:BUDGET_MEASUREMENT_COVERAGE_QUANTITY_MISMATCH; UNKNOWN coverage with a stronger source refuses at MEASUREMENT:BUDGET_OBSERVATION_SOURCE_COVERAGE_MISMATCH; fact = {tier:null,truthClass:UNKNOWN}; PARTIAL keeps 0 and 5 as exact lower bounds. DoD3: \"ADAPTER_REPORTED\" refuses at the contract layer; the source-by-coverage sweep guards its own case list via expect([accepts,refusals]).toStrictEqual([9,9]); DERIVED_LIST_PRICE requires an integer-micros pricebook binding and projects truthClass UNKNOWN, never OBSERVED; a non-derived source carrying a binding refuses as BUDGET_OBSERVATION_UNCORRELATED_BILLING_CLAIM. DoD4: same-identity same-bytes returns the PRIOR object by reference (toBe); different bytes, gap, regression, foreign stream, truncated-COMPLETE and unsupported parser version each fail closed under a distinct code.\n\nReason-code rail audited, not trusted: ran my own 16-mutation red-check from an out-of-tree backup covering every refusal class plus deepFreeze, detachment, identity length-prefixing, no-op-returns-prior, and the CONTRACT layer tag. All 16 RED; each restore hash-verified, file byte-identical afterwards.\n\nDoD4's \"frozen deterministic issues\" is unasserted, so I probed it out-of-tree: a three-issue refusal is frozen, canonically sorted, stable across calls. Behavior correct; nit in the handoff memory."
 }
