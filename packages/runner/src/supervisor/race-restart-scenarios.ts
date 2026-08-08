@@ -1,4 +1,5 @@
 import { activateEffect } from "./effect-activation.js";
+import type { SupervisorFailure } from "./effect-kernel.js";
 import {
   makeActivationRequest,
   makeClaim,
@@ -29,13 +30,37 @@ if (activated.kind !== "ACTIVATED") {
 export const COMMIT = activated.commit;
 
 const CANCEL = disposition("WORK_CANCEL");
-const RELEASE = disposition("WORK_RELEASE_OR_PAUSE");
+export const RELEASE = disposition("WORK_RELEASE_OR_PAUSE");
 
 /** The lock and its registration are both gone — the post-exit reading. */
-const GONE = { registration: null, lockState: "RELEASED" } as const;
+export const GONE = { registration: null, lockState: "RELEASED" } as const;
 
 /** A settled effect with no attempt left behind it. */
-const SETTLED = { intent: makeIntent({ state: "SUCCEEDED" }), attempt: null, grant: null } as const;
+export const SETTLED = Object.freeze({
+  intent: makeIntent({ state: "SUCCEEDED" }),
+  attempt: null,
+  grant: null,
+});
+
+export function failureOf(outcome: unknown): SupervisorFailure {
+  const failure = (outcome as { failure?: SupervisorFailure }).failure;
+  if (failure === undefined) {
+    throw new Error(`expected a refusal, received ${JSON.stringify(outcome)}`);
+  }
+  return failure;
+}
+
+/**
+ * `post:<state>` or `refused:<code>` — one label per legal answer. This only
+ * FORMATS the production outcome; it decides nothing, so an expectation written
+ * against it is still an expectation about `reconstructAfterRestart`.
+ */
+export function labelOf(outcome: unknown): string {
+  const value = outcome as { kind?: string; postState?: string };
+  return value.kind === "RECONSTRUCTED"
+    ? `post:${String(value.postState)}`
+    : `refused:${failureOf(outcome).code}`;
+}
 
 export function restartInput(overrides: Overrides = {}): unknown {
   return {

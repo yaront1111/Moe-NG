@@ -71,34 +71,55 @@
     {
       "stepId": "step-4",
       "description": "Drive the supervisor slice through the harness — DoD 1 and DoD 3. Create packages/runner/src/supervisor/supervisor-races.test.ts running at least 5 seeds x at least 200 steps per seed across claim/activate/cancel/duplicate-delivery/restart orderings over child 1's and child 2's surfaces. Assert the observed outcome-kind SET EQUALS the hand-written expected list from step 1 — no unexpected kind, no missing kind — and record per-kind counts in the test output for the completion evidence. Assert on EVERY step, as harness invariants rather than spot checks: versionDelta is in {0,1} and a state change implies exactly 1; strongest-reason monotonicity, so a disposition never downgrades; and that every race ends in exactly one legal state. Note the invariant child 1 warned about — a NO_OP returns a fresh object at the SAME version, so 'a new object implies version+1' is WRONG and would fail spuriously. Treat any expected kind whose count is zero as a coverage failure to investigate, not a pass.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/supervisor-races.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/supervisor-races.test.ts"
       ],
-      "startedAt": "2026-08-08T21:01:33.387Z"
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts",
+        "packages/runner/src/supervisor/race-harness.ts",
+        "packages/runner/src/supervisor/race-harness.test.ts"
+      ],
+      "note": "supervisor-races.test.ts: 14 tests green. 8 seeds x 400 steps = 3200 steps (DoD 1 asks >=5 x >=200). The hand-written EXPECTED_OUTCOME_KINDS list (66 entries, transcribed in the step-1 note BEFORE any run) matched the observed set EXACTLY with no edit to the expected list. Every kind hit >=3 times; the test asserts count>=2 per kind so a one-off cannot pass as coverage.\n\nPer-step invariants asserted on all 3200 steps, not spot checks: label is a declared kind and effectState is in EFFECT_STATES; versionDelta in {0,1} and stateChanged implies exactly 1 (the NO_OP trap child 1 warned about is explicitly NOT asserted - a fresh object at the same version is legal); zero inputMutated; zero harness-detected violations; strongest-reason rank and reason-set size never decrease within a schedule, with a non-vacuity check that the final reasonCount actually grew.\n\nTWO HARNESS DEFECTS THE GATE CAUGHT ON ITS FIRST RED RUN, both fixed:\n1. xorshift32 low-bit correlation. Every decision is `value % n` for small n and each step draws three in a row; xorshift is linear so those low bits stay linearly related. Three of the 16 activation leg tampers were NEVER reached and two more fired once in 1200 steps - i.e. the gate was silently narrower than it claimed. Replaced with splitmix32 (mixed counter, full avalanche) and added a self-test asserting a 16-way split two draws after a 10-way split reaches all 16 arms.\n2. Grant provenance gap. The ACTIVE pool member holds a grant committed before step 0, so an honest consume recorded a LAUNCH with no in-log issuance and checkGrantOrdering fired. Not a production defect - the grant is real. Fixed by priming the event log from the pool, but ONLY for members whose three records the production validateActivationCommit agrees are a whole commit; an incoherent one stays unrecorded so a launch off it still fails.\n\nPer-kind counts (quoted for the completion evidence, 66 kinds / 3200 steps): NO:ACTIVATION:ACTIVATION_DEPENDENCY_WITNESS_STALE 5, ACTIVATION_DESIRED_STATE_MISMATCH 10, ACTIVATION_GRAPH_EPOCH_MISMATCH 8, ACTIVATION_INTENT_NOT_ARMED 182, ACTIVATION_LOCK_IDENTITY_MISMATCH 4, ATTEMPT_BINDING_MISMATCH 3, ATTEMPT_NOT_LAUNCH_REQUESTED 7, EFFECT_TOMBSTONED 4, PROVIDER_CAPABILITY_CHANGED 3; NO:DRAIN:DRAIN_DISPOSITION_NOT_MONOTONIC 8, DRAIN_RESOURCE_UNRECONCILED 10, DRAIN_ROW_NOT_ADMITTED 105, RESTART_SAFE_HANDOFF_ABSENT 7; NO:GRANT:GRANT_ALREADY_CONSUMED 38, GRANT_WRAPPER_MISMATCH 28; NO:KERNEL:EFFECT_ATTEMPT_MALFORMED 6, EFFECT_CLAIM_MALFORMED 43, EFFECT_COMMAND_MALFORMED 123, EFFECT_GRANT_MALFORMED 180, EFFECT_INTENT_MALFORMED 242, EFFECT_TOMBSTONE_MALFORMED 33; NO:LAUNCH_LOCK:IDENTITY_CONFLICT 26, MALFORMED 29, REGISTRATION_ABSENT 34, SUSPECT 66; NO:LEASE_MIRROR:MALFORMED 6, STALE 5, STALE_EPOCH 6, SUPERSEDED_AUTHORITY 5; NO:LIFECYCLE:SETTLEMENT_EVIDENCE_INVALID 11, SETTLEMENT_TARGET_NOT_ADMITTED 13, TERMINAL_ABSORBED 55, TOMBSTONE_DOES_NOT_DOMINATE 201, TRANSITION_NOT_ADMITTED 573, UNCERTAINTY_EVIDENCE_REQUIRED 10, UNCERTAINTY_EVIDENCE_UNEXPECTED 16; NO:RESTART:DRAIN_RESOURCE_UNRECONCILED 5, DRAIN_ROW_NOT_ADMITTED 83, RESTART_PREMATURE_TERMINAL 11, RESTART_RECORDS_INCOHERENT 14, RESTART_SAFE_HANDOFF_ABSENT 9; OK:ACT:ACTIVATED 19; OK:DRAIN:ATOMIC_ACTIVATION 8, DRAINING 148, RECONCILE_ONLY 6, TERMINALIZED 26, TOMBSTONED 10; OK:DUP:ADOPTED 83, EXIT_BEFORE_LAUNCH 50; OK:GRANT:CONSUMED 73; OK:LIFE:ARMED 19, CANCELLED 46, CANCEL_REQUESTED 41, CLAIMED 15, FAILED 16, MUST_DRAIN 57, SUCCEEDED 26, UNKNOWN 65; OK:RESTART:ACTIVE_ADOPTED 23, DRAINING 50, RECONCILE_ONLY 9, SUSPECT 66, TERMINAL_PROVEN 5, TOMBSTONED 7, UNKNOWN 33; OK:TOMB:CANCELLED 72.",
+      "startedAt": "2026-08-08T21:01:33.387Z",
+      "completedAt": "2026-08-08T21:05:38.739Z"
     },
     {
       "stepId": "step-5",
       "description": "Assert the parent slice's headline safety property — DoD 2, the one the whole supervisor exists to guarantee. In supervisor-races.test.ts add two harness-level invariants checked on every seeded schedule, not as spot checks. First: NO external-action grant is ever observed before its committed ARMED->ACTIVE plus LAUNCH_REQUESTED->RUNNING pair. Implement this as a running check over the recorded step log so a violation anywhere in any schedule fails, and verify the check is load-bearing by temporarily reordering a synthetic log and confirming it goes red — an invariant that never fires on a deliberately broken input is not testing anything. Second: NO duplicate delivery ever produces a fresh launch; every duplicate resolves to ADOPTED, EXIT_BEFORE_LAUNCH or SUSPECT, asserted by set equality against child 2's exported frozen kind list so a blind-relaunch kind cannot appear unnoticed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/supervisor-races.test.ts",
         "packages/runner/src/supervisor/race-harness.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts",
+        "packages/runner/src/supervisor/race-harness.ts",
+        "packages/runner/src/supervisor/race-harness.test.ts"
+      ],
+      "note": "DoD 2 asserted as harness invariants over every seeded schedule (supervisor-races.test.ts \"DoD 2\" block, 5 tests).\n\nFirst invariant - no external-action grant before its committed pair. checkGrantOrdering runs over the whole recorded event log of each of the 8 seeds and must return []. It flags three distinct faults: a grant minted by anything other than the exact ARMED->ACTIVE|LAUNCH_REQUESTED->RUNNING pair, a launch of a grant no activation minted, and a launch whose step index precedes its issuance. A separate test asserts activations AND launches are both non-zero (19 activations, 73 world-provenance launches across the run) so the invariant is not passing on an empty set.\n\nRewrote the check to two passes while wiring this up: the single-pass version compared each launch only against issuances EARLIER IN THE ARRAY, which made it an assertion about the log's sort order rather than about the schedule, and left its own index-comparison branch unreachable. Collecting all issuances first makes the step-index property the thing under test.\n\nLoad-bearing verification (race-harness.test.ts, 5 tests on deliberately broken synthetic logs): a correct log returns []; the same two events with the launch at step 1 and its activation at step 4 returns exactly \"step 1: launch precedes its activation at step 4\"; a forged grant id returns \"step 9: launch of grant-forged that no activation minted\"; a half pair (LAUNCH_REQUESTED->LAUNCH_REQUESTED) and a null pair each return an \"uncommitted pair\" violation.\n\nSecond invariant - duplicate delivery never blind-relaunches. Set EQUALITY of the observed outcomeKind values on duplicateDelivery steps against child 2's exported frozen DUPLICATE_DELIVERY_KINDS (ADOPTED | EXIT_BEFORE_LAUNCH | SUSPECT), using the production surface's own `kind` rather than a label the harness invented, so a fourth optimistic arm cannot hide behind \"every observed kind is one we declared\". Plus a per-seed check that no LAUNCH event ever shares a step index with a duplicateDelivery step, with a non-zero duplicate-step count asserted first. Observed: ADOPTED 83, EXIT_BEFORE_LAUNCH 50, SUSPECT 155 (66 LAUNCH_LOCK_SUSPECT + 34 REGISTRATION_ABSENT + 26 IDENTITY_CONFLICT + 29 MALFORMED). 32/32 tests green.",
+      "startedAt": "2026-08-08T21:05:43.218Z",
+      "completedAt": "2026-08-08T21:06:53.873Z"
     },
     {
       "stepId": "step-6",
       "description": "Restart reconstruction races — DoD 3's restart half. Create packages/runner/src/supervisor/supervisor-restart.test.ts seeding crash points across the slice's transaction boundaries and asserting that reconstruction lands each pre-crash state in EXACTLY ONE legal post state, compared against a hand-written expected outcome set asserted for set equality and non-zero length. Assert that current token, epoch, budget and runtime closure are revalidated after every restart — a reconstruction that restores state without re-proving authority is the defect this DoD names. Assert no premature terminal: a terminal label must never appear where its evidence is absent, and the restart path must prefer UNKNOWN or SUSPECT over a guessed terminal. Include the composed case none of the individual drills cover: a restart landing mid-drain, which must remain DRAINING with its holds intact rather than resolving optimistically.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/supervisor-restart.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/supervisor-restart.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/supervisor-restart.test.ts"
+      ],
+      "note": "supervisor-restart.test.ts: 39 tests green. 19 hand-written crash points spanning the slice's transaction boundaries (pre-attempt, post-claim, post-arm, post-launch-request, BOTH halves of a split activation commit, a non-deriving grant id, whole commit x lock HELD/RELEASED/UNKNOWN, observation without registration, three mid-drain variants, post-tombstone, terminal attempt over a live effect, and three settled-effect evidence levels). Each asserted against its own hand-written label, then the produced answer set asserted for set EQUALITY against a hand-written 11-entry list with non-zero length, and all 7 RESTART_POST_STATES asserted reached so none is dead vocabulary.\n\nAuthority is re-proved, not restored, asserted in two halves: (a) structurally, every RECONSTRUCTED outcome's own keys are exactly [capacityHeld, kind, ok, postState, terminalTarget] - no grant, no lease, no token, so a reconstruction cannot hand back authority; (b) behaviourally, five post-restart re-activations over the rehydrated records are each refused with a NAMED code AND layer - LEASE_MIRROR_STALE/LEASE_MIRROR (token), LEASE_MIRROR_STALE_EPOCH/LEASE_MIRROR (epoch), LEASE_MIRROR_SUPERSEDED_AUTHORITY/LEASE_MIRROR, PROVIDER_CAPABILITY_CHANGED/ACTIVATION (runtime closure), ACTIVATION_GRAPH_EPOCH_MISMATCH/ACTIVATION - plus a positive control asserting the same base request DOES commit, so the five refusals cannot all be a broken fixture. Grant-id re-derivation checked by forging the id on an otherwise whole commit.\n\nBudget/capacity closure: a hand-written postState -> capacityHeld table checked against every crash point (ACTIVE_ADOPTED and DRAINING hold; TERMINAL_PROVEN, TOMBSTONED, RECONCILE_ONLY, SUSPECT, UNKNOWN do not). The composed mid-drain case asserts DRAINING with capacityHeld true and terminalTarget null.\n\nNo premature terminal: four unproven-evidence cases must land inside a written-out admitted set. Fixed a weak assertion caught while writing it - the first draft mapped any refusal onto \"post:UNKNOWN\" before comparing, so it passed for ANY refusal; it now compares the real label against the explicit four-member admitted list. Also asserts RESTART_PREMATURE_TERMINAL and RESTART_SAFE_HANDOFF_ABSENT each name the RESTART layer, distinguishing the latter from the identical fact refused at DRAIN. Redaction asserted: no crash-point answer echoes the lease token or the bootstrap credential digest.\n\nLOAD-BEARING VERIFIED by mutating production and confirming red (epic rail 6). Mutation 1, disabling the reconciliation check in reconstructTerminalAttempt: 5 tests red across BOTH files, including the race gate's outcome-kind set equality. Mutation 2, collapsing duplicate-delivery's held-lock-no-registration SUSPECT arm into exitBeforeLaunch: the race gate's set equality red. Both reverted; `git diff` on the two production files is empty. Whole supervisor suite after revert: 9 files / 505 tests green.\n\nNOTE FOR THE GOVERNOR (not mine to fix): commits c42b578 (task-1e512b95, Evidence receipt pipeline) and 34a3d11 (task-f837ce45, Session coordination fabric) swept THIS task's untracked race-*.ts files into their commits. Epic rail 3 requires explicit-pathspec commits; a broad pathspec captured foreign work from the shared index. My files are now tracked under their commits, so this task's own commit carries only the deltas.",
+      "startedAt": "2026-08-08T21:07:43.220Z",
+      "completedAt": "2026-08-08T21:10:57.286Z"
     },
     {
       "stepId": "step-7",
@@ -114,26 +135,39 @@
     {
       "stepId": "step-8",
       "description": "Fix the defects the harness exposes — DoD 4, and the reason this gate exists. Every fix is red-first: add the focused failing test that names the defect, then make the minimum change, and keep the fix in a separate commit-visible shape from the harness code so the diff shows what the harness caught. Fixes stay strictly INSIDE the slice's owned paths (packages/runner/src/supervisor/** and apps/daemon/src/work/**); a defect found in a foreign package is REPORTED, not fixed here. Add no features — this task adds tests and defect fixes only, and new supervisor, relay or service surface belongs in a new task. If the harness exposes NO defect, say so explicitly in the completion evidence together with the seeds, step counts and per-kind coverage that justify the claim — a negative result is a result, but a gate narrowed until it produces one violates the slice's own rail.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-lifecycle.ts",
         "packages/runner/src/supervisor/drain-reconciliation.ts",
         "packages/runner/src/supervisor/launch-lock.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts"
+      ],
+      "note": "NO PRODUCTION DEFECT FOUND in children 1-2, and the negative result is justified by numbers rather than asserted: 8 seeds x 400 steps = 3200 steps over a 10-command alphabet and a 5-member asserted-good state pool, 70/30 honest/tamper, reaching all 66 declared outcome kinds with every kind hit >=3 times (full count table in the step-4 note). Zero versionDelta violations, zero input mutations, zero monotonicity violations, zero grant-ordering violations, zero duplicate-delivery relaunches.\n\nTWO DEFECTS THE GATE DID EXPOSE, both in the harness, both fixed red-first (the failing run came first in each case):\n1. xorshift32 low-bit correlation silently narrowed the gate. Three of the 16 activation leg tampers were never reached and two more fired once in 1200 steps, so five refusal codes were effectively untested while the suite looked green. Replaced with splitmix32 and added a self-test asserting a 16-way split taken two draws after a 10-way split reaches all 16 arms.\n2. checkGrantOrdering compared each launch only to issuances EARLIER IN THE ARRAY, making it an assertion about log sort order rather than about step index, and leaving its own index-comparison branch unreachable. Rewritten as two passes; the reordered-log self-test now genuinely exercises the index comparison.\n\nONE DESIGN ASYMMETRY: REPORTED, NOT EDITED (msg-1e2432dd to #architects). `applyEffectCommand(ARMED, {kind:\"activate\"})` transitions straight to ACTIVE with no lease fence, grant, tombstone, graph-epoch or runtime-closure check, and `activateEffect` never consults that arc row - while the symmetric ACTIVE+requestCancel cell got an explicit MUST_DRAIN short-circuit from child 2 for exactly that hazard. Child 1's lifecycle matrix pins the current behaviour against a hand-transcribed DESIGN_ARCS list, so changing it is a design decision on a DONE task, outside this task's \"tests and defect fixes only\" scope. Closed the coverage gap instead with three tests proving the safety net holds on that path: the reducer outcome's own keys are exactly [intent, kind, ok, result, versionDelta] with result null (no grant, no commit), the half commit it leaves is refused by validateActivationCommit with ACTIVATION_COMMIT_INCOHERENT at layer ACTIVATION, and a positive control asserts a real committed activation still returns COHERENT so the refusal cannot be a broken fixture.\n\nRedaction was checked for duplication before adding anything: children 1 and 2 already sweep the lease token and the bootstrap credential digest (effect-activation.test.ts:320, launch-lock.test.ts:158, effect-properties.test.ts:38). Added only the restart-surface sweep, which was missing.\n\nSupervisor suite: 9 files / 508 tests green. `pnpm --filter @moe/runner typecheck` currently red on ONE FOREIGN file, packages/runner/src/evidence/candidate-rematerialization.ts(4,3) TS6133 'refMatches' is declared but its value is never read - a mid-flight TDD-red from the evidence-receipt task (commit c42b578), outside this slice's owned paths. Attributed by path, will re-measure at step 9.",
+      "startedAt": "2026-08-08T21:11:30.739Z",
+      "completedAt": "2026-08-08T21:14:08.001Z"
     },
     {
       "stepId": "step-9",
       "description": "Full regression — this task owns it for the whole slice, which is why mid-slice children ran focused gates only. Run, fresh from the repo root, capturing real output: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm test. All must exit 0. ATTRIBUTE RED BY PATH, NEVER BY A REMEMBERED COUNT — a stale 'known failures' number had to be retracted from another plan on this board today, and carrying one into evidence means owning the discrepancy when a reviewer re-measures. Investigate anything red outside the slice before calling it foreign; name the specific failing file rather than a count. The scope-observation real-git test has a known 5s-timeout flake on this machine: re-run once, report it, do not chase it. Quote the per-kind outcome counts from step 4 in the evidence, as the lease-core handoff does — those numbers are how a reviewer judges the gate was non-vacuous.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/race-harness.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "note": "FULL REGRESSION, fresh from the repo root. Red attributed BY PATH, never by a remembered count.\n\n1. `pnpm --filter @moe/runner typecheck` exit 0.\n2. `pnpm --filter @moe/runner test` exit 0 - 20 files / 720 tests passed.\n3. `pnpm --filter @moe/daemon typecheck` exit 0.\n4. `pnpm --filter @moe/daemon test` exit 0 - 5 files / 72 tests passed. NOTE: one earlier run of this gate failed on `apps/daemon/src/bootstrap/*` at `expect(outcome.refusedBy).toBe(\"DAEMON_INGRESS\")`. Re-run: green. Transient foreign mid-flight TDD-red from the bootstrap ingress task, path-attributed, not chased.\n5. `pnpm test` (repo root) exit 1 - 1 failed / 2641 passed / 1 skipped across 151 files.\n\nTHE ONE ROOT FAILURE IS FOREIGN: `tests/fault/foundation/j4-replan-stale.test.ts` > \"schedule:j4-stale-lease-enforcement produces its declared outcome\". Expected PRODUCTION_BEHAVIOR_ABSENT{missingSurface:\"exported lease/authority fencing surface\", probeRef:\"probe:scheduler-authority-lease\"}, received PASS_EXPECTED. Investigated before calling it foreign: `produceAbsenceOutcome` (tests/fault/foundation/foundation-harness.ts:105) is a deliberate RATCHET whose own comment states it returns PASS_EXPECTED the moment the surface exists, so a landing surface turns the schedule red and forces the manifest to be updated. Commit 239aa4f (task-8ee125d0 \"Publish scheduler claim-composition surface\", still WORKING) published that surface. The ratchet fired as designed; the remedy is a manifest update in `tests/fault/foundation/`, which is outside this task's owned paths. Reported to #architects/#governors as msg-83d2232044404cc7a5b3a538be71e9d7.\n\nONE ROOT FAILURE FIXED, because it WAS in my owned path: `packages/scheduler/src/package-boundary.test.ts` was red on `packages/runner/src/supervisor/effect-test-fixtures.ts` - its line-17 comment quoted an internal scheduler path, which matches the boundary regex `scheduler[\\\\/]src[\\\\/]` exactly like an import would. Child 2 verified it pre-existing and handed it to governors, but the offending file is inside `packages/runner/src/supervisor/**` and this task owns the root gate, so I reworded the comment to name the module rather than quote its path and added a why-line so it is not reintroduced. Red-first: the failure was observed at root before the edit; the boundary suite is now 14/14 green and root red dropped from 2 files to 1.\n\nGrepped `packages/`, `apps/` and `adapters/` for the two forbidden patterns afterwards: zero hits outside the boundary test itself.\n\nPer-kind outcome counts from step 4 are quoted in that step's note (66 kinds, 3200 steps, every kind >=3). The scope-observation real-git 5s-timeout flake the plan warned about did not appear in either root run.",
+      "startedAt": "2026-08-08T21:14:13.878Z",
+      "completedAt": "2026-08-08T21:17:20.650Z"
     },
     {
       "stepId": "step-10",
       "description": "Whole-slice adversarial pass and docs sweep, both of which this task owns as the closing gate. Adversarial: re-read the entire slice — children 1, 2 and 3's production code, not just this task's tests — asking whether any refusal asserts only that something failed rather than which code and which layer; whether any sweep can generate zero cases and still pass; whether the expected outcome-kind list was hand-written or quietly derived from the implementation; whether any invariant would survive a deliberately broken input; whether uncertainty anywhere gains authority instead of staying SUSPECT or UNKNOWN; and whether any redaction rule leaks a lease token, bootstrap credential, or expected digest. Docs: inline why-comments where the reasoning is non-obvious, and update docs/ ONLY if a public surface actually changed — do not add a contract document for an internal module. Confirm every production file in the slice is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line, and record the counts.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T21:17:25.888Z"
     },
     {
       "stepId": "step-11",
@@ -155,12 +189,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-08T21:01:33.387Z",
+  "updatedAt": "2026-08-08T21:17:25.888Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:30:47.157Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 3
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -169,7 +203,12 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:32:35.926Z",

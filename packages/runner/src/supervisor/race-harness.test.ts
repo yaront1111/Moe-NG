@@ -28,8 +28,25 @@ describe("the seeded schedule is reproducible and seed-sensitive", () => {
     expect(runTrace(11, 120)).not.toEqual(runTrace(12, 120));
   });
 
-  it("refuses the xorshift fixed point instead of emitting one value forever", () => {
-    expect(() => seeded(0)).toThrow(/fixed point/);
+  it("gives every configured seed its own schedule, including seed 0", () => {
+    const schedules = [0, ...RACE_SEEDS].map((seed) =>
+      JSON.stringify(runTrace(seed, 60).steps.map((step) => step.label)),
+    );
+    expect(new Set(schedules).size).toBe(schedules.length);
+  });
+
+  it("draws small-modulus decisions without the low-bit correlation of an LFSR", () => {
+    // Sixteen is the tamper-table width, and it is read two draws after a `% 10`
+    // command draw. A linear generator makes that pair periodic; this asserts
+    // every arm of a sixteen-way split is reachable at a realistic sample size.
+    const next = seeded(RACE_SEEDS[0]);
+    const arms = new Set<number>();
+    for (let index = 0; index < 400; index += 1) {
+      next();
+      next();
+      arms.add(next() % 16);
+    }
+    expect(arms.size).toBe(16);
   });
 
   it("executes exactly the requested number of steps, in order", () => {
@@ -132,14 +149,15 @@ describe("the grant-ordering invariant is load-bearing", () => {
   });
 
   it("fails the same two events reordered, naming the launch that got ahead", () => {
+    // The launch is at step 1 and its activation at step 4: the check must read
+    // the step index, not the position in the array it was handed.
     const violations = checkGrantOrdering([{ ...launch, index: 1 }, issued]);
-    expect(violations.length).toBe(1);
-    expect(violations[0]).toContain("launch precedes any activation of grant-a");
+    expect(violations).toEqual(["step 1: launch precedes its activation at step 4"]);
   });
 
   it("fails a launch of a grant no activation ever minted", () => {
     const violations = checkGrantOrdering([issued, { ...launch, grantId: "grant-forged" }]);
-    expect(violations).toEqual(["step 9: launch precedes any activation of grant-forged"]);
+    expect(violations).toEqual(["step 9: launch of grant-forged that no activation minted"]);
   });
 
   it("fails a grant minted by half an activation pair", () => {

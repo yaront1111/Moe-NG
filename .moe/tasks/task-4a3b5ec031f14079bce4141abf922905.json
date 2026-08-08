@@ -159,13 +159,19 @@
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then the commit — which is the highest-risk step on this task, not the code. Review your own diff as an attacker: can any uncertain state reach a launch grant by a path the tests do not cover; does any refusal assert only that something failed rather than which code and which layer; is the 786/787 row list or the strength order derived from the resolver instead of hand-written from the design; can a disposition downgrade through any route; does any outcome or message leak a bootstrap credential, lease token, or expected digest; did any frozen vocabulary get reordered rather than appended. THEN COMMIT, and treat this as the contamination hazard it is: child 1's ELEVEN files sit uncommitted in the same working directory, so a pathspec of packages/runner/src/supervisor/ would sweep their entire in-flight task into your commit. Run git status --porcelain first, stage and commit by EXPLICIT PER-FILE pathspec naming only this task's files — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never the directory. effect-kernel.ts and effect-lifecycle.ts need particular care: they are child 1 files you EXTENDED, so their working-tree content also carries child 1's uncommitted work, and committing them would publish that work under your task. Do not resolve that alone — ask the governor in #governors how they want those two files handled before staging either, and commit your own new files meanwhile. Unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only owned paths landed and no debug, probe, scratch, or generated evidence file is present.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-08T21:01:29.632Z"
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/launch-lock.test.ts",
+        "packages/runner/src/supervisor/restart-reconstruction.test.ts"
+      ],
+      "note": "Adversarial review found the two fixes exact and non-derived: six literal LAUNCH_LOCK expectations with the KERNEL arm separately pinned, plus exact post:UNKNOWN. No production/concurrency/side-effect surface changed; diff-check clean and fresh gate green. Foreign task f837ce's known completion hook swept both owned paths into pushed commit 34a3d11 while the gate ran; staged index is empty and owned worktree diff is now empty. I did not rewrite/revert foreign history or manufacture a no-op change; governor notified msg-bbf4698b14a44548ba9567c48dcae418. Exact owned patch verified with `git diff 34a3d11^ 34a3d11 -- <two paths>`.",
+      "startedAt": "2026-08-08T21:01:29.632Z",
+      "completedAt": "2026-08-08T21:02:22.188Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-9337a867",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -177,7 +183,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:19:48.762Z",
-  "updatedAt": "2026-08-08T21:01:29.632Z",
+  "updatedAt": "2026-08-08T21:10:33.053Z",
   "contextFetchedBy": [
     "qa-cbad3a29",
     "worker-9337a867"
@@ -186,9 +192,11 @@
     "firstClaimAt": "2026-08-08T18:25:20.970Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 21,
+    "executedStepCount": 22,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-08T21:10:33.053Z",
+    "wallClockMs": 9912083
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -204,7 +212,8 @@
     "step-7",
     "step-8",
     "step-9",
-    "step-10"
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [
     {
@@ -234,32 +243,25 @@
   },
   "planApprovedAt": "2026-08-08T18:30:20.342Z",
   "workStartedAt": "2026-08-08T20:07:28.593Z",
-  "reviewStartedAt": "2026-08-08T20:42:26.482Z",
+  "reviewStartedAt": "2026-08-08T21:06:45.996Z",
   "verification": {
     "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  15 passed (15)\n      Tests  617 passed (617)\n   Start at  23:40:42\n   Duration  655ms (transform 1.39s, setup 0ms, import 1.98s, tests 751ms, environment 1ms)\n\nGATE_EXIT=0",
-    "reportedAt": "2026-08-08T20:42:26.482Z"
+    "outputTail": "Test Files  19 passed (19)\nTests  678 passed (678)\nDuration  778ms\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src",
+    "reportedAt": "2026-08-08T21:06:45.996Z"
   },
   "filesModified": [
     "packages/runner/src/supervisor/effect-kernel.ts",
     "packages/runner/src/supervisor/launch-lock.test.ts",
     "packages/runner/src/supervisor/launch-lock.ts",
-    "packages/runner/src/supervisor/duplicate-delivery.ts",
-    "packages/runner/src/supervisor/process-observation.ts",
     "packages/runner/src/supervisor/effect-lifecycle.ts",
-    "packages/runner/src/supervisor/effect-lifecycle.test.ts",
     "packages/runner/src/supervisor/drain-table.ts",
     "packages/runner/src/supervisor/drain-reconciliation.test.ts",
     "packages/runner/src/supervisor/drain-reconciliation.ts",
-    "packages/runner/src/supervisor/drain-disposition.ts",
-    "packages/runner/src/supervisor/drain-fence.ts",
     "packages/runner/src/supervisor/restart-reconstruction.test.ts",
-    "packages/runner/src/supervisor/restart-reconstruction.ts",
-    "packages/runner/src/supervisor/restart-records.ts",
-    "packages/runner/src/supervisor/effect-properties.test.ts"
+    "packages/runner/src/supervisor/restart-reconstruction.ts"
   ],
-  "reviewCompletedAt": "2026-08-08T20:51:51.770Z",
+  "reviewCompletedAt": "2026-08-08T21:10:33.053Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Uncertain ARMED or lock state maps to SUSPECT with a stable code, asserted against the production surface — the code is pinned but the REFUSING LAYER is not, and a layer mis-stamp survives the full suite (mutation-verified M5)."
@@ -302,5 +304,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-08T21:10:33.053Z",
+  "reviewSummary": "APPROVED at reopen 1. Both rejected assertions now load-bearing; re-ran the mutants that previously survived. (1) launch-lock.test.ts:184-235 — six SUSPECT rows carry a literal expected-layer column (all LAUNCH_LOCK) and assert exact toEqual({code,layer}); codeAndLayer(:63-66) returns exactly {code,layer}; KERNEL arm stays separate at :237-241 pinning EFFECT_CLAIM_MALFORMED/KERNEL. MUTANT A (duplicate-delivery.ts:123 \"LAUNCH_LOCK\"->\"KERNEL\"): KILLED, 2 FAIL. (2) restart-reconstruction.test.ts:250 asserts exact post:UNKNOWN (production restart-reconstruction.ts:131-133); MUTANT B (line 132 UNKNOWN->SUSPECT): KILLED, 1 FAIL \"expected 'post:SUSPECT' to be 'post:UNKNOWN'\". Both production files restored byte-identical, git hash-object == git rev-parse HEAD:<path>. GATE from repo root, foreground, before and after drills: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test -> exit 0, 20 files / 717 tests, no flake. RAILS: owned worktree diff empty, staged index empty; git diff --stat 7528e00 HEAD -- supervisor/ shows ZERO drift in this task's production files since the prior QA baseline — only the two owned test files plus child 4's additive race-*.ts. Per-file lines: 138/153/88/210/227/188, extended kernel 266, lifecycle 262 — all under 400. Fence grep child_process|spawn|kill(|Date.now|Math.random over the six production modules: ZERO. DoD 1/3/4, design fidelity vs the design file, append-only vocabulary, redaction sweep, 13-code reachability verified at 7528e00 last round and untouched at HEAD. Not the worker's defect: fixes were swept into foreign completion-hook commit 34a3d11; owned bytes attributable via git diff 34a3d11^ 34a3d11 -- the two test files. Governors notified; no revert, per epic rail 3."
 }

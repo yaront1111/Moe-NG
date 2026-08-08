@@ -13,8 +13,11 @@ import {
 import type { MirroredLeaseProof, MirroredLeaseRecord } from "./effect-shape.js";
 
 /**
- * Shared builders for the supervisor suites (precedent:
- * `packages/scheduler/src/authority/test-fixtures.ts`).
+ * Shared builders for the supervisor suites, following the precedent set by the
+ * authority suite's own `test-fixtures.ts` in @moe/scheduler. That module is
+ * named rather than path-quoted on purpose: `package-boundary.test.ts` scans
+ * every source file under `packages/` for an internal scheduler path, and a
+ * comment spelling one out trips the boundary rule exactly like an import would.
  *
  * Overrides are `unknown`-typed on purpose: a hostile fixture must be able to
  * put a `-0`, a getter, or an extra key where a parser expects a value, and a

@@ -64,7 +64,7 @@
     {
       "stepId": "step-4",
       "description": "Implement the first three bootstrap services to green in apps/daemon/src/bootstrap/bootstrap-services.ts: project register, repository bind, and provider probe. Each follows one shape and no other: decode and exact-shape gate (step 3), load current state, hand the parsed command to the @moe/core reducer that owns it (reduceProject for register and bind), and commit the reducer's verdict through SqliteEventStore.commitExpectedVersionDecision so the decision is durable and replayable. The service composes; it NEVER decides. A rejected reducer result becomes a refusal carrying the core's own reason code — do not translate it into a local code, because that erases which layer refused. Repository bind consumes a caller-supplied RepositoryObservation and provider probe a caller-supplied observation: this module performs no I/O, no spawn, and no clock read. Target under 250 lines for this file across steps 4 and 5 combined; split before 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.ts",
         "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
@@ -72,21 +72,36 @@
       "newFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.ts"
       ],
-      "startedAt": "2026-08-08T21:01:51.686Z"
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts"
+      ],
+      "note": "Register, bind and probe green. TDD ORDER DEVIATION, stated plainly: I wrote bootstrap-ledger.ts/bootstrap-services.ts before their tests rather than test-first. The core surfaces were unpinnable from the plan's prose (see the step-2 note's three deltas) and several signatures only resolved by reading source — writing assertions against guessed signatures would have produced red-for-the-wrong-reason. The guards are mutation-proven in step 10 instead, which is the property test-first is a proxy for.\n\nTWO PRODUCTION FILES ADDED BEYOND THE PLAN'S NAMES, both to hold the per-file cap:\n- bootstrap-ledger.ts — the durable half: readDurableLedger (folds committed decisions into per-aggregate state), commitAccepted (the ONE commit seam all nine kinds funnel through, so \"exactly one durable decision\" is a property of one function not nine call sites), replayOf, the refusal constructors, and COMMAND_PREREQUISITES.\n- bootstrap-policy-services.ts — policy.install/validate, split out of bootstrap-services.ts.\n\nTHREE-LAYER REFUSAL MARKER, extending step 3's two. SERVICE_REFUSED_BY = DAEMON_INGRESS | DAEMON_PREREQUISITE | CORE_REDUCER. The middle one is new and load-bearing: the daemon's durable-sequence gate can refuse where neither the ingress shape check nor a core reducer would, and collapsing it into DAEMON_INGRESS would make \"which layer refused\" unanswerable for exactly the DoD-1 and DoD-3 arms.\n\nREPLAY BEFORE REDUCER, per the prior session's handoff. replayOf() calls store.getCommandDecision(key) as the first durable act. Inverting this makes DoD 2 unreachable: reduceProject compares expectedVersion to current version, so an identical second request is rejected by the core and never reaches the store to be recognised as the replay it is. Comment in bootstrap-ledger.ts says so at the seam.\n\nCOMMIT ONLY ON ACCEPTANCE. reduceAndCommit returns refuseFromCore BEFORE touching the store. Passing a rejected verdict through would still write a NO_BUSINESS_EFFECT audit row with resultCode EXPECTED_VERSION_CONFLICT — a durable row — and DoD 3 asserts the durable decision count is UNCHANGED for the stale-version fixture.\n\nSEPARATE AGGREGATE STREAMS. provider.probe writes to `${projectId}-provider` and policy.* to `${projectId}-policy`. Sharing the project stream would bump the project's version out from under reduceProject's expectedVersion check.\n\nprovider.probe has NO core reducer (confirmed on disk, not assumed) — it is a caller-supplied observation whose adequacy is judged later by the activation witness's providerMinimumProfileRef. The daemon therefore owns only its shape and version agreement, and both refusals are daemon-layer marked so they cannot be misread as core verdicts. No I/O, no spawn, no clock read anywhere: decidedAt is caller-supplied.\n\nVerified: pnpm --filter @moe/daemon typecheck exit 0; pnpm --filter @moe/daemon test 3 files / 58 tests passed.",
+      "startedAt": "2026-08-08T21:01:51.686Z",
+      "completedAt": "2026-08-08T21:08:31.615Z"
     },
     {
       "stepId": "step-5",
       "description": "Complete the bootstrap module with policy install, policy validate, and project activate, and prove DoD 1. Policy install and validate route through @moe/core's policy modules (policy-validation, policy-evaluation, policy-contract); an unknown or unregistered policy input refuses with a stable code and commits nothing. Project activate is the one that carries DoD 1 — 'no hand-edited state can activate a project': activation must require the ProjectActivationWitness the core reducer demands AND a durable prior decision for the register and bind steps, refusing when either is absent. Assert that arm by its stable refusal code and by reading the store back to show no row was written, not merely by the returned value — a service that mutates and then refuses would pass a return-value-only assertion. Also assert the ordering property: activation refuses when the bootstrap sequence is out of order, which is what makes the sequence command-driven rather than hand-editable.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.ts",
         "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "Policy install/validate and project activate green; DoD 1 proven by four tests in bootstrap-durability.test.ts, all asserting BOTH the stable code AND a store read-back.\n\nDoD 1 — \"no hand-edited state can activate a project\" — rests on two independent requirements, not one:\n(a) the ProjectActivationWitness the core reducer demands (missing witness refuses BOOTSTRAP_PAYLOAD_INVALID / DAEMON_INGRESS), and\n(b) durable prior decisions for register, bind AND probe, enforced by COMMAND_PREREQUISITES before any reducer runs (refuses BOOTSTRAP_PREREQUISITE_MISSING / DAEMON_PREREQUISITE).\nNeither alone is sufficient: (a) alone would let a caller with a well-formed witness activate a project that was never registered; (b) alone would let a witness-free activation through once the sequence held.\n\nNON-MUTATION IS ASSERTED BY READING THE STORE BACK, not from the return value. Each arm asserts readDurableLedger(...).decisionCount is unchanged, and the activation arms additionally assert ledger.kinds.has(\"project.activate\") === false. A service that mutated and then refused would pass a return-value-only assertion; these fail it.\n\nORDERING PROPERTY: \"refuses an out-of-order sequence: bind before register\" sends bind against an empty store and asserts BOOTSTRAP_PREREQUISITE_MISSING / DAEMON_PREREQUISITE with decisionCount 0. Plus \"refuses a goal against a project that is not durably activated\" — same code, one link further down the chain — so the sequence is proven command-driven at two points, not one.\n\nPOLICY. Neither install nor validate has a core lifecycle reducer, verified on disk. install records the slice durably under the project's own policy aggregate; validate hands the caller's input to @moe/core's evaluatePolicy UNCHANGED and surfaces its RuntimeError code untranslated when it rejects. The daemon's single judgement is the durable one — was the policy named by input.policyRevisionRef ever installed for this project — refusing BOOTSTRAP_POLICY_UNKNOWN / DAEMON_PREREQUISITE. Marked daemon-layer deliberately: it must not be mistakable for the core rejecting a policy on its merits.\n\nGOTCHA for anyone building policy fixtures: validateEvaluationInput requires policyRevisionRef to be validHex64, while validSlice accepts any non-empty sliceRef. A slice installed under a human-readable ref can therefore NEVER be named by a valid evaluation input, and the unknown-policy arm would fire for the wrong reason. Fixtures use a hex64 sliceRef so install and validate line up.\n\nVerified: typecheck exit 0; 3 files / 58 tests passed.",
+      "startedAt": "2026-08-08T21:08:34.197Z",
+      "completedAt": "2026-08-08T21:08:51.407Z"
     },
     {
       "stepId": "step-6",
       "description": "Goal create service, TDD. Create apps/daemon/src/goals/goal-services.test.ts then apps/daemon/src/goals/goal-services.ts implementing the goal create command against @moe/core's reduceGoal, GOAL_COMMAND_KINDS and GoalCreateCommand, committed through commitExpectedVersionDecision exactly as the bootstrap services are. Reuse the decode and exact-shape gate exported from bootstrap-contracts.ts rather than restating it — a second copy of the ingress rule is a second thing to drift. A goal create against a project that is not durably ACTIVE refuses with the core's own reason code and commits nothing; assert the code and read the store back to prove the non-mutation.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/goals/goal-services.ts",
         "apps/daemon/src/goals/goal-services.test.ts"
@@ -94,12 +109,20 @@
       "newFiles": [
         "apps/daemon/src/goals/goal-services.ts",
         "apps/daemon/src/goals/goal-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-services.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ],
+      "note": "goal-services.ts + goal-services.test.ts green. 66 production lines: the module contributes ONE handler and nothing else. The decode gate, exact-shape check, replay lookup and durable-sequence check are not restated — they live in runBootstrapCommand and this handler is called with an already-decoded request, so there is no second copy of the ingress rule to drift.\n\nRoutes to @moe/core reduceGoal, commits through the shared commitAccepted seam (commitExpectedVersionDecision), identical shape to the bootstrap services.\n\nFOUR ARMS, each naming code AND layer AND reading the store back:\n- accepted: one decision, durable goal lands at lifecycle DRAFT read back from the ledger (not from the return value).\n- stale expected version -> CORE_REDUCER / EXPECTED_VERSION_CONFLICT, count unchanged.\n- absent witness -> DAEMON_INGRESS / BOOTSTRAP_PAYLOAD_INVALID, count unchanged, no goal aggregate.\n- malformed witness (bad truthClass) -> CORE_REDUCER / UNKNOWN_ERROR. This arm exists specifically to prove the daemon does NOT pre-judge witness contents: if the handler validated truthClass itself the layer would read DAEMON_INGRESS and the test goes red.\n\nTWO EXPECTATIONS I HAD WRONG, corrected against real reducer behaviour rather than by loosening the assertion:\n1. A second goal.create at expectedVersion 0 against a goal already at version 1 returns EXPECTED_VERSION_CONFLICT, not ILLEGAL_TRANSITION — reduceGoal checks version agreement BEFORE the transition table. Comment in the test records the ordering so the next reader does not \"fix\" it back.\n2. The plan says a goal against a non-ACTIVE project should refuse \"with the core's own reason code\". It does not, and cannot: goal.create declares project.activate as its prerequisite, so the daemon's sequence gate answers first with BOOTSTRAP_PREREQUISITE_MISSING / DAEMON_PREREQUISITE and the core never runs. That arm is asserted in bootstrap-durability.test.ts under DoD 1 with the layer named. Asserting the core code there would have been asserting a refusal that never happens.\n\nVerified: typecheck exit 0; 5 files / 72 tests passed.",
+      "startedAt": "2026-08-08T21:12:13.247Z",
+      "completedAt": "2026-08-08T21:12:27.199Z"
     },
     {
       "stepId": "step-7",
       "description": "Plan propose and approval services, TDD. Create apps/daemon/src/planning/planning-services.test.ts then apps/daemon/src/planning/planning-services.ts for the last two commands, routed through @moe/core's planning-command-contract and graph-revision-reducer for propose, and approval-contract plus approval-validation for approval. Same composition shape and the same shared ingress gate; the services never decide. Approval is the authority-bearing command in this task, so it carries the strictest assertions: an approval whose policy input is unknown, whose approver is not eligible per the core's validation, or whose target revision hash does not match refuses with the core's reason code and commits nothing. Where the result carries no authority, label it with the daemon's existing advisory envelope shape (advisoryOnly: true, authority: 'NONE') as apps/daemon/src/index.ts already does — do not invent a second convention for the same idea.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
@@ -107,49 +130,84 @@
       "newFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ],
+      "note": "planning-services.ts + planning-services.test.ts green. Two handlers, same composition shape, same shared ingress gate.\n\nSURFACE CORRECTION — the plan names entry points that @moe/core does not export. There is no `planning-command-contract` export and `graph-revision-reducer` is the wrong reducer for propose. Verified on disk: `plan.propose` is a member of PLANNING_RUN_COMMAND_KINDS and is handled by `reducePlanningRun` (planning-run-reducer.ts:149 -> planning-run-submission.ts:44). `reduceGraphRevision` is a different aggregate and owns none of the nine kinds. Routed to reducePlanningRun. Approval uses `applyApprovalCommand` (exported via approval-invalidation.js), which calls validateApprovalRecord/validateApprovalCommand internally — validateApprovalCommand itself is NOT on the root index, so calling it directly was not an option.\n\nPLAN.PROPOSE IS UNREACHABLE IN ONE COMMAND, and this is the task's real design problem. PLANNING_RUN_TRANSITIONS gates plan.propose on lifecycle PLANNING or SUBMISSION_DRAINING; the commands that get a run there — planning.create_draft, planning.ready, planning.claim — are NOT among this task's nine. A single-shot propose against a fresh store can only ever be refused, so DoD 2's \"each parsed command produces one durable terminal decision\" would be unsatisfiable for it.\n\nResolved by folding, not by seeding. The payload carries an ORDERED CHAIN of core planning-run commands, folded left through reducePlanningRun from durable state. The daemon synthesises no step and rewrites no expectedVersion — every element is decided by the core, and the first rejection aborts the entire fold and commits nothing. The rejected alternative was writing a durable decision by hand in the test to fake a PLANNING run: that is precisely the hand-edited state DoD 1 forbids, and it would have made the propose arm prove nothing.\n\nThird reducer arm handled: PlanningRunReducerResult has THREE members, and PlanningUnsupportedResult carries `reason`, no RuntimeError. Surfaced as its own stable code with refusedBy CORE_REDUCER. A naive `verdict.error` read does not compile — tsc caught it.\n\nAPPROVAL, strictest arms, each naming code AND layer:\n- accepted -> advisoryOnly false, authority DURABLE_DECISION, record read back at lifecycle DECIDED.\n- ineligible approver (HUMAN record, command stepUpAuthRef null) -> CORE_REDUCER / ILLEGAL_TRANSITION. The hash MATCHES in this fixture on purpose, so the daemon's revision gate passes and the core is forced to be the layer that answers; with a mismatched hash this test would have gone green while testing the daemon gate instead of core eligibility — the exact vacuity the project rail names.\n- wrong target revision hash -> DAEMON_PREREQUISITE / BOOTSTRAP_REVISION_HASH_MISMATCH, nothing committed.\n- approval before any durable proposal -> DAEMON_PREREQUISITE / BOOTSTRAP_PREREQUISITE_MISSING.\n\nADVISORY ENVELOPE reused, not reinvented: every refusal carries advisoryOnly: true / authority: \"NONE\" exactly as apps/daemon/src/index.ts does, and accepted results carry advisoryOnly: false / authority: \"DURABLE_DECISION\" — the same two fields, not a second convention.\n\nAlso added apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts (270 lines) so the three suites share one set of request builders. It builds inputs and drives the PRODUCTION pipeline (send -> runBootstrapCommand, decisionCount -> readDurableLedger); it reimplements no rule, per epic rail 6.\n\nVerified: typecheck exit 0; 5 files / 72 tests passed.",
+      "startedAt": "2026-08-08T21:12:29.594Z",
+      "completedAt": "2026-08-08T21:12:52.061Z"
     },
     {
       "stepId": "step-8",
       "description": "Prove DoD 2 across ALL eight commands — one durable terminal decision and an exact idempotent replay. For each command in turn, issue it twice with the identical request and assert: the first call commits exactly one durable decision row; the second returns the SAME terminal decision with disposition REPLAYED; and the durable row count is still one afterwards, read back from the store. The count assertion is the load-bearing one — 'it did not throw the second time' is compatible with a service that wrote a second row, which is precisely the bug this DoD exists to catch. Drive the sweep from the exported command-kind list so it covers all eight by construction, and assert the generated case count equals eight and is non-zero, per epic rail 6 — a sweep that silently produces zero cases passes while testing nothing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
         "apps/daemon/src/goals/goal-services.test.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "DoD 2 proven across NINE commands, not eight. The plan's \"eight\" counts the task description's comma groups, where \"policy install/validate\" is one slash-joined group that step 5 then requires as two separate services. All nine are in BOOTSTRAP_COMMAND_KINDS and all nine are swept.\n\nSweep is `it.each` over bootstrapSequence(), one case per kind. Per case: driveThrough() establishes the durable prerequisites, `before = decisionCount(store)` is captured, then\n\nFIRST call: ok, disposition DECIDED, authority DURABLE_DECISION, advisoryOnly false, and decisionCount === before + 1.\nSECOND call, byte-identical request: ok, disposition REPLAYED, and THREE identity fields equal to the first — decisionId, resultSha256, decisionSha256 — so \"same terminal decision\" means the same durable row and the same committed bytes, not merely a truthy result.\nTHEN: decisionCount === before + 1 again. This is the load-bearing assertion. \"It did not throw the second time\" is fully compatible with a service that wrote a second row; the count is what excludes it. Read back through readDurableLedger, never inferred from the return value.\n\nANTI-DEGENERACY, per epic rail 6 — a sweep that silently generates zero cases passes while testing nothing. Three guards, all in \"drives every owned command kind exactly once\":\n- sequence.length === 9 (literal, so a shrinking fixture is caught)\n- sequence.length === BOOTSTRAP_COMMAND_KINDS.length (so production and fixture cannot drift apart)\n- Set(sequence kinds) equals Set(BOOTSTRAP_COMMAND_KINDS) (so nine cases of the same kind cannot satisfy the length checks)\nVerified non-vacuous by observation, not assumption: the runner names all nine cases individually and the suite reports 72 tests.\n\nWHY \"EXACTLY ONE ROW\" IS A PROPERTY OF ONE FUNCTION, not nine call sites: every accepted command commits through the single commitAccepted seam in bootstrap-ledger.ts, which issues exactly one commitExpectedVersionDecision with one EventDraft. plan.propose folds four core commands and still commits ONE decision — the fold's events travel in that single event's payload — so the count assertion holds uniformly.\n\nThe replay path is what makes this possible at all: replayOf() calls store.getCommandDecision BEFORE any reducer. Inverted, reduceProject/reduceGoal would reject the identical second request on expectedVersion and REPLAYED would be unreachable. Step 10 mutation-checks that ordering.\n\nVerified: typecheck exit 0; 5 files / 72 tests passed.",
+      "startedAt": "2026-08-08T21:12:54.316Z",
+      "completedAt": "2026-08-08T21:13:10.243Z"
     },
     {
       "stepId": "step-9",
       "description": "Prove DoD 3 — the four hostile inputs commit no unauthorized mutation. Build a fixture per named input: a STALE VERSION (an expected-version mismatch against the durable head), a WRONG HASH (a revision or policy digest that does not match the durable record), a MISSING PROBE (activation attempted with no durable provider-probe decision), and an UNKNOWN POLICY (a policy identifier never installed). For each, assert BOTH halves: the specific stable refusal code and, by reading the store back, that the durable decision count and the aggregate head are unchanged. Assert which layer refused wherever both the daemon's ingress gate and a core reducer could answer — per the project rail, a test asserting only 'refused' is one added layer away from vacuous, and here the ingress gate could start answering first and leave the test green while no longer testing the core's rule. Drive the four from a declared list and assert its length, so the sweep cannot degenerate.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "DoD 3 proven. Four named fixtures, each asserting BOTH halves — the stable code AND a store read-back — plus the layer that refused.\n\nSTALE_VERSION: driveThrough to project.activate (register, bind, probe, policy all durable) then activate at expectedVersion 99 against a head at 2. Asserts CORE_REDUCER / EXPECTED_VERSION_CONFLICT, decisionCount unchanged, AND the project aggregate head deep-equal to the value captured before the call. This is the arm where the layer assertion does real work: driving only to provider.probe would leave the sequence gate answering first with BOOTSTRAP_PREREQUISITE_MISSING, and the test would pass while never reaching the core's version rule. That is not hypothetical — it is exactly how I first wrote it, and the layer assertion is what caught it (observed as \"expected 'DAEMON_PREREQUISITE' to be 'CORE_REDUCER'\").\n\nWRONG_HASH: full sequence durable, then approval whose record.exactRevisionHash does not match the durably proposed submissionHash. Asserts DAEMON_PREREQUISITE / BOOTSTRAP_REVISION_HASH_MISMATCH, count unchanged, and kinds.has(\"approval.decide\") false. Paired with a positive control in the same suite proving the gate compares against the DURABLE hash rather than accepting anything — without it, a gate that always refused would pass the negative arm.\n\nMISSING_PROBE: register + bind only, then activate. DAEMON_PREREQUISITE / BOOTSTRAP_PREREQUISITE_MISSING, count unchanged, kinds.has(\"project.activate\") false.\n\nUNKNOWN_POLICY: install a slice, then validate naming a policyRevisionRef never installed. DAEMON_PREREQUISITE / BOOTSTRAP_POLICY_UNKNOWN, count unchanged, kinds.has(\"policy.validate\") false.\n\nWHY THE COUNT CAN BE UNCHANGED AT ALL — the non-obvious part. The store's commitExpectedVersionDecision does NOT simply throw on a version mismatch: its NO_BUSINESS_EFFECT path writes a durable audit decision row carrying resultCode EXPECTED_VERSION_CONFLICT. Passing a rejected verdict through would therefore satisfy \"it refused\" while incrementing the durable count and failing this DoD. Every service refuses BEFORE any store call, which is what makes the count assertion true and simultaneously pins which layer answered.\n\nreadDurableLedger counts ALL decisions including NO_BUSINESS_EFFECT rows on purpose, so an audit row cannot hide from these assertions. It folds only EFFECTS_COMMITTED rows into aggregate state, so a refusal can never satisfy a later prerequisite.\n\nANTI-DEGENERACY: the four are declared as a literal list with length === 4 and Set(...).size === 4 asserted, so a duplicated or dropped entry is caught. Each fixture is then its own named test rather than a loop body — a loop over a list of four names with the bodies inside would let a typo silently skip one.\n\nVerified: typecheck exit 0; 5 files / 72 tests passed.",
+      "startedAt": "2026-08-08T21:13:12.630Z",
+      "completedAt": "2026-08-08T21:13:35.496Z"
     },
     {
       "stepId": "step-10",
       "description": "Mutation drill, then the gate. Neutralise each guard at its single source — the exact-shape key check, the schemaVersion literal comparison, the expected-version pass-through to commitExpectedVersionDecision, the activation witness requirement, and the approval eligibility check — by replacing the operand with a constant, NEVER by deleting a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the test that goes red is the one that names that guard's code. Back each file up out-of-tree and verify the restore with git hash-object. Then run the gate fresh from the repo root and capture the real output as evidence: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test. Note that the daemon's test script is the non-standard `vitest run --root . --config package.json src` — use the pnpm script, do not hand-invoke vitest differently. Add no .js bridge files: @moe/daemon needs none, unlike @moe/store. Confirm each production file is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/bootstrap/bootstrap-services.ts",
         "apps/daemon/src/goals/goal-services.ts",
         "apps/daemon/src/planning/planning-services.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "MUTATION DRILL: 6 guards, 6 killed, 0 survivors. Every mutation replaced an OPERAND with a constant; no line was ever deleted, so no mutation could pass as \"survived\" by way of a syntax error. Baseline before each: 5 files / 72 tests (73 after the fix below). Failed SUITES counted alongside failed tests.\n\nM1 exact-key check — bootstrap-contracts.ts, `hasExactKeys(request)` -> `true`.\n   RED 1 suite / 1 test: \"refuses an envelope carrying an extra key\".\n   Honest note: \"missing a required key\" SURVIVED M1 — a missing key also trips the per-field isRef check, so that case is defended by two guards. Reported, not hidden.\nM2 schemaVersion literal — `request[\"schemaVersion\"] === BOOTSTRAP_SCHEMA_VERSION` -> `true`.\n   RED 1/1: \"refuses a wrong schema version\".\nM3 expected-version pass-through — bootstrap-ledger.ts, `expectedVersion: plan.expectedVersion` -> `expectedVersion: 0`.\n   RED 3 suites / 19 tests across all three modules. Widest blast radius, and it exposed a real defect (below).\nM4 activation witness requirement — bootstrap-services.ts, `if (witness === null)` -> `if (false as boolean)` with `?? {}`.\n   RED 1/1: \"refuses activation carrying no witness, at the ingress layer\".\nM5 approval eligibility — planning-services.ts, command operand forced to carry a valid stepUpAuthRef.\n   RED 1/1: \"refuses an ineligible approver with the core's code, not the daemon's\".\nM6 (new guard, drilled after adding it) store-layer disposition check -> `if (false as boolean)`.\n   RED 1/1: \"refuses at the store layer when the durable head moved under the commit\".\n\nAll four mutated files backed up OUT OF TREE to %TEMP%/moe-mut-964ae3f0 and each restore verified byte-identical with git hash-object: bootstrap-contracts a265174b, bootstrap-services faad554a, planning-services 8d916059, bootstrap-ledger 29aecbe7 (ledger then intentionally re-patched with the fix below).\n\nDEFECT FOUND AND FIXED BY THE DRILL — a genuine fail-open, not a test artefact. commitExpectedVersionDecision does NOT throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row and reports the conflict in resultCode. commitAccepted was returning ok:true / authority DURABLE_DECISION for that response — claiming authority for a command that committed no business effect, contrary to epic rail 4. Reachable in production whenever a concurrent writer moves the aggregate head between the ledger read and the commit; M3 simulated exactly that. Fixed by surfacing the store's own resultCode under a FOURTH layer marker, DURABLE_STORE, so evidence still names who refused. Covered by a new test that drives the production seam directly and asserts DURABLE_STORE / EXPECTED_VERSION_CONFLICT, authority NONE, and that the aggregate head did not move. That test is M6 above.\n\nGATE, run fresh from the repo root in the foreground, exit 0:\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test\n  -> tsc clean; \"Test Files 5 passed (5) / Tests 73 passed (73)\".\nUsed the pnpm script, not a hand-rolled vitest invocation (the daemon's is the non-standard `vitest run --root . --config package.json src`).\n\nNO .js BRIDGE FILES ADDED — `ls apps/daemon/src/**/*.js` returns nothing; @moe/daemon needs none.\n\nPER-FILE CAP via wc -l, not Measure-Object. Largest production file is bootstrap-ledger.ts at 258; all others 66-200. Nothing near the 400 hard cap. bootstrap-ledger.ts was split mid-step (bootstrap-sequence.ts extracted, 66 lines) when it reached 289 and passed the 250 target; the re-export keeps every importer's single import path intact.",
+      "startedAt": "2026-08-08T21:15:58.246Z",
+      "completedAt": "2026-08-08T21:16:22.391Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can any command reach a durable mutation without its core reducer accepting it; does any service decide something the core should have decided; can a replay write a second row; does any refusal assert only that it failed rather than which code and which layer; does any hostile-input test check the return value without reading the store back; is any sweep able to generate zero cases and still pass; does any result claim authority where the daemon's advisory envelope belongs. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never a directory. The working directory is shared with other in-flight tasks, so run git status --porcelain first and unstage any foreign path with git restore --staged. apps/daemon/package.json and pnpm-lock.yaml are committed here ONLY if step 1's amendment was granted; the lock must show the single expected hunk and nothing else. After committing, verify with git show --stat that only owned paths landed and that no debug, probe, scratch, or generated evidence file is present.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "Adversarial review found TWO REAL FAIL-OPENS. Both fixed, both covered, both mutation-drilled. Neither had a failing test before review.\n\nDEFECT A — replay lookup accepted another command's decision. The store's decision key is (commandId, principalId, projectId) and does NOT include the command kind. replayOf short-circuits BEFORE any store write, so the store's own command-id guard never sees the request. Concretely: register with commandId X commits; then activate with the SAME commandId X returned register's decision as an accepted REPLAYED activation — authority claimed for a command never decided, against epic rail 4. Fixed: replayOf refuses BOOTSTRAP_COMMAND_ID_REUSED / DAEMON_PREREQUISITE when the stored decision's commandKind differs. Test asserts code, layer, authority NONE, unchanged count, and kinds.has(\"project.activate\") false.\n\nDEFECT B — accepted result returned for a non-committing store response (found during step 10's M3, fixed there). commitExpectedVersionDecision answers a version mismatch with a NO_BUSINESS_EFFECT audit row rather than throwing; commitAccepted was reporting that as ok/DURABLE_DECISION. Fixed with the fourth layer marker DURABLE_STORE.\n\nBoth new guards drilled: M7 (commandKind check -> `false`) reddened exactly \"refuses a commandId reused under a different kind\"; M6 (store disposition check -> `false`) reddened exactly the store-layer test. 1 suite / 1 test each.\n\nCHECKLIST, answered against the diff:\n- Can a command reach a durable mutation without its core reducer accepting it? Only provider.probe and policy.install, and only because NO core reducer exists for either (verified on disk, not assumed) — they record caller-supplied observations, shape-gated at the daemon layer and marked as such. Every lifecycle-bearing command goes through reduceProject/reduceGoal/reducePlanningRun/applyApprovalCommand/evaluatePolicy.\n- Does any service decide what core should decide? Two daemon-owned judgements, both deliberate and documented in-code: the approval revision-hash match (design 265 assigns the graph diff to the daemon) and COMMAND_PREREQUISITES sequencing (cross-aggregate ordering no single reducer can see). Nothing else.\n- Can a replay write a second row? No. Sweep asserts count === before+1 after BOTH calls for all nine kinds.\n- Refusals asserting only \"it failed\"? None. Every refusal assertion names code AND layer.\n- Hostile tests checking only the return value? None. All four read the store back.\n- Sweep able to generate zero cases? No — three independent anti-degeneracy assertions.\n- Authority claimed where the advisory envelope belongs? Fixed by defects A and B; every refusal now carries advisoryOnly true / authority NONE.\n- Concurrency: readDurableLedger-then-commit IS check-then-act. The store's expected-version guard resolves the race and the loser now gets the DURABLE_STORE refusal instead of a false acceptance — that is defect B, and the race is the reason it is reachable rather than theoretical.\n- Error paths: no handles, sockets or subprocesses opened; no clock read (decidedAt is caller-supplied); no filesystem access.\nKNOWN, NOT FIXED, disclosed for QA rather than left silent: (1) readDurableLedger is a full O(n) decision scan per command — correct but not scalable past preview volumes; (2) aggregateIdFor derives `${projectId}-provider` and `-policy`, so a project literally named \"X-provider\" would collide with project X's probe stream.\n\nCOMMIT 4fc116c, explicit per-file pathspec, 10 files, 1670 insertions, all under apps/daemon/src/{bootstrap,goals,planning}/. `git status --porcelain` was checked first and the index was clean beforehand and after; nothing foreign staged, nothing unstaged. `git show --name-only` filtered against the owned-path prefix returns empty. No debug, probe, scratch or generated evidence file. Mutation backups live OUT of tree in %TEMP%.\n\nSTEP-1 AMENDMENT FILES WERE NOT COMMITTED HERE, and could not be: apps/daemon/package.json and pnpm-lock.yaml were already swept into 34a3d11 (task-f837ce45's message) by the completion hook that qa-cbad3a29 flagged in #governors. Verified at HEAD — the daemon manifest carries @moe/core and @moe/store and the lock carries both importer links. Both files are clean in my working tree, so there was nothing of mine left to stage. Attribution is wrong in history but the content is correct and present; per epic rail 3 I did not rewrite, revert or reset anything to correct it.\n\nGate re-run fresh from repo root in the foreground AFTER both fixes: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test -> exit 0, \"Test Files 5 passed (5) / Tests 74 passed (74)\". Largest production file 267 lines (bootstrap-ledger.ts); all 12 files well under the 400 cap by wc -l.",
+      "startedAt": "2026-08-08T21:16:25.463Z",
+      "completedAt": "2026-08-08T21:18:36.649Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-964ae3f0",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,12 +226,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.266Z",
-  "updatedAt": "2026-08-08T21:01:51.686Z",
+  "updatedAt": "2026-08-08T21:20:04.079Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:19:12.207Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 3
+    "executedStepCount": 11
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -182,7 +240,15 @@
   "stepsCompleted": [
     "step-2",
     "step-3",
-    "step-1"
+    "step-1",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:22:09.951Z",
@@ -211,5 +277,28 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-08T21:20:04.079Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n\n Test Files  5 passed (5)\n      Tests  74 passed (74)\n   Start at  00:18:40\n   Duration  1.05s (transform 1.92s, setup 0ms, import 2.43s, tests 728ms, environment 0ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-08T21:20:04.079Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "pnpm-lock.yaml",
+    "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+    "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+    "apps/daemon/src/bootstrap/bootstrap-services.ts",
+    "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/goals/goal-services.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/planning/planning-services.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
+  ]
 }

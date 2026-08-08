@@ -171,8 +171,8 @@
       "completedAt": "2026-08-08T20:57:00.609Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-cbad3a29",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,12 +191,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.683Z",
-  "updatedAt": "2026-08-08T20:59:04.215Z",
+  "updatedAt": "2026-08-08T21:06:16.307Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:09:52.155Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-08T21:06:16.307Z",
+    "wallClockMs": 3384152
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -271,5 +273,8 @@
     "packages/coordination/src/index.ts",
     "packages/coordination/src/coordination-integration.test.ts",
     "packages/coordination/src/coordination-entrypoint-smoke-worker.mjs"
-  ]
+  ],
+  "completedAt": "2026-08-08T21:06:16.307Z",
+  "reviewCompletedAt": "2026-08-08T21:06:16.307Z",
+  "reviewSummary": "APPROVED. Gate re-run by QA in foreground 3x: pnpm --filter @moe/coordination typecheck && test -> exit 0, 2 files, 40 tests. DoD1: every endpoint digests its exact request bytes for the authenticator, demands an exact coordinationCapability grant, carries fixed envelope+endpoint versions, bounds strings/depth/page/TTL, resolves BOTH sender and recipient via the registry, sequences from aggregateSequence. DoD2: DEDUPLICATED on identical resend, IDEMPOTENCY_CONFLICT on same-id/different-bytes, CURSOR_GAP, MAILBOX_FULL at N+1, EXPIRED surfaced as a sequence-bearing item not filtered, RECIPIENT_UNKNOWN, OUTCOME_UNKNOWN never claiming delivery, restart proven on a real file-backed SqliteEventStore. DoD3: TERMINAL_BINDING_INVALID at ADDRESS; advisoryOnly structurally pinned true; frozen service with exactly acknowledge/read/replay/send; CONTROL closed non-lifecycle. DoD4: exit 0. Rails: 10 production .ts all <=247 lines; 26 tracked files, no scratch artifacts; commits 2428083+bee5159 touched packages/coordination/** only. Rail 6 verified by 8 mutation drills on the production surface (auth-binding, terminal-binding, idempotency mapping, cursor-gap, advisoryOnly, sender-owns-identity, forbidden-field, expired-send) - each turned the suite RED; failure tests assert exact code AND refusing layer, sweeps assert positive case counts. Incident, repaired: the whole-tree completion hook for task-1e512b95 fired mid-drill, so c42b578 captured one mutated line in coordination-parts.ts (advisoryOnly pin disabled at HEAD; git status read clean because HEAD had moved). Fixed in a3c16f0 by pathspec checkout from 34a3d11 + pathspec-only commit; diff vs 34a3d11 over packages/coordination is blank = byte parity, no foreign work touched. Nits only: @moe/core declared but unimported; mailbox.lookup swallows a store throw so a RESPONSE can refuse REPLY_TARGET_MISSING at CORRELATION not STORE."
 }

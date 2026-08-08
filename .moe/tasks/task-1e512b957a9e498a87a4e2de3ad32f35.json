@@ -204,7 +204,7 @@
       "completedAt": "2026-08-08T20:56:50.893Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -224,12 +224,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.486Z",
-  "updatedAt": "2026-08-08T21:01:48.039Z",
+  "updatedAt": "2026-08-08T21:15:31.207Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:22:19.012Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-08T21:15:31.207Z",
+    "wallClockMs": 3192195
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -269,7 +271,8 @@
   },
   "planApprovedAt": "2026-08-08T20:24:30.620Z",
   "contextFetchedBy": [
-    "worker-f8533806"
+    "worker-f8533806",
+    "qa-cbad3a29"
   ],
   "workStartedAt": "2026-08-08T20:27:58.708Z",
   "reviewStartedAt": "2026-08-08T21:01:48.039Z",
@@ -291,5 +294,8 @@
     "packages/runner/src/evidence/receipt-obligations.ts",
     "packages/runner/src/evidence/verifier-execution.ts",
     "packages/runner/src/evidence/evidence-pipeline.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T21:15:31.207Z",
+  "reviewCompletedAt": "2026-08-08T21:15:31.207Z",
+  "reviewSummary": "APPROVED. QA re-ran the gate: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> EXIT 0, 20 suites / 720 tests (twice). DoD1: enforced by SHAPE (no prose-carrying param; AGENT_REPORT carries only reportedBy+reportSha256), backstop at one source, receipt-obligations.ts:49, before field inspection; tests assert the code AND layer===\"OBLIGATION\". DoD2: receiptDigestInput covers all 10 DoD fields, asserted by SET EQUALITY vs hand-written DOD_BOUND_FIELDS (.length===10); the per-field digest-change sweep runs off that same list with covered.length asserted equal and >0, so it cannot silently generate zero cases. DoD3: FOREIGN vs UNDECLARED are distinct codes with distinct fixtures; refMatches is the production surface; manifest tamper, recipe-digest mismatch, tree divergence, CANDIDATE_NOT_EMPTY clean-start all covered; a refusal removes every byte it wrote. DoD4: exit 0. INDEPENDENT 6-MUTATION DRILL BY QA, ALL KILLED, each by the test naming that guard's code: argv divergence, UNKNOWN truth class, agent-text refusal, foreign+undeclared, refMatches, argv index-vs-iterator smuggling bind. Each neutralised an operand with a constant, never deleted a line; backed up out-of-tree, restore verified with git hash-object vs HEAD blobs — evidence/ byte-identical to HEAD, status clean. RAILS: per-FILE cap fine (production 141-248 lines); fence swept — zero child_process/spawn/kill/Date.now/Math.random/node:fs, only node:path; no .js bridges, no scratch files; 32/33 codes asserted by name. COMMIT: worker's 1be8e2c is 9 files all under evidence/, explicit pathspec, compliant; 8 were earlier swept into 42f1c21 and c42b578 carries this task's message with only foreign supervisor files — the known completion-hook whole-tree sweep, not this worker's violation. SEAM, not a rejection: disposition/exitCode are validated but not digest-bound, so FAILED and COMPLETED runs with identical outputs share a receipt digest."
 }

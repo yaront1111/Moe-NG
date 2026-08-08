@@ -1,3 +1,4 @@
+import { validateActivationCommit } from "./effect-grant.js";
 import type { EffectState } from "./effect-kernel.js";
 import { isTerminalEffectState } from "./effect-kernel.js";
 import type { LaunchLockObservedState, LaunchLockRegistration } from "./launch-lock.js";
@@ -19,8 +20,8 @@ import {
  * A failing schedule that cannot be replayed is not a bug report, and a harness
  * whose coverage moves between runs cannot support a set-equality assertion.
  */
-export const RACE_SEEDS = Object.freeze([3, 11, 29, 61, 127] as const);
-export const RACE_STEPS = 240;
+export const RACE_SEEDS = Object.freeze([3, 11, 29, 61, 127, 257, 521, 1031] as const);
+export const RACE_STEPS = 400;
 
 /**
  * 70 honest / 30 tampered, matching the lease-presence core. Tilting honest is
@@ -34,16 +35,24 @@ export const COMMITTED_ACTIVATION_PAIR = "ARMED->ACTIVE|LAUNCH_REQUESTED->RUNNIN
 const OBSERVED_LOCK_STATES: readonly LaunchLockObservedState[] = ["HELD", "RELEASED", "UNKNOWN"];
 const OBSERVED_REGISTRATIONS: readonly (LaunchLockRegistration | null)[] = [REGISTRATION, null];
 
+/**
+ * splitmix32, NOT xorshift32.
+ *
+ * Every decision here is a `value % n` for a small n, and each step draws three
+ * of them in a row. xorshift32 is linear, so its low bits stay linearly related
+ * across successive draws: the first build of this harness used it and a
+ * sixteen-arm tamper table never reached three of its arms, while two more were
+ * hit once each in 1200 steps. splitmix32 is a mixed counter with full
+ * avalanche, so `% 16` two draws after `% 10` is not a function of it.
+ */
 export function seeded(seed: number): () => number {
   let state = seed | 0;
-  if (state === 0) {
-    throw new Error("an xorshift seed of 0 is a fixed point and would emit one value forever");
-  }
   return () => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return state >>> 0;
+    state = (state + 0x9e3779b9) | 0;
+    let z = state;
+    z = Math.imul(z ^ (z >>> 16), 0x21f0aaad);
+    z = Math.imul(z ^ (z >>> 15), 0x735a2d97);
+    return (z ^ (z >>> 15)) >>> 0;
   };
 }
 
@@ -112,22 +121,26 @@ export function createRecorder(declared?: readonly string[]): OutcomeRecorder {
  */
 export function checkGrantOrdering(events: readonly RaceEvent[]): readonly string[] {
   const violations: string[] = [];
-  const issued = new Map<string, RaceEvent>();
+  // Two passes on purpose. A single pass would only ever compare a launch to the
+  // issuances that happen to appear EARLIER IN THE ARRAY, which makes the check
+  // an assertion about the log's sort order rather than about the schedule. The
+  // property under test is the step index, so every issuance is collected first.
+  const issuedAt = new Map<string, number>();
   for (const event of events) {
-    if (event.kind === "GRANT_ISSUED") {
-      if (event.pair !== COMMITTED_ACTIVATION_PAIR) {
-        violations.push(`step ${event.index}: grant issued by an uncommitted pair ${event.pair}`);
-      }
-      if (!issued.has(event.grantId)) issued.set(event.grantId, event);
-      continue;
+    if (event.kind !== "GRANT_ISSUED") continue;
+    if (event.pair !== COMMITTED_ACTIVATION_PAIR) {
+      violations.push(`step ${event.index}: grant issued by an uncommitted pair ${event.pair}`);
     }
-    const source = issued.get(event.grantId);
-    if (source === undefined) {
-      violations.push(`step ${event.index}: launch precedes any activation of ${event.grantId}`);
-      continue;
-    }
-    if (source.index > event.index) {
-      violations.push(`step ${event.index}: launch precedes its activation at ${source.index}`);
+    const earliest = issuedAt.get(event.grantId);
+    if (earliest === undefined || event.index < earliest) issuedAt.set(event.grantId, event.index);
+  }
+  for (const event of events) {
+    if (event.kind !== "LAUNCH") continue;
+    const at = issuedAt.get(event.grantId);
+    if (at === undefined) {
+      violations.push(`step ${event.index}: launch of ${event.grantId} that no activation minted`);
+    } else if (at > event.index) {
+      violations.push(`step ${event.index}: launch precedes its activation at step ${at}`);
     }
   }
   return violations;
@@ -153,13 +166,39 @@ function resample(world: World, pool: readonly World[], next: () => number): Wor
   return current;
 }
 
+/**
+ * A pool member may already hold a grant minted before step 0 — the wrapper that
+ * restarts mid-flight is exactly that state. Its provenance is recorded only
+ * when the PRODUCTION commit checker agrees the three records are a whole
+ * commit; an incoherent one is left unrecorded so a launch off it still fails
+ * the ordering invariant.
+ */
+function primeEvents(pool: readonly World[]): RaceEvent[] {
+  const events: RaceEvent[] = [];
+  const seen = new Set<string>();
+  for (const world of pool) {
+    if (world.grant === null || seen.has(world.grant.grantId)) continue;
+    if (validateActivationCommit(world.intent, world.attempt, world.grant).kind !== "COHERENT") {
+      continue;
+    }
+    seen.add(world.grant.grantId);
+    events.push({
+      index: -1,
+      kind: "GRANT_ISSUED",
+      grantId: world.grant.grantId,
+      pair: COMMITTED_ACTIVATION_PAIR,
+    });
+  }
+  return events;
+}
+
 export function runTrace(seed: number, steps: number): Trace {
   const pool = statePool();
   const next = seeded(seed);
   let world = pool[next() % pool.length];
   if (world === undefined) throw new Error("the asserted-good state pool is empty");
   const records: StepRecord[] = [];
-  const events: RaceEvent[] = [];
+  const events: RaceEvent[] = primeEvents(pool);
   for (let index = 0; index < steps; index += 1) {
     const command = RACE_COMMANDS[next() % RACE_COMMANDS.length] ?? "claim";
     const honest = next() % 10 < HONEST_IN_TEN;
