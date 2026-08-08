@@ -74,7 +74,7 @@
     {
       "stepId": "step-4",
       "description": "TDD red then green — the per-kind detail surfaces (each <=250) + approval-details.test.tsx. approval-detail-plan.tsx (§4.7): objective, write scope, oracle + recipe-valid check, numbered steps (scrollable; scope/oracle header pinned), abbreviated revision hash, risk tier, idle line, [Approve plan]/[Reject plan…] via cr.action.approval-decide.*; PLUS the §8.4 DELTA-REAPPROVAL variant as a MODE of this surface: invalidation banner ('Your approval of {old} was invalidated by {new} — reviewing only the delta'), both revision hashes named, unchanged nodes collapsed by default under cr.approvals.delta.unchanged (CR-J4-001), INVALIDATED records struck-through + cr.banner.invalidated; §8.11 reject modal with the reopen-bound counter on decline. approval-detail-expansion.tsx (§4.8): subgraph preview, daemon-checked precondition rows cr.approvals.precondition.{scopes|oracles|budget|width} with REAL path sets, budget reservation figure, width/depth vs caps, 'Invalidates:' line, supersedes-hash header — approve control routed via cr.action.graph-approve (NOT approval-decide; spec 307-325, the §13-D1 kind-routing note documented as provisional). approval-detail-acceptance.tsx (§4.9): diff base->head SHAs + file count + in-scope claim, receipt (recipe, exit, time, digest), reviewer identity + distinct-principal check + findings count, [Accept work]/[Decline acceptance…] BOTH via approval.decide; decline carries the §8.11 modal. approval-detail-confirmation.tsx: revocation confirmation + CUTOVER_QUIESCE + CUTOVER_ACTIVATE as three kinds sharing the §9 destructive-modal pattern + step-up display (stepUpAuthRef) + the design-1007 consequence-payload frame — CUTOVER IS DESIGN-DERIVED PROVISIONAL UI (spec has ZERO cutover text: no testids claimed, module header documents the ⟨TD⟩ status; fields from design 1007 verbatim: exact stored hash, disposition, funding reservation, planning-fence membership/deadline, release action, consequence payload); split cutover into its own file via amendment if 250 breaks (then merge two test files to hold the 10-file budget). approval-details.test.tsx: per-kind field-list assertions (every DoD-1 fact: subject hash, scope, risk, budget, policy, delta, consequences — each rendered through kernel Fact/TruthChip with cr.chip.* descendants), narrow-window rule (spec 431: preconditions above previews, decision buttons pinned), keyboard reachability, R3/cutover step-up display, SYSTEM_POLICY records never render human-approved truth.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/approvals/approval-detail-plan.tsx",
         "apps/control-room/src/approvals/approval-detail-expansion.tsx",
@@ -88,21 +88,39 @@
         "apps/control-room/src/approvals/approval-detail-acceptance.tsx",
         "apps/control-room/src/approvals/approval-detail-confirmation.tsx",
         "apps/control-room/src/approvals/approval-details.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-detail-plan.tsx",
+        "apps/control-room/src/approvals/approval-detail-expansion.tsx",
+        "apps/control-room/src/approvals/approval-detail-acceptance.tsx",
+        "apps/control-room/src/approvals/approval-detail-confirmation.tsx",
+        "apps/control-room/src/approvals/approval-details.test.tsx",
+        "apps/control-room/src/approvals/approval-inbox.tsx"
+      ],
+      "note": "All four detail surfaces landed. `pnpm --filter @moe/control-room typecheck` exit 0; `test` exit 0, Test Files 11 passed (11) | Tests 155 passed (155).\n\napproval-detail-plan.tsx (245) — §4.7 plus the shared frame the other three import one-directionally (no cycle): DecisionHeader (title with abbreviated hash, full hash in the h2 title attribute, and the DoD-1 identity facts risk / exact revision hash / approved scope / budget / policy / step-up, table-driven so no kind can silently drop one), IdleLine, ReasonModal, DecisionActions, abbreviateHash. Plan body: objective, write scope, oracle, recipe-valid, scrollable numbered steps, §8.10 idle line, [Approve plan] / [Reject plan…] on cr.action.approval-decide.approve/.reject. §8.4 DELTA MODE of the same surface: cr.banner.invalidated as a polite live region carrying the exact sentence with the superseded hash struck through (line-through asserted), cr.approvals.delta.unchanged collapsed by default (\"3 steps unchanged — expand\", aria-expanded false), and the under-button \"Approving revision X (this supersedes your approval of Y).\" line. Outside delta mode neither device renders (asserted).\n\napproval-detail-expansion.tsx (121) — §4.8. Approve routes cr.action.graph-approve and reject routes the ratified expansion.decline; the test asserts cr.action.approval-decide.approve is ABSENT here, so the routing distinction is pinned rather than described. Four cr.approvals.precondition.{scopes|oracles|budget|width} rows with real path sets, \"Invalidates:\" line, §8.11 reject body verbatim. Preconditions render above the preview and the actions container is last and data-pinned — one DOM order satisfies §4.16's narrow rule, asserted by comparing the actual test-id order.\n\napproval-detail-acceptance.tsx (130) — §4.9. Diff base/head/file-count/in-scope, receipt recipe/exit/time/digest, reviewer + distinct-principal + findings, each a separately classed fact. Accept and decline both via approval.decide (.accept/.decline); the decline modal body carries the reopen bound \"(1 of 3)\".\n\napproval-detail-confirmation.tsx (128) — revocation confirmation + both cutover gates under one §9 destructive pattern. CUTOVER IS EXPLICITLY PROVISIONAL: module header records that the control-room spec has zero cutover text, the surface claims no spec-declared component IDs (only cr.fact.* wrappers, which bar 3 requires anyway), and it renders CUTOVER_PROVISIONAL_NOTE visibly. Design-1007 consequence frame rendered field-for-field (stored hash, disposition, funding reservation, planning-fence membership, deadline, release action, consequence payload). Command routing is SUPPLIED by the caller, not guessed, because decision-kind routing is unratified (§13-D1). Cutover shows NO idle line (§8.10 defines none — inventing one would fabricate a consequence claim) while revocation confirmation shows its §8.10 line; both directions asserted. A confirmation never decides from the button: activation only opens the modal, and the test asserts onDecide was not called at that point.\n\n§9 MODAL COMPLIANCE ASSERTED, not just implemented: role=dialog, concrete \"Scope of effect:\" line, \"This records event {event} with your identity.\", required reason (confirm button disabled until non-empty, and onDecide not called), destructive verb repeated on confirm (\"Reject plan\", \"Reject expansion\", \"Decline acceptance\", \"Activate cutover\" — never \"OK\"), Escape closes without deciding.\n\nDoD-2 ON THE SURFACES TOO: an INVALIDATED record renders the approve control disabled with data-reason-code REVISION_REBOUND / data-refused-by RECORD_VALIDITY, and an already-decided SYSTEM_POLICY record renders ILLEGAL_TRANSITION / RECORD_LIFECYCLE. Bar 3 (chips === facts, and every fact contains a chip) is asserted on every surface. A policy-decided record renders daemon-verified chips and never a human_approved chip.\n\nREUSE, NOT DUPLICATION: the inbox's control renderer was generalized and exported as DecisionControl (onActivate fires only for an ENABLED control with a real commandId), so all five surfaces render controls through one component and no surface can hand-roll an action.\n\nSIZE DISCIPLINE (per-file rail): first pass had approval-detail-plan.tsx at 257 and approval-details.test.tsx at 411. Compressed DecisionHeader into a table-driven fact list (245) and tightened the test file to 398. Final: every production module <=250 (245/249/229/250/130/128/121), every test file <400 (398/253/208). Ten owned files exactly — no amendment needed. approval-j1.tsx untouched at 49.",
+      "startedAt": "2026-08-08T08:51:13.337Z",
+      "completedAt": "2026-08-08T08:51:34.866Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l apps/control-room/src/approvals/*.ts apps/control-room/src/approvals/*.tsx` — every file <=250 (per-file rail); approval-j1.tsx UNTOUCHED (`git diff --stat -- apps/control-room/src/approvals/approval-j1.tsx` empty). (2) Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> exit 0 (Task B's j1-flow + gating tests must stay green alongside) — complete_task evidence verbatim. (3) Root gate `pnpm typecheck && pnpm test` (scheduler boundary scans the new .tsx contents — no scheduler path literals in fixture strings) with by-path attribution. (4) MUTATION RED-CHECKS: validity guard off -> stale-submit test red; hash-match off -> mismatch red; reason-channel bypass (disabled without a fixture reason) -> absent-control test red; auto-group rendered under default-off fixture -> manual-default test red. (5) Red-team: forge an affordance for a kind the record's validity forbids -> refused with the exact guard code; attempt a decide control not derived from nextAllowedCommands -> impossible by construction (grep for any hardcoded action rendering); SYSTEM_POLICY + HUMAN_APPROVED truth combination -> fixture validation refuses; cutover module claims no spec testids (grep its testids against the spec's list — provisional-marked only). (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- apps/control-room/src/approvals/approval-fixtures.ts apps/control-room/src/approvals/approval-gating.ts apps/control-room/src/approvals/approval-gating.test.tsx apps/control-room/src/approvals/approval-inbox.tsx apps/control-room/src/approvals/approval-inbox.test.tsx apps/control-room/src/approvals/approval-detail-plan.tsx apps/control-room/src/approvals/approval-detail-expansion.tsx apps/control-room/src/approvals/approval-detail-acceptance.tsx apps/control-room/src/approvals/approval-detail-confirmation.tsx apps/control-room/src/approvals/approval-details.test.tsx`; `git show --stat` lists exactly these 10 paths (plus amendment-recorded splits).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/approvals/approval-gating.ts",
         "apps/control-room/src/approvals/approval-inbox.tsx",
         "apps/control-room/src/approvals/approval-detail-confirmation.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-detail-plan.tsx",
+        "apps/control-room/src/approvals/approval-detail-expansion.tsx"
+      ],
+      "note": "(1) SIZES: production modules 250/249/246/229/130/128/121 — all <=250. Test files 398/253/208 — all under the 400 split bar. approval-j1.tsx UNTOUCHED: it is Task B's file, authored in its commit ad4419f, never in any commit or working-tree change of mine.\n\n(2) FOCUSED GATE, fresh: `pnpm --filter @moe/control-room typecheck` exit 0; `pnpm --filter @moe/control-room test` exit 0, Test Files 11 passed (11) | Tests 155 passed (155) — Task B's j1-flow and gating-keyboard suites green alongside mine.\n\n(3) ROOT GATE FAILS ON FOREIGN WORK ONLY. `pnpm typecheck` -> packages/scheduler src/budget/budget-settlement.test.ts(6,81) TS2307 \"Cannot find module './budget-settlement.js'\"; `pnpm test` -> same file, 1 failed | 122 passed (123 files), 1756 tests passed. Attribution proven, not assumed: that test file is UNTRACKED (git status shows `?? packages/scheduler/src/budget/budget-settlement.test.ts`) and no budget-settlement.ts exists on disk — a sibling worker's in-flight TDD red. The root gate output contains ZERO references to apps/control-room. No scheduler path literals appear anywhere in my sources (grep for packages/scheduler and @moe/scheduler across src/approvals = 0 hits), so the boundary scan has nothing of mine to trip on.\n\n(4) MUTATION RED-CHECKS — all four killed exactly the intended tests, each reverted and re-verified:\n - validity guard removed -> 6 red: \"refuses an invalidated record…\", \"refuses a superseded record…\", \"pins guard order…\", \"never enables a control for a non-current record across every kind\", \"refuses a stale escalation choice with its guard's reason code\", \"refuses to submit a plan whose approval the daemon already invalidated\".\n - hash match removed -> 1 red: \"refuses when the record's exact hash is not the identity the command pins\".\n - reason channel bypassed (disable with a guessed reason instead of ABSENT) -> 1 red: \"omits the control entirely when the daemon returned neither command nor reason\".\n - auto group rendered under the default-off fixture -> 1 red: \"shows nothing at all for a manual-default project\".\n`grep -rn MUTATION-PROBE apps/control-room/src/` returns nothing; full suite re-run green after restore.\n\n(5) RED-TEAM:\n - Forged affordance for a record whose validity forbids it: refused with the exact guard code — this is the 9-kinds x 2-stale-validities sweep, which also asserts swept === 18 so an empty sweep cannot pass silently.\n - Decide control not derived from nextAllowedCommands: impossible by construction. `grep 'data-testid=\"cr.action' src/approvals/*.tsx` (production) = ZERO hits; every action id comes from ApprovalControl.testId, produced only by resolveApprovalControls, and DecisionControl fires onActivate only when state === ENABLED and commandId !== null.\n - SYSTEM_POLICY + HUMAN_APPROVED: fixture construction throws (asserted), so the combination cannot reach a surface; the detail test also asserts no cr.chip.human_approved renders for a policy-decided record.\n - Cutover claims no spec test IDs: `grep data-testid approval-detail-confirmation.tsx` = ZERO literal ids; it renders only cr.fact.* wrappers (required by bar 3) and inherits the generic frame ids, plus a visible provisional note.\n\nADVERSARIAL SELF-REVIEW — one real defect found and FIXED: plan steps and expansion children were keyed by their own text, so two legitimately identical strings would collide as React keys. Both now keyed by position. Considered and judged not-a-bug: no concurrency surface (pure presentation, no shared mutable state, no IO, no handles to close); empty approvedNodeScope renders as UNKNOWN with an UNKNOWN chip rather than a blank confident claim; an empty exactRevisionHash fails the hash guard closed; `commandId as string` casts are only reachable from an activated ENABLED control. Three limits recorded rather than silently shipped: double-activating an enabled control fires onDecide twice (the daemon owns idempotency; no supplied fact says \"in flight\"), plan/acceptance branch on testId suffix so a qualifier rename would reroute silently, and the 'a' approvals shortcut belongs to the shell frame, not this surface.\n\n(6) NO SCRATCH FILES. Committed explicit owned paths only (no add -A, no push, no reset): commit 46ef880 with exactly 6 paths — approval-detail-{plan,expansion,acceptance,confirmation}.tsx, approval-details.test.tsx, approval-inbox.tsx.\n\nATTRIBUTION WARNING FOR QA: the other 4 owned files (approval-fixtures.ts, approval-gating.ts, approval-gating.test.tsx, approval-inbox.test.tsx) were swept into Task B's session-end auto-commit c1f599e before I could commit them — the known mem:gotcha-session-end-commit-sweeps-foreign-work failure mode, reconfirmed here. Content is intact and current; reviewing only \"this task's commit\" will show 6 of the 10 owned files. `git status --porcelain -- apps/control-room/src/approvals/` is now empty.\n\nMemories written: task-task-fddc6a201a5344a1bd596e76b9e110b0-handoff (rewritten from BLOCKED to COMPLETE) and gotcha-pol-chip-is-not-a-tru",
+      "startedAt": "2026-08-08T08:51:37.758Z",
+      "completedAt": "2026-08-08T08:55:57.785Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40cb4878",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,12 +132,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.321Z",
-  "updatedAt": "2026-08-08T08:43:41.868Z",
+  "updatedAt": "2026-08-08T09:00:00.349Z",
   "contextFetchedBy": [
     "architect-d89636d1",
     "worker-40cb4878",
     "governor-95f824a1",
-    "governor-afcd0846"
+    "governor-afcd0846",
+    "qa-6fd67108"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -127,7 +146,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:52:24.028Z",
@@ -135,7 +156,9 @@
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 10,
     "firstClaimAt": "2026-08-08T08:24:13.255Z",
-    "executedStepCount": 3
+    "executedStepCount": 5,
+    "doneAt": "2026-08-08T09:00:00.349Z",
+    "wallClockMs": 2147094
   },
   "planningNotes": {
     "approachesConsidered": "Verified by a targeted spec agent before planning; key rulings folded: (1) CUTOVER surfaces have ZERO spec basis (grep = 0 hits) — rendered as design-derived PROVISIONAL UI from design 1007's exact field list under the §9 destructive-modal + step-up pattern, never claiming spec testids; (2) the DoD's 'reason-coded disabled states' vs spec 588-590's no-guessed-text rule resolves via an approvals-LOCAL DEVELOPMENT_ONLY reason channel (the landed shared fixtures.ts has NO reason channel — Task B's notes misdescribe it) reusing RATIFIED RuntimeErrorCode spellings with APPROVAL/CUTOVER sources + mirrored CARRY_FORWARD_* codes, provisional pending §13-D2; (3) escalation + reconciliation are INBOX ITEMS with §8.10 idle lines and affordance-only choices (spec 121/123/537/CR-J4-002) — full detail surfaces would be unspecified UI; soft-policy waiver stays a fixture union member only; (4) delta-reapproval is a MODE of the plan detail (§8.4 banner + cr.approvals.delta.unchanged), not a separate surface; (5) expansion approval routes via cr.action.graph-approve, not approval-decide (§4.8; §13-D1 routing note documented provisional); (6) manual-default/audited-automation = the two spec devices exactly (collapsed cr.approvals.auto group + POL chip records, EMPTY under the default-off fixture) — an invented per-kind badge would be unspecified; (7) sibling coordination: extend BESIDE approval-j1.tsx (never touch it), gate on its commit, keep j1-flow green.",
@@ -159,5 +182,27 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-08T08:56:40.991Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  11 passed (11)\n      Tests  155 passed (155)\n   Start at  11:54:54\n   Duration  2.97s (transform 1.30s, setup 0ms, import 2.82s, tests 4.78s, environment 8.52s)\n\ntest exit=0",
+    "reportedAt": "2026-08-08T08:56:40.991Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/approvals/approval-fixtures.ts",
+    "apps/control-room/src/approvals/approval-gating.ts",
+    "apps/control-room/src/approvals/approval-gating.test.tsx",
+    "apps/control-room/src/approvals/approval-inbox.tsx",
+    "apps/control-room/src/approvals/approval-inbox.test.tsx",
+    "apps/control-room/src/approvals/approval-detail-plan.tsx",
+    "apps/control-room/src/approvals/approval-detail-expansion.tsx",
+    "apps/control-room/src/approvals/approval-detail-acceptance.tsx",
+    "apps/control-room/src/approvals/approval-detail-confirmation.tsx",
+    "apps/control-room/src/approvals/approval-details.test.tsx"
+  ],
+  "completedAt": "2026-08-08T09:00:00.349Z",
+  "reviewCompletedAt": "2026-08-08T09:00:00.349Z",
+  "reviewSummary": "APPROVED. Read the gating core + surfaces; independently mutation-verified.\n\nGATE re-run by me: `pnpm --filter @moe/control-room test` -> exit 0, 11 files/155 tests, matching task.verification.\n\nMUTATIONS I RAN MYSELF (epic rail requires it; did not take the worker's word): (a) deleted the validity guard from approval-gating.ts -> exactly the 6 claimed tests red across all 3 test files. (b) deleted the hash-match branch -> exactly 1 red, \"refuses when the record's exact hash is not the identity the command pins\". Restored, hash-object back to da0a8e29 both times, tree clean. Failure-path tests are load-bearing.\n\nDoD1 PASS: HEADER_FACTS (approval-detail-plan.tsx:50-57) is table-driven, so risk / exact hash / scope / budget / policy / step-up render on every kind and none can be silently dropped. Delta = plan delta mode; consequences = idle lines + design-1007 cutover frame.\nDoD2 PASS: guard chain approval-gating.ts:168-189, fixed order, fail-closed on an unpinned hash. Every refusing path returns commandId null, so a surface cannot submit a stale approval even ignoring state. Hardcoded cr.action ids in production = ZERO.\nDoD3 PASS: auto group renders only when supplied, manual-default is absence, both asserted. POL badge asserted OUTSIDE cr.fact.* (inbox.test:202-206) so the one-chip-per-fact audit still counts truth chips exactly.\nDoD4 PASS: gate exit 0.\n\nTESTS per epic rail: 24 reasonCode/refusedBy assertions; the 9-kinds sweep asserts swept === 9*2 AND > 0, so an empty sweep cannot pass.\n\nRAILS: production 250/249/246/229/130/128/121 all <=250; tests 398/253/208 under 400. No scheduler literals. Tripwires green. Commit 46ef880 = exactly 6 owned paths, zero foreign. approval-j1.tsx untouched.\n\nROOT RED, FOREIGN: untracked budget-settlement.test.ts and store/outbox-relay/. Zero apps/control-room references.\n\nCUTOVER honestly provisional: zero spec test IDs, visible note, no invented idle line, command kind supplied not guessed."
 }

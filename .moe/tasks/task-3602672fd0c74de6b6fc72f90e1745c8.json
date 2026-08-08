@@ -20,38 +20,54 @@
     {
       "stepId": "step-1",
       "description": "RECON (read-only, no edits). Read design D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md lines 585-670 (11.1-11.4, especially the closed quarantine transition set at 655-664 and the conservation equation at 610-613) and lines 1035-1041 (recovery matrix: budget.reconcile row and budget.conservative_settle row — the latter REQUIRES human acknowledgement plus bound classification). Read the four landed siblings in packages/scheduler/src/budget/: budget-contract.ts, budget-account.ts, budget-reservation.ts, budget-measurement.ts. Confirm before writing code: RESERVATION_STATES is the closed union RESERVED|ACTIVATED|CANCELLED (no SETTLED — settlement must mint its own record); deriveReservationId IS exported from budget-reservation but totalPerMeter/shiftView/deepFreeze/isCount/isRef/firstOf/readRecord are NOT exported anywhere (each sibling re-clones them privately; this module must clone its own, ~35-45 lines); NormalizedMeasurement is {measurement, pricebookBinding, truncated, identity} with measurement carrying providerRunRef/sequence/coverage/quantity(null iff UNKNOWN)/meter; MAX_BUDGET_VERSION exported from budget-account; BUDGET_ACCOUNT_STATES = OPEN|SETTLING|CLOSED|CLOSED_WITH_UNKNOWN_LIABILITY|OVERDRAWN; BudgetAvailableView = {accountId,state,version,meters} of BudgetMeterBuckets {meter,available,reserved,quarantined,committed}. Predecessor files are read-only for this task. Note: package-boundary.test.ts skips the whole packages/scheduler subtree, so no literal-scan concern applies to the new files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RECON done, read-only. Verified against source, not assumed: RESERVATION_STATES = RESERVED|ACTIVATED|CANCELLED (closed frozen, no SETTLED) budget-reservation.ts:38; deriveReservationId IS exported (:127); totalPerMeter/shiftView/deepFreeze/isCount/isRef/firstOf/readRecord are all module-private in every sibling (no export keyword) so this module must re-clone them; BudgetAvailableView={accountId,state,version,meters} (:56); MAX_BUDGET_VERSION exported budget-account.ts:50; BUDGET_ACCOUNT_STATES=OPEN|SETTLING|CLOSED|CLOSED_WITH_UNKNOWN_LIABILITY|OVERDRAWN budget-contract.ts:33; BudgetMeterBuckets={meter,available,reserved,quarantined,committed} (:66); NormalizedMeasurement={measurement,pricebookBinding,truncated,identity} budget-measurement.ts:52 with measurement.quantity null iff coverage UNKNOWN (contract biconditional :220). runtime-shape exports isPlainRecord/isPlainArray/readOwnDataProperty/hasOnlyOwnStringKeys (+3 array readers); isPlainRecord rejects proxies and any non-Object.prototype prototype, so Object.create() hostile input refuses. Bridge convention verified byte-exact: `export * from \"./budget-reservation.ts\";` one line. Design read: 585-670 (conservation equation 610-613, closed quarantine exits 655-664, \"No account closes with RESERVED or QUARANTINED units\") and recovery matrix 1038-1039 (budget.conservative_settle REQUIRES human acknowledgement plus bound classification). Toolchain: no eslint in repo; gates are tsc (strict + noUncheckedIndexedAccess + verbatimModuleSyntax + exactOptionalPropertyTypes) and vitest only. Sibling sizes at HEAD: 250/250/250/249 TS + 1-line bridges, so the 250 cap has zero margin. New refinement to plan: the reconcile receipt quantity is the TOTAL measured use for a meter, so the committed delta is qty - alreadyCommitted; that unifies settle (credited=0) and reconcile into one per-meter disposition function and is also exactly what makes MEASUREMENT_CONFLICT (qty below the committed lower bound) expressible.",
+      "startedAt": "2026-08-08T08:44:40.342Z",
+      "completedAt": "2026-08-08T08:47:40.933Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, part A — create packages/scheduler/src/budget/budget-settlement.test.ts with builders and acceptance-path specs (budget ~125 lines; WHOLE FILE must end <=250 physical lines, so keep builders dense). Builders: mkView(meters overrides), mkActivated(reservation in state ACTIVATED with attemptRef 'run-1', lines built via reserveForAdmission conventions or hand literals), mkMeasurement(coverage, quantity, sequence, providerRunRef default 'run-1', meter) wrapping a valid NormalizedMeasurement literal (64-hex rawReceiptDigest). expectConserved(before, after, overrunTotal) pins the DESIGN EQUATION (610-613): for each meter, after.available+after.reserved+after.quarantined+after.committed === before sum + overrun for that meter — measured excess above the hold ENTERS COMMITTED and is ALSO recorded as explicit overrun, which is what balances the equation. Acceptance specs: (1) exact settle: COMPLETE qty < hold commits qty RESERVED->COMMITTED, refunds remainder RESERVED->AVAILABLE, settlement.state SETTLED, disposition EXACT, view.version+1; (2) duplicate-safe: replay with prior=first settlement and byte-identical inputs returns the PRIOR record BY REFERENCE (toBe) and moves nothing; (3) overrun: COMPLETE qty > hold commits FULL measured qty into COMMITTED (hold from RESERVED + excess minted against explicit overrun), overrun array carries exactly the excess, view.state OVERDRAWN, NO bucket negative, an untouched sibling meter's buckets byte-equal before/after (no sibling funding); (4) PARTIAL commits lower bound, quarantines remainder RESERVED->QUARANTINED, state QUARANTINED, disposition LOWER_BOUND; (5) UNKNOWN coverage (and separately: a reserved meter with NO measurement) quarantines the whole hold, commits ZERO units with disposition UNKNOWN_HELD — assert no COMMITTED movement happened, never a zero-committed EXACT; (6) reconcile receipt path: quarantined settlement + later COMPLETE receipt with sequence advancing past the stored line sequence commits exact from QUARANTINED, refunds proven remainder QUARANTINED->AVAILABLE, state SETTLED; (7) reconcile never-started path: neverStartedProofRef refunds every quarantined unit QUARANTINED->AVAILABLE while a pre-existing committed attempt.count bucket amount on the view stays byte-identical (assert the committed field unchanged); (8) conservativeSettle with acknowledgementRef + enforceableUpperBound:true commits ALL quarantined units as disposition CONSERVATIVE_WRITE_OFF, refunds nothing, state WRITTEN_OFF, unknownExternalLiability false; (9) same with enforceableUpperBound:false additionally sets persistent unknownExternalLiability:true; (10) closeSettledView on a drained OPEN view (all meters available=0,reserved=0,quarantined=0; committed may be >0) with settlements carrying no liability yields state CLOSED; with any supplied settlement carrying unknownExternalLiability:true yields CLOSED_WITH_UNKNOWN_LIABILITY — never plain CLOSED (DoD 4).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-settlement.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.test.ts"
+      ],
+      "note": "TDD RED part A landed: budget-settlement.test.ts at 158 physical lines (92 left under the 250 cap for the part-B matrix + meta tests). Suite is RED as required — \"Test Files 1 failed (1) / Tests no tests\", the import of ./budget-settlement.js does not resolve yet. Builders: mkView (MS holds 90 of 100; AT is a sibling meter carrying 1 already-committed attempt.count so DoD-3 can assert it stays byte-identical), mkActivated (ACTIVATED, attemptRef run-1, MS-only lines summing 90), mkMeasurement (valid NormalizedMeasurement literal, 64-hex digest, identity length-prefixed exactly as the 17.04 sibling derives it), expectConserved (design 610-613 per-meter equation buckets = before + recorded overrun, plus a no-negative-bucket assertion) with a `conserved` counter that part B asserts. Acceptance specs written: exact settle, byte-identical replay returning the prior BY REFERENCE with view toBe input, overrun (COMPLETE 130 vs hold 90 commits the FULL 130 and records overrun 40, view OVERDRAWN, AT sibling byte-equal), PARTIAL lower bound + quarantined remainder, UNKNOWN and no-receipt both quarantining the whole hold at committed 0, reconcile receipt arm, reconcile never-started arm (AT committed stays 1), conservativeSettle both bound classifications, and closeSettledView CLOSED vs CLOSED_WITH_UNKNOWN_LIABILITY. Dropped the describe() wrappers purely for line budget. Pinned API the implementation must match: settleReservation(view, reservation, {measurements}, {expectedViewVersion, expectedReservationVersion, prior}), reconcileSettlement(view, settlement, {measurements, neverStartedProofRef}, {expectedViewVersion, expectedSettlementVersion}), conservativeSettle(view, settlement, {...same, acknowledgementRef, enforceableUpperBound}), closeSettledView(view, settlements, {expectedVersion}), deriveSettlementId(reservationId).",
+      "startedAt": "2026-08-08T08:49:38.025Z",
+      "completedAt": "2026-08-08T08:52:06.616Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED, part B — extend budget-settlement.test.ts with the table-driven rejection matrix and meta tests (file total <=250 lines; copy the 17.02/17.03 density pattern: one row per case, shared runner asserting for every row a SINGLE one-element issue array with the exact expected code, Object.isFrozen(result) and frozen issue, result.view toBe the input view (zero effect, same reference), and for ops carrying a settlement that the input settlement object is unmutated). Matrix rows, minimum: MALFORMED (hostile/extra-key cmd, non-record measurement, negative expectedVersion); IDENTITY_MISMATCH (reservation.reservationId not matching deriveReservationId(accountId, admissionRef), and accountId != view.accountId); NOT_ACTIVATED (settle on state RESERVED and on CANCELLED); ALREADY_SETTLED (settle with prior of same reservationId but DIFFERENT bytes; reconcile/conservative on state SETTLED and WRITTEN_OFF); STALE_VERSION (view version mismatch; settlement version mismatch — both ops); COUNTER_EXHAUSTED (view.version >= MAX_BUDGET_VERSION); UNCORRELATED_MEASUREMENT (measurement.providerRunRef !== reservation.attemptRef); UNKNOWN_METER (measurement meter not among reservation line meters; reconcile receipt meter not quarantined in settlement); DUPLICATE_METER (two measurements same meter in one call); INSUFFICIENT_RESERVED / INSUFFICIENT_QUARANTINED (view buckets below the reservation/settlement totals — tampered or foreign view); MEASUREMENT_CONFLICT (reconcile receipt qty BELOW the already-committed lower bound; never-started proof against a settlement whose any line committed > 0); SEQUENCE_STALE (reconcile receipt sequence <= stored line sequence); EVIDENCE_AMBIGUOUS (reconcile with both measurements and neverStartedProofRef non-null, and with both null); ACKNOWLEDGEMENT_MISSING (conservativeSettle without acknowledgementRef); ILLEGAL_CLOSE (close with reserved>0; with quarantined>0; with available>0; view.state OVERDRAWN; view.state already CLOSED; a supplied settlement still state QUARANTINED). Meta tests: (a) coverage — the set of codes asserted across the matrix EQUALS the exported BUDGET_SETTLEMENT_ISSUE_CODES exactly, so an uncovered code fails the suite; (b) every acceptance spec from part A runs expectConserved; (c) each row asserts the case was actually generated (non-empty matrix guard, per epic rail).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.test.ts"
+      ],
+      "note": "TDD RED part B landed; file now 243 physical lines (7 under the cap, part A recompacted to make room). Rejection matrix is ONE table of 32 rows across all four ops, each row a thunk returning a Probe tuple [result, view, suppliedRecord, jsonSnapshotTakenBeforeTheCall]. The shared runner asserts, per row: exactly one issue whose code equals BUDGET_SETTLEMENT_<row code>, result.view toBe the input view (zero effect, same reference), JSON of BOTH the view and the supplied reservation/settlement/settlements unchanged (proves the input record is not mutated, which the plan asked for on settlement-carrying ops), Object.isFrozen(result) and the issue frozen. All 16 codes are covered: MALFORMED x3 (extra-key command, prototype-chain measurement, negative version), IDENTITY_MISMATCH x2, NOT_ACTIVATED x2 (RESERVED with null attemptRef, CANCELLED), ALREADY_SETTLED x3, STALE_VERSION x3, COUNTER_EXHAUSTED, UNCORRELATED_MEASUREMENT, DUPLICATE_METER, UNKNOWN_METER x2 (settle + reconcile-not-quarantined), INSUFFICIENT_RESERVED, INSUFFICIENT_QUARANTINED, MEASUREMENT_CONFLICT x2 (receipt below the committed lower bound; never-started proof against committed use), SEQUENCE_STALE, EVIDENCE_AMBIGUOUS x2 (both arms, neither arm), ACKNOWLEDGEMENT_MISSING, ILLEGAL_CLOSE x6 (reserved>0, quarantined>0, available>0, OVERDRAWN, already CLOSED, supplied settlement still QUARANTINED). Meta test (runs last, so it sees the whole run) asserts ROWS.length === 32 so a silently empty matrix fails, BUDGET_SETTLEMENT_ISSUE_CODES frozen, the observed code set EQUALS the published set exactly (an uncovered or unpublished code fails), and conserved === 12 so every acceptance path provably ran expectConserved. Precedence this pins for the implementation — settle: MALFORMED > IDENTITY_MISMATCH > NOT_ACTIVATED > COUNTER_EXHAUSTED > STALE_VERSION > UNCORRELATED > DUPLICATE_METER > UNKNOWN_METER > INSUFFICIENT_RESERVED > ALREADY_SETTLED (the prior comparison is byte-identity against the computed candidate, so it is necessarily last). reconcile: MALFORMED > ALREADY_SETTLED (state must be QUARANTINED) > EVIDENCE_AMBIGUOUS > COUNTER > STALE > UNCORRELATED > DUPLICATE > UNKNOWN_METER > SEQUENCE_STALE > MEASUREMENT_CONFLICT > INSUFFICIENT_QUARANTINED.",
+      "startedAt": "2026-08-08T08:54:19.807Z",
+      "completedAt": "2026-08-08T08:57:07.749Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN, part 1 — create packages/scheduler/src/budget/budget-settlement.ts: header comment MAX 12 lines (the 250 cap is the binding constraint; siblings landed at 249-250 with smaller surfaces, so density is mandatory: derived messages, Check tuple tables, shared transition guard). Contents: (1) imports — type-only from ./budget-contract.js (BudgetMeterBuckets, BudgetAccountState), MAX_BUDGET_VERSION from ./budget-account.js, deriveReservationId + types (BudgetAvailableView, ReservationRecord) from ./budget-reservation.js, type NormalizedMeasurement from ./budget-measurement.js, hostile-input readers (isPlainRecord, isPlainArray, hasOnlyOwnStringKeys, readOwnDataProperty) from ../runtime-shape.js; (2) BUDGET_SETTLEMENT_ISSUE_CODES — closed frozen union of EXACTLY the 16 codes named in the test matrix, prefix BUDGET_SETTLEMENT_, message DERIVED from code (slice prefix, lowercase, underscores to spaces — the 17.03 compaction; do not hand-write messages); (3) SETTLEMENT_STATES = ['QUARANTINED','SETTLED','WRITTEN_OFF'], LINE_DISPOSITIONS = ['EXACT','LOWER_BOUND','UNKNOWN_HELD','CONSERVATIVE_WRITE_OFF','NEVER_STARTED_REFUND']; (4) types: SettlementLine {meter, reserved, committed, refunded, quarantined, disposition, identity: string|null, sequence: number|null} (identity/sequence of the settling measurement, consulted by reconcile ordering); SettlementRecord {settlementId, reservationId, accountId, attemptRef, version, state, lines, unknownExternalLiability: boolean, overrun: readonly {meter,amount}[]}; deriveSettlementId(reservationId) = `settlement:${reservationId.length}:${reservationId}` (length-prefixed, injective); BudgetSettlementResult = {ok:true, settlement, view} | {ok:false, settlement: SettlementRecord|null, view, issues} — refusal returns the caller's view BY REFERENCE, deepFrozen result, single first-failing-check code via ordered Check tables; (5) local private clones: deepFreeze, isCount, isRef, firstOf, readRecord (unavoidable — siblings do not export them); (6) settleReservation(view, reservation, evidence {measurements: readonly NormalizedMeasurement[]}, cmd {expectedViewVersion, expectedReservationVersion, prior: SettlementRecord|null}): guards in pinned order malformed > identity (deriveReservationId recheck + accountId===view.accountId) > not-activated > duplicate/already-settled (prior same reservationId: byte-identical full inputs return PRIOR BY REFERENCE as ok; different bytes refuse ALREADY_SETTLED) > stale versions > counter exhausted > uncorrelated (each measurement.measurement.providerRunRef === reservation.attemptRef) > duplicate meter > unknown meter (measurement meter must be in reservation totals) > insufficient reserved. Per-meter disposition over totalPerMeter(reservation.lines) recomputed locally: COMPLETE qty<=hold commits qty, refunds hold-qty; COMPLETE qty>hold commits the FULL measured qty into COMMITTED (the hold from RESERVED plus the excess minted against an explicit overrun entry {meter, amount: qty-hold}) and sets view.state OVERDRAWN — the conservation equation (design 610-613) balances because bucket sum grows by exactly the recorded overrun; PARTIAL commits qty (lower bound), quarantines hold-qty; UNKNOWN or missing measurement quarantines the full hold with committed 0 and disposition UNKNOWN_HELD (never a zero-committed EXACT — that would launder unknown to zero). Record state QUARANTINED iff any line quarantined>0 else SETTLED; view.version+1; no bucket may go negative anywhere.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-settlement.ts"
-      ]
+      ],
+      "startedAt": "2026-08-08T08:58:19.558Z"
     },
     {
       "stepId": "step-5",
@@ -86,7 +102,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40ee2326",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,16 +114,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:58.147Z",
-  "updatedAt": "2026-08-08T08:38:10.038Z",
+  "updatedAt": "2026-08-08T08:58:19.558Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T08:27:39.376Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "worker-40ee2326"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T08:38:08.005Z",
   "planningNotes": {
@@ -126,5 +148,6 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-08T08:38:10.038Z"
+  "planApprovedAt": "2026-08-08T08:38:10.038Z",
+  "workStartedAt": "2026-08-08T08:44:40.342Z"
 }

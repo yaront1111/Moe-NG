@@ -127,8 +127,8 @@
       "completedAt": "2026-08-08T08:42:18.084Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-6fd67108",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -140,12 +140,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T22:15:02.258Z",
-  "updatedAt": "2026-08-08T08:43:39.553Z",
+  "updatedAt": "2026-08-08T08:51:15.213Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:39:03.367Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-08T08:51:15.213Z",
+    "wallClockMs": 4331846
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -199,5 +201,8 @@
     "apps/control-room/src/evidence/evidence-j1.tsx",
     "apps/control-room/src/doctor/doctor-j1.tsx",
     "apps/control-room/src/shell/j1-flow.test.tsx"
-  ]
+  ],
+  "completedAt": "2026-08-08T08:51:15.213Z",
+  "reviewCompletedAt": "2026-08-08T08:51:15.213Z",
+  "reviewSummary": "APPROVED. Read all 10 owned files; re-ran gates myself.\n\nRAN: (1) focused gate `pnpm --filter @moe/control-room typecheck && test` -> exit 0, 10 files/135 tests, matches task.verification; re-ran identical. (2) root `pnpm typecheck` -> exit 1, FOREIGN RED: sole failure is packages/store outbox-relay TS2307, untracked WIP of worker-7e037598's live task-071173ab. (3) apps/**-scanning tripwires (scheduler package-boundary, testkit foundation-spec) -> exit 0, 33 tests. (4) wc -l: max 247, 10 files, 1140 LOC.\n\nDoD1 PASS: frame.tsx:180-219 nav/main/aside/footer; graph placeholder not cr.graph.-prefixed; j1-flow.test.tsx:133-142 clicks the tab, asserts cr.graph.* count 0, re-asserted 5x in the walk.\nDoD2 PASS: six slices in canonical dirs, minimal (5 board columns, no joinstrip; inspector asserts cr.inspector.transcript.* count 0; doctor zero actions). No src/surfaces|a11y|performance.\nDoD3 PASS (hardest): disconnected leg uses MUTATION_BLOCK_ISOLATION[0], the only fixture dropping transport WHILE holding affordances - canonical DISCONNECTED has zero commands, cannot tell disabled from hidden. Negative controls (bannersSeen>0, disabledSeen>0) block vacuous passes. Lag: stale labelled, all enabled. No invented reason: no title/data-reason-code attrs plus source scan with positive control. Every cr.action.* data-command-id verified supplied.\nDoD4 PASS: tab-order reach + aria-labels; Enter opens all 7 provenance fields + timeline jump, Escape restores focus to chip; p ignored off-chip; UNKNOWN dashed border.\n\nRAILS met: <=250/file, 10 files, no scheduler literal, no foundation/ import, no client authority. Commit ad4419f = exactly the 8 owned paths; main/kernel/fixtures/config diff empty.\n\nDEVIATIONS OK: (a) acceptance uses cr.action.integration-accept-output, not the spec-pinned id - that kind carries the decision. (b) main.tsx unmounted is rail COMPLIANCE; governor route the mount.\n\nSIZE 1140 LOC over my 400 default - not rejecting: post-split task, rail authorizes 10x250."
 }

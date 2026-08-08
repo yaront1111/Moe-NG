@@ -29,19 +29,24 @@
     {
       "stepId": "step-2",
       "description": "TDD RED: create the focused integration suite against the intended relay production surface. Prove one successful delivery returns frozen APPLIED and, by direct SQLite inspection, leaves exactly the command event, its EventDraft.outbox message, the projection checkpoint/state digest, and the (consumer_id,message_id,receipt_digest) inbox row. Add a named fault matrix for aborts at domain_events, outbox_messages, projections, and inbox_receipts (install a scoped SQLite RAISE(ABORT) trigger after opening the disposable store); assert the matrix contains all four labels, assert each stable refusal/error code and layer, then query that command's event/outbox/inbox rows and the prior projection row to prove all-or-none rollback. Add a fold-refusal case that asserts the exact ProjectionFoldCode, INPUT/REDUCER/UPCAST layer, and nested upcast code where applicable, plus zero persisted effects. Add same-envelope redelivery with fresh downstream command/event/outbox IDs: it must return ALREADY_APPLIED with deduplicatedBy INBOX, make zero reducer calls on the duplicate, enqueue no second outbox row, and leave the projection unchanged. Same consumer/message key with changed immutable envelope bytes must refuse OUTBOX_RELAY_INBOX_CONFLICT at layer INBOX. Close and reopen the database, redeliver with fresh downstream IDs, and assert the same durable INBOX outcome. Also pin command-receipt REPLAYED as a separately labeled ALREADY_APPLIED outcome and stale projection checkpoint/digest as OUTBOX_RELAY_PROJECTION_CONFLICT with full rollback. Run only this new test file to capture the expected missing-module/red failure before implementation.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
       ],
       "newFiles": [
         "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
       ],
-      "startedAt": "2026-08-08T08:41:37.793Z"
+      "modifiedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ],
+      "note": "RED captured. `cd packages/store && pnpm exec vitest run --root ../.. packages/store/src/outbox-relay/transactional-outbox-relay.test.ts` -> \"Test Files 1 failed (1) / Tests no tests\", failing with `Error: Cannot find module './transactional-outbox-relay.js'` — the intended missing-module red, not a typo or collection artifact (the run was issued FROM packages/store so --root ../.. resolves correctly; see mem:task-task-82989467...-handoff for the repo-root trap). Suite covers: APPLIED with frozen result plus direct SQLite proof of exactly one domain_event, one outbox_messages row, the projections checkpoint|state_digest pair, and the (consumer_id,message_id,receipt_digest) inbox row; a named four-label fault matrix (domain_events, outbox_messages, projections, inbox_receipts) whose label list is asserted so a zero-case sweep cannot pass silently, each case injecting a scoped RAISE(ABORT) trigger from a second connection and asserting STORE_UNAVAILABLE for the two pre-apply boundaries versus OUTBOX_RELAY_PROJECTION_WRITE_FAILED@PROJECTION and OUTBOX_RELAY_INBOX_WRITE_FAILED@INBOX for the two relay boundaries, then proving all-or-none rollback; fold refusal preserving PROJECTION_FOLD_UPCAST_REFUSED@UPCAST with nested SCHEMA_VERSION_UNSUPPORTED and PROJECTION_FOLD_REDUCER_MISSING@REDUCER; same-envelope redelivery with fresh command/event/outbox IDs returning ALREADY_APPLIED/INBOX with zero reducer calls and an unchanged database; changed envelope bytes under the same identity refusing OUTBOX_RELAY_INBOX_CONFLICT@INBOX; close-and-reopen redelivery proving the dedupe is durable, not in-memory; command replay labelled ALREADY_APPLIED/COMMAND_RECEIPT with disposition REPLAYED; both halves of the projection compare-and-set (stale checkpoint and stale state digest) refusing OUTBOX_RELAY_PROJECTION_CONFLICT with full rollback; INPUT-layer refusals; and a digest-determinism case that observes the production hash through the persisted state_digest rather than reimplementing it.",
+      "startedAt": "2026-08-08T08:41:37.793Z",
+      "completedAt": "2026-08-08T08:44:54.672Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement domain-separated deterministic digests for the relay in outbox-relay-digests.ts with its one-line .js bridge. Snapshot the inbound immutable envelope fields before hashing; length-frame strings and byte arrays so concatenations cannot collide, and exclude retry-variant deliveryAttempts while binding consumer-visible messageId/topic/payload/headers. Canonically hash ProjectionState with explicit type tags, sorted object keys, array order, bigint text, and distinct encodings for -0/non-finite numbers so the same state has the same lowercase SHA-256 on Windows, macOS, and Linux. Keep helpers synchronous, total over the fold's validated plain-data output, focused, and <=250 lines; tests must observe their production use through receipt/state_digest rows and the same-ID/different-content path rather than reimplementing the algorithm in test helpers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/outbox-relay-digests.ts",
         "packages/store/src/outbox-relay/outbox-relay-digests.js"
@@ -49,12 +54,20 @@
       "newFiles": [
         "packages/store/src/outbox-relay/outbox-relay-digests.ts",
         "packages/store/src/outbox-relay/outbox-relay-digests.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ],
+      "note": "outbox-relay-digests.ts (222 lines, under the 250 target) plus its one-line .js bridge. Two domain-separated identities: RELAY_INBOX_RECEIPT_VERSION \"moe-relay-inbox-receipt/1\" and RELAY_PROJECTION_STATE_VERSION \"moe-relay-projection-state/1\", each opening its hash so a state digest can never equal a receipt digest. Every string and byte run is length-framed with an 8-byte big-endian prefix (same convention as store-digests.ts updateLengthFramed), so no concatenation of adjacent fields can collide. digestInboxReceipt(consumerId, message) snapshots the envelope through requireDataRecord/readOwnDataProperty/requireIdentifier/snapshotBytes before hashing — a proxy is rejected outright and an accessor is refused rather than invoked, so the bytes hashed are the bytes the caller is bound to. It binds consumerId/messageId/topic/payload/headers and deliberately excludes deliveryAttempts and deliveredAt, which vary between retries of the same message: including them would turn a legitimate redelivery into a conflict instead of a dedupe. canonicalProjectionState hashes and deep-clones in ONE walk and returns {digest, state}, so the digested bytes and the value handed to the fold cannot diverge on a second read. Explicit one-byte type tags for null/false/true/number/bigint/string/array/object make cross-type collisions impossible; object keys are sorted by code unit (no locale collation) and framed with their count, arrays keep order and frame their length; bigints hash as decimal text; numbers use String()'s spec-defined shortest round-trip with \"-0\", \"NaN\", \"Infinity\", \"-Infinity\" named explicitly, because String(-0) is \"0\" and would let two distinguishable states share a digest. Plain-data rules mirror the fold's (alien prototypes, functions, symbol keys, __proto__ keys, accessors, array holes, extra array properties, cycles all refused). Both entry points are synchronous, total, and return null instead of throwing so the relay can attach its own stable code. Neither is reimplemented in the test: determinism is observed through the persisted projections.state_digest across three runs, and receipt identity through the same-ID/changed-bytes path. Test file compressed from 479 to 395 lines to stay under the 400 per-file split threshold. pnpm --filter @moe/store typecheck reports no error in either digest file; the only remaining errors are the two expected TS2307 for the not-yet-written ./transactional-outbox-relay.js.",
+      "startedAt": "2026-08-08T08:44:55.267Z",
+      "completedAt": "2026-08-08T08:48:33.627Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement transactional-outbox-relay.ts and its one-line .js bridge, keeping the production source <=250 lines. Expose frozen discriminated outcomes: APPLIED with the CommitResult and folded checkpoint/state/stateDigest; ALREADY_APPLIED with deduplicatedBy INBOX or COMMAND_RECEIPT; and typed refusals carrying a stable code plus the refusing layer. Validate/snapshot consumerId, the message envelope, CommitInput, projection name/checkpoint/state/reducers/upcaster before entering the transaction. Call store.commitWithApply using that snapshot. Inside apply, first SELECT inbox_receipts by (consumer_id,message_id): matching digest raises a private relay rollback sentinel for INBOX ALREADY_APPLIED before any reducer call; differing digest raises OUTBOX_RELAY_INBOX_CONFLICT. SELECT the new command's CAST(global_position AS TEXT), event_id, and command_event_index rows through context.database, validate exact count/order/IDs against the normalized snapshot and summary, and construct detached StoredEvent values with the committed versions/bytes. Verify the durable projection row matches the supplied prior checkpoint and canonical prior-state digest (absence is legal only at checkpoint 0), otherwise roll back as OUTBOX_RELAY_PROJECTION_CONFLICT. Drive foldProjection with exactly that materialized array; on refusal roll back while preserving its code, layer, eventId, detail, and nested upcast failure. On success compare-and-set/upsert projections to the new checkpoint/digest and insert the inbox receipt, checking SQLite change counts and translating each known persistence failure to its own stable PROJECTION or INBOX refusal. Do not insert outbox_messages: EventDraft.outbox was already written by writeCommitEffects under the same outer transaction. Outside the callback, unwrap only the private sentinel from PROJECTION_APPLY_FAILED into the frozen result; map a store REPLAYED result to COMMAND_RECEIPT ALREADY_APPLIED, and rethrow unrecognized errors/OUTCOME_UNKNOWN so uncertainty never gains authority.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
         "packages/store/src/outbox-relay/transactional-outbox-relay.js"
@@ -62,35 +75,65 @@
       "newFiles": [
         "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
         "packages/store/src/outbox-relay/transactional-outbox-relay.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js",
+        "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
+        "packages/store/src/outbox-relay/outbox-relay-contracts.js",
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts"
+      ],
+      "note": "GREEN: 17/17 in the focused suite, 25 files / 201 tests for the whole package, typecheck exit 0. relayMessage(store, request) drives the whole delivery through SqliteEventStore.commitWithApply, so append + outbox + projection + inbox receipt share one BEGIN IMMEDIATE. planRelay snapshots consumerId, envelope, CommitInput, projection name/checkpoint/state/reducers/upcaster BEFORE the transaction opens, through requireDataRecord/readOwnDataProperty (non-proxy, own-data-property only), so nothing the caller still holds can change what the fold sees. Inside apply, in order: SELECT inbox_receipts by (consumer_id,message_id) — a matching receipt_digest rolls back as ALREADY_APPLIED/INBOX BEFORE any reducer runs, a differing one as OUTBOX_RELAY_INBOX_CONFLICT@INBOX; then SELECT the new command's CAST(global_position AS TEXT)/event_id/command_event_index and rebuild detached frozen StoredEvent values (aggregateSequence = previousVersion+index+1, bytes re-wrapped with new Uint8Array), refusing OUTBOX_RELAY_COMMIT_MISMATCH@COMMIT on any count/order/ID divergence; then compare-and-set the durable projections row against the supplied checkpoint AND canonical prior-state digest, absence legal only at position 0, else OUTBOX_RELAY_PROJECTION_CONFLICT@PROJECTION; then foldProjection over exactly that array, whose refusal rolls back as OUTBOX_RELAY_PROJECTION_REFUSED@PROJECTION carrying the fold's own code/layer/eventId/detail and nested UpcastFailure verbatim; then a single guarded upsert (ON CONFLICT DO UPDATE ... WHERE last_applied_position = ? AND state_digest IS ?) and the inbox INSERT, each checking SQLite's change count and mapping both a throw and a 0-row result to OUTBOX_RELAY_PROJECTION_WRITE_FAILED / OUTBOX_RELAY_INBOX_WRITE_FAILED. No outbox_messages insert: writeCommitEffects already wrote EventDraft.outbox under the same transaction. Outside the callback, ONLY a private RelayRollback unwrapped from DurableStoreError.cause on PROJECTION_APPLY_FAILED becomes a result; every other error, including OUTCOME_UNKNOWN, is rethrown, and a COMMITTED disposition with no recorded outcome raises OUTCOME_UNKNOWN rather than inventing success. A REPLAYED store result maps to ALREADY_APPLIED/COMMAND_RECEIPT, distinct from INBOX. Result payload fields sit only on the arm that owns them (checkpoint/state/stateDigest only on APPLIED), which closes the unnarrowed-union footgun recorded in mem:gotcha-union-refusal-echo-unnarrowed. SCOPE NOTE: to honour the <=250-line-per-file target I split the public types into outbox-relay-contracts.ts + its .js bridge, which the relay re-exports so callers still import one module — owned paths are now 7 rather than the plan's 5, all inside the task's declared packages/store/src/outbox-relay/** and within the epic's <=10 affectedFiles bound. transactional-outbox-relay.ts is 264 lines: 14 over the plan's stated target and well inside the epic rail's 400-line split threshold; I stopped compressing there rather than trade readability for the last 14 lines. Other sizes: contracts 59, digests 232, test 395.",
+      "startedAt": "2026-08-08T08:48:34.357Z",
+      "completedAt": "2026-08-08T08:55:45.956Z"
     },
     {
       "stepId": "step-5",
       "description": "Adversarially review the complete five-file diff before the gate. Exercise the checklist for two concurrent/redelivered calls, null/accessor/proxy/sparse/oversized inputs, same identity with altered bytes, command replay that skips apply, stale checkpoint/digest, reducer/upcaster throws, SQLite faults at every write boundary, and an attempted async callback; confirm there is no nested transaction, external IO, post-commit apply, swallowed OUTCOME_UNKNOWN, or exactly-once external-effect claim. Mutation-check the production surface with out-of-tree backups: remove the matching-inbox early rollback (duplicate test must go red), weaken the projection compare-and-set (stale-state test must go red), bypass fold-refusal rollback (atomic/refusal test must go red), and swap a PROJECTION/INBOX persistence code or layer (failure-matrix assertion must go red). Restore each file and confirm its hash. Run git diff --check and line counts, and inspect git status so only the five owned paths are attributable to this task; make no cleanup edits to foreign paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/outbox-relay-digests.ts",
         "packages/store/src/outbox-relay/outbox-relay-digests.js",
         "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
         "packages/store/src/outbox-relay/transactional-outbox-relay.js",
         "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts"
+      ],
+      "note": "EIGHT mutations run with out-of-tree backups in $(mktemp -d); every restore verified by git hash-object and the temp dir deleted. relay hash 95d8def6 (pre-review), digests hash f57bd835 — both matched after every cycle, no RESTORE MISMATCH. A) invert the matching-inbox digest check -> 3 red (redelivery, envelope-changed, restart). B) drop the prior-state-digest half of the compare-and-set -> 1 red (stale state digest). C) bypass the fold-refusal rollback -> 2 red (upcast refusal, reducer-missing). D) swap the INBOX write-failure layer to PROJECTION -> 1 red (inbox_receipts fault). E) swap the projection write-failure code to the inbox code -> 1 red (projections fault). F) drop the -0 distinction in the number encoder -> 1 red. G3) remove length framing at its single source -> 1 red (envelope-changed). H2) drop sorted-key canonicalization -> 1 red.\n\nTWO REAL GAPS FOUND BY MUTATION AND FIXED, both of which a green suite hid. (1) The -0/NaN/Infinity encoder branch was dead weight: no test distinguished them, so the digest determinism case now folds states differing ONLY by 0 vs -0 and asserts different digests, and a state with a bigint and a nested array so those type tags actually execute. (2) Length framing and key sorting were both unasserted — the first attempt at a framing mutation (G) stayed GREEN because it only unframed strings while payload stayed framed, which is exactly the \"mutation that proves nothing\" trap; the real fix was to make the envelope-changed test shift one character from topic into payload so an UNFRAMED concatenation would hash identically, and to add two states with the same content in different key insertion order asserting equal digests. Both now redden.\n\nAdversarial checklist. Concurrency: BEGIN IMMEDIATE serializes writers, and the inbox SELECT plus projection compare-and-set plus both writes are inside that one transaction, so a second delivery either blocks then dedupes or refuses — no check-then-act window. Inputs: null/non-object/proxy/accessor/symbol-key/__proto__/sparse-array/cyclic/class-instance all refuse at INPUT (the canonical walk mirrors the fold's plain-data rules and its recursion is inside a try, so a pathologically deep state returns null instead of escaping as RangeError); oversized inputs are bounded by snapshotCommitInput's MAX_COMMIT_BYTES/MAX_EVENTS_PER_COMMIT and snapshotBytes' MAX_BLOB_BYTES. Injection: every production statement binds parameters; the only interpolation is the test's own constant table name. Exit paths: the sole throw the relay translates is its private non-exported RelayRollback unwrapped from DurableStoreError.cause; a reducer or upcaster throwing is caught by the fold and becomes a REDUCER/UPCAST refusal, and it cannot forge the sentinel because the class is not exported. CRUCIAL: if ROLLBACK itself fails the store raises OUTCOME_UNKNOWN instead of PROJECTION_APPLY_FAILED, so the unwrap does not match and the error is rethrown — verified by reading event-ledger-recovery.ts:22-46, uncertainty keeps its authority. Confirmed by grep: no BEGIN/COMMIT/ROLLBACK, no fs/net/process/Date/Math.random/async/await, no outbox_messages insert, no post-commit apply, and no exactly-once external-effect claim anywhere in the three production files.\n\nONE TIGHTENING APPLIED: APPLIED now returns next.state (the canonical clone the digest was computed over) rather than folded.state, so the reported state and stateDigest cannot describe two different objects.\n\nKNOWN BEHAVIOUR, deliberate, flagged for QA not a defect: reusing ONE commandId for two DIFFERENT inbound messages returns ALREADY_APPLIED/COMMAND_RECEIPT and never writes the second message's inbox receipt, because commitWithApply skips apply entirely on command replay. That is honest (the command really was applied) and distinguishable from INBOX dedupe, which is precisely why the two labels exist.\n\nHygiene: git diff --check equivalent clean — no trailing whitespace, tabs, or CRLF; no line over 100 chars; all four files under the 400 split threshold (relay 266, digests 232, contracts 59, test 399). git status shows only packages/store/src/outbox-relay/ attributable to this task; foreign .moe/* and packages/scheduler/src/budget/* left untouched. Full package gate green: typecheck exit 0, 25 files / 201 tests.",
+      "startedAt": "2026-08-08T08:55:46.918Z",
+      "completedAt": "2026-08-08T09:03:09.368Z"
     },
     {
       "stepId": "step-6",
       "description": "Run the single required fresh foreground verification command exactly: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Require exit 0 and retain the output tail for complete_task evidence; do not substitute a focused green test if the named package gate is red. Then run git status --porcelain, unstage any foreign staged entry with git restore --staged -- <foreign-path> while leaving its working bytes untouched, stage only the five owned outbox-relay paths, recheck that every staged entry is owned, and commit with an explicit pathspec (never bare commit, -a, git add -A, reset, stash, merge, or push). Verify git show --stat --oneline HEAD contains only those five paths and report the exact verification evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/outbox-relay-digests.ts",
         "packages/store/src/outbox-relay/outbox-relay-digests.js",
         "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
         "packages/store/src/outbox-relay/transactional-outbox-relay.js",
         "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
+        "packages/store/src/outbox-relay/outbox-relay-contracts.js",
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ],
+      "note": "Named gate run fresh in the foreground, twice, exactly as planned: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, \"Test Files 25 passed (25) / Tests 201 passed (201)\". No substitution of a focused suite. Root regression sweep also run and green for cross-package safety: `pnpm test` -> exit 0, 123 files, 1801 passed / 1 skipped.\n\nCommit hygiene. Index was empty before staging (git diff --cached --name-only returned nothing), so no foreign entry needed unstaging and no `git restore --staged` was required. Staged only the owned outbox-relay paths, re-verified the staged list was exactly those paths, then committed with an explicit pathspec: `git commit -F - -- packages/store/src/outbox-relay/`. No bare commit, no -a, no add -A, no reset, stash, merge, or push. Commit 2443a6a on moe/work-2026-08-08; `git show --stat --oneline HEAD` shows 7 files changed, 959 insertions, all under packages/store/src/outbox-relay/: outbox-relay-contracts.ts 59 + .js bridge, outbox-relay-digests.ts 232 + .js bridge, transactional-outbox-relay.ts 266 + .js bridge, transactional-outbox-relay.test.ts 399. Nothing else. git status after the commit still shows only the foreign `.moe/*` runtime files and another worker's untracked packages/scheduler/src/budget/* — all left byte-untouched.\n\nDEVIATION FROM PLAN, stated plainly: 7 owned paths rather than the plan's 5. The plan required transactional-outbox-relay.ts to stay <=250 lines and it came in at 342 with the public types inline, so I extracted them into outbox-relay-contracts.ts (+ its .js bridge) and re-export them from the relay, which keeps a single import site for callers. Every file is now inside the epic rail's per-file bound, and all 7 paths are inside the task's own declared owned glob packages/store/src/outbox-relay/**, within the epic's <=10 affectedFiles limit. transactional-outbox-relay.ts is 266 lines, 16 over the plan's target and well under the 400 split threshold; I stopped compressing rather than trade readability for the last few lines. No production evidence, scratch, or debug files remain — the mutation harness lived entirely in a mktemp dir outside the repo and was deleted.",
+      "startedAt": "2026-08-08T09:03:10.186Z",
+      "completedAt": "2026-08-08T09:04:28.550Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-7e037598",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f4052923",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,19 +145,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:03.373Z",
-  "updatedAt": "2026-08-08T08:41:37.793Z",
+  "updatedAt": "2026-08-08T09:05:39.054Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T08:28:34.310Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-e54ba2b5",
-    "worker-7e037598"
+    "worker-7e037598",
+    "qa-f4052923"
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T08:37:36.949Z",
@@ -134,5 +183,21 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-08T08:37:38.985Z",
-  "workStartedAt": "2026-08-08T08:37:51.335Z"
+  "workStartedAt": "2026-08-08T08:37:51.335Z",
+  "reviewStartedAt": "2026-08-08T09:05:38.114Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  25 passed (25)\n      Tests  201 passed (201)\n   Start at  12:03:54\n   Duration  1.76s (transform 4.54s, setup 0ms, import 6.88s, tests 5.16s, environment 2ms)\n\nNAMED_GATE_EXIT=0",
+    "reportedAt": "2026-08-08T09:05:38.114Z"
+  },
+  "filesModified": [
+    "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
+    "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+    "packages/store/src/outbox-relay/outbox-relay-digests.js",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.js",
+    "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
+    "packages/store/src/outbox-relay/outbox-relay-contracts.js"
+  ]
 }
