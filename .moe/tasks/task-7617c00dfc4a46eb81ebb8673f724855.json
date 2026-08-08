@@ -123,22 +123,50 @@
     {
       "stepId": "step-6",
       "description": "PHASE 7 (mutation drill + adversarial self-review). Invoke Skill(skill=\"adversarial-self-review\") and run the mutation drill on every failure path, mutating the MECHANISM AT ITS SINGLE SOURCE, not a delegating wrapper (see mem:gotcha-digest-mutation-that-proves-nothing; back up originals out-of-tree and verify restore with git hash-object): (1) drop the key-sort in canonical serialization → order-independence test red; (2) remove length framing at its source → collision-pair test red (the pair must shift a char between two fields BOTH framed by the mutated code); (3) invert the generation comparison → GENERATION_CHANGED test red; (4) delete the NULL-floor empty-ledger branch → empty-ledger HISTORY_PRUNED test red; (5) change clamp <= to < → at-checkpoint boundary test red; (6) drop generation from the publishSnapshot CAS predicate → stale-generation race test red; (7) remove the reserved-prefix guard from ONE non-register entry point → that entry point's sentinel-protection test red; (8) remove the snapshot-stale floor comparison in reseatToSnapshot → SUBSCRIPTION_SNAPSHOT_STALE test red. Restore and re-verify green after each. Then the checklist: two module instances acknowledging concurrently (CAS serializes, loser gets stable refusal not corruption); null/empty/huge inputs on every public API; every early-return path frozen/rolled back; grep -rn \"outbox-relay\\|projections/\" packages/store/src/subscriptions --include=*.ts must return ZERO import hits; wc -l on every production file (NOT PowerShell Measure-Object -Line — it undercounts blank lines) <=400, target 250; no probe/scratch/debug files anywhere in the tree.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/subscriptions/subscription-writes.ts",
         "packages/store/src/subscriptions/subscription-read-page.ts",
         "packages/store/src/subscriptions/subscription-contracts.ts"
       ],
-      "startedAt": "2026-08-08T16:09:48.759Z"
+      "modifiedFiles": [
+        "packages/store/src/subscriptions/subscription-doc-codec.ts",
+        "packages/store/src/subscriptions/subscription-internals.ts",
+        "packages/store/src/subscriptions/subscription-read-page.ts",
+        "packages/store/src/subscriptions/subscription-writes.ts",
+        "packages/store/src/subscriptions/subscription-contracts.ts",
+        "packages/store/src/subscriptions/subscription-docs.test.ts",
+        "packages/store/src/subscriptions/subscription-writes.test.ts",
+        "packages/store/src/subscriptions/subscription-read-page.test.ts"
+      ],
+      "note": "Mutation drill: 12 mutations, ALL load-bearing. Suite is 28 files / 305 tests green, typecheck exit 0. Originals backed up to /tmp (out of tree) BEFORE the first mutation, restore in a trap, and restore verified by `git hash-object` diff after every batch — final check printed RESTORE VERIFIED with all eight sources byte-identical.\n\nM1 drop .sort() in canonicalRecord -> \"digests snapshot state by content, not by key insertion order\" RED.\nM2 delete the length prefix inside frameBytes (the SINGLE source, not the frameText wrapper) -> \"length-frames adjacent filter entries\" RED. The fixture shifts a character between two filter entries that BOTH go through the mutated framing, per mem:gotcha-digest-mutation-that-proves-nothing.\nM3 delete the generation gap check -> GENERATION_CHANGED RED.\nM4 replace the NULL-floor branch with the unguarded comparison -> empty-ledger HISTORY_PRUNED RED (the fresh-store empty-PAGE case stays green, so the pair really discriminates).\nM5 clamp <= becomes < -> 6 RED including the at-checkpoint boundary case.\nM6 drop the generation predicate from the publishSnapshot CAS -> stale-generation race RED.\nM7 remove the reserved-prefix guard from acknowledge ONLY -> that entry point's sentinel row RED (it still refuses, with the WRONG code — exactly what epic rail 6 is about).\nM8 remove the snapshot-stale floor comparison -> both SNAPSHOT_STALE cases RED.\nM9/M10/M11/M12 cover the four guards added by this review (below).\n\nTHE DRILL FOUND A BLIND SPOT IN MY OWN HARNESS. The first M9 attempt deleted a line and left the file syntactically invalid; vitest then failed the SUITE with zero \"×\" lines, and a harness counting only \"×\" reported failed=0, i.e. \"mutation survived\". Any mutation that breaks parsing looks load-bearing-free under that harness. Fixed by counting FAIL suites as well and by neutralising the guard (-> `false`) instead of deleting the line. Re-run: M9 RED.\n\nFOUR REAL DEFECTS FOUND BY THE ADVERSARIAL PASS, all fixed with tests:\n1. TOCTOU across the read path. readSubscriptionPage issued five independent SELECTs, so a concurrent advanceGeneration could be observed HALF-APPLIED: generation read after the advance next to a baseline read before it, which loadSnapshot reports as SUBSCRIPTION_STATE_CORRUPT — durable corruption claimed for a perfectly legal rebuild. Fixed with inReadSnapshot (BEGIN DEFERRED, one snapshot, reusing a transaction the caller already holds rather than nesting). Writes were already safe inside BEGIN IMMEDIATE. Tests: no read transaction left open on either the page or the refusal path, and a caller-held transaction is reused. M11/M12 prove both.\n2. Double-walk vs a hostile value. encodeSnapshotDoc canonicalises state twice — once for the digest, once for the stored text. A Proxy answering differently between the walks would store a doc whose digest can NEVER verify, permanently un-decodable. Proxies are now refused at every depth (canonicalJson and plainRecord); the test drives a proxy at top level, nested, and inside an array. M9 proves it.\n3. advanceGeneration crashed with a raw TypeError on non-iterable baselines instead of a stable code. Now SUBSCRIPTION_INPUT_INVALID.\n4. THE TEST FOR (3) WAS INITIALLY WORTHLESS and M10 caught it: I used the string \"every-projection\", and a string IS iterable, so it refused identically with or without the guard — the test passed for the wrong reason. Rewritten as a table over a non-iterable object, a string, and null; without the guard the non-iterable case now escapes as \"TypeError: input.baselines is not iterable\" and the test goes RED.\n\nCHECKLIST:\n- Concurrency: two independent connections acknowledging the same subscriber — the CAS serializes, the loser gets SUBSCRIPTION_CURSOR_REGRESSION (not corruption, not a lost update), the durable cursor is exactly the winner's, and a subsequent forward ack from the second connection still succeeds. SQLITE_BUSY is a stable SUBSCRIPTION_STORE_BUSY.\n- Hostile inputs: a 10-case table over every write entry point (non-canonical timestamp, empty subscriber id, null projection, 65-entry filter, missing cursor, empty reason, 70KB state, negative checkpoint, number-instead-of-bigint checkpoint, empty reseat projection) — all SUBSCRIPTION_INPUT_INVALID/INPUT, and no subscription row is created by any of them.\n- Exit paths: every write rolls back on every throw; a rollback that itself fails raises OUTCOME_UNKNOWN. Every returned result is frozen.\n- grep -rn \"outbox-relay|projections/\" over the module: ZERO hits.\n- wc -l (NOT Measure-Object): contracts 150, read-page 140, writes 247, internals 265, doc-codec 301. All under the 400 hard cap; two over the 250 target, which is the cost of holding the module to 11 files rather than 13.\n- No probe/scratch/debug files: `git status --porcelain` shows only packages/store/src/subscriptions/ plus daemon-owned .moe state and the pre-existing untracked .idea/.",
+      "startedAt": "2026-08-08T16:09:48.759Z",
+      "completedAt": "2026-08-08T16:18:29.403Z"
     },
     {
       "stepId": "step-7",
       "description": "PHASE 5+6+8 (verification + pathspec commit — DoD 4). Invoke Skill(skill=\"regression-check\"). Run `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` and capture FRESH output — this exact command's exit-0 output is the complete_task evidence; the store suite had 25 files / 201 tests green before this task, so any pre-existing red is foreign (check sibling-task liveness before blocking on it, mem:gotcha-shared-package-gate-broken-by-sibling-red-file). This is a mid-epic task: focused package gate only — the epic's final hardening task owns full regression and the docs sweep. No index.ts edit (not an owned path; the relay set the precedent of staying unexported). No inline docs beyond why-comments where non-obvious (module is package-internal). COMMIT (shared working tree — epic rail 3): `git status --porcelain`; every staged entry must be under packages/store/src/subscriptions/; unstage any foreign path with `git restore --staged -- <path>`; commit by explicit pathspec ONLY: `git commit -m \"feat(task-7617c00dfc4a46eb81ebb8673f724855): Subscription cursors with CURSOR_GAP snapshots\" -- packages/store/src/subscriptions`; verify with `git show --stat` that the commit contains only owned paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/subscriptions/subscription-writes.ts",
         "packages/store/src/subscriptions/subscription-read-page.ts"
       ],
+      "modifiedFiles": [
+        "packages/store/src/subscriptions/subscription-contracts.ts",
+        "packages/store/src/subscriptions/subscription-contracts.js",
+        "packages/store/src/subscriptions/subscription-doc-codec.ts",
+        "packages/store/src/subscriptions/subscription-internals.ts",
+        "packages/store/src/subscriptions/subscription-writes.ts",
+        "packages/store/src/subscriptions/subscription-writes.js",
+        "packages/store/src/subscriptions/subscription-read-page.ts",
+        "packages/store/src/subscriptions/subscription-read-page.js",
+        "packages/store/src/subscriptions/subscription-docs.test.ts",
+        "packages/store/src/subscriptions/subscription-writes.test.ts",
+        "packages/store/src/subscriptions/subscription-read-page.test.ts"
+      ],
+      "note": "FRESH GATE (19:19:52, exit 0): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> tsc clean, 28 files / 305 tests passed. Baseline before this task was 25 files / 201 tests, so this task added 3 files / 104 tests and broke nothing.\n\nBROADER SWEEP, beyond the plan's focused gate (regression-check skill): root `pnpm typecheck` exit 0 across every package, root `pnpm test` exit 0 with 126 files / 1906 passed / 1 skipped. Previous recorded root baseline was 123 files / 1801 passed / 1 skipped — the delta is exactly my three suites. Zero regressions anywhere in the repo.\n\nCOMMIT — MY PATHSPEC COMMIT STAGED NOTHING, AND THAT IS CORRECT. governor-38d884e4 committed all eleven owned files at 19:17:50 as `dfcea2d`, on explicit human instruction, while I was mid step-6. Its message says so and predicts exactly this. I verified rather than assumed:\n- `git ls-files packages/store/src/subscriptions` lists all 11 files as tracked;\n- `git diff HEAD -- packages/store/src/subscriptions` is EMPTY, so the committed bytes are identical to the verified working tree;\n- `git status --porcelain` shows 0 entries under packages/store.\nNothing of mine is uncommitted and nothing is lost. Per epic rail 3 and the governor's standing instruction I did NOT revert, reset or re-commit; a second commit would have been an empty no-op. `73804e0` is a separate daemon/governor state-sync commit touching only .moe/**. My own `git add` of the eleven explicit paths staged nothing because they already match HEAD.\n\nGOVERNOR ADDENDUM — RECONCILIATION OF UNDECLARED FILES (all four points):\n\n(1) Every file in the owned path, with wc -l and declaration status:\n  subscription-contracts.ts     150  PLAN-DECLARED (step-1)\n  subscription-contracts.js       1  PLAN-DECLARED (step-1 bridge)\n  subscription-doc-codec.ts     301  UNDECLARED (step-1 split)\n  subscription-docs.test.ts     271  PLAN-DECLARED (step-1)\n  subscription-internals.ts     265  UNDECLARED (step-3 split)\n  subscription-writes.ts        247  PLAN-DECLARED (step-3)\n  subscription-writes.js          1  PLAN-DECLARED (step-3 bridge)\n  subscription-writes.test.ts   623  PLAN-DECLARED (step-2)\n  subscription-read-page.ts     140  PLAN-DECLARED (step-5)\n  subscription-read-page.js       1  PLAN-DECLARED (step-5 bridge)\n  subscription-read-page.test.ts 523 PLAN-DECLARED (step-4)\n  11 files, 5 production .ts, 3 bridges, 3 test suites. Largest production file 301, hard cap 400.\n\n(2) Why each undeclared file exists — the per-file rail forced both splits, measured not guessed:\n  - subscription-doc-codec.ts: subscription-contracts.ts holding the contract types AND the codec measured 378 lines. The codec (canonical JSON, framed digest, parsePosition, encode/decode) moved out; contracts kept the shapes. Without the split, subscription-contracts.ts would have shipped at 378.\n  - subscription-internals.ts: subscription-writes.ts holding the shared plumbing AND the five write APIs measured 446 lines — OVER the 400 hard cap, not merely over the 250 target. The transaction/refusal machinery and the durable readers moved out. Without the split, subscription-writes.ts would have shipped at 446 and violated epic rail 5.\n\n(3) The missing .js bridges are INTENTIONAL, not an oversight. Both undeclared modules are internal helpers of an already-bridged sibling and have no external consumer: everything outside imports ./subscription-contracts.js, ./subscription-writes.js or ./subscription-read-page.js, which re-export or wrap them. This is governor-38d884e4's own option 1, issued before step-1 precisely for this case. I verified rather than assumed that the bridge-less specifiers resolve on both gates: tsc NodeNext exits 0, and vitest resolves them (28 suites green). Nothing under subscriptions/** is exported from index.ts, so no Node type-stripping path depends on a bridge file. If the reviewer prefers strict convention over the file count, adding the two bridges is a 2-line change that takes the module to 13 files.\n\n(4) `grep -rn \"outbox-relay\\|projections/\" packages/store/src/subscriptions --include=*.ts` returns ZERO hits — no import specifiers, no type-only imports, no string references. The relay's output is consumed as durable state through plain SELECTs on the projections and domain_events tables, which is consumption, not reaching into its modules.\n\nNo index.ts edit (not an owned path; the relay set the precedent of staying unexported). No docs sweep — mid-epic task, the final hardening task owns it.",
+      "startedAt": "2026-08-08T16:18:33.501Z",
+      "completedAt": "2026-08-08T16:20:23.609Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -151,8 +179,8 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0fb25cf3",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-b90b8ffe",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -164,17 +192,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:21.887Z",
-  "updatedAt": "2026-08-08T16:09:48.759Z",
+  "updatedAt": "2026-08-08T16:22:49.782Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T15:20:58.636Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-e9f16b5b",
     "worker-0fb25cf3",
-    "governor-38d884e4"
+    "governor-38d884e4",
+    "qa-b90b8ffe"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -184,7 +213,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T15:42:12.111Z",
@@ -207,5 +238,25 @@
     "wallClockMs": 14400000
   },
   "planApprovedAt": "2026-08-08T15:42:14.151Z",
-  "workStartedAt": "2026-08-08T15:45:30.239Z"
+  "workStartedAt": "2026-08-08T15:45:30.239Z",
+  "reviewStartedAt": "2026-08-08T16:22:37.618Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  28 passed (28)\n      Tests  305 passed (305)\n   Start at  19:19:52\n   Duration  2.79s (transform 10.47s, setup 0ms, import 15.49s, tests 8.53s, environment 2ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-08T16:22:37.618Z"
+  },
+  "filesModified": [
+    "packages/store/src/subscriptions/subscription-contracts.ts",
+    "packages/store/src/subscriptions/subscription-contracts.js",
+    "packages/store/src/subscriptions/subscription-doc-codec.ts",
+    "packages/store/src/subscriptions/subscription-docs.test.ts",
+    "packages/store/src/subscriptions/subscription-writes.test.ts",
+    "packages/store/src/subscriptions/subscription-writes.ts",
+    "packages/store/src/subscriptions/subscription-writes.js",
+    "packages/store/src/subscriptions/subscription-internals.ts",
+    "packages/store/src/subscriptions/subscription-read-page.test.ts",
+    "packages/store/src/subscriptions/subscription-read-page.ts",
+    "packages/store/src/subscriptions/subscription-read-page.js"
+  ]
 }

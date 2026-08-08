@@ -1,0 +1,35 @@
+{
+  "id": "task-4a3b5ec031f14079bce4141abf922905",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Launch lock, process adoption, drain and restart reconciliation",
+  "description": "Objective: everything between an activation grant and a proven-terminal or reconciled attempt for one Claude node. SPIDR child 2 of 4, split from task-312c1de3c76a4f1dbd8da5c34e629b0e per human-approved 4-child decomposition 2026-08-08 (coarse split: lock/adoption/observation AND cancel/drain/restart deliberately share this task). Design authority: pinned design lines 798 (launch lock, bootstrap credential, duplicate delivery, SUSPECT), 786-787 (reconciliation table), 382/568 (drain on invalidation/remove), 336 (lifecycle). Deliverable: launch-lock protocol records (OS-exclusive lock identity, one-time bootstrap credential registration — lock/credential facts are caller-supplied observations, no syscalls); duplicate delivery adopts the registered process or exits before provider launch; process observation intake over caller-supplied EXITED{code}|SIGNALLED{signal}|UNOBSERVED bound to the adapter's claude-observation and claude-cancel-reconcile outcome shapes; uncertain ARMED/lock state becomes SUSPECT and is never auto-relaunched; the design-786/787 reconciliation: pre-activation intents with every resource proven absent/released are atomically tombstoned with lease/slot fenced-released, budget settled, attempt terminalized by strongest typed reason (RELEASED additionally requires an exact safe handoff); any active/unknown resource forces attempt DRAINING with capacity/NodeRun hold retained until adapter reconciliation, then strongest disposition; restart reconstruction re-derives exactly one legal state from durable records, never a premature terminal. NOT in scope: real OS spawn/job-object/lock syscalls (port-shaped observations; OS wiring is a later task), daemon services (child 3), seeded race harness (child 4), Codex, multi-node. Hard dependencies: Effect intent lifecycle and one-use activation gate (task-2580a578, child 1) for intent records and grant shapes; Claude runtime adapter (task-5ff2b39d, DONE) for observation/cancel-reconcile shapes. Owned paths: packages/runner/src/supervisor/** additions and focused tests (do not rewrite child 1's files; extend). Verification: pnpm --filter @moe/runner typecheck &amp;&amp; pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Duplicate delivery with a registered process ADOPTS it (same process identity in the outcome) and without a registration EXITS before provider launch; both arms asserted with their stable codes, and the duplicate-delivery outcome matrix asserts set-equality so a blind-relaunch outcome kind cannot exist unnoticed.",
+    "Uncertain ARMED or lock state maps to SUSPECT with a stable code; no SUSPECT or UNKNOWN state can yield a launch grant, asserted against the production surface.",
+    "Every design-786/787 reconciliation row has a fixture: all-resources-proven-released terminalizes by strongest typed reason in one step; any active/unknown resource yields DRAINING with capacity held until adapter reconciliation; the row list is asserted so a sweep generating zero rows fails.",
+    "Restart reconstruction over seeded pre-crash states lands each in exactly one legal post state (asserted outcome set), never a premature terminal label; RELEASED requires an exact safe handoff and its absence is a distinct refusal.",
+    "The focused runner typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Follow pinned design lines 798/786-787/382/568; process termination is best-effort, fencing is authoritative — no post-activation business mutation may be accepted even while DRAINING.",
+    "No child_process, spawn, kill, Date.now, or Math.random — all OS facts are caller-supplied observations; uncertainty stays SUSPECT or UNKNOWN and never gains authority.",
+    "Do not add package dependencies; mirror foreign shapes structurally with pinned version literals.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
+    "Assert the reason code and refusing layer; mutation-verify failure paths at the mechanism's single source."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
+  "priority": "CRITICAL",
+  "order": 2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T16:19:48.762Z",
+  "updatedAt": "2026-08-08T16:19:48.762Z"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "task-ba3a45f96cda4db691233c4e45df2432",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Daemon work services",
+  "description": "Objective: daemon-side work.claim|renew|release|resume|get_context|cancel service handlers for one Claude node (design line 992 command family). SPIDR child 3 of 4, split from task-312c1de3c76a4f1dbd8da5c34e629b0e per human-approved 4-child decomposition 2026-08-08. Deliverable: bounded byte-ingress handlers following the daemon graph-preview precedent (decodeBoundedJsonBytes first; INPUT_REJECTED preserves the decoder's stable code, REQUEST_INVALID for envelope mismatch, frozen results with explicit authority labeling — see mem:decision-daemon-graph-preview-ingress) composing scheduler lease/slot/budget records (@moe/scheduler is already a daemon dependency: reserveAll/reserveProviderSlot/fenceAuthority from packages/scheduler/src/authority/**, budget reservation records from packages/scheduler/src/budget/**) with runner supervisor intent/activation records; atomic work.claim: lease + provider slot RESERVED + protected budget reservation + effect intent creation together or nothing, refused with one stable code naming the failing leg; renew/release/cancel/resume/get_context handlers with current token/epoch revalidation on every mutation. OWNERSHIP AMENDMENT (human-approved 2026-08-08): owned paths include apps/daemon/package.json solely to add the @moe/runner workspace dependency, plus exactly the pnpm-lock.yaml hunk that dependency addition produces — the lockfile is shared state, commit only your own hunk (mem:gotcha-shared-pnpm-lock-ownership). NOT in scope: HTTP/auth transport, persistence wiring to @moe/store, automatic approval, provider execution, multi-node, Codex. Hard dependencies: Effect intent lifecycle and one-use activation gate (task-2580a578, child 1); Launch lock, process adoption, drain and restart reconciliation (task-4a3b5ec0, child 2); Lease presence core (task-967769ea, DONE); Conserved budget core children (all five DONE, parent task-d5c4b086 DONE). Owned paths: apps/daemon/src/work/**, apps/daemon/package.json, pnpm-lock.yaml (dep-add hunk only). Verification: pnpm --filter @moe/daemon typecheck &amp;&amp; pnpm --filter @moe/daemon test (daemon test script is `vitest run --root . --config package.json src`; the root vitest config would otherwise hide app tests — mem:gotcha-vitest-app-root-config).",
+  "definitionOfDone": [
+    "work.claim commits lease + RESERVED provider slot + protected budget reservation + effect intent together or nothing: a failure injected at each single leg leaves the other three unobservable, asserted per leg with a stable code naming the refusing leg.",
+    "Every handler rejects malformed or oversized bytes with the INPUT_REJECTED / REQUEST_INVALID taxonomy BEFORE any authority path executes, and every result is frozen with explicit authority labeling.",
+    "renew, release, resume, get_context, and cancel each revalidate current token and epoch; claim-vs-cancel and release-vs-renew interleavings end in exactly one legal state with the losing side receiving a stable reason code.",
+    "The scheduler slot ceiling is honored: a fifth concurrent RESERVED|ACTIVE claim in the default dimension is refused with the slot-exhausted stable code, never queued silently.",
+    "The focused daemon typecheck and test command exits 0; committed paths are exactly apps/daemon/src/work/**, apps/daemon/package.json, and the single pnpm-lock.yaml dependency hunk."
+  ],
+  "taskRails": [
+    "Ingress before authority: decodeBoundedJsonBytes first, exact envelope validation second, composition last; never add HTTP, auth, persistence, activation-bypass, or next-command affordances here (graph-preview boundary precedent).",
+    "Fail closed with stable reason codes; a refused claim leaves zero durable or in-memory authority residue.",
+    "The package.json edit adds exactly one dependency line (@moe/runner workspace:*) and nothing else; the lockfile commit contains only the hunk that edit produces.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
+    "Assert the reason code and refusing layer; mutation-verify each failure path."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
+  "priority": "CRITICAL",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T16:20:12.133Z",
+  "updatedAt": "2026-08-08T16:20:12.133Z"
+}

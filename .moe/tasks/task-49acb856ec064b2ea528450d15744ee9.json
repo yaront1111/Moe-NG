@@ -1,0 +1,35 @@
+{
+  "id": "task-49acb856ec064b2ea528450d15744ee9",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Supervisor race and restart hardening gate",
+  "description": "Objective: closing hardening gate for the external effect supervisor slice; carries the parent task's full DoD evidence (task-312c1de3c76a4f1dbd8da5c34e629b0e). SPIDR child 4 of 4, split per human-approved 4-child decomposition 2026-08-08. This is the epic-verification-budget FINAL task for the slice: it owns full regression, the whole-slice adversarial pass, and the docs sweep — mid-slice children deliberately ran focused gates only. Deliverable: a seeded deterministic race harness across claim/activate/cancel/duplicate-delivery/restart orderings spanning runner supervisor and daemon work services, following the lease-presence-core harness pattern (multiple seeds x hundreds of steps, honest/tamper bias, and the test asserts the observed outcome-kind SET equals an exact expected list with per-kind counts recorded — see mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff for the shape and non-vacuity bar); cross-package invariant checks proving parent DoD 1-3 end to end: no external-action grant precedes a committed ARMED-&gt;ACTIVE + LAUNCH_REQUESTED-&gt;RUNNING pair on ANY seeded schedule; every race ends in one legal state with token/epoch/budget/runtime closure revalidated; duplicate delivery never blind-relaunches. Full regression: both focused gates plus repo root pnpm test. Whole-slice adversarial review and docs sweep (inline why-comments; no new docs/ contract unless a public surface changed). NOT in scope: new supervisor/service features — this task adds tests and fixes only defects those tests expose (defect fixes stay within the slice's owned paths and must each get a red-first test). Hard dependencies: children 1-3 (task-2580a578, task-4a3b5ec0, task-ba3a45f9) all DONE. Owned paths: packages/runner/src/supervisor/** and apps/daemon/src/work/** (test additions plus defect fixes only). Verification: pnpm --filter @moe/runner typecheck &amp;&amp; pnpm --filter @moe/runner test &amp;&amp; pnpm --filter @moe/daemon typecheck &amp;&amp; pnpm --filter @moe/daemon test &amp;&amp; pnpm test.",
+  "definitionOfDone": [
+    "The race harness runs >=5 seeds x >=200 steps per seed with a documented honest/tamper bias and asserts the observed outcome-kind set EQUALS an exact expected list (no unexpected kind, no missing kind); per-kind counts are recorded in the test output and quoted in the completion evidence.",
+    "Across every seeded schedule, no external-action grant is observed before its committed ARMED->ACTIVE + LAUNCH_REQUESTED->RUNNING pair, and no duplicate delivery produces a fresh launch — both asserted as harness invariants, not spot checks.",
+    "Start/cancel/release/restart races end in exactly one legal state with current token, epoch, budget, and runtime closure revalidated; the harness asserts version-delta and strongest-reason monotonicity invariants on every step.",
+    "Any defect found gets a red-first focused test and a fix within the slice's owned paths; zero regressions: both focused gates AND repo root pnpm test exit 0 with fresh output quoted.",
+    "Adversarial self-review checklist run on the whole slice; no probe, scratch, or debug files committed; only owned paths staged and committed."
+  ],
+  "taskRails": [
+    "This gate concentrates verification: do not weaken it into spot checks; the outcome-kind set equality and nonzero per-kind counts are the non-vacuity bar (a sweep producing zero cases must fail).",
+    "Determinism: seeds are pinned constants; no Date.now or Math.random outside the seeded generator; identical reruns produce identical outcome counts.",
+    "Fix defects red-first inside owned paths; anything outside the slice's ownership is a report to #architects, not an edit.",
+    "Keep each test file <=400 lines, split by concern before that. Commit by explicit pathspec only.",
+    "Assert reason codes and refusing layers throughout; the harness must assert against production surfaces, never a reimplementing helper."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
+  "priority": "CRITICAL",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T16:20:38.488Z",
+  "updatedAt": "2026-08-08T16:20:38.488Z"
+}

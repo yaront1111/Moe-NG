@@ -1,0 +1,35 @@
+{
+  "id": "task-2580a578812f46a49cae0af79ff6fc16",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Effect intent lifecycle and one-use activation gate",
+  "description": "Objective: EffectIntent protocol records and the effect.activate linearization point for one Claude node. SPIDR child 1 of 4, split from task-312c1de3c76a4f1dbd8da5c34e629b0e (External effect supervisor) per human-approved 4-child decomposition 2026-08-08. Design authority: pinned rebuild design lines 771-787 (EffectIntent protocol), 336 (attempt lifecycle), 798 (wrapper pre-activation duties). Deliverable: frozen EffectIntent/EffectClaim/EffectResult/EffectTombstone vocabularies with binding fields (aggregate, expected graph epoch/lease, input binding, predecessor cursor value, desired state, effect-specific idempotency key, runtime observation digest); a pure lifecycle reducer admitting exactly PENDING-&gt;CLAIMED-&gt;ARMED-&gt;ACTIVE-&gt;SUCCEEDED|FAILED|UNKNOWN and PENDING|CLAIMED|ARMED-&gt;CANCEL_REQUESTED-&gt;CANCELLED|UNKNOWN; terminal EffectTombstone dominance over pre-activation intents ONLY; the effect.activate revalidation gate (intent state, epoch/lease/binding, desired state, dependency witnesses, runtime closure comparison against the quote-bound ProviderRuntimeObservation digest, lock identity) that atomically pairs effect ARMED-&gt;ACTIVE with owning attempt LAUNCH_REQUESTED-&gt;RUNNING — together or neither — and returns a one-use activation grant bound to the requesting wrapper; cancel-commits-first rejects activation with no external-action grant, activation-commits-first forces any later cancel into active drain semantics. NOT in scope: OS locks, process observation/adoption, drain/restart reconciliation (child 2), daemon services (child 3), race harness (child 4), Codex, multi-node. Hard dependencies: Claude runtime adapter (task-5ff2b39d, DONE — ProviderRuntimeObservation/observationDigest shapes in packages/runner/src/providers/claude/claude-observation.ts); Lease presence core (task-967769ea, DONE — lease/epoch shapes MIRRORED STRUCTURALLY: @moe/runner depends only on @moe/contracts and package.json is not owned, follow the claude-render structural-mirror precedent with pinned version literals). Owned paths: packages/runner/src/supervisor/** (greenfield — git ls-files shows no such directory) and its focused tests. Verification: pnpm --filter @moe/runner typecheck &amp;&amp; pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "The lifecycle reducer admits exactly the design-774/775 arcs; every illegal transition is refused with a stable reason code naming the current state and the attempted command, asserted per transition from a generated matrix whose case count is itself asserted nonzero.",
+    "A terminal EffectTombstone dominates PENDING|CLAIMED|ARMED and never dominates ACTIVE or later; both directions asserted with their reason codes.",
+    "effect.activate returns a ONE-USE grant: a second use of the same grant is refused with a stable code; activation pairs effect ARMED-&gt;ACTIVE with attempt LAUNCH_REQUESTED-&gt;RUNNING together or neither — a failure injected at each revalidation leg leaves BOTH records unchanged, asserted per leg with the leg-naming code.",
+    "Cancel-before-activate rejects activation with a stable code and yields no grant; activate-before-cancel yields active drain semantics; both interleavings tested.",
+    "A runtime observation digest mismatch refuses activation with a stable capability-changed code; the focused runner typecheck and test command exits 0 and only explicitly owned paths are staged and committed."
+  ],
+  "taskRails": [
+    "Follow pinned design lines 771-787/336/798; this task cannot create authority beyond its named contract.",
+    "No child_process, spawn, kill, Date.now, or Math.random anywhere in the module — process facts are caller-supplied observations (adapter fence precedent); timestamps and randomness are inputs.",
+    "Mirror scheduler/adapter shapes structurally with pinned version literals; do NOT add dependencies to packages/runner/package.json (not owned).",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
+    "Assert the reason code and, where more than one layer can refuse, which layer refused; mutation-verify each failure-path test by flipping the production check and confirming red."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
+  "priority": "CRITICAL",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T16:19:20.892Z",
+  "updatedAt": "2026-08-08T16:19:20.892Z"
+}
