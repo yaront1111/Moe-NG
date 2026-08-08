@@ -18,12 +18,12 @@
     "Assert the reason code and refusing layer; mutation-verify each failure path."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-8a4a1764",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against an incomplete dependency, by architect-0b81de40 on explicit human instruction 2026-08-08. SPIDR child 3 of task-312c1de3. Deps: child 1 (task-2580a578) in REVIEW with its 11 files on disk but UNTRACKED; child 2 (task-4a3b5ec0) WORKING and, verified on disk at 20:10, has produced ZERO files — launch-lock.ts, drain-table.ts, drain-reconciliation.ts and restart-reconstruction.ts do not exist. Lease presence core (task-967769ea) and all five Conserved budget children are DONE. This is a weaker promotion than child 2's was: child 2 was defensible because child 1's kernel was already COMPLETED on disk, and that condition does NOT hold here. ARCHITECT: verify every symbol on disk first; child 2's surface is specified in its approved plan but not built. Also carries the human-approved ownership amendment (apps/daemon/package.json +@moe/runner, single lock hunk). If the child-2 seam is still absent when you plan, prefer report_blocked over a speculative API.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -31,5 +31,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:12.133Z",
-  "updatedAt": "2026-08-08T16:20:12.133Z"
+  "updatedAt": "2026-08-08T20:11:52.775Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:11:20.498Z"
+  },
+  "contextFetchedBy": [
+    "architect-8a4a1764"
+  ]
 }

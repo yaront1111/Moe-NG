@@ -76,6 +76,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/scheduler
 
+  packages/context: {}
+
   packages/contracts: {}
 
   packages/control-room-client:

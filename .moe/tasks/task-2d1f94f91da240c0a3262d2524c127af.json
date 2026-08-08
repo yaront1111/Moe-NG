@@ -15,13 +15,124 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin the seam and settle the package edge. Confirm on disk that apps/daemon/src/http/ and apps/control-room/src/data/ do not exist (this task creates both). Re-read the committed surfaces this seam exposes: packages/store/src/subscriptions/subscription-contracts.ts (SubscriptionPage and its CURSOR_GAP arm, SubscriptionCursor, SubscriptionGapCause, GenerationBaseline, SNAPSHOT_SUBSCRIBER_PREFIX, SubscriptionCode/SubscriptionLayer) and subscription-read-page.ts / subscription-writes.ts; packages/control-room-client/src/index.ts (createCompatGate) and its generated client plus the existing client-compat, generated-coverage and generator-determinism tests; and apps/daemon/src/index.ts for the established ingress pattern. THEN CHECK apps/daemon/package.json — it declared only @moe/contracts and @moe/scheduler, but sibling tasks in this batch may already have added @moe/store, @moe/core or @moe/runner. Exposing subscriptions needs @moe/store: if it is already there, add nothing; if genuinely missing, request the ownership amendment in #governors citing the precedent approved for child 3, and WAIT. Write down the command registry shape the adapter will be generic over — that genericity is what makes this task independent of its five unbuilt dependencies.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Define the adapter boundary vocabulary. Create apps/daemon/src/http/http-contract.ts as exported frozen data: the stable wire error-code list (DoD 1's 'stable errors' means a closed, versioned vocabulary, not ad-hoc strings); the input bound constants for body bytes, field count and depth, reusing @moe/contracts' bounded-JSON limits rather than inventing new ones; the pinned wire protocol version literal used for distribution compatibility; the auth outcome lattice with AUTHENTICATED, UNAUTHENTICATED and UNAUTHORIZED as distinct verdicts; and the COMMAND REGISTRY type — an entry names a command kind, its exact-shape key list, and its handler, so commands from tasks that do not exist yet can be added later without touching boundary code. Data and types only. This registry indirection is the mechanism that makes the rest of this plan buildable while five dependencies are unbuilt, so keep boundary logic strictly free of any specific command's knowledge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-contract.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for the adapter boundary — DoD 1, all five properties. Create apps/daemon/src/http/http-adapter.test.ts before the module, driving a small registry of committed and deliberately synthetic command entries so the boundary is tested independently of any real command. Assert: an unauthenticated request is refused with its stable code BEFORE the body is decoded, and an unauthorized one is refused distinctly from unauthenticated, with neither refusal leaking whether the target exists; a request whose wire protocol version is incompatible is refused through the existing createCompatGate rather than a second compatibility rule; a body exceeding the byte, field-count or depth bound is refused with the specific bound's code, tested AT the boundary (exactly at the limit admits, one over refuses); an unknown command kind is refused rather than ignored; and the error vocabulary is asserted by SET EQUALITY against the exported list so an ad-hoc error string cannot appear unnoticed. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement apps/daemon/src/http/http-adapter.ts to green, and prove idempotency by STATE. Follow the daemon's established ingress order exactly and do not reorder it: authenticate, then compatibility-gate, then bounded-decode via decodeBoundedJsonBytes, then exact-shape check against the registry entry's frozen key list, then dispatch. Authentication precedes decoding so an unauthenticated caller cannot make the daemon parse attacker-controlled bytes. Command idempotency routes through the store's durable command decision so a replay returns the SAME terminal decision — and assert it by state, not by response: replay a command and check both that the decision matches and that NO second durable effect exists, since 'it did not error the second time' is exactly what a double-write also looks like. Refusals are frozen, carry a stable code, and never echo credentials or reveal target existence. Target under 250 lines; split before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/http-adapter.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/http-adapter.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red for resumable cursor events — DoD 2, the correctness-critical path. Create apps/daemon/src/http/event-stream.test.ts. The store already distinguishes these cases; this seam must SURFACE that distinction rather than flatten it. Assert: a normal read returns a PAGE arm carrying nextCursor; a gap returns the CURSOR_GAP arm carrying a digest-verified snapshot, with the gap CAUSE preserved rather than collapsed to a generic 'gap'; and a stale snapshot is refused with its stable code rather than silently accepted. Then the property the whole DoD turns on: resuming from ONE verified snapshot skips NO events — assert it by comparing the union of events delivered across a gap-then-resume sequence against a single uninterrupted read of the same ledger, asserting exact equality of the delivered event id sequence, not merely equal counts. Also assert that a resume with a cursor from a superseded generation is refused rather than silently reseated. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/event-stream.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/event-stream.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement apps/daemon/src/http/event-stream.ts to green. It exposes the committed subscription surface over the wire and adds NO new gap semantics of its own: readSubscriptionPage supplies the PAGE and CURSOR_GAP arms, reseatToSnapshot performs the reseat, and this module's job is transport, bounds and shape. Preserve the arm discipline the store deliberately built — nextCursor exists only on PAGE and snapshot only on CURSOR_GAP — so a client cannot read a cursor off a gap response and resume from a position that was never delivered; do not flatten the union into one optional-field object, which would undo that guarantee at the boundary. Page sizes are bounded by the adapter's limits. Every refusal carries the store's own SubscriptionCode and layer verbatim rather than a locally invented code, so a reviewer can still see which layer refused. Target under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/event-stream.ts",
+        "apps/daemon/src/http/event-stream.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/event-stream.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Regenerate the client bindings through the EXISTING generator — do not hand-edit generated output. packages/control-room-client already ships generator-determinism.test.ts and generated-coverage.test.ts, which exist precisely to police this; a hand edit will fail them for a confusing reason and waste a debugging cycle. Regenerate so the bindings cover the new command and event-stream surface, then confirm the determinism test still passes (regenerating twice produces byte-identical output) and the coverage test still passes (every exposed surface has a binding). If the generator itself needs a change to cover the new surface, that is a real change to make — but make it in the generator and regenerate, never in its output. Keep createCompatGate as the single compatibility rule shared by client and adapter.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/control-room-client/src/generated/generated-client.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Control-room data adapters — DoD 3, and the ban that must be structural. Create apps/control-room/src/data/data-adapter.ts and data-adapter.test.ts. The adapters fetch and shape data ONLY: they never compute a transition, never derive truth strength, never infer a status the daemon did not state. Anything the UI displays about state or confidence arrives already computed from the daemon. Prove the ban the way the lease core proved its import ban rather than by behaviour alone: a STATIC SOURCE SCAN over apps/control-room/src/data/** asserting no transition or strength computation appears, AND asserting the scanned file list equals an expected set so a new file cannot escape the ban later. Also assert the advisory rule this epic holds everywhere: a session or terminal message can never cause a state change except through the command path — feed one and assert no command is dispatched and no state is mutated. Do not modify the existing feature directories (approvals, attempts, board, doctor, evidence, goals, nodes, shell); this task adds data/ beneath them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/data/data-adapter.ts",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/data/data-adapter.ts",
+        "apps/control-room/src/data/data-adapter.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the assertions are load-bearing. MUTATION DRILL at each mechanism's single source: the auth-before-decode ordering, the compat gate call, each input bound, the idempotency pass-through to the durable decision, the stale-snapshot refusal, and the arm discipline that keeps nextCursor off the CURSOR_GAP response. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests. Two mutations matter most: moving decode before authentication must redden the ordering test, and flattening the page/gap union must redden the resume test — if either survives, the property is untested no matter how green the suite is. Back each file up out-of-tree and verify restores with git hash-object. Also confirm the static source scan in step 8 is itself load-bearing by adding a temporary file that violates the ban and confirming the scan goes red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-adapter.ts",
+        "apps/daemon/src/http/event-stream.ts",
+        "apps/control-room/src/data/data-adapter.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the REPO-WIDE gate — this task's stated verification is `pnpm typecheck && pnpm test`, not a focused filter, which makes it the most exposed task on the board to other people's red. Run both fresh from the repo root and capture real output as evidence. ATTRIBUTE RED BY PATH, NEVER BY A REMEMBERED COUNT: a stale 'known failures' number had to be retracted from another plan on this board today, and carrying one into evidence means owning the discrepancy when a reviewer re-measures. Anything red under apps/daemon/src/http/, apps/control-room/src/data/, or packages/control-room-client/ is unambiguously yours. For anything else, identify the owning task and confirm it is genuinely in flight before calling it foreign, and name the specific failing file rather than a count. The scope-observation real-git test has a known 5s-timeout flake on this machine: re-run once, report, do not chase. Confirm every production file is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can an unauthenticated request cause any parsing, allocation or state read before it is refused; do the unauthenticated and unauthorized refusals leak whether the target exists; can a replayed command produce a second durable effect; can a client resume from a cursor it was never given, or from a superseded generation; can a gap-then-resume ever skip an event; does any data adapter compute a transition or truth strength, including indirectly through a helper; can a session or terminal message reach a state change without crossing the command path; was any generated file hand-edited. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never a directory pathspec, since this working directory is shared with several in-flight tasks and packages/runner/src/ in particular holds foreign untracked files. Run git status --porcelain first and unstage any foreign path with git restore --staged. apps/daemon/package.json and pnpm-lock.yaml are committed only if step 1 established an amendment was needed and granted. Verify with git show --stat that only owned paths landed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against incomplete dependencies, by architect-0b81de40 on explicit human instruction 2026-08-08. This task has SEVEN dependencies and is the most speculative promotion in the batch: \"Projection outbox core, Bootstrap application services, External effect supervisor, Independent review flow, Crash reconciliation services, Session coordination fabric, and Foundation control-room shell.\" Satisfied: Foundation control-room shell (task-fd82678f) DONE, and Projection outbox core's five children all committed. Unbuilt: Bootstrap application services (task-2f6ac0d1), Session coordination fabric (task-f837ce45), Independent review flow (task-58029c26) and Crash reconciliation services (task-52ec1406) are all sitting in PLANNING from this same batch with no code; External effect supervisor is a BLOCKED shell with 1 of 4 children in REVIEW. ARCHITECT: read the board before planning. If five of seven seams are still unbuilt when you claim this, report_blocked is the correct outcome and is not a failure.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +140,35 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.051Z",
-  "updatedAt": "2026-08-07T11:50:16.051Z"
+  "updatedAt": "2026-08-08T20:34:34.266Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:32:50.504Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:34:32.218Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WHY THIS IS NOT BLOCKED DESPITE SEVEN DEPENDENCIES, FIVE OF THEM UNBUILT. The promotion note said report_blocked would be the correct outcome. It is not, and the reason is that this task's DoD is about the ADAPTER BOUNDARY, not about the commands that cross it. Read the four DoD items: authentication, distribution compatibility, input bounds, idempotency and stable errors (DoD 1); cursor gaps, stale snapshots and resume without skipped events (DoD 2); the client never computing transitions or truth strength (DoD 3); repo gates green (DoD 4). Every one of those is a property OF THE SEAM. None requires any particular command to exist. So the design is: make the adapter GENERIC OVER A COMMAND REGISTRY, and let the unbuilt dependencies contribute registry entries later without touching the boundary code. The boundary is testable today with a small set of committed commands plus deliberately synthetic registry entries.\n(2) DoD 2 IS ALREADY BUILT AND COMMITTED. Cursor gaps, verified snapshots and gapless resume are exactly what `packages/store/src/subscriptions/` shipped in task-7617c00d — SubscriptionPage, CURSOR_GAP with a digest-verified snapshot, SubscriptionGapCause, readSubscriptionPage, reseatToSnapshot. This task must EXPOSE that surface over the wire, not reinvent it. That is the single largest reason this task is far more buildable than its dependency list suggests.\n(3) DoD 3 IS A NEGATIVE PROPERTY AND NEEDS A STRUCTURAL TEST. 'The client never computes transitions or truth strength' cannot be proven by behaviour alone. Prove it the way the lease core proved its import ban (`mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff` decision 6): a STATIC SOURCE SCAN over apps/control-room/src/data/** asserting no transition/strength computation and asserting the scanned file list equals an expected set, so a NEW file cannot escape the ban.\n(4) GENERATED BINDINGS ARE GENERATED. packages/control-room-client already has a generator with determinism and coverage tests. Regenerate through the existing generator and let its own tests police it; do not hand-edit generated output.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **All three owned directories are MISSING**: `apps/daemon/src/http/`, `apps/control-room/src/data/`. They are created by this task, so collisions are limited to package.json and the generated client.\n- **Foundation control-room shell is DONE and real**: `apps/control-room/src/` holds approvals, attempts, board, doctor, evidence, goals, nodes, shell, kernel.tsx, main.tsx, fixtures.ts, scaffold.test.tsx. This task adds `data/` beneath it and must not rewrite those feature directories.\n- **packages/control-room-client is real**: `src/index.ts` exports `createCompatGate` from client-compat.js; `src/generated/generated-client.ts` is generated output; and it already ships `client-compat.test.ts`, `generated-coverage.test.ts` and `generator-determinism.test.ts`. The compat gate is the natural home for DoD 1's distribution-compatibility check — CONSUME it rather than writing a second one.\n- **The subscription surface DoD 2 needs is committed** in packages/store/src/subscriptions/: SubscriptionPage and the CURSOR_GAP arm (payload fields live only on the arm that owns them — `nextCursor` only on PAGE, `snapshot` only on CURSOR_GAP), SubscriptionCursor, SubscriptionGapCause, GenerationBaseline, SNAPSHOT_SUBSCRIBER_PREFIX ('moe-snapshot/'), SubscriptionCode/SubscriptionLayer, plus readSubscriptionPage, registerSubscription, acknowledge, publishSnapshot, advanceGeneration, reseatToSnapshot.\n- **apps/daemon depends on @moe/contracts and @moe/scheduler only.** Exposing subscriptions needs @moe/store; sibling tasks in this batch may already have added it. Check before requesting an amendment.\n- **The daemon ingress pattern to follow** is in apps/daemon/src/index.ts: decodeBoundedJsonBytes, exact-shape check against a frozen key list with a pinned schemaVersion literal, then compose, returning a frozen discriminated union with an advisory envelope where the result carries no authority (`mem:decision-daemon-graph-preview-ingress`).\n- **Daemon test script is non-standard**: `vitest run --root . --config package.json src` (`mem:gotcha-vitest-app-root-config`).",
+    "risks": "1. **This task's gate is the WHOLE REPO** (`pnpm typecheck && pnpm test`), not a focused filter. That makes it the most exposed task on the board to other people's red. Attribute by path and never by a remembered count — a stale 'known failures' number had to be retracted from another plan today. Investigate anything red before calling it foreign, and name specific files in the evidence.\n2. **DoD 3's failure mode is silent and creeps in later.** A data adapter that helpfully derives 'is this attempt healthy' has already broken it. The static source scan must assert the scanned file list equals an expected set, or a new file added next month escapes the ban entirely.\n3. **Idempotency must be proven by state, not by response.** Replay a command and assert the SAME terminal decision AND that no second durable effect exists — 'it did not error the second time' is compatible with a double write.\n4. **Cursor resume is the correctness-critical path**: assert that resuming from a verified snapshot skips NO events, by comparing the union of delivered events across a gap-then-resume against a single uninterrupted read. Assert both CURSOR_GAP causes and that a stale snapshot is refused with its stable code rather than silently accepted — the store already distinguishes these; surface the distinction rather than flattening it.\n5. **Do not hand-edit generated client output.** Regenerate through the existing generator; generator-determinism.test.ts and generated-coverage.test.ts will police drift, and a hand edit will fail them for a confusing reason.\n6. Auth belongs at the boundary and must fail closed: an unauthenticated or unauthorized request is refused with a stable code before any command is decoded, and the refusal must not leak whether the target exists.\n7. Session and terminal messages are advisory: assert that no session/terminal message can cause a state change without going through the command path, which is the epic's standing rule that free-form text never bypasses command authority.\n8. apps/daemon/package.json and pnpm-lock.yaml are shared with every in-flight task. Check whether a sibling already added @moe/store before requesting anything.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/package.json",
+      "packages/control-room-client/src/index.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "packages/store/src/subscriptions/subscription-contracts.ts",
+      "packages/store/src/subscriptions/subscription-read-page.ts",
+      "apps/control-room/src/kernel.tsx"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 28800000
+  },
+  "planApprovedAt": "2026-08-08T20:34:34.266Z"
 }

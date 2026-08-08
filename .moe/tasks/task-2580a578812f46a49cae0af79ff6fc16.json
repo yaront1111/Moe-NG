@@ -168,7 +168,7 @@
       "completedAt": "2026-08-08T18:29:43.094Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -181,12 +181,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:19:20.892Z",
-  "updatedAt": "2026-08-08T18:30:38.895Z",
+  "updatedAt": "2026-08-08T20:13:01.933Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T16:53:48.135Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-08T20:13:01.933Z",
+    "wallClockMs": 11953798
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -217,13 +219,15 @@
     ]
   },
   "budget": {
-    "wallClockMs": 14400000
+    "wallClockMs": 14400000,
+    "warnedAt": "2026-08-08T20:07:03.931Z"
   },
   "planApprovedAt": "2026-08-08T17:04:46.289Z",
   "contextFetchedBy": [
     "worker-6bdacafd",
     "worker-5e600233",
-    "qa-fb528454"
+    "qa-fb528454",
+    "qa-cbad3a29"
   ],
   "workStartedAt": "2026-08-08T17:08:45.247Z",
   "reviewStartedAt": "2026-08-08T18:30:22.975Z",
@@ -245,5 +249,8 @@
     "packages/runner/src/supervisor/effect-grant.ts",
     "packages/runner/src/supervisor/effect-activation.ts",
     "packages/runner/src/supervisor/effect-properties.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T20:13:01.933Z",
+  "reviewCompletedAt": "2026-08-08T20:13:01.933Z",
+  "reviewSummary": "APPROVED — commit 72545bb, 11 files, all under packages/runner/src/supervisor/.\n\nGATE RE-RUN MYSELF: typecheck && test exit 0, 10 files, 388/388 — matches worker's claim.\n\nRAILS: wc -l max production 257 (then 253/250/238/165/148/113), all under 400. Forbidden-API grep (child_process|spawn|kill|Date.now|Math.random|Uint8Array) = 1 hit, a COMMENT at effect-kernel.ts:165. git show --stat = 11 owned files, no package.json, no scratch.\n\nMUTATIONS I RAN MYSELF (3, not trusting the worker's 9; restored, baseline back to 388/388, status clean): disable tombstoneWitness leg -> 6 red; delete ARMED->activate row from ADMITTED_EFFECT_TRANSITIONS -> 2 red; drop CONSUMED check in consumeActivationGrant -> 4 red. The middle proves the matrix expectations are the hand-written DESIGN_ARCS list, not derived from the table under test.\n\nDoD1: 54-cell matrix (9x6), count asserted >0/==product/==54; refusals assert code + detail.state + detail.command. DoD2: 3 dominated -> CANCELLED versionDelta 1; 6 refused EFFECT_TOMBSTONE_DOES_NOT_DOMINATE with state. DoD3: GRANT_ALREADY_CONSUMED + GRANT_WRAPPER_MISMATCH; 10-leg table, length asserted, each leg pinning code+layer+leg; refusal keys asserted == [\"kind\",\"failure\"]; input digest compared before/after per leg. DoD4: cancel-first refuses with no commit; activate-first -> MUST_DRAIN. DoD5: PROVIDER_CAPABILITY_CHANGED at runtimeObservation. Plus a 30-code sweep asserting set equality with SUPERVISOR_ERROR_CODES.\n\nNOTED not rejected: EFFECT_TOMBSTONE_DOES_NOT_DOMINATE folds two causes into one code (both tested); commit ab1c2bd carries this task's message but foreign content — wrapper auto-commit, not the worker.\n\nRISK for child 3: @moe/runner has zero .js bridges, no build step. Probed on Node v24.16.0 with controls — store bridge OK; supervisor AND runner/src/index.ts both ERR_MODULE_NOT_FOUND. Pre-existing, inert until the daemon depends on it. See mem:gotcha-runner-package-does-not-load-under-plain-node."
 }

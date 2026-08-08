@@ -15,13 +15,196 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold the new package, because packages/context does not exist yet. Create packages/context/package.json and packages/context/tsconfig.json by copying the @moe/scheduler template exactly: private ESM package named @moe/context, version 0.0.0, `exports: { \".\": \"./src/index.ts\" }`, scripts `typecheck: \"tsc --project tsconfig.json\"` and `test: \"vitest run --root ../.. packages/context/src\"`; tsconfig extends ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"], and tsBuildInfoFile ../../node_modules/.cache/context.tsbuildinfo. Prefer ZERO dependencies as @moe/scheduler does — take @moe/contracts only if bounded-JSON decoding is genuinely required at this layer, and justify it in the completion evidence if you do. pnpm-workspace.yaml already globs packages/*, so it needs NO edit. Run the workspace install and confirm with `git diff --stat pnpm-lock.yaml` that the lock gained only the single new importer entry — that file is shared with every other in-flight task and a full regeneration would collide. Then confirm the empty package typechecks before writing any logic, so a scaffold error cannot be mistaken for a code error later.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/package.json",
+        "packages/context/tsconfig.json",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/context/package.json",
+        "packages/context/tsconfig.json"
+      ],
+      "modifiedFiles": [
+        "packages/context/package.json",
+        "packages/context/tsconfig.json",
+        "packages/context/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Scaffolded zero-dependency @moe/context from the verified scheduler template. `pnpm install --lockfile-only` initially swept the foreign untracked coordination package and unrelated Vitest peer normalization into the shared lock, so I restored the pre-run lock (verified it had no prior diff) and added only `packages/context: {}`. Fresh scaffold typecheck exited 0.",
+      "startedAt": "2026-08-08T20:28:40.792Z",
+      "completedAt": "2026-08-08T20:29:47.846Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Define the closed vocabulary as exported frozen data. Create packages/context/src/context-contract.ts holding: pinned version literals for the journal, the render manifest, and the renderer itself (the renderer version is one of the seven things DoD 2 requires to be digest-bound, so it is a literal, not a runtime value); the numeric limits — maximum journal entry count, maximum journal text characters, and the context byte budget; the closed error-code list including CONTEXT_TOO_LARGE and the journal and predicate refusal codes; the context item kinds with MANDATORY and OPTIONAL as distinct types rather than a boolean flag, so a mandatory item cannot be silently reclassified; and the typed fact-predicate shape for DoD 3. Also create packages/context/src/index.ts exporting the package surface. Everything here is data and types — no logic — so later steps and their tests share one source of truth for limits and codes rather than restating them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/context-contract.ts",
+        "packages/context/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/context-contract.ts",
+        "packages/context/src/index.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/context-contract.ts",
+        "packages/context/src/index.ts"
+      ],
+      "note": "Added the frozen closed vocabulary and zero-logic types. Limits follow the design's automatic-context journal bounds (8 entries, 12 KiB text) and expose a conservative default byte budget while selector calls remain adapter-budgeted. Typecheck exited 0.",
+      "startedAt": "2026-08-08T20:29:52.647Z",
+      "completedAt": "2026-08-08T20:31:08.944Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for the bounded dead-end journal and typed retry predicates — DoD 3. Create packages/context/src/dead-end-journal.test.ts before the module. Assert the bounds AT the boundary, not near it: exactly at the entry-count limit admits and one over refuses with its stable code; exactly at the text-character limit admits and one character over refuses. Then DoD 3, both arms, because a test that only refuses can pass by refusing everything: (a) NEGATIVE — a retry whose dead-end record differs only in reworded prose does NOT unlock, refusing with its specific code, and assert WHICH layer refused so a nearer shape gate answering first cannot leave this green while no longer testing the rule; (b) POSITIVE — a retry carrying a genuinely changed typed fact predicate DOES unlock. Also assert journal entries are ordered by an explicit total order and that the same entry set inserted in a different order produces an identical journal digest. Red, because the module does not exist.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/dead-end-journal.test.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/dead-end-journal.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/dead-end-journal.test.ts"
+      ],
+      "note": "Wrote boundary, refusal-layer, positive unlock, explicit-order, and insertion-order digest tests first. RED verified: focused Vitest exited 1 with 1 failed suite because `./dead-end-journal.js` does not exist; zero tests executed, matching the approved red-step expectation.",
+      "startedAt": "2026-08-08T20:31:13.544Z",
+      "completedAt": "2026-08-08T20:32:17.132Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement packages/context/src/dead-end-journal.ts to green, enforcing DoD 3 by SHAPE rather than by check. The unlock function accepts a TYPED FACT PREDICATE and has no parameter through which free prose could travel; the comparison is over structured fact identity, so a reworded reason string is not merely rejected, it is not expressible as an unlock. Keep a stable refusal code as the backstop for the nearest legal attempt — a caller passing an unchanged predicate. The journal itself is bounded and immutable: appending past the entry limit or the text limit is a refusal carrying the limit that was hit, never a silent drop of the oldest entry, because a journal that forgets a dead end lets the same dead end be retried forever. Entries are held in an explicit total order over a stable key so the digest does not depend on insertion order. Deep-freeze what you return and derive the digest over exactly the returned value. No Date.now: every timestamp is caller-supplied canonical UTC. Target under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/dead-end-journal.ts",
+        "packages/context/src/dead-end-journal.test.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/dead-end-journal.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/canonical-digest.ts",
+        "packages/context/src/dead-end-journal.ts",
+        "packages/context/src/dead-end-journal.test.ts",
+        "packages/context/src/index.ts"
+      ],
+      "note": "Implemented immutable bounded journal and typed-only retry comparison. Bounds refuse with JOURNAL_LIMIT_REACHED plus the exact limit, sorting is occurredAt/id/content-digest total order, and digests use canonical key sorting with special numeric encodings. Added alias/freeze coverage. Fresh typecheck + Vitest exited 0: 1 file, 7 tests.",
+      "startedAt": "2026-08-08T20:32:51.010Z",
+      "completedAt": "2026-08-08T20:34:09.480Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red for deterministic selection and admission — DoD 1, the property this package exists to guarantee. Create packages/context/src/context-pipeline.test.ts. Assert the three admission arms explicitly: mandatory content that fits admits and the rendered output contains EVERY mandatory item; mandatory content that does not fit fails admission with CONTEXT_TOO_LARGE; and — the case that catches the dangerous implementation — mandatory content that would fit only if something were trimmed still fails with CONTEXT_TOO_LARGE rather than admitting a trimmed result. There must be no third outcome in which mandatory content is dropped and the call still succeeds; assert the outcome kinds by SET EQUALITY against the declared list so a 'degraded success' arm cannot appear unnoticed. Optional selection is where trimming is legal: assert it is deterministic — the same inputs always select the same optional set, selection follows the declared priority order, and declared exclusions are honoured. Red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "note": "Added DoD-1 tests for complete mandatory admission, exact CONTEXT_TOO_LARGE selection-layer refusals (including the trim-only danger case), closed outcome-kind set equality, and deterministic priority/exclusion handling. RED verified: focused Vitest exited 1 with context-pipeline failing because context-selection is absent; existing journal suite remained green (1 passed suite, 7 tests).",
+      "startedAt": "2026-08-08T20:35:12.250Z",
+      "completedAt": "2026-08-08T20:35:43.933Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement packages/context/src/context-selection.ts to green. Selection takes the mandatory set, the optional candidates with their declared priority, the exclusions, and the byte budget, and returns either an admitted selection or a refusal. The single rule that governs the whole module: MANDATORY CONTENT IS NEVER DROPPED. Compute the mandatory cost first; if it alone exceeds the budget, refuse CONTEXT_TOO_LARGE immediately and select nothing — do not proceed to fill the remainder, because a partially-filled result invites a caller to use it. Only after mandatory content is proven to fit may optional candidates be admitted, in declared priority order, skipping exclusions, stopping at the budget. Every comparison uses an explicit total order over a stable key — no locale-sensitive sort, no reliance on object key order or Map iteration order, since those would make the same inputs render different bytes on a different host. Target under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/context-selection.ts",
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/context-selection.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/context-selection.ts",
+        "packages/context/src/context-pipeline.test.ts",
+        "packages/context/src/index.ts"
+      ],
+      "note": "Implemented mandatory-first fail-closed selection with UTF-8 byte accounting, immutable detached results, explicit code-unit total ordering, priority-prefix optional admission, and sorted bound exclusions. Added a multibyte UTF-8 boundary test. Fresh typecheck + Vitest exited 0: 2 files, 13 tests.",
+      "startedAt": "2026-08-08T20:36:01.709Z",
+      "completedAt": "2026-08-08T20:36:53.406Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Implement packages/context/src/context-render.ts — exact bytes and the digest manifest, DoD 2. The renderer turns an admitted selection into exact output bytes plus a manifest binding all SEVEN things DoD 2 names: the optional selection, the journal count limit, the journal text limit, the ordering, the renderer version literal, the exclusions, and the exact bytes. Bind them under the pinned manifest version with one canonical digest over the whole frozen manifest. Rendering is a pure function of the selection: the same selection renders byte-identical output every time, on any host. Extend context-pipeline.test.ts to assert the manifest's bound field set by SET EQUALITY against a hand-written list taken from the DoD — so a field silently dropped from the binding fails rather than passing unnoticed — and to assert the digest CHANGES when each field changes, driven from that same list so every field is covered by construction, with the generated case count asserted equal to the list length and non-zero.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/context-render.ts",
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "newFiles": [
+        "packages/context/src/context-render.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/context-render.ts",
+        "packages/context/src/context-pipeline.test.ts",
+        "packages/context/src/index.ts"
+      ],
+      "note": "TDD red first (missing context-render), then implemented immutable exact byte arrays and a pinned manifest whose binding has exactly the seven DoD fields. Canonical digest tests cover every field with asserted non-zero case count, field framing, key insertion order, and -0. Fresh typecheck + Vitest exited 0: 2 files, 17 tests.",
+      "startedAt": "2026-08-08T20:38:12.397Z",
+      "completedAt": "2026-08-08T20:39:40.552Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Add the release handoff package, the last deliverable, and wire the package surface. A handoff package is the immutable bundle a released attempt leaves behind: the rendered context manifest digest, the journal digest, and the external identities it cites — graph, lease, and evidence-receipt references. CITE THOSE BY OPAQUE CONTENT-ADDRESSED REFERENCE, validated for shape only (64-hex), and do NOT import or reconstruct them: the Evidence receipt pipeline that owns receipt shape is still unbuilt, and guessing its internals here would create a seam that has to be undone. Add it to context-render.ts, or to a focused sibling module if that file would burst 400 lines, creating the sibling in this same step. Export the finished surface from src/index.ts. Assert that a handoff package is immutable, that its digest covers every cited identity, and that a malformed or non-64-hex reference refuses with its stable code rather than being stored unvalidated.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/context/src/context-render.ts",
+        "packages/context/src/index.ts",
+        "packages/context/src/context-pipeline.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/context/src/context-contract.ts",
+        "packages/context/src/release-handoff.ts",
+        "packages/context/src/release-handoff.test.ts",
+        "packages/context/src/index.ts"
+      ],
+      "note": "TDD red first, then added a focused immutable release-handoff module. It shape-validates all five opaque 64-hex references, normalizes case, refuses at RELEASE_HANDOFF with INVALID_CONTENT_REFERENCE and the exact field, and hashes every cited identity. No evidence-receipt shape/import was invented. Fresh typecheck + Vitest exited 0: 3 files, 21 tests.",
+      "startedAt": "2026-08-08T20:39:59.951Z",
+      "completedAt": "2026-08-08T20:41:22.332Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the assertions are load-bearing and sweep determinism. MUTATION DRILL at each mechanism's single source: the mandatory-fits check that produces CONTEXT_TOO_LARGE, the entry-count bound, the text-length bound, the typed-predicate comparison, and the explicit sort comparator. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests and confirm the red test is the one naming that guard's code. The comparator mutation matters most here: replacing the total order with a constant must redden the ordering-determinism test, and if it does not, the determinism claim is untested. Back each file up out-of-tree and verify the restore with git hash-object. Then the determinism sweep: grep the package for Date.now, Math.random, localeCompare, and any sort without an explicit comparator, and confirm zero hits. Add no .js bridge files — @moe/store is the only package that uses them and this is not it.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/context/src/context-selection.ts",
+        "packages/context/src/context-render.ts",
+        "packages/context/src/dead-end-journal.ts"
+      ],
+      "startedAt": "2026-08-08T20:41:53.529Z"
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the gate on the new package. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test. Because this package did not exist before this task, a filter miss looks exactly like a passing run with zero tests — so assert the run actually executed your suites by checking the reported file and test counts are non-zero, and treat 'No test files found' as a FAILURE of this step, not a pass. Every failure here is unambiguously yours: nothing else in the repo touches packages/context. Also run root pnpm typecheck to confirm the new package did not break the workspace build. Confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file is under the 400 hard cap, and record each count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/context/package.json"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: is there ANY path on which mandatory context is dropped and the call still returns success; can prose reach the unlock predicate by any route; does the render digest actually cover all seven DoD-2 fields, verified by set equality rather than by eye; can the same inputs render different bytes on a different host through a locale sort, an unordered Map, or object key order; does the journal ever silently evict an entry to stay in bounds; is any cited external identity stored without shape validation. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A. Every packages/context/ file is new and uncontested, but pnpm-lock.yaml is SHARED with every in-flight task: confirm it carries only the single new importer entry before staging it, and unstage any foreign path with git restore --staged. Run git status --porcelain first. After committing, verify with git show --stat that only packages/context/ paths plus the one lock hunk landed, and that no debug, probe, scratch, or generated evidence file is present.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-10c55fbd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against an incomplete dependency, by architect-0b81de40 on explicit human instruction 2026-08-08. Deps: \"Planning graph lifecycle core, Lease presence core, Projection outbox core, and Evidence receipt pipeline.\" Three are effectively satisfied — task-1ade51c0 DONE, task-967769ea DONE, and Projection outbox core's five children all committed. The fourth, Evidence receipt pipeline (task-1e512b95), was promoted to PLANNING in the same batch and has NO plan and NO code. ARCHITECT: this is two levels of speculation deep. Plan only what rests on the committed planning-graph, lease and store surfaces; treat the evidence-receipt seam as unbuilt and report_blocked rather than inventing its shape.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -36,5 +219,47 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.596Z",
-  "updatedAt": "2026-08-07T12:10:20.068Z"
+  "updatedAt": "2026-08-08T20:41:53.529Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:24:38.510Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:26:42.245Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WHY THIS IS NOT BLOCKED, AND IS IN FACT THE SAFEST TASK IN THE BATCH — the promotion note warned this was 'two levels of speculation deep' because Evidence receipt pipeline is unbuilt. It turns out `packages/context/**` DOES NOT EXIST: this task creates a GREENFIELD PACKAGE. It touches no file any other in-flight task can touch, which makes it the lowest-collision task on the board right now. The Evidence receipt dependency enters only as a digest/reference a journal entry or handoff package may CITE — model it as an opaque content-addressed ref validated for shape (64-hex) and never import or reconstruct the receipt. Nothing here needs the receipt's internal shape, so nothing here is blocked.\n(2) PACKAGE SCAFFOLD — `pnpm-workspace.yaml` already globs `packages/*`, so a new `packages/context` is picked up with NO workspace-file edit. @moe/scheduler is the exact template to copy: a private ESM package with `exports: {\".\": \"./src/index.ts\"}`, zero dependencies, `typecheck: tsc --project tsconfig.json`, and a vitest script rooted at the repo. Prefer ZERO dependencies like @moe/scheduler; take @moe/contracts only if bounded-JSON decoding is genuinely needed at this layer, and say so in the evidence if you do.\n(3) DoD 3 ENFORCED BY SHAPE, NOT BY CHECK — 'reworded prose alone cannot unlock a repeated dead end' is the same class of property as the evidence task's 'agent text cannot satisfy an obligation'. The strongest form is that the unlock function has NO parameter through which prose could travel: it accepts a typed fact predicate, and the comparison is over structured fact identity, not text. A runtime `if (isJustProse)` guard is weaker because a caller can dress prose up as a reason string. Build it by shape, and keep a refusal code as the backstop for the nearest legal attempt.\n(4) TRUNCATION IS THE ENEMY — DoD 1 and the NOT-in-scope line both say mandatory context is never silently truncated. So the selector must NEVER have a code path that drops a mandatory item to fit; over-budget mandatory content is an admission FAILURE (CONTEXT_TOO_LARGE), which is a refusal, not a degraded success.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **`packages/context/` DOES NOT EXIST.** This task creates the package from nothing. That is why it collides with no one.\n- **`pnpm-workspace.yaml` globs `apps/*`, `adapters/*`, `packages/*`** with `autoInstallPeers: false`, `engineStrict: true`, `saveExact: true`, `strictPeerDependencies: true`. A new directory under packages/ needs NO workspace-file change.\n- **Scaffold template — `packages/scheduler/package.json`** (the zero-dependency precedent):\n  `{ name, version: \"0.0.0\", private: true, type: \"module\", exports: { \".\": \"./src/index.ts\" }, scripts: { typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/scheduler/src\" } }` with NO dependencies block at all.\n- **`packages/scheduler/tsconfig.json`**: extends `../../tsconfig.base.json`, `rootDir: \"src\"`, `tsBuildInfoFile: \"../../node_modules/.cache/<name>.tsbuildinfo\"`, `types: [\"node\"]`, `include: [\"src/**/*.ts\"]`. Copy this exactly, changing only the cache filename.\n- **Bridge convention**: @moe/store is the ONLY package that uses `.js` bridge files. @moe/runner, @moe/scheduler and @moe/daemon have none. A new package should follow the majority: **no bridges**. Do not add them.\n- Committed surfaces this package may cite by reference: @moe/core planning (planning-contract, planning-command-contract, graph-revision-contract) and @moe/scheduler authority/budget for lease facts. Prefer citing IDs and digests over importing, so the new package keeps zero dependencies.",
+    "risks": "1. **Determinism is the whole product here, so every source of nondeterminism is a defect**: no Date.now, no Math.random, no locale-sensitive comparison, no Object key-order reliance, no Set/Map iteration order leaking into output bytes. Sort with an explicit total order over a stable key. All timestamps are caller-supplied canonical UTC strings. Grep for Date.now and Math.random before the gate.\n2. **DoD 1's failure mode is a helpful truncation.** The dangerous implementation is one that trims a mandatory item 'just to fit' and returns success. There must be NO code path that drops mandatory content; assert it by mutating the budget check and confirming a test goes red naming CONTEXT_TOO_LARGE, and by asserting the rendered bytes contain every mandatory item when admission succeeds.\n3. **DoD 2 lists SEVEN things that must be deterministic and digest-bound** — optional selection, journal count limit, journal text limit, ordering, renderer version, exclusions, exact bytes. Assert the bound field set with SET EQUALITY against a hand-written list from the DoD, and assert the digest changes when each one changes, driven from that same list so coverage is by construction and the case count is asserted non-zero (epic rail 6).\n4. `mem:gotcha-digest-mutation-that-proves-nothing`: a same-in/same-out digest test passes against a broken hash. Assert the adversarial pairs — two inputs differing only by a character moved across a field boundary must differ (framing); the same content in a different key insertion order must be EQUAL (canonical ordering); `-0` versus `0` must differ.\n5. **DoD 3's trap**: a test that changes the prose and asserts 'still locked' is weak if the shape gate refuses it first for another reason. Assert which layer refused, and add the positive arm — a genuine typed fact-predicate change DOES unlock — so the test cannot pass by refusing everything.\n6. Journal limits are bounds, so test AT the boundary, not near it: exactly at the count limit admits, one over refuses; exactly at the text limit admits, one character over refuses.\n7. `pnpm-lock.yaml` gains an importer entry when the new package is installed. That file is shared state across every in-flight task — keep the change to that single entry, verify with `git diff --stat pnpm-lock.yaml`, and never regenerate the whole lock.",
+    "keyFiles": [
+      "packages/scheduler/package.json",
+      "packages/scheduler/tsconfig.json",
+      "pnpm-workspace.yaml",
+      "tsconfig.base.json",
+      "packages/core/src/planning/planning-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T20:26:44.281Z",
+  "contextFetchedBy": [
+    "worker-10c55fbd"
+  ],
+  "workStartedAt": "2026-08-08T20:28:40.792Z"
 }

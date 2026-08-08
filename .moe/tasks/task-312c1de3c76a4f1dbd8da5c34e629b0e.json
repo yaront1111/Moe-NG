@@ -36,12 +36,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.373Z",
-  "updatedAt": "2026-08-08T16:53:40.800Z",
+  "updatedAt": "2026-08-08T20:07:56.734Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T16:14:31.225Z"
   },
   "contextFetchedBy": [
-    "architect-e9f16b5b"
+    "architect-e9f16b5b",
+    "governor-eae4fc53"
   ],
   "blockedReason": "Decomposition shell, NOT the store-dependency block you pre-authorized: your cursor assumption HOLDS (EffectIntent binds a predecessor cursor value, design 771; no subscription feed, no crash/rebuild dependency). Blocked because 7 concerns across 2 packages cannot fit one plan (12-step/10-file caps; lease core was 21 files). Human approved a 4-child SPIDR split, all created CRITICAL in dependency order: task-2580a578 (intent lifecycle + one-use activation) -> task-4a3b5ec0 (launch lock/adoption/drain/restart) -> task-ba3a45f9 (daemon work services; includes approved ownership amendment apps/daemon/package.json +@moe/runner + single lock hunk) -> task-49acb856 (race/restart hardening gate, carries this parent's full DoD). Child 1 is immediately plannable — deps task-5ff2b39d and task-967769ea are DONE. Promote task-2580a578 to PLANNING to keep the chokepoint moving; unblock this shell only when all four children are DONE, then close via labeled REVIEW-transit (task-d5c4b086 precedent). Details in comment-c866c1cc.",
   "blockedResourceId": null,

@@ -194,7 +194,7 @@
       "completedAt": "2026-08-08T18:54:08.171Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -207,19 +207,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:42.088Z",
-  "updatedAt": "2026-08-08T18:56:04.404Z",
+  "updatedAt": "2026-08-08T20:20:30.007Z",
   "contextFetchedBy": [
     "architect-c4babdf9",
     "architect-e9f16b5b",
     "architect-0b81de40",
     "governor-eae4fc53",
-    "worker-6d318ae8"
+    "worker-6d318ae8",
+    "qa-cbad3a29"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-08T17:07:16.624Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-08T20:20:30.007Z",
+    "wallClockMs": 11593383
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -276,5 +279,8 @@
     "packages/store/src/projections/projection-generated-history.test.ts",
     "packages/store/src/projections/projection-crash-worker.mjs",
     "packages/store/src/projections/projection-crash-drill.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T20:20:30.007Z",
+  "reviewCompletedAt": "2026-08-08T20:20:30.007Z",
+  "reviewSummary": "APPROVED. Diffed 272a755 (6 files, +770/-15, only src/projections/). Gate re-run 3x: store typecheck+test exit 0, 31 files/331 tests; root typecheck exit 0.\n\nDoD1: 10-entry literal boundary matrix, a real SIGKILLed child per entry on its own temp DB; each asserts the BOUNDARY marker + non-zero exit (no signal name), integrity_check ok, foreign_key_check 0, reopen {quickCheck:\"ok\",violations:0}, exact event/outbox/inbox counts, and a whole-prefix rebuild reconciliation. Matrix asserts own length/uniqueness/>0; FUZZ asserts distinct survivors>2; POST_COMMIT is the opposite arm.\nDoD2: rebuild digest === incremental === durable state_digest + strict state equality over curated + 8 fixed seeds + edges (empty, single, MAX_EVENTS_PER_COMMIT/3 pages, -0/NaN/Infinity/bigint/nesting/two key orders). Sweep asserts generated>0, committed===generated, distinct digests>1, upcasts>0; key-order asserted on production canonicalProjectionState incl. -0 not collapsing.\nDoD3: redelivery across a crash asserts ALREADY_APPLIED + deduplicatedBy INBOX, stale-version arm pinned to EXPECTED_VERSION_CONFLICT; restart mid-rebuild (row at 3 of 6) resumes to exactly the uninterrupted reference row; rebuild-relay-rebuild matches a cold rebuild; both CAS-loss arms refuse PROJECTION_REBUILD_STATE_CONFLICT naming the guard.\nDoD4: QA's own mutation drill, 4 operands neutralised in place, restores verified byte-identical by git hash-object: binding observed instead of the rebuild's own expected killed the CAS test; clampPage cond true killed the page-spans test; !hasMore && true killed the walks-past test; relay requireFreshInbox if(true) killed the redelivery test, proving the steps 1-4 negative result was MEASURED.\n\nwc -l production 248/245/54, all <250. New non-test .ts have .js bridges and load under plain node. Commit owned paths only, no scratch files; packages/store clean, nothing staged. Detail in memory task-task-791d73407af64b179f6099810d940758-qa-verdict."
 }

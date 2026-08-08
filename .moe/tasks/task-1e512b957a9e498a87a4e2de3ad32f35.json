@@ -15,13 +15,163 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin the foundation before naming a symbol, and confirm the one thing that decides whether this task is blocked. `packages/runner/src/evidence/` does not exist yet; everything it rests on does. Re-read and confirm: workspace-contract.ts (WorkspaceInputManifest, WorkspaceResultManifest, ResultTreeEntry, ResultEntryOrigin, inputManifestDigestInput, resultManifestDigestInput, workspaceFailure, RUNNER_WORKSPACE_ERROR_CODES) and workspace-manifest.ts (buildInputManifest, buildResultManifest); artifact-contract.ts (ArtifactRef, ArtifactFsPort, ArtifactStore, refMatches, refRejection, ARTIFACT_ADDRESS_PATTERN, sha256Hex) and createArtifactStore; scope-contract.ts (ScopeObservation, SCOPE_ATTRIBUTION_CLASSES); claude-observation.ts (ProviderRuntimeObservation, observationDigestInput, OBSERVATION_TRUTH_CLASSES) for the environment/runtime binding; canonical.ts. THEN CONFIRM THE NON-BLOCKING CALL: the External effect supervisor appears in this task only as DoD 2's 'effect identities' — an opaque identity field in a receipt, not a call into an unbuilt module. Verify that reading by checking that nothing in the deliverable requires launching, cancelling, or reasoning about an effect. If that holds, proceed; this task is NOT blocked. If you find a genuine call-level dependency, moe.report_blocked naming it rather than inventing the supervisor's shape — it is still unbuilt. Produce no code.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Confirmed on disk: packages/runner/src/evidence/ does not exist. Verified every named symbol exists and is exported — workspace-contract.ts (WorkspaceInputManifest, WorkspaceResultManifest, ResultTreeEntry, ResultEntryOrigin, inputManifestDigestInput, resultManifestDigestInput, workspaceFailure, RUNNER_WORKSPACE_ERROR_CODES, MAX_WORKSPACE_ENTRIES), workspace-manifest.ts (buildInputManifest, buildResultManifest), artifact-contract.ts (ArtifactRef, ArtifactFsPort, ArtifactStore, refMatches, refRejection, ARTIFACT_ADDRESS_PATTERN, sha256Hex), artifact-store.ts (createArtifactStore; store API is stageArtifact/verifyArtifact/deleteArtifact — NO read method, so byte reads must go through ArtifactFsPort.readAll at join(root,\"objects\",sha256)), scope-contract.ts (ScopeObservation, SCOPE_ATTRIBUTION_CLASSES, canonicalPathRejection), claude-observation.ts (ProviderRuntimeObservation, observationDigestInput, OBSERVATION_TRUTH_CLASSES), canonical.ts (canonicalJson/canonicalDigest/deepFreeze/isCanonicalUtcTimestamp/isHex64/isSafeByteCount/isNormalizedText).\n\nNON-BLOCKING CALL CONFIRMED: the External effect supervisor appears in this deliverable only as DoD 2's \"effect identities\" — an opaque caller-supplied identity field bound into a receipt. Nothing here launches, cancels, or reasons about an effect; no import of packages/runner/src/supervisor/ is required. Task is NOT blocked. No code produced.",
+      "startedAt": "2026-08-08T20:27:58.708Z",
+      "completedAt": "2026-08-08T20:30:20.011Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red for immutable verification recipes. Create packages/runner/src/evidence/evidence-contract.ts holding the vocabulary as exported frozen data — a pinned recipe version literal, a pinned receipt version literal, the closed evidence error-code list, and the obligation kinds — and then packages/runner/src/evidence/verification-recipe.test.ts asserting the recipe contract before it exists. A recipe declares: exact argv as a frozen string list, the declared input closure as content-addressed ArtifactRefs, the expected output declaration, and the verifier identity. Assert: a recipe is immutable and content-addressed, so its digest changes when argv order changes but NOT when the same content is supplied in a different key order; a malformed argv entry, an ArtifactRef failing ARTIFACT_ADDRESS_PATTERN, or an over-limit entry count refuses with its specific stable code; and two recipes differing only by a character shifted between two adjacent fields produce DIFFERENT digests, which is the framing property a naive same-in-same-out test cannot see. Every refusal assertion names the code. Red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/evidence/evidence-contract.ts",
+        "packages/runner/src/evidence/verification-recipe.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/evidence-contract.ts",
+        "packages/runner/src/evidence/verification-recipe.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/evidence-contract.ts",
+        "packages/runner/src/evidence/verification-recipe.test.ts"
+      ],
+      "note": "RED verified. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 1 failed (1)\", cause \"Error: Cannot find module './verification-recipe.js'\" — fails because the production module is missing, not from a typo.\n\nevidence-contract.ts holds the vocabulary as frozen data: VERIFICATION_RECIPE_VERSION / EVIDENCE_RECEIPT_VERSION pins, EVIDENCE_REFUSAL_LAYERS (7 layers, so a test can assert WHICH gate refused), RUNNER_EVIDENCE_ERROR_CODES (33 closed codes covering recipe, rematerialization, execution, receipt, obligation), EVIDENCE_OBLIGATION_KINDS, evidenceFailure/isEvidenceFailure, isEvidenceIdentity (opaque graph/lease/effect shape-only), evidencePathRejection (delegates to canonicalPathRejection), evidenceRefRejection (delegates to refRejection — no new ref validator), recipe types and recipeDigestInput.\n\nverification-recipe.test.ts: 17 tests. Immutability (frozen recipe + frozen argv/entries), key-order and closure-order independence -> SAME digest, argv-order change -> DIFFERENT digest, and two framing pairs (character shifted between adjacent argv entries, and between adjacent verifier identity fields) that a naive same-in/same-out test cannot see. Every refusal names its code AND its layer: ARGV_INVALID, ARGV_LIMIT, ARTIFACT_REF_INVALID (fixture asserted hostile against ARTIFACT_ADDRESS_PATTERN first), DECLARATION_LIMIT, DECLARATION_DUPLICATE, PATH_NOT_CANONICAL, VERIFIER_IDENTITY_INVALID. Limit sweeps assert the generated case count. Final test asserts no `recipe` key on the refusal arm.",
+      "startedAt": "2026-08-08T20:30:24.298Z",
+      "completedAt": "2026-08-08T20:32:43.691Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement packages/runner/src/evidence/verification-recipe.ts to green. A pure builder producing a frozen, content-addressed recipe: validate the argv list, the declared input closure of ArtifactRefs (reuse refRejection and ARTIFACT_ADDRESS_PATTERN — write no new ref validator), the output declaration, and the verifier identity, then bind them under the pinned recipe version with canonicalDigest. Refuse through a frozen failure carrying a stable code and the refusing layer; return payload fields only on the success arm so a caller cannot read a recipe digest off an unnarrowed refusal. Immutability is the point: the returned recipe is deepFrozen and the digest covers exactly the object returned, so a caller holding a reference cannot mutate what the digest attested. Target under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/evidence/verification-recipe.ts",
+        "packages/runner/src/evidence/verification-recipe.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/verification-recipe.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/verification-recipe.ts"
+      ],
+      "note": "GREEN. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 1 passed (1) / Tests 17 passed (17)\". `pnpm --filter @moe/runner typecheck` -> exit 0, no diagnostics.\n\nbuildVerificationRecipe is pure: validates argv (non-empty, bounded normalized text, entry limit), the declared closure (path via evidencePathRejection -> canonicalPathRejection, ref via evidenceRefRejection -> refRejection; NO new ref validator written), the output declaration, and the verifier identity, then binds them under VERIFICATION_RECIPE_VERSION with canonicalDigest(recipeDigestInput(body)) and deepFreeze. argv is never sorted (order is the command); the declared closure and output paths ARE sorted (discovery order is not a fact about the closure). Inputs and outputs share one case-folding DeclaredPathSet, so a path that is both rematerialized and produced refuses as DECLARATION_DUPLICATE rather than leaving two owners for one byte. Every refusal is a frozen evidenceFailure carrying code + refusing layer, and the success arm is the only arm with a `recipe` field. Also exported recipeSealMatches for the downstream digest-tamper check. 249 lines (target <=250).",
+      "startedAt": "2026-08-08T20:32:44.401Z",
+      "completedAt": "2026-08-08T20:33:40.183Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red for clean candidate rematerialization — DoD 3. Create packages/runner/src/evidence/candidate-rematerialization.test.ts asserting that a fresh rematerialization from a recipe's declared closure accepts exactly the declared bytes and nothing else. Two DISTINCT hostile fixtures, because one 'bad bytes' case would let either half regress unseen: FOREIGN bytes — content present in the candidate tree that the recipe never declared — and UNDECLARED bytes — content produced into the tree that is declared nowhere. Each refuses with its own stable code. Then the tamper cases, all of which must fail closed: an ArtifactRef whose bytes no longer match its address (assert via refMatches, the production surface, not a local re-hash), a manifest whose recorded digest has been edited, and a recipe digest that does not match the recipe it claims to describe. Also assert the clean-start property: rematerialization refuses to proceed into a candidate location that is not empty, so a stale prior tree cannot silently contribute bytes. Red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "note": "RED verified. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 1 failed | 1 passed (2)\", cause \"Error: Cannot find module './candidate-rematerialization.js'\" — missing production module, not a typo. The 17 recipe tests stay green.\n\n13 tests. Ports only: an in-memory ArtifactFsPort plus the REAL createArtifactStore stages the fixture bytes, so refs are genuine content addresses, and an in-memory CandidateTreePort models the candidate location. No node:fs.\n\nTWO DISTINCT hostile fixtures as required: FOREIGN bytes = content at \"vendor/foreign.bin\", a path the recipe declares nowhere -> RUNNER_EVIDENCE_FOREIGN_BYTES; UNDECLARED bytes = content produced into \"out/report.json\", a declared output slot whose content no ref declares -> RUNNER_EVIDENCE_UNDECLARED_BYTES. Either half can now regress alone.\n\nTamper cases, each with its own code: object swapped at rest -> ARTIFACT_UNVERIFIABLE (store's own verification refuses); bytes swapped BETWEEN the store's verify read and the materializing read (TOCTOU) -> REF_MISMATCH; edited recipe digest -> RECIPE_DIGEST_MISMATCH; edited manifest digest -> MANIFEST_TAMPERED; a well-sealed manifest describing a different tree -> INPUT_TREE_DIVERGENCE. Both byte-tamper fixtures are proven hostile with refMatches (the production surface) before the call, never a local re-hash.\n\nClean-start: a non-empty candidate location refuses CANDIDATE_NOT_EMPTY and asserts candidate.writes === [] so a stale tree cannot contribute bytes. Cleanup: after a post-write refusal, asserts writes.length > 0 (non-vacuous), removes === writes, and none of the written paths survive. Plus DECLARED_BYTES_MISSING, CANDIDATE_PORT_FAILED for a throwing port, and no `inputManifest` key on the refusal arm.",
+      "startedAt": "2026-08-08T20:33:40.836Z",
+      "completedAt": "2026-08-08T20:35:31.217Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement packages/runner/src/evidence/candidate-rematerialization.ts to green. It takes the ArtifactFsPort and ArtifactStore as PORTS — never node:fs directly; createNodeArtifactFs is the only place real fs lives and it is the caller's to supply. Materialize exactly the recipe's declared closure, verifying every ref through the artifact store's own verification rather than re-hashing, then build the input manifest through buildInputManifest so the input tree identity is the workspace foundation's, not a second one. Any byte that is present but undeclared, or declared but missing, is a refusal with its own stable code and no partial tree left behind — clean up on the failure path so a refused rematerialization cannot leave bytes that a later run would inherit. Bind the resulting input-tree digest for the receipt to consume. Target under 250 lines; split before 400 and keep the port boundary intact in the split.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.ts",
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.ts",
+        "packages/runner/src/evidence/candidate-reconciliation.ts",
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "note": "GREEN. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 2 passed (2) / Tests 30 passed (30)\". `pnpm --filter @moe/runner typecheck` -> exit 0.\n\nPORTS ONLY, no node:fs: ArtifactStore.verifyArtifact does the verification (never a local re-hash), ArtifactFsPort.readAll fetches the bytes at <artifactRoot>/objects/<sha256>, CandidateTreePort owns the candidate location. Order is verify -> read -> refMatches(read bytes, ref) -> write, so a swap BETWEEN the store's read and ours is caught by refMatches, the production surface. Input tree identity comes from buildInputManifest — this module derives no second tree digest. Every port call goes through portAttempt, so no boundary can throw past the module.\n\nCleanup on the failure path is real: `refuse()` removes every path this call wrote before returning, and a throwing remove never upgrades a refusal.\n\nFIRST RUN WAS 1/13 RED, which caught a live fixture bug rather than a production one: the TOCTOU swap fired during staging (createArtifactStore's publish already reads the address once), so the store refused with ARTIFACT_UNVERIFIABLE and the REF_MISMATCH path was never reached. Fixed by anchoring the swap to reads already consumed (armSwapAfterNextRead), so ARTIFACT_UNVERIFIABLE and REF_MISMATCH now have genuinely distinct fixtures instead of one masking the other.\n\nSPLIT FOR THE PER-FILE CAP: first draft was 327 lines (over the 250 target). Split with the port boundary intact — candidate-reconciliation.ts (145) is pure and takes already-observed entries (portAttempt, scanRejection, reconcile with the FOREIGN/UNDECLARED distinction, expectationRejection); candidate-rematerialization.ts (219) owns the ports and the orchestration. All 6 evidence files: 145/219/216/249 production, 372/240 test.",
+      "startedAt": "2026-08-08T20:35:31.690Z",
+      "completedAt": "2026-08-08T20:38:02.098Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "TDD red for evidence-key receipts — DoD 2, the binding list, and DoD 1, the headline property. Create packages/runner/src/evidence/evidence-receipt.test.ts. DoD 2: a receipt binds ALL of exact argv, input tree, result tree, environment/runtime, output, timestamps, recipe, graph, lease, and effect identities — assert the bound field set with SET EQUALITY against a hand-written list taken from the DoD, so a field silently dropped from the binding fails the test rather than passing unnoticed, and assert the receipt digest CHANGES when any one of them changes (drive that from the same list so every field is covered by construction, asserting the generated case count equals the list length and is non-zero). DoD 1: assert that an obligation cannot be discharged by agent-reported text — the nearest legal attempt, a well-formed receipt whose only support for an obligation is an agent-authored text field, refuses with its specific stable code, and assert WHICH layer refused so a nearer shape gate answering first cannot leave this green while no longer testing the rule. Timestamps and identities are caller-supplied (no Date.now); effect, graph and lease identities are opaque refs validated for shape only. Red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/evidence/evidence-receipt.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/evidence-receipt.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/evidence-receipt.test.ts",
+        "packages/runner/src/evidence/evidence-contract.ts"
+      ],
+      "note": "RED verified. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 1 failed | 2 passed (3)\", cause \"Error: Cannot find module './evidence-receipt.js'\". The 30 recipe + rematerialization tests stay green.\n\nDoD 2 — SET EQUALITY, not eyeballing. DOD_BOUND_FIELDS is hand-written from the DoD sentence as 10 [phrase, field] pairs; STRUCTURAL_BOUND_FIELDS names the 2 bound fields the DoD does not (receiptVersion, obligations). The test asserts `new Set(Object.keys(receiptDigestInput(receipt)))` EQUALS that union, so a field silently dropped from the binding reddens instead of passing unnoticed, and asserts DOD_BOUND_FIELDS.length === 10.\n\nDoD 2 — per-field digest sweep driven from the same list BY CONSTRUCTION: a MUTATIONS table keyed by bound field, asserted set-equal to the digest-input key set (a newly bound field with no mutation case fails right there), case count asserted === 12 and > 0. Each case mutates ONE field of the receipt body and asserts canonicalDigest(receiptDigestInput(mutated)) differs. Deliberately driven through the production receiptDigestInput + canonicalDigest rather than the builder: mutating argv through the builder would drag recipeSha256 with it, so a dropped argv binding would still change the digest and the case would prove nothing.\n\nDoD 1 — the headline. Primary enforcement is SHAPE: buildEvidenceReceipt takes no free-text parameter, and every ObligationSupport member is digest-bound (AGENT_REPORT carries only reportedBy + reportSha256, never prose). The test drives the nearest LEGAL attempt: a fully well-formed AGENT_REPORT support on an otherwise valid receipt, asserting code RUNNER_EVIDENCE_AGENT_TEXT_UNSUPPORTED AND layer \"OBLIGATION\" — asserting the layer is what stops a nearer shape gate from answering first and leaving this green while no longer testing the rule. Second variant proves it still refuses when every other obligation is properly supported.\n\nAlso asserted: support digests must name something the receipt itself binds (OBLIGATION_SUPPORT_INVALID), unknown kind, over-limit list, key-order independence -> SAME digest, deep-frozen receipt, and the shape gates IDENTITY_INVALID (graph/lease/effect, opaque and shape-validated only), TIMESTAMP_INVALID (caller-supplied, no Date.now), INPUT/RESULT_MANIFEST_INVALID, MANIFEST_BINDING_MISMATCH, OBSERVATION_INVALID, OUTPUT_UNDECLARED, OUTPUT_MISSING, and no `receipt` key on the refusal arm. 22 tests. Added ObligationSupport/DischargedObligation to evidence-contract.ts.",
+      "startedAt": "2026-08-08T20:38:02.360Z",
+      "completedAt": "2026-08-08T20:41:20.645Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Implement packages/runner/src/evidence/evidence-receipt.ts to green, and make DoD 1 true by SHAPE rather than by check. The receipt builder accepts only digest-bound evidence: manifest digests from inputManifestDigestInput/resultManifestDigestInput, the runtime observation bound through observationDigestInput, content-addressed output refs, caller-supplied canonical UTC timestamps, the recipe digest, and opaque graph/lease/effect identity refs. It has NO parameter through which free text could discharge an obligation — that is the primary enforcement of DoD 1, with the refusal code as the backstop for the nearest legal attempt. Bind every field under the pinned receipt version with canonicalDigest, deep-freeze the result, and return payload fields only on the success arm. Counters are safe-integer numbers and bytes are base64 or refs, because canonicalDigest throws on bigint and non-safe integers and canonicalJson mishandles Uint8Array. Target under 250 lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/evidence/evidence-receipt.ts",
+        "packages/runner/src/evidence/evidence-receipt.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/evidence/evidence-receipt.ts"
+      ],
+      "startedAt": "2026-08-08T20:41:21.330Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Wire verifier execution as an OBSERVATION PORT and close the pipeline end to end. Verifier execution in this task must never spawn a process: the caller supplies an observed execution result — argv actually used, exit disposition, output refs, and the runtime observation — and this module decides what it proves, exactly as providers/claude does. Add the intake to evidence-receipt.ts (or a focused sibling if it would burst 400 lines, in which case create the sibling in this same step) and assert the end-to-end path in the existing suites: recipe -> rematerialization -> observed execution -> receipt, where the receipt's bound argv must EQUAL the recipe's declared argv and a divergence refuses with its own code. That divergence check is the one that makes the receipt evidence of the recipe rather than of some other run. Assert that an execution observation whose truth class is UNKNOWN cannot discharge an obligation and yields no receipt — unverifiable evidence stays UNKNOWN and never gains authority, per epic rail 4.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/evidence/evidence-receipt.ts",
+        "packages/runner/src/evidence/evidence-receipt.test.ts",
+        "packages/runner/src/evidence/evidence-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the assertions are load-bearing and sweep the fence. MUTATION DRILL at each mechanism's single source: the argv-divergence check, the foreign-bytes guard, the undeclared-bytes guard, the ref-match verification, the UNKNOWN-truth-class refusal, and the agent-text refusal. Neutralise the operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the red test is the one naming that guard's code. Back each file up out-of-tree and verify the restore with git hash-object. Then the fence sweep: grep the new evidence/ modules for child_process, spawn, kill, Date.now and Math.random and confirm ZERO hits — verifier execution is a port, and a single spawn here would silently undo the property the whole subtree is built on. Confirm no `.js` bridge files were added: @moe/runner has none package-wide and needs none.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/evidence/verification-recipe.ts",
+        "packages/runner/src/evidence/candidate-rematerialization.ts",
+        "packages/runner/src/evidence/evidence-receipt.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the gate and attribute failures honestly. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Attribute red by path, never by a remembered count. `packages/runner/src/supervisor/` is SHARED with other in-flight tasks and currently holds 11 untracked files belonging to task-2580a578, with task-4a3b5ec0 also working there — red under `supervisor/` is almost certainly theirs; check before claiming or fixing it, and never edit a foreign test to make your suite green. The `scope-observation` real-git test has a known 5s-timeout flake on this machine: re-run once, report the result, do not chase it. Anything red under `packages/runner/src/evidence/` is unambiguously yours. Confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file created here is under the 400 hard cap, and record each count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/evidence/evidence-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can any obligation be discharged by text, or by an observation whose truth class is UNKNOWN; can a receipt attest a run whose argv differed from its recipe; can foreign or undeclared bytes survive rematerialization; does any digest get re-derived locally instead of bound from the workspace/artifact/observation surfaces that own it; does the receipt digest actually cover every field DoD 2 lists, verified by set equality rather than by eye; does any refusal assert only that it failed rather than which code and which layer; does a refused rematerialization leave partial bytes behind for a later run to inherit. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and NEVER a directory pathspec under packages/runner/src/, because a sibling task's 11 untracked supervisor files sit in the same working directory and would be swept in. Run git status --porcelain first and unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only packages/runner/src/evidence/ paths landed and that no debug, probe, scratch, or generated evidence file is present.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-f8533806",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against an incomplete dependency, by architect-0b81de40 on explicit human instruction 2026-08-08 (asked, concern raised, reaffirmed). Deps: \"Clean workspace foundation, External effect supervisor, and Projection outbox core.\" Clean workspace foundation (task-6ce92e5d) DONE. Projection outbox core (task-55d5a898) is a shell whose five children are all committed (791d7340 at 10/10 in REVIEW) — real on disk. External effect supervisor (task-312c1de3) is NOT done: it is a BLOCKED shell with 4 children — task-2580a578 in REVIEW, task-4a3b5ec0 WORKING with ZERO files produced, task-ba3a45f9 and task-49acb856 still BACKLOG. ARCHITECT: read packages/runner/src/supervisor/ on disk before naming any symbol; child 1's 11 files are real but UNTRACKED, and none of child 2's modules exist. Plan the parts that rest on the committed store and workspace surfaces; if the supervisor seam is unavoidable, report_blocked rather than inventing it.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,5 +186,47 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.486Z",
-  "updatedAt": "2026-08-07T12:10:20.186Z"
+  "updatedAt": "2026-08-08T20:41:21.330Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:22:19.012Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:24:28.594Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WHY THIS IS NOT BLOCKED ON THE SUPERVISOR — the promotion note warned that External effect supervisor is unbuilt and told the architect to report_blocked if its seam were unavoidable. It is avoidable. The supervisor appears in this task exactly ONCE, in DoD 2's list of things a receipt must bind: '...recipe, graph, lease, and effect identities'. That is an identity FIELD in a receipt, not a call into the supervisor. Model it as an opaque caller-supplied reference string, validated for shape only, exactly as the supervisor itself models `lockIdentity` and `wrapperIdentity`. Nothing in this task needs to import, launch, or reason about an effect. So the plan proceeds in full and blocks on nothing.\n(2) VERIFIER EXECUTION AS A PORT, NOT A SPAWN — 'verifier execution' sounds like running a process. It must not be. The whole runner subtree is fenced against child_process/spawn/kill/Date.now/Math.random, and the Claude adapter already established the shape: the caller supplies an OBSERVATION of what happened and the pure module decides what it proves. This is also what makes DoD 1 enforceable rather than aspirational — see (3).\n(3) DoD 1 IS THE HEADLINE PROPERTY AND IT IS A TYPE-LEVEL CLAIM, NOT A CHECK. 'Agent-reported text cannot satisfy a verification obligation' is best enforced by giving the obligation-discharging function NO parameter that can carry prose: it accepts only digest-bound observations and content-addressed refs. A runtime `if (looksLikeProse) refuse` is weaker — it can be bypassed by a caller who dresses prose up. Plan for both: the shape makes it impossible, and a test asserts the refusal code for the nearest legal attempt.\n(4) REUSE, DO NOT REBUILD — the clean workspace foundation is DONE and rich: buildInputManifest/buildResultManifest, the artifact store's content-addressed refs, and scope observation all exist. Rematerialization composes those; it must not re-derive digests or re-walk trees itself.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08. `packages/runner/src/evidence/` DOES NOT EXIST — this task creates it. What it builds on is all committed and real:\n- **workspace/workspace-contract.ts**: WORKSPACE_INPUT_MANIFEST_VERSION, WORKSPACE_RESULT_MANIFEST_VERSION, MAX_WORKSPACE_ENTRIES (4096), MAX_WORKSPACE_REF_CHARS (200), RUNNER_WORKSPACE_ERROR_CODES, WorkspaceInputManifest, WorkspaceResultManifest, ResultTreeEntry, ResultEntryOrigin ('INHERITED' | 'AUTHORED'), WorkspaceProducer, inputManifestDigestInput, resultManifestDigestInput, workspaceFailure, isWorkspaceFailure.\n- **workspace/workspace-manifest.ts**: buildInputManifest, buildResultManifest — the input/result tree identities DoD 2 requires. Do not compute a tree digest yourself; bind theirs.\n- **artifacts/artifact-contract.ts**: ArtifactRef, ArtifactFsPort, ArtifactStore, StagedArtifact, ARTIFACT_ADDRESS_PATTERN (/^[0-9a-f]{64}$/u), refMatches(bytes, ref), refRejection(ref), sha256Hex, artifactFailure, RUNNER_ARTIFACT_ERROR_CODES. `artifacts/artifact-store.ts` exports createArtifactStore; `artifact-node-fs.ts` exports createNodeArtifactFs (the ONLY place real fs lives — it is a port implementation, and evidence modules take the port, never the fs).\n- **scope/scope-contract.ts**: SCOPE_OBSERVATION_VERSION, ScopeObservation, ScopeAttributionClass, SCOPE_ATTRIBUTION_CLASSES, RUNNER_SCOPE_ERROR_CODES, GitObserver, ScopePathObserver; `observeScope` in scope-observation.ts.\n- **providers/claude/claude-observation.ts** is the precedent for 'environment/runtime' in DoD 2: ProviderRuntimeObservation, PlatformIdentity, RuntimeClosureEntry, ObservationFreshness, OBSERVATION_TRUTH_CLASSES ('PROVEN' | 'UNKNOWN'), observationDigestInput, runtimePinningIsAuthoritative. Bind that observation by digest rather than inventing an environment record.\n- **canonical.ts**: canonicalJson, canonicalDigest, sha256Hex, deepFreeze, isCanonicalUtcTimestamp, isHex64. canonicalDigest THROWS on bigint and on non-safe-integer numbers, and deepFreeze/canonicalJson mishandle Uint8Array — so counters are safe-integer `number` and bytes are base64 strings or content-addressed refs.\n- **@moe/runner has ZERO `.js` bridge files package-wide and needs none** (NodeNext + vitest resolve `.js` to `.ts`). Do NOT add them — that rule is @moe/store's and applying it here would be wrong. New modules also stay OFF index.ts unless a later task needs them exported; `supervisor/` set that precedent.",
+    "risks": "1. **The runner fence is absolute**: no child_process, spawn, kill, Date.now, Math.random anywhere in this subtree. 'Verifier execution' means accepting a caller-supplied execution observation, never running one. Grep for all five before the gate.\n2. **DoD 1 is the property most likely to be faked.** A test that feeds prose and asserts 'refused' is nearly vacuous if the shape gate refuses it first for being the wrong type. Assert WHICH layer refused, and add the harder case: a well-formed receipt whose only support for an obligation is an agent-authored text field must still refuse with the specific code. Verify by mutating the guard and confirming red.\n3. **Do not re-derive digests.** Bind `inputManifestDigestInput`/`resultManifestDigestInput`/`observationDigestInput` outputs. A second digest implementation for the same bytes is a second thing to drift, and epic rail 6 explicitly forbids asserting a property against a reimplementation rather than the production surface.\n4. `mem:gotcha-digest-mutation-that-proves-nothing`: a 'same input, same digest / different input, different digest' test passes against almost any hash including a broken one. For the receipt digest, assert the specific adversarial pairs — two receipts differing only in a swapped field pair (framing), only in key order (must be EQUAL), and only in a `-0` versus `0` counter.\n5. DoD 3 has two distinct halves that need separate fixtures: FOREIGN bytes (present in the tree but not declared by the recipe) and UNDECLARED bytes (declared nowhere but produced). Both must fail closed with their own codes; one fixture covering 'some bad bytes' would let either half regress unseen.\n6. Effect, graph and lease identities are opaque caller-supplied refs. Validate SHAPE only and never invent semantics for them — the supervisor that owns effect identity is still unbuilt, and guessing its format here would create a seam that has to be undone.\n7. `packages/runner/src/supervisor/` currently holds another task's 11 UNTRACKED files. Never stage a directory pathspec under `packages/runner/src/`; commit `evidence/` files individually.\n8. Known flake, not yours: the `scope-observation` real-git test can hit a 5s timeout on this machine. Re-run once, report, do not chase.",
+    "keyFiles": [
+      "packages/runner/src/workspace/workspace-contract.ts",
+      "packages/runner/src/workspace/workspace-manifest.ts",
+      "packages/runner/src/artifacts/artifact-contract.ts",
+      "packages/runner/src/artifacts/artifact-store.ts",
+      "packages/runner/src/scope/scope-contract.ts",
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "packages/runner/src/canonical.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T20:24:30.620Z",
+  "contextFetchedBy": [
+    "worker-f8533806"
+  ],
+  "workStartedAt": "2026-08-08T20:27:58.708Z"
 }

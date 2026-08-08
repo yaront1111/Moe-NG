@@ -17,13 +17,114 @@
     "Keep each test file <=400 lines, split by concern before that. Commit by explicit pathspec only.",
     "Assert reason codes and refusing layers throughout; the harness must assert against production surfaces, never a reimplementing helper."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "DECIDE WHICH WORLD YOU ARE IN before writing anything — this task's dependencies were incomplete when it was planned and will have moved. On disk (working tree, NOT `git ls-files` — the supervisor directory has been untracked throughout this slice), check for: child 1's modules (effect-kernel, effect-shape, effect-parse, effect-lifecycle, effect-activation, effect-grant, lease-mirror, effect-test-fixtures); child 2's (launch-lock.ts, drain-table.ts, drain-reconciliation.ts, restart-reconstruction.ts); and child 3's apps/daemon/src/work/**. Record exactly which exist. If ALL THREE children are present, run this plan straight through. If child 2 or 3 is still absent, build steps 2-3 (the harness engine, which depends on none of them and is never wasted work) and then moe.report_blocked naming the specific missing modules — do NOT proceed to write slice invariants against code that is not there, and above all do NOT trim the expected outcome-kind list to match a partial slice. Then transcribe, BY HAND from the design and from the children's exported vocabularies, the expected outcome-kind list this gate asserts against; a list derived from a harness run cannot check that run.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Build the seeded harness engine — pure, dependency-free, and buildable regardless of children 2-3. Create packages/runner/src/supervisor/race-harness.ts following the lease-core pattern in mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff: a deterministic PRNG seeded from a FIXED LITERAL seed array (no Math.random, no clock anywhere, so every failing schedule is reproducible); a command alphabet covering claim, arm, activate, requestCancel, settle, consumeGrant, tombstone, duplicate-delivery, restart and drain; an asserted-good state pool of at least five members so the schedule explores real states rather than one; a documented honest/tamper bias (the lease core used 70/30 — document whatever you choose); and an outcome recorder that accumulates observed outcome KINDS with PER-KIND COUNTS. The recorder is the load-bearing part: it must expose both the observed kind set and the counts, because DoD 1 requires set equality against a hand-written list AND counts quoted in the evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/race-harness.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/race-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Test the harness itself, because a harness nobody checks is the easiest place for this whole gate to become vacuous. Create packages/runner/src/supervisor/race-harness.test.ts asserting: the same seed produces the identical schedule twice (reproducibility — without it a failure cannot be investigated); different seeds produce different schedules (the seed is actually used); the requested step count is actually executed rather than short-circuited; the tamper bias produces both honest and tampered commands in roughly the documented proportion, asserting BOTH are non-zero so a bias of 100/0 cannot pass; and the outcome recorder counts what it observes, verified by feeding it a known sequence and asserting exact counts. Also assert the harness fails loudly on an unknown outcome kind rather than dropping it, since a silently ignored kind would defeat the set-equality assertion this gate is built on.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/race-harness.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/race-harness.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Drive the supervisor slice through the harness — DoD 1 and DoD 3. Create packages/runner/src/supervisor/supervisor-races.test.ts running at least 5 seeds x at least 200 steps per seed across claim/activate/cancel/duplicate-delivery/restart orderings over child 1's and child 2's surfaces. Assert the observed outcome-kind SET EQUALS the hand-written expected list from step 1 — no unexpected kind, no missing kind — and record per-kind counts in the test output for the completion evidence. Assert on EVERY step, as harness invariants rather than spot checks: versionDelta is in {0,1} and a state change implies exactly 1; strongest-reason monotonicity, so a disposition never downgrades; and that every race ends in exactly one legal state. Note the invariant child 1 warned about — a NO_OP returns a fresh object at the SAME version, so 'a new object implies version+1' is WRONG and would fail spuriously. Treat any expected kind whose count is zero as a coverage failure to investigate, not a pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Assert the parent slice's headline safety property — DoD 2, the one the whole supervisor exists to guarantee. In supervisor-races.test.ts add two harness-level invariants checked on every seeded schedule, not as spot checks. First: NO external-action grant is ever observed before its committed ARMED->ACTIVE plus LAUNCH_REQUESTED->RUNNING pair. Implement this as a running check over the recorded step log so a violation anywhere in any schedule fails, and verify the check is load-bearing by temporarily reordering a synthetic log and confirming it goes red — an invariant that never fires on a deliberately broken input is not testing anything. Second: NO duplicate delivery ever produces a fresh launch; every duplicate resolves to ADOPTED, EXIT_BEFORE_LAUNCH or SUSPECT, asserted by set equality against child 2's exported frozen kind list so a blind-relaunch kind cannot appear unnoticed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/supervisor-races.test.ts",
+        "packages/runner/src/supervisor/race-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Restart reconstruction races — DoD 3's restart half. Create packages/runner/src/supervisor/supervisor-restart.test.ts seeding crash points across the slice's transaction boundaries and asserting that reconstruction lands each pre-crash state in EXACTLY ONE legal post state, compared against a hand-written expected outcome set asserted for set equality and non-zero length. Assert that current token, epoch, budget and runtime closure are revalidated after every restart — a reconstruction that restores state without re-proving authority is the defect this DoD names. Assert no premature terminal: a terminal label must never appear where its evidence is absent, and the restart path must prefer UNKNOWN or SUSPECT over a guessed terminal. Include the composed case none of the individual drills cover: a restart landing mid-drain, which must remain DRAINING with its holds intact rather than resolving optimistically.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/supervisor-restart.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/supervisor-restart.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "The cross-package drift test, which MUST live in the daemon — child 1 deferred it here for a structural reason. @moe/runner depends only on @moe/contracts, so a runner test cannot import @moe/scheduler and therefore cannot compare the supervisor's `lease-mirror.ts` against the real `fenceAuthority`. apps/daemon has @moe/scheduler and gains @moe/runner through child 3's approved ownership amendment, so it is the only place both surfaces meet. Create apps/daemon/src/work/work-races.test.ts asserting VERDICT EQUALITY, not merely 'both refuse': for a shared table of hostile and honest lease inputs, the supervisor's mirrored validation and the scheduler's fenceAuthority must return the SAME verdict and the SAME reason code on every case. Assert the case count is non-zero and that both accepting and refusing verdicts appear, so a table that only ever refuses cannot pass. Also drive child 3's work services through the harness for the claim/activate orderings that span both packages.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-races.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-races.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Fix the defects the harness exposes — DoD 4, and the reason this gate exists. Every fix is red-first: add the focused failing test that names the defect, then make the minimum change, and keep the fix in a separate commit-visible shape from the harness code so the diff shows what the harness caught. Fixes stay strictly INSIDE the slice's owned paths (packages/runner/src/supervisor/** and apps/daemon/src/work/**); a defect found in a foreign package is REPORTED, not fixed here. Add no features — this task adds tests and defect fixes only, and new supervisor, relay or service surface belongs in a new task. If the harness exposes NO defect, say so explicitly in the completion evidence together with the seeds, step counts and per-kind coverage that justify the claim — a negative result is a result, but a gate narrowed until it produces one violates the slice's own rail.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts",
+        "packages/runner/src/supervisor/drain-reconciliation.ts",
+        "packages/runner/src/supervisor/launch-lock.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Full regression — this task owns it for the whole slice, which is why mid-slice children ran focused gates only. Run, fresh from the repo root, capturing real output: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm test. All must exit 0. ATTRIBUTE RED BY PATH, NEVER BY A REMEMBERED COUNT — a stale 'known failures' number had to be retracted from another plan on this board today, and carrying one into evidence means owning the discrepancy when a reviewer re-measures. Investigate anything red outside the slice before calling it foreign; name the specific failing file rather than a count. The scope-observation real-git test has a known 5s-timeout flake on this machine: re-run once, report it, do not chase it. Quote the per-kind outcome counts from step 4 in the evidence, as the lease-core handoff does — those numbers are how a reviewer judges the gate was non-vacuous.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/race-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Whole-slice adversarial pass and docs sweep, both of which this task owns as the closing gate. Adversarial: re-read the entire slice — children 1, 2 and 3's production code, not just this task's tests — asking whether any refusal asserts only that something failed rather than which code and which layer; whether any sweep can generate zero cases and still pass; whether the expected outcome-kind list was hand-written or quietly derived from the implementation; whether any invariant would survive a deliberately broken input; whether uncertainty anywhere gains authority instead of staying SUSPECT or UNKNOWN; and whether any redaction rule leaks a lease token, bootstrap credential, or expected digest. Docs: inline why-comments where the reasoning is non-obvious, and update docs/ ONLY if a public surface actually changed — do not add a contract document for an internal module. Confirm every production file in the slice is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line, and record the counts.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-11",
+      "description": "Commit by explicit pathspec, with the slice's contamination hazard front of mind. `packages/runner/src/supervisor/` has been shared and untracked throughout this slice, so a directory pathspec would sweep sibling work into this commit. Run git status --porcelain first, confirm every staged entry is an owned path of THIS task, and stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, never a directory. Owned here are the harness and test files this task created plus any defect fixes inside packages/runner/src/supervisor/** and apps/daemon/src/work/**. If children 1-3's files are still uncommitted when you reach this step, do NOT commit them on their owners' behalf; raise it with the governor instead. Unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only owned paths landed and that no probe, scratch, debug, or generated evidence file is present — DoD 5 names that explicitly.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against incomplete dependencies, by architect-0b81de40 on explicit human instruction 2026-08-08. SPIDR child 4 of task-312c1de3, the supervisor hardening gate; its stated dep is \"children 1-3 (task-2580a578, task-4a3b5ec0, task-ba3a45f9) all DONE\" and NONE of the three is DONE — child 1 is in REVIEW, child 2 is WORKING with zero files on disk, child 3 was promoted to PLANNING in this same batch. As the closing gate it carries the parent's full DoD plus full regression, so its whole purpose is to harden code that does not exist yet. ARCHITECT: verify children 1-3 on disk before planning; if their surfaces are absent, report_blocked. Per mem:task-task-312c1de3c76a4f1dbd8da5c34e629b0e-handoff this uses the lease-core harness pattern with outcome-set equality, and runner tests cannot import @moe/scheduler — the mirror-vs-fenceAuthority drift test belongs here via the daemon package.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -31,5 +132,35 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-08T16:20:38.488Z"
+  "updatedAt": "2026-08-08T20:32:37.961Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:30:47.157Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:32:35.926Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) THIS IS THE ONE TASK IN THE BATCH THAT CANNOT BE FULLY DE-BLOCKED BY CLEVERNESS, AND PRETENDING OTHERWISE WOULD BE THE WORST OUTCOME. It is a hardening gate: its entire product is tests over children 1-3's code. Child 1 is real (11 files, untracked); at plan time child 2 had produced ZERO files and child 3 had no plan. A gate written against absent code would be a weakened gate, and the parent slice's own rail says a drill weakened, skipped, or narrowed to pass defeats the purpose of the whole SPIDR breakdown. So this plan does NOT fake coverage.\n(2) WHAT IT DOES INSTEAD — it splits into two halves along the dependency line. The HARNESS ENGINE (seeded scheduler, command alphabet, outcome recorder, per-kind counting, set-equality assertion) is pure, depends on nothing from children 2-3, and is fully buildable and testable today. The SLICE INVARIANTS need the slice. Building the engine first is real progress that is never wasted, and it front-loads the part that historically takes longest to get right. By queue order this task is claimed last, so children 1-3 will most likely be DONE by then and the plan runs straight through; step 1 decides which world you are in.\n(3) FOLLOW THE LEASE-CORE HARNESS, DO NOT INVENT ONE. `mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff` gives the exact shape AND the non-vacuity bar to beat: 5 seeds x 240 steps, a 5-member asserted-good state pool, 70/30 honest/tamper bias, a 10-command alphabet, and a test asserting the observed outcome-kind SET equals an exact 18-entry list with per-kind counts recorded. That memory's count table is the model for what this task must quote in its own evidence.\n(4) THE DRIFT TEST GOES IN THE DAEMON, NOT THE RUNNER. Runner tests cannot import @moe/scheduler (@moe/runner depends only on @moe/contracts). The supervisor's `lease-mirror.ts` re-validates at fenceAuthority strictness, and proving the mirror has not drifted from the real `fenceAuthority` requires both in one place — that is apps/daemon, which has @moe/scheduler and gains @moe/runner via child 3's approved ownership amendment. Child 1 explicitly deferred this test to child 4.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08 (re-verify at step 1 — this WILL have changed):\n- **Child 1 (task-2580a578, REVIEW) is real**: `packages/runner/src/supervisor/` holds 11 files, ALL UNTRACKED — `git ls-files` on that directory returns NOTHING, so read the working tree. effect-kernel.ts 250, effect-shape.ts 238, effect-parse.ts 165, effect-lifecycle.ts 253, effect-activation.ts 247, effect-grant.ts 148, lease-mirror.ts 113, effect-test-fixtures.ts 191, plus 3 test files.\n- **Symbols the harness drives** (child 1, settled): `ADMITTED_EFFECT_TRANSITIONS` (frozen arc data), `applyEffectCommand`, `applyEffectTombstone`, `LifecycleOutcome` with THREE kinds TRANSITIONED | MUST_DRAIN | REFUSED, `activateEffect`, `consumeActivationGrant`, `validateActivationCommit`, `deriveGrantId`, `fenceMirroredLease`, `EFFECT_STATES`, `TERMINAL_EFFECT_STATES`, `EFFECT_COMMANDS`, `SUPERVISOR_ERROR_CODES`, `SUPERVISOR_LAYERS`, and the fixtures makeIntent/makeAttempt/makeClaim/makeGrant/makeTombstone/withGetter/withExtraKey.\n- **Child 2 (task-4a3b5ec0)** will add, per its approved plan: `launch-lock.ts` (registerLaunchLock, resolveDuplicateDelivery with the frozen kind list ADOPTED | EXIT_BEFORE_LAUNCH | SUSPECT), `drain-table.ts`, `drain-reconciliation.ts`, `restart-reconstruction.ts`, plus new kernel layers LAUNCH_LOCK/DRAIN/RESTART and 13 new error codes. **At plan time NONE existed.**\n- **Child 3 (task-ba3a45f9)** owns `apps/daemon/src/work/**` and carries the human-approved ownership amendment adding @moe/runner to apps/daemon/package.json.\n- **Invariants child 1 pinned that this harness must assert** (from `mem:task-task-2580a578812f46a49cae0af79ff6fc16-handoff`): versionDelta is in {0,1} and a state change implies 1; MUST_DRAIN is an outcome kind, not a refusal; a `releaseWork`-style NO_OP returns a fresh object at the SAME version, so any 'new object implies version+1' invariant is WRONG.\n- **Bridges**: @moe/runner and @moe/daemon have none and need none. Daemon test script is the non-standard `vitest run --root . --config package.json src`.",
+    "risks": "1. **The gate must not be weakened to go green.** If children 2-3 are still absent when this is claimed, do NOT trim the expected outcome-kind list to whatever the harness happens to produce — that inverts the entire point, since DoD 1's set-equality assertion is only meaningful against a HAND-WRITTEN expected list. Build the engine, then wait or block on the slice arms.\n2. `mem:gotcha-self-derived-universe-cannot-check-itself` is the central trap here: an expected outcome-kind list derived from a harness run cannot check that run. Write the expected list BY HAND from the design and the children's exported vocabularies, and let the test fail loudly when reality disagrees — that failure is the gate doing its job.\n3. **Non-vacuity has a numeric bar**: DoD 1 demands >=5 seeds x >=200 steps with a documented honest/tamper bias and per-kind counts quoted in the evidence. A harness that runs the required steps but explores one state is vacuous — the lease core beat this with a 5-member asserted-good state pool and a 10-command alphabet. Record per-kind counts and treat any kind with count 0 as a coverage failure to investigate, not a pass.\n4. **No clock, no randomness outside the seeded PRNG.** Seeds are a fixed literal array so any failure is reproducible; a non-reproducible failing schedule is not a bug report. No Date.now, no Math.random.\n5. **Defect fixes are in scope but features are not.** Every fix needs a red-first focused test and must stay inside the slice's owned paths. Resist fixing anything in a foreign package — report it instead.\n6. **This task runs repo-root `pnpm test`.** Attribute red by path and never by a remembered count; a stale 'known failures' number is exactly the false baseline that had to be retracted from another plan on this board today. Investigate anything outside the slice before calling it foreign.\n7. **Commit hazard**: `packages/runner/src/supervisor/` is shared and was full of untracked foreign files at plan time. Commit by explicit per-file pathspec only, never the directory.",
+    "keyFiles": [
+      "packages/runner/src/supervisor/effect-lifecycle.ts",
+      "packages/runner/src/supervisor/effect-activation.ts",
+      "packages/runner/src/supervisor/effect-grant.ts",
+      "packages/runner/src/supervisor/lease-mirror.ts",
+      "packages/runner/src/supervisor/effect-test-fixtures.ts",
+      "packages/scheduler/src/authority/lease-fencing.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 28800000
+  },
+  "planApprovedAt": "2026-08-08T20:32:37.961Z"
 }

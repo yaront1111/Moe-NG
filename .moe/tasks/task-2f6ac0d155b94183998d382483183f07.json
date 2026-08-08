@@ -15,13 +15,138 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "OWNERSHIP AMENDMENT — governance first, because this task cannot compile without it. apps/daemon/package.json declares only @moe/contracts and @moe/scheduler, but this task must compose the pure cores (@moe/core: reduceProject, reduceGoal, the policy and planning modules) and durable decisions (@moe/store: commitExpectedVersionDecision). Neither package.json nor pnpm-lock.yaml is inside this task's stated owned paths, so adding the two workspace dependencies is an ownership amendment, not an implementation detail. Post the request in #governors naming both files and both dependencies, citing the precedent already approved for child 3 (task-ba3a45f9 carries 'apps/daemon/package.json +@moe/runner, single lock hunk'). WAIT for confirmation; do not self-approve. Once granted, add exactly `\"@moe/core\": \"workspace:*\"` and `\"@moe/store\": \"workspace:*\"` to dependencies and run the workspace install, then confirm with `git diff --stat pnpm-lock.yaml` that the lock moved by a single small hunk — pnpm-lock.yaml is shared state and a full regeneration would collide with every other task in flight. If the amendment is REFUSED, stop and moe.report_blocked with the refusal quoted; do not work around it by copying core logic into the daemon.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "startedAt": "2026-08-08T20:22:33.456Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Pin the two surfaces before naming a symbol. From @moe/core/src/index.ts confirm the exports this task consumes: PROJECT_COMMAND_KINDS, PROJECT_TRANSITIONS, reduceProject and the types ProjectRegisterCommand, ProjectBindRepositoryCommand, ProjectActivateCommand, ProjectActivationWitness, RepositoryObservation, ProjectState, ProjectReducerResult, ProjectAcceptedResult, ProjectRejectedResult; GOAL_COMMAND_KINDS, GOAL_TRANSITIONS, reduceGoal, GoalCreateCommand, GoalAcceptedResult; and the policy and planning entry points (approval-contract, approval-validation, policy-evaluation, policy-validation, planning-command-contract). From @moe/store/src/index.ts confirm SqliteEventStore.commitExpectedVersionDecision, readCommandDecisionsAfter, EXPECTED_VERSION_DECISION_COVERAGE and the CommandDecision* types. Write down, per command, which core reducer decides it and which store call makes it durable — that mapping is the whole design of this task and every later step reads it. Also re-read apps/daemon/src/index.ts: it is the established ingress shape this task must follow (decodeBoundedJsonBytes, then an exact-shape check against a frozen key list and a pinned schemaVersion literal, then compose, returning a frozen discriminated union). Produce no code.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Surfaces pinned on disk. Three deltas from the plan's prose, all verified, none discretionary:\n\n(1) COUNT IS NINE, NOT EIGHT. All of project.register, project.bind_repository, provider.probe, policy.install, policy.validate, project.activate, goal.create, plan.propose, approval.decide are present in RUNTIME_COMMAND_KINDS (packages/contracts/src/runtime/runtime-vocabulary.ts:85-110). The plan's \"eight\" counts the task description's comma-separated groups, where \"policy install/validate\" is one slash-joined group; step-5 itself then requires them as two separate services. I implement nine kinds and will assert SET EQUALITY against a frozen nine-element literal plus an explicit length===9, so a tenth kind cannot appear unnoticed and the sweep cannot silently generate zero (epic rail 6).\n\n(2) NO `planning-command-contract` ENTRY POINT is exported from @moe/core. Reachable planning surface is PLANNING_RUN_COMMAND_KINDS/PLANNING_RUN_TRANSITIONS/reducePlanningRun (planning-run-reducer.ts:48, includes \"plan.propose\") and GRAPH_REVISION_COMMAND_KINDS/reduceGraphRevision. Approval is APPROVAL_COMMAND_KINDS (\"approval.decide\",\"approval.withdraw\") + validateApprovalCommand (approval-validation.ts:93) + applyApprovalCommand. Policy is evaluatePolicy (policy-evaluation.ts:166) + validateEvaluationInput (policy-validation.ts:211).\n\n(3) provider.probe HAS NO CORE REDUCER — it exists only as a contracts vocabulary kind. So its service records a caller-supplied observation and its truth class; the adequacy judgement is not made here, it is consumed later by project.activate, whose ProjectActivationWitness carries providerMinimumProfileRef. That is what makes step-5's MISSING PROBE arm meaningful.\n\nCommand -> decider -> durability mapping (the design of this task):\n  project.register / bind_repository / activate -> reduceProject -> commitExpectedVersionDecision\n  goal.create -> reduceGoal -> same\n  plan.propose -> reducePlanningRun -> same\n  approval.decide -> validateApprovalCommand + applyApprovalCommand -> same\n  policy.install -> validateEvaluationInput -> same\n  policy.validate -> evaluatePolicy -> same\n  provider.probe -> ingress shape gate over caller-supplied observation -> same\n\nORDERING CONSTRAINT discovered while pinning, load-bearing for DoD 2: the replay lookup (SqliteEventStore.getCommandDecision, sqlite-event-store.ts:270) MUST run BEFORE the core reducer. reduceProject/reduceGoal compare expectedVersion against current version and return EXPECTED_VERSION_CONFLICT, so a second identical call would be rejected by the reducer and could never reach the store to return disposition REPLAYED. Replay-first is what makes \"exact idempotent replay result\" reachable.\n\nCorollary for DoD 3: services commit ONLY on reducer acceptance. A stale version is refused by the core reducer before any store call, so the durable decision count is genuinely unchanged — rather than the store's own NO_BUSINESS_EFFECT path, which WOULD write an audit decision row and would have made step-9's \"count unchanged\" assertion false.\n\nStore surface: commitExpectedVersionDecision(input: CommitExpectedVersionDecisionInput) -> CommandDecisionResponse {decision, disposition:\"DECIDED\"|\"REPLAYED\", historical, requiresAffordanceRefresh}. Input requires commandKind, committedResultBytes, correlationId, decidedAt, events[], expectedVersion, key{commandId,principalId,projectId}, requestBytes, targetAggregateId. decidedAt being caller-supplied is what keeps this module free of a clock read.\n\nBLOCKER STATUS UNCHANGED: apps/daemon/node_modules/@moe/ contains only contracts and scheduler symlinks, and tsconfig.base.json is NodeNext with no path mappings, so nothing above is importable from the daemon until step-1's amendment is granted. No production code written in this step.",
+      "startedAt": "2026-08-08T20:34:58.912Z",
+      "completedAt": "2026-08-08T20:35:45.905Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for the bootstrap ingress. Create apps/daemon/src/bootstrap/bootstrap-contracts.ts holding the command vocabulary as exported frozen data — the eight command kinds, a pinned schemaVersion literal, the frozen exact-key list per command, and the stable refusal code union — plus the bounded decode and exact-shape gate, reusing decodeBoundedJsonBytes from @moe/contracts rather than parsing JSON directly. Then create apps/daemon/src/bootstrap/bootstrap-services.test.ts asserting the ingress contract before any service exists: an unparseable payload refuses with the decode error surfaced verbatim; a payload with an extra key, a missing key, or a wrong schemaVersion refuses the exact-shape code; and the command-kind list asserts SET EQUALITY against the eight kinds this task owns, so a ninth kind cannot appear unnoticed and a sweep cannot silently cover zero. Every refusal assertion names the specific stable code, never merely that it failed. Red, because the module does not exist.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ],
+      "note": "TDD cycle observed, not asserted. RED first: test file written against a non-existent module, run produced `Error: Cannot find module './bootstrap-contracts.js'` with \"Test Files 1 failed | 1 passed (2)\" — failed for the intended reason (module absent), not a typo. GREEN after implementing bootstrap-contracts.ts: `pnpm --filter @moe/daemon typecheck` exit 0 and `pnpm --filter @moe/daemon test` \"Test Files 2 passed (2) / Tests 39 passed (39)\".\n\nIngress contract as built (apps/daemon/src/bootstrap/bootstrap-contracts.ts, 196 lines, well under the 250 target):\n- BOOTSTRAP_SCHEMA_VERSION \"moe-bootstrap-command/1\", pinned as a literal and compared by identity.\n- BOOTSTRAP_COMMAND_KINDS: frozen NINE kinds, typed `as const satisfies readonly RuntimeCommandKind[]` so a typo cannot compile.\n- BOOTSTRAP_REQUEST_KEYS: frozen exact 9-key envelope (commandId, correlationId, decidedAt, expectedVersion, kind, payload, principalId, projectId, schemaVersion).\n- BOOTSTRAP_REFUSAL_CODES: BOOTSTRAP_INPUT_REJECTED | BOOTSTRAP_REQUEST_INVALID | BOOTSTRAP_COMMAND_UNKNOWN.\n- decodeBootstrapRequestBytes reuses decodeBoundedJsonBytes; it never calls JSON.parse.\n\nTwo deliberate design points, both aimed at epic rail 6:\n(a) EVERY refusal carries `refusedBy: \"DAEMON_INGRESS\"`. This is the layer marker: when the core services land, their refusals will carry the core's own RuntimeError code and a distinct refusedBy, so a test can assert WHICH layer answered and cannot go vacuous if a second layer starts answering first.\n(b) The set-equality test compares BOOTSTRAP_COMMAND_KINDS against a literal nine-element list restated in the test, NOT against a list derived from production. Deriving both sides would make the assertion vacuous — a tenth kind would appear on both sides and stay green. Also asserts both lengths === 9 so the comparison cannot degenerate to two empty sets.\n\nUnknown-kind refuses under its own code (BOOTSTRAP_COMMAND_UNKNOWN) rather than the generic shape code, so widening the surface by accident is distinguishable in evidence from a malformed envelope. Prototype check mirrors apps/daemon/src/index.ts: a non-null prototype means the value did not come from the bounded decoder.\n\nSTEP 1 STILL UNANSWERED. Two chat_wait timeouts (300s, 180s) plus a #general cross-post, no governor reply. Steps 4-9 compose @moe/core and @moe/store, which remain unresolvable from apps/daemon (node_modules/@moe has only contracts and scheduler; NodeNext with no path mappings). This step needed no amendment and is complete on its own; the next step does.",
+      "startedAt": "2026-08-08T20:36:16.291Z",
+      "completedAt": "2026-08-08T20:38:30.083Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the first three bootstrap services to green in apps/daemon/src/bootstrap/bootstrap-services.ts: project register, repository bind, and provider probe. Each follows one shape and no other: decode and exact-shape gate (step 3), load current state, hand the parsed command to the @moe/core reducer that owns it (reduceProject for register and bind), and commit the reducer's verdict through SqliteEventStore.commitExpectedVersionDecision so the decision is durable and replayable. The service composes; it NEVER decides. A rejected reducer result becomes a refusal carrying the core's own reason code — do not translate it into a local code, because that erases which layer refused. Repository bind consumes a caller-supplied RepositoryObservation and provider probe a caller-supplied observation: this module performs no I/O, no spawn, and no clock read. Target under 250 lines for this file across steps 4 and 5 combined; split before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Complete the bootstrap module with policy install, policy validate, and project activate, and prove DoD 1. Policy install and validate route through @moe/core's policy modules (policy-validation, policy-evaluation, policy-contract); an unknown or unregistered policy input refuses with a stable code and commits nothing. Project activate is the one that carries DoD 1 — 'no hand-edited state can activate a project': activation must require the ProjectActivationWitness the core reducer demands AND a durable prior decision for the register and bind steps, refusing when either is absent. Assert that arm by its stable refusal code and by reading the store back to show no row was written, not merely by the returned value — a service that mutates and then refuses would pass a return-value-only assertion. Also assert the ordering property: activation refuses when the bootstrap sequence is out of order, which is what makes the sequence command-driven rather than hand-editable.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Goal create service, TDD. Create apps/daemon/src/goals/goal-services.test.ts then apps/daemon/src/goals/goal-services.ts implementing the goal create command against @moe/core's reduceGoal, GOAL_COMMAND_KINDS and GoalCreateCommand, committed through commitExpectedVersionDecision exactly as the bootstrap services are. Reuse the decode and exact-shape gate exported from bootstrap-contracts.ts rather than restating it — a second copy of the ingress rule is a second thing to drift. A goal create against a project that is not durably ACTIVE refuses with the core's own reason code and commits nothing; assert the code and read the store back to prove the non-mutation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Plan propose and approval services, TDD. Create apps/daemon/src/planning/planning-services.test.ts then apps/daemon/src/planning/planning-services.ts for the last two commands, routed through @moe/core's planning-command-contract and graph-revision-reducer for propose, and approval-contract plus approval-validation for approval. Same composition shape and the same shared ingress gate; the services never decide. Approval is the authority-bearing command in this task, so it carries the strictest assertions: an approval whose policy input is unknown, whose approver is not eligible per the core's validation, or whose target revision hash does not match refuses with the core's reason code and commits nothing. Where the result carries no authority, label it with the daemon's existing advisory envelope shape (advisoryOnly: true, authority: 'NONE') as apps/daemon/src/index.ts already does — do not invent a second convention for the same idea.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Prove DoD 2 across ALL eight commands — one durable terminal decision and an exact idempotent replay. For each command in turn, issue it twice with the identical request and assert: the first call commits exactly one durable decision row; the second returns the SAME terminal decision with disposition REPLAYED; and the durable row count is still one afterwards, read back from the store. The count assertion is the load-bearing one — 'it did not throw the second time' is compatible with a service that wrote a second row, which is precisely the bug this DoD exists to catch. Drive the sweep from the exported command-kind list so it covers all eight by construction, and assert the generated case count equals eight and is non-zero, per epic rail 6 — a sweep that silently produces zero cases passes while testing nothing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/goals/goal-services.test.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove DoD 3 — the four hostile inputs commit no unauthorized mutation. Build a fixture per named input: a STALE VERSION (an expected-version mismatch against the durable head), a WRONG HASH (a revision or policy digest that does not match the durable record), a MISSING PROBE (activation attempted with no durable provider-probe decision), and an UNKNOWN POLICY (a policy identifier never installed). For each, assert BOTH halves: the specific stable refusal code and, by reading the store back, that the durable decision count and the aggregate head are unchanged. Assert which layer refused wherever both the daemon's ingress gate and a core reducer could answer — per the project rail, a test asserting only 'refused' is one added layer away from vacuous, and here the ingress gate could start answering first and leave the test green while no longer testing the core's rule. Drive the four from a declared list and assert its length, so the sweep cannot degenerate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.test.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Mutation drill, then the gate. Neutralise each guard at its single source — the exact-shape key check, the schemaVersion literal comparison, the expected-version pass-through to commitExpectedVersionDecision, the activation witness requirement, and the approval eligibility check — by replacing the operand with a constant, NEVER by deleting a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the test that goes red is the one that names that guard's code. Back each file up out-of-tree and verify the restore with git hash-object. Then run the gate fresh from the repo root and capture the real output as evidence: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test. Note that the daemon's test script is the non-standard `vitest run --root . --config package.json src` — use the pnpm script, do not hand-invoke vitest differently. Add no .js bridge files: @moe/daemon needs none, unlike @moe/store. Confirm each production file is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/planning/planning-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can any command reach a durable mutation without its core reducer accepting it; does any service decide something the core should have decided; can a replay write a second row; does any refusal assert only that it failed rather than which code and which layer; does any hostile-input test check the return value without reading the store back; is any sweep able to generate zero cases and still pass; does any result claim authority where the daemon's advisory envelope belongs. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never a directory. The working directory is shared with other in-flight tasks, so run git status --porcelain first and unstage any foreign path with git restore --staged. apps/daemon/package.json and pnpm-lock.yaml are committed here ONLY if step 1's amendment was granted; the lock must show the single expected hunk and nothing else. After committing, verify with git show --stat that only owned paths landed and that no debug, probe, scratch, or generated evidence file is present.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-964ae3f0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by architect-0b81de40 on explicit human instruction 2026-08-08. Dependency pass: \"Project goal lifecycle core, Planning graph lifecycle core, Policy approval core, Projection outbox core, and Claude runtime adapter.\" Four are DONE (task-8f14038c, task-1ade51c0, task-556d87c3, task-5ff2b39d). The fifth, Projection outbox core (task-55d5a898), is a SPIDR parent shell whose five children are all committed — a602b3d4, 82989467, 071173ab, 7617c00d DONE and 791d7340 at 10/10 steps in REVIEW — so the surface this task consumes exists on disk and only the QA hop plus the labeled REVIEW-transit close remain. ARCHITECT: verify the store surface on disk before naming symbols; do not treat the shell's BACKLOG status as absence of code.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +154,47 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.266Z",
-  "updatedAt": "2026-08-07T11:50:15.266Z"
+  "updatedAt": "2026-08-08T20:41:56.864Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:19:12.207Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 2
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:22:09.951Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) THE REAL BLOCKER IS A PACKAGE EDGE, NOT MISSING CODE. `apps/daemon/package.json` depends ONLY on @moe/contracts and @moe/scheduler. This task must 'compose store and pure cores', and the pure cores live in **@moe/core** (goal, planning, policy, project, identity) with durable decisions in **@moe/store** — neither is reachable from the daemon today. Every dependency this task names is DONE and on disk; the only thing missing is the import edge. Rather than report_blocked, this plan opens with an explicit ownership amendment, exactly the pattern the human already approved for child 3 (task-ba3a45f9 carries 'apps/daemon/package.json +@moe/runner, single lock hunk'). That is why step 1 is governance, not code.\n(2) GROUPING THE EIGHT SERVICES — the task names eight commands (project register, repository bind, provider probe, policy install, policy validate, project activate, goal create, plan propose, approval) and gives exactly three owned directories. I grouped by owned path rather than by command: bootstrap/ takes the five project-scoped ones, goals/ takes goal create, planning/ takes plan propose and approval. That keeps the file count at 9 and each production module near the 250-line target.\n(3) DECODE LAYER — folded into bootstrap-contracts.ts rather than its own module, purely to stay off the 10-file ceiling. If it pushes that file past 400 lines, split it and give the split its own test coverage; @moe/daemon needs NO .js bridges (see codebaseInsights).",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **apps/daemon/src is nearly empty**: `index.ts` plus `graph-preview-request.test.ts`. None of `src/bootstrap`, `src/goals`, `src/planning` exists yet — this task creates all three.\n- **apps/daemon/package.json dependencies**: `@moe/contracts`, `@moe/scheduler`. NOT @moe/core, NOT @moe/store. This is the amendment step 1 exists for.\n- **@moe/core/src/index.ts exports the pure reducers as data plus functions**: `PROJECT_COMMAND_KINDS`, `PROJECT_TRANSITIONS`, `reduceProject`, and types `ProjectRegisterCommand`, `ProjectBindRepositoryCommand`, `ProjectActivateCommand`, `ProjectActivationWitness`, `RepositoryObservation`, `ProjectState`, `ProjectReducerResult`, `ProjectAcceptedResult`, `ProjectRejectedResult`; and `GOAL_COMMAND_KINDS`, `GOAL_TRANSITIONS`, `reduceGoal` with `GoalCreateCommand`, `GoalCommand`, `GoalAcceptedResult`. Core directories on disk: goal/ (goal-contract, goal-reducer, goal-validation), planning/ (planning-command-contract, planning-contract, graph-revision-reducer, graph-revision-validation, planning-invariant-drivers), policy/ (approval-contract, approval-validation, approval-invalidation, policy-contract, policy-evaluation, policy-validation, policy-composition), project/, identity/.\n- **@moe/store public surface** (packages/store/src/index.ts) exports `SqliteEventStore` with `commit`, `commitExpectedVersionDecision`, `commitWithApply`, `readCommandDecisionsAfter`, plus types `CommandDecisionRecord`, `CommandDecisionResponse`, `CommandDecisionKey`, `CommitResult`, `EXPECTED_VERSION_DECISION_COVERAGE`. `commitExpectedVersionDecision` is the seam DoD 2's 'one durable terminal decision and exact idempotent replay result' is built on — replay returns disposition REPLAYED.\n- **The daemon's established ingress pattern is already written in `src/index.ts`** and this task must follow it: `decodeBoundedJsonBytes` from @moe/contracts, then an EXACT-shape check (`isExactRequest` with a frozen key list and a pinned `schemaVersion` literal), then compose, returning a frozen discriminated union whose arms carry an advisory envelope (`advisoryOnly: true, authority: \"NONE\"`) where the result has no authority. See `mem:decision-daemon-graph-preview-ingress`.\n- **Daemon test command is non-standard**: `vitest run --root . --config package.json src` (see package.json scripts, and `mem:gotcha-vitest-app-root-config`). The task's stated gate `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` runs it correctly — do not invent a different invocation.\n- **@moe/daemon has NO `.js` bridge files** and needs none, same as @moe/runner and unlike @moe/store. Do not add them.",
+    "risks": "1. **STEP 1 IS A GOVERNANCE GATE, NOT A CODE STEP — do not skip it or self-approve it.** `apps/daemon/package.json` and `pnpm-lock.yaml` are NOT in this task's stated owned paths (`apps/daemon/src/bootstrap/**`, `goals/**`, `planning/**`). Adding @moe/core and @moe/store is an ownership amendment and needs the governor's confirmation first, exactly as child 3's was human-approved. If it is refused, THEN report_blocked — with the specific refusal, not a guess.\n2. **`pnpm-lock.yaml` is shared state across every task on this board.** Keep the change to the single hunk the two workspace deps produce; never regenerate the whole lock. Verify with `git diff --stat pnpm-lock.yaml` before staging, and stage it by explicit pathspec with package.json.\n3. DoD 1 says no hand-edited state can activate a project. The activation path must require the witness the core reducer demands (`ProjectActivationWitness`) and must refuse when the durable decision record is absent — assert that refusal by code, not by absence of a mutation.\n4. DoD 3 names four hostile inputs — stale version, wrong hash, missing probe, unknown policy. Each needs its own fixture asserting BOTH the stable refusal code AND that no durable row was written; a test that only checks the return value would pass against a service that mutated and then refused. Read the store back to prove the non-mutation.\n5. Idempotent replay (DoD 2) is the property most likely to be faked: assert the SECOND call returns the same terminal decision with disposition REPLAYED and that no second durable row exists, not merely that it did not throw.\n6. Eight commands across three modules is the largest surface in this batch. If any production file approaches 400 lines, split it in place and note the split in the completion evidence — the per-file cap is real, the per-task LOC bar does not exist.\n7. `moe.amend_plan_step` is currently broken for architects (`mem:gotcha-architect-team-role-null-blocks-amend-plan-step`), and `affectedFiles` is write-once, which is why the two amendment files are declared up front even though step 1 might not be approved.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/package.json",
+      "packages/core/src/index.ts",
+      "packages/core/src/project/project-reducer.ts",
+      "packages/core/src/goal/goal-reducer.ts",
+      "packages/core/src/policy/approval-contract.ts",
+      "packages/store/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T20:22:11.993Z",
+  "contextFetchedBy": [
+    "worker-964ae3f0"
+  ],
+  "workStartedAt": "2026-08-08T20:22:33.456Z",
+  "blockedReason": "Step-1 ownership amendment UNANSWERED (not refused). Need permission to add \"@moe/core\": \"workspace:*\" and \"@moe/store\": \"workspace:*\" to apps/daemon/package.json + the single pnpm-lock.yaml importer hunk. Both are outside my owned paths, so step-1 forbids self-approval. Precedent: task-ba3a45f9 carries the same approved amendment for @moe/runner.\n\nMECHANICAL, measured: `ls apps/daemon/node_modules/@moe/` = only contracts + scheduler; tsconfig.base.json is NodeNext with NO path mappings. So `import {reduceProject} from \"@moe/core\"` cannot typecheck from apps/daemon and the task gate cannot reach exit 0 for steps 4-9 (every service). I will not copy core logic into the daemon to route around it.\n\nEscalated 3x: #governors msg-5ebbe878, msg-bbafd125; #general msg-30238c2d. Four chat_wait timeouts (~17 min). governor-eae4fc53 silent since 18:19; another worker's #governors post is also unanswered.\n\nDELIVERED meanwhile (steps 2-3, owned paths only). Commit b8a2381, 2 files, verified: typecheck exit 0, tests 2 files / 39 passed. bootstrap-contracts.ts (196 lines) = bounded decode, exact 9-key envelope gate, pinned schemaVersion, closed refusal-code union, every refusal tagged refusedBy \"DAEMON_INGRESS\" so a later test can pin which layer refused. RED observed before green.\n\nFull detail in Serena mem:task-task-2f6ac0d155b94183998d382483183f07-handoff. Key deltas: (1) NINE command kinds not eight — all nine in RUNTIME_COMMAND_KINDS; the plan's \"eight\" counts comma groups where \"policy install/validate\" is one. (2) @moe/core exports no planning-command-contract; real surface is PLANNING_RUN_COMMAND_KINDS/reducePlanningRun, GRAPH_REVISION_COMMAND_KINDS/reduceGraphRevision, APPROVAL_COMMAND_KINDS+validateApprovalCommand, evaluatePolicy. (3) provider.probe has NO core reducer.\n\nAlso: pnpm-lock.yaml is already modified by another in-flight task — add only the apps/daemon importer hunk, never regenerate.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-08T20:41:56.864Z"
 }

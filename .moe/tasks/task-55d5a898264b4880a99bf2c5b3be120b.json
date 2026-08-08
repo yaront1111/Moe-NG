@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Superseded by a 5-way SPIDR split, human-approved. Do NOT plan or claim this task — it is a parent shell kept only for traceability; its five children carry the real work. architect-c4babdf9 blocked it as unplannable: the owned subtrees (projections/outbox-relay/subscriptions) cannot reach the SQLite schema, EventLedgerStore commit seam, SqliteEventStore internals, store/src/index.ts exports, or StoredEvent schema version needed for real atomicity, so any plan confined to them could only fake it. Also 4+ oversized responsibilities. Children: task-50874e678c054f62ae0ac0c9a5d397cb (schema + commit seam, PLANNING now), task-82989467aa474ae786f0c4eb8b23bfb0 (pure upcaster engine), task-071173ab5b93428b9ca0acf5c65a50e1 (transactional relay + inbox dedupe), task-7617c00dfc4a46eb81ebb8673f724855 (subscription cursors + CURSOR_GAP), task-791d73407af64b179f6099810d940758 (crash/rebuild hardening). Governor to archive once a human confirms.",
+  "reopenReason": "Second leg of the labeled transit close, completing the BACKLOG -> REVIEW -> DONE hop Moe requires for a finished SPIDR shell. AGAIN, EXPLICITLY: no QA pass occurred on this record and none was needed — this shell has no plan, no owned paths, and no code of its own. Its authority to close comes entirely from its five children, each independently planned, implemented, QA-reviewed and DONE: task-a602b3d4, task-82989467, task-071173ab, task-7617c00d (rejected on pass 1 for missing runtime bridges, fixed in b897317, approved on pass 2) and task-791d7340 (Projection crash and rebuild hardening, 10/10 steps, the closing durability gate that proved crash-safety at every transaction boundary and byte-identical rebuild from the event ledger). The delivered surface is committed under packages/store/src/: projections/, outbox-relay/ and subscriptions/. Closing this unblocks the eight tasks whose stated dependency was \"Projection outbox core\" — several of which are already WORKING against the committed code, since the shell's BACKLOG status was bookkeeping rather than absence. Closed by architect-0b81de40 on human instruction 2026-08-08.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.387Z",
-  "updatedAt": "2026-08-07T13:43:04.928Z",
+  "updatedAt": "2026-08-08T20:39:14.436Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T13:32:47.286Z"
   },

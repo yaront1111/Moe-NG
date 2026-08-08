@@ -15,13 +15,132 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold the new package, because packages/review does not exist. Create packages/review/package.json and packages/review/tsconfig.json from the @moe/scheduler template: private ESM package named @moe/review, version 0.0.0, `exports: { \".\": \"./src/index.ts\" }`, scripts `typecheck: \"tsc --project tsconfig.json\"` and `test: \"vitest run --root ../.. packages/review/src\"`; tsconfig extends ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"], tsBuildInfoFile ../../node_modules/.cache/review.tsbuildinfo. Take @moe/core as the one dependency — this task must CONSUME the committed policy core's approval validity and acceptance qualification rather than restate them — and take nothing else. pnpm-workspace.yaml globs packages/* so it needs NO edit. Run the workspace install and confirm with `git diff --stat pnpm-lock.yaml` that the lock gained only the single new importer entry; that file is shared with every in-flight task and a full regeneration would collide. Confirm the empty package typechecks before writing logic, so a scaffold error cannot be mistaken for a code error later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/package.json",
+        "packages/review/tsconfig.json",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/review/package.json",
+        "packages/review/tsconfig.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Pin the policy core and define the closed vocabulary. First confirm on disk what @moe/core/src/policy already owns — approval-contract.ts, approval-validation.ts, approval-invalidation.ts, policy-contract.ts, policy-evaluation.ts, policy-validation.ts, policy-composition.ts — and what @moe/core/src/planning exposes, so acceptance qualification and approval validity are CONSUMED, not reimplemented; a second copy of those rules would drift and would violate the rail against asserting a property somewhere other than the production surface that owns it. Then create packages/review/src/review-contract.ts as exported frozen data: the independence verdict lattice INDEPENDENT | NOT_INDEPENDENT | UNKNOWN (three-valued, not a boolean — DoD 1 needs 'cannot tell' to be distinct from 'proven not independent'); the closed error-code list including UNKNOWN_REVIEWER_INDEPENDENCE; the review package's ALLOWED item kinds as an allow-list plus the forbidden kinds named in DoD 2 (worker transcript, self-assessment, journal); the structured finding shape keyed on a typed subject and rule rather than text; the escalation round limit as a named constant; and the rubric shape. Also create src/index.ts. Data and types only, no logic.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/review-contract.ts",
+        "packages/review/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/review-contract.ts",
+        "packages/review/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for reviewer eligibility and calibration — DoD 1. Create packages/review/src/reviewer-eligibility.test.ts before the module. The obvious case is cheap; the ones that matter are not, so assert all of: the AUTHOR is never independent; a reviewer who held a MUTATING lease over the subject at any prior point is never independent, including after releasing it; a reviewer who held only a READ-ONLY lease REMAINS independent (the positive arm — without it the rule can pass by refusing everyone); and a reviewer whose lease history cannot be resolved yields UNKNOWN_REVIEWER_INDEPENDENCE rather than defaulting to eligible. Assert the verdict values from the three-valued lattice, not a boolean, and assert that UNKNOWN produces NO acceptance qualification — a distinct assertion from NOT_INDEPENDENT, because collapsing them is the exact defect DoD 1 names. Calibration must be deterministic: the same reviewer and subject always yield the same verdict, with no sampling and no clock. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/reviewer-eligibility.test.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/reviewer-eligibility.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement packages/review/src/reviewer-eligibility.ts to green. Independence is computed over caller-supplied durable facts — authorship and the lease history of the subject — and returns the three-valued verdict. Fail closed in the precise sense DoD 1 requires: any fact that cannot be resolved makes the verdict UNKNOWN with UNKNOWN_REVIEWER_INDEPENDENCE, and UNKNOWN can never yield an acceptance qualification, because unverifiable evidence must never gain authority. Mutating and read-only lease kinds are distinguished explicitly rather than treating any lease as disqualifying — over-refusing would make independent review impossible and would hide a real bug behind a green suite. Calibration is a pure deterministic function of the same inputs: no clock, no randomness, no sampling. Target under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/reviewer-eligibility.ts",
+        "packages/review/src/reviewer-eligibility.test.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/reviewer-eligibility.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red for the clean review package — DoD 2. Create packages/review/src/review-flow.test.ts. Two halves, both asserted. BINDS: the package binds exact criteria, hashes, tree, receipts, rubric, and submitted bytes — assert that bound set by SET EQUALITY against a hand-written list taken from the DoD so a field silently dropped from the binding fails rather than passing unnoticed, and assert the package digest CHANGES when each one changes, driven from the same list so coverage is by construction with the case count asserted non-zero. EXCLUDES: worker transcripts, self-assessment, and journal content must not be expressible — feed one item of each forbidden kind and assert the specific refusal code. Receipts are cited as opaque content-addressed references validated for shape only (64-hex); the Evidence receipt pipeline that owns their internals is unbuilt, and reconstructing its shape here would create a seam that has to be undone. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/review-flow.test.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/review-flow.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement packages/review/src/review-package.ts to green, enforcing the exclusions BY CONSTRUCTION. The builder accepts only the allow-listed item kinds from review-contract.ts, so a worker transcript, a self-assessment, or a journal entry is not something the package strips out — it is something that was never expressible, which is a stronger guarantee than any filter. Keep a stable refusal code as the backstop for the nearest legal attempt. Bind the six required fields under a pinned package version with one canonical digest over the whole frozen result, and deep-freeze what you return so a caller holding a reference cannot mutate what the digest attested. Note that DoD 2's journal exclusion means this module takes NO dependency on the context journal package at all: you cannot import a thing in order to leave it out. Target under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/review-package.ts",
+        "packages/review/src/review-flow.test.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/review-package.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Implement structured findings and rejection lineage in packages/review/src/review-findings.ts, TDD against review-flow.test.ts. Findings are structured records keyed on a TYPED SUBJECT AND RULE, never on prose, and rejection lineage is append-only: a later round can never rewrite an earlier finding, and an attempted mutation refuses with a stable code while the lineage digest stays stable. Repeat detection is the load-bearing rule and must be tested in BOTH directions or it collapses into string equality: two findings whose text differs but whose typed subject and rule match ARE repeats and route to replan; two whose text is identical but whose subject differs are NOT repeats and must not. Assert the routing outcome by its stable kind, and assert which layer decided it wherever both the eligibility gate and the findings reducer could answer — a nearer gate answering first would leave the test green while no longer testing this rule.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/review-findings.ts",
+        "packages/review/src/review-flow.test.ts"
+      ],
+      "newFiles": [
+        "packages/review/src/review-findings.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Close DoD 3 — acceptance, escalation, and the two proof states that cannot accept. Extend review-findings.ts and review-flow.test.ts. Assert three distinct fixtures, because folding any two together hides a real case: a FAILED proof cannot produce an acceptance qualification; an UNKNOWN proof cannot either, and it is a separate case from failed, since 'we could not tell' and 'we checked and it failed' are different facts and only one of them might later become provable; and a reviewer whose independence verdict is UNKNOWN cannot accept regardless of the proof. Then the escalation boundary, tested AT the boundary rather than near it: two unsuccessful rounds do not escalate, THREE require human escalation, and a fourth cannot quietly proceed as if unescalated. Acceptance qualification itself routes through @moe/core's policy modules — consume their verdict and carry their reason code verbatim rather than restating the rule, so the two cannot drift.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/review-findings.ts",
+        "packages/review/src/review-flow.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the assertions are load-bearing. MUTATION DRILL at each mechanism's single source: the mutating-versus-read-only lease distinction, the UNKNOWN-verdict fail-closed branch, the package allow-list, the repeat-finding subject comparison, the append-only lineage guard, and the escalation round constant. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the red test is the one naming that guard's code. Two mutations matter most: replacing the allow-list with an accept-all must redden the transcript-exclusion test, and replacing the subject comparison with text equality must redden the repeat-detection test — if either survives, that DoD is untested regardless of how green the suite looks. Back each file up out-of-tree and verify the restore with git hash-object. Also grep for Date.now and Math.random and confirm zero hits; add no .js bridge files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/src/reviewer-eligibility.ts",
+        "packages/review/src/review-package.ts",
+        "packages/review/src/review-findings.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the gate on the new package. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test. Because this package did not exist before this task, a filter miss looks exactly like a passing run with zero tests — so assert the run actually executed your suites by checking the reported file and test counts are non-zero, and treat 'No test files found' as a FAILURE of this step, not a pass. Every failure here is unambiguously yours: nothing else in the repo touches packages/review. Also run root pnpm typecheck to confirm the new package and its @moe/core edge did not break the workspace build. Confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file is under the 400 hard cap, and record each count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/review/package.json"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can an author or a prior mutating lease holder reach an acceptance by any indirect route; does an unresolvable history default to eligible anywhere; can a transcript, self-assessment, or journal entry enter the clean package through any constructor or override; does the package digest actually cover all six DoD-2 fields, verified by set equality rather than by eye; can a repeat finding evade detection by rewording; can rejection lineage be rewritten by a later round; does the third unsuccessful round always escalate, including when rounds arrive out of order; is any policy rule restated here instead of consumed from @moe/core. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A. Every packages/review/ file is new and uncontested, but pnpm-lock.yaml is SHARED with every in-flight task: confirm it carries only the single new importer entry before staging it, and unstage any foreign path with git restore --staged. Run git status --porcelain first. After committing, verify with git show --stat that only owned paths landed and no debug, probe, scratch, or generated evidence file is present.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against incomplete dependencies, by architect-0b81de40 on explicit human instruction 2026-08-08. Deps: \"Planning graph lifecycle core, Policy approval core, Projection outbox core, Evidence receipt pipeline, and Deterministic context journal.\" Three effectively satisfied (task-1ade51c0 DONE, task-556d87c3 DONE, Projection outbox core children all committed). TWO ARE UNBUILT: Evidence receipt pipeline (task-1e512b95) and Deterministic context journal (task-79eddf12) were both promoted to PLANNING in this same batch and have no plan and no code. ARCHITECT: verify on disk before naming a symbol from either; prefer report_blocked over a speculative API.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +148,35 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.708Z",
-  "updatedAt": "2026-08-07T11:50:15.708Z"
+  "updatedAt": "2026-08-08T20:28:37.663Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:26:48.554Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:28:35.626Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WHY THIS IS NOT BLOCKED, despite the promotion note naming two unbuilt dependencies. `packages/review/**` DOES NOT EXIST — this is a GREENFIELD PACKAGE, so it collides with nothing. The two unbuilt deps enter in ways that need no code from them: Evidence receipt pipeline appears in DoD 2 only as 'receipts' among the things the clean package BINDS — cite them as opaque content-addressed references validated for shape (64-hex). Deterministic context journal appears only as something the clean package must EXCLUDE. An exclusion is not a dependency: you cannot import a thing in order to leave it out, and modelling it as 'no journal-kind item may appear in the package' is stronger than any import would be. So nothing here is blocked and nothing is speculative.\n(2) DoD 1 ENFORCED BY LATTICE, NOT BY BOOLEAN. 'Ineligible capacity yields UNKNOWN_REVIEWER_INDEPENDENCE' means independence is three-valued — INDEPENDENT, NOT_INDEPENDENT, UNKNOWN — not a boolean with an error. UNKNOWN is a first-class verdict that cannot accept, which is exactly epic rail 4 (unverifiable evidence never gains authority). A boolean plus a thrown error collapses 'proven not independent' and 'cannot tell' into one answer and loses the distinction the DoD is asking for.\n(3) EXCLUSION PROVEN BY CONSTRUCTION, NOT BY FILTER. DoD 2 forbids worker transcripts, self-assessment, and journal content in the clean package. A filter that strips them is one bug away from leaking. Prefer an allow-list: the package builder accepts ONLY the declared item kinds, so a transcript is not something that gets removed — it is something that was never expressible. Keep a refusal code for the nearest legal attempt.\n(4) THREE ROUNDS IS A COUNT, SO IT IS A BOUNDARY — test at 2, 3 and 4 rounds, not 'several'.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **`packages/review/` DOES NOT EXIST.** This task creates the package. Nothing else in the repo touches it.\n- **`pnpm-workspace.yaml` globs `packages/*`** — a new directory needs NO workspace-file edit.\n- **Scaffold template is `packages/scheduler`** (the zero-dependency precedent): private ESM package, `exports: { \".\": \"./src/index.ts\" }`, scripts `typecheck: \"tsc --project tsconfig.json\"` and `test: \"vitest run --root ../.. packages/<name>/src\"`, NO dependencies block. tsconfig extends `../../tsconfig.base.json` with `rootDir: \"src\"`, `types: [\"node\"]`, `include: [\"src/**/*.ts\"]`, and its own `tsBuildInfoFile` under `../../node_modules/.cache/`.\n- **Committed surfaces this package may consume**: @moe/core policy (approval-contract.ts, approval-validation.ts, approval-invalidation.ts, policy-contract.ts, policy-evaluation.ts, policy-validation.ts, policy-composition.ts) and @moe/core planning (planning-contract.ts, planning-command-contract.ts, graph-revision-contract.ts). Both cores are DONE and real. Acceptance qualification and approval validity already live in the policy core — CONSUME them, do not restate their rules here, or the two will drift and epic rail 6's 'assert against the production surface' is violated by construction.\n- **Bridge convention**: @moe/store is the ONLY package using `.js` bridge files. @moe/runner, @moe/scheduler, @moe/daemon have none. A new package follows the majority: NO bridges.\n- **Determinism helpers exist per package** rather than centrally (e.g. `packages/runner/src/canonical.ts` with canonicalJson/canonicalDigest/deepFreeze). If this package needs a canonical digest and takes no dependency, mirror that small helper locally rather than adding a package edge — and note it in the evidence.",
+    "risks": "1. **DoD 1's real trap is self-review by an indirect path.** An author is obvious; a 'prior mutating lease holder' is not. Build the check over the durable lease history, and test the non-obvious cases: a reviewer who held a mutating lease earlier and released it, a reviewer who held a READ-ONLY lease (must remain eligible), and a reviewer whose history cannot be resolved at all (must be UNKNOWN_REVIEWER_INDEPENDENCE, never a default of eligible).\n2. **UNKNOWN must be unable to accept, and that needs its own test.** Assert the specific code and that no acceptance qualification is produced — not merely that a boolean was false.\n3. **DoD 2 lists six things the package must BIND and three it must EXCLUDE.** Assert the bound set by SET EQUALITY against a hand-written list from the DoD, and assert the excluded kinds are not expressible — feed a transcript-kind item and assert the refusal code, then mutate the allow-list and confirm the test goes red. A sweep must assert its own case count is non-zero (epic rail 6).\n4. **DoD 3 has three separate rules that need separate fixtures**: failed proof cannot accept; UNKNOWN proof cannot accept (a distinct case — do not fold it into 'failed'); repeat findings route to replan. Then the escalation boundary at exactly 2, 3 and 4 unsuccessful rounds.\n5. **Repeat-finding detection must be over structured finding identity, not prose.** Two findings whose text differs but whose typed subject and rule are identical ARE repeats; two whose text is identical but whose subject differs are not. Test both directions, or the rule reduces to string equality.\n6. Rejection lineage must be append-only and immutable: a later round can never rewrite an earlier finding's record. Assert that a mutation attempt refuses and that the lineage digest is stable.\n7. `pnpm-lock.yaml` gains one importer entry on install. It is shared state across every in-flight task — keep the change to that single entry, verify with `git diff --stat`, never regenerate the whole lock.\n8. No Date.now and no Math.random: round counts and timestamps are caller-supplied, and calibration must not sample randomly.",
+    "keyFiles": [
+      "packages/scheduler/package.json",
+      "packages/scheduler/tsconfig.json",
+      "packages/core/src/policy/approval-contract.ts",
+      "packages/core/src/policy/approval-validation.ts",
+      "packages/core/src/policy/policy-evaluation.ts",
+      "packages/core/src/planning/planning-contract.ts",
+      "pnpm-workspace.yaml"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T20:28:37.663Z"
 }

@@ -15,13 +15,117 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin the surfaces and settle the package edge before writing anything. Confirm on disk that `packages/runner/src/recovery/` and `apps/daemon/src/recovery/` do not exist (this task creates both). Re-read `providers/claude/claude-cancel-reconcile.ts` — ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED), CLAUDE_RECONCILED_OUTCOMES as a frozen closed list, reconcileClaudeRun — because it is the in-package precedent this task's classifier must follow and IMPORT rather than mirror. Confirm the @moe/scheduler lease/authority surface for epoch and fencing facts, and @moe/store for durable records. THEN CHECK apps/daemon/package.json: it currently declares only @moe/contracts and @moe/scheduler, but sibling tasks in this same batch may already have added @moe/core, @moe/store or @moe/runner. If what the daemon half needs is already there, take it and add nothing. If it is genuinely missing, request the ownership amendment in #governors naming the exact dependency and citing the precedent already approved for child 3 (task-ba3a45f9: '+@moe/runner, single lock hunk'), and WAIT for confirmation — do not self-approve. Produce no code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Define the closed recovery vocabulary as exported frozen data. Create packages/runner/src/recovery/recovery-contract.ts holding: the CLOSED outcome-kind list that DoD 2 turns on — ADOPTED, ABSENT, SUSPECT, QUARANTINED, and RECONCILIATION_COMMAND — with no sixth kind and deliberately no 'RESUMED' arm, because 'nothing silently resumes' is enforced by the vocabulary rather than by a check; the closed error-code list; the predecessor release-status lattice PROVEN_RELEASED | ACTIVE | UNKNOWN; the crash-observation input shape, built on the imported ClaudeProcessExit rather than a local copy; and the shape validators for the opaque references this task carries (effect identity, journal digest, review-package digest — 64-hex, shape only). Everything is data and types; no logic. Later steps and their tests both read this one source, so the expected outcome-set in the test is the exported list rather than a restatement of it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/recovery-contract.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery/recovery-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for the safe-boundary rule — DoD 1, the one that corrupts data if it is wrong. Create packages/runner/src/recovery/safe-boundary.test.ts before the module. Assert all three predecessor states explicitly, because an optimistic implementation gets exactly one of them wrong: a predecessor PROVEN_RELEASED admits the successor; a predecessor still ACTIVE blocks it; and a predecessor whose release status is UNKNOWN also BLOCKS it, with its own stable refusal code distinct from the ACTIVE case — 'we cannot tell whether it released' and 'we know it has not' are different facts and must not collapse. Then release/resume: a resume is admissible only across a proven boundary, and a resume attempted without one refuses rather than proceeding. Assert the specific code and the refusing layer on every negative arm. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/safe-boundary.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery/safe-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement packages/runner/src/recovery/safe-boundary.ts to green — safe-boundary drain plus release/resume. A successor may overlap a predecessor only when the predecessor's safe release boundary is PROVEN; ACTIVE and UNKNOWN both block, with distinct codes. Drain is monotonic: a drain disposition may be upgraded by a later reason but never downgraded, and an attempted downgrade is a refusal rather than a silent no-op, so a weaker later signal cannot walk back a stronger earlier one. Every fact is caller-supplied — lease epoch and token from the lease core, effect status as a classification, process exit as the imported ClaudeProcessExit. There is no clock and no randomness in this module: no Date.now, no Math.random, no elapsed-time reasoning of any kind, which is also what makes DoD 3's timer-based ownership theft unwritable. Target under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/safe-boundary.ts",
+        "packages/runner/src/recovery/safe-boundary.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery/safe-boundary.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD red for crash classification — DoD 2 and DoD 3. Create packages/runner/src/recovery/crash-classification.test.ts. DoD 2 is a set property: sweep a table of injected crash situations — process exited cleanly, exited non-zero, signalled, unobserved; effect absent, active, or unknown; lease epoch current or stale — and assert the observed outcome kinds EQUAL the exported closed list, with per-kind counts recorded in the output so a sweep that only ever produces one kind is visible rather than passing. Assert the injected case count is non-zero, since a sweep that generates nothing passes while testing nothing. Assert explicitly that NO input produces a silent resume. DoD 3, two separate fixtures: QUIET PRESENCE — an observation showing a live-looking process with no epoch advance must NOT transfer ownership, refusing with its stable code; and LATE OBSERVATION — an observation carrying an older epoch than the durable record must be REFUSED with its own code, not merged and not silently dropped, since silently dropping it would pass a weak test while losing the refusal. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/crash-classification.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery/crash-classification.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement packages/runner/src/recovery/crash-classification.ts to green — absent-process recovery and suspect effect handling. Given durable records plus a caller-supplied crash observation, classify into exactly one of the five closed outcome kinds. The rules that matter: an effect whose status cannot be established is SUSPECT, never optimistically adopted, and a SUSPECT effect is never auto-resumed; a process proven absent with all resources proven released is ABSENT; anything with an unreconciled resource is QUARANTINED with what remains held named explicitly; and where no local decision is safe, emit an exact RECONCILIATION_COMMAND describing precisely what an operator or adapter must do, rather than guessing. Ownership transfer requires a proven epoch or token advance from the lease core — quiescence is never authority. A stale-epoch observation is refused, never merged. Import ClaudeProcessExit and the reconciled-outcome vocabulary from providers/claude rather than restating them. Target under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/crash-classification.ts",
+        "packages/runner/src/recovery/crash-classification.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery/crash-classification.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Doctor recovery commands on the daemon side, TDD. Create apps/daemon/src/recovery/doctor-commands.test.ts then apps/daemon/src/recovery/doctor-commands.ts. Follow the daemon's established ingress pattern already visible in apps/daemon/src/index.ts — bounded decode via decodeBoundedJsonBytes, then an EXACT-shape check against a frozen key list and a pinned schemaVersion literal, then compose — returning a frozen discriminated union. Doctor commands REPORT and PROPOSE; they do not silently repair. Every command that would change durable state must produce the exact reconciliation command for confirmation rather than applying it, which is the daemon-side half of 'nothing silently resumes'. Assert: a malformed or extra-key payload refuses with the exact-shape code; a doctor command targeting a record whose authority is stale refuses with the stale-authority code; and the command surface's kind list is asserted by SET EQUALITY so a repair-without-confirmation command cannot appear unnoticed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/doctor-commands.ts",
+        "apps/daemon/src/recovery/doctor-commands.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/doctor-commands.ts",
+        "apps/daemon/src/recovery/doctor-commands.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Prove the assertions are load-bearing and sweep the fence. MUTATION DRILL at each mechanism's single source: the UNKNOWN-blocks-successor branch, the drain monotonicity guard, the epoch-advance requirement for ownership transfer, the stale-epoch refusal, the SUSPECT-never-adopted branch, and the doctor confirm-before-apply gate. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the red test names that guard's code. The epoch mutation is the one to watch: if replacing the epoch-advance requirement with a constant true leaves the suite green, then DoD 3's ownership-theft protection is untested no matter how the suite looks. Back each file up out-of-tree and verify restores with git hash-object. Then grep both owned directories for child_process, spawn, kill, Date.now and Math.random and confirm ZERO hits — a single clock read here would make timer-based ownership theft writable.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/safe-boundary.ts",
+        "packages/runner/src/recovery/crash-classification.ts",
+        "apps/daemon/src/recovery/doctor-commands.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Run BOTH gates and attribute failures honestly. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/runner test && pnpm --filter @moe/daemon test. Both must exit 0 — this task spans two packages and a change on one side can redden the other, so never report one gate as if it were both. Also run the typechecks for both packages. Attribute red by path, never by a remembered count: `packages/runner/src/supervisor/` is SHARED and currently holds another task's 11 untracked files with a second task working there, so red under `supervisor/` is almost certainly foreign — check before claiming or fixing it, and never edit a foreign test to make your suite green. The `scope-observation` real-git test has a known 5s-timeout flake: re-run once, report, do not chase. Anything red under the two `recovery/` directories is unambiguously yours. Confirm every production file is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery/recovery-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can a successor start while a predecessor's release is merely unproven; can quiet presence, elapsed time, or a retry count transfer ownership anywhere; can a late observation advance authority; is there ANY path that resumes without an explicit outcome kind; can a drain disposition be downgraded; does a doctor command apply a repair without confirmation; is any unbuilt module's shape guessed at rather than carried as an opaque reference. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and NEVER a directory pathspec under packages/runner/src/, because a sibling task's untracked supervisor files sit in the same working directory and would be swept in. Run git status --porcelain first and unstage any foreign path with git restore --staged. apps/daemon/package.json and pnpm-lock.yaml are committed here ONLY if step 1 established that an amendment was needed and granted; if a sibling already landed the dependency, commit neither. Verify with git show --stat that only owned paths landed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED PROMOTION against incomplete dependencies, by architect-0b81de40 on explicit human instruction 2026-08-08. Deps: \"Lease presence core, Projection outbox core, External effect supervisor, Deterministic context journal, and Independent review flow.\" Only TWO are satisfied — task-967769ea DONE and Projection outbox core's children all committed. THREE ARE UNBUILT: External effect supervisor (task-312c1de3, BLOCKED shell, 1 of 4 children in REVIEW and child 2 with zero files on disk), Deterministic context journal (task-79eddf12) and Independent review flow (task-58029c26), both promoted to PLANNING in this same batch with no plan and no code. ARCHITECT: this is the deep end of the pipelined batch. Expect to plan only the lease/store-backed slice and report_blocked on the rest rather than inventing three unbuilt seams.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +133,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.830Z",
-  "updatedAt": "2026-08-07T11:50:15.830Z"
+  "updatedAt": "2026-08-08T20:30:25.795Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:28:53.368Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:30:23.753Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) WHY THIS IS NOT BLOCKED, though the promotion note called it the deep end and expected report_blocked. All three unbuilt dependencies enter this task as OBSERVATIONS AND IDENTITIES, never as calls. The whole runner subtree is already fenced so that OS and process facts arrive as caller-supplied observations — the Claude adapter and the supervisor both work this way — and crash reconciliation is the purest case of it: a crash is by definition something you learn about after the fact from durable records plus an observation. So: effect identity is an opaque reference; the effect's own SUSPECT/absent/active status is a caller-supplied classification, not something this module asks the supervisor for; journal and review artifacts are cited by content-addressed digest. Nothing here imports an unbuilt module, so nothing here is speculative. Both owned directories are greenfield, so nothing collides either.\n(2) DoD 2 IS AN OUTCOME-SET PROPERTY, so it drives the design. 'Every injected crash yields adopted, absent, suspect, quarantined, or an exact reconciliation command; nothing silently resumes' means the classifier's outcome kinds are a CLOSED exported list and the test asserts SET EQUALITY against it. That is what makes 'nothing silently resumes' checkable rather than aspirational — a sixth outcome, or a silent resume, shows up as a set mismatch instead of hiding.\n(3) THE DAEMON HALF MAY NEED A PACKAGE EDGE. apps/daemon depends only on @moe/contracts and @moe/scheduler; doctor recovery commands will likely need @moe/runner and/or @moe/store. That is an ownership amendment on apps/daemon/package.json, precedented and human-approved for child 3 (task-ba3a45f9: '+@moe/runner, single lock hunk'), and possibly ALREADY LANDED by a sibling task before this one runs. Step 1 checks the file first and only requests what is genuinely missing — do not blindly re-add.\n(4) SPLIT BY PACKAGE, NOT BY CONCERN. The runner half is pure classification and boundary logic; the daemon half is command ingress. Keeping them apart matches the two owned path roots and the two-command verification gate.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **BOTH owned directories are MISSING**: `packages/runner/src/recovery/` and `apps/daemon/src/recovery/` do not exist. This task creates both, so it collides with no in-flight work.\n- **apps/daemon/package.json dependencies are @moe/contracts and @moe/scheduler ONLY** — no @moe/runner, no @moe/store, no @moe/core. Check this file again at step 1: sibling tasks in this same batch (task-2f6ac0d1 adds @moe/core and @moe/store; task-ba3a45f9 carries the approved +@moe/runner amendment) may already have changed it.\n- **Committed surfaces this task rests on**: @moe/scheduler's lease/authority modules (Lease presence core is DONE) for epoch and fencing facts; @moe/store for durable records (SqliteEventStore, commitExpectedVersionDecision, readCommandDecisionsAfter). `packages/runner/src/canonical.ts` has canonicalJson/canonicalDigest/deepFreeze/isCanonicalUtcTimestamp — canonicalDigest THROWS on bigint and non-safe-integer numbers, so counters are safe-integer `number`.\n- **The observation precedent to copy** is `packages/runner/src/providers/claude/claude-cancel-reconcile.ts`: `ClaudeProcessExit = EXITED{code} | SIGNALLED{signal} | UNOBSERVED`, `CLAUDE_RECONCILED_OUTCOMES` as a frozen closed list, and `reconcileClaudeRun` deciding purely from stream + cancelRequested + processExit. Same package, so IMPORT these directly rather than mirroring them — the mirror-structurally rule is for out-of-package @moe/scheduler shapes.\n- **Daemon test command is non-standard**: `vitest run --root . --config package.json src` (`mem:gotcha-vitest-app-root-config`). Use the pnpm script.\n- **Bridge convention**: @moe/store is the ONLY package with `.js` bridges. @moe/runner and @moe/daemon have none and need none. Do not add them.\n- `packages/runner/src/supervisor/` currently holds ANOTHER task's 11 UNTRACKED files. Never use a directory pathspec under packages/runner/src/.",
+    "risks": "1. **DoD 3 is the security-shaped one: 'quiet presence alone cannot steal ownership'.** The failure mode is a recovery path that treats 'the process seems to be alive' or 'nobody has objected for a while' as authority to take over. Ownership transfer must require a proven fence — epoch or token advance from the lease core — never quiescence and never elapsed time. There is no clock in this subtree at all (no Date.now), which makes timer-based theft unwritable; keep it that way and assert the refusal code for the nearest legal attempt.\n2. **'Late observations cannot advance stale authority'** needs its own fixture: an observation carrying an older epoch than the durable record must be REFUSED with a stable code, not merged, not ignored silently. Ignoring it silently would pass a weak test while losing the refusal the DoD asks for — assert the code, not just the absence of a change.\n3. **DoD 1's overlap rule is the one that corrupts data if wrong.** A successor may only start when the predecessor has a PROVEN safe release boundary; unknown release status must block the successor, not allow it. Test all three predecessor states — proven released, proven active, and UNKNOWN — and assert UNKNOWN blocks, since that is the arm an optimistic implementation gets wrong.\n4. **DoD 2 must be asserted as SET EQUALITY** over the closed outcome list, with per-kind counts recorded so a sweep that only ever produces one kind is visible. Assert the generated case count is non-zero (epic rail 6) — a crash sweep that injects zero crashes passes while testing nothing.\n5. Effect identity, journal digests and review-package digests are opaque content-addressed references validated for shape only. The modules that own them are unbuilt; inventing their internals here creates a seam that must later be undone.\n6. The daemon amendment may already be landed by a sibling. Check before requesting, keep any lock change to the single hunk, and verify with `git diff --stat pnpm-lock.yaml`.\n7. Two gates must BOTH exit 0 (`@moe/runner` and `@moe/daemon`). A change on one side can redden the other; run both before claiming completion.\n8. Known flake, not yours: the `scope-observation` real-git test can hit a 5s timeout. Re-run once, report, do not chase.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
+      "packages/runner/src/canonical.ts",
+      "apps/daemon/package.json",
+      "apps/daemon/src/index.ts",
+      "packages/scheduler/src/authority",
+      "packages/store/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T20:30:25.795Z"
 }

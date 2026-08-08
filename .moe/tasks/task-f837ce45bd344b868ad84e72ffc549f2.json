@@ -15,13 +15,131 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Scaffold @moe/coordination and write the complete RED contract/service suite first. Configure the source-consumed NodeNext package with focused typecheck/test scripts and workspace dependencies on @moe/contracts, @moe/core, and @moe/store. In one test file, enumerate every endpoint (send, read, acknowledge, replay), all five envelope kinds, and every refusal/outcome layer; assert the generated matrices are non-empty and assert exact stable code plus refusing layer. Cover exact schema/key handling, address/correlation rules, authentication and scoped capability failures, store-backed sequencing/dedupe/ack/replay, expiry, N/N+1 overload and byte/depth/count limits, unknown recipients, terminal/effect binding, response reversal, restart, and advisory/no-authority behavior. Run the focused test once and record that it is RED because the production entrypoint is absent, not because a dependency or fixture failed.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/coordination/package.json",
+        "packages/coordination/tsconfig.json",
+        "packages/coordination/src/coordination-service.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/coordination/package.json",
+        "packages/coordination/tsconfig.json",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Scaffolded @moe/coordination (package.json exports ./src/index.ts, NodeNext tsconfig mirroring @moe/store, focused typecheck/test scripts, workspace deps on @moe/contracts + @moe/core + @moe/store materialized as node_modules junctions so pnpm-lock.yaml stays untouched). Wrote the single RED suite coordination-suite.test.ts covering all four endpoints (send/read/acknowledge/replay), all five envelope kinds, exact key/schema handling, address+correlation rules, auth/capability failure matrices, store-backed sequencing/dedupe/ack/replay, expiry boundary, N/N+1 mailbox overload, page-limit bounds, unknown recipients, terminal/effect binding, response reversal, store throw/OUTCOME_UNKNOWN mapping, and advisory/no-authority behaviour. Every failure case asserts the exact stable code AND the refusing layer; every generated matrix asserts a positive case count. Fresh run: RED for the right reason - \"Cannot find module './coordination-contracts.js'\", i.e. the production entrypoint is absent; @moe/store resolved fine so no dependency or fixture failure.",
+      "startedAt": "2026-08-08T20:23:03.978Z",
+      "completedAt": "2026-08-08T20:30:47.218Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the versioned coordination contract and hostile-input codec until the contract cases turn green. Define a deeply frozen discriminated envelope union for REQUEST, RESPONSE, EVENT, CONTROL, and HANDOFF with server-owned sequence/timestamps, exact sender/recipient session addresses, mandatory correlation id, RESPONSE inReplyTo, bounded JSON data, and advisoryOnly=true for any advisory text. CONTROL is a closed non-lifecycle vocabulary; HANDOFF is structured around objective/criteria, repository/base/head/scopes, verification/artifact digests, decisions/blockers, and exact next action. Reject credential/secret and executable-command fields instead of forwarding them. Publish fixed endpoint/envelope versions, UTF-8/depth/page/TTL/outstanding-mailbox limits, and frozen result/refusal unions with stable codes and layers (DECODE, AUTHENTICATION, CAPABILITY, ADDRESS, CORRELATION, MAILBOX, STORE). Reuse the contracts bounded decoder/error vocabulary where applicable; never echo hostile bytes. Add the one-line runtime bridge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/coordination/src/coordination-service.test.ts"
+      ],
+      "newFiles": [
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/coordination-contracts.js"
+      ],
+      "modifiedFiles": [
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/coordination-contracts.js",
+        "packages/coordination/src/coordination-shape.ts",
+        "packages/coordination/src/coordination-shape.js",
+        "packages/coordination/src/coordination-parts.ts",
+        "packages/coordination/src/coordination-parts.js",
+        "packages/coordination/src/coordination-codec.ts",
+        "packages/coordination/src/coordination-codec.js",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Implemented the versioned contract + hostile-input codec. coordination-contracts.ts publishes fixed envelope/endpoint versions, the single coordination scope, frozen sorted vocabularies (endpoints, five envelope kinds, roles, closed NON-lifecycle CONTROL kinds, seven layers, 21 stable codes), the forbidden credential/command field list, all limits (UTF-8/depth/page/TTL/outstanding-mailbox/attempts), the deeply frozen discriminated envelope union with server-owned sequence+timestamps deliberately absent from caller fields, the frozen result/refusal unions, refuse(), and coordinationCapability() as the single production source of grant strings. coordination-shape.ts holds the strict hostile-input readers (isPlainRecord rejects proxies/exotic prototypes; readOwnDataProperty rejects accessors; hasExactOwnKeys rejects extras/missing/symbols; readList indexes by readOwnDataProperty so a subclassed array, overridden Symbol.iterator, accessor element or sparse hole cannot smuggle past the length bound). coordination-parts.ts decodes addresses, advisory (advisoryOnly structurally pinned true, else COORDINATION_ADVISORY_AUTHORITY_CLAIMED), the structured HANDOFF (objective/criteria, repository/base/head/scopes, verification/artifact digests, decisions/blockers, exact nextAction), and bounded JSON data with a recursive forbidden-field scan returning COORDINATION_FORBIDDEN_FIELD instead of forwarding credential/command-shaped keys. coordination-codec.ts canonicalises to sorted-key JSON that is a pure function of caller-owned fields (so an identical resend hashes identically), digests with length-framed sha256, and re-reads the canonical bytes through the shared @moe/contracts decodeBoundedJsonBytes as an independent final gate. Refusal details name the field only and never echo hostile bytes. Added the one-line .js runtime bridges for all four modules. Evidence: focused typecheck now reports zero errors in any production module; every remaining error traces to the two not-yet-written modules (Cannot find module ./coordination-mailbox.js and ./coordination-service.js) plus the implicit-any their absence causes in the suite. Per-file physical lines: contracts 192, shape 105, parts 190, codec 235 - all under the 250 target.",
+      "startedAt": "2026-08-08T20:30:50.918Z",
+      "completedAt": "2026-08-08T20:37:39.886Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the durable mailbox adapter over the public SqliteEventStore seam and drive it from the same RED suite. Persist exactly one canonical envelope event plus outbox draft atomically on a deterministic per-recipient mailbox aggregate; derive event/outbox/command identities from the bounded message id and canonical bytes. Return DEDUPLICATED only for store replay of identical bytes, map same-id/different-bytes to the exact idempotency-conflict code/layer, and propagate unknown commit ambiguity without claiming delivery. Use aggregateSequence as the mailbox cursor. Persist acknowledgements in a deterministic recipient/consumer ack aggregate, recover only its last durable event, validate monotonic ack sequence plus stored message id/digest, and make read repeat unacked entries while replay reads an explicit historical cursor without advancing it. Detect ahead/missing/non-contiguous cursors as CURSOR_GAP, calculate bounded outstanding depth for overload, and return expired messages as typed sequence-bearing EXPIRED items so callers can explicitly acknowledge them. Add bounded optimistic contention handling and the one-line runtime bridge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/coordination/src/coordination-service.test.ts"
+      ],
+      "newFiles": [
+        "packages/coordination/src/durable-mailbox.ts",
+        "packages/coordination/src/durable-mailbox.js"
+      ],
+      "modifiedFiles": [
+        "packages/coordination/src/coordination-mailbox-ids.ts",
+        "packages/coordination/src/coordination-mailbox-ids.js",
+        "packages/coordination/src/coordination-mailbox-reads.ts",
+        "packages/coordination/src/coordination-mailbox-reads.js",
+        "packages/coordination/src/coordination-mailbox.ts",
+        "packages/coordination/src/coordination-mailbox.js",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Implemented the durable mailbox over the PUBLIC SqliteEventStore seam as a structural CoordinationEventStore port (commit / getAggregateVersion / getCommandReceipt / readAggregateEvents only - no package-internal projection, relay, or SQL reach-through). coordination-mailbox-ids.ts owns the deterministic identities: mailbox aggregate per exact address (effectId participates, so a terminal wrapper and its bare session are never the same mailbox), ack aggregate derived from it, send commandId from mailbox+bounded messageId ONLY (so a resend always addresses the same durable command slot), and eventId/outboxMessageId from mailbox+messageId+canonical bytes (so identical resend collides deliberately and different bytes cannot). Server stamps (sentAt/expiresAt/digest) are stored as event METADATA, never inside the canonical bytes, so arrival time cannot perturb the digest and a later retry still deduplicates. Send: one canonical envelope event plus one outbox draft committed atomically; a pre-existing receipt whose eventIds contain the derived eventId returns DEDUPLICATED with the ORIGINAL stamps, anything else returns COORDINATION_IDEMPOTENCY_CONFLICT at STORE; OUTCOME_UNKNOWN maps to COORDINATION_OUTCOME_UNKNOWN and never claims delivery; EXPECTED_VERSION_CONFLICT retries under a bounded attempt cap then returns COORDINATION_STORE_BUSY. aggregateSequence is the cursor. coordination-mailbox-reads.ts recovers only the LAST durable ack event (never a full replay), reports cursor-ahead and non-contiguous sequences as typed CURSOR_GAP carrying both positions, computes bounded outstanding depth for N/N+1 overload, and returns expired entries as typed sequence-bearing EXPIRED items instead of filtering them. Acknowledge validates the stored messageId+digest at the claimed sequence first (COORDINATION_ACK_UNKNOWN_MESSAGE) then monotonicity (COORDINATION_ACK_REGRESSION), and read repeats unacked entries while replay reads an explicit historical cursor without advancing the ack. Also corrected the suite's store-failure injection: SqliteEventStore instances are Object.freeze'd so defineProperty on the instance would have thrown - failures are now injected through the structural port with every read delegated to the real store. Added the three .js bridges. Evidence: focused typecheck reports zero errors in any mailbox module; the only remaining errors are Cannot find module ./coordination-service.js and the implicit-any it causes in the suite. Per-file lines: ids 163, reads 111, mailbox 240.",
+      "startedAt": "2026-08-08T20:37:42.705Z",
+      "completedAt": "2026-08-08T20:41:59.531Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the coordination service endpoints around the codec and mailbox with fail-closed dependency ports. For every send/read/acknowledge/replay request, pass the canonical request digest, endpoint kind, credential/proof presentation, transport, current time, and exact coordination scope to an injected identity authenticator; accept only a frozen positive binding whose principal/session matches the request, and keep auth material out of stored bytes. Resolve every recipient through an injected registry before storage and require exact send-kind/recipient or mailbox read/ack/replay capability. For terminal/effect-wrapper addresses, require a current positive effectId+sessionId binding; throws, UNKNOWN, stale, or mismatched answers return TERMINAL_BINDING_INVALID at ADDRESS without mailbox mutation. On RESPONSE send, load the referenced durable REQUEST and require reversed addresses and identical correlation id. Stamp time/sequence server-side, refuse already-expired sends and full mailboxes, expose no dispatch/lifecycle/effect callback, and ensure free-form advisory text remains immutable data with no authority or next-command affordance. Add the one-line runtime bridge.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/coordination/src/coordination-service.test.ts",
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/durable-mailbox.ts"
+      ],
+      "newFiles": [
+        "packages/coordination/src/coordination-service.ts",
+        "packages/coordination/src/coordination-service.js"
+      ],
+      "startedAt": "2026-08-08T20:42:02.606Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Create the curated public entrypoint and finish the integration/restart cases. Export only the five envelope contracts, limits/codes/layers, dependency-port types, durable mailbox constructor, and service constructor; do not export store internals, raw SQL, credential material, or an envelope-to-command executor. Exercise the public entrypoint against a real file-backed SqliteEventStore: enqueue ordered mixed-kind messages, observe redelivery before ack, close/reopen, replay and acknowledge, reopen again, and prove the next read resumes strictly after the durable ack with identical message ids/digests/sequences. Add concurrent sends, response lookup, expiry boundary, mailbox-limit N/N+1, cursor-ahead/gap, store throw/ambiguous outcome, unknown recipient, revoked/expired/replayed auth, missing capability, and terminal-binding cases. Use mkdtemp under the OS temp directory with finally cleanup after every store close, and include a plain-Node source-entrypoint import smoke assertion so missing .js bridges cannot hide behind Vitest resolution.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/coordination/package.json",
+        "packages/coordination/src/coordination-service.test.ts",
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/durable-mailbox.ts",
+        "packages/coordination/src/coordination-service.ts"
+      ],
+      "newFiles": [
+        "packages/coordination/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform the single adversarial review over the owned diff before the final gate. Attack double/concurrent send and ack, replay after restart, null/array/proxy/revoked-proxy inputs, empty/negative/fractional/huge limits and TTLs, Unicode byte limits, expiry at the exact boundary, response-to-nonrequest and address swaps, recipient/effect disappearance, stale auth, store throw/OUTCOME_UNKNOWN, and advisory payloads shaped like runtime commands, shell argv, or credentials. Confirm every failure test asserts the specific code and refusing layer and every generated sweep asserts a positive case count. Mutation-drill at least authentication bypass, terminal-binding bypass, idempotency-conflict mapping, cursor-gap detection, and advisoryOnly on the production surface; each named test must go red. Restore exact owned bytes in a finally path, confirm no scratch/evidence files remain, and verify each production .ts file is at most 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/durable-mailbox.ts",
+        "packages/coordination/src/coordination-service.ts",
+        "packages/coordination/src/index.ts",
+        "packages/coordination/src/coordination-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the one required foreground verification command exactly: pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test. Record fresh exit 0 and test counts as completion evidence. Then run git status --porcelain, ensure every staged entry is one of the ten owned packages/coordination paths and pnpm-lock.yaml is neither modified nor staged, unstage any foreign path without altering it, and commit only explicit owned pathspecs with git commit -- <owned paths>. Verify git show --stat contains only packages/coordination/** before calling moe.complete_task; do not push, merge, reset, stash, or use a broad add/commit.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-e46fb0dc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by architect-0b81de40 on explicit human instruction 2026-08-08. Dependency pass: \"Runtime contract registry, Identity session core, and Projection outbox core.\" Runtime contract registry (task-12e18265) DONE; Identity session core (task-5fa38373) DONE; Projection outbox core (task-55d5a898) is a SPIDR parent shell whose five children are a602b3d4 DONE, 82989467 DONE, 071173ab DONE, 7617c00d DONE, and 791d7340 at 10/10 steps in REVIEW — so its surface is fully committed and only the QA hop plus the labeled REVIEW-transit close remain. ARCHITECT: plan against the committed store surface (packages/store/src/projections, outbox-relay, subscriptions), which is real on disk; do not wait on the shell's status field.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,5 +154,45 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.683Z",
-  "updatedAt": "2026-08-07T13:37:21.556Z"
+  "updatedAt": "2026-08-08T20:42:02.606Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:09:52.155Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-da724bb7",
+    "worker-e46fb0dc"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:22:19.383Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the existing store rather than .moe/sessions or a second SQLite schema. A peer-to-peer/chat design and any envelope-to-runtime-command dispatcher are rejected because they would mint authority outside the contract. Direct imports of package-internal projection/relay/subscription modules are also rejected: coordination should consume the public @moe/store event/commit/read surface plus narrow injected identity, recipient, and effect-binding ports, while preserving the invariants established by those internal modules. Durable message and acknowledgement aggregates give strict mailbox order, store idempotency gives send dedupe, and explicit ack/replay cursors give at-least-once delivery across restart.",
+    "codebaseInsights": "The current @moe/contracts barrel exposes bounded JSON/runtime versions and stable auth/session/idempotency errors; @moe/core now re-exports its identity seam; @moe/store publicly exposes SqliteEventStore commit, aggregate/global reads, command receipts, and pending outbox pages. Store projection/outbox/subscription implementations are intentionally package-internal and establish the rules to preserve: event+outbox atomicity, inbox/message digest dedupe, strict-after cursors, typed gaps, and no silent poison skip. Persist under the store only; do not use ignored .moe/sessions. This source-consumed NodeNext workspace needs a one-line .js bridge for every non-entrypoint production .ts module. Because pnpm-lock.yaml is outside the owned paths, never stage or commit it; if workspace links must be materialized locally, use pnpm install --lockfile=false --ignore-scripts and keep the required package dependencies confined to packages/coordination/package.json.",
+    "risks": "Authentication must bind the digest of the exact endpoint request, not trust caller-asserted sender data; auth credentials/proofs are endpoint-only and must never enter the durable envelope or logs. A RESPONSE must resolve its stored REQUEST and prove reversed addresses plus the same correlation id. Terminal/effect addresses must be positively resolved to the authenticated session and current effect binding. Reads must expose expired entries as typed sequence-bearing items rather than filter them, and an unknown/ambiguous store outcome must never become success. Bound concurrency retries, page bytes/count, TTL, outstanding depth, all strings and structured payload depth; test N and N+1. Use OS temp directories and close SQLite before cleanup for Windows/macOS/Linux. Keep each production .ts file at or below 250 physical lines.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/contracts/src/runtime/runtime-envelope.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/core/src/identity/authenticate-command.ts",
+      "packages/core/src/identity/index.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+      "packages/store/src/subscriptions/subscription-read-page.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-08T20:22:21.421Z",
+  "workStartedAt": "2026-08-08T20:23:03.978Z"
 }
