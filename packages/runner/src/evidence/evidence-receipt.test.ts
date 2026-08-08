@@ -356,6 +356,91 @@ describe("buildEvidenceReceipt refuses agent-reported text", () => {
   });
 });
 
+describe("buildEvidenceReceipt admissibility", () => {
+  // This is the check that makes a receipt evidence of ITS recipe rather than of
+  // some other run that happened to produce the same outputs.
+  it("refuses an observed argv that diverges from the recipe's declared argv", () => {
+    const result = buildEvidenceReceipt(
+      receiptInput({ execution: executionFixture({ argv: ["node", "verify.mjs", "--sneak"] }) }),
+    );
+
+    expect(result.ok === false && result.code).toBe("RUNNER_EVIDENCE_ARGV_DIVERGENCE");
+    expect(result.ok === false && result.layer).toBe("EXECUTION");
+  });
+
+  it("refuses an observed argv that differs from the recipe only in order", () => {
+    const reordered = [...RECIPE.argv].reverse();
+    expect(reordered).not.toEqual([...RECIPE.argv]);
+
+    const result = buildEvidenceReceipt(
+      receiptInput({ execution: executionFixture({ argv: reordered }) }),
+    );
+
+    expect(result.ok === false && result.code).toBe("RUNNER_EVIDENCE_ARGV_DIVERGENCE");
+  });
+
+  it("binds the recipe's exact argv when the observation agrees with it", () => {
+    const receipt = receiptOrThrow();
+
+    expect(receipt.argv).toEqual([...RECIPE.argv]);
+    expect(receipt.recipeSha256).toBe(RECIPE.sha256);
+  });
+
+  // Epic rail 4: unverifiable evidence stays UNKNOWN and never gains authority.
+  it("yields no receipt when the runtime observation's truth class is UNKNOWN", () => {
+    const unproven = observationFixture(null);
+    expect(unproven.truthClass).toBe("UNKNOWN");
+
+    const result = buildEvidenceReceipt(
+      receiptInput({ execution: executionFixture({ runtimeObservation: unproven }) }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.code).toBe("RUNNER_EVIDENCE_OBSERVATION_UNKNOWN");
+    expect(result.ok === false && result.layer).toBe("EXECUTION");
+    expect(Object.hasOwn(result, "receipt")).toBe(false);
+  });
+
+  it("yields no receipt when the execution disposition is UNKNOWN", () => {
+    const result = buildEvidenceReceipt(
+      receiptInput({ execution: executionFixture({ disposition: "UNKNOWN", exitCode: null }) }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.code).toBe("RUNNER_EVIDENCE_EXECUTION_UNKNOWN");
+    expect(Object.hasOwn(result, "receipt")).toBe(false);
+  });
+
+  // Array.isArray is true for a subclass, and a subclass can override
+  // Symbol.iterator to yield values its indices never held. If the divergence
+  // check read indices while the binding spread the iterator, an attacker could
+  // get the check to approve one command and the receipt to attest another.
+  it("cannot be made to bind argv a second read smuggled past the divergence check", () => {
+    const smuggled = [...RECIPE.argv] as string[];
+    Object.defineProperty(smuggled, Symbol.iterator, {
+      value: function* (): Generator<string> {
+        yield "node";
+        yield "attacker.mjs";
+      },
+    });
+    expect([...smuggled]).toEqual(["node", "attacker.mjs"]);
+    expect(smuggled[1]).toBe(RECIPE.argv[1]);
+
+    const receipt = receiptOrThrow({ execution: executionFixture({ argv: smuggled }) });
+
+    expect(receipt.argv).toEqual([...RECIPE.argv]);
+    expect(receipt.argv).not.toContain("attacker.mjs");
+  });
+
+  it("still produces a receipt for an execution that failed, because a failure is a proven fact", () => {
+    const receipt = receiptOrThrow({
+      execution: executionFixture({ disposition: "FAILED", exitCode: 1 }),
+    });
+
+    expect(receipt.receiptVersion).toBe(EVIDENCE_RECEIPT_VERSION);
+  });
+});
+
 describe("buildEvidenceReceipt shape gates", () => {
   it("refuses an empty graph identity", () => {
     const result = buildEvidenceReceipt(receiptInput({ graphIdentity: "" }));

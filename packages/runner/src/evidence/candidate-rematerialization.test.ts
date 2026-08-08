@@ -295,7 +295,7 @@ describe("rematerializeCandidate", () => {
   });
 
   it("refuses when the bytes read back no longer match the ref that was just verified", () => {
-    const { input, fs, refs } = fixture();
+    const { input, fs, refs, candidate } = fixture();
     const ref = refs.get("src/a.ts");
     expect(ref).toBeDefined();
     const swapped = textBytes("swapped after verification");
@@ -307,6 +307,9 @@ describe("rematerializeCandidate", () => {
 
     expect(result.ok === false && result.code).toBe("RUNNER_EVIDENCE_REF_MISMATCH");
     expect(result.ok === false && result.path).toBe("src/a.ts");
+    // Caught BEFORE the bytes touch the tree. Without this the later tree
+    // reconciliation would raise the same code and mask a broken refMatches check.
+    expect(candidate.writes).toEqual([]);
   });
 
   it("refuses a recipe whose recorded digest does not describe the recipe it claims to", () => {

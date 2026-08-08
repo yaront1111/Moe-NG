@@ -41,7 +41,12 @@ function canonicalArgv(argv: readonly string[]): readonly string[] | EvidenceFai
       `argv holds ${argv.length} entries, limit is ${MAX_EVIDENCE_ARGV_ENTRIES}`,
     );
   }
-  for (const entry of argv) {
+  // Copied during the validation pass, by index. Validating with one read and
+  // copying with a second would let a list that answers differently the second
+  // time bind values the check never saw.
+  const canonical: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const entry = argv[index];
     if (!isBoundedText(entry)) {
       return evidenceFailure(
         "RUNNER_EVIDENCE_ARGV_INVALID",
@@ -49,8 +54,9 @@ function canonicalArgv(argv: readonly string[]): readonly string[] | EvidenceFai
         `argv entry ${JSON.stringify(entry)} is not bounded normalized text`,
       );
     }
+    canonical.push(entry);
   }
-  return [...argv];
+  return canonical;
 }
 
 /** Case folding is checked too: two paths one filesystem could merge are one path. */

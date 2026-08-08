@@ -50,20 +50,24 @@ export interface ObservedVerifierExecution {
   readonly completedAt: string;
 }
 
+const invalid = (message: string): EvidenceFailure =>
+  evidenceFailure("RUNNER_EVIDENCE_EXECUTION_INVALID", LAYER, message);
+
+/**
+ * Read by INDEX, never by iterator. `Array.isArray` is true for a subclass, and a
+ * subclass can override `Symbol.iterator` to yield values its indices never held
+ * — so a `for...of` validation pass and an index-based comparison would be
+ * inspecting two different lists. Every structural read in this module walks
+ * indices up to the checked `length` so exactly one list is ever seen.
+ */
 function argvRejection(argv: readonly string[]): EvidenceFailure | null {
   if (!Array.isArray(argv) || argv.length === 0 || argv.length > MAX_EVIDENCE_ARGV_ENTRIES) {
-    return evidenceFailure(
-      "RUNNER_EVIDENCE_EXECUTION_INVALID",
-      LAYER,
-      "observed argv must be a non-empty bounded list",
-    );
+    return invalid("observed argv must be a non-empty bounded list");
   }
-  for (const entry of argv) {
-    if (!isBoundedEvidenceText(entry)) {
-      return evidenceFailure(
-        "RUNNER_EVIDENCE_EXECUTION_INVALID",
-        LAYER,
-        `observed argv entry ${JSON.stringify(entry)} is not bounded normalized text`,
+  for (let index = 0; index < argv.length; index += 1) {
+    if (!isBoundedEvidenceText(argv[index])) {
+      return invalid(
+        `observed argv entry ${JSON.stringify(argv[index])} is not bounded normalized text`,
       );
     }
   }
@@ -80,21 +84,14 @@ function outputsRejection(
   declaredOutputPaths: readonly string[],
 ): EvidenceFailure | null {
   if (!Array.isArray(outputs) || outputs.length > MAX_EVIDENCE_DECLARED_ENTRIES) {
-    return evidenceFailure(
-      "RUNNER_EVIDENCE_EXECUTION_INVALID",
-      LAYER,
-      "observed outputs must be a bounded list",
-    );
+    return invalid("observed outputs must be a bounded list");
   }
   const declared = new Set(declaredOutputPaths);
   const seen = new Set<string>();
-  for (const output of outputs) {
+  for (let index = 0; index < outputs.length; index += 1) {
+    const output = outputs[index] as ObservedOutput;
     if (typeof output !== "object" || output === null) {
-      return evidenceFailure(
-        "RUNNER_EVIDENCE_EXECUTION_INVALID",
-        LAYER,
-        "every observed output must be a record",
-      );
+      return invalid("every observed output must be a record");
     }
     const pathFailure = evidencePathRejection(output.path, LAYER);
     if (pathFailure !== null) {
@@ -135,7 +132,39 @@ function outputsRejection(
   return null;
 }
 
-/** An observation that cannot re-derive its own digest attests nothing. */
+/**
+ * The check that makes a receipt evidence of ITS recipe rather than of some other
+ * run that happened to produce the same outputs. Order counts, because argv order
+ * is the command.
+ */
+function argvDivergence(
+  observed: readonly string[],
+  declared: readonly string[],
+): EvidenceFailure | null {
+  if (observed.length !== declared.length) {
+    return evidenceFailure(
+      "RUNNER_EVIDENCE_ARGV_DIVERGENCE",
+      LAYER,
+      `observed argv has ${observed.length} entries, the recipe declares ${declared.length}`,
+    );
+  }
+  for (let index = 0; index < declared.length; index += 1) {
+    if (observed[index] !== declared[index]) {
+      return evidenceFailure(
+        "RUNNER_EVIDENCE_ARGV_DIVERGENCE",
+        LAYER,
+        `observed argv entry ${index} is ${JSON.stringify(observed[index])}, the recipe declares ${JSON.stringify(declared[index])}`,
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * An observation that cannot re-derive its own digest attests nothing, and one
+ * whose truth class is UNKNOWN never gains authority: unverifiable evidence stays
+ * unverifiable rather than being upgraded by having been recorded.
+ */
 function observationRejection(observation: ProviderRuntimeObservation): EvidenceFailure | null {
   let recomputes = false;
   try {
@@ -143,12 +172,19 @@ function observationRejection(observation: ProviderRuntimeObservation): Evidence
   } catch {
     recomputes = false;
   }
-  return recomputes
+  if (!recomputes) {
+    return evidenceFailure(
+      "RUNNER_EVIDENCE_OBSERVATION_INVALID",
+      LAYER,
+      "runtime observation digest does not recompute",
+    );
+  }
+  return observation.truthClass === "PROVEN"
     ? null
     : evidenceFailure(
-        "RUNNER_EVIDENCE_OBSERVATION_INVALID",
+        "RUNNER_EVIDENCE_OBSERVATION_UNKNOWN",
         LAYER,
-        "runtime observation digest does not recompute",
+        `runtime observation truth class is ${observation.truthClass} and can discharge nothing`,
       );
 }
 
@@ -161,29 +197,30 @@ export function observedExecutionRejection(
   recipe: VerificationRecipe,
 ): EvidenceFailure | null {
   if (typeof execution !== "object" || execution === null) {
-    return evidenceFailure(
-      "RUNNER_EVIDENCE_EXECUTION_INVALID",
-      LAYER,
-      "observed execution must be a record",
-    );
+    return invalid("observed execution must be a record");
   }
   const argvFailure = argvRejection(execution.argv);
   if (argvFailure !== null) {
     return argvFailure;
   }
   if (!EXECUTION_DISPOSITIONS.includes(execution.disposition)) {
+    return invalid(`unknown execution disposition ${JSON.stringify(execution.disposition)}`);
+  }
+  const divergence = argvDivergence(execution.argv, recipe.argv);
+  if (divergence !== null) {
+    return divergence;
+  }
+  // A FAILED run is a proven fact and still earns a receipt; an UNKNOWN one is
+  // the absence of a fact, so it yields nothing at all.
+  if (execution.disposition === "UNKNOWN") {
     return evidenceFailure(
-      "RUNNER_EVIDENCE_EXECUTION_INVALID",
+      "RUNNER_EVIDENCE_EXECUTION_UNKNOWN",
       LAYER,
-      `unknown execution disposition ${JSON.stringify(execution.disposition)}`,
+      "an execution whose disposition is UNKNOWN cannot discharge an obligation",
     );
   }
   if (execution.exitCode !== null && !Number.isSafeInteger(execution.exitCode)) {
-    return evidenceFailure(
-      "RUNNER_EVIDENCE_EXECUTION_INVALID",
-      LAYER,
-      "exit code must be a safe integer or explicitly null",
-    );
+    return invalid("exit code must be a safe integer or explicitly null");
   }
   if (
     !isCanonicalUtcTimestamp(execution.startedAt) ||

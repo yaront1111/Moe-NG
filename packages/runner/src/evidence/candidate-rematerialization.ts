@@ -14,13 +14,14 @@ import {
 import { buildInputManifest } from "../workspace/workspace-manifest.js";
 import {
   expectationRejection,
+  normalizeScan,
   portAttempt,
   reconcile,
-  scanRejection,
   type CandidateTreeEntry,
 } from "./candidate-reconciliation.js";
 import {
   evidenceFailure,
+  isEvidenceFailure,
   type EvidenceFailure,
   type VerificationRecipe,
 } from "./evidence-contract.js";
@@ -113,11 +114,11 @@ export function rematerializeCandidate(
   if (!after.ok) {
     return refuse(after);
   }
-  const afterRejection = scanRejection(after.value);
-  if (afterRejection !== null) {
-    return refuse(afterRejection);
+  const observed = normalizeScan(after.value);
+  if (isEvidenceFailure(observed)) {
+    return refuse(observed);
   }
-  const mismatch = reconcile(after.value, declared, recipe.declaredOutputPaths);
+  const mismatch = reconcile(observed, declared, recipe.declaredOutputPaths);
   if (mismatch !== null) {
     return refuse(mismatch);
   }
@@ -130,17 +131,17 @@ function requireEmptyCandidate(candidate: CandidateTreePort): EvidenceFailure | 
   if (!before.ok) {
     return before;
   }
-  const rejection = scanRejection(before.value);
-  if (rejection !== null) {
-    return rejection;
+  const observed = normalizeScan(before.value);
+  if (isEvidenceFailure(observed)) {
+    return observed;
   }
-  return before.value.length === 0
+  return observed.length === 0
     ? null
     : evidenceFailure(
         "RUNNER_EVIDENCE_CANDIDATE_NOT_EMPTY",
         LAYER,
-        `candidate location already holds ${before.value.length} entries`,
-        before.value[0]?.path ?? null,
+        `candidate location already holds ${observed.length} entries`,
+        observed[0]?.path ?? null,
       );
 }
 

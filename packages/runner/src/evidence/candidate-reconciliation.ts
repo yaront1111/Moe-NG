@@ -29,36 +29,40 @@ export function portAttempt<T>(action: () => T): PortRead<T> {
   }
 }
 
-/** A listing crosses a port, so its shape is a claim rather than a guarantee. */
-export function scanRejection(entries: readonly CandidateTreeEntry[]): EvidenceFailure | null {
+const portFailed = (message: string): EvidenceFailure =>
+  evidenceFailure("RUNNER_EVIDENCE_CANDIDATE_PORT_FAILED", LAYER, message);
+
+/**
+ * A listing crosses a port, so its shape is a claim rather than a guarantee.
+ *
+ * Read by INDEX and rebuilt into a fresh list, because `Array.isArray` is true
+ * for a subclass and a subclass can override `Symbol.iterator` to yield entries
+ * its indices never held. Returning the normalized copy means every later
+ * decision — emptiness, foreign, undeclared, missing — inspects the same list
+ * this function validated, not a second answer from the same port.
+ */
+export function normalizeScan(
+  entries: readonly CandidateTreeEntry[],
+): readonly CandidateTreeEntry[] | EvidenceFailure {
   if (!Array.isArray(entries)) {
-    return evidenceFailure(
-      "RUNNER_EVIDENCE_CANDIDATE_PORT_FAILED",
-      LAYER,
-      "candidate listing must be a list of entries",
-    );
+    return portFailed("candidate listing must be a list of entries");
   }
-  for (const entry of entries) {
+  const normalized: CandidateTreeEntry[] = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
     if (typeof entry !== "object" || entry === null) {
-      return evidenceFailure(
-        "RUNNER_EVIDENCE_CANDIDATE_PORT_FAILED",
-        LAYER,
-        "every candidate entry must be a record",
-      );
+      return portFailed("every candidate entry must be a record");
     }
     if (
       typeof entry.path !== "string" ||
       !isHex64(entry.sha256) ||
       !isSafeByteCount(entry.byteLength)
     ) {
-      return evidenceFailure(
-        "RUNNER_EVIDENCE_CANDIDATE_PORT_FAILED",
-        LAYER,
-        "candidate entry needs a path, a sha256 digest, and a byte count",
-      );
+      return portFailed("candidate entry needs a path, a sha256 digest, and a byte count");
     }
+    normalized.push({ path: entry.path, sha256: entry.sha256, byteLength: entry.byteLength });
   }
-  return null;
+  return normalized;
 }
 
 /**
