@@ -17,13 +17,122 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
     "Assert the reason code and refusing layer; mutation-verify failure paths at the mechanism's single source."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin the surface before naming a symbol, because it moved under the promotion note and may move again. Re-read the working tree of packages/runner/src/supervisor/ (11 files as of 18:2x, ALL UNTRACKED — `git ls-files` on that directory returns nothing, so read the tree, never conclude the surface is absent). Confirm the symbols planningNotes pins still exist: SUPERVISOR_ERROR_CODES and SUPERVISOR_LAYERS in effect-kernel.ts, ADMITTED_EFFECT_TRANSITIONS and the three-armed LifecycleOutcome in effect-lifecycle.ts, the EffectClaim wrapperIdentity/lockIdentity pair, the ACTIVATION_LOCK_IDENTITY_MISMATCH refusal at effect-activation.ts:176-179, the validators in effect-shape.ts, and CLAUDE_RECONCILED_OUTCOMES / ClaudeProcessExit in providers/claude/claude-cancel-reconcile.ts. Then transcribe the design-786/787 table's SIX rows and the design-336 attempt arcs into a written list, BY HAND from the design file, not from any code — step 5 turns that transcription into the expected-row fixture, and a row list derived from the implementation cannot check the implementation. Produce no code. If a pinned symbol has changed, record the delta in the step note and adapt within this plan; moe.amend_plan_step is currently refusing architects, so do not assume a plan edit is available.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extend the kernel's closed vocabularies, APPEND-ONLY. In packages/runner/src/supervisor/effect-kernel.ts add the layers this task refuses from — LAUNCH_LOCK, DRAIN, RESTART — to SUPERVISOR_LAYERS, and add its codes to SUPERVISOR_ERROR_CODES: LAUNCH_LOCK_MALFORMED, LAUNCH_LOCK_CREDENTIAL_REUSED, LAUNCH_LOCK_REGISTRATION_ABSENT, LAUNCH_LOCK_IDENTITY_CONFLICT, LAUNCH_LOCK_SUSPECT, PROCESS_OBSERVATION_MALFORMED, DRAIN_ROW_NOT_ADMITTED, DRAIN_RESOURCE_UNRECONCILED, DRAIN_DISPOSITION_NOT_MONOTONIC, DRAIN_POST_ACTIVATION_MUTATION_REFUSED, RESTART_RECORDS_INCOHERENT, RESTART_PREMATURE_TERMINAL, RESTART_SAFE_HANDOFF_ABSENT. Append to the end of each frozen array and change nothing else in the file: child 1's suites assert against these arrays, and a reorder or removal breaks a foreign green suite and will read as your regression. This is an EXTENSION of a child-1 file, not a rewrite — do not touch any other declaration in it. The kernel is 250 lines; confirm with wc -l that the additions keep it under 400, and if it would burst, split the vocabulary into a sibling module rather than trimming a code. Every code added here must be reachable from a caller-visible surface by the end of the task — the kernel's own comment says a code no refusal can produce is a code no test can pin, and step 9 checks exactly that.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-kernel.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red for the launch lock, adoption and observation intake — DoD 1 and DoD 2. Create packages/runner/src/supervisor/launch-lock.test.ts importing child 1's fixtures read-only (AT, DIGEST, makeIntent, makeAttempt, makeClaim from effect-test-fixtures.ts — this task does NOT edit that file) and the claude shapes directly from providers/claude/claude-cancel-reconcile.js (same package: import them, do not re-declare them; the mirror-structurally rail is for out-of-package @moe/scheduler shapes). Assert: a launch-lock registration binds lockIdentity + wrapperIdentity + a one-time bootstrap credential held as a DIGEST only, and a second registration presenting the same credential refuses LAUNCH_LOCK_CREDENTIAL_REUSED at layer LAUNCH_LOCK; a registration whose lockIdentity disagrees with the claim refuses LAUNCH_LOCK_IDENTITY_CONFLICT; duplicate delivery WITH a coherent registration returns ADOPTED carrying the SAME process identity it adopted (assert the identity value, not merely the kind); duplicate delivery WITHOUT a registration returns EXIT_BEFORE_LAUNCH and no launch; an uncertain ARMED or lock state returns SUSPECT with LAUNCH_LOCK_SUSPECT and is never auto-relaunched; a malformed observation refuses PROCESS_OBSERVATION_MALFORMED. Two sweeps epic rail 6 requires: the duplicate-delivery outcome matrix asserts SET EQUALITY between the kinds the resolver can actually produce and the exported frozen kind list, so a blind-relaunch kind cannot exist unnoticed; and no SUSPECT or UNKNOWN state yields a launch grant, asserted against the PRODUCTION grant surface (activateEffect / consumeActivationGrant), not against a helper that restates the rule. Every refusal assertion names the code AND the layer. Red because the module does not exist.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/launch-lock.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/launch-lock.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement packages/runner/src/supervisor/launch-lock.ts to green. Pure module, no syscalls: every OS fact arrives as a caller-supplied observation and every timestamp as a caller-supplied canonical UTC string (task rail 2 forbids child_process, spawn, kill, Date.now and Math.random outright). Surface: a frozen LaunchLockRegistration record (lockIdentity, wrapperIdentity, processIdentity, bootstrapCredentialDigest, registeredAt) validated with effect-shape.ts's existing isRef/isDigest/exactRecord/hasOnlyOwnStringKeys — write no new validators; registerLaunchLock refusing a reused credential; and resolveDuplicateDelivery returning a frozen discriminated outcome over an EXPORTED FROZEN kind list (ADOPTED | EXIT_BEFORE_LAUNCH | SUSPECT) so step 3's set-equality sweep has a production-side list to compare against. ADOPTED carries the adopted process identity; SUSPECT is terminal for this decision and never yields a relaunch. Observation intake accepts ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED) and binds a ClaudeReconciliation by digest rather than re-deriving its outcome — the adapter owns that verdict. REDACTION IS A SECURITY PROPERTY HERE: the bootstrap credential is compared as a digest and must never appear in a refusal message, a detail field, or an outcome; same for lease tokens and expected observation digests (effect-kernel.ts:118). Refuse through supervisorFailure(code, layer, message, detail) with layer LAUNCH_LOCK. Target under 250 lines; split before 400 and give the split a focused name.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/launch-lock.ts",
+        "packages/runner/src/supervisor/launch-lock.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/launch-lock.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Extend the arc table, then write the design-786/787 rows as hand-transcribed data with its tests red — DoD 3. First, in effect-lifecycle.ts add the design-776 ACTIVE -> CANCEL_REQUESTED edge to ADMITTED_EFFECT_TRANSITIONS; child 1's comment at :45 names this task as the one that adds it. Re-read the array first and skip the addition if child 1 already landed it — do not duplicate the row. Then create packages/runner/src/supervisor/drain-table.ts holding, as exported frozen DATA hand-written from the design file (NOT derived from any resolver): the six 786/787 rows — (1) no attempt + pre-materialization intent -> tombstone intent, no authority created; (2) LEASED|LAUNCH_REQUESTED with every resource proven absent/released + effect PENDING|CLAIMED|ARMED -> atomically tombstone, fence/release leases and provider slot, settle budget, terminalize by strongest typed reason, with RELEASED additionally requiring an exact safe handoff; (3) the same attempt states with ANY resource active or unknown -> tombstone the provider effect and release the provider slot but enter DRAINING, retaining capacity/NodeRun hold until adapter reconciliation; (4) LAUNCH_REQUESTED + activation -> atomically RUNNING plus ACTIVE, or neither; (5) RUNNING|DRAINING with ACTIVE|CANCEL_REQUESTED|UNKNOWN -> enter/remain DRAINING, every later reason monotonically upgrading the disposition, reaching CHECKPOINTED -> SUCCEEDED|RELEASED|SUPERSEDED|CANCELLED from the strongest current reason; (6) terminal attempt + any nonterminal/unknown effect -> no resurrection, reconcile/quarantine only. Also export the disposition-strength order as frozen data with a strict total order. Create drain-reconciliation.test.ts asserting each row has a fixture, the row list length is asserted and non-zero, disposition upgrades are monotonic and never downgrade, and the fence rail holds: no post-activation business mutation is accepted even while DRAINING, refusing DRAIN_POST_ACTIVATION_MUTATION_REFUSED. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts",
+        "packages/runner/src/supervisor/drain-table.ts",
+        "packages/runner/src/supervisor/drain-reconciliation.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/drain-table.ts",
+        "packages/runner/src/supervisor/drain-reconciliation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement packages/runner/src/supervisor/drain-reconciliation.ts to green. It resolves one row of the step-5 table from (attempt slice state, effect state, resource facts, optional ClaudeReconciliation) and returns a frozen outcome: either TERMINALIZED carrying the strongest typed reason and, for RELEASED, the exact safe handoff it required, or DRAINING carrying what stays held — capacity and the NodeRun hold — until adapter reconciliation. Resource facts are caller-supplied classifications (PROVEN_RELEASED | ACTIVE | UNKNOWN); ACTIVE and UNKNOWN both force DRAINING, and the UNKNOWN arm is the one that must never be optimistically collapsed into released — epic rail 4 keeps unverifiable evidence at UNKNOWN with no authority. An input matching no table row refuses DRAIN_ROW_NOT_ADMITTED rather than falling through to a default, and a reconciliation that leaves a resource unaccounted refuses DRAIN_RESOURCE_UNRECONCILED. Disposition upgrades read the strength order exported by drain-table.ts and refuse DRAIN_DISPOSITION_NOT_MONOTONIC on any attempted downgrade — monotonicity is enforced at this single source so step 9 can mutate it here and see red. Consume the lifecycle's MUST_DRAIN arm rather than re-deriving when a drain is required; it is already a distinct LifecycleOutcome kind, not a refusal. Target under 250 lines; split before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/drain-reconciliation.ts",
+        "packages/runner/src/supervisor/drain-reconciliation.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/drain-reconciliation.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "TDD red for restart reconstruction — DoD 4. Create packages/runner/src/supervisor/restart-reconstruction.test.ts seeding pre-crash durable record sets across the interesting shapes: a committed activation whose grant is CONSUMED but whose attempt never reached RUNNING; a partial activation commit (the case child 1's validateActivationCommit already detects); a registered launch lock with no observation; an observation with no registration; a DRAINING attempt with an unreconciled resource; a terminal attempt with a nonterminal effect; and a RELEASED candidate both with and without its exact safe handoff. For each, assert the reconstruction lands in EXACTLY ONE legal post state by comparing against a hand-written expected outcome SET — asserted for set equality and non-zero length, so a reconstruction that widens its answers or generates nothing fails. Two properties get their own assertions because they are the ones that would be silently wrong: no seed may produce a premature terminal label (missing or unverifiable evidence must land UNKNOWN or SUSPECT, refusing RESTART_PREMATURE_TERMINAL if a terminal is attempted without proof), and RELEASED without its exact safe handoff must be a DISTINCT refusal, RESTART_SAFE_HANDOFF_ABSENT, not folded into a generic incoherence code. Incoherent record sets refuse RESTART_RECORDS_INCOHERENT. Every assertion names code and layer. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/restart-reconstruction.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/restart-reconstruction.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Implement packages/runner/src/supervisor/restart-reconstruction.ts to green. Pure re-derivation over durable records only — effect intent, attempt slice, claim, grant, tombstone, launch-lock registration, and any bound reconciliation. It must produce exactly one legal state, never a set and never a guess: where the records admit more than one reading, that ambiguity is itself the answer and resolves to UNKNOWN or SUSPECT with a stable code, because epic rail 4 forbids unverifiable evidence from gaining authority. It must never label a terminal it cannot prove; a terminal claim without its evidence refuses RESTART_PREMATURE_TERMINAL. RELEASED is the strictest arm and requires the exact safe handoff, refusing RESTART_SAFE_HANDOFF_ABSENT when it is missing — a distinct code, so a reviewer can tell 'no handoff' from 'records disagree'. Reuse child 1's validateActivationCommit for partial-commit detection rather than re-implementing that check, and route drain decisions through drain-reconciliation.ts rather than duplicating the table. Refuse at layer RESTART. Target under 250 lines; split before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/restart-reconstruction.ts",
+        "packages/runner/src/supervisor/restart-reconstruction.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/restart-reconstruction.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the new assertions are load-bearing, and sweep the two rails that a green suite cannot see. MUTATION DRILL at each mechanism's SINGLE source, per task rail 5: neutralise the credential-reuse check, the registration-absent branch, the SUSPECT mapping, the monotonic-upgrade guard in drain-reconciliation.ts, the row-match fallthrough, and the premature-terminal guard — replace the operand with a constant, NEVER delete a line, since a deleted line from a multi-line condition yields a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests. Back each file up out-of-tree and verify the restore with git hash-object. Then two static sweeps: (a) REDACTION — grep the new modules and their outputs for any path that could put a bootstrap credential, lease token, or expected observation digest into a message, a detail field, or an outcome, and assert it in a test rather than only by eye; this is a security property, not a style note. (b) FENCE — grep the new files for child_process, spawn, kill, Date.now, Math.random and confirm zero hits, since task rail 2 forbids all five outright. Finally confirm every code added to SUPERVISOR_ERROR_CODES in step 2 is actually reachable from a caller-visible surface — an unreachable code is one no test can pin, and adding one would be a defect introduced by this task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the gate and attribute every failure honestly. From the repo root, fresh, capturing real output as the evidence: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Do NOT add .js bridge files — @moe/runner has zero of them package-wide and that is correct for this package (NodeNext plus vitest resolve a .js specifier to its .ts sibling); the opposite rule holds in @moe/store and applying it here would be wrong. supervisor/ also stays off index.ts. Attribute red by path, never by a remembered count: packages/runner/src/supervisor/ is SHARED with child 1's in-flight task right now, so a failure in effect-*.test.ts may well be theirs — check whether task-2580a578 is still working before claiming or fixing it, and never edit a child-1 test to make your suite green. The scope-observation real-git test has a known 5s-timeout flake on this machine: re-run once, report the result, do not chase it. Anything red in the files this task created is unambiguously yours. Also confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file this task touched or created is under the 400 hard cap, and record each count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/launch-lock.ts",
+        "packages/runner/src/supervisor/drain-reconciliation.ts",
+        "packages/runner/src/supervisor/restart-reconstruction.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then the commit — which is the highest-risk step on this task, not the code. Review your own diff as an attacker: can any uncertain state reach a launch grant by a path the tests do not cover; does any refusal assert only that something failed rather than which code and which layer; is the 786/787 row list or the strength order derived from the resolver instead of hand-written from the design; can a disposition downgrade through any route; does any outcome or message leak a bootstrap credential, lease token, or expected digest; did any frozen vocabulary get reordered rather than appended. THEN COMMIT, and treat this as the contamination hazard it is: child 1's ELEVEN files sit uncommitted in the same working directory, so a pathspec of packages/runner/src/supervisor/ would sweep their entire in-flight task into your commit. Run git status --porcelain first, stage and commit by EXPLICIT PER-FILE pathspec naming only this task's files — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never the directory. effect-kernel.ts and effect-lifecycle.ts need particular care: they are child 1 files you EXTENDED, so their working-tree content also carries child 1's uncommitted work, and committing them would publish that work under your task. Do not resolve that alone — ask the governor in #governors how they want those two files handled before staging either, and commit your own new files meanwhile. Unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only owned paths landed and no debug, probe, scratch, or generated evidence file is present.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Pipelined promotion by governor-eae4fc53 on explicit human instruction, 2026-08-08T18:15Z. SPIDR child 2 of 4 of task-312c1de3; hard dep is child 1 (task-2580a578), which is WORKING at 2/8 steps and NOT DONE. Promotion is defensible because the shapes child 2 consumes are already materialized: child 1's step-1 (kernel) is COMPLETED and packages/runner/src/supervisor/ holds effect-kernel.ts (249), effect-shape.ts (203), effect-parse.ts (165), effect-lifecycle.ts (253), effect-test-fixtures.ts (169), effect-lifecycle.test.ts (300). ARCHITECT: those files are UNTRACKED — git ls-files returns nothing for that directory, so read the working tree directly and do not conclude the surface is absent. Verify every symbol on disk before naming it; child 1 is actively editing effect-lifecycle.ts, so treat the lifecycle surface as still-moving and prefer amend_plan_step over re-plan if it shifts. COMMIT HAZARD, highest risk on this task: child 1's files are uncommitted in a shared working directory, so a pathspec of packages/runner/src/supervisor/ would sweep child 1's work into child 2's commit. Commit by explicit per-file pathspec only. Owned paths are ADDITIONS to that directory; do not rewrite child 1's files, extend them.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -31,5 +140,40 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:19:48.762Z",
-  "updatedAt": "2026-08-08T16:19:48.762Z"
+  "updatedAt": "2026-08-08T18:30:20.342Z",
+  "contextFetchedBy": [
+    "governor-eae4fc53",
+    "architect-0b81de40"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-08T18:25:20.970Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T18:30:18.315Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) SPLIT OR NOT — decided NOT to split, though governor-eae4fc53 pre-authorized one. The human deliberately approved this coarse pairing (lock/adoption/observation AND cancel/drain/restart share this task by design), so re-splitting would override a human decision, and it fits: 11 steps / 9 distinct files, one slot of headroom on each hard threshold (>12 steps, >10 files reject). Compression was NOT how it was made to fit — the 786/787 reconciliation is largely exported frozen DATA plus one resolver, which is dense in behaviour and thin in files.\n(2) MIRROR OR IMPORT THE CLAUDE SHAPES — decided IMPORT. Task rail 3 ('mirror foreign shapes structurally with pinned version literals') applies to @moe/scheduler lease shapes, which are out-of-package. `ClaudeProcessExit`, `ClaudeReconciliation` and `ClaudeReconciledOutcome` live in `packages/runner/src/providers/claude/` — the SAME package. Import them directly; a structural re-declaration here would be a second source of truth that drifts silently.\n(3) WHERE THE NEW CODES LIVE — decided: extend `effect-kernel.ts`'s frozen vocabularies rather than starting a private code union. The kernel comments call it 'the closed refusal vocabulary', and a second closed vocabulary beside it defeats the point. APPEND only — never reorder or remove an existing entry, since child 1's tests assert against those arrays.\n(4) LOCK IDENTITY — decided to EXTEND, not re-model. `EffectClaim` already carries `wrapperIdentity` and `lockIdentity`, and `effect-activation.ts:176-179` already refuses `ACTIVATION_LOCK_IDENTITY_MISMATCH` when they disagree. This task adds the REGISTRATION and ADOPTION protocol around that existing identity field; it does not introduce a competing one.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08 18:2x — and note the governor's file list is already STALE. `packages/runner/src/supervisor/` now holds 11 files, not 6: effect-activation.ts (247), effect-activation.test.ts (340), effect-grant.ts (148), effect-kernel.ts (250), effect-lifecycle.ts (253), effect-lifecycle.test.ts (300), effect-parse.ts (165), effect-properties.test.ts (259), effect-shape.ts (238), effect-test-fixtures.ts (191), lease-mirror.ts (113). `effect-activation.ts` HAS landed — the `Cannot find module './effect-activation.js'` red the governor saw at 18:19 is gone.\n\nALL OF IT IS UNTRACKED. `git ls-files packages/runner/src/supervisor/` returns nothing. Read the working tree; do not conclude the surface is absent, and do not `git add` the directory.\n\nPinned symbols (grep-verified, safe to name):\n- `effect-kernel.ts`: SUPERVISOR_ERROR_CODES (:78, 30 entries), SUPERVISOR_LAYERS (:65, KERNEL|LIFECYCLE|LEASE_MIRROR|ACTIVATION|GRANT), EFFECT_STATES (:27), TERMINAL_EFFECT_STATES (:40), ATTEMPT_SLICE_STATES (:59, LAUNCH_REQUESTED|RUNNING), supervisorFailure(code, layer, message, detail) (:137), withLeg (:157), SupervisorFailureDetail {state, command, leg} (:122), EffectIntent (:169), AttemptSlice (:185), EffectClaim (:194, carries wrapperIdentity + lockIdentity), EffectTombstone (:202), ActivationGrant (:208).\n- `effect-lifecycle.ts:49` ADMITTED_EFFECT_TRANSITIONS — exported frozen data, and the comment at :45 says verbatim that CHILD 2 adds the design-776 `ACTIVE -> CANCEL_REQUESTED` edge by extending this array. That hook is yours.\n- `effect-lifecycle.ts:69` LifecycleOutcome has THREE kinds: TRANSITIONED | MUST_DRAIN | REFUSED. MUST_DRAIN is not a refusal — it is an instruction to drain, and it is the seam this task's drain resolver consumes.\n- `effect-shape.ts`: isStrictRecord, exactRecord, readOwnDataProperty, hasOnlyOwnStringKeys, isRef, isDigest, isCount, oneOf, readList, MAX_SUPERVISOR_TEXT_CHARS(400), MAX_SUPERVISOR_COUNT. Reuse these; do not write new validators.\n- `effect-test-fixtures.ts`: AT, LATER, DIGEST, makeIntent, makeAttempt, makeClaim, makeTombstone, makeGrant, makeSettlement, makeUncertainty, makeWitness, makeActivationRequest, withGetter, withExtraKey. Import read-only; this task does NOT edit that file.\n- `canonical.ts`: canonicalJson, canonicalDigest, sha256Hex, deepFreeze, isCanonicalUtcTimestamp, isHex64.\n- `providers/claude/claude-cancel-reconcile.ts`: CLAUDE_RECONCILED_OUTCOMES (:19) = CANCELLED_CLEAN | CANCELLED_UNKNOWN_TAIL | COMPLETED_BEFORE_CANCEL | CRASHED | HONEST_UNKNOWN | PROVEN_RESULT; ClaudeProcessExit (:29) = EXITED{code} | SIGNALLED{signal} | UNOBSERVED; ClaudeReconciliation (:40); reconcileClaudeRun (:119).\n\nPACKAGE CONVENTION: @moe/runner has ZERO `.js` bridge files — `find packages/runner/src -name '*.js'` returns nothing. That is CORRECT for this package (NodeNext + vitest resolve `.js` to `.ts`), the opposite of @moe/store. governor-eae4fc53 has already pre-empted a false QA reject on this. Do not add bridges. `supervisor/` also stays OFF `index.ts`.\n\nDESIGN TEXT, read verbatim this session — the 786/787 table has SIX rows and they are transcribed into step 5. Design 336 gives the attempt arcs; 382 and 568 give the drain-on-invalidation and REMOVE edges, including the sentence this task's rail restates: 'Process termination is best-effort; immediate fencing is authoritative, so no post-activation business mutation is accepted even while the attempt truthfully remains DRAINING.'",
+    "risks": "1. **THE COMMIT IS THE HIGHEST-RISK STEP, not the code.** Child 1's 11 files are uncommitted in a shared working directory. A pathspec of `packages/runner/src/supervisor/` sweeps child 1's entire in-flight task into this commit. Commit by EXPLICIT PER-FILE pathspec naming only this task's files, and note that `effect-kernel.ts` and `effect-lifecycle.ts` are child 1 files you are EXTENDING — committing them at all needs care, because their working-tree content also contains child 1's uncommitted work. Resolve that in step 11 by checking with the governor before staging either, rather than deciding alone.\n2. **`moe.amend_plan_step` is currently BROKEN for architects.** Team `Architects` has `role: null` in the registry, so the role gate refuses every architect (`mem:gotcha-architect-team-role-null-blocks-amend-plan-step`). The usual escape hatch — 'if the surface shifts, amend' — may not be available. That is why this plan declares files generously and pins symbols against the SETTLED files. If you need a plan change, raise it in `#architects`/`#governors` and expect a governor to apply it.\n3. **`effect-lifecycle.ts` was still moving when this was planned.** Pin against `effect-kernel.ts` and `effect-shape.ts` (child 1 step-1 COMPLETED, settled). Re-read the arc table before extending it; if child 1 already added `ACTIVE -> CANCEL_REQUESTED`, do not duplicate the row.\n4. **APPEND to the frozen vocabularies, never reorder.** Child 1's tests assert against SUPERVISOR_ERROR_CODES and SUPERVISOR_LAYERS. Reordering or removing an entry breaks a foreign green suite and reads as your regression.\n5. `mem:gotcha-self-derived-universe-cannot-check-itself`: the 786/787 row list and the disposition-strength order MUST be hand-written from the design text, not derived from the resolver. A matrix test that builds its expectation from the code under test proves nothing.\n6. Epic rail 6: every sweep asserts its own case count is non-zero, and the duplicate-delivery matrix asserts SET EQUALITY of outcome kinds — DoD 1 requires it explicitly so a blind-relaunch kind cannot appear unnoticed.\n7. REDACTION (kernel :118): no refusal detail or message may carry a lease token, a bootstrap credential, or an expected observation digest. The bootstrap credential is stored and compared as a DIGEST only. Sweep for it in step 9 — this is a security property, not a style note.\n8. `canonicalDigest` throws on bigint and non-safe-integer numbers, and deepFreeze/canonicalJson mishandle Uint8Array. All counters are safe-integer `number`; any bytes are base64 strings. `exactOptionalPropertyTypes` is ON — fields are required+nullable, never optional.\n9. Task rail 2 is absolute: no child_process, spawn, kill, Date.now, Math.random. Every OS fact is a caller-supplied observation, every timestamp is a caller-supplied canonical UTC string. A grep for those five identifiers belongs in the step-9 sweep.\n10. Known flake, not yours: the `scope-observation` real-git test can hit a 5s timeout on this machine. Re-run once, report it, do not chase it. Attribute any other red by path — `packages/runner/src/supervisor/` is shared with child 1 right now, so a red there may be theirs; check before claiming it.",
+    "keyFiles": [
+      "packages/runner/src/supervisor/effect-kernel.ts",
+      "packages/runner/src/supervisor/effect-lifecycle.ts",
+      "packages/runner/src/supervisor/effect-activation.ts",
+      "packages/runner/src/supervisor/effect-shape.ts",
+      "packages/runner/src/supervisor/effect-test-fixtures.ts",
+      "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
+      "packages/runner/src/canonical.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-08T18:30:20.342Z"
 }

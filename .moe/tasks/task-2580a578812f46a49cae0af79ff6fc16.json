@@ -17,13 +17,163 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
     "Assert the reason code and, where more than one layer can refuse, which layer refused; mutation-verify each failure-path test by flipping the production check and confirming red."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 1+2+4 (kernel). Create supervisor/effect-kernel.ts — NO .js bridge (runner convention: zero bridge files; NodeNext resolves .js specifiers to .ts; do NOT touch packages/runner/src/index.ts — claude modules are precedent for unexported internals). CONTENT: (1) frozen vocabularies: EFFECT_STATES = PENDING|CLAIMED|ARMED|ACTIVE|CANCEL_REQUESTED|SUCCEEDED|FAILED|UNKNOWN|CANCELLED with TERMINAL_EFFECT_STATES = SUCCEEDED|FAILED|UNKNOWN|CANCELLED; command vocabulary (claim, arm, activate, requestCancel, settle, consumeGrant); closed error-code list including EFFECT_TOMBSTONED, ATTEMPT_BINDING_MISMATCH, ATTEMPT_NOT_LAUNCH_REQUESTED, and settlement-evidence codes. (2) Records, ALL fields required (never optional — exactOptionalPropertyTypes is on; absent facts are explicit null, adapter precedent): EffectIntent {intentId, aggregateId, expectedGraphEpoch, leaseBinding (mirrored lease record — see step 5), inputBinding, predecessorCursor (opaque string), desiredState, idempotencyKey, runtimeObservationDigest, state, version (safe-integer counter)}; AttemptSlice {attemptId, aggregateId, intentId, state (LAUNCH_REQUESTED|RUNNING slice), version}; EffectTombstone {intentId, reason, terminalizedAt}; ActivationGrant {grantId, intentId, wrapperIdentity, state UNUSED|CONSUMED, version}; provider-NEUTRAL SupervisorFailure shape mirroring claudeFailure's pattern (do not import or reuse ClaudeFailure — supervisor must serve Codex later; do not reuse the six ClaudeReconciledOutcome string values; the interface name MoeEffectIdentity is taken in claude-stream.ts). (3) Full-strictness parsers per scheduler's exactRecord discipline: exact own-key sets (defeats prototype/getter smuggling), safe-integer counters ONLY (canonicalJson THROWS on bigint and on unsafe/float numbers — canonical.ts:16-26; use number, validate like isSafeByteCount), -0 rejected, state vocabulary membership. (4) BYTES RULE: no Uint8Array anywhere in any record — deepFreeze treats one as a plain record and Object.freeze THROWS on a non-empty typed array (canonical.ts:43-62) while canonicalJson would silently digest it as {\"0\":n} — byte-ish fields are xxxBase64 strings with byteLength/sha256 companions (claude-render precedent). (5) The schema version literal lives on the supervisor ENVELOPE records, never inside the mirrored lease shape (scheduler's LeaseRecord has no version field; injecting one breaks its string-identical-clone convention). (6) MODULE DOC = the CALLER CONTRACT, load-bearing and tested by later steps: (a) effect/attempt/grant successors from one activation commit in ONE transaction with CAS on the intent version AND attempt version read at revalidation; (b) committing an EffectTombstone MUST bump the tombstoned intent's version so a concurrent activation's CAS conflicts — without this the tombstone-vs-activate race is open; (c) grant-id uniqueness and (aggregate, idempotencyKey) uniqueness are store indexes — this pure module validates shape only; (d) the OS-exclusive launch lock (child 2) is the physical duplicate-launch backstop; the grant is only the logical linearization token. Helpers: import canonicalDigest/deepFreeze/sha256Hex from ../canonical.js. Target <=250 lines; split before 400.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-kernel.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-kernel.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-shape.ts",
+        "packages/runner/src/supervisor/effect-kernel.ts",
+        "packages/runner/src/supervisor/effect-parse.ts"
+      ],
+      "note": "Kernel landed as THREE files instead of one to hold the <=250 per-file cap (rail: per-file, file count is not the rail): effect-shape.ts (203) hostile-input guards + structurally mirrored lease/proof + pinned MAX_SUPERVISOR_COUNT literal; effect-kernel.ts (249) frozen vocabularies (9 effect states, 4 terminal, 6 commands, attempt slice, grant states, 5 layers), closed 29-code SUPERVISOR_ERROR_CODES, provider-neutral SupervisorFailure + withLeg, all records (EffectIntent/AttemptSlice/EffectClaim/EffectTombstone/ActivationGrant/SettlementEvidence/UncertaintyEvidence/DependencyWitness/EffectResult), and EFFECT_CALLER_CONTRACT exported as frozen DATA (4 clauses incl. the tombstone version-bump clause) so step 4 can assert it without scraping source; effect-parse.ts (165) exact-own-key parsers returning null. No .js bridges (runner convention). No Uint8Array field anywhere; all counters safe-integer number. Version literals on supervisor envelopes only, never inside the mirrored lease shape. pnpm --filter @moe/runner typecheck exit 0.",
+      "startedAt": "2026-08-08T17:08:45.247Z",
+      "completedAt": "2026-08-08T18:10:25.105Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "PHASE 3 (lifecycle TDD, RED). Write supervisor/effect-lifecycle.test.ts against the not-yet-written effect-lifecycle.ts. COVER: (1) generated FULL (state x command) matrix — every admitted arc of design 774/775 transitions, every other pair refused with the stable code naming BOTH the current state and attempted command; the generator asserts its own case count equals |states| x |commands| so a silently-empty sweep fails. (2) Kernel parse refusals (hostile fixtures: extra key, getter property, -0 version, unsafe-integer counter, bigint-shaped string where number expected, unknown state) each with exact code. (3) SETTLEMENT IS EVIDENCE-BOUND (verified-attack fix — the reducer must not invent completions): settle(SUCCEEDED|FAILED) REQUIRES a settlement-evidence reference record {reconciliationVersion, reconciliationDigest (hex64), outcomeClass} validated for shape and digest-bound into the terminal record; settle(UNKNOWN) additionally requires an uncertainty-evidence record; missing or malformed evidence is a DISTINCT stable code and zero state change; the terminal record carries the evidence digest verbatim (child 2 binds real reconcileClaudeRun output to this seam — shape only here, no interpretation). (4) Tombstone dominance BOTH directions: applies to PENDING|CLAIMED|ARMED; refused with its own code against ACTIVE|CANCEL_REQUESTED|terminals. (5) Terminal absorption cross-product: every command against each of SUCCEEDED|FAILED|UNKNOWN|CANCELLED refused naming both. (6) requestCancel on ACTIVE returns the THIRD outcome kind MUST_DRAIN — typed as neither ok:true nor ok:false refusal; it asserts both records are active and drain is mandatory (drain itself is child 2); a naive refusal-shaped MUST_DRAIN is wrong because callers pattern-matching refusal codes would retry an instruction. (7) The admitted-transition TABLE is exported DATA (frozen array), and the exhaustive test derives from it — the declared child-2 extension seam: child 2 adds the design-776 ACTIVE->CANCEL_REQUESTED edge by extending the table, not rewriting this test. (8) CANCELLED vs UNKNOWN cancel arcs discriminated by input evidence kind. Suite RED for module-missing, not import-crash.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "note": "RED verified: `Failed to resolve import \"./effect-lifecycle.js\"` — module-missing, not an import crash (1 file failed, no tests ran). effect-lifecycle.test.ts covers: (1) 54-cell generated matrix with its own case count asserted (>0, |states|x|commands|, ==54) — refusals assert code + detail.state + detail.command; (2) the hand-written DESIGN_ARCS list (from design 774-775, design-776 arc deliberately absent) is compared FOR EQUALITY against the exported ADMITTED_EFFECT_TRANSITIONS, so deleting a production table row reddens both the equality test and the matrix — the expectations are never derived from the table under test; (3) 7 hostile parse fixtures (extra key, accessor, -0, unsafe integer, string-where-number, unknown state, above-ceiling) each pinned to EFFECT_INTENT_MALFORMED + layer KERNEL, plus EFFECT_COMMAND_MALFORMED and EFFECT_COUNTER_EXHAUSTED; (4) evidence-bound settlement — digest hand-built in the test (not via a production helper), distinct codes for INVALID/REQUIRED/UNEXPECTED/TARGET_NOT_ADMITTED, refusal object key set asserted as exactly {kind,failure}; (5) tombstone dominance both directions across all 9 states; (6) MUST_DRAIN asserted as neither ok:true nor a refusal (\"ok\" in outcome === false). Also added effect-test-fixtures.ts (scheduler authority/test-fixtures.ts precedent) with unknown-typed overrides so hostile shapes are expressible.",
+      "startedAt": "2026-08-08T18:10:27.896Z",
+      "completedAt": "2026-08-08T18:13:11.214Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "PHASE 4 (lifecycle GREEN). supervisor/effect-lifecycle.ts: pure reducer over kernel records — records in, ONE frozen result out (deepFreeze; remember the no-typed-array rule); zero clocks/randomness (timestamps are validated inputs); admitted transitions driven by the exported frozen TABLE from the kernel/lifecycle boundary; every refusal is a SupervisorFailure carrying code + the (state, command) pair; MUST_DRAIN third outcome kind; settlement evidence digest-bound via canonicalDigest; version increments by exactly 1 on every state change and 0 on refusal (lease-core rule: versionDelta in {0,1}, state change implies 1). Gate: step-2 suite green via pnpm --filter @moe/runner test. Target <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "note": "GREEN: 86/86 tests pass, typecheck exit 0. effect-lifecycle.ts (253 lines) is a pure reducer — no clock, no randomness, timestamps are validated inputs. ADMITTED_EFFECT_TRANSITIONS is an exported deep-frozen 8-row table (the child-2 seam for the design-776 ACTIVE->CANCEL_REQUESTED edge); no code path invents an edge that is not in it. LifecycleOutcome has three kinds discriminated by `kind`: TRANSITIONED (ok:true, versionDelta 1), MUST_DRAIN (drainRequired:true, versionDelta 0, NO `ok` field at all so a caller matching ok:false cannot mistake it for a rejected command), REFUSED (exactly {kind,failure}, no successor fields). The RED run caught a real imprecision: routing settle straight to the evidence gate made \"PENDING does not admit settle at all\" report EFFECT_SETTLEMENT_TARGET_NOT_ADMITTED; production now splits arc-missing (EFFECT_TRANSITION_NOT_ADMITTED) from target-not-in-arc, so the two mistakes stay distinguishable to a caller. Settlement digest = canonicalDigest({settlement, uncertainty}) bound into EffectResult; tombstone dominance restricted to PENDING|CLAIMED|ARMED and to a tombstone naming the same intent.",
+      "startedAt": "2026-08-08T18:13:16.010Z",
+      "completedAt": "2026-08-08T18:16:32.102Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "PHASE 3 (activation TDD, RED). Write supervisor/effect-activation.test.ts. LEG ORDER (integrity/identity before authority before content, digest LAST; first failing leg decides the code, exactly once): 1 intent is ARMED + claim/lock identity matches; 2 TOMBSTONE WITNESS — activate TAKES tombstone: EffectTombstone | null as an INPUT and refuses EFFECT_TOMBSTONED when non-null (BLOCKER fix: a pure function cannot refuse on a record it is never given; the caller-contract version-bump clause from step 1 is what closes the commit-side race — assert the doc states it); 3 ATTEMPT_BINDING_MISMATCH (attempt id/aggregate/intent binding); 4 ATTEMPT_NOT_LAUNCH_REQUESTED; 5 graph epoch equality; 6 lease fence via the strict mirror (step 5); 7 desired-state match; 8 dependency witnesses current; 9 runtimeObservationDigest equality (compare digest STRINGS — the wrapper convention per claude-observation.ts:190-217). TESTS: per-leg injected failure → exact code AND structurally zero state change (refusal object contains NO successor fields; frozen inputs unmutated); double-fault input → earlier leg's code exactly once; cancel-commits-first (CANCEL_REQUESTED, CANCELLED, and tombstoned variants) refuses with no grant; activate-before-cancel → later requestCancel is MUST_DRAIN. SUCCESS: one frozen ActivationCommit envelope carrying effect ARMED->ACTIVE successor + attempt LAUNCH_REQUESTED->RUNNING successor + UNUSED ActivationGrant + activationDigest = canonicalDigest over all three successors; grantId is DETERMINISTIC from (intentId, activationDigest) so a replayed activation cannot mint a fresh grant id. GRANT: consumeActivationGrant(grant, wrapperIdentity) returns CONSUMED successor; consuming a CONSUMED grant refused with stable code; different wrapperIdentity refused with its own code; HONESTY TEST (verified-attack requirement): re-presenting the SAME stale UNUSED record succeeds at the pure layer — asserted AS success — pinning that replay protection is the caller's CAS + store uniqueness + OS launch lock, not this function. PARTIAL-COMMIT DETECTOR: validateActivationCommit(effect, attempt, grant) refuses/flags effect ACTIVE with attempt not RUNNING (and grant/digest mismatches) so a rehydrating caller can machine-check the together-or-neither invariant after restart.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-activation.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-activation.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-activation.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts",
+        "packages/runner/src/supervisor/effect-kernel.ts"
+      ],
+      "note": "RED verified: activation suite fails on `Failed to resolve import \"./effect-activation.js\"` while the lifecycle suite stays green (86 passed). effect-activation.test.ts pins a 10-entry LEG table (count asserted) in the design order intentState, lockIdentity, tombstoneWitness, attemptBinding, attemptState, graphEpoch, leaseFence, desiredState, dependencyWitness, runtimeObservation — each injected failure asserts code AND layer AND detail.leg, plus structurally zero state change (refusal key set is exactly {kind,failure}; the whole request's canonicalDigest is compared before/after). Double-fault (attemptBinding + graphEpoch) asserts the earlier code and that the later code appears nowhere in the serialized outcome. Tombstone is an activate INPUT so a pure function can actually witness it; a separate test asserts EFFECT_CALLER_CONTRACT publishes the \"EffectTombstone MUST bump ... compare-and-set\" clause that closes the commit-side race. Cancel-first (CANCEL_REQUESTED and CANCELLED) refuses with no commit field; activate-first then requestCancel yields MUST_DRAIN. Grant id is asserted against a hand-built canonicalDigest({activationDigest, intentId}) so a randomised grantId reddens. Grant honesty test asserts SUCCESS on a replayed stale UNUSED record. validateActivationCommit covers ACTIVE-without-RUNNING, undeived grant id, wrong intent, malformed attempt. Redaction tests assert neither lease token nor the expected runtime digest is echoed. Added EFFECT_CLAIM_MALFORMED to the closed code list (30 codes).",
+      "startedAt": "2026-08-08T18:16:34.686Z",
+      "completedAt": "2026-08-08T18:18:49.450Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "PHASE 4 (activation + mirror GREEN). Two production files. supervisor/lease-mirror.ts: STRICT structural re-validation of the mirrored lease record — NOT a trusting shape cast (verified-attack finding: a token/epoch comparison on unparsed shapes accepts records scheduler's parseLeaseRecord refuses — a fencing bypass). Clone the parse discipline at full strictness: exact own-key set, isCount semantics (rejects -0, non-safe integers, values above the authority-count ceiling — mirror the two-bound rule: parse <= ceiling, mutate < ceiling), state vocabulary, then fence checks in lease-fencing's published order (token, epoch, hash, session, version, state) with malformed-parse-first yielding a PLAIN refusal carrying no security detail. REDACTION RULE (both files): no refusal may carry the input leaseToken or the expected observation digest value — scheduler redacts these deliberately; supervisor must not leak them. supervisor/effect-activation.ts: the 9-leg gate + ActivationCommit envelope + deterministic grant + consumeActivationGrant + validateActivationCommit per step 4's tests. Cross-package NOTE for planningNotes/handoff: runner tests CANNOT import @moe/scheduler (single-dep package; cross-package relative imports break composite rootDir) — the mirror's hostile fixtures here assert supervisor verdicts only; the verdict-EQUALITY drift test against scheduler's real fenceAuthority lands in child 4 via the daemon package, which will have BOTH deps after child 3's ownership amendment. Gate: steps 2+4 suites green. Target <=250 lines each; if effect-activation.ts bursts toward 400, split the grant/validator pair into a fifth prod file (per-file cap is the rail; file COUNT is not).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-activation.ts",
+        "packages/runner/src/supervisor/lease-mirror.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-activation.ts",
+        "packages/runner/src/supervisor/lease-mirror.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/lease-mirror.ts",
+        "packages/runner/src/supervisor/effect-grant.ts",
+        "packages/runner/src/supervisor/effect-activation.ts"
+      ],
+      "note": "GREEN: 123/123 tests, typecheck exit 0. Three production files (the plan's declared split of the grant/validator pair into a fifth file was taken; per-file cap is the rail, file count is not): lease-mirror.ts (112) re-VALIDATES the mirrored lease and proof through parseMirroredLease/parseMirroredProof before any comparison — not a shape cast — then fences in the scheduler's published order (token, epoch with the REVOKED/superseded discrimination, authority hash, session, version, state) with malformed-parse-first and exhausted-counter both answered plainly and with state:null so a syntactically invalid attempt carries no security detail; 4 mirror codes map 1:1 onto scheduler's 4 authority codes so child 4's verdict-equality drift test in the daemon package is a clean mapping. effect-grant.ts (148) derives grantId = canonicalDigest({activationDigest, intentId}) from the identity-free initialGrantBinding (state UNUSED, version 0), so consumption does not change the derivation and validateActivationCommit can still machine-check a rehydrated triple; consumeActivationGrant checks wrapper identity before grant state. effect-activation.ts (233) parses the request envelope with an exact 11-key set, then runs the legs in order counters, intentState, lockIdentity, tombstoneWitness, attemptBinding, attemptState, graphEpoch, leaseFence (mirror failure restamped via withLeg so both the deciding layer AND the leg are on the record), desiredState, dependencyWitness, runtimeObservation — digest STRING comparison only, concrete digests never enter a refusal. Also removed an unreachable claim-null branch surfaced while tightening ParsedRequest.",
+      "startedAt": "2026-08-08T18:18:51.982Z",
+      "completedAt": "2026-08-08T18:21:31.250Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "PHASE 3+4 (property, redaction, hostile-mirror tests). Write supervisor/effect-properties.test.ts: (1) digest replay property — structurally equal EffectIntent/ActivationCommit values produce IDENTICAL canonicalDigest; key insertion order does not change it (canonicalJson sorts keys — assert it via two construction orders); (2) redaction sweep — every refusal constructor in the module is enumerated (generated list, count asserted equal to the closed error-code list length) and JSON.stringify of each refusal contains neither the input leaseToken value nor the expected observation digest value; (3) hostile-mirror fixture matrix — extra key, accessor property, -0 epoch, counter above ceiling, wrong state vocabulary, exhausted counter — each refused with the mirror's exact code and the malformed-first ordering asserted (a record failing both parse and fence yields the parse code); (4) counter-ceiling two-bound rule asserted on every mirrored/versioned field (parse accepts == ceiling, transition refuses to exceed); (5) frozen-result property — every success and refusal output is deep-frozen and every input remains unmutated (compare pre/post canonicalDigest of inputs).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-properties.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/effect-properties.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-properties.test.ts",
+        "packages/runner/src/supervisor/lease-mirror.ts"
+      ],
+      "note": "GREEN: 230/230 tests across 3 supervisor suites, typecheck exit 0. effect-properties.test.ts (226) adds: (1) a refusal sweep that drives ALL 30 closed codes from real production surfaces — asserts observed.length === SUPERVISOR_ERROR_CODES.length AND set equality, so an unreachable code (a code no surface can produce) fails the suite rather than hiding; each of the 30 then gets a code assertion, a redaction assertion (neither lease token value nor the expected runtime observation digest appears in JSON.stringify), and a deep-frozen assertion on outcome/failure/detail. (2) Hostile mirror matrix: extra key, accessor, -0 epoch, above-ceiling counter, unknown state, unknown kind — all LEASE_MIRROR_MALFORMED; malformed-first ordering asserted by a record that fails BOTH parse and fence (yields the parse code with detail.state null); malformed detail asserted to be exactly {state:null, command:\"effect.activate\", leg:null}, i.e. no security detail. (3) Counter-ceiling two-bound rule: parseEffectIntent/parseMirroredLease ACCEPT a record at the ceiling (asserted non-null) while applyEffectCommand and activateEffect refuse EFFECT_COUNTER_EXHAUSTED, and one past the ceiling is refused at parse time. (4) Digest replay: a key-order-reversed intent digests identically, with a guard assertion that the key orders really do differ so the test cannot pass vacuously. (5) Frozen-success property plus inputs unchanged by pre/post canonicalDigest of the whole request. Also changed lease-mirror's FENCED success from Object.freeze to deepFreeze so the frozen-output property holds for the nested lease/proof too.",
+      "startedAt": "2026-08-08T18:21:33.526Z",
+      "completedAt": "2026-08-08T18:23:20.393Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "PHASE 7 (mutation drill + adversarial self-review). Invoke Skill(skill=\"adversarial-self-review\"). Mutation drill at the mechanism's SINGLE SOURCE (mem:gotcha-digest-mutation-that-proves-nothing; back up out-of-tree, verify restore with git hash-object): (1) remove the tombstone-witness leg → tombstoned-activate test red; (2) swap legs 3/5 order → double-fault leg-order test red; (3) delete one row from the admitted-transition TABLE → matrix test red (proves the test derives from design, not from the table it is testing — the expected arcs list in the TEST must be hand-written, never imported from the production table, else the mutation stays green); (4) drop evidence requirement from settle → evidence-refusal test red; (5) make grantId random instead of deterministic → replayed-activation grant-id test red; (6) weaken mirror isCount to accept -0 → hostile fixture red; (7) let a refusal carry leaseToken → redaction sweep red; (8) skip version bump on one transition → versionDelta property red. Restore + re-verify green after each. Checklist: no child_process/spawn/kill/Date.now/Math.random in any supervisor file (grep, zero hits); no Uint8Array field in any record; wc -l every file (NOT PowerShell Measure-Object) <=400 target 250; no probe/scratch files.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-kernel.ts",
+        "packages/runner/src/supervisor/effect-lifecycle.ts",
+        "packages/runner/src/supervisor/effect-activation.ts",
+        "packages/runner/src/supervisor/lease-mirror.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-shape.ts",
+        "packages/runner/src/supervisor/effect-activation.ts",
+        "packages/runner/src/supervisor/effect-properties.test.ts",
+        "packages/runner/src/supervisor/effect-lifecycle.test.ts"
+      ],
+      "note": "MUTATION DRILL — 9 mutations, each applied at the mechanism's single source, backed up out-of-tree, restore verified by git hash-object diff, green re-confirmed after every one. (1) tombstone-witness leg disabled -> 6 red incl. the tombstoned-activate test; (2) attemptBinding/graphEpoch legs swapped -> exactly the double-fault leg-order test red; (3) ARMED/activate row deleted from the table -> BOTH the hand-written-arcs equality test and the 'ARMED x activate' matrix cell red, proving the expectations are not derived from the table under test; (4) settle evidence requirement dropped -> evidence-refusal test red AND the sweep's completeness assertion red; (5) grantId minted from a counter instead of derived -> derivation, replay, and coherent-triple tests red; (6) mirror isCount accepts -0 -> both -0 fixtures red; (7) mirror refusal interpolates the lease token -> both redaction sweeps red; (8) version bump skipped -> all 8 admitted-arc matrix cells red; (9) witness list back to Array.isArray + for..of -> the two new hostile-array tests red.\n\nADVERSARIAL REVIEW — one real defect found and FIXED: parseWitnessList used Array.isArray + for...of, which accepts a subclassed array whose Symbol.iterator answers different elements than the length check saw, and reads accessor elements. Replaced with a readList clone of the scheduler's discipline (plain-array prototype check, own-data length and element reads, 128 cap); four hostile fixtures added and mutation-verified. NOTED, not defects: an empty witness list legitimately asserts \"no dependencies\" and this function cannot distinguish that from a caller that failed to load them — documented as a store responsibility; EFFECT_COUNTER_EXHAUSTED is reachable from two layers (LIFECYCLE and ACTIVATION) which the layer field discriminates; the tombstone that commits AFTER revalidation is out of reach of any pure function and is closed by the published caller-contract version-bump clause. No shared state, no handles/sockets/subprocesses, so no error-path cleanup exists to leak.\n\nCHECKLIST: grep for child_process/spawn/kill/Date.now/Math.random/new Date/performance.now across all supervisor files = 0 hits; no Uint8Array/ArrayBuffer/Buffer field (only the kernel doc line explaining why); wc -l (not Measure-Object) max production file 257, all <=304 incl. tests; no probe/scratch files; long lines wrapped to <=115 except the 4 EFFECT_CALLER_CONTRACT string literals whose exact text a test asserts. 235/235 green, typecheck exit 0.",
+      "startedAt": "2026-08-08T18:23:23.921Z",
+      "completedAt": "2026-08-08T18:27:47.656Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "PHASE 5+8 (verify + pathspec commit — DoD 5). Invoke Skill(skill=\"regression-check\"). Run pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test — fresh output is the complete_task evidence. KNOWN FLAKE: scope-observation.test.ts 'observeScope over a real repository' can hit a 5s timeout on this machine (environmental, pre-existing — verified 2026-08-08); if it is the ONLY red, rerun once and report it explicitly rather than blocking (mem:gotcha-shared-package-gate-broken-by-sibling-red-file for the general foreign-red rule). Mid-slice task: focused gate only — child 4 owns full regression. COMMIT (shared tree, epic rail 3): git status --porcelain; every staged entry under packages/runner/src/supervisor/; unstage foreign paths with git restore --staged; commit by explicit pathspec ONLY: git commit -m \"feat(task-2580a578812f46a49cae0af79ff6fc16): Effect intent lifecycle and one-use activation gate\" -- packages/runner/src/supervisor; verify with git show --stat. WARNING: the wrapper has swept uncommitted files into foreign commits before (mem:gotcha-moe-wrapper-autocommit) — commit promptly after green, and if a sweep already captured the files, verify content by git show HEAD:<path> hash comparison and document instead of resetting.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-kernel.ts",
+        "packages/runner/src/supervisor/effect-lifecycle.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/effect-activation.ts",
+        "packages/runner/src/supervisor/effect-properties.test.ts"
+      ],
+      "note": "VERIFY: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0 — 10 test files, 388/388 tests (235 of them the new supervisor suites). The known scope-observation 5s flake did NOT fire; no rerun needed and no foreign red. Command was re-run fresh AFTER the line-ending normalization below, so the evidence matches the committed bytes.\n\nLINE ENDINGS: the scripted line-wrapping pass rewrote two files as CRLF (Python's open(...,'w') translates \\n to os.linesep on Windows). Caught by git's CRLF warning at `git add`, normalized to LF with a binary rewrite, then the gate re-run fresh. Recorded as mem:gotcha-python-inplace-edit-flips-line-endings.\n\nCOMMIT (epic rail 3): `git status --porcelain` showed 11 staged entries, ALL under packages/runner/src/supervisor/; the foreign untracked work in packages/store/src/projections/ was left alone and never staged. Committed by explicit pathspec only — `git commit -m \"feat(task-2580a578812f46a49cae0af79ff6fc16): ...\" -- packages/runner/src/supervisor`. Result: commit 72545bb, `git show --stat` confirms 11 files changed, 2559 insertions, zero foreign paths. No wrapper autocommit sweep occurred.",
+      "startedAt": "2026-08-08T18:27:50.729Z",
+      "completedAt": "2026-08-08T18:29:43.094Z"
+    }
+  ],
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by architect-e9f16b5b on the human's direct instruction to continue (REPL). Deps verified DONE at split time: Claude runtime adapter task-5ff2b39d, Lease presence core task-967769ea. Greenfield owned path packages/runner/src/supervisor/**. Child 1 of the human-approved 4-child supervisor split; gates children 2-4 which gate Codex adapter. Governor was pinged in the parent block report; this promotion executes exactly the ask in comment-c866c1cc.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -31,5 +181,68 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:19:20.892Z",
-  "updatedAt": "2026-08-08T16:19:20.892Z"
+  "updatedAt": "2026-08-08T18:30:22.975Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T16:53:48.135Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T17:04:44.243Z",
+  "planningNotes": {
+    "approachesConsidered": "Settlement arcs: (a) evidence-bound settle commands now vs (b) defer all ACTIVE->terminal arcs to child 2 with a SETTLEMENT_DEFERRED refusal. Chose (a)-lite — settle requires a shape-validated evidence reference (reconciliationVersion/digest/outcomeClass) digest-bound into the terminal record, no interpretation — because the task DoD pins 'admits exactly the design-774/775 arcs' and (b) would contradict it; child 2 binds real reconcileClaudeRun output to the same seam. Tombstone handling: adversarial review proved the original design UNSATISFIABLE (BLOCKER) — a pure activate cannot refuse on a tombstone it is never given, and CAS on the intent alone does not conflict with a separate tombstone row; fixed by making tombstone an explicit activation INPUT plus the caller-contract clause that tombstone commit bumps the intent version. Grant replay: chose honesty over overclaim — the pure layer PROVABLY cannot refuse a stale UNUSED replay; the plan pins that as an asserted-success test and names the caller CAS + store uniqueness + OS launch lock (child 2) as the real guards. Failure shape: provider-neutral SupervisorFailure, NOT ClaudeFailure reuse — supervisor must serve Codex later. File packing: adversarial reviewer showed 3+2 files starves the test matrix (scheduler's smaller authority machine is ~975 prod + ~1000 test lines); repacked to 4 prod + 3 tests.",
+    "codebaseInsights": "Runner convention: ZERO .js bridges (unlike store/scheduler) — NodeNext + vitest resolve .js specifiers to .ts directly; typecheck and test verified exit 0 on this machine. index.ts does not export provider/internal modules; supervisor stays unexported. tsconfig.base: exactOptionalPropertyTypes:true, noUncheckedIndexedAccess, verbatimModuleSyntax — fields are required+nullable, never optional. canonical.ts: canonicalDigest = sha256(canonicalJson), sorts keys, THROWS on bigint AND on non-safe-integer numbers — all counters are safe-integer number; deepFreeze treats Uint8Array as plain record and Object.freeze THROWS on non-empty typed arrays while canonicalJson silently mis-digests them as {\"0\":n} — bytes are base64 strings (claude-render precedent). ProviderRuntimeObservation.observationDigest is a FIELD; observationDigestInput is the re-verification helper; wrapper comparison is digest-string equality; runtimePinningIsAuthoritative is the pre-activate predicate. No exported identifier in runner contains ACTIVATION/GRANT/EFFECT_; avoid the six ClaudeReconciledOutcome string values and the taken name MoeEffectIdentity. Lease mirror MUST re-validate at fenceAuthority strictness (exact keys, isCount incl -0/ceiling, published check order, malformed-first plain refusal); the version literal goes on the supervisor envelope, never inside the mirrored lease shape (LeaseRecord has no version field; string-identical-clone convention).",
+    "risks": "(1) Runner tests cannot import @moe/scheduler — the mirror-vs-fenceAuthority verdict-equality drift test is DEFERRED to child 4 via the daemon package (both deps after child 3); child 1 ships hostile-fixture parity only. Record this in the handoff so child 4 does not miss it. (2) The transition-matrix mutation check only proves anything if the TEST's expected-arcs list is hand-written from the design, never derived from the production table (mem:gotcha-self-derived-universe-cannot-check-itself). (3) MUST_DRAIN must be a third outcome kind, not a refusal — callers pattern-matching refusal codes would retry an instruction. (4) versionDelta rule from lease core: {0,1}, state change implies 1 — a 'new object implies +1' invariant is wrong. (5) Known environmental flake: scope-observation real-git test 5s timeout — rerun once, report, do not block. (6) Wrapper auto-commit has swept uncommitted work into foreign commits before (mem:gotcha-moe-wrapper-autocommit) — commit promptly, verify by content hash if swept. (7) If effect-activation.ts approaches 400 lines, split grant/validator into a fifth file — per-file cap is the rail, file count is not.",
+    "keyFiles": [
+      "packages/runner/src/canonical.ts",
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
+      "packages/scheduler/src/authority/lease-fencing.ts",
+      "packages/scheduler/src/authority/authority-kernel.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-08T17:04:46.289Z",
+  "contextFetchedBy": [
+    "worker-6bdacafd",
+    "worker-5e600233"
+  ],
+  "workStartedAt": "2026-08-08T17:08:45.247Z",
+  "reviewStartedAt": "2026-08-08T18:30:22.975Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  10 passed (10)\n      Tests  388 passed (388)\n   Start at  21:28:17\n   Duration  510ms (transform 723ms, setup 0ms, import 1.05s, tests 605ms, environment 1ms)",
+    "reportedAt": "2026-08-08T18:30:22.975Z"
+  },
+  "filesModified": [
+    "packages/runner/src/supervisor/effect-shape.ts",
+    "packages/runner/src/supervisor/effect-kernel.ts",
+    "packages/runner/src/supervisor/effect-parse.ts",
+    "packages/runner/src/supervisor/effect-lifecycle.test.ts",
+    "packages/runner/src/supervisor/effect-test-fixtures.ts",
+    "packages/runner/src/supervisor/effect-lifecycle.ts",
+    "packages/runner/src/supervisor/effect-activation.test.ts",
+    "packages/runner/src/supervisor/lease-mirror.ts",
+    "packages/runner/src/supervisor/effect-grant.ts",
+    "packages/runner/src/supervisor/effect-activation.ts",
+    "packages/runner/src/supervisor/effect-properties.test.ts"
+  ]
 }

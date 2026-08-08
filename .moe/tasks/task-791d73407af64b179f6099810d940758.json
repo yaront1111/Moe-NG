@@ -16,9 +16,146 @@
     "Byte-identical means byte-identical. A rebuild that differs in ordering, whitespace, or field presence is a failure, not a rounding error.",
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin the surface and enumerate the boundary matrix before writing anything. Re-read the four predecessor modules to confirm every symbol this task will name still exists as planningNotes records it (foldProjection, canonicalProjectionState, relayMessage + its OutboxRelayResult arms, the five subscription writes, CommitApplyContext.database, store.readEventsAfter). Then write down the ordered list of transaction boundaries the drills must hit, each as a (table, trigger-timing) pair reachable by a TEMP trigger on the store's own connection: BEFORE INSERT ON domain_events, BEFORE INSERT ON outbox_messages, BEFORE INSERT ON projections, BEFORE UPDATE ON projections, BEFORE INSERT ON inbox_receipts, BEFORE INSERT ON event_subscriptions, BEFORE INSERT ON cursor_generations, plus the non-trigger boundaries: inside the relay's fold (a reducer that kills), and immediately after commitWithApply returns (post-COMMIT survival). This list is the literal constant step 6's matrix iterates and asserts its own length against. Produce no code in this step; if a symbol differs from planningNotes, correct the plan via moe.amend_plan_step rather than coding around it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Surface re-verified on disk; every symbol planningNotes names still exists exactly as recorded. foldProjection projection-fold.ts:232 (ProjectionFoldInput{checkpoint,events,reducers,state,upcaster}); canonicalProjectionState outbox-relay-digests.ts:181 (returns {digest,state}|null); relayMessage transactional-outbox-relay.ts:237 with OutboxRelayResult arms APPLIED/ALREADY_APPLIED/REFUSED; PROJECTION_UPSERT CAS at :57 with `WHERE last_applied_position = ? AND state_digest IS ?`; CommitApplyContext.database event-ledger-transaction.ts:30; SqliteEventStore.commitWithApply :262, readEventsAfter :312, openForProject :102; five subscription writes registerSubscription/acknowledge/publishSnapshot/advanceGeneration/reseatToSnapshot all present. projections table confirmed digest-only (sqlite-schema-manifest.ts:205). No amend needed for predecessor symbols.\n\nBOUNDARY MATRIX (the literal constant step 6 iterates; length 10, all non-zero):\n1 DOMAIN_EVENTS_INSERT     - TEMP trigger BEFORE INSERT ON domain_events\n2 OUTBOX_MESSAGES_INSERT   - TEMP trigger BEFORE INSERT ON outbox_messages\n3 PROJECTIONS_INSERT       - TEMP trigger BEFORE INSERT ON projections (first relay, no prior row)\n4 PROJECTIONS_UPDATE       - TEMP trigger BEFORE UPDATE ON projections (second relay; needs one committed relay first)\n5 INBOX_RECEIPTS_INSERT    - TEMP trigger BEFORE INSERT ON inbox_receipts\n6 EVENT_SUBSCRIPTIONS_INSERT - TEMP trigger BEFORE INSERT ON event_subscriptions\n7 CURSOR_GENERATIONS_INSERT  - TEMP trigger BEFORE INSERT ON cursor_generations\n8 REDUCER                  - non-trigger: reducer kills mid-fold inside relayMessage\n9 POST_COMMIT              - non-trigger: kill immediately after commitWithApply returns (survival arm)\n10 FUZZ                    - seeded: tick UDF on every table, kills at seeded tick N in [1,12]\n\nReachability findings that shape the worker driver (verified, not assumed):\n- Boundaries 6 and 7 are BOTH reached by a single advanceGeneration call: subscription-writes.ts:196-198 inserts cursor_generations first, then :199-202 upserts the baseline into event_subscriptions inside the SAME BEGIN IMMEDIATE. Killing at boundary 6 therefore proves a two-table rollback (cursor_generations must be empty after recovery), which is stronger than either alone. publishSnapshot/registerSubscription cannot be used to reach event_subscriptions first because loadSnapshot() corrupts when no baseline sentinel exists (subscription-internals.ts:203-218).\n- Boundary 3 vs 4 are distinguished only by prior state: the relay's PROJECTION_UPSERT is one statement whose INSERT arm fires on the first relay and whose DO UPDATE arm fires on every later one.\n\nOne planned signature deviation to record now (my own new module, not a predecessor symbol): rebuildProjection's request gains an optional `state?: ProjectionState` origin, defaulting to {}. Without it a rebuild cannot reproduce an incremental relay that started from a non-empty origin state, and step 4's mandatory empty-ledger edge case would compare {} against the relay's origin and fail for a reason that is not a durability defect. Tests will pass a NON-empty origin so the parameter is genuinely exercised rather than defaulted around.",
+      "startedAt": "2026-08-08T18:13:34.837Z",
+      "completedAt": "2026-08-08T18:18:20.943Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: write the rebuild contract tests and the shared drill helper first. Create packages/store/src/projections/projection-drill-test-helpers.ts holding (a) a deterministic seeded PRNG (mulberry32-style, integer seeds passed in — no Math.random, no clock anywhere), (b) a fixture builder that opens a file-backed store via SqliteEventStore.openForProject in a mkdtempSync directory, (c) the shared reducer/upcaster set, (d) a helper that drives relayMessage to build projection state incrementally, and (e) an invariant checker that opens a raw DatabaseSync on the same file and asserts PRAGMA integrity_check === 'ok' and PRAGMA foreign_key_check returns zero rows. Name it *-test-helpers.ts deliberately: that suffix is the repo's test-only convention and correctly gets NO .js bridge. Then create packages/store/src/projections/projection-rebuild.test.ts asserting, against a curated history: rebuilt digest equals the incrementally-built digest AND equals the durable projections.state_digest column; the canonical states compare deeply equal; a rebuild run twice changes nothing (same digest, same last_applied_position, zero extra rows); a rebuild whose durable row was tampered to a foreign digest refuses PROJECTION_REBUILD_STATE_CONFLICT rather than overwriting. Assert the specific reason code and refusing layer, never merely that it failed. Suite must be RED because the module does not exist yet.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-drill-test-helpers.ts",
+        "packages/store/src/projections/projection-rebuild.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/projections/projection-drill-test-helpers.ts",
+        "packages/store/src/projections/projection-rebuild.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-drill-test-helpers.ts",
+        "packages/store/src/projections/projection-rebuild.test.ts"
+      ],
+      "note": "TDD red confirmed. `npx vitest run packages/store/src/projections/projection-rebuild.test.ts` fails with \"Cannot find module './projection-rebuild.js'\" — the module is genuinely absent, not a typo or an assertion mismatch.\n\nprojection-drill-test-helpers.ts (no .js bridge, per the repo's test-only suffix convention): mulberry32 + boundedInteger (integer seeds only, no Math.random, no clock anywhere); withDrillDirectory/openDrillStore/withDrillStore/withDrillDatabase file-backed fixtures with the Windows-safe rmSync {force,maxRetries:10,recursive,retryDelay:50}; DRILL_REDUCERS + DRILL_UPCASTER where goal.renamed only reaches moe-domain-schema/1 through an upcast hop that prefixes the payload with \"up:\", so a state carrying that prefix is evidence the hop actually ran; relayHistory() drives relayMessage per commit threading checkpoint/state and throws on anything but APPLIED; inspectDrillDatabase() runs PRAGMA integrity_check and PRAGMA foreign_key_check on a fresh connection; readDurableProjection/ledgerEnd/countRows read the durable row directly.\n\nDRILL_ORIGIN_STATE is deliberately non-empty ({count,last,names}) so the new optional `state` origin parameter is genuinely exercised — a rebuild that ignored it would still match an empty-origin relay and the check would be vacuous.\n\nprojection-rebuild.test.ts, 10 cases, every refusal pinning code AND layer: incremental-vs-rebuild digest/state/checkpoint equality plus the durable state_digest column; pageLimit 1 reaching the identical digest in 5 pages; a second rebuild leaving the row and the row count untouched; empty ledger recording the origin digest at checkpoint 0; tampered digest refusing PROJECTION_REBUILD_STATE_CONFLICT/STATE with the row NOT overwritten; durable checkpoint ahead of the ledger refusing the same; missing reducer refusing PROJECTION_REBUILD_FOLD_REFUSED/PROJECTION while separately asserting fold.code PROJECTION_FOLD_REDUCER_MISSING, fold.eventId evt-1 and fold.layer REDUCER (the two-layer distinction rail 6 demands); pageLimit 0, empty name, and non-canonicalizable origin state each refusing PROJECTION_REBUILD_INPUT_INVALID/INPUT.",
+      "startedAt": "2026-08-08T18:18:26.721Z",
+      "completedAt": "2026-08-08T18:21:59.466Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum rebuild driver: packages/store/src/projections/projection-rebuild.ts plus its one-line sibling bridge projection-rebuild.js (export * from \"./projection-rebuild.ts\";). Do NOT add it to packages/store/src/index.ts — it stays an unexported internal module, the same shape outbox-relay/ and subscriptions/ already ship in. Signature: rebuildProjection(database: DatabaseSync, request: {name, pageLimit?, reducers, source, upcaster}) where source is a STRUCTURAL read seam ({readEventsAfter(after: bigint, limit: number): CursorPage<StoredEvent, bigint>}) so the module never imports the store class, mirroring RelayCommitSeam. Behaviour: always fold from global position 0 (the projections table stores no state, so there is nothing to resume an accumulator from); page the ledger through source.readEventsAfter until hasMore is false; fold each page with foldProjection, propagating any fold refusal verbatim as PROJECTION_REBUILD_FOLD_REFUSED carrying the fold's own code and layer; derive the digest with canonicalProjectionState from ../outbox-relay/outbox-relay-digests.js (safe: the reverse edge is import-type-only, no runtime cycle); persist progress inside one BEGIN IMMEDIATE per page that both reads the current row and compare-and-set-upserts it with the relay's exact ON CONFLICT ... WHERE last_applied_position = ? AND state_digest IS ? clause, asserting changes === 1; when the walk passes a position already durable, assert the recomputed digest equals the stored state_digest and refuse PROJECTION_REBUILD_STATE_CONFLICT on mismatch. Return a frozen discriminated union with payload fields only on the success arm. Codes: PROJECTION_REBUILD_FOLD_REFUSED | PROJECTION_REBUILD_INPUT_INVALID | PROJECTION_REBUILD_STATE_CONFLICT | PROJECTION_REBUILD_WRITE_FAILED. Target under 250 lines; if it would burst, split and give the split file its own .js bridge in this same step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-rebuild.ts",
+        "packages/store/src/projections/projection-rebuild.js",
+        "packages/store/src/projections/projection-rebuild.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/projections/projection-rebuild.ts",
+        "packages/store/src/projections/projection-rebuild.js"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-rebuild.ts",
+        "packages/store/src/projections/projection-rebuild.js",
+        "packages/store/src/projections/projection-rebuild-contracts.ts",
+        "packages/store/src/projections/projection-rebuild-contracts.js"
+      ],
+      "note": "GREEN: 10/10 rebuild tests pass; full store suite 29 files / 315 tests exit 0; `pnpm --filter @moe/store typecheck` clean. Baseline before this task was 28 files / 305 tests.\n\nSplit as the step sanctioned, because the single file would have burst the cap: projection-rebuild.ts (245 lines, driver) + projection-rebuild-contracts.ts (54 lines, types), each with its own one-line .js bridge created in this same step (mem:gotcha-missing-runtime-bridge-invisible-to-vitest). Neither is added to index.ts — package-internal, the same shape outbox-relay/ and subscriptions/ ship in. projection-rebuild.ts re-exports its contracts, mirroring transactional-outbox-relay.ts.\n\nDesign points worth carrying forward:\n- source is the structural seam ProjectionLedgerSource {readEventsAfter(after, limit)}; the module never imports SqliteEventStore. canonicalProjectionState is imported as a VALUE from ../outbox-relay/outbox-relay-digests.js — verified safe, the reverse edge outbox-relay-digests.ts:4 is import-type-only, so no runtime cycle.\n- Two-phase walk. While the walk is still BEHIND the durable checkpoint it writes nothing and clampPage() truncates each page so it can never step over that checkpoint; on landing exactly on it the recomputed digest is compared against the stored state_digest; past it every page persists. Without the clamp a small pageLimit would have refused STATE_CONFLICT on its very first page against a healthy up-to-date row (caught while writing, hence the clamp).\n- persist() threads `expected` = the rebuild's OWN last written value, not a per-transaction re-read, so a relay that advances the row between pages loses the CAS (changes 0) rather than being silently overwritten. That is what keeps the WHERE clause load-bearing rather than decorative.\n- A rebuild always persists at least once, even over an empty ledger, so a durable row pointing past the end of the ledger is caught instead of ignored.\n- Signature deviation recorded in step 1 is implemented: optional `state` origin (default {}), and DRILL_ORIGIN_STATE is non-empty so it is genuinely exercised.\n- Unclassifiable errors (a source that throws) propagate rather than becoming a named refusal, matching the relay's discipline.\n\nOne typecheck-only fix during the step: planRebuild's `bad` needed an explicit `(detail: string) => never` VARIABLE annotation, not just the arrow's return type, or TS18047 fires on the narrowing after it — same trick transactional-outbox-relay.ts:147 documents.",
+      "startedAt": "2026-08-08T18:22:02.181Z",
+      "completedAt": "2026-08-08T18:25:29.598Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Generated-history sweep: packages/store/src/projections/projection-generated-history.test.ts. Using the seeded PRNG from the helper, generate randomized event histories varying the number of commits, events per commit, aggregate count and interleaving, event types (all covered by reducers, with a designated share routed through the upcaster), and payload bytes. For each generated history assert the rebuild digest equals the incrementally-relayed digest and equals the durable projections.state_digest. Explicitly include the edge histories a random generator will rarely produce: an empty ledger (zero events), a single event, a single commit at the maximum event count, and one history whose reducer output carries -0, NaN, Infinity, a bigint, a nested object and the same content under two different key insertion orders, so canonicalization is genuinely exercised rather than assumed. Per epic rail 6 the sweep must assert its own generated case count is greater than zero and that the number of events actually committed matches the number generated — a sweep that silently produces zero cases must fail, not pass. Seeds are a fixed literal array so any failure is reproducible; no Math.random and no clock.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-generated-history.test.ts",
+        "packages/store/src/projections/projection-drill-test-helpers.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/projections/projection-generated-history.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-generated-history.test.ts"
+      ],
+      "note": "6/6 green; store typecheck clean. Seeds are the fixed literal array [1, 7, 13, 42, 101, 2027, 31337, 65521]; PRNG is seeded mulberry32; no Math.random and no clock in the file.\n\nGenerator shapes verified as genuinely varied rather than assumed (probed the exact generator arithmetic standalone): 1-9 commits, 3-18 events, 1-4 aggregates, 1-4 events per commit, and every single seed routes at least one event through the upcaster. Per seed the sweep asserts rebuild digest == incremental digest == durable projections.state_digest, durable last_applied_position == rebuild checkpoint == committed event count, and a deep state equality.\n\nRail-6 self-assertions (a sweep that silently produces nothing must FAIL):\n- cases.length === SEEDS.length AND > 0.\n- per case generated > 0 and committed === generated, so a generator that emitted commits the store never accepted cannot pass.\n- distinct rebuild digests across seeds > 1, so the whole sweep cannot agree for the trivial reason that every case folded to the same state.\n- total upcast events across the sweep > 0, so the upcast hop is never left untested by an unlucky draw.\n\nEdge histories a random generator would rarely produce, each its own case: empty ledger (0 events, origin digest, 0 domain_events rows); a single event; one commit at MAX_EVENTS_PER_COMMIT (256) which the rebuild walks in exactly 3 pages at pageLimit 100, so paging is exercised against a real multi-page fold.\n\nCanonicalization is exercised, not assumed. EXOTIC_REDUCERS emit -0, NaN, +/-Infinity, bigints past Number.MAX_SAFE_INTEGER, a nested object, and the SAME nested content under two different key insertion orders chosen by index parity; the rebuild reproduces the incremental digest over that history and the surviving values are asserted with Object.is so -0 and 0 are distinguished. Paired with a direct assertion against the production canonicalProjectionState that key order does not change the digest AND that -0 does NOT collapse onto 0 — without the second half the first would pass against a hash that ignores its input (mem:gotcha-digest-mutation-that-proves-nothing).\n\nOne transform error fixed while writing: `as readonly number[][3]` is a parse error under oxc, not an index expression.",
+      "startedAt": "2026-08-08T18:25:32.017Z",
+      "completedAt": "2026-08-08T18:27:52.672Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Build the crash injector child: packages/store/src/projections/projection-crash-worker.mjs, following the existing *-worker.mjs convention. It takes a database path, a boundary name and a seed on argv, opens the store with SqliteEventStore.openForProject, obtains the store's own DatabaseSync by stashing context.database from a throwaway commitWithApply, then registers a user-defined function via database.function('moe_crash_now', ...) and a TEMP trigger for the requested boundary (a TEMP trigger is mandatory — UDFs are per-connection, so a permanent trigger created from a second connection raises 'no such function' and merely refuses instead of crashing). The UDF writes the boundary marker with writeSync(1, ...) so it flushes before the process dies, then calls process.kill(process.pid, 'SIGKILL'). Support the two non-trigger boundaries too: a reducer that kills mid-fold, and a kill issued immediately after commitWithApply returns (post-COMMIT survival). Support one additional 'FUZZ' mode that kills after a seeded pseudo-random number of statements so boundaries no JS hook can reach are still covered. The child must never exit cleanly in a crash mode; if it reaches the end without dying it must exit with a distinct non-zero code so the parent can tell 'the boundary was never reached' apart from 'the crash worked'.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-crash-worker.mjs"
+      ],
+      "newFiles": [
+        "packages/store/src/projections/projection-crash-worker.mjs"
+      ],
+      "startedAt": "2026-08-08T18:27:56.363Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Crash drill matrix: packages/store/src/projections/projection-crash-drill.test.ts. Iterate the exact boundary list written in step 1, spawning the crash worker once per boundary against a fresh file-backed database. For each: assert the child printed its boundary marker and exited non-zero, asserting only that (never the signal name — a SIGKILL child reports code 1 / signal null on Windows and code null / SIGKILL on POSIX). Then reopen the database and prove all-or-nothing: run PRAGMA integrity_check === 'ok' and PRAGMA foreign_key_check with zero rows on a raw connection, confirm SqliteEventStore.open succeeds (which re-runs validateSchema), and reconcile the durable state against the ledger by running rebuildProjection and asserting the durable projections row is exactly the rebuild's value at its own checkpoint — i.e. the surviving state is a whole-prefix fold of the ledger, with no half-applied event and no inbox receipt without its projection advance or vice versa. Include the post-COMMIT boundary asserting the opposite arm of DoD 1: everything committed is still there after the kill. Assert the matrix covered every boundary in the list (cases.length equals the boundary list length and is greater than zero) so a matrix that silently degenerates to zero spawns fails. Close every connection before rmSync(dir, {force:true, maxRetries:10, recursive:true, retryDelay:50}) — Windows holds locks otherwise.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts",
+        "packages/store/src/projections/projection-crash-worker.mjs",
+        "packages/store/src/projections/projection-drill-test-helpers.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Combined idempotence, which is DoD 3 and the one property none of the earlier steps can prove alone. In projection-crash-drill.test.ts add the composed sequences, not just the individual ones: (a) relay a message, crash, reopen, redeliver the SAME message with a bumped expectedVersion (per the step-3 handoff a redelivery at the stale version dies with EXPECTED_VERSION_CONFLICT before apply ever runs and proves nothing), assert ALREADY_APPLIED with deduplicatedBy 'INBOX' and an unchanged digest; (b) crash mid-rebuild at the projections boundary, reopen, run the rebuild again to completion, and assert the final digest and last_applied_position are identical to an uninterrupted rebuild of the same ledger — the restart-mid-rebuild arm; (c) rebuild, then relay a further message, then rebuild again, asserting the digest matches a single cold rebuild of the whole ledger; (d) a rebuild whose durable row is advanced underneath it by a relay loses its CAS and refuses PROJECTION_REBUILD_STATE_CONFLICT instead of clobbering. Every assertion names the specific reason code and, where two layers can refuse, which layer refused.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts",
+        "packages/store/src/projections/projection-rebuild.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Prove the new assertions are load-bearing. Mutation drill: for each of the rebuild driver's guards (the CAS clause, the changes === 1 assertion, the durable-digest reconciliation, the fold-refusal propagation) neutralise the operand in place — replace it with a constant, NEVER delete a line — run the store suite, and confirm at least one test goes red naming the right code. Count failed SUITES as well as failed tests: a mutation that reddens zero tests and zero suites is a real survivor, while zero tests and one suite means the mutant did not parse and proves nothing either way. Back the file up out-of-tree and verify the restore with git hash-object before moving on. Separately run the runtime-bridge probe from the repo root for every new non-test .ts added by this task (node -e \"import('./packages/store/src/projections/projection-rebuild.js')...\") with a known-good module as a control, because vitest and tsc both resolve a missing .js bridge back to its .ts sibling and hide the defect entirely.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-9",
+      "description": "Close the defects the drills exposed and run the full gate. Any real durability defect these drills surface in steps 1-4 is fixed HERE, in place, not filed forward — the most likely sites are the relay's apply ordering and the fold's preflight, listed below; a defect landing in another owned path is fixed there with a moe.amend_plan_step naming it. Fix by test first: add the failing assertion, then the minimum change, and keep the fix separate from the drill code so the diff shows what the drill caught. If the drills expose no defect, say so explicitly in the completion evidence with the boundary list they covered — a negative result is a result, but a drill weakened or narrowed to produce one violates task rail 1. Then run the exact verification command fresh, from the repo root, capturing its real output as the evidence: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Also run root pnpm typecheck (expected exit 0). Root pnpm test is known red with 11 pre-existing failures in packages/runner and packages/testkit that are foreign to this task — do not chase them, and do not claim them as yours.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/projections/projection-fold.ts",
+        "packages/store/src/projections/projection-crash-drill.test.ts"
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "Close the defects the drills exposed and run the full gate. Any real durability defect these drills surface in steps 1-4 is fixed HERE, in place, not filed forward — the most likely sites are the relay's apply ordering and the fold's preflight, listed below; a defect landing in another owned path is fixed there with a moe.amend_plan_step naming it. Fix by test first: add the failing assertion, then the minimum change, and keep the fix separate from the drill code so the diff shows what the drill caught. If the drills expose no defect, say so explicitly in the completion evidence with the boundary list they covered — a negative result is a result, but a drill weakened or narrowed to produce one violates task rail 1. Then run the exact verification command fresh, from the repo root, capturing its real output as the evidence: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Also run root pnpm typecheck (expected exit 0).\n\nCORRECTED BASELINE (governor-eae4fc53, measured 2026-08-08T18:19Z — the original text of this step said \"root pnpm test is known red with 11 pre-existing failures in packages/runner and packages/testkit\"; that was FALSE and is retracted). Actual measured state: `npx vitest run --root . packages/testkit` = 18 files, 234 tests, ZERO failures — testkit is fully green. `npx vitest run --root . packages/runner` = 8 files passed, 1 failed, 239 tests passing; the single failure is `packages/runner/src/supervisor/effect-activation.test.ts` with \"Cannot find module ./effect-activation.js\", which is worker-5e600233's TDD red phase on task-2580a578 (step 3 of 8) and will go green when that worker writes the module.\n\nTherefore: the ONLY legitimately-foreign red is under `packages/runner/src/supervisor/`, and only while task-2580a578 is in flight. Any other failure anywhere — and unconditionally anything under packages/store, which you own — is yours until you have proven otherwise by naming the owning task. Do NOT carry the number 11, or any blanket \"known pre-existing failures\" claim, into your completion evidence: QA will diff that against a green testkit and you will own the discrepancy. If you assert a failure is foreign, name the file and the task that owns it. This is the closing durability gate and task rail 1 is explicit that a drill weakened or narrowed to pass defeats the purpose of the whole SPIDR breakdown — an inherited licence to ignore failures is exactly that kind of weakening.",
+          "reason": "Governor correction (governor-eae4fc53): the step's foreign-failure baseline was factually wrong and licensed ignoring real breakage on the closing durability gate. Original text claimed \"root pnpm test is known red with 11 pre-existing failures in packages/runner and packages/testkit that are foreign to this task\". Measured 2026-08-08T18:19Z: packages/testkit is 18 files / 234 tests, ZERO failures; packages/runner is 8 passed / 1 failed / 239 tests passing, and the single failure is effect-activation.test.ts \"Cannot find module ./effect-activation.js\" — worker-5e600233's TDD red phase on task-2580a578, step 3 of 8, transient and genuinely foreign. The architect appears to have measured root pnpm test during a concurrent task's red phase and frozen that transient count into the plan as a permanent baseline. Everything else in this step is unchanged; only the final baseline sentence is corrected. Named the specific foreign path rather than a count so the licence cannot stretch to cover your own breakage.",
+          "amendedBy": "governor-eae4fc53",
+          "amendedAt": "2026-08-08T18:25:20.509Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review, then commit. Read your own diff as an attacker: does any drill assert merely that something refused rather than which code and which layer refused; does any sweep pass while generating zero cases; is any property asserted against the helper instead of the production function; can the rebuild ever move the durable row backwards or overwrite a newer relay advance; does any crash boundary silently never fire and still pass; does any file handle or child process leak on a failure path; is every new non-test .ts accompanied by its .js bridge. Confirm each production source is under 250 lines (use wc -l, not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room). Then stage and commit by EXPLICIT PATHSPEC ONLY — git commit -- <owned path> [<owned path>...] — never a bare git commit or git commit -a, because the working directory is shared with other tasks. Run git status --porcelain first and confirm every staged entry is an owned path of this task, unstaging any foreign path with git restore --staged. After committing, verify with git show --stat that the commit contains only owned paths and no debug, probe, scratch or generated evidence files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-6d318ae8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,8 +167,50 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:42.088Z",
-  "updatedAt": "2026-08-08T16:13:12.784Z",
+  "updatedAt": "2026-08-08T18:27:56.363Z",
   "contextFetchedBy": [
-    "architect-c4babdf9"
-  ]
+    "architect-c4babdf9",
+    "architect-e9f16b5b",
+    "architect-0b81de40",
+    "governor-eae4fc53",
+    "worker-6d318ae8"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-08T17:07:16.624Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 4
+  },
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T18:11:43.562Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) REBUILD DRIVER PLACEMENT — decided: a new PRODUCTION module `projections/projection-rebuild.ts` that is NOT exported from `packages/store/src/index.ts`. Rejected a test-only rebuild loop: DoD 3 needs a restart mid-rebuild, so the driver must be reachable from a separate crashing child process, which forces a non-test `.ts` module anyway; putting it in `src/` gets it typechecked, bridged and size-capped. Task rail 3 forbids new *surface* — unexported is not surface, exactly the precedent `outbox-relay/` and `subscriptions/` already set (neither is in index.ts). The driver only sequences existing production functions (`foldProjection`, `canonicalProjectionState`, `store.readEventsAfter`); it reimplements none of them, which is what epic rail 6 requires. (2) CRASH MECHANISM — decided: a real child-process SIGKILL, not fault-injection triggers. Step 3 already proved ROLLBACK via `RAISE(ABORT)`; that proves rollback, not crash. Only process death leaves the WAL to recover. (3) BOUNDARY PRECISION — decided: register a SQLite user-defined function on the STORE'S OWN connection plus a TEMP trigger, so the kill lands between two specific statements inside one open transaction. Rejected an out-of-band timer kill as the only mechanism (non-deterministic, cannot name the boundary), but kept a seeded randomized-delay fuzz pass as a supplement so boundaries no JS hook can reach are still covered.",
+    "codebaseInsights": "VERIFIED ON DISK, do not re-derive:\n- `foldProjection(request: ProjectionFoldInput): ProjectionFoldResult` at `projections/projection-fold.ts:232`; input is `{checkpoint:{globalPosition:bigint}, events: readonly StoredEvent[], reducers: Record<string,ProjectionReducer>, state: ProjectionState, upcaster: StoredEventUpcaster}`. Refusals carry `code`+`layer` and echo the caller's unchanged state/checkpoint.\n- `canonicalProjectionState(value): {digest, state} | null` at `outbox-relay/outbox-relay-digests.ts:181`. It key-sorts, type-tags and length-frames, so digest equality IS the byte-identity proof rail 4 asks for.\n- IMPORT DIRECTION IS SAFE: `outbox-relay-digests.ts:4` imports `projection-fold.js` with `import type` only, so a value import from `projection-rebuild.ts` back into `outbox-relay-digests.js` creates NO runtime cycle. Do not add a duplicate digest to avoid an imagined cycle.\n- `projections` table is `(projection_name TEXT PK, last_applied_position TEXT NOT NULL, state_digest TEXT) STRICT` — `sqlite-schema-manifest.ts:206`. IT DOES NOT STORE THE STATE. `validateSchema` pins the exact schema object SQL, so adding a column is out of scope and would break `validateExactSchemaObjects`.\n- Relay CAS pattern to copy verbatim: `PROJECTION_UPSERT` at `transactional-outbox-relay.ts:57` — `ON CONFLICT DO UPDATE ... WHERE last_applied_position = ? AND state_digest IS ?`, then assert `changes === 1`.\n- `CommitApplyContext` (`event-ledger-transaction.ts:30`) exposes `database: DatabaseSync` — that is how a test gets the store's own connection to install a UDF + TEMP trigger on it.\n- Store opens WAL + `synchronous = FULL` + `foreign_keys = ON` + `trusted_schema = OFF` (`sqlite-event-store.ts:177-205`), so a hard kill is genuinely all-or-nothing.\n- PROBED AND CONFIRMED on Node v24.16.0: `DatabaseSync.prototype.function` exists, and a UDF invoked from a TEMP trigger runs even with `trusted_schema = OFF`. A NON-temp trigger will NOT work — UDFs are per-connection, so a permanent trigger created on a second connection raises `no such function` on the store's connection and merely refuses instead of crashing.\n- Read seam: `store.readEventsAfter(afterGlobalPosition: bigint, limit = 100, maxDecodedBytes?): CursorPage<StoredEvent, bigint>` with `{hasMore, items, nextCursor}`.\n- Existing precedents: worker processes are `*-worker.mjs` (see `sqlite-event-store-race-worker.mjs`); test-only helpers are `*-test-helpers.ts` and correctly have NO `.js` bridge (`sqlite-event-store-test-helpers.ts`, `command-decision-test-helpers.ts`). Every other non-test `.ts` under `src/` DOES need one.",
+    "risks": "1. RESUME CANNOT RECOVER STATE FROM DISK. `projections` stores the digest, not the state, so an interrupted rebuild has nothing to resume its in-memory accumulator from. Design answer (do not invent another): a restarted rebuild ALWAYS re-folds from global position 0, and when it reaches the durable checkpoint it must assert the recomputed digest equals the stored `state_digest`, refusing `PROJECTION_REBUILD_STATE_CONFLICT` if not. That makes restart-mid-rebuild idempotent by construction and needs no schema change.\n2. A rebuild racing a live relay on the same projection row must LOSE, not clobber. Same CAS as the relay; a failed CAS is a refusal, never a retry-and-overwrite.\n3. `mem:gotcha-missing-runtime-bridge-invisible-to-vitest`: `projection-rebuild.ts` needs `projection-rebuild.js` in the SAME commit, and so does any file you split out mid-task that no plan step names. Vitest and tsc both hide this.\n4. `mem:gotcha-mutation-drill-blind-to-broken-syntax`: neutralise operands (`false`), never delete lines, and count failed SUITES as well as failed tests — a syntax error prints zero `x` lines and reads as `survived`.\n5. `mem:gotcha-digest-mutation-that-proves-nothing`: a `same input same digest` assertion passes against a broken hash. Generate at least one history whose state carries `-0`, a nested object, a bigint and a key-order variant so canonicalization is genuinely exercised.\n6. `mem:gotcha-read-path-toctou-across-plain-selects`: statements that feed ONE decision belong in ONE snapshot. The rebuild's checkpoint read and its CAS must be inside the same `BEGIN IMMEDIATE`.\n7. Cross-platform: on Windows a SIGKILL child reports exit code 1 with `signal === null`, on POSIX code `null` / signal `SIGKILL`. Assert only `exitCode !== 0` plus the boundary marker, never the signal name. Write the marker with `writeSync(1, ...)` BEFORE the kill or buffering loses it.\n8. Windows EBUSY on temp-dir cleanup (`mem:gotcha-testkit-temp-fixture-leak-ebusy`): close every connection, then `rmSync(dir, {force:true, maxRetries:10, recursive:true, retryDelay:50})`.\n9. Root `pnpm test` is KNOWN RED (11 pre-existing failures in packages/runner + packages/testkit). That is foreign; do not chase it. Root `pnpm typecheck` is exit 0.\n10. Never use `Math.random` or a wall clock in the generators — a non-reproducible failing case is not a bug report.",
+    "keyFiles": [
+      "packages/store/src/projections/projection-fold.ts",
+      "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+      "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+      "packages/store/src/event-ledger-transaction.ts",
+      "packages/store/src/event-ledger-recovery.ts",
+      "packages/store/src/sqlite-schema-manifest.ts",
+      "packages/store/src/sqlite-schema-integrity.ts",
+      "packages/store/src/sqlite-event-store-recovery.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 18000000
+  },
+  "planApprovedAt": "2026-08-08T18:11:45.606Z",
+  "workStartedAt": "2026-08-08T18:13:34.838Z"
 }

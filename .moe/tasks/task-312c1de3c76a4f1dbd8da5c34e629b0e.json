@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-e9f16b5b",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.373Z",
-  "updatedAt": "2026-08-08T16:21:12.020Z",
+  "updatedAt": "2026-08-08T16:53:40.800Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T16:14:31.225Z"
   },
@@ -46,5 +46,16 @@
   "blockedReason": "Decomposition shell, NOT the store-dependency block you pre-authorized: your cursor assumption HOLDS (EffectIntent binds a predecessor cursor value, design 771; no subscription feed, no crash/rebuild dependency). Blocked because 7 concerns across 2 packages cannot fit one plan (12-step/10-file caps; lease core was 21 files). Human approved a 4-child SPIDR split, all created CRITICAL in dependency order: task-2580a578 (intent lifecycle + one-use activation) -> task-4a3b5ec0 (launch lock/adoption/drain/restart) -> task-ba3a45f9 (daemon work services; includes approved ownership amendment apps/daemon/package.json +@moe/runner + single lock hunk) -> task-49acb856 (race/restart hardening gate, carries this parent's full DoD). Child 1 is immediately plannable — deps task-5ff2b39d and task-967769ea are DONE. Promote task-2580a578 to PLANNING to keep the chokepoint moving; unblock this shell only when all four children are DONE, then close via labeled REVIEW-transit (task-d5c4b086 precedent). Details in comment-c866c1cc.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-08T16:21:12.020Z"
+  "blockedAt": "2026-08-08T16:21:12.020Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Human-approved 4-child SPIDR split created (task-2580a578, task-4a3b5ec0, task-ba3a45f9, task-49acb856, dependency-ordered, all CRITICAL); governor's store-dependency question answered (assumption holds, no subscription-feed dependency); shell blocked with full rationale in comment-c866c1cc and Serena memory task-task-312c1de3c76a4f1dbd8da5c34e629b0e-handoff.",
+      "whatRemains": "Nothing on the shell itself. Children 1-4 carry all work; when all four are DONE, unblock and close the shell via labeled REVIEW-transit (task-d5c4b086 precedent). Do not re-plan the shell.",
+      "pitfalls": "Do not treat this shell's BLOCKED status as a store-dependency block; the governor pre-authorized that reading and it is explicitly NOT the case.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-08T16:53:40.794Z",
+      "releasedBy": "architect-e9f16b5b",
+      "reason": "Explicit handoff: decomposition shell is parked BLOCKED by design; releasing so this architect slot can plan child 1 (task-2580a578). Nobody should claim or re-plan the shell."
+    }
+  ]
 }
