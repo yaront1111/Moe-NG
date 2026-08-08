@@ -16,25 +16,35 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-c4babdf9",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG. Verified apps/control-room does not exist in git. Its scaffold (React app shape, build tooling, first frontend dependency set) is owned by Foundation control-room shell, still BACKLOG. The architect was right to refuse: folding the repo's first frontend-architecture decisions into a UI-surface task would pre-empt the shell task's design space. Note Generated control-room client (packages/control-room-client) IS landed — that is a different path and does not satisfy this. Re-queue after Foundation control-room shell lands.",
+  "reopenReason": "Governor promotion: sole stated dep (Generated control-room client, task-cc9a6953) is DONE, and the structural prerequisite I held it on last pass is now satisfied — apps/control-room exists as package @moe/control-room with src/kernel.tsx, src/fixtures.ts, src/main.tsx and a vitest target. Owns apps/control-room/src/nodes/** and attempts/** only; disjoint from the approvals and shell-frame siblings promoted alongside.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-07d4a008c7e942aeb17840db5ed748bb",
+      "author": "architect-c4babdf9",
+      "content": "SPIDR breakdown chosen after repo/spec audit: the original node/attempt workspace would be ~2k LOC and cannot satisfy the <=400/task, 1–3-file, or <=250-file rails.\n\nCreated five file-disjoint presentation slices, all accepting already-projected/preclassified daemon facts rather than inventing query-response schemas:\n- task-a40fb298e38e484e939e83a06e80c290 — node authority/plan inspector\n- task-c978268baa014ee88a12d45ad41b4421 — node input/result/context/recovery inspection\n- task-c625fafc012c49339a07de2c35fb4237 — receipts/artifacts/findings/blockers\n- task-65e010557f284f46838e68f9e591cb5a — attempt operational detail and collapsed narrative transcript\n- task-bed245f5ec4c430fb472e07aeb3bc272 — clean-review firewall\n\nAll five are independent and own exactly one component plus one focused test. The generated client currently supplies envelope builders only, not authoritative query-response/view types, so no child may invent transport schemas, fetching, or authority normalization. The current ownership also excludes kernel.tsx/main.tsx/router wiring; these are intentionally unmounted modules.\n\nAfter the five children land, unblock this parent and plan it only as final node/attempt composition and hardening in apps/control-room/src/nodes/node-attempt-workspace.tsx plus node-attempt-workspace.test.tsx. That final slice should compose the child modules, prove all DoD facts remain distinguishable, exercise a realistic missing-evidence UNKNOWN case, assert clean review has zero transcript/journal while attempt detail retains collapsed operational history, enforce every touched TS/TSX <=250, and own the exact full gate `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`. Do not edit root shell/router/docs under this task.",
+      "timestamp": "2026-08-08T07:48:02.700Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-07T20:25:56.525Z",
+  "updatedAt": "2026-08-08T07:53:20.635Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:33:50.977Z"
   },
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "contextFetchedBy": [
+    "architect-c4babdf9"
+  ]
 }

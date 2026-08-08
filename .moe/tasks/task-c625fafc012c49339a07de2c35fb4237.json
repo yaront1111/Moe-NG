@@ -1,0 +1,32 @@
+{
+  "id": "task-c625fafc012c49339a07de2c35fb4237",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Node evidence inspection",
+  "description": "Objective: render node receipts, artifacts, findings, and blockers with explicit provenance and fail-closed missing-evidence behavior. Deliverable: apps/control-room/src/nodes/node-evidence.tsx and node-evidence.test.tsx, presentation-only sections using stable cr.inspector.section.{findings|artifacts|blockers}, cr.inspector.receipt.* IDs, full digest/type labels, and provenance affordances. NOT in scope: editing/rerunning evidence, fetching artifact bytes, timeline behavior, clean review, attempt transcript/journal, query-response schema invention, routing/mounting, or edits outside the two files. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room exec vitest run src/nodes/node-evidence.test.tsx.",
+  "definitionOfDone": [
+    "Focused tests distinguish receipt identity/result, artifact identity/type/digest, structured findings, and blocker state/owner under stable test IDs with text/icon/color truth encoding.",
+    "A missing/unreadable receipt, artifact digest, or provenance record renders explicit UNKNOWN and exposes no success wording or active evidence link.",
+    "Receipt/artifact/finding/blocker order is deterministic from the supplied projection and the component does not mutate, edit, rerun, or upgrade evidence.",
+    "node-evidence.tsx and node-evidence.test.tsx are each <=250 physical lines and the exact focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Links and digests are presentation facts, not proof by themselves; never upgrade them beyond the supplied truth class.",
+    "Do not add evidence mutation/rerun actions or import transport/storage internals.",
+    "Own and stage only apps/control-room/src/nodes/node-evidence.tsx and node-evidence.test.tsx."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-975f8d673a0c45238b117f91682fbbec",
+  "priority": "HIGH",
+  "order": 2.93,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T07:47:46.998Z",
+  "updatedAt": "2026-08-08T07:47:46.998Z"
+}

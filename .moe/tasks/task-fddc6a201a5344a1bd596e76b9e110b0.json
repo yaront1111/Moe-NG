@@ -15,13 +15,77 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "DEPENDENCY GATE + baseline. Task B (task-04673fd0, WORKING) commits apps/control-room/src/approvals/approval-j1.tsx among exactly 10 paths — gate: `git log --diff-filter=A -- apps/control-room/src/approvals/approval-j1.tsx` non-empty (file committed) OR Task B DONE; absent -> moe.report_blocked needsFrom task-04673fd0. approval-j1.tsx is NEVER renamed, deleted, or edited — this task extends with NEW sibling files, keeps j1's plan+acceptance slice mounted so Task B's j1-flow test stays green, and its file does NOT count against this task's budget. Baseline reads: apps/control-room/src/kernel.tsx (TruthChip/Fact — never reimplement), src/fixtures.ts (CONTROL_ROOM_FIXTURE_KIND marker + FixtureAffordanceSnapshot — NOTE: it has NO reason channel; the reason channel is approvals-LOCAL, see step 2), packages/core/src/policy/approval-contract.ts:43-62 (ApprovalDecisionRecord field list to mirror STRUCTURALLY — control-room cannot import @moe/core; enums do NOT need mirroring: APPROVAL/APPROVAL_DECISION/APPROVAL_VALIDITY/CUTOVER/TRUTH_CLASS all come from @moe/contracts RUNTIME_LIFECYCLES already in deps). Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` GREEN baseline.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — approval-gating.test.tsx + the fixtures/gating modules it drives. approval-fixtures.ts: DEVELOPMENT_ONLY structural mirror of ApprovalDecisionRecord (exactRevisionHash, riskTier, actor, actorKind HUMAN|SYSTEM_POLICY, decision, decisionReason, lifecycle, validity, approvedNodeScope[], applicablePolicyRef, budgetRef, criteriaRef, planQualityAssessmentRef, policyDecisionRef, stepUpAuthRef, dependencyChanges{additions,challenges,removals}, truthClass) + per-kind decision fixtures (plan, expansion, acceptance, revocation-confirmation, cutover-quiesce, cutover-activate, escalation, reconciliation, soft-policy-waiver as a fixture-typed union member ONLY — no surface) + the design-1007 cutover consequence-payload shape {exactStoredHash, disposition, fundingReservation, planningFenceMembership, deadline, releaseAction, consequencePayload} + the approvals-LOCAL reason-code channel: reasons reuse RATIFIED RuntimeErrorCode spellings whose validSources include APPROVAL/CUTOVER (CAPABILITY_DENIED, STALE_EPOCH, EXPECTED_VERSION_CONFLICT, ILLEGAL_TRANSITION, SUPERSEDED_AUTHORITY, REVISION_REBOUND) + structural mirrors of core CARRY_FORWARD_* for delta display — never invented codes, all marked provisional pending spec §13-D2 (spec 755), carrying the DEVELOPMENT_ONLY marker. approval-gating.ts (PURE): kind+hash affordance matching (decide controls derive ONLY from nextAllowedCommands entries — spec 742 bar 4); STALE-APPROVAL GUARD (DoD 2): an enabled decide control is REFUSED whenever record validity !== CURRENT or exactRevisionHash mismatches the affordance's pinned graphRevisionHash/expectedVersion (design 1007: prepare commits BEFORE the approval action enables — the click never approves an identity created after it); reason-coded-disabled vs ABSENT resolution (spec 588-590: daemon-shaped fixture reason -> disabled 'Unavailable: {phrase} ({CODE})'; NO reason -> control ABSENT, never guessed text). Tests assert exact codes + which guard refused; mutation red-checks named (disable the validity guard -> stale test red; disable the hash match -> mismatch test red). Confirm RED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-fixtures.ts",
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/approvals/approval-fixtures.ts",
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD red then green — approval-inbox.tsx + approval-inbox.test.tsx (spec §4.6 + §2.6/§8.10). Inbox list: pending items with risk tier, age, precondition summary, [Open], per-item IDLE-CONSEQUENCE line using the §8.10 EXACT strings; ESCALATION and RECONCILIATION render as inbox ITEMS (spec 121/123: cr.approvals.item.escalation; CR-J4-002: third rejection yields the escalation item, not a fourth loop) with idle lines ('node stays parked in PLANNING' / 'the record stays quarantined and unschedulable') and choices rendered ONLY as returned affordance commands (escalation command kinds are ⟨TD⟩ — spec 537 — so fixture affordances supply them; NO full detail surfaces for these kinds); the collapsed cr.approvals.auto group: 'Decided by policy (n) — auto-approved under rev {q} (project opted in)' with per-record 'decided by policy {rev}, rule {rule}' + POL chip (cr.chip.policy-approved via the kernel) + provenance link — and EMPTY/ABSENT under the default-off fixture (manual-default representation, DoD 3: the two spec devices — the auto group + policy-surface mode line — NOT an invented per-kind badge; auto records carry actorKind SYSTEM_POLICY + truthClass DAEMON_VERIFIED never HUMAN_APPROVED, tier R0/R1 only, design 701/710); Approvals empty state 'Nothing needs you.' + degraded 'may be stale' flag (spec 702); badge as polite live region + 'a' shortcut reachability (spec 687/691).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-inbox.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-inbox.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red then green — the per-kind detail surfaces (each <=250) + approval-details.test.tsx. approval-detail-plan.tsx (§4.7): objective, write scope, oracle + recipe-valid check, numbered steps (scrollable; scope/oracle header pinned), abbreviated revision hash, risk tier, idle line, [Approve plan]/[Reject plan…] via cr.action.approval-decide.*; PLUS the §8.4 DELTA-REAPPROVAL variant as a MODE of this surface: invalidation banner ('Your approval of {old} was invalidated by {new} — reviewing only the delta'), both revision hashes named, unchanged nodes collapsed by default under cr.approvals.delta.unchanged (CR-J4-001), INVALIDATED records struck-through + cr.banner.invalidated; §8.11 reject modal with the reopen-bound counter on decline. approval-detail-expansion.tsx (§4.8): subgraph preview, daemon-checked precondition rows cr.approvals.precondition.{scopes|oracles|budget|width} with REAL path sets, budget reservation figure, width/depth vs caps, 'Invalidates:' line, supersedes-hash header — approve control routed via cr.action.graph-approve (NOT approval-decide; spec 307-325, the §13-D1 kind-routing note documented as provisional). approval-detail-acceptance.tsx (§4.9): diff base->head SHAs + file count + in-scope claim, receipt (recipe, exit, time, digest), reviewer identity + distinct-principal check + findings count, [Accept work]/[Decline acceptance…] BOTH via approval.decide; decline carries the §8.11 modal. approval-detail-confirmation.tsx: revocation confirmation + CUTOVER_QUIESCE + CUTOVER_ACTIVATE as three kinds sharing the §9 destructive-modal pattern + step-up display (stepUpAuthRef) + the design-1007 consequence-payload frame — CUTOVER IS DESIGN-DERIVED PROVISIONAL UI (spec has ZERO cutover text: no testids claimed, module header documents the ⟨TD⟩ status; fields from design 1007 verbatim: exact stored hash, disposition, funding reservation, planning-fence membership/deadline, release action, consequence payload); split cutover into its own file via amendment if 250 breaks (then merge two test files to hold the 10-file budget). approval-details.test.tsx: per-kind field-list assertions (every DoD-1 fact: subject hash, scope, risk, budget, policy, delta, consequences — each rendered through kernel Fact/TruthChip with cr.chip.* descendants), narrow-window rule (spec 431: preconditions above previews, decision buttons pinned), keyboard reachability, R3/cutover step-up display, SYSTEM_POLICY records never render human-approved truth.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-detail-plan.tsx",
+        "apps/control-room/src/approvals/approval-detail-expansion.tsx",
+        "apps/control-room/src/approvals/approval-detail-acceptance.tsx",
+        "apps/control-room/src/approvals/approval-detail-confirmation.tsx",
+        "apps/control-room/src/approvals/approval-details.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/approvals/approval-detail-plan.tsx",
+        "apps/control-room/src/approvals/approval-detail-expansion.tsx",
+        "apps/control-room/src/approvals/approval-detail-acceptance.tsx",
+        "apps/control-room/src/approvals/approval-detail-confirmation.tsx",
+        "apps/control-room/src/approvals/approval-details.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate + adversarial self-review + commit. (1) `wc -l apps/control-room/src/approvals/*.ts apps/control-room/src/approvals/*.tsx` — every file <=250 (per-file rail); approval-j1.tsx UNTOUCHED (`git diff --stat -- apps/control-room/src/approvals/approval-j1.tsx` empty). (2) Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> exit 0 (Task B's j1-flow + gating tests must stay green alongside) — complete_task evidence verbatim. (3) Root gate `pnpm typecheck && pnpm test` (scheduler boundary scans the new .tsx contents — no scheduler path literals in fixture strings) with by-path attribution. (4) MUTATION RED-CHECKS: validity guard off -> stale-submit test red; hash-match off -> mismatch red; reason-channel bypass (disabled without a fixture reason) -> absent-control test red; auto-group rendered under default-off fixture -> manual-default test red. (5) Red-team: forge an affordance for a kind the record's validity forbids -> refused with the exact guard code; attempt a decide control not derived from nextAllowedCommands -> impossible by construction (grep for any hardcoded action rendering); SYSTEM_POLICY + HUMAN_APPROVED truth combination -> fixture validation refuses; cutover module claims no spec testids (grep its testids against the spec's list — provisional-marked only). (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- apps/control-room/src/approvals/approval-fixtures.ts apps/control-room/src/approvals/approval-gating.ts apps/control-room/src/approvals/approval-gating.test.tsx apps/control-room/src/approvals/approval-inbox.tsx apps/control-room/src/approvals/approval-inbox.test.tsx apps/control-room/src/approvals/approval-detail-plan.tsx apps/control-room/src/approvals/approval-detail-expansion.tsx apps/control-room/src/approvals/approval-detail-acceptance.tsx apps/control-room/src/approvals/approval-detail-confirmation.tsx apps/control-room/src/approvals/approval-details.test.tsx`; `git show --stat` lists exactly these 10 paths (plus amendment-recorded splits).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-detail-confirmation.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: both stated deps DONE (Generated control-room client task-cc9a6953, Policy approval core task-556d87c3), and the apps/control-room scaffold it builds into is now on disk with the truth-presentation kernel adapter present. Owns apps/control-room/src/approvals/** only — disjoint from the nodes/attempts and shell-frame siblings.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +93,36 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.321Z",
-  "updatedAt": "2026-08-07T11:55:20.321Z"
+  "updatedAt": "2026-08-08T07:52:26.072Z",
+  "contextFetchedBy": [
+    "architect-d89636d1"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T07:52:24.028Z",
+  "metrics": {
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 10
+  },
+  "planningNotes": {
+    "approachesConsidered": "Verified by a targeted spec agent before planning; key rulings folded: (1) CUTOVER surfaces have ZERO spec basis (grep = 0 hits) — rendered as design-derived PROVISIONAL UI from design 1007's exact field list under the §9 destructive-modal + step-up pattern, never claiming spec testids; (2) the DoD's 'reason-coded disabled states' vs spec 588-590's no-guessed-text rule resolves via an approvals-LOCAL DEVELOPMENT_ONLY reason channel (the landed shared fixtures.ts has NO reason channel — Task B's notes misdescribe it) reusing RATIFIED RuntimeErrorCode spellings with APPROVAL/CUTOVER sources + mirrored CARRY_FORWARD_* codes, provisional pending §13-D2; (3) escalation + reconciliation are INBOX ITEMS with §8.10 idle lines and affordance-only choices (spec 121/123/537/CR-J4-002) — full detail surfaces would be unspecified UI; soft-policy waiver stays a fixture union member only; (4) delta-reapproval is a MODE of the plan detail (§8.4 banner + cr.approvals.delta.unchanged), not a separate surface; (5) expansion approval routes via cr.action.graph-approve, not approval-decide (§4.8; §13-D1 routing note documented provisional); (6) manual-default/audited-automation = the two spec devices exactly (collapsed cr.approvals.auto group + POL chip records, EMPTY under the default-off fixture) — an invented per-kind badge would be unspecified; (7) sibling coordination: extend BESIDE approval-j1.tsx (never touch it), gate on its commit, keep j1-flow green.",
+    "codebaseInsights": "ApprovalDecisionRecord lives in packages/core/src/policy/approval-contract.ts:43-62 (NOT policy-contract.ts) — mirrored structurally (control-room deps exclude @moe/core); enums come from @moe/contracts RUNTIME_LIFECYCLES already in deps (approval/decision/validity/cutover/truth). Stale-approval mechanics assembled: validity leaves CURRENT (INVALIDATED via impact-set, SUPERSEDED via successor) or exactRevisionHash mismatches the affordance's pinned graphRevisionHash/expectedVersion; spec renders INVALIDATED struck-through + cr.banner.invalidated; 'no stale approval can submit' = decide controls derive only from nextAllowedCommands (bar 4) + the gating guard refusing non-CURRENT/hash-mismatched records (design 1007 prepare-before-enable). Per-kind field lists + testids pinned from spec §4.6-4.9, §8.4/8.10/8.11, 431 narrow rule, 687/691 a11y, 702 empty/degraded. Landed kernel TruthChip/Fact reused for every DoD-1 fact (cr.chip.* descendants). Fixture tripwires: no scheduler path literals in strings (root boundary scan covers .tsx).",
+    "risks": "(1) Stale-submit is the DoD-2 make-or-break — validity + hash guards with mutation red-checks. (2) Guessed disabled-text is the spec's explicit prohibition — reason channel only, absent otherwise, red-checked. (3) Cutover provisional status must be unmistakable in the module header or QA reads it as spec-noncompliant invention. (4) Task B in flight in the same directory — gate on approval-j1.tsx committed; never edit it; j1-flow test green alongside. (5) Kind-routing (§13-D1 unratified): expansion via graph-approve documented provisional. (6) 250-pressure on approval-detail-confirmation (three kinds + 1007 fields) — amendment split point named with the test-merge fallback holding the 10-file budget. (7) Root-gate tripwires on .tsx fixture strings.",
+    "keyFiles": [
+      "packages/core/src/policy/approval-contract.ts",
+      "packages/contracts/src/runtime/runtime-affordance.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "apps/control-room/src/kernel.tsx",
+      "apps/control-room/src/fixtures.ts",
+      "apps/control-room/src/approvals/approval-j1.tsx",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-08T07:52:26.072Z"
 }

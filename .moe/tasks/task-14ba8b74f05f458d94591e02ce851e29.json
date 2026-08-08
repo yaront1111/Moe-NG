@@ -111,18 +111,25 @@
     {
       "stepId": "step-7",
       "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an attacker: can any input produce a partially-built event? Does a Buffer-backed payload or metadata actually detach (re-check the copy primitive is `new Uint8Array(...)`)? Does a zero-length payload still round-trip, and does a zero-hop event still get copied rather than aliased? Is domainSchemaVersion rewritten to currentVersion on every ok path? Can a handler mutating its input patch reach the caller's event? Does any failure path leak a thrown handler error or an unhandled rejection? Does the production file still have exactly one type-only import, and are the four purity tokens absent from its comments as well as its code? Confirm packages/store/src/index.ts is untouched and no new package subpath was exported. Then stage and commit by explicit pathspec only, per epic rail 3: `git add -- packages/store/src/projections/projection-upcast.ts packages/store/src/projections/projection-upcast.js packages/store/src/projections/projection-upcast.test.ts`, then run `git status --porcelain` and confirm every staged entry is one of those three paths, unstaging any foreign path with `git restore --staged -- <path>`; commit with `git commit -- <the three paths>` (never a bare `git commit`, never -a, never add -A), and verify with `git show --stat` that the commit contains exactly those three files. Leave no debug, probe or scratch file behind.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/store/src/projections/projection-upcast.ts",
         "packages/store/src/projections/projection-upcast.js",
         "packages/store/src/projections/projection-upcast.test.ts"
       ],
-      "startedAt": "2026-08-07T22:29:20.906Z"
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-upcast.ts",
+        "packages/store/src/projections/projection-upcast.js",
+        "packages/store/src/projections/projection-upcast.test.ts"
+      ],
+      "note": "Adversarial review found TWO REAL DEFECTS. Both fixed, both mutation-verified, both regression-tested. Committed as 40eda60.\n\nDEFECT 1 — a hostile getter threw straight out of upcast(), breaking the module's central contract. `checkOutput(produced)` ran OUTSIDE the try/catch guarding the handler call, so a handler returning `{ get metadata() { throw ... }, payload }` propagated the exception out of upcast() instead of returning frozen evidence. That is not cosmetic: the entire reason this API returns a result union (per the plan's own API-shape rationale) is so the parent fold task-82989467 can quarantine an offending event WITHOUT a try/catch per event in its hot loop. The hole would have made that promise false for exactly the adversarial input the fold most needs protection from. Fix: `checked = checkOutput(hop.handler({ metadata, payload }))` inside the existing try, so throw-on-call and throw-on-read close together. Costs -1 line.\n\nDEFECT 2 — `Object.keys` silently accepted a symbol-keyed extra property. DoD 4 requires handler output whose own keys are not exactly {payload, metadata} to fail closed. `Object.keys` omits symbols (verified: 1 vs Reflect.ownKeys 2), so `{ [Symbol(\"x\")]: 1, metadata, payload }` was ACCEPTED and the symbol dropped. This is the trap mem:gotcha-pure-reducer-deep-freeze-aliasing warns about, and I had walked past it. Fix: `Reflect.ownKeys`. Costs 0 lines.\n\nMUTATION-VERIFIED, not assumed. Reverted each fix independently and confirmed the new test goes red, then restored:\n- `Reflect.ownKeys` -> `Object.keys`: \"× refuses handler output that is an extra symbol key\", 1 failed / 18 passed.\n- inspection moved back outside the try: \"× contains a throwing handler and never awaits a thenable result\" with `Error: getter` printed in the failure output — the exception visibly escaping is the proof the bug was real.\nA regression test for a hole you just closed is worth nothing until you have seen it fail.\n\nREJECTED FIX WORTH RECORDING: the textbook remedy for hostile getters is to read `Object.getOwnPropertyDescriptor` instead of invoking property access. I checked it at runtime before adopting it and it is WRONG here — `Object.getOwnPropertyDescriptor(Promise.resolve(), \"then\")` is `undefined`, because a real promise's `then` lives on Promise.prototype. A descriptor-based probe would have stopped detecting genuine async handlers, silently converting DoD item 4's thenable requirement into a no-op while looking more defensive. The try/catch is the correct boundary, not descriptor reads.\n\nOTHER RED-TEAM QUESTIONS, all checked at runtime rather than reasoned about (`node -e`, output in the step-7 transcript):\n- Buffer detachment: `new Uint8Array(buf)` copies (`copy.buffer !== buf.buffer`, mutation does not write through) while `buf.slice(0,3)` DOES alias and write through — confirms the ban on `.slice()` empirically. `.slice(` appears nowhere in the file (grep count 0).\n- Zero-length payload round-trips; now asserted in the zero-hop test.\n- `Object.freeze(new Uint8Array(2))` throws \"Cannot freeze array buffer views with elements\" — confirms bytes must never be frozen, and empty arrays freeze fine, which is exactly how this bug hides behind 0-byte fixtures.\n- Handler reference escape: traced each hop — the arrays the last handler saw are never the arrays that ship, because every hop copies the returned arrays into fresh ones. Stronger than the tests assert.\n- Partial event: `upcast` is constructed only after the loop completes; every failure path returns before it exists. `Object.hasOwn(outcome,\"event\") === false` is asserted on all 14 failure cases via the expectFailure funnel.\n- Concurrency: compiled maps are read-only after compile, all dispatch state is per-call locals, no await — two concurrent upcasts cannot interfere.\n- Prototype/non-enumerable keys: `Object.create({metadata,payload})` and non-enumerable own props both yield ownKeys.length 0 -> OUTPUT_INVALID. Fail-closed.\n\nTHEORETICAL ONLY, not fixed, flagged for QA: compile-time reachability is O(V^2) for V versions since it walks from every registered start. Definitions are programmer wire-up rather than attacker input and real chains are a handful of versions, so this is not a DoS surface; memoizing visited starts would cost lines against a cap that is already exactly met.\n\nREADABILITY REGRESSION SELF-CAUGHT: step 5 had renamed the public parameter `definitions` -> `defs` purely to win a line. That is an invented abbreviation on an exported signature — restored to `definitions` and the two lines were paid for elsewhere.\n\nCOMMIT — epic rail 3 followed exactly. `git add --` with the three explicit paths; `git diff --cached --name-only` showed exactly those three and nothing else; committed with `git commit -F <msg outside the repo> -- <three paths>` (never bare, never -a, never add -A; message via -F per mem:gotcha-bash-git-commit-message, since `-m @-` silently commits the literal \"@-\"). `git show --stat` confirms 3 files / +386. Forei",
+      "startedAt": "2026-08-07T22:29:20.906Z",
+      "completedAt": "2026-08-07T22:34:56.693Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29a7f3a3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -134,17 +141,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:59:35.526Z",
-  "updatedAt": "2026-08-07T22:29:20.906Z",
+  "updatedAt": "2026-08-07T22:37:42.231Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T22:07:34.162Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "doneAt": "2026-08-07T22:37:42.231Z",
+    "wallClockMs": 1808069
   },
   "contextFetchedBy": [
     "architect-bf90be5d",
     "governor-95f824a1",
-    "worker-29a7f3a3"
+    "worker-29a7f3a3",
+    "qa-813cd351"
   ],
   "stepsCompleted": [
     "step-1",
@@ -152,7 +162,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-07T22:13:51.152Z",
@@ -171,5 +182,21 @@
     "wallClockMs": 5400000
   },
   "planApprovedAt": "2026-08-07T22:13:53.177Z",
-  "workStartedAt": "2026-08-07T22:14:13.898Z"
+  "workStartedAt": "2026-08-07T22:14:13.898Z",
+  "reviewStartedAt": "2026-08-07T22:35:53.587Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store exec vitest run --root ../.. packages/store/src/projections/projection-upcast.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  1 passed (1)\n      Tests  19 passed (19)\n   Start at  01:35:05\n   Duration  142ms (transform 28ms, setup 0ms, import 38ms, tests 4ms, environment 0ms)",
+    "reportedAt": "2026-08-07T22:35:53.587Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-contracts.ts",
+    "packages/store/src/projections/projection-upcast.test.ts",
+    "packages/store/src/projections/projection-upcast.ts",
+    "packages/store/src/projections/projection-upcast.js"
+  ],
+  "completedAt": "2026-08-07T22:37:42.231Z",
+  "reviewCompletedAt": "2026-08-07T22:37:42.231Z",
+  "reviewSummary": "APPROVE. All five DoD items met. Gate re-run: typecheck 0, focused 1 file / 19 tests exit 0, full store 165 tests exit 0.\n\nFOUR MUTATIONS, each reverted, tree clean, green after:\n- MUT-A, the dangerous fail-open: made an unregistered starting version fall through as if current instead of refusing -> 2 tests red. DoD 3 holds; an unroutable event cannot be passed through or dropped.\n- MUT-B: removed the cycle/dead-end reachability check -> 2 red.\n- MUT-C: aliased the caller's payload instead of copying it -> 1 red. The defensive copy in DoD 2 is pinned, not assumed.\n- MUT-D: let the current version enter the handler loop -> 14 red. DoD 1's no-handler-on-current holds.\n\nRAIL 6 COMPLIANCE, checked because it is now an epic rail: every failure test asserts the specific stable code through an expectFailure(outcome, CODE) helper, not merely that the call failed. The two SCHEMA_VERSION_UNSUPPORTED cases assert the whole evidence object — code, currentVersion including the null-definition case, eventId — and the definition-time failures are a table of five distinct codes (DUPLICATE_EVENT_TYPE, DUPLICATE_DISPATCH_KEY, SELF_LOOP, ROUTE_CYCLE, ROUTE_DEAD_END), so no two collapse into one. First task I have reviewed that satisfies rail 6 unprompted.\n\nSIZES exactly at the DoD caps: projection-upcast.ts 165, test 220, bridge one line `export * from \"./projection-upcast.ts\";`.\n\nRAILS: packages/store/src/index.ts untouched with zero references, so no package subpath was exported. SCHEMA_VERSION_UNSUPPORTED used only for an unregistered route; UPCAST_* codes are module-local and frozen in tests. Purity grep over the production file: no node:fs, sqlite, transaction, prepare(, Date, Math.random, process.\n\nMETADATA NIT, no action, not a rail breach: task.filesModified lists store-contracts.ts, which this task did not touch — git log attributes its last change to foreign commit a81aedd and the tree is clean. Only the three owned paths changed; the record is stale."
 }

@@ -1,0 +1,32 @@
+{
+  "id": "task-65e010557f284f46838e68f9e591cb5a",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Attempt operational detail",
+  "description": "Objective: present immutable attempt operational history while keeping narrative transcript explicitly separate from evidence. Deliverable: apps/control-room/src/attempts/attempt-detail.tsx and attempt-detail.test.tsx, showing attempt identity/outcome, current binding/lease epoch as supplied, receipts, bounded journal entries, recovery state, and a transcript available only inside a collapsed-by-default native disclosure labeled “💬 AGENT_REPORTED — narrative, not evidence”. NOT in scope: clean review/acceptance surfaces, transcript promotion to evidence, journal mutation, fetching, routing/mounting, lifecycle/recovery inference, or edits outside the two files. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room exec vitest run src/attempts/attempt-detail.test.tsx.",
+  "definitionOfDone": [
+    "Focused tests prove attempt outcome, authority/binding and lease epoch, receipts, journal entries, recovery state, and transcript are separately labeled operational facts.",
+    "The transcript is present only in attempt detail, collapsed by default, keyboard operable, carries the exact AGENT_REPORTED narrative-not-evidence label, and cannot satisfy any verification assertion.",
+    "Missing receipt/recovery/provenance facts render UNKNOWN; immutable historical attempt identity is never rewritten or presented as a current successor.",
+    "attempt-detail.tsx and attempt-detail.test.tsx are each <=250 physical lines and the exact focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Transcript and journal are operational history, not evidence; do not expose transcript props to clean-review modules.",
+    "Use native semantic disclosure/controls and stable cr.inspector.* test IDs; no color-only state.",
+    "Own and stage only apps/control-room/src/attempts/attempt-detail.tsx and attempt-detail.test.tsx."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-975f8d673a0c45238b117f91682fbbec",
+  "priority": "HIGH",
+  "order": 2.94,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T07:47:47.337Z",
+  "updatedAt": "2026-08-08T07:47:47.337Z"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "task-bed245f5ec4c430fb472e07aeb3bc272",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Clean review firewall",
+  "description": "Objective: implement the clean independent-review surface as a trust boundary that cannot receive or render worker transcript, self-assessment, handoff persuasion, or dead-end journal. Deliverable: apps/control-room/src/attempts/review-surface.tsx and review-surface.test.tsx, containing exactly cr.review.diff, criteria, receipts, findings, and graph/plan context inside cr.review.surface, with exact base/head provenance and honest missing-proof handling. NOT in scope: attempt detail, transcript/journal props, review command submission, evidence rerun, fetching, routing/mounting, authoritative response schemas, or edits outside the two files. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room exec vitest run src/attempts/review-surface.test.tsx.",
+  "definitionOfDone": [
+    "Focused DOM tests assert cr.review.surface contains the five required descendants and contains zero cr.inspector.transcript.*, journal, self-assessment, or handoff-persuasion elements.",
+    "Diff rendering requires separately supplied exact base and head SHAs; missing either produces UNKNOWN and no diff-success presentation, while out-of-scope changed paths are visibly flagged.",
+    "Criteria, receipts, findings, graph/plan hashes, reviewer identity/eligibility, and calibration are rendered as supplied truth; absent eligibility/calibration/evidence stays UNKNOWN with provenance.",
+    "review-surface.tsx exposes no transcript/journal/self-assessment prop, both files are <=250 physical lines, and the exact focused verification command exits 0."
+  ],
+  "taskRails": [
+    "The clean-review exclusion boundary is non-waivable: never add transcript, journal, self-assessment, or persuasive handoff data to its props or DOM.",
+    "Do not infer reviewer eligibility, acceptance, or evidence strength; render only supplied daemon truth and exact design outcome vocabulary.",
+    "Own and stage only apps/control-room/src/attempts/review-surface.tsx and review-surface.test.tsx."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-975f8d673a0c45238b117f91682fbbec",
+  "priority": "HIGH",
+  "order": 2.95,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T07:47:47.677Z",
+  "updatedAt": "2026-08-08T07:47:47.677Z"
+}

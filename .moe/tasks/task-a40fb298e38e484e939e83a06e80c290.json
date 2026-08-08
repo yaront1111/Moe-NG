@@ -1,0 +1,32 @@
+{
+  "id": "task-a40fb298e38e484e939e83a06e80c290",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Node authority inspector",
+  "description": "Objective: render the node identity, lifecycle, authority, lease, and approved-plan facts named by the pinned control-room contract without deriving any of them in the client. Deliverable: apps/control-room/src/nodes/node-authority.tsx and node-authority.test.tsx, a presentation-only React inspector over explicit daemon-projected/preclassified props. It must show objective, criteria, write scope, phase, daemon-supplied legal commands, current authority hash, lease principal/epoch/expiry, separate activity and renewal silence, plan/approval hashes, and reopen count with stable cr.inspector test IDs. NOT in scope: query-response schemas, fetching, routing/mounting, command construction, lifecycle inference, attempt/context/evidence rendering, or editing kernel.tsx/main.tsx. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room exec vitest run src/nodes/node-authority.test.tsx.",
+  "definitionOfDone": [
+    "The focused tests prove identity, phase, current authority hash, lease principal/epoch/expiry, both silence datums, plan/approval binding, and reopen count render under the specified cr.inspector section IDs.",
+    "Legal commands and every validity/currentness label come only from explicit input props; the component contains no lifecycle transition table or inferred authority state.",
+    "Absent or malformed truth metadata renders an explicit UNKNOWN presentation with a keyboard-reachable provenance affordance and never a success/valid label.",
+    "node-authority.tsx and node-authority.test.tsx are each <=250 physical lines and the exact focused verification command exits 0."
+  ],
+  "taskRails": [
+    "This is a presentation component contract, not a daemon query-response or domain-record schema; do not invent transport fields or fetch logic.",
+    "Use the pinned design vocabulary when it conflicts with the older UI draft, and render actions only from supplied nextAllowedCommands.",
+    "Own and stage only apps/control-room/src/nodes/node-authority.tsx and node-authority.test.tsx."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-975f8d673a0c45238b117f91682fbbec",
+  "priority": "HIGH",
+  "order": 2.91,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T07:47:46.339Z",
+  "updatedAt": "2026-08-08T07:47:46.339Z"
+}

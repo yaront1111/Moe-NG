@@ -15,9 +15,74 @@
     "No floating point, guessed cost, quote commitment, discount/credit/tax inference, or uncorrelated billing claim.",
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline (read-only): landed budget-contract surface verified — BUDGET_MEASUREMENT_SOURCES = PROVIDER_REPORTED_COMPLETE | PROVIDER_REPORTED_PARTIAL | DERIVED_LIST_PRICE | SUBSCRIPTION_QUOTA | ACTUAL_BILLED | UNKNOWN (the six pinned sources), BUDGET_MEASUREMENT_COVERAGES = COMPLETE|PARTIAL|UNKNOWN, validateUsageMeasurement + UsageMeasurementRecord {meter, quantity|null, coverage, source, providerRunRef, sourceParserVersion, sequence, rawReceiptDigest, observedInterval} + BudgetIssue/BudgetValidationResult + BUDGET_TRUTH_CLASSES all exported from './budget-contract.js' (in-package import — legal). Committed PolicyFactInput shape to mirror STRUCTURALLY (task rail: no @moe/core import): { factId: string; tier: 'R0'|'R1'|'R2'|'R3' | null; truthClass: <5-string truth> } (packages/core/src/policy/policy-contract.ts:68-72). Fresh `pnpm --filter @moe/scheduler typecheck` + the sibling budget-contract focused test GREEN. NOTE the new epic rails now in force: per-file cap only (no per-task LOC bar — dispute resolved) and ASSERT-THE-REASON-CODE (every refusal test asserts the specific BUDGET_* / measurement issue code and which layer refused; mutation-check failure paths).",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline read-only verification done. budget-contract.ts (250 lines) exports the six pinned BUDGET_MEASUREMENT_SOURCES, BUDGET_MEASUREMENT_COVERAGES, BUDGET_TRUTH_CLASSES, BUDGET_ISSUE_CODES, UsageMeasurementRecord (all nine DoD fields), ObservedIntervalRefs, BudgetIssue/BudgetValidationResult, validateUsageMeasurement. PolicyFactInput confirmed at packages/core/src/policy/policy-contract.ts:68-72 = {factId, tier: PolicyRiskTier|null, truthClass: RuntimeTruthClass} — mirrored structurally, not imported. runtime-shape.ts exports isPlainRecord/isPlainArray/readOwnDataProperty/hasOnlyOwnStringKeys/readPlainArrayLength/hasExactDenseArrayShape/readOwnArrayElement. Bridge convention confirmed: `export * from \"./budget-contract.ts\";` one line. budget-measurement.* does not yet exist. Fresh `pnpm --filter @moe/scheduler typecheck` exit 0; `vitest run ... budget-contract.test.ts` exit 0, 19/19.\n\nDesign correction found during exploration (plan step-3 said measurement-layer codes should be BUDGET_MEASUREMENT_* \"distinct from the contract layer's BUDGET_* codes\"): the contract layer ALREADY owns BUDGET_MEASUREMENT_MALFORMED / _FIELD_INVALID / _COVERAGE_QUANTITY_MISMATCH, so that prefix collides and would make the two-layer assertion untestable. Using BUDGET_OBSERVATION_* instead (provably disjoint from BUDGET_ISSUE_CODES, asserted by a test) plus an explicit `layer: \"CONTRACT\"|\"MEASUREMENT\"` tag on each issue, so which-layer-refused is a first-class assertion rather than a prefix inference.",
+      "startedAt": "2026-08-08T07:39:28.251Z",
+      "completedAt": "2026-08-08T07:42:58.435Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — packages/scheduler/src/budget/budget-measurement.test.ts (<=250 physical HARD). Cases, EVERY refusal asserting its exact issue code + refusing layer (contract-validation layer vs measurement-truth layer — the two-layer rule): (1) ACCEPTANCE: a valid measurement normalizes to a deeply frozen DETACHED record retaining all nine DoD fields; repeat over equal bytes deep-equal; (2) UNKNOWN DISCIPLINE: coverage UNKNOWN requires quantity null (nonnull -> refuse, exact code) and PROJECTS a required budget fact { factId: deterministic from meter+providerRunRef+sequence, tier: null, truthClass: 'UNKNOWN' } — never zero, never COMPLETE, never an actual-cost claim (attempt each laundering path, assert refusal code); (3) PARTIAL: retains the exact integer lower bound, stays unresolved (no completion claim; projecting fact truthClass reflects the source's honesty class); (4) SOURCE RULES: only the six pinned sources (unknown string -> contract-layer refusal code); source/coverage CONSISTENCY matrix — PROVIDER_REPORTED_COMPLETE requires coverage COMPLETE, PROVIDER_REPORTED_PARTIAL requires PARTIAL, source UNKNOWN requires coverage UNKNOWN (each mismatch -> measurement-layer code); (5) DERIVED_LIST_PRICE: requires an immutable pricebook binding {pricebookRevisionRef (non-empty bounded), unitPriceMicros (safe nonneg integer), pricedAtRef} — absent/malformed -> refuse; a DERIVED_LIST_PRICE measurement can NEVER claim ACTUAL_BILLED semantics (assert the projected fact and record carry the derived marker; attempting source ACTUAL_BILLED with a pricebook binding -> refuse — uncorrelated billing claim); integer micros only (fractional -> refuse; no-floating-point rail); (6) MONOTONIC IDENTITY: per (providerRunRef) stream — duplicate same-identity (meter+providerRunRef+sequence) SAME-bytes observation is a deterministic NO-OP (returns the prior record, deep-equal, no issue); same identity DIFFERENT bytes -> fail closed (exact code — the CORE-I9 analogue); sequence GAP detection -> typed gap issue or UNKNOWN-family outcome (never silent); counter REGRESSION (sequence lower than seen) -> fail closed; truncation/unknown schema version markers -> remain UNKNOWN (never invented completion); (7) hostile inputs via '../runtime-shape.js' helpers (proxy/accessor/extra-key/prototype) -> contract-layer refusals. NON-VACUITY per the new rail: a mutation checklist comment names which production check each refusal test pins; sweep-style case sets assert their own case counts. Confirm RED via the task's focused command.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-measurement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.test.ts"
+      ],
+      "note": "RED confirmed. budget-measurement.test.ts written at 250 physical lines (at the hard cap), 16 tests across 6 describes. Focused command exits 1 with \"Failed to load url ./budget-measurement.js\" — fails because the module is missing, not a typo.\n\nSurface the tests pin: normalizeUsageMeasurement(observationEnvelope, prior?) where the envelope is exactly {measurement, pricebookBinding, truncated}; projectBudgetFact(record); MEASUREMENT_ISSUE_CODES (10, frozen); SUPPORTED_SOURCE_PARSER_VERSIONS ([1,2]); every issue carries an explicit layer: \"CONTRACT\" | \"MEASUREMENT\" tag so which-layer-refused is asserted directly, plus a test proving MEASUREMENT_ISSUE_CODES is disjoint from BUDGET_ISSUE_CODES.\n\nCoverage: (1) contract layer first, no measurement noise on contract failure; hostile measurement (proxy/extra-key/unknown source) -> CONTRACT codes, hostile envelope (proxy/extra-key/undefined/prototype-inherited/accessor) -> MEASUREMENT:BUDGET_OBSERVATION_MALFORMED. (2) all nine DoD fields retained, deeply frozen, detached from the caller (mutating the caller's interval and envelope after the call changes nothing), repeat deep-equal. (3) UNKNOWN: quantity null, fact {tier:null, truthClass:\"UNKNOWN\"}; laundering refused — quantity 0/1200 -> CONTRACT:BUDGET_MEASUREMENT_COVERAGE_QUANTITY_MISMATCH, source upgrade to PROVIDER_REPORTED_COMPLETE/ACTUAL_BILLED/DERIVED_LIST_PRICE and coverage upgrade to COMPLETE -> MEASUREMENT:_SOURCE_COVERAGE_MISMATCH. (4) PARTIAL keeps its exact lower bound (0 and 5 both). (5) 6x3 source/coverage sweep with a non-vacuity assertion on its own case counts: expect([accepts, refusals]).toStrictEqual([9, 9]). (6) DERIVED_LIST_PRICE requires an immutable binding {pricebookRevisionRef, unitPriceMicros, pricedAtRef} — 8 malformed variants incl. fractional and negative micros -> _PRICEBOOK_BINDING_INVALID; ACTUAL_BILLED/PROVIDER_REPORTED_COMPLETE/SUBSCRIPTION_QUOTA carrying a binding -> _UNCORRELATED_BILLING_CLAIM; derived fact truthClass UNKNOWN and factId carries the DERIVED_LIST_PRICE marker. (7) monotonic identity vs a caller-supplied prior: same-bytes duplicate returns the prior object by reference (toBe), different bytes (digest, quantity, or truncated flag) -> _IDENTITY_CONFLICT, sequence 10 after 7 -> _SEQUENCE_GAP, sequence 6/0 or a different meter at the same sequence -> _SEQUENCE_REGRESSION, foreign providerRunRef prior -> _STREAM_MISMATCH. (8) truncated + COMPLETE -> _TRUNCATED_COMPLETION_CLAIM (PARTIAL/UNKNOWN pass); sourceParserVersion 9 with COMPLETE/PARTIAL -> _PARSER_VERSION_UNSUPPORTED, with UNKNOWN coverage it stays accepted as UNKNOWN. Mutation checklist naming each pinned production check is in the file header.",
+      "startedAt": "2026-08-08T07:43:10.180Z",
+      "completedAt": "2026-08-08T07:45:59.045Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — packages/scheduler/src/budget/budget-measurement.ts (<=250 physical HARD) + budget-measurement.js (exactly one line `export * from \"./budget-measurement.ts\";`). Shape: normalizeUsageMeasurement(input, priorByIdentity?) -> BudgetValidationResult<NormalizedMeasurement> composing the LANDED validateUsageMeasurement first (contract layer), then the measurement-truth layer rules from step 2 (source/coverage consistency, pricebook binding, identity/monotonicity vs the caller-supplied prior-observation snapshot — pure function, NO internal mutable registry: the caller supplies the prior state, determinism preserved); projectBudgetFact(normalized) -> local structural PolicyFactInputCompatible { factId, tier: null, truthClass } (frozen; factId deterministic; truthClass derived from source honesty: ACTUAL_BILLED/PROVIDER_REPORTED_* -> the observation truth string, DERIVED_LIST_PRICE -> derived marker class, UNKNOWN -> 'UNKNOWN'); measurement-layer issue codes as a frozen LOCAL union EXTENDING the convention (BUDGET_MEASUREMENT_* prefixed, distinct from the contract layer's BUDGET_* codes so the two-layer assertion is possible); deepFreeze/sortIssues clone-set reuse from the sibling module's conventions; integers only; no Date/random; no @moe/core/@moe/contracts imports. All step-2 tests green; typecheck green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.ts",
+        "packages/scheduler/src/budget/budget-measurement.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-measurement.ts",
+        "packages/scheduler/src/budget/budget-measurement.js"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.ts",
+        "packages/scheduler/src/budget/budget-measurement.js"
+      ],
+      "note": "GREEN. budget-measurement.ts at 242 physical lines, budget-measurement.js exactly one line `export * from \"./budget-measurement.ts\";`. Focused test 18/18 pass, exit 0; `pnpm --filter @moe/scheduler typecheck` exit 0.\n\nShape: normalizeUsageMeasurement(input, prior?) -> MeasurementResult<NormalizedMeasurement>. readObservation guards the {measurement, pricebookBinding, truncated} envelope via runtime-shape helpers, then validateUsageMeasurement (contract layer) runs and SHORT-CIRCUITS with its issues re-tagged {layer:\"CONTRACT\"} — truth rules never judge an unvalidated record. checkStandalone applies source/coverage (SOURCE_COVERAGES table), pricebook binding, truncation, and parser-version rules; checkAgainstPrior applies stream/identity/sequence rules against the caller's snapshot. Issues are sorted deterministically before failing.\n\nDeviation from the plan text, deliberate and noted in step-1: measurement-layer codes use the BUDGET_OBSERVATION_ prefix, not BUDGET_MEASUREMENT_, because the contract layer already owns BUDGET_MEASUREMENT_MALFORMED/_FIELD_INVALID/_COVERAGE_QUANTITY_MISMATCH and reuse would make which-layer-refused unassertable. Each issue additionally carries an explicit `layer` discriminant, so the two-layer assertion is structural rather than a prefix convention; a test proves MEASUREMENT_ISSUE_CODES is disjoint from BUDGET_ISSUE_CODES.\n\nTruth-class derivation (from source honesty, never caller-asserted): ACTUAL_BILLED -> OBSERVED; PROVIDER_REPORTED_COMPLETE/PROVIDER_REPORTED_PARTIAL/SUBSCRIPTION_QUOTA -> AGENT_REPORTED; DERIVED_LIST_PRICE -> UNKNOWN (an estimate is not an observation, design 638-653); UNKNOWN -> UNKNOWN. Derived is kept distinguishable from genuinely-unknown by the factId, which spells the source: `budget.usage:<SOURCE>:<providerRunRef>|<meter>|<sequence>`. tier is always null (MEASUREMENT_FACT_TIER) — a usage measurement bears no risk tier. Fact is frozen with exactly three keys.\n\nPurity: no module-level registry, so identical arguments always give an identical answer; no Date, no Math.random, no floating point; only in-package './budget-contract.js' and '../runtime-shape.js' imports. Duplicate same-identity same-bytes returns the caller's prior object by reference (toBe), gated on zero issues.",
+      "startedAt": "2026-08-08T07:46:03.176Z",
+      "completedAt": "2026-08-08T07:47:31.705Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250 physical; bridge exactly one line. (2) Fresh task verification: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-measurement.test.ts` -> exit 0 — complete_task evidence with that exact command; ALSO run full `pnpm --filter @moe/scheduler test` for regression awareness (attribute foreign red by path — the 17.02 sibling may be in flight). (3) Greps: '@moe/core\\|@moe/contracts' in budget-measurement.* -> ZERO; float literals/Number.parseFloat/Math\\. -> zero; Date.now|Math.random -> zero; 'scheduler/src\\|@moe/scheduler/' -> zero. (4) MUTATION RED-CHECK (the new rail): for each refusal class, temporarily disable its production check in a scratch copy OUTSIDE the repo and confirm the corresponding test would go red (spot-check at least: UNKNOWN-nonnull-quantity, same-identity-different-bytes, DERIVED-without-pricebook, source/coverage mismatch); (5) laundering red-team — attempt every UNKNOWN->value path (quantity coercion, coverage rewrite, fact tier upgrade, ACTUAL_BILLED claim from derived) -> all refused with exact codes; duplicate no-op returns the PRIOR record bit-identical; (6) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/budget/budget-measurement.ts packages/scheduler/src/budget/budget-measurement.js packages/scheduler/src/budget/budget-measurement.test.ts`; `git show --stat` lists exactly these 3 paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.ts",
+        "packages/scheduler/src/budget/budget-measurement.js",
+        "packages/scheduler/src/budget/budget-measurement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-measurement.ts",
+        "packages/scheduler/src/budget/budget-measurement.js",
+        "packages/scheduler/src/budget/budget-measurement.test.ts"
+      ],
+      "note": "Verification gate PASSED, committed as 1125ed6.\n\n(1) SIZE: budget-measurement.ts 250 physical, budget-measurement.test.ts 250 physical (both exactly at the hard cap), budget-measurement.js exactly 1 line. Longest lines 105 / 125, within the sibling norm (budget-contract.ts peaks at 128).\n(2) VERIFICATION: fresh `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-measurement.test.ts` -> exit 0, 18/18. REGRESSION: full `pnpm --filter @moe/scheduler test` -> 29 files / 433 tests, exit 0, zero foreign red.\n(3) GREPS on the owned files, all zero matches: import lines naming @moe/core or @moe/contracts; Date.now / new Date / Math. / parseFloat / toFixed; @moe/scheduler/ or scheduler/src/ (the package-boundary.test.ts prose pattern).\n(4) MUTATION RED-CHECK — 19 mutations run out-of-tree-backed (backup in TEMP, restore by cp, every restore hash-verified with git hash-object per mem:gotcha-mutation-testing-restore-safety); 19/19 KILLED after the fix below. Covered: source/coverage matrix, derived-requires-binding, uncorrelated-billing-claim, identity-conflict-on-bytes, sequence gap, sequence regression, truncated-completion, parser-version, stream-mismatch, envelope guard, contract short-circuit, fact truthClass, fact tier, result freeze, dedup-returns-prior, integer micros, binding detachment, measurement detachment, identity injectivity. Also mutated the CONTRACT layer's UNKNOWN/quantity biconditional in budget-contract.ts (foreign, tracked): my laundering test went red, restore hash-verified identical, `git status` clean for that path.\n(5) TWO DEFECTS FOUND AND FIXED by this gate, neither visible to the green suite:\n  - M17 SURVIVED: returning the caller's raw pricebook binding instead of the rebuilt one passed every test, so the DoD's detachment requirement was unpinned for the binding. Test now asserts the record's binding is frozen, the CALLER's object is NOT frozen (no input side effect), and post-call caller mutation does not reach the record. M17/M18 now killed.\n  - Adversarial review: the identity/factId was a bare `run|meter|sequence` join, so (\"run|x\",\"y\") and (\"run\",\"x|y\") collided into ONE identity and therefore one policy fact ID — two distinct measurements could collapse downstream. Now length-prefixed (identityOf), with an injectivity test; mutation M19 back to the naive join reddens 4 tests.\n(6) LAUNDERING RED-TEAM, each refused with its exact code: UNKNOWN + quantity 0 or 1200 -> CONTRACT:BUDGET_MEASUREMENT_COVERAGE_QUANTITY_MISMATCH; UNKNOWN coverage claiming PROVIDER_REPORTED_COMPLETE / ACTUAL_BILLED / DERIVED_LIST_PRICE, and UNKNOWN source claiming COMPLETE -> MEASUREMENT:_SOURCE_COVERAGE_MISMATCH; billing/provider/quota source carrying a pricebook binding -> _UNCORRELATED_BILLING_CLAIM; derived fact truthClass is UNKNOWN, never OBSERVED, and its factId spells DERIVED_LIST_PRICE; tier is structurally always null (M13); truncated + COMPLETE -> _TRUNCATED_COMPLETION_CLAIM; unreadable parser version + COMPLETE/PARTIAL -> _PARSER_VERSION_UNSUPPORTED while UNKNOWN coverage stays accepted as UNKNOWN. Duplicate no-op returns the prior by reference (toBe), not a rebuilt equal.\n(7) ADVERSARIAL NOTES, considered and accepted: `prior` is a trusted typed param, not revalidated at runtime — same convention as the sibling ledger's BudgetLedgerState (budget-account.ts:184-192); garbage from a JS caller throws rather than yielding a reason code. Sequence at Number.MAX_SAFE_INTEGER makes every successor compare as a REGRESSION — fail-closed direction. An envelope spelling `pricebookBinding: undefined` on a non-derived source refuses with _UNCORRELATED_BILLING_CLAIM rather than being treated as absent; strictly stricter, forces callers to spell null. SOURCE_COVERAGES/SOURCE_TRUTH_CLASSES are typed Record<BudgetMeasurementSource, ...>, so adding a seventh source is a compile error rather than a runtime undefined.\n(8) CLEANUP: mutation harness lived entirely in TEMP and was deleted; `git status --porcelain -- packages/` is empty. Commit 1125ed6 by explicit 3-path pathspec after confirming nothing foreign was staged; `git show --stat` lists exactly budget-measurement.js, budget-measurement.test.ts, budget-measurement.ts (501 insertions).",
+      "startedAt": "2026-08-08T07:47:36.628Z",
+      "completedAt": "2026-08-08T07:55:27.263Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f4052923",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,5 +94,52 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:39.175Z",
-  "updatedAt": "2026-08-07T22:19:06.352Z"
+  "updatedAt": "2026-08-08T07:56:42.340Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T07:35:51.932Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-40cb4878",
+    "qa-f4052923"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T07:37:26.277Z",
+  "planningNotes": {
+    "approachesConsidered": "Direct plan, no verification workflow: the governor's task card is written at full fidelity against the LANDED sibling surface (verified on-screen: six sources, coverages, validateUsageMeasurement, UsageMeasurementRecord fields exactly matching the DoD's nine), the PolicyFactInput mirror shape is committed and read, and every convention (in-package '.js' imports, runtime-shape reuse, clone-set, bridge, unexported subdir, per-file 250) is established across four sibling plans. Design choices: (1) PURE monotonicity — caller supplies the prior-observation snapshot; an internal registry would make the module stateful and nondeterministic (kernel purity precedent); (2) two-layer issue codes — contract layer (landed BUDGET_*) vs measurement layer (new BUDGET_MEASUREMENT_*) so tests can assert WHICH layer refused (the new epic rail demands it); (3) truthClass derivation from source honesty rather than caller assertion — a caller-supplied truth class on a measurement would be self-attestation; (4) DERIVED_LIST_PRICE pricebook binding as required sub-record with integer micros — no float, no billing claim (design 638-653: derived list price never becomes actual cost; ACTUAL_BILLED only with a correlated receipt); (5) duplicate-same-bytes as deterministic NO-OP returning the prior record — idempotent evidence ingestion (CORE-I9 analogue: same identity + different bytes is a hard conflict).",
+    "codebaseInsights": "Landed budget-contract.ts (verified): BUDGET_MEASUREMENT_SOURCES six-tuple, BUDGET_MEASUREMENT_COVERAGES, UsageMeasurementRecord + validateUsageMeasurement + BudgetValidationResult/BudgetIssue, BUDGET_TRUTH_CLASSES, MAX_BUDGET_METERS — the measurement module composes these via in-package './budget-contract.js' import. PolicyFactInput committed shape {factId, tier: PolicyRiskTier|null, truthClass} at policy-contract.ts:68-72 — mirrored structurally with a local type, never imported. NEW EPIC RAILS in force: per-file cap only (per-task LOC dispute resolved — no size pre-notes needed) and assert-the-reason-code (mutation red-checks encoded in the plan). Design anchors: 11.3 (UsageMeasurement fields, coverage semantics, UNKNOWN never zero), 638-653 (derived list price vs actual billed; metering enforceability HOLD_UNKNOWN feeds policy via the projected fact), CORE-I9 (same-ID-different-bytes conflict).",
+    "risks": "(1) Laundering paths are the safety surface: UNKNOWN->zero, PARTIAL->complete, derived->billed, fact-tier upgrade — each has a named refusal test + mutation red-check. (2) Statefulness temptation: monotonicity via caller-supplied prior snapshot ONLY; any module-level registry breaks determinism and the repeat-call deep-equal DoD. (3) Two-layer code discipline: reusing a contract-layer code for a measurement-layer refusal would make the layer assertion untestable — distinct BUDGET_MEASUREMENT_* prefix. (4) 250-line pressure on the test file (seven case families + mutation checklist): tighten fixtures, never drop assertions; the sibling contract test landed at similar density. (5) Shared tree: 17.02 sibling may plan/work in parallel — file-disjoint; three-path explicit commit.",
+    "keyFiles": [
+      "packages/scheduler/src/budget/budget-contract.ts",
+      "packages/core/src/policy/policy-contract.ts",
+      "packages/scheduler/src/runtime-shape.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-08T07:37:28.300Z",
+  "workStartedAt": "2026-08-08T07:39:28.251Z",
+  "reviewStartedAt": "2026-08-08T07:56:12.475Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-measurement.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  1 passed (1)\n      Tests  18 passed (18)\n   Start at  10:55:00\n   Duration  149ms (transform 39ms, setup 0ms, import 51ms, tests 6ms, environment 0ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-08T07:56:12.475Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/budget/budget-measurement.test.ts",
+    "packages/scheduler/src/budget/budget-measurement.ts",
+    "packages/scheduler/src/budget/budget-measurement.js"
+  ]
 }

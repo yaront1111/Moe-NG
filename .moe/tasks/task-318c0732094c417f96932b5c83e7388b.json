@@ -15,13 +15,55 @@
     "Consume only a narrow already-validated policy/approval gate structurally aligned with the committed core interface; do not forge approvals, duplicate evaluatePolicy, or import @moe/core.",
     "Production and test TypeScript files must each be <=250 physical lines; stage only the three explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline (read-only): landed surfaces verified — ledger shipped as budget-account.ts (NOT budget-ledger.ts): BudgetLedgerState/BudgetAuthorization/BudgetLedgerEntry (kinds ROOT_OPENED|ALLOCATED|RETURNED|CLOSED), openBudgetRoot/allocateToChild/returnToParent/closeBudgetAccount/replayBudgetLedger, BudgetLedgerResult, BudgetMeterAmount, MAX_BUDGET_VERSION (commit 406eb95); budget-contract.ts vocabularies incl. BUDGET_RESERVE_PURPOSES = VERIFICATION|REVIEW|ACCEPTANCE_PROCESSING|CONTINGENCY|INPUT_MATERIALIZATION|INTEGRATION. VOCABULARY NOTE the worker must encode: the task's five caller-supplied ADMISSION amounts (EXECUTION, VERIFICATION, INDEPENDENT_REVIEW, FINAL_ACCEPTANCE, CONTINGENCY) are an ADMISSION-set vocabulary local to this module — EXECUTION is the admitted work itself (not a contract reserve purpose), and the protected lines map onto contract purposes (INDEPENDENT_REVIEW->REVIEW, FINAL_ACCEPTANCE->ACCEPTANCE_PROCESSING, VERIFICATION/CONTINGENCY identity) — document the mapping in a module comment; verify exact landed spellings before typing. Committed core gate shapes to mirror STRUCTURALLY (no @moe/core import): policy allowance {decisionRef, outcome:'ALLOW'} and current human approval {approvalRef, decision:'APPROVE', validity:'CURRENT'} — narrow already-validated facts, never re-evaluated. Fresh `pnpm --filter @moe/scheduler typecheck` green baseline; sibling 17.04 is WORKING — file-disjoint, attribute foreign red by path.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T07:52:01.911Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red — packages/scheduler/src/budget/budget-reservation.test.ts (<=250 physical HARD; assert-the-reason-code rail: every refusal asserts its exact code AND which layer refused; mutation red-checks named). Cases: (1) ALL-OR-NONE ADMISSION: reserveForAdmission over a caller-supplied five-purpose amount set against a ledger-derived available view — success returns a frozen ReservationRecord (per-purpose lines, deterministic reservationId from accountId+admissionRef, state RESERVED, version) + the updated frozen bucket view; ANY shortfall returns a frozen refusal with ZERO state/ledger change (deep-equal before/after — the no-partial-set rule, design 12.2/587); (2) EXACT BOUNDARY: reserving exactly the available amount succeeds; one unit more refuses (per meter, per purpose — both boundary directions asserted); (3) PURPOSE PROTECTION: no operation path can spend or reclassify a protected-purpose line through the EXECUTION line — attempt activation/cancel calls that reference a protected line via the execution entry -> refusal with exact code; protected lines remain untouched after EXECUTION activation (deep-equal on the protected entries); (4) ONE-USE ACTIVATION: activateReservation succeeds at most once (RESERVED->ACTIVATED with version bump); a second activate and a concurrent stale-expectedVersion activate/cancel competitor pair yield ONE legal winner and a ZERO-EFFECT loser (exact stale code; the exactly-one-successor discipline); (5) CANCELLATION: refunds ONLY a proven-never-started refundable reservation (neverStartedProof ref required; activated -> refuse; missing proof -> refuse; refund restores the bucket view deep-equal to pre-reserve); (6) FAIL-CLOSED PRECEDENCE (deterministic order asserted): malformed input (contract layer) > duplicate purpose entries > zero/unsafe quantities > missing protected purposes (all four protected lines REQUIRED — absent -> refuse; caller-supplied amounts are facts, zero-amount protected line is a refusal not a default) > closed/overdrawn account state > gate rejection (policy outcome other than validated ALLOW / current human approval — wrong outcome string, stale validity, absent gate each with distinct codes); (7) hostile inputs via '../runtime-shape.js'. Confirm RED via the task's focused command.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-reservation.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-reservation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Green — packages/scheduler/src/budget/budget-reservation.ts (<=250 physical HARD) + budget-reservation.js (exactly `export * from \"./budget-reservation.ts\";`). Pure functions over caller-supplied state (NO internal registries): reserveForAdmission(availableView, admission {admissionRef, amounts per purpose per meter}, gate) -> {ok, reservation, updatedView} | {ok:false, issues}; activateReservation(reservation, {expectedVersion, attemptRef}) -> one-use transition; cancelReservation(reservation, {expectedVersion, neverStartedProofRef}) -> refund result; ADMISSION_PURPOSES local five-tuple with the contract-purpose mapping comment; reservation-layer issue codes as frozen local BUDGET_RESERVATION_* union (distinct from contract BUDGET_* and account BUDGET_ACCOUNT_* codes — three-layer assertion possible); integers only; deepFreeze/sortIssues clone conventions; no Date/random; imports only './budget-contract.js', './budget-account.js' (types/validators — in-package), '../runtime-shape.js'. All step-2 tests green; typecheck green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-reservation.ts",
+        "packages/scheduler/src/budget/budget-reservation.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/budget/budget-reservation.ts",
+        "packages/scheduler/src/budget/budget-reservation.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250; bridge one line. (2) Fresh focused command from the task -> exit 0 — complete_task evidence verbatim; full `pnpm --filter @moe/scheduler test` for regression awareness (17.04 sibling WORKING — attribute by path). (3) Greps: '@moe/core\\|@moe/contracts' -> zero; float/Math\\.|Date.now|Math.random -> zero; 'scheduler/src\\|@moe/scheduler/' -> zero. (4) MUTATION RED-CHECKS (scratch copy OUTSIDE the repo): disable the all-or-none guard -> partial-set test red; disable the one-use marker -> double-activation test red; disable the protected-line fence -> reclassify test red; disable the never-started requirement -> refund test red. (5) Laundering red-team: forge a gate {outcome:'ALLOW'} with extra hostile keys / wrong validity / prototype tricks -> refused with gate-layer code; attempt reservation mutation post-freeze -> throws/no-op; boundary refusal leaves the view BIT-identical. (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/scheduler/src/budget/budget-reservation.ts packages/scheduler/src/budget/budget-reservation.js packages/scheduler/src/budget/budget-reservation.test.ts`; `git show --stat` lists exactly these 3 paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/budget/budget-reservation.ts",
+        "packages/scheduler/src/budget/budget-reservation.js",
+        "packages/scheduler/src/budget/budget-reservation.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-40ee2326",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion: both hard dependencies now DONE unchanged — task-7dc2e487 (Budget contract vocabulary) and task-a5def097 (Hierarchical budget ledger), whose conserved ledger this builds reservations on. Next in architect-c4babdf9's pinned SPIDR order. Owns budget-reservation.* only, disjoint from the 17.04 sibling currently WORKING.",
   "createdBy": "WORKER",
   "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
   "priority": "HIGH",
@@ -29,5 +71,34 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:24.020Z",
-  "updatedAt": "2026-08-07T21:47:24.020Z"
+  "updatedAt": "2026-08-08T07:52:01.911Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T07:40:32.651Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-d89636d1",
+    "worker-40ee2326"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T07:42:17.208Z",
+  "planningNotes": {
+    "approachesConsidered": "Direct plan (fifth budget/scheduler sibling; conventions locked; governor card written at full fidelity against landed surfaces). Design choices: (1) ADMISSION_PURPOSES as a module-local five-tuple (EXECUTION + four protected) with an explicit mapping comment onto the landed contract RESERVE_PURPOSES (INDEPENDENT_REVIEW->REVIEW, FINAL_ACCEPTANCE->ACCEPTANCE_PROCESSING) — the task text and the landed vocabulary use different spellings; inventing new contract entries or editing budget-contract.ts (unowned) are both wrong, and EXECUTION is the admitted work, not a contract reserve purpose (design 587). (2) Pure caller-supplied-state functions, no registries (sibling precedent — determinism + repeat-call deep-equal). (3) Three-layer issue codes (contract BUDGET_*, account BUDGET_ACCOUNT_*, new BUDGET_RESERVATION_*) so the assert-which-layer rail is satisfiable. (4) Gate as narrow structural mirror of the committed core shapes ({decisionRef, outcome:'ALLOW'} / {approvalRef, decision:'APPROVE', validity:'CURRENT'}) — already-validated facts only, no evaluatePolicy duplication, no @moe/core import (task rail). (5) Activation is a one-use MARKER binding attemptRef — bucket movement to COMMITTED belongs to settlement (17.04/17.05); cancel refunds RESERVED->AVAILABLE only with a never-started proof ref (design 12.2 pre-active tombstone analogue).",
+    "codebaseInsights": "Landed: budget-account.ts (commit 406eb95) = the conserved ledger with ROOT_OPENED|ALLOCATED|RETURNED|CLOSED entries, replayBudgetLedger, deriveSubtreeTotals — reservations layer WITHIN-account bucket state over the ledger's account view; budget-contract.ts (326e146, compacted under 250) = vocabularies + validators incl. the six RESERVE_PURPOSES. NEW epic rails in force: per-file 250 only; assert-the-reason-code with mutation red-checks (encoded per refusal class). Design anchors: 587 (protect verification/review/acceptance/contingency before ANY acceptance-bearing launch incl. linear J1; execution spend cannot consume proof), 12.2 last para (all-or-none, never hold a partial set), 591/OVERDRAWN (closed/overdrawn accounts hold new work).",
+    "risks": "(1) Partial-set laundering is THE conservation hazard — all-or-none mutation red-check mandatory. (2) Purpose reclassification through the EXECUTION line would let execution spend consume proof reserves (design 587's exact prohibition) — fence + red-check. (3) Double-activation under version races — exactly-one-winner asserted (aliasing gotcha precedent). (4) Vocabulary spelling drift between the task card and the landed contract — the local mapping comment is the honest resolution; editing unowned files is not. (5) Gate forgery — structural mirror validated hostile; wrong-outcome/stale-validity distinct codes. (6) 250-pressure on the test (seven families): tighten fixtures, never drop assertions. (7) Shared tree: 17.04 WORKING — three-path commit, by-path attribution.",
+    "keyFiles": [
+      "packages/scheduler/src/budget/budget-account.ts",
+      "packages/scheduler/src/budget/budget-contract.ts",
+      "packages/scheduler/src/runtime-shape.ts",
+      "packages/core/src/policy/policy-contract.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-08T07:42:19.235Z",
+  "workStartedAt": "2026-08-08T07:52:01.911Z"
 }

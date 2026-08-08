@@ -1,0 +1,32 @@
+{
+  "id": "task-c978268baa014ee88a12d45ad41b4421",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Node context inspection",
+  "description": "Objective: make node input, result, context, and recovery identities visibly distinct without turning missing proof into success. Deliverable: apps/control-room/src/nodes/node-context.tsx and node-context.test.tsx, a presentation-only React section over explicit daemon-projected/preclassified props. It must separately label started graph revision/binding, input binding hash, input manifest/tree digests, result manifest/tree digests, contextDigest, providerInputDigest, token/byte coverage, and recovery state/reason/allowed commands. NOT in scope: context selection, digest calculation, provider tokenization, recovery-policy inference, fetching, routing/mounting, receipts/artifacts, or edits outside the two files. Verification: pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room exec vitest run src/nodes/node-context.test.tsx.",
+  "definitionOfDone": [
+    "Focused tests assert input binding, input manifest/tree, result manifest/tree, context, and provider-input identities have separate accessible labels and cannot collapse into one generic hash.",
+    "Recovery state, reason, and allowed commands are rendered only as supplied daemon facts; no client-side recovery or readiness inference exists.",
+    "Missing digest, tokenization, or proof metadata renders UNKNOWN with provenance and never zero, verified, current, or successful wording.",
+    "node-context.tsx and node-context.test.tsx are each <=250 physical lines and the exact focused verification command exits 0."
+  ],
+  "taskRails": [
+    "Accept already-projected presentation props only; do not define an authoritative wire schema or calculate hashes/currentness in the UI.",
+    "Keep context used by workers distinct from the clean review graph/plan context and preserve UNKNOWN for missing token/proof measurements.",
+    "Own and stage only apps/control-room/src/nodes/node-context.tsx and node-context.test.tsx."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-975f8d673a0c45238b117f91682fbbec",
+  "priority": "HIGH",
+  "order": 2.92,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T07:47:46.669Z",
+  "updatedAt": "2026-08-08T07:47:46.669Z"
+}
