@@ -90,19 +90,25 @@
     {
       "stepId": "step-5",
       "description": "Build the crash injector child: packages/store/src/projections/projection-crash-worker.mjs, following the existing *-worker.mjs convention. It takes a database path, a boundary name and a seed on argv, opens the store with SqliteEventStore.openForProject, obtains the store's own DatabaseSync by stashing context.database from a throwaway commitWithApply, then registers a user-defined function via database.function('moe_crash_now', ...) and a TEMP trigger for the requested boundary (a TEMP trigger is mandatory — UDFs are per-connection, so a permanent trigger created from a second connection raises 'no such function' and merely refuses instead of crashing). The UDF writes the boundary marker with writeSync(1, ...) so it flushes before the process dies, then calls process.kill(process.pid, 'SIGKILL'). Support the two non-trigger boundaries too: a reducer that kills mid-fold, and a kill issued immediately after commitWithApply returns (post-COMMIT survival). Support one additional 'FUZZ' mode that kills after a seeded pseudo-random number of statements so boundaries no JS hook can reach are still covered. The child must never exit cleanly in a crash mode; if it reaches the end without dying it must exit with a distinct non-zero code so the parent can tell 'the boundary was never reached' apart from 'the crash worked'.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-crash-worker.mjs"
       ],
       "newFiles": [
         "packages/store/src/projections/projection-crash-worker.mjs"
       ],
-      "startedAt": "2026-08-08T18:27:56.363Z"
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-crash-worker.mjs",
+        "packages/store/src/projections/projection-drill-test-helpers.ts"
+      ],
+      "note": "Crash worker built and PROBED on all 12 modes; store typecheck clean, suite 30 files / 321 tests exit 0.\n\nargv: <databasePath> <boundary> [seed] [skip]. Exit contract: 0 only in NONE mode; 97 BOUNDARY_NEVER_REACHED (a crash mode that ran to the end without dying — the signal the parent needs to tell \"never fired\" from \"the crash worked\"); 96/95/94 for a refused relay/advance/rebuild; SIGKILL otherwise.\n\nMeasured behaviour per boundary (exit code, marker, and the surviving database read on a fresh connection). Every one exited non-zero with its BOUNDARY: marker, PRAGMA integrity_check = ok and PRAGMA foreign_key_check = 0 rows:\n- DOMAIN_EVENTS_INSERT / OUTBOX_MESSAGES_INSERT / PROJECTIONS_UPDATE / INBOX_RECEIPTS_INSERT / EVENT_SUBSCRIPTIONS_INSERT / CURSOR_GENERATIONS_INSERT / REDUCER / FUZZ: exactly the prelude delivery survives — ev=1 ob=1 ib=1 projections at position 1 — and the interrupted transaction left NOTHING behind.\n- PROJECTIONS_INSERT (prelude 0, so the row cannot pre-exist): database completely empty, ev=ob=ib=0, no projections row. The whole first transaction rolled back.\n- POST_COMMIT: both deliveries survive, ev=2 projections at 2 — the opposite arm of DoD 1.\n- NONE: 6 events, rebuild ran to completion at position 6.\n- REBUILD_PROJECTIONS_UPDATE with skip 0/1/2/3 leaves the projection at 2/2/3/4 over a 6-event ledger, so a genuinely half-finished rebuild is reproducible for step 7(b).\n\nMechanism notes:\n- The store's own connection is captured by a commitWithApply whose apply THROWS (\"connection probe\"), so the probe transaction rolls back and the ledger it later reconciles is untouched. CommitApplyContext.database is the only public route.\n- TEMP triggers only, on that same connection; a permanent trigger from a second connection would raise `no such function` and merely refuse (mem:decision-crash-injection-via-udf-temp-trigger).\n- FUZZ arms all seven table triggers at once and kills at a seeded tick in [1,12] against a 14-tick workload, so the target is always reachable and the 97 arm stays meaningful.\n- die() writes the marker with writeSync(1,...) BEFORE process.kill and then throws, so a kill that somehow did not land cannot let the interrupted statement complete and report a clean success.\n\nREAL DEFECT FOUND AND FIXED HERE, not filed forward: projection-drill-test-helpers.ts imported bytes/text from sqlite-event-store-test-helpers.js, which does not exist — that module correctly has no .js bridge. vitest and tsc both resolve the missing specifier back to the .ts sibling and stayed green, but plain Node does NOT (probed: ERR_MODULE_NOT_FOUND on the exact URL), so every crash-worker spawn would have died on import instead of at its boundary. bytes/text are now declared locally and the helper is proven to load under plain Node with 29 exports. This is the mirror image of mem:gotcha-vitest-hides-missing-js-bridge: there a .ts had no .js; here a .js was imported that never existed.",
+      "startedAt": "2026-08-08T18:27:56.363Z",
+      "completedAt": "2026-08-08T18:33:13.661Z"
     },
     {
       "stepId": "step-6",
       "description": "Crash drill matrix: packages/store/src/projections/projection-crash-drill.test.ts. Iterate the exact boundary list written in step 1, spawning the crash worker once per boundary against a fresh file-backed database. For each: assert the child printed its boundary marker and exited non-zero, asserting only that (never the signal name — a SIGKILL child reports code 1 / signal null on Windows and code null / SIGKILL on POSIX). Then reopen the database and prove all-or-nothing: run PRAGMA integrity_check === 'ok' and PRAGMA foreign_key_check with zero rows on a raw connection, confirm SqliteEventStore.open succeeds (which re-runs validateSchema), and reconcile the durable state against the ledger by running rebuildProjection and asserting the durable projections row is exactly the rebuild's value at its own checkpoint — i.e. the surviving state is a whole-prefix fold of the ledger, with no half-applied event and no inbox receipt without its projection advance or vice versa. Include the post-COMMIT boundary asserting the opposite arm of DoD 1: everything committed is still there after the kill. Assert the matrix covered every boundary in the list (cases.length equals the boundary list length and is greater than zero) so a matrix that silently degenerates to zero spawns fails. Close every connection before rmSync(dir, {force:true, maxRetries:10, recursive:true, retryDelay:50}) — Windows holds locks otherwise.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-crash-drill.test.ts",
         "packages/store/src/projections/projection-crash-worker.mjs",
@@ -110,32 +116,60 @@
       ],
       "newFiles": [
         "packages/store/src/projections/projection-crash-drill.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts"
+      ],
+      "note": "3/3 green in 2.6s; store typecheck clean. Real SIGKILL child processes, one per boundary, each against its own mkdtempSync database.\n\nThe matrix iterates the exact 10-entry boundary list from step 1 (DOMAIN_EVENTS_INSERT, OUTBOX_MESSAGES_INSERT, PROJECTIONS_INSERT, PROJECTIONS_UPDATE, INBOX_RECEIPTS_INSERT, EVENT_SUBSCRIPTIONS_INSERT, CURSOR_GENERATIONS_INSERT, REDUCER, POST_COMMIT, FUZZ) and pins each one's expected surviving delivery count as a literal, so the drill asserts a specific durable state rather than \"something plausible\".\n\nPer boundary: the child printed BOUNDARY:<name> AND exited non-zero — asserted as `child.status !== 0` only, never by signal name (a SIGKILL child is code 1 / signal null on Windows and code null / SIGKILL on POSIX). Then the database is reopened and proved all-or-nothing: PRAGMA integrity_check === \"ok\", PRAGMA foreign_key_check zero rows, SqliteEventStore.open succeeds (which re-runs validateSchema), events === outbox === inbox === ledgerEnd === the expected delivery count, and event_subscriptions/cursor_generations both zero — which is what proves the EVENT_SUBSCRIPTIONS_INSERT kill rolled back the cursor_generations insert that the SAME advanceGeneration transaction had already written.\n\nThe whole-prefix reconciliation is rebuildProjection itself: it folds the surviving ledger from the origin, clamps at the durable checkpoint and refuses PROJECTION_REBUILD_STATE_CONFLICT unless the recomputed digest equals the stored one, so a REBUILT outcome IS the proof that the durable row is the fold of a whole ledger prefix — no half-applied event, no inbox receipt without its projection advance. Its checkpoint and digest are then asserted equal to the durable row.\n\nPOST_COMMIT gets its own case for the opposite arm of DoD 1: the kill lands after commitWithApply returned and both deliveries plus every effect they owed are still on disk (events 2, outbox 2, inbox 2, projection at 2).\n\nRail-6 self-assertions: `covered` is compared elementwise to the boundary names AND its length to BOUNDARIES.length AND to > 0 AND its Set size to the same, so a matrix that silently spawned nothing fails. The FUZZ sweep runs 6 seeds chosen so the tick target spans all three relayed transactions (targets 1, 4, 7, 8, 11, 12 over a 14-tick workload) and asserts more than 2 DISTINCT surviving counts were observed — a fuzz that always died at the same statement would otherwise look like six cases while covering one.\n\nWindows-safe cleanup throughout via withDrillDirectory's rmSync {force, maxRetries:10, recursive, retryDelay:50}; every connection is closed by withDrillStore/withDrillDatabase finally blocks before it runs.",
+      "startedAt": "2026-08-08T18:33:17.886Z",
+      "completedAt": "2026-08-08T18:36:16.924Z"
     },
     {
       "stepId": "step-7",
       "description": "Combined idempotence, which is DoD 3 and the one property none of the earlier steps can prove alone. In projection-crash-drill.test.ts add the composed sequences, not just the individual ones: (a) relay a message, crash, reopen, redeliver the SAME message with a bumped expectedVersion (per the step-3 handoff a redelivery at the stale version dies with EXPECTED_VERSION_CONFLICT before apply ever runs and proves nothing), assert ALREADY_APPLIED with deduplicatedBy 'INBOX' and an unchanged digest; (b) crash mid-rebuild at the projections boundary, reopen, run the rebuild again to completion, and assert the final digest and last_applied_position are identical to an uninterrupted rebuild of the same ledger — the restart-mid-rebuild arm; (c) rebuild, then relay a further message, then rebuild again, asserting the digest matches a single cold rebuild of the whole ledger; (d) a rebuild whose durable row is advanced underneath it by a relay loses its CAS and refuses PROJECTION_REBUILD_STATE_CONFLICT instead of clobbering. Every assertion names the specific reason code and, where two layers can refuse, which layer refused.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-crash-drill.test.ts",
         "packages/store/src/projections/projection-rebuild.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts",
+        "packages/store/src/projections/projection-drill-test-helpers.ts",
+        "packages/store/src/projections/projection-crash-worker.mjs",
+        "packages/store/src/projections/projection-generated-history.test.ts"
+      ],
+      "note": "DoD 3 covered. Drill file now 8/8 green; store typecheck clean; full suite 31 files / 329 tests exit 0.\n\n(a) Redelivery across a crash and restart. Crash at PROJECTIONS_UPDATE leaves delivery 0 durable; the drill then redelivers the SAME inbound envelope with fresh command/event/outbox ids. It asserts BOTH arms and pins which layer refused: at the stale expectedVersion the command layer throws DurableStoreError EXPECTED_VERSION_CONFLICT before apply ever runs (so that arm proves nothing about the inbox — asserted explicitly rather than assumed), and only at the bumped version does the relay reach ALREADY_APPLIED with deduplicatedBy \"INBOX\" and commit null. The durable row, event count, inbox count and outbox count are all unchanged afterwards.\n\n(b) Restart mid-rebuild. REBUILD_PROJECTIONS_UPDATE with skip 2 leaves the projection at position 3 over a 6-event ledger — genuinely mid-flight, asserted as strictly past the relayed checkpoint of 2 and short of the end. A NONE-mode child runs the identical workload uninterrupted in a second directory as the reference. Resuming reaches position 6 with a digest identical to the uninterrupted run, the whole durable row compares equal, and a further rebuild changes nothing.\n\n(c) rebuild -> relay -> rebuild equals a single cold rebuild: digest, checkpoint and deep state all match a second directory that relayed the same four commits and rebuilt once.\n\n(d) Split into TWO cases because two different guards can refuse and a single test would not say which. Both refuse PROJECTION_REBUILD_STATE_CONFLICT at layer STATE and both assert the durable row was NOT clobbered:\n  - A live relay advancing the row to position 6 while the rebuild's next page ends at 3 trips the ahead-of-checkpoint guard (detail \"runs ahead of\"); the relay's advance stands.\n  - A foreign writer landing on EXACTLY the position and digest the rebuild is about to write passes both the position and digest guards, so the compare-and-set is the only arm that can refuse (detail \"compare-and-set\"). Reaching that state needs a writer that stops at position 3, which a relay structurally cannot do — a relay always advances to the event it just appended, i.e. past any unrelayed tail — so the foreign writer is a second rebuildProjection over a ceiling-limited ledger view. Still the production surface, and it is what makes the CAS clause load-bearing instead of decorative under step 8's mutation.\n\nHelper changes to support composition: DrillCommit gains optional inboundId (a redelivery needs fresh outbox ids but the same inbound envelope, or the COMMAND_RECEIPT dedupe fires first and the inbox is never consulted); the whole inbound envelope now derives from that id so two deliveries sharing it produce the same receipt digest; IncrementalBuild carries per-aggregate versions and relayHistory takes {reducers, start} so a run can resume at the right expectedVersion. crashCommit/CRASH_AGGREGATE moved into the helper so the crash child and the parent drill share one definition of every identifier instead of re-deriving it.",
+      "startedAt": "2026-08-08T18:36:19.719Z",
+      "completedAt": "2026-08-08T18:42:38.905Z"
     },
     {
       "stepId": "step-8",
       "description": "Prove the new assertions are load-bearing. Mutation drill: for each of the rebuild driver's guards (the CAS clause, the changes === 1 assertion, the durable-digest reconciliation, the fold-refusal propagation) neutralise the operand in place — replace it with a constant, NEVER delete a line — run the store suite, and confirm at least one test goes red naming the right code. Count failed SUITES as well as failed tests: a mutation that reddens zero tests and zero suites is a real survivor, while zero tests and one suite means the mutant did not parse and proves nothing either way. Back the file up out-of-tree and verify the restore with git hash-object before moving on. Separately run the runtime-bridge probe from the repo root for every new non-test .ts added by this task (node -e \"import('./packages/store/src/projections/projection-rebuild.js')...\") with a known-good module as a control, because vitest and tsc both resolve a missing .js bridge back to its .ts sibling and hide the defect entirely.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-rebuild.ts",
+        "packages/store/src/projections/projection-rebuild.test.ts"
+      ],
+      "note": "Mutation drill run out-of-tree (harness and backup both under %TEMP%, nothing scratch in the repo). Neutralised operands in place, never deleted a line, and counted failed SUITES as well as failed tests per mem:gotcha-mutation-drill-blind-to-broken-syntax. Backup restored and verified with git hash-object each run (match=True).\n\nFIRST PASS, 7 mutations: 6 KILLED, 1 REAL SURVIVOR.\nKILLED: CAS clause -> tautology (1 suite/1 test); `changes !== 1` -> false (1/1); durable-digest reconciliation -> false (1/1); ahead-of-checkpoint guard -> false (2/2); `!folded.ok` -> false (1/1, and the surviving output shows the test bit on PROJECTION_REBUILD_FOLD_REFUSED specifically); `layer: folded.layer` -> \"INPUT\" (1/1) — the epic-rail-6 case, proving the test pins the FOLD's own layer and not merely that something refused.\nSURVIVED: removing clampPage entirely reddened zero tests and zero suites. A genuine gap: every existing case either used pageLimit 1 (no page can span the durable checkpoint) or had the checkpoint at the ledger end, so nothing covered a rebuild whose single page crosses a mid-ledger durable row — exactly the case where the digest reconciliation is skipped and a corrupt durable row would be silently overwritten.\n\nWRITING THE MISSING TEST EXPOSED A REAL DEFECT IN MY OWN STEP-3 CODE, fixed here rather than filed forward. `walk` broke out of the loop on the UNCLAMPED page's `hasMore`. With pageLimit 100 over a 5-event ledger whose durable checkpoint is 2, the source returns all five events with hasMore=false, the clamp drops three of them, and the walk then stopped at position 2 and reported REBUILT — a silent under-rebuild that claimed completion. Fixed by only breaking when the clamp dropped nothing (`!page.hasMore && events.length === page.items.length`). projection-rebuild.ts is now 248 lines.\n\nSECOND PASS, 9 mutations, ALL KILLED, including the two that pin the fix: \"page clamp removed\" (1/1) and \"clamped page trusts the unclamped hasMore again\" (1/1), plus \"final persist on an empty walk skipped\" (2/2). Restore hash verified.\n\nRuntime-bridge probe from the repo root, with both controls (mem:gotcha-missing-runtime-bridge-invisible-to-vitest):\n- projection-rebuild.js -> 1 export, 0 undefined (value module)\n- projection-rebuild-contracts.js -> resolves, 0 exports, 0 undefined. Zero is CORRECT for a types-only contracts module and matches the CONTROL outbox-relay-contracts.js exactly; the requirement there is that it resolves at all.\n- transactional-outbox-relay.js control -> 1 export, 0 undefined\n- KNOWN-BAD control: projection-drill-test-helpers.js -> ERR_MODULE_NOT_FOUND, which is both correct (test-only files get no bridge) and proof the probe can actually detect a missing bridge rather than passing vacuously.\n\nStore suite after the fix: 31 files / 331 tests, exit 0; typecheck clean.\n\nContamination note for QA, not a defect of mine: commits 72545bb and ab1c2bd carry task-2580a578's title but swept 7 of THIS task's in-flight files (projection-rebuild.{ts,js}, projection-rebuild-contracts.{ts,js}, projection-drill-test-helpers.ts and two test files, +1047 lines) via the wrapper post-flight `git add -A`. Same infrastructure defect as mem:gotcha-shared-tree-foreign-red-and-swept-commits. My step-10 commit still stages only my owned paths by explicit pathspec; QA must diff MY commit, not HEAD.",
+      "startedAt": "2026-08-08T18:42:41.875Z",
+      "completedAt": "2026-08-08T18:47:19.769Z"
     },
     {
       "stepId": "step-9",
       "description": "Close the defects the drills exposed and run the full gate. Any real durability defect these drills surface in steps 1-4 is fixed HERE, in place, not filed forward — the most likely sites are the relay's apply ordering and the fold's preflight, listed below; a defect landing in another owned path is fixed there with a moe.amend_plan_step naming it. Fix by test first: add the failing assertion, then the minimum change, and keep the fix separate from the drill code so the diff shows what the drill caught. If the drills expose no defect, say so explicitly in the completion evidence with the boundary list they covered — a negative result is a result, but a drill weakened or narrowed to produce one violates task rail 1. Then run the exact verification command fresh, from the repo root, capturing its real output as the evidence: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Also run root pnpm typecheck (expected exit 0). Root pnpm test is known red with 11 pre-existing failures in packages/runner and packages/testkit that are foreign to this task — do not chase them, and do not claim them as yours.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
         "packages/store/src/projections/projection-fold.ts",
         "packages/store/src/projections/projection-crash-drill.test.ts"
       ],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-rebuild.ts"
+      ],
+      "note": "GATE, run fresh from the repo root:\n- `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, tsc clean, 31 files / 331 tests passed. Store baseline before this task was 30/321 at step 5 and 28/305 at the start of the SPIDR chain.\n- Root `pnpm typecheck` -> exit 0, every package Done.\n- Root `npx vitest run --root .` -> 131 files passed / 1 failed, 2166 passed / 1 failed / 1 skipped (2168).\n\nThe single repo-wide failure is FOREIGN and named precisely, not waved off as \"known pre-existing\": packages/scheduler/src/package-boundary.test.ts fails because packages/runner/src/supervisor/effect-test-fixtures.ts imports a scheduler internal path. That file is task-2580a578's, committed under its title in 72545bb, and lives in the one directory the corrected baseline identifies as legitimately in flight. ZERO failures anywhere in packages/store, which I own. I am not carrying the retracted \"11 pre-existing failures\" claim.\n\nDEFECTS THE DRILLS EXPOSED — two, both real, both fixed here rather than filed forward. Both were in code THIS task wrote, not in steps 1-4:\n1. projection-drill-test-helpers.ts imported bytes/text from sqlite-event-store-test-helpers.js, a bridge that does not exist. vitest and tsc resolve it back to the .ts sibling; plain Node does not, so every crash-worker spawn would have died at import instead of at its boundary. Found in step 5, fixed there.\n2. rebuildProjection's walk broke on the UNCLAMPED page's hasMore. With pageLimit 100 over a ledger whose durable checkpoint sits mid-history, the source returns every event with hasMore=false, the clamp drops the tail, and the walk stopped at the checkpoint while reporting REBUILT — a silent under-rebuild claiming completion. Found in step 8 by writing the test that killed the one surviving mutant, fixed by breaking only when the clamp dropped nothing. Fix is one guarded condition in projection-rebuild.ts, separate from the drill code.\n\nNEGATIVE RESULT ON STEPS 1-4, stated explicitly as the step requires. No durability defect surfaced in the versioned event schema, the upcaster, the relay, or the subscription writes. Coverage that produced that negative: 10 named boundaries (BEFORE INSERT on domain_events / outbox_messages / projections / inbox_receipts / event_subscriptions / cursor_generations, BEFORE UPDATE on projections, a reducer that kills mid-fold, a post-COMMIT kill, and a seeded FUZZ) plus 6 fuzz seeds spanning three different transactions, each SIGKILLed for real and each reopened to integrity_check ok, foreign_key_check zero rows, a successful validateSchema reopen, and a whole-prefix reconciliation.\n\nThe negative is not from a weakened drill — I measured the drill's power against predecessor code instead of assuming it. Mutating the RELAY (step 3, transactional-outbox-relay.ts) so requireFreshInbox never sees an existing receipt reddens exactly one test, and it is one of MINE: \"combined idempotence > dedupes a redelivery of the same inbound message across a crash and a restart\". Backup restored, git hash-object 95d8def687c37209fd5e69511e9be3121d67535a — identical to the hash recorded in the step-3 QA verdict, independently confirming the relay is unmodified.\n\nONE OBSERVATION, deliberately NOT dressed up as a defect: neutralising the relay's own PROJECTION_UPSERT compare-and-set to a tautology survives the entire 331-test store suite. That is defense-in-depth whose outer layer answers first — requireProjectionAt compares position and digest earlier in the SAME BEGIN IMMEDIATE, and SQLite's single-writer lock means nothing can change the row between that check and the upsert, so the relay's CAS is structurally unreachable as the refusing layer and cannot be pinned without contriving a seam. The production code is correct and no fix is warranted; I am recording it rather than manufacturing a test that would only appear to cover it. My rebuild driver's CAS is different — its persist transactions are separate per page, so the race is reachable, and step 7(d) plus the step-8 mutation prove it bites.\n\nWorking tree note: transactional-outbox-relay.ts shows ` M` in git status purely as a stat-cache/line-ending artifact of the mutate-restore cycle; `git diff --quiet` on it succeeds, i.e. zero content change. It is not an owned path and will not be staged.",
+      "startedAt": "2026-08-08T18:47:25.950Z",
+      "completedAt": "2026-08-08T18:50:36.560Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -150,12 +184,18 @@
     {
       "stepId": "step-10",
       "description": "Adversarial self-review, then commit. Read your own diff as an attacker: does any drill assert merely that something refused rather than which code and which layer refused; does any sweep pass while generating zero cases; is any property asserted against the helper instead of the production function; can the rebuild ever move the durable row backwards or overwrite a newer relay advance; does any crash boundary silently never fire and still pass; does any file handle or child process leak on a failure path; is every new non-test .ts accompanied by its .js bridge. Confirm each production source is under 250 lines (use wc -l, not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room). Then stage and commit by EXPLICIT PATHSPEC ONLY — git commit -- <owned path> [<owned path>...] — never a bare git commit or git commit -a, because the working directory is shared with other tasks. Run git status --porcelain first and confirm every staged entry is an owned path of this task, unstaging any foreign path with git restore --staged. After committing, verify with git show --stat that the commit contains only owned paths and no debug, probe, scratch or generated evidence files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-crash-drill.test.ts"
+      ],
+      "note": "Adversarial review done, then committed by explicit pathspec as 272a755.\n\nAttacker pass, item by item:\n- \"Asserts merely that something refused\": every refusal arm names code AND layer. The fold refusal additionally pins fold.code / fold.eventId / fold.layer separately from the rebuild's own layer, and the two STATE_CONFLICT arms are split into distinct tests asserting distinct details (\"runs ahead of\" vs \"compare-and-set\") because two different guards can produce that code.\n- \"Sweep passes while generating zero cases\": all three sweeps self-assert. Generated history: cases.length === SEEDS.length AND > 0, per-case generated > 0, committed === generated, distinct digests > 1, total upcast events > 0. Crash matrix: covered compared ELEMENTWISE to the boundary names plus length plus Set size. Fuzz: survivors.length === FUZZ_SEEDS.length AND > 0 AND more than 2 distinct outcomes.\n- \"Property asserted against the helper\": no. Digests come from production canonicalProjectionState (drillDigest is a four-line call, not a reimplementation), the incremental side from relayMessage, the rebuild side from rebuildProjection. The key-order and -0 assertions call canonicalProjectionState directly.\n- \"Can the rebuild move the row backwards or overwrite a newer relay advance\": no, on three paths. A durable checkpoint ahead of the walk refuses instead of rewinding (proven with a +40 position tamper AND by the pruned-ledger shape). A foreign advance mid-walk loses the CAS. A rebuild with the wrong origin state or wrong reducers refuses at the digest comparison instead of silently rewriting a correct row.\n- \"Crash boundary silently never fires\": impossible to pass. The child exits 97 BOUNDARY_NEVER_REACHED and prints no marker, and every case asserts the marker. Verified empirically — NONE mode exits 0 with no marker.\n- \"File handle or child process leak on a failure path\": persist() rolls back in its catch before re-throwing and BEGIN IMMEDIATE sits OUTSIDE the try (nothing to roll back if the lock acquisition itself throws). withDrillStore/withDrillDatabase both close in finally and nest correctly. spawnSync is synchronous with a 30s timeout. withDrillDirectory cleans up in finally, including the nested pairs.\n- \"Every new non-test .ts has its .js bridge\": projection-rebuild.js and projection-rebuild-contracts.js both present and both probed under plain Node with a known-bad control in step 8. index.ts confirmed UNCHANGED — the module stays package-internal.\n\nOne weak assertion found and strengthened in this step: reopens() returned a bare `true`, making `expect(...).toBe(true)` a dressed-up \"did not throw\". It now returns the reopened store's own health and the drill asserts {quickCheck: \"ok\", violations: 0}, so it pins SQLite's verdict on the recovered file. Suite re-run green after the change.\n\nSizes measured with wc -l, not Measure-Object (mem:gotcha-powershell-measure-line-undercounts-blank-lines). Production sources: projection-rebuild.ts 248, projection-rebuild-contracts.ts 54, projection-crash-worker.mjs 245 — all under 250. Test files 420/326/265/236; the per-file cap is on production sources and these sit inside the package's established range (existing suites run 413-681, including 623 and 523 from the immediately preceding SPIDR step).\n\nCOMMIT 272a755, staged and committed by explicit pathspec only, never a bare git commit. git status --porcelain was checked before staging: .moe/ state files and packages/store/src/outbox-relay/transactional-outbox-relay.ts were deliberately left unstaged. git show --stat confirms exactly 6 owned paths, +770/-15, no debug, probe, scratch or generated evidence files. The mutation harness, its backup and the commit-message file all lived under %TEMP% and are deleted.\n\ntransactional-outbox-relay.ts still shows ` M` in git status: that is a stat-cache and line-ending artifact of the mutate-and-restore probe, with ZERO content change — `git diff --quiet` on it succeeds, and its git hash-object is 95d8def687c37209fd5e69511e9be3121d67535a, identical to the value the step-3 QA verdict recorded. Left untouched rather than restored, since it is not an owned path.\n\nFinal gate re-run fresh after the commit: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test -> exit 0, 31 files / 331 tests.",
+      "startedAt": "2026-08-08T18:50:44.229Z",
+      "completedAt": "2026-08-08T18:54:08.171Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-6d318ae8",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,7 +207,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:42.088Z",
-  "updatedAt": "2026-08-08T18:27:56.363Z",
+  "updatedAt": "2026-08-08T18:56:04.404Z",
   "contextFetchedBy": [
     "architect-c4babdf9",
     "architect-e9f16b5b",
@@ -179,7 +219,7 @@
     "firstClaimAt": "2026-08-08T17:07:16.624Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 10
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -189,7 +229,13 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T18:11:43.562Z",
@@ -212,5 +258,23 @@
     "wallClockMs": 18000000
   },
   "planApprovedAt": "2026-08-08T18:11:45.606Z",
-  "workStartedAt": "2026-08-08T18:13:34.838Z"
+  "workStartedAt": "2026-08-08T18:13:34.838Z",
+  "reviewStartedAt": "2026-08-08T18:56:04.404Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  31 passed (31)\n      Tests  331 passed (331)\n   Start at  21:53:37\n   Duration  3.19s (transform 5.87s, setup 0ms, import 9.25s, tests 9.28s, environment 2ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-08T18:56:04.404Z"
+  },
+  "filesModified": [
+    "packages/store/src/projections/projection-drill-test-helpers.ts",
+    "packages/store/src/projections/projection-rebuild.test.ts",
+    "packages/store/src/projections/projection-rebuild.ts",
+    "packages/store/src/projections/projection-rebuild.js",
+    "packages/store/src/projections/projection-rebuild-contracts.ts",
+    "packages/store/src/projections/projection-rebuild-contracts.js",
+    "packages/store/src/projections/projection-generated-history.test.ts",
+    "packages/store/src/projections/projection-crash-worker.mjs",
+    "packages/store/src/projections/projection-crash-drill.test.ts"
+  ]
 }
