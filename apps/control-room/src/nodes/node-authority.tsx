@@ -37,6 +37,11 @@ function readValue(fact: SuppliedFact): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+/** Whether the payload supplied a usable value for this fact. */
+export function isSupplied(fact: SuppliedFact): boolean {
+  return readValue(fact) !== null;
+}
+
 /** A supplied identity, or the UNKNOWN marker when the payload omitted one. */
 export function readIdentity(identity: string): string {
   return typeof identity === "string" && identity !== "" ? identity : UNKNOWN_FACT_VALUE;

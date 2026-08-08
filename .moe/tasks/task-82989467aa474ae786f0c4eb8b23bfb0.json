@@ -64,17 +64,24 @@
     {
       "stepId": "step-4",
       "description": "Verification gate + adversarial self-review + commit. (1) `wc -l` both TS files <=250; bridge one line. (2) Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0 — complete_task evidence verbatim (the DoD names the full store gate, not just the focused file); attribute foreign red by path (projection siblings may be in flight). (3) PURITY GREP (the rail's teeth): `grep -n \"node:\\|DatabaseSync\\|readFile\\|writeFile\\|Date\\.\\|Math\\.random\" packages/store/src/projections/projection-fold.ts` -> ZERO hits; test file constructs NO database (grep DatabaseSync in the test -> zero). (4) MUTATION RED-CHECKS (scratch copy OUTSIDE the repo): bypass upcaster -> version test red; skip preflight -> out-of-order test red; let a partial batch commit -> no-partial-state test red; unfreeze the result -> detachment test red. (5) Ordering red-team: craft a batch that is globalPosition-ordered but per-aggregate out-of-order (interleaved aggregates) — must refuse with the aggregate-layer code; equal-sequence duplicate across DIFFERENT eventIds -> duplicate code (the correction's exact case). (6) No scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- packages/store/src/projections/projection-fold.ts packages/store/src/projections/projection-fold.js packages/store/src/projections/projection-fold.test.ts`; `git show --stat` lists exactly these 3 paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/projections/projection-fold.ts",
         "packages/store/src/projections/projection-fold.js",
         "packages/store/src/projections/projection-fold.test.ts"
       ],
-      "startedAt": "2026-08-08T08:15:32.951Z"
+      "modifiedFiles": [
+        "packages/store/src/projections/projection-fold.ts",
+        "packages/store/src/projections/projection-fold.js",
+        "packages/store/src/projections/projection-fold.test.ts"
+      ],
+      "note": "Gate + adversarial review + commit c27029a. (1) SIZES VERIFIED AT HEAD, not the working tree (mem:gotcha-shared-index-commit-capture — a foreign sweep can land a mid-edit state, so a local measurement proves nothing about what shipped): `git show HEAD:<path> | wc -l` -> projection-fold.ts 250, projection-fold.test.ts 250, projection-fold.js 1, and the bridge at HEAD is exactly `export * from \"./projection-fold.ts\";`. (2) FRESH GATE post-commit: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> EXIT 0, 24 files / 184 tests (baseline 23/165). (3) PURITY GREP RUN AGAINST HEAD CONTENT: `git show HEAD:...projection-fold.ts | grep \"node:\\|DatabaseSync\\|readFile\\|writeFile\\|Date\\.\\|Math\\.random\"` -> zero hits; module specifiers are exactly [\"../store-contracts.js\",\"./projection-upcast.js\"]; the test's only \"DatabaseSync\" occurrence is the forbidden-token list itself — no database is constructed anywhere in the suite. (4) EIGHT MUTATION RED-CHECKS, out-of-tree backup per mem:gotcha-mutation-testing-restore-safety (the file is untracked, so `git checkout` could not have restored it), each restore verified by git hash-object — final hash identical to baseline, no RESTORE MISMATCH. Bypass upcaster -> 2 red (upcast-before-reduce + version refusal). Disable the position check -> out-of-order red. Echo the partial accumulator instead of the input state -> no-partial-state red. Return the source instead of a frozen clone -> 3 red (freeze + unchanged-state + detachment). Allow equal per-aggregate sequence -> the correction's duplicate case red. Prototype-chain reducer lookup instead of Object.hasOwn -> the \"constructor\" test red. (5) ADVERSARIAL SELF-REVIEW FOUND AND FIXED TWO REAL DEFECTS THE GREEN SUITE DID NOT SEE — both verified at the JS level before fixing, then mutation-verified after: (a) `FIELD_KINDS[key] === undefined` is FALSE for key \"__proto__\" and \"constructor\" because the lookup walks the prototype chain, so the extra-key guard waved both through; an event with an own \"constructor\" key normalized successfully, and an own \"__proto__\" key gave the normalized event an ATTACKER-CONTROLLED PROTOTYPE. Fixed with Object.hasOwn(FIELD_KINDS, key). (b) In plainClone, `draft[\"__proto__\"] = item` invokes the Object.prototype setter — it swaps the prototype instead of creating an own key, so a state key named \"__proto__\" was SILENTLY ABSORBED (key lost, prototype replaced). Fixed by refusing \"__proto__\" keys outright. The first fix went red immediately; THE SECOND DID NOT — mutating it away left all 19 tests green, because the event-shaped hostile fixture is caught by (a) first and never reaches plainClone. That is mem:gotcha-mutation-finds-the-untested-half-of-a-pair exactly: I added the reachable case (an input STATE carrying a \"__proto__\" key, not an event) and re-ran, and only then did the guard go red. (6) ORDERING RED-TEAM both covered and mutation-proven: a batch that is globalPosition-ordered but per-aggregate out-of-order via goal-1/goal-2 interleaving refuses with PROJECTION_FOLD_OUT_OF_ORDER, and equal sequence across DIFFERENT eventIds refuses with PROJECTION_FOLD_DUPLICATE_EVENT. (7) REPO-WIDE DIRECTORY-WALKING GUARDS RUN, not just grepped — scheduler package-boundary, testkit, skills: 21 files / 323 passed, 1 skipped. A grep proves the file text is clean; running them proves the new directory shape is too. (8) NO SCRATCH FILES: the mutation harness and commit message lived in /tmp, outside the repository, and were deleted. (9) COMMIT per epic rail 3: index was empty before staging; `git add` + `git commit -F <msgfile> --` with the three explicit pathspecs; `git show --stat` lists EXACTLY packages/store/src/projections/projection-fold.{js,test.ts,ts}, 501 insertions. Foreign in-flight work (apps/control-room/src/attempts/, apps/control-room/src/nodes/, .moe/** daemon metadata) was left untouched and unstaged. THEORETICAL, NOT FIXED, FLAGGED FOR QA: `events` is typed readonly StoredEvent[] but consumed with for-of, so a caller passing an INFINITE generator would hang rather than refuse; every other malformed-batch shape (null, non-iterable, throwing iterator) is already caught by the entry try and refused INPUT_INVALID. Deep recursion in plainClone is contained — a RangeError from a pathologically nested state is caught by the same try and fails closed as INPUT_INVALID or REDUCER_FAILED rather than escaping.",
+      "startedAt": "2026-08-08T08:15:32.951Z",
+      "completedAt": "2026-08-08T08:21:30.918Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40cb4878",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -99,12 +106,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:41:45.149Z",
-  "updatedAt": "2026-08-08T08:15:32.951Z",
+  "updatedAt": "2026-08-08T08:22:29.020Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T21:52:41.182Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-c4babdf9",
@@ -118,7 +125,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:43:38.673Z",
@@ -138,5 +146,17 @@
     "escalatedAt": "2026-08-08T07:58:01.161Z"
   },
   "planApprovedAt": "2026-08-08T07:43:40.706Z",
-  "workStartedAt": "2026-08-08T07:58:14.831Z"
+  "workStartedAt": "2026-08-08T07:58:14.831Z",
+  "reviewStartedAt": "2026-08-08T08:22:29.020Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  24 passed (24)\n      Tests  184 passed (184)\n   Start at  11:21:45\n   Duration  1.15s (transform 4.26s, setup 0ms, import 6.38s, tests 3.99s, environment 1ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-08T08:22:29.020Z"
+  },
+  "filesModified": [
+    "packages/store/src/projections/projection-fold.test.ts",
+    "packages/store/src/projections/projection-fold.ts",
+    "packages/store/src/projections/projection-fold.js"
+  ]
 }

@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "Baseline + COLLISION GATE (governor watch): Task A (task-fd82678f) is at 4/5 and still owns the shared entry files — this task NEVER touches apps/control-room/src/main.tsx, src/kernel.tsx, src/fixtures.ts, package.json, tsconfig.json, vite.config.ts, index.html, or pnpm-lock.yaml. The frame is wired for the DoD via TESTS (jsdom renders ShellFrame directly); the one-line main.tsx mount of the frame is deferred to a follow-up after A closes (record in the completion note for the governor — do NOT edit main.tsx even if A finishes mid-task). Verify A's artifacts present: src/kernel.tsx (TruthChip + describeTruthClass re-export + absent->UNKNOWN mapping), src/fixtures.ts (J1 snapshots + three affordance states + provenance fixture type + DEVELOPMENT_ONLY markers), dependency set installed. If kernel/fixtures exports differ from the description's assumptions, adapt consumption — never edit A's files; if fundamentally absent, report_blocked needsFrom task-fd82678f. Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` GREEN baseline. Re-read this task's own description — it pins every spec decision (gating semantics 524/530/588-590/614, J1 slice per surface §6.1, tripwires, never-mounted Graph, canonical downstream dirs); NEW EPIC RAILS also apply: per-file 250 cap (no per-task LOC bar) and assert-the-reason/testid, mutation-red-check failure paths.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T08:22:00.708Z"
     },
     {
       "stepId": "step-2",
@@ -89,7 +90,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40ee2326",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -101,7 +102,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T22:15:02.258Z",
-  "updatedAt": "2026-08-08T07:40:28.570Z",
+  "updatedAt": "2026-08-08T08:22:00.708Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:39:03.367Z",
     "plannedStepCount": 6,
@@ -128,5 +129,9 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-08T07:40:28.570Z"
+  "planApprovedAt": "2026-08-08T07:40:28.570Z",
+  "contextFetchedBy": [
+    "worker-40ee2326"
+  ],
+  "workStartedAt": "2026-08-08T08:22:00.708Z"
 }

@@ -76,7 +76,7 @@
     {
       "stepId": "step-4",
       "description": "Implement the three focused node inspector panels, taking the node tests green without defining daemon wire/query schemas. node-authority.tsx accepts a closed, presentation-only prop shape containing explicit preclassified facts and supplied legal command kinds; it renders semantic sections/lists using the existing Fact/TruthChip from ../kernel.js, maps missing values to literal UNKNOWN with an absent truth class, passes provenance callbacks per fact, and never accepts/renders leaseToken, credentials, transition tables, fetchers, or mutation handlers. node-context.tsx uses the same fail-closed presentation pattern but keeps source/current authority binding, input/result manifests and trees, worker context/provider input digests, measurement coverage, and daemon-supplied recovery facts distinct; it computes no hash/currentness/readiness/recovery. node-evidence.tsx renders only supplied receipts, artifacts, findings, and blockers in deterministic array order, with full identities/provenance, no evidence mutation/rerun, and no link when identity/provenance is missing. Use semantic headings and stable spec IDs, NodeNext .js imports, no Node-only APIs, and keep every production file <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/nodes/node-authority.tsx",
         "apps/control-room/src/nodes/node-context.tsx",
@@ -87,12 +87,19 @@
         "apps/control-room/src/nodes/node-context.tsx",
         "apps/control-room/src/nodes/node-evidence.tsx"
       ],
-      "startedAt": "2026-08-08T08:19:42.568Z"
+      "modifiedFiles": [
+        "apps/control-room/src/nodes/node-authority.tsx",
+        "apps/control-room/src/nodes/node-context.tsx",
+        "apps/control-room/src/nodes/node-evidence.tsx"
+      ],
+      "note": "GREEN for the three node panels: node-authority 11/11, node-context 10/10, node-evidence 9/9 (npx vitest run per file). node-authority.tsx (234 lines) also hosts the shared presentation primitives every panel reuses — PresentedFact/SuppliedFact, UNKNOWN_FACT_VALUE, NO_COMMANDS_SUPPLIED, NONE_SUPPLIED, readIdentity, FactRow (the only path a claim renders through; a withdrawn value drops its class so a chip cannot outlive its value), FactList, Panel, CommandKindList — so truth mapping is never duplicated and every assertion runs against the production surface. node-context.tsx (123) keeps started revision / graph epoch / binding version / inputBindingHash, input vs result manifest+tree, contextDigest vs providerInputDigest, token vs byte coverage, and supplied recovery state/reason/commands distinct. node-evidence.tsx (219) renders receipts/artifacts/findings/blockers in supplied array order via map only (no sort/filter/rank/dedupe), full untruncated digests, and an evidence link only when identity AND provenanceRef are both non-empty. Legal and recovery command kinds render as <li> labels under cr.action.<kebab>, never as controls — these modules accept no mutation handler, fetcher, or transition table. tsc: only the two not-yet-written attempts modules error (TS2307), which step-5 closes; node files are clean and all <=250 lines.",
+      "startedAt": "2026-08-08T08:19:42.568Z",
+      "completedAt": "2026-08-08T08:22:15.853Z"
     },
     {
       "stepId": "step-5",
       "description": "Implement attempt-detail.tsx and review-surface.tsx as separate trust boundaries and take their tests green. AttemptDetail renders explicit immutable attempt/binding/outcome, receipts, journal, and recovery facts through Fact/TruthChip; transcript content is operational narrative only, inside a collapsed <details> with the exact label, and no receipt/evidence fact is derived from it. ReviewSurface accepts only clean-package presentation inputs (criteria/constraints, graph/plan hashes, exact base/head/diff paths, receipts, findings, reviewer eligibility/calibration), structurally omits transcript/journal/self-assessment/handoff props and DOM, renders a diff only when both SHAs are supplied, flags supplied out-of-scope paths, and shows UNKNOWN for missing proof rather than inferring acceptance. Do not add review commands, evidence reruns, fetching, routing, persistence, or lifecycle logic. Use NodeNext .js imports and keep both production files <=250 lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/attempts/attempt-detail.tsx",
         "apps/control-room/src/attempts/review-surface.tsx"
@@ -100,7 +107,8 @@
       "newFiles": [
         "apps/control-room/src/attempts/attempt-detail.tsx",
         "apps/control-room/src/attempts/review-surface.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-08T08:22:18.324Z"
     },
     {
       "stepId": "step-6",
@@ -163,12 +171,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-08T08:19:42.568Z",
+  "updatedAt": "2026-08-08T08:22:18.324Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:33:50.977Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -184,7 +192,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T08:01:59.899Z",
