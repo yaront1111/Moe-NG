@@ -176,31 +176,47 @@
     {
       "stepId": "step-9",
       "description": "Prove the assertions are load-bearing and sweep determinism. MUTATION DRILL at each mechanism's single source: the mandatory-fits check that produces CONTEXT_TOO_LARGE, the entry-count bound, the text-length bound, the typed-predicate comparison, and the explicit sort comparator. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests and confirm the red test is the one naming that guard's code. The comparator mutation matters most here: replacing the total order with a constant must redden the ordering-determinism test, and if it does not, the determinism claim is untested. Back each file up out-of-tree and verify the restore with git hash-object. Then the determinism sweep: grep the package for Date.now, Math.random, localeCompare, and any sort without an explicit comparator, and confirm zero hits. Add no .js bridge files — @moe/store is the only package that uses them and this is not it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/context/src/context-selection.ts",
         "packages/context/src/context-render.ts",
         "packages/context/src/dead-end-journal.ts"
       ],
-      "startedAt": "2026-08-08T20:41:53.529Z"
+      "note": "Mutation drill passed at each single source with out-of-tree byte backups and git hash-object restore equality. mandatory-fit: 1 failed suite/3 tests; entry-count: 1/1; text-length: 1/1; typed-predicate: 1/1; comparator constant: 1/2. Each red output contained the named guard test and stable code/section. Determinism sweep: Date.now=0, Math.random=0, localeCompare=0, empty-comparator sort=0, .js bridges=0. Post-restore focused suite: 3 files, 21 tests passed.",
+      "startedAt": "2026-08-08T20:41:53.529Z",
+      "completedAt": "2026-08-08T20:42:50.761Z"
     },
     {
       "stepId": "step-10",
       "description": "Run the gate on the new package. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test. Because this package did not exist before this task, a filter miss looks exactly like a passing run with zero tests — so assert the run actually executed your suites by checking the reported file and test counts are non-zero, and treat 'No test files found' as a FAILURE of this step, not a pass. Every failure here is unambiguously yours: nothing else in the repo touches packages/context. Also run root pnpm typecheck to confirm the new package did not break the workspace build. Confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file is under the 400 hard cap, and record each count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/context/package.json"
-      ]
+      ],
+      "note": "Fresh required gate exited 0 and executed 3 test files / 21 tests: `pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test`. Root `pnpm typecheck` was run; @moe/context completed, then foreign in-flight @moe/runner evidence files failed (missing evidence-receipt.js and an AGENT_REPORT narrowing error). A follow-up excluding runner reached another foreign in-flight @moe/coordination missing coordination-service.js. No context diagnostic occurred. GNU `wc -l`: canonical-digest 48, context-contract 61, context-selection 138, context-render 89, dead-end-journal 147, release-handoff 71, index 5; every production source is under 250/400.",
+      "startedAt": "2026-08-08T20:43:00.986Z",
+      "completedAt": "2026-08-08T20:43:58.262Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: is there ANY path on which mandatory context is dropped and the call still returns success; can prose reach the unlock predicate by any route; does the render digest actually cover all seven DoD-2 fields, verified by set equality rather than by eye; can the same inputs render different bytes on a different host through a locale sort, an unordered Map, or object key order; does the journal ever silently evict an entry to stay in bounds; is any cited external identity stored without shape validation. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A. Every packages/context/ file is new and uncontested, but pnpm-lock.yaml is SHARED with every in-flight task: confirm it carries only the single new importer entry before staging it, and unstage any foreign path with git restore --staged. Run git status --porcelain first. After committing, verify with git show --stat that only packages/context/ paths plus the one lock hunk landed, and that no debug, probe, scratch, or generated evidence file is present.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/context/src/context-adversarial.test.ts",
+        "packages/context/src/context-contract.ts",
+        "packages/context/src/context-pipeline.test.ts",
+        "packages/context/src/context-render.ts",
+        "packages/context/src/context-selection.ts",
+        "packages/context/src/context-wire.ts"
+      ],
+      "note": "Adversarial review found and fixed two real risks with red tests: NaN/Infinity/negative/fractional budgets admitted fail-open, and unframed mandatory chunks allowed shifted boundaries to produce identical bytes/digests. Final staged commit 2d3ae2d contains only six owned context paths. Concurrency incident: before this step, foreign commit 42f1c21 swept the already-created packages/context files and the exact two-line context lock importer together with another task's paths; history preservation forbids rewriting it. I preserved that commit and made the final attributable fix commit by explicit pathspec. Current packages/context and lock are clean; git show for 2d3ae2d contains only owned paths.",
+      "startedAt": "2026-08-08T20:44:13.438Z",
+      "completedAt": "2026-08-08T20:49:30.352Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-10c55fbd",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -219,12 +235,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.596Z",
-  "updatedAt": "2026-08-08T20:41:53.529Z",
+  "updatedAt": "2026-08-08T20:56:27.910Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:24:38.510Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 11,
+    "doneAt": "2026-08-08T20:56:27.910Z",
+    "wallClockMs": 1909400
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -238,7 +256,10 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:26:42.245Z",
@@ -259,7 +280,35 @@
   },
   "planApprovedAt": "2026-08-08T20:26:44.281Z",
   "contextFetchedBy": [
-    "worker-10c55fbd"
+    "worker-10c55fbd",
+    "qa-cbad3a29"
   ],
-  "workStartedAt": "2026-08-08T20:28:40.792Z"
+  "workStartedAt": "2026-08-08T20:28:40.792Z",
+  "reviewStartedAt": "2026-08-08T20:51:13.195Z",
+  "verification": {
+    "command": "pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test",
+    "exitCode": 0,
+    "outputTail": "---FRESH REQUIRED VERIFICATION---\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/context/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  4 passed (4)\n      Tests  23 passed (23)\n   Duration  158ms (transform 141ms, setup 0ms, import 194ms, tests 17ms, environment 0ms)",
+    "reportedAt": "2026-08-08T20:51:13.195Z"
+  },
+  "filesModified": [
+    "packages/context/package.json",
+    "packages/context/tsconfig.json",
+    "packages/context/src/index.ts",
+    "pnpm-lock.yaml",
+    "packages/context/src/context-contract.ts",
+    "packages/context/src/dead-end-journal.test.ts",
+    "packages/context/src/canonical-digest.ts",
+    "packages/context/src/dead-end-journal.ts",
+    "packages/context/src/context-pipeline.test.ts",
+    "packages/context/src/context-selection.ts",
+    "packages/context/src/context-render.ts",
+    "packages/context/src/release-handoff.ts",
+    "packages/context/src/release-handoff.test.ts",
+    "packages/context/src/context-adversarial.test.ts",
+    "packages/context/src/context-wire.ts"
+  ],
+  "completedAt": "2026-08-08T20:56:27.910Z",
+  "reviewCompletedAt": "2026-08-08T20:56:27.910Z",
+  "reviewSummary": "APPROVED. Re-ran the gate myself: `pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test` exited 0, 4 test files / 23 tests (non-zero, so not a phantom filter-miss). DoD1: context-selection.ts:116 refuses before any optional fill, no path drops a mandatory item, outcome kinds asserted by set equality so no degraded-success arm can hide. DoD2: context-render.ts:68-76 binds exactly the seven fields (optionalSelection, journalCountLimit, journalTextLimit, ordering, rendererVersion, exclusions, exactBytes), verified by set equality plus a per-field digest-change sweep whose case count is asserted equal to the list length and non-zero; framing, key-order and -0 pairs covered. DoD3: evaluateRetryUnlock takes a typed FactPredicate with no parameter prose can travel through; both arms assert code RETRY_PREDICATE_UNCHANGED AND layer RETRY_PREDICATE. DoD4: gate exits 0. Ran five own mutation drills (constant substitution, never deletion) per epic rail 6: mandatory-fit guard -> 1 suite/3 tests red naming CONTEXT_TOO_LARGE; journal comparator -> 1 suite/2 tests red (ordering + insertion-order digest, so determinism is genuinely tested); predicate equality -> 1/1 naming RETRY_PREDICATE_UNCHANGED; text bound -> 1/1 naming TEXT_CHARACTERS; entry-count bound -> 1/1 naming ENTRY_COUNT. Restores byte-exact via git hash-object (09912c03, ef180c92), git status clean for packages/context after. Sweeps: zero hits for Date.now, Math.random, new Date(, localeCompare, bare .sort(); all five sorts have explicit comparators. Per-FILE cap OK, largest production file 149 lines (task-level LOC is not a bar per epic rail 5, not weighed). Zero deps, no .js bridges, no debug/scratch files; pnpm-lock.yaml gained exactly one line `packages/context: {}`. Own commit 2d3ae2d is explicit-pathspec, context-only; the earlier sweep into foreign commit 42f1c21 was another task's completion hook, not this worker's violation."
 }

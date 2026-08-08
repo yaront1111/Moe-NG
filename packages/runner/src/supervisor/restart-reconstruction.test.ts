@@ -247,7 +247,7 @@ describe("no seed may produce a premature terminal", () => {
         resourceFact: "UNKNOWN",
       }),
     );
-    expect(labelOf(outcome)).not.toBe("post:TERMINAL_PROVEN");
+    expect(labelOf(outcome)).toBe("post:UNKNOWN");
   });
 });
 

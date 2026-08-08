@@ -181,17 +181,24 @@ describe("duplicate delivery", () => {
     expect(outcome.launched).toBe(false);
   });
 
-  const suspects: ReadonlyArray<readonly [string, unknown, string]> = [
+  const suspects: ReadonlyArray<readonly [string, unknown, string, "LAUNCH_LOCK"]> = [
     [
       "a held lock with no registration",
       makeDelivery({ lockState: "HELD" }),
       "LAUNCH_LOCK_REGISTRATION_ABSENT",
+      "LAUNCH_LOCK",
     ],
-    ["an unknown lock state", makeDelivery({ lockState: "UNKNOWN" }), "LAUNCH_LOCK_SUSPECT"],
+    [
+      "an unknown lock state",
+      makeDelivery({ lockState: "UNKNOWN" }),
+      "LAUNCH_LOCK_SUSPECT",
+      "LAUNCH_LOCK",
+    ],
     [
       "an uncertain effect state",
       makeDelivery({ effectState: "UNKNOWN", lockState: "HELD", registration: registered() }),
       "LAUNCH_LOCK_SUSPECT",
+      "LAUNCH_LOCK",
     ],
     [
       "a registration bound to another lock",
@@ -201,28 +208,31 @@ describe("duplicate delivery", () => {
         lockState: "HELD",
       }),
       "LAUNCH_LOCK_IDENTITY_CONFLICT",
+      "LAUNCH_LOCK",
     ],
     [
       "a malformed registration",
       makeDelivery({ registration: { lockIdentity: "lock-1" }, lockState: "HELD" }),
       "LAUNCH_LOCK_MALFORMED",
+      "LAUNCH_LOCK",
     ],
     [
       "an unknown lock vocabulary",
       makeDelivery({ lockState: "PARTIALLY_HELD" }),
       "LAUNCH_LOCK_MALFORMED",
+      "LAUNCH_LOCK",
     ],
   ];
 
-  it.each(suspects)("holds %s as SUSPECT and never relaunches", (_label, input, code) => {
-    const outcome = resolveDuplicateDelivery(input);
-    expect(outcome.kind).toBe("SUSPECT");
-    expect(codeAndLayer(outcome).code).toBe(code);
-    expect(failureOf(outcome).layer === "LAUNCH_LOCK" || failureOf(outcome).layer === "KERNEL").toBe(
-      true,
-    );
-    expect(JSON.stringify(outcome)).not.toContain("processIdentity");
-  });
+  it.each(suspects)(
+    "holds %s as SUSPECT and never relaunches",
+    (_label, input, code, layer) => {
+      const outcome = resolveDuplicateDelivery(input);
+      expect(outcome.kind).toBe("SUSPECT");
+      expect(codeAndLayer(outcome)).toEqual({ code, layer });
+      expect(JSON.stringify(outcome)).not.toContain("processIdentity");
+    },
+  );
 
   it("names the kernel layer when the claim does not parse", () => {
     const outcome = resolveDuplicateDelivery(makeDelivery({ claim: {} }));

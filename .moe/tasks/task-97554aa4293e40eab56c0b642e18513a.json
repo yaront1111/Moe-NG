@@ -15,13 +15,119 @@
     "Keep production modules focused, target <=250 lines, split before 400.",
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Decide whether the journey half can run at all, and transcribe the journeys by hand. First, check the board: this canary drives the daemon bootstrap and work services, the HTTP/stream seam, review flow, crash reconciliation, evidence receipts, the context journal handoff package and session coordination — all of which were in flight when this was planned. Record which are DONE and which are not. The harness half (steps 2-4) is buildable regardless and is never wasted; the journey half (steps 5-8) needs its features. If the features are absent, build the harness and then moe.report_blocked naming exactly which ones are missing — do NOT stub, mock, or narrow a journey to make it pass, because this is the epic's cutover acceptance gate and a canary trimmed until it goes green certifies a cutover that never happened. Second, transcribe BY HAND from the pinned design (read-only, epic rail 1) the exact assertions for J1 (line 1095: exactly three human actions — goal.create, plan/initial-graph approval, final acceptance), J3 (line 1099) and J4 (line 1101), plus the exit condition at line 1324. That hand-written list is the specification for steps 5-8; a list derived from the implementation would assert only that the system does what it does. Produce no code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "OWNERSHIP AMENDMENT for the test lane. This task's stated verification is `pnpm typecheck && pnpm test && pnpm test:e2e`, but `test:e2e` does not exist in root package.json (current scripts: typecheck, test, test:meta, test:property, test:store, verify:foundation, verify:store), and root package.json is NOT inside this task's owned paths (`tests/e2e/foundation/**` and release evidence paths only). Request the amendment in #governors naming the exact one-line script addition, and WAIT for confirmation — do not self-approve. Follow the existing `test:property` precedent (`vitest run tests/property`) rather than inventing a new runner or config. Critically, the new lane must NOT change what the existing `pnpm test` covers: verify before and after that root `pnpm test` reports the same suite set, because silently widening or narrowing the repo-wide gate would affect every other task's evidence. Root package.json and pnpm-lock.yaml are shared state — keep the change to the single hunk and verify with `git diff --stat`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Build the harness foundation — buildable today, independent of every in-flight feature. Create tests/e2e/foundation/foundation-fixtures.ts providing the INPUTS a journey needs: a scratch project repository, a seeded low-risk task definition, and a pinned Claude runtime observation. Fixtures supply inputs only — they may NEVER stand in for a component under certification, because mocking the system under test would make this suite an elaborate tautology. Create tests/e2e/foundation/e2e-harness.ts with the run scaffolding: deterministic seeds as fixed literals (no Math.random, no wall clock, so a failing journey is reproducible), a declared-boundary process control used ONLY by this harness and never imported into a package, and cleanup that runs on every exit path including failure — on Windows a killed child holds handles and a leaked fixture directory will fail later cases with EBUSY rather than with the real error.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/foundation-fixtures.ts",
+        "tests/e2e/foundation/e2e-harness.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/foundation-fixtures.ts",
+        "tests/e2e/foundation/e2e-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Build the release manifest and the exact-commit gate — DoD 1, and also buildable today. Create tests/e2e/foundation/release-manifest.ts and release-manifest.test.ts. The manifest binds, for one canary run: the exact commit SHA, the frozen-lockfile install result, every gate that ran with its outcome, and the digests of the evidence each journey produced. Assert the two properties that make it meaningful rather than decorative: the working tree was CLEAN at the start of the run and every gate ran at the SAME commit — a canary assembled from a dirty tree, or whose gates were run at different commits, proves nothing about a release. Use `pnpm install --frozen-lockfile` as part of the claim, not as a convenience, and record its result in the manifest. The manifest is immutable and content-addressed; assert its digest covers every field by set equality against a hand-written list.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/release-manifest.ts",
+        "tests/e2e/foundation/release-manifest.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/release-manifest.ts",
+        "tests/e2e/foundation/release-manifest.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "J1 — the linear Tuesday-bug journey, against the REAL daemon command surface and the REAL store. Create tests/e2e/foundation/j1-linear-task.e2e.test.ts asserting the design's own claim at line 1095: after bootstrap, one causal bug remains one worker node, and the per-goal happy-path human actions are EXACTLY three — goal.create, exact plan/initial-graph approval, and final acceptance of the verified and reviewed result. Assert that count exactly: a journey needing a fourth human action has failed the design's claim, and a journey needing fewer has skipped an approval gate. Assert the run produces exact diffs and receipts, and that control-plane overhead is reported. Drive it end to end through the daemon's command path — no mock of any component under certification. If a required command surface is absent, this test FAILS or the task blocks; it is never stubbed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j1-linear-task.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/j1-linear-task.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "J3 — crash recovery, design line 1099. Create tests/e2e/foundation/j3-crash-recovery.e2e.test.ts killing the agent, the runner and the daemon at DECLARED boundaries (this harness is the only place in the epic where real process termination is legitimate; the runner subtree is deliberately fenced against it). After each restart assert that the system shows the honest record — adopted, suspect, quarantined, and reconciliation records with their truth chips — rather than a silently resumed run. Assert the two properties that distinguish honest recovery from a cover-up: healthy continuation is ONE safe action or an already-approved policy action, and it creates a traceable continuation or binding record and NEVER edits history — compare the pre-crash records byte-for-byte after recovery to prove nothing was rewritten. Assert the outcome kinds by set equality against the hand-written list from step 1, so an unexpected recovery outcome fails rather than passing unnoticed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j3-crash-recovery.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/j3-crash-recovery.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "J4 — rejection and re-plan, design line 1101. Create tests/e2e/foundation/j4-rejection-replan.e2e.test.ts asserting: findings link evidence to required changes (a finding with no evidence link fails); delta approval shows changed hashes and correctly classifies invalidated versus carry-forward nodes; the three-round counter is VISIBLE and escalation is EXPLICIT, tested at the boundary — two rounds do not escalate, the third does; and old plans, attempts, receipts and reviews remain READABLE after a re-plan, which is the immutability half and the one most easily lost, so assert the earlier records are still retrievable and byte-identical rather than merely that a new plan exists.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j4-rejection-replan.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/j4-rejection-replan.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Hostile-client and release-handoff incident fixtures — named in the design's exit condition at line 1324 and in this task's deliverable. Create tests/e2e/foundation/hostile-client.e2e.test.ts driving the adapter boundary with deliberately hostile input: oversized bodies, malformed envelopes, replayed commands, stale cursors, forged or absent authentication, and free-form session/terminal text attempting to trigger a state change. Assert each is refused with its stable code at the boundary and that NONE produces a durable mutation — read the store back to prove the non-mutation rather than trusting the response, since a service that mutates and then refuses would pass a response-only assertion. Include the release-handoff incident: an attempt released mid-flight must leave an exact safe handoff and no partial authority. Assert the case list length is non-zero so a hostile sweep that generates nothing cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/hostile-client.e2e.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/hostile-client.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the self-host claim — DoD 3, the point of the whole canary. Assert that ONE exclusive low-risk moe-next task completes the full arc through the real system: plan, execute, verify, independent review, accept, with typed session and terminal communication throughout, producing exact receipts and NO duplicate authority. The duplicate-authority assertion is the load-bearing one — assert that at no point do two workers hold authority over the same task, checked across the whole run rather than at the end, since a transient overlap that resolves before completion is exactly the bug this gate exists to catch. Assert every session and terminal message is advisory and that none of them caused a state change except through the command path. Record the receipts in the release manifest from step 4.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/j1-linear-task.e2e.test.ts",
+        "tests/e2e/foundation/release-manifest.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the full gate at ONE exact commit and assemble the evidence. From a clean tree at a recorded commit SHA: `pnpm install --frozen-lockfile`, then `pnpm typecheck && pnpm test && pnpm test:e2e`, capturing real output for each. All must exit 0 at the SAME commit — gates run at different commits do not compose into a release claim, and that is what DoD 1 is asserting. Record the commit SHA, the install result, and each gate's outcome in the release manifest. Attribute any red by path and never by a remembered count. Then DoD 4's external half: 'Old Moe records the canary as externally delegated so no second worker owns it' is a real coordination action against another system, NOT a test assertion — do not perform it as a side effect of a passing run. Ask for explicit human confirmation before performing it, and record the confirmation. Finally confirm no unresolved authority UNKNOWN and no foreign-path admission remains, asserted rather than eyeballed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the suite as an attacker: is any component under certification mocked or stubbed anywhere — the tautology failure that would make this whole gate worthless; was any journey assertion weakened, skipped, or narrowed so it would pass against a partial system; were the journey expectations transcribed by hand from the design or quietly derived from the implementation; does J3 actually kill real processes at declared boundaries, and does it prove history was not rewritten rather than merely that recovery happened; does the hostile suite read the store back to prove non-mutation; can two workers ever hold authority over the same task at any instant during the run; did every gate genuinely run at one commit from a clean tree; does any harness process leak on a failure path. Then stage and commit by EXPLICIT PER-FILE pathspec — never a bare git commit, never git commit -a, never git add -A, never a directory — since the working tree is shared with many in-flight tasks. Root package.json is committed only if step 2's amendment was granted. Run `git status --porcelain` first, unstage foreign paths with `git restore --staged`, and verify with `git show --stat` that only owned paths landed with no probe, scratch or debug files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by architect-0b81de40 on explicit human instruction 2026-08-08 (\"plan all\"). I twice held this back deliberately as the epic's terminal acceptance gate (\"every preceding SH task and completion of the cleanup lane\"), and that reasoning still stands: nearly every feature it exercises is in flight right now. Promoting because the human asked, and because a reviewable plan for the E2E harness has value ahead of the features. THE PLAN IS SPLIT ALONG THE DEPENDENCY LINE, same as the supervisor hardening gate: the harness, fixtures, evidence manifest and release manifest rest on nothing and are buildable now; the J1/J3/J4 journey assertions need the daemon commands, control-room seam, review flow and crash reconciliation that are still being written. Step 1 checks the board and decides. ARCHITECT/WORKER: do NOT weaken a journey assertion to make it pass against a partial system — this is the cutover acceptance gate and a canary trimmed until it goes green is worse than no canary.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -29,5 +135,33 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-07T11:50:16.163Z"
+  "updatedAt": "2026-08-08T20:58:43.710Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:57:10.555Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
+  },
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:58:41.667Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) THIS IS THE EPIC'S TERMINAL ACCEPTANCE GATE AND MUST NOT BE MADE TO PASS EARLY. Its dependency is literally 'every preceding SH task and completion of the cleanup lane', and at plan time nearly every feature it exercises is being written. The failure mode here is not lateness — it is a canary trimmed until it goes green, which would certify a cutover that never happened. So this plan deliberately does NOT try to be fully de-blockable.\n(2) SPLIT ALONG THE DEPENDENCY LINE, as with the supervisor hardening gate. The HARNESS half — fixtures, the frozen-lockfile install gate, the evidence manifest, the release manifest, and the `test:e2e` script — rests on nothing and is buildable today. The JOURNEY half (J1/J3/J4, hostile-client, crash, handoff) needs the daemon command surface, the control-room seam, the review flow and crash reconciliation. Building the harness first is never wasted and front-loads the slowest part.\n(3) THE JOURNEYS ARE PINNED IN THE DESIGN — do not invent them. Design lines 1095 (J1: exactly three human actions — goal.create, plan/initial-graph approval, final acceptance), 1099 (J3: kill agent/runner/daemon at declared boundaries; restart shows adopted/suspect/quarantined/reconciliation with truth chips; continuation is one safe action and creates a binding, not edited history) and 1101 (J4: findings link evidence to required changes; delta approval shows changed hashes and invalidated/carry-forward nodes; three-round counter visible and escalation explicit; old plans/attempts/receipts/reviews remain readable). Line 1324 states the exit condition. Transcribe these BY HAND into the expected-assertion list.\n(4) ROOT package.json IS NOT IN OWNED PATHS but `pnpm test:e2e` does not exist and the task's verification names it. That is an ownership amendment, handled as an explicit governance step rather than smuggled in.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-08:\n- **`tests/` holds only `fault/`, `instruction-contract/`, `property/`. There is NO `tests/e2e/`** — this task creates it.\n- **Root package.json scripts**: typecheck, test, test:meta, test:property, test:store, verify:foundation, verify:store. **There is NO `test:e2e`**, though this task's stated verification is `pnpm typecheck && pnpm test && pnpm test:e2e`. Adding it edits root package.json, which is outside the stated owned paths (`tests/e2e/foundation/**` and release evidence paths only) — hence the amendment step.\n- **The journeys are specified verbatim in the pinned design** at `D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md`: J1 line 1095, J3 line 1099, J4 line 1101, exit condition line 1324 ('Foundation Preview passes J1, J3, J4 and hostile-client/release-handoff incident fixtures on Windows+Claude'). Epic rail 1 forbids editing that file; read it only.\n- **Existing test-lane precedent**: `tests/property/` with the `test:property` script shows the repo's convention for a separate lane rooted outside packages — follow it for `test:e2e` rather than inventing a new runner.\n- **What the canary will drive, all in flight at plan time**: apps/daemon bootstrap services (task-2f6ac0d1), work services (task-ba3a45f9), the HTTP/stream seam (task-2d1f94f9), review flow (task-58029c26), crash reconciliation (task-52ec1406), evidence receipts (task-1e512b95), context journal + handoff package (task-79eddf12), session coordination (task-f837ce45).\n- **Determinism constraints inherited epic-wide**: no Math.random, no wall clock in fixtures; seeds are fixed literals so a failing journey is reproducible.",
+    "risks": "1. **THE CANARY MUST NOT BE WEAKENED TO PASS.** This is the cutover acceptance gate for the epic. If a journey cannot run because a feature is absent, the journey FAILS or the task blocks — it is never narrowed, stubbed, or asserted against a mock of the thing under test. A green canary over a partial system is the single worst outcome available here, worse than no canary, because it certifies a cutover that did not happen.\n2. **Do not mock the system under test.** E2E means the real daemon command surface and the real store. Mocking a daemon service to make J1 pass would make this suite an elaborate tautology. Fixtures may supply INPUTS (a repo, a task, a pinned Claude runtime observation); they may never stand in for the components being certified.\n3. **DoD 1 requires ONE EXACT COMMIT.** A canary assembled from a dirty tree, or whose gates were run at different commits, proves nothing about a release. Record the commit SHA and assert the tree is clean at the start of the run; a fresh frozen-lockfile install (`--frozen-lockfile`) is part of the claim, not a convenience.\n4. **DoD 4 has an external, irreversible-feeling side**: 'Old Moe records the canary as externally delegated so no second worker owns it.' That is a real coordination action against another system, not a test assertion. Treat it as requiring explicit human confirmation before it is performed, and never perform it as a side effect of a passing test run.\n5. **J3 kills processes at declared boundaries** — the only place in this epic where real process termination is legitimate, since the runner subtree is fenced against it. Confine that capability to the E2E harness, never import it into a package, and assert cleanup on every exit path so a killed child cannot leak into later cases (Windows holds handles; see the EBUSY temp-fixture memory).\n6. **Do not derive the expected journey assertions from the implementation.** Transcribe them by hand from design lines 1095/1099/1101 (`mem:gotcha-self-derived-universe-cannot-check-itself`), or the canary asserts only that the system does what it does.\n7. Root `package.json` and `pnpm-lock.yaml` are shared with every in-flight task — single-hunk change, verified with `git diff --stat`, committed by explicit pathspec.\n8. `pnpm test` at root currently includes other packages' suites; do not let this task's lane silently change what that script covers.",
+    "keyFiles": [
+      "package.json",
+      "tests/property",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "apps/daemon/src/index.ts",
+      "packages/store/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 28800000
+  },
+  "planApprovedAt": "2026-08-08T20:58:43.710Z"
 }

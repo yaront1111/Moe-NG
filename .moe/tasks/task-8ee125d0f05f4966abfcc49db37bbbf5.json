@@ -1,0 +1,100 @@
+{
+  "id": "task-8ee125d0f05f4966abfcc49db37bbbf5",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Publish scheduler claim-composition surface on @moe/scheduler root",
+  "description": "Objective: make the scheduler authority and budget claim-composition surface reachable from outside @moe/scheduler, so apps/daemon can compose it. Blocker-fix task 1 of 2, created by architect-8a4a1764 on 2026-08-08 under human approval in the REPL, after task-ba3a45f9 (Daemon work services, SPIDR child 3) was found unbuildable from its owned paths.\n\nWHY THIS EXISTS - evidence, probed not assumed, from apps/daemon with both controls:\n  node --experimental-strip-types -e \"import('@moe/scheduler/authority/lease-resource.js')\"\n    -> DEEP FAIL ERR_PACKAGE_PATH_NOT_EXPORTED\n  node --experimental-strip-types -e \"import('@moe/scheduler')\"\n    -> ROOT OK exports=17\nThe 17 root exports are ALL graph-kernel (validateGraphSnapshot, analyzeGraphStructure, analyzeHardEdgeCounterfactuals, partitionFrontier, previewGraphSnapshot, resolveGraphPolicy, createTraversalCounter, GraphAnalysisError, and 9 graph policy constants). packages/scheduler/package.json pins \"exports\": {\".\": \"./src/index.ts\"}, which is an EXCLUSIVE map: no subpath import resolves, at runtime or under moduleResolution NodeNext. So reserveAll / reserveProviderSlot / fenceAuthority / the budget reservation records are unreachable from every package except scheduler itself. Verified zero external consumers today: the only mention of fenceAuthority outside packages/scheduler is a COMMENT in packages/runner/src/supervisor/lease-mirror.ts:33.\n\nDeliverable: extend packages/scheduler/src/index.ts with the claim-composition surface, following the file's existing export style (value exports grouped by module, then a `export type { ... }` block, all specifiers written with the .js extension per NodeNext). Minimum symbol set, driven by what task-ba3a45f9's four-leg atomic claim needs:\n  - from ./authority/lease-resource.js : reserveAll, reserveProviderSlot, adapterConfirm, adapterFail, grantSuccessorCapacity + the AuthorityOutcome / ReserveAllResult / ProviderSlotReservation / AcquisitionSet types\n  - from ./authority/lease-fencing.js  : fenceAuthority, parseLeaseRecord, parseProof, parseClock + the Fenced type\n  - from ./authority/resource-model.js : SLOT_STATES, SlotState and the acquisition row types the above signatures name\n  - from ./budget/budget-reservation.js: reserveForAdmission, activateReservation, cancelReservation, deriveReservationId, ADMISSION_PURPOSES, PROTECTED_ADMISSION_PURPOSES, ADMISSION_PURPOSE_RESERVE_CONTRACT, RESERVATION_STATES, BUDGET_RESERVATION_ISSUE_CODES + BudgetAvailableView, AdmissionRequest, AdmissionGate, ReservationRecord, ReservationState, BudgetReservationResult, BudgetReservationIssueCode and the command types\nAdd whatever transitive types those signatures reference (from ./authority/authority-kernel.js and ./budget/budget-contract.js) so a consumer can name every parameter and every branch of every return type without a deep import. Update the index.ts header docblock: its current \"pure structural graph-analysis kernel\" summary stops being the whole truth once authority and budget ship on the same entry point.\n\nNO new .js bridges are needed here - verified: every module under packages/scheduler/src/authority/ and packages/scheduler/src/budget/ already has its tracked one-line sibling bridge (mem:gotcha-scheduler-js-shims). This task must not create, delete, or edit any bridge.\n\nNOT in scope: changing any authority or budget BEHAVIOUR; adding a slot-count ceiling (design 427's four-slot project-wide limit is deliberately absent from reserveProviderSlot, which validates one slot and does no counting - the counting belongs to the daemon caller and is task-ba3a45f9's work); touching packages/runner; touching apps/daemon; any package.json or lockfile edit.\n\nHard dependencies: none. The authority children (lease presence core task-967769ea) and all five conserved-budget children are DONE. This task is independent of supervisor SPIDR children 1 and 2 and can start immediately.\n\nOwned paths: packages/scheduler/src/index.ts, packages/scheduler/src/index-surface.test.ts (new).\nVerification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck",
+  "definitionOfDone": [
+    "Every symbol named in the description is exported from packages/scheduler/src/index.ts, and a consumer can name every parameter type and every union branch of every exported function's return type without any deep subpath import.",
+    "A new packages/scheduler/src/index-surface.test.ts imports the package ROOT specifier @moe/scheduler (never a relative or deep path) and asserts, per symbol, that the export is present and of the expected typeof - so a dropped export fails the suite by name rather than by a vague count.",
+    "The same test pins the surface against silent loss: it asserts set equality between Object.keys of the namespace and a hand-written expected export list, so both a removed export AND an unreviewed addition go red. The list is hand-transcribed, never derived from the namespace under test (mem:gotcha-self-derived-universe-cannot-check-itself).",
+    "A plain-Node probe run from the repo root proves the new surface actually loads outside vitest, with BOTH controls recorded in the completion evidence: import('@moe/scheduler') resolves and its namespace contains reserveProviderSlot and fenceAuthority (positive), and a deep subpath import still raises ERR_PACKAGE_PATH_NOT_EXPORTED (negative control proving the exports map stayed exclusive). A vitest-only gate is not evidence the module loads (mem:gotcha-vitest-hides-missing-js-bridge).",
+    "Zero behaviour change: no non-test file under packages/scheduler/src/authority/ or packages/scheduler/src/budget/ is modified, no .js bridge is added or edited, and the pre-existing scheduler suite passes with the same test count as before this task.",
+    "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck exits 0; committed paths are exactly packages/scheduler/src/index.ts and packages/scheduler/src/index-surface.test.ts."
+  ],
+  "taskRails": [
+    "Re-export only. This task changes what is REACHABLE, never what any function DOES. If a symbol seems to need a signature change to be exportable, stop and report_blocked rather than editing authority or budget logic.",
+    "Do not add, remove, or edit any .js bridge - packages/scheduler/src/authority/** and budget/** are already fully bridged, and an unnecessary bridge edit is an unowned change to shared runtime state.",
+    "Assert the reason code, not just the outcome: the exclusive-exports negative control must assert the literal ERR_PACKAGE_PATH_NOT_EXPORTED, never merely that the deep import failed.",
+    "Keep the production file focused: target <=250 lines, split before 400. packages/scheduler/src/index.ts is 81 lines today - if the added surface would push it past 250, extract the authority/budget re-exports into a sibling module that index.ts re-exports, rather than letting the entry point sprawl.",
+    "Commit by explicit pathspec only: git commit -- packages/scheduler/src/index.ts packages/scheduler/src/index-surface.test.ts. Never a bare git commit; the index is shared across concurrent tasks (epic rail 3)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the TDD baseline and create the RED root-surface contract. Before editing, run the existing scheduler suite once and record its file/test counts in the step evidence so the final total can distinguish the new surface cases from the unchanged pre-existing suite. Add index-surface.test.ts with `import * as scheduler from \"@moe/scheduler\"` and type-only imports from that same root specifier only. Hand-transcribe an alphabetized 36-value expected namespace: the verified 17 graph values plus ADMISSION_PURPOSES, ADMISSION_PURPOSE_RESERVE_CONTRACT, BUDGET_RESERVATION_ISSUE_CODES, PROTECTED_ADMISSION_PURPOSES, RESERVATION_STATES, SLOT_STATES, activateReservation, adapterConfirm, adapterFail, cancelReservation, deriveReservationId, fenceAuthority, grantSuccessorCapacity, parseClock, parseLeaseRecord, parseProof, reserveAll, reserveForAdmission, and reserveProviderSlot. Assert exact set equality and one named expected typeof assertion per value (functions/classes versus arrays/objects/numbers), never a count-only check. Add compile-time/expectTypeOf coverage proving every exported function parameter and each success/refusal union arm is nameable using the root-exported types: AuthorityOutcome, AuthorityErrorCode, AuthorityIssue, AuthorityProof, AuthorityRejection, ClockObservation, Fenced, LeaseKind, LeaseRecord, LeaseState, RejectionSecurityRecord; AcquisitionFailure, AcquisitionSet, AcquisitionState, DeclaredResource, ProviderSlotReservation, ReserveAllRequest, ReserveAllResult, ResourceRow, ResourceWaitRequest, SlotState; AdmissionAmount, AdmissionGate, AdmissionHumanApproval, AdmissionPolicyAllowance, AdmissionPurpose, AdmissionRequest, BudgetAvailableView, BudgetReservationIssue, BudgetReservationIssueCode, BudgetReservationResult, ReservationActivateCommand, ReservationCancelCommand, ReservationLine, ReservationRecord, ReservationState; and BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, BudgetReservePurpose. Assert the matrix/list has the exact positive cardinality, then run only this test and confirm RED specifically names missing requested root exports.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Publish the minimum explicit root surface in index.ts, without modifying behavior. Rewrite the header docblock to describe three zero-minting composition areas—structural graph analysis/preview, caller-supplied authority fencing/resource reservation, and caller-supplied conserved-budget admission reservation—and retain the warning that the scheduler does not invent dependency, policy, lease, or execution authority. Add grouped value exports from `./authority/lease-resource.js` (reserveAll, adapterConfirm, adapterFail, reserveProviderSlot, grantSuccessorCapacity), `./authority/lease-fencing.js` (fenceAuthority, parseLeaseRecord, parseProof, parseClock), `./authority/resource-model.js` (SLOT_STATES), and `./budget/budget-reservation.js` (reserveForAdmission, activateReservation, cancelReservation, deriveReservationId, ADMISSION_PURPOSES, PROTECTED_ADMISSION_PURPOSES, ADMISSION_PURPOSE_RESERVE_CONTRACT, RESERVATION_STATES, BUDGET_RESERVATION_ISSUE_CODES). Add explicit type-only blocks from authority-kernel, lease-fencing, resource-model, budget-reservation, and budget-contract for every type named in step 1. Use only `.js` specifiers, no export-star, no aliases, no signature edits, no package.json change, and no bridge or authority/budget file edit. Keep index.ts at or below 250 physical lines and make the new root-surface test green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the single adversarial review over the two owned paths. Compare every value/type name against its defining export and each public function signature; verify the type closure covers both branches rather than only happy-path parameters, no helper/private value leaked, the 17 graph keys remain unchanged, and the header does not imply new authority. Check null/hostile-input behavior was not touched because this is reachability-only. Mutation-drill the production surface by temporarily removing `fenceAuthority` (and separately, if needed, adding an unapproved exported value such as ACQUISITION_STATES): the named typeof/set-equality surface test must go red, proving both loss and addition axes are load-bearing. Restore the exact original owned bytes in a finally path, confirm no bridge/package/authority/budget diff exists, no scratch file remains, and index.ts is <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the final verification from the repository root. First record both plain-Node controls via `pnpm --filter @moe/scheduler exec node --experimental-strip-types`: the positive `import('@moe/scheduler')` must report `typeof reserveProviderSlot === 'function'` and `typeof fenceAuthority === 'function'`; the negative `import('@moe/scheduler/authority/lease-resource.js')` must exit successfully only when the caught `error.code` is exactly `ERR_PACKAGE_PATH_NOT_EXPORTED`. Then run the required foreground gate exactly: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck`. Record exit 0 and show that the pre-existing scheduler tests retain their baseline count while the final total adds only the new surface cases. Inspect `git diff -- packages/scheduler/src/index.ts packages/scheduler/src/index-surface.test.ts` and `git status --porcelain`; unstage foreign entries without altering them, stage only these two owned paths, commit only with `git commit -- packages/scheduler/src/index.ts packages/scheduler/src/index-surface.test.ts`, and verify `git show --stat` contains exactly those paths before calling moe.complete_task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 34,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-08T20:44:45.217Z",
+  "updatedAt": "2026-08-08T20:54:29.110Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T20:50:42.259Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-da724bb7"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:54:27.080Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep packages/scheduler/package.json's exclusive root-only exports map and publish an explicit curated root surface. Deep/subpath exports are rejected because they would widen the runtime boundary, and export-star forwarding is rejected because it would silently publish helpers and make the expected namespace unstable. A sibling export module is unnecessary: the current index is 79 physical lines and the explicit value/type blocks fit below 250. No authority/budget behavior file or existing .js bridge is touched.",
+    "codebaseInsights": "A live plain-Node package-self-reference probe invoked from the repository root via `pnpm --filter @moe/scheduler exec node --experimental-strip-types` reports exactly 17 current runtime keys: ABSOLUTE_MAX_GRAPH_HARD_EDGES, ABSOLUTE_MAX_GRAPH_NODES, ABSOLUTE_MAX_GRAPH_TOTAL_EDGES, DEFAULT_GRAPH_POLICY, DEFAULT_MAX_HARD_EDGES, DEFAULT_MAX_NODES, DEFAULT_MAX_TOTAL_EDGES, GraphAnalysisError, MAX_GRAPH_KEY_CODE_UNITS, MIN_GATED_DESCENDANTS_FOR_REVIEW, analyzeGraphStructure, analyzeHardEdgeCounterfactuals, createTraversalCounter, partitionFrontier, previewGraphSnapshot, resolveGraphPolicy, validateGraphSnapshot. The requested additions exist with the named signatures in lease-resource.ts, lease-fencing.ts, resource-model.ts, and budget-reservation.ts. AuthorityOutcome's false arm transitively names AuthorityRejection, AuthorityIssue, AuthorityErrorCode, RejectionSecurityRecord, and LeaseState; budget reservation signatures transitively name BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, and BudgetReservePurpose. All referenced authority/budget .js bridges are already tracked.",
+    "risks": "Keep runtime values and type-only exports separate: type exports must not change Object.keys. The expected namespace must be a hand-written 36-name list (17 existing + 19 approved additions), never derived from the namespace. Use explicit named exports, not export *. The package-root probe must run through `pnpm --filter @moe/scheduler exec node` from the repo root so Node resolves the package self-reference; bare `node -e` at the workspace root has no @moe/scheduler link and is not a valid control. The negative control must assert literal ERR_PACKAGE_PATH_NOT_EXPORTED. If any requested type cannot be exported without changing its defining module/signature, stop and report blocked.",
+    "keyFiles": [
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/package.json",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "packages/scheduler/src/authority/lease-fencing.ts",
+      "packages/scheduler/src/authority/resource-model.ts",
+      "packages/scheduler/src/authority/authority-kernel.ts",
+      "packages/scheduler/src/budget/budget-reservation.ts",
+      "packages/scheduler/src/budget/budget-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-08T20:54:29.110Z"
+}

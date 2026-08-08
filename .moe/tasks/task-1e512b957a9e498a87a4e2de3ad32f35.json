@@ -121,7 +121,7 @@
     {
       "stepId": "step-7",
       "description": "Implement packages/runner/src/evidence/evidence-receipt.ts to green, and make DoD 1 true by SHAPE rather than by check. The receipt builder accepts only digest-bound evidence: manifest digests from inputManifestDigestInput/resultManifestDigestInput, the runtime observation bound through observationDigestInput, content-addressed output refs, caller-supplied canonical UTC timestamps, the recipe digest, and opaque graph/lease/effect identity refs. It has NO parameter through which free text could discharge an obligation — that is the primary enforcement of DoD 1, with the refusal code as the backstop for the nearest legal attempt. Bind every field under the pinned receipt version with canonicalDigest, deep-freeze the result, and return payload fields only on the success arm. Counters are safe-integer numbers and bytes are base64 or refs, because canonicalDigest throws on bigint and non-safe integers and canonicalJson mishandles Uint8Array. Target under 250 lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/evidence/evidence-receipt.ts",
         "packages/runner/src/evidence/evidence-receipt.test.ts"
@@ -129,41 +129,79 @@
       "newFiles": [
         "packages/runner/src/evidence/evidence-receipt.ts"
       ],
-      "startedAt": "2026-08-08T20:41:21.330Z"
+      "modifiedFiles": [
+        "packages/runner/src/evidence/evidence-receipt.ts",
+        "packages/runner/src/evidence/receipt-obligations.ts",
+        "packages/runner/src/evidence/verifier-execution.ts",
+        "packages/runner/src/evidence/evidence-contract.ts",
+        "packages/runner/src/evidence/verification-recipe.ts"
+      ],
+      "note": "GREEN. `pnpm exec vitest run packages/runner/src/evidence` -> \"Test Files 3 passed (3) / Tests 50 passed (50)\". `pnpm --filter @moe/runner typecheck` -> exit 0.\n\nDoD 1 IS TRUE BY SHAPE. BuildEvidenceReceiptInput has eight fields: recipe, execution, inputManifest, resultManifest, three opaque identity strings, obligations. Not one of them can carry prose that discharges anything — the manifests are bound via inputManifestDigestInput/resultManifestDigestInput, the runtime via observationDigestInput, outputs are content-addressed ArtifactRefs, timestamps are caller-supplied canonical UTC (no Date.now anywhere), and every ObligationSupport member is digest-bound. AGENT_REPORT exists only so the nearest legal attempt has a representable shape and a coded refusal; it carries reportedBy + reportSha256, never text. The backstop lives at ONE source, receipt-obligations.ts checkSupport, and fires on `support.kind === \"AGENT_REPORT\"` BEFORE any of its fields are inspected, so no shape gate can answer first.\n\nThree focused modules rather than one: verifier-execution.ts (203) is the OBSERVATION PORT — it defines ObservedVerifierExecution and decides admissibility (argv shape, disposition in a closed set, exitCode safe-integer-or-null, canonical UTC timestamps, the runtime observation re-deriving its own digest, and outputs reconciled against the recipe's declared outputs with OUTPUT_UNDECLARED and OUTPUT_MISSING as separate facts). receipt-obligations.ts (132) owns obligation and support validation; support must name something the receipt itself binds. evidence-receipt.ts (224) binds all 12 fields under EVIDENCE_RECEIPT_VERSION with canonicalDigest, deep-freezes, and returns `receipt` only on the success arm.\n\nDesign note recorded in the module: the execution's disposition is an ADMISSIBILITY GATE, not a bound field — it decides whether a receipt exists at all, while what the receipt attests is exactly the DoD 2 list. Counters stay safe-integer numbers and bytes stay refs, per the canonicalDigest/canonicalJson constraints.\n\nAlso folded verification-recipe.ts's local isBoundedText into evidence-contract.ts's isBoundedEvidenceText so recipe and execution validate text identically instead of drifting. Lines: contract 235, verification-recipe 242, candidate-rematerialization 219, candidate-reconciliation 145, evidence-receipt 224, verifier-execution 203, receipt-obligations 132 — all under the 250 target.",
+      "startedAt": "2026-08-08T20:41:21.330Z",
+      "completedAt": "2026-08-08T20:44:55.013Z"
     },
     {
       "stepId": "step-8",
       "description": "Wire verifier execution as an OBSERVATION PORT and close the pipeline end to end. Verifier execution in this task must never spawn a process: the caller supplies an observed execution result — argv actually used, exit disposition, output refs, and the runtime observation — and this module decides what it proves, exactly as providers/claude does. Add the intake to evidence-receipt.ts (or a focused sibling if it would burst 400 lines, in which case create the sibling in this same step) and assert the end-to-end path in the existing suites: recipe -> rematerialization -> observed execution -> receipt, where the receipt's bound argv must EQUAL the recipe's declared argv and a divergence refuses with its own code. That divergence check is the one that makes the receipt evidence of the recipe rather than of some other run. Assert that an execution observation whose truth class is UNKNOWN cannot discharge an obligation and yields no receipt — unverifiable evidence stays UNKNOWN and never gains authority, per epic rail 4.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/evidence/evidence-receipt.ts",
         "packages/runner/src/evidence/evidence-receipt.test.ts",
         "packages/runner/src/evidence/evidence-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/verifier-execution.ts",
+        "packages/runner/src/evidence/evidence-receipt.test.ts",
+        "packages/runner/src/evidence/evidence-pipeline.test.ts"
+      ],
+      "note": "RED FIRST, then GREEN. Red run: \"Tests 5 failed | 53 passed (58)\" — argv divergence (x2 in the receipt suite, x1 end-to-end), UNKNOWN truth class, UNKNOWN disposition, all failing because the rules did not exist yet. Green run: \"Test Files 4 passed (4) / Tests 58 passed (58)\". `pnpm --filter @moe/runner typecheck` -> exit 0.\n\nVERIFIER EXECUTION IS A PORT, NOT A SPAWN. verifier-execution.ts takes a caller-supplied ObservedVerifierExecution (argv actually used, disposition, exitCode, output refs, runtime observation, caller-supplied instants) and decides what it proves — the same shape providers/claude uses. Nothing in the subtree imports child_process.\n\nThree rules added, each with its own code and layer EXECUTION:\n- ARGV_DIVERGENCE: observed argv must equal the recipe's declared argv element-by-element, length included. This is what makes the receipt evidence of ITS recipe rather than of some other run that happened to produce the same outputs. Tested by an extra flag AND by a pure reorder (order is the command), plus the positive case asserting the bound argv equals the recipe's.\n- OBSERVATION_UNKNOWN: an observation whose truthClass is not PROVEN discharges nothing and yields no receipt — asserted with Object.hasOwn(result,\"receipt\") === false. Epic rail 4.\n- EXECUTION_UNKNOWN: an UNKNOWN disposition yields no receipt. Paired with the contrasting test that a FAILED run STILL earns a receipt — a failure is a proven fact, absence of a fact is not. That pair stops the rule from degenerating into \"only success counts\".\n\nPLAN DEVIATION, deliberate: the step said add end-to-end assertions \"in the existing suites\". The admissibility tests did go into the existing evidence-receipt.test.ts, but the end-to-end path went into a NEW evidence-pipeline.test.ts, because it needs the artifact store, fs, and candidate ports that the receipt suite has no fixtures for, and evidence-receipt.test.ts was already 460 lines. The pipeline suite stages real bytes through createArtifactStore, builds a real recipe, rematerializes through the real ports, then builds a receipt, asserting the candidate tree holds exactly the declared closure and that the receipt binds this recipe digest, this rematerialized input tree, this result tree, and this observation — plus the end-to-end divergence refusal.\n\nverifier-execution.ts was 255 after the additions (over the 250 target); factored the repeated evidenceFailure calls behind one local `invalid` helper to land at 230. All 7 production files: 132/145/219/224/230/235/242.",
+      "startedAt": "2026-08-08T20:44:55.559Z",
+      "completedAt": "2026-08-08T20:47:35.315Z"
     },
     {
       "stepId": "step-9",
       "description": "Prove the assertions are load-bearing and sweep the fence. MUTATION DRILL at each mechanism's single source: the argv-divergence check, the foreign-bytes guard, the undeclared-bytes guard, the ref-match verification, the UNKNOWN-truth-class refusal, and the agent-text refusal. Neutralise the operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests, and confirm the red test is the one naming that guard's code. Back each file up out-of-tree and verify the restore with git hash-object. Then the fence sweep: grep the new evidence/ modules for child_process, spawn, kill, Date.now and Math.random and confirm ZERO hits — verifier execution is a port, and a single spawn here would silently undo the property the whole subtree is built on. Confirm no `.js` bridge files were added: @moe/runner has none package-wide and needs none.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/evidence/verification-recipe.ts",
         "packages/runner/src/evidence/candidate-rematerialization.ts",
         "packages/runner/src/evidence/evidence-receipt.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/candidate-rematerialization.test.ts"
+      ],
+      "note": "MUTATION DRILL: 6 mechanisms, 6 mutations, ALL KILLED. Each neutralised an operand with a constant — no line was ever deleted. Baseline 4 suites / 58 tests green.\n\nM1 argv-divergence (verifier-execution.ts, both `declared` operands -> `observed`): 2 SUITES failed, 3 tests — \"diverges from the recipe's declared argv\", \"differs from the recipe only in order\", and the end-to-end \"run that happened used different argv\".\nM2 foreign-bytes (candidate-reconciliation.ts, `outputs.has(entry.path)` -> `true`): 1 suite, 1 test — the FOREIGN test, and the UNDECLARED test stayed green.\nM3 undeclared-bytes (same operand -> `false`): 1 suite, 1 test — the UNDECLARED test, and the FOREIGN test stayed green. M2/M3 together prove the two halves are independently load-bearing, which one \"bad bytes\" fixture could never show.\nM4 ref-match (candidate-rematerialization.ts, `!refMatches(read.value, ref)` -> `false`): 1 suite, 1 test.\nM5 UNKNOWN-truth-class (`observation.truthClass === \"PROVEN\"` -> `true`): 1 suite, 1 test, \"expected true to be false\" — the receipt was produced when it must not be.\nM6 agent-text (receipt-obligations.ts, `support.kind === \"AGENT_REPORT\"` -> `false`): 1 suite, 2 tests, both reading 'RUNNER_EVIDENCE_OBLIGATION_SUPPORT_IN…' to be 'RUNNER_EVIDENCE_AGENT_TEXT_UNSUPPORTED' — i.e. the fallback answered instead of the rule. Exactly the failure the layer assertion was written to catch.\n\nTHE DRILL FOUND A REAL DEFECT AND IT IS FIXED. M4 was initially MASKED: with refMatches neutralised the swapped bytes were written and the later tree reconciliation raised the SAME code REF_MISMATCH at the SAME path, so the test stayed green while the check it names was dead. Strengthened the test to also assert `candidate.writes` is empty — a ref mismatch must be caught BEFORE the bytes touch the tree — and the mutation then reddens. Recorded, because \"survived\" would have been the wrong reading.\n\nBackups were taken out-of-tree (mktemp -d) and every restore was verified: `git hash-object` over all 11 files before vs after diffs clean, \"hashes identical\". Temp artifacts removed.\n\nFENCE SWEEP over packages/runner/src/evidence/ — child_process 0, kill 0, Date.now 0, Math.random 0, node:fs 0, execSync 0. `spawn` shows 3 hits, ALL prose in doc comments asserting the fence (\"never a spawn\", \"without ever spawning or touching a disk\", \"Nothing here spawns anything\") — inspected individually, zero code hits. The only node import in the subtree is `node:path` (3), used for joining the artifact object address; real fs stays behind ArtifactFsPort.\n\n.js bridge files package-wide in @moe/runner: 0, none added — that rule is @moe/store's and does not apply here. evidence/ is deliberately NOT exported from index.ts, matching the supervisor/ precedent.",
+      "startedAt": "2026-08-08T20:47:36.121Z",
+      "completedAt": "2026-08-08T20:49:29.595Z"
     },
     {
       "stepId": "step-10",
       "description": "Run the gate and attribute failures honestly. From the repo root, fresh, capturing real output as evidence: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Attribute red by path, never by a remembered count. `packages/runner/src/supervisor/` is SHARED with other in-flight tasks and currently holds 11 untracked files belonging to task-2580a578, with task-4a3b5ec0 also working there — red under `supervisor/` is almost certainly theirs; check before claiming or fixing it, and never edit a foreign test to make your suite green. The `scope-observation` real-git test has a known 5s-timeout flake on this machine: re-run once, report the result, do not chase it. Anything red under `packages/runner/src/evidence/` is unambiguously yours. Confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file created here is under the 400 hard cap, and record each count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/evidence/evidence-contract.ts"
-      ]
+      ],
+      "note": "GATE GREEN, run fresh from the repo root: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> EXIT=0. \"Test Files 17 passed (17) / Tests 645 passed (645)\", duration 606ms. Ran twice; identical both times.\n\nATTRIBUTION BY PATH: there is nothing red to attribute. Zero failures anywhere in the package, so nothing under `packages/runner/src/supervisor/` (the shared directory holding task-2580a578's untracked files with task-4a3b5ec0 also working there) needed checking, and no foreign test was touched. The known `scope-observation` real-git 5s-timeout flake did NOT fire on either run — reported as instructed, not chased.\n\nPER-FILE LINE COUNTS via wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room). All 7 production files, every one under the 250 target and far under the 400 hard cap:\n  receipt-obligations.ts       132\n  candidate-reconciliation.ts  145\n  candidate-rematerialization.ts 219\n  evidence-receipt.ts          224\n  verifier-execution.ts        230\n  evidence-contract.ts         235\n  verification-recipe.ts       242\nTest files (not subject to the production cap): verification-recipe.test.ts 240, evidence-pipeline.test.ts 318, candidate-rematerialization.test.ts 375, evidence-receipt.test.ts 524.\n\nThe evidence subtree contributes 4 suites / 58 tests of that total.",
+      "startedAt": "2026-08-08T20:49:30.053Z",
+      "completedAt": "2026-08-08T20:49:57.903Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can any obligation be discharged by text, or by an observation whose truth class is UNKNOWN; can a receipt attest a run whose argv differed from its recipe; can foreign or undeclared bytes survive rematerialization; does any digest get re-derived locally instead of bound from the workspace/artifact/observation surfaces that own it; does the receipt digest actually cover every field DoD 2 lists, verified by set equality rather than by eye; does any refusal assert only that it failed rather than which code and which layer; does a refused rematerialization leave partial bytes behind for a later run to inherit. Then stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and NEVER a directory pathspec under packages/runner/src/, because a sibling task's 11 untracked supervisor files sit in the same working directory and would be swept in. Run git status --porcelain first and unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only packages/runner/src/evidence/ paths landed and that no debug, probe, scratch, or generated evidence file is present.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/evidence/verifier-execution.ts",
+        "packages/runner/src/evidence/evidence-receipt.ts",
+        "packages/runner/src/evidence/candidate-reconciliation.ts",
+        "packages/runner/src/evidence/candidate-rematerialization.ts",
+        "packages/runner/src/evidence/verification-recipe.ts",
+        "packages/runner/src/evidence/receipt-obligations.ts",
+        "packages/runner/src/evidence/evidence-receipt.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW FOUND A REAL EXPLOIT AND IT IS FIXED, MUTATION-PROVEN.\n\nTHE HOLE: `Array.isArray` is true for a subclass, and a subclass can override `Symbol.iterator` to yield values its indices never held. The argv divergence check read INDICES (`observed[index] !== declared[index]`) while the receipt bound the ITERATOR (`argv: [...execution.argv]`). So an attacker could hand in an argv whose indices matched the recipe — divergence green — and whose iterator yielded a different command, which is what the receipt then attested. That breaks the exact property step 8 exists to establish. Verified with a fixture: `[...smuggled]` yields [\"node\",\"attacker.mjs\"] while `smuggled[1]` equals the recipe's entry.\n\nFIX, applied everywhere the pattern occurred:\n- evidence-receipt.ts binds `[...input.recipe.argv]` — the recipe's own frozen array — since divergence has just proven the run used it. There is no longer a second structural read of a caller-supplied list between check and bind.\n- verifier-execution.ts validates argv AND outputs by index up to the checked `length`, never by iterator.\n- verification-recipe.ts's canonicalArgv had the same double-read (`for...of` to validate, `[...argv]` to copy); it now copies during the validation pass, by index.\n- candidate-reconciliation.ts's scanRejection became normalizeScan: it reads the port listing by index and returns a fresh normalized list, so emptiness, foreign, undeclared and missing all inspect the list that was validated rather than asking a hostile port a second time.\n- receipt-obligations.ts reads obligations by index.\nNew regression test \"cannot be made to bind argv a second read smuggled past the divergence check\". M7 mutation (revert the bind to `[...execution.argv]`): 1 suite / 1 test red, restore verified by git hash-object. Load-bearing.\n\nALSO FIXED: a non-list `obligations` reported OBLIGATION_LIMIT, which is the wrong reason code for the wrong shape; it now reports OBLIGATION_KIND_INVALID and LIMIT is reserved for over-limit.\n\nREST OF THE CHECKLIST, all clean: no obligation can be discharged by text (shape + single-source coded refusal, M6-proven); no receipt survives an UNKNOWN truth class or UNKNOWN disposition (M5-proven); foreign and undeclared bytes each refuse with their own code (M2/M3-proven); every digest is bound from inputManifestDigestInput / resultManifestDigestInput / observationDigestInput / recipeDigestInput, none re-derived locally; the receipt digest is verified against the DoD list by SET EQUALITY; every refusal names code and, at the contested boundaries, layer; a refused rematerialization removes every byte it wrote. NOTED, not fixed: if the candidate port's own `write` throws mid-way, that path was never recorded as written, so a partial file is the adapter's to clean — the port contract treats write as atomic.\n\nGATE: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> EXIT=0, \"Test Files 17 passed (17) / Tests 646 passed (646)\".\n\nGATE WAS BLOCKED BY A FOREIGN FILE FOR ~4 MINUTES, honestly attributed and NOT worked around: `packages/runner/src/supervisor/race-scenarios.ts` (untracked, foreign, created mid-session) failed TS2322 on a widened `reasons: string[]`. I did not touch it. Posted the diagnosis and the one-line fix to chat (msg-a1ed2412), polled, and its owner fixed it; the gate then passed on its own.\n\nCOMMIT 1be8e2c, by EXPLICIT PER-FILE PATHSPEC (`git add -- <file>...` then `git commit -- <file>...`; never -A, never -a, never a directory pathspec). `git show --name-only` filtered against `packages/runner/src/evidence/` returns 0 foreign paths. 9 files, +894/-71, no debug, probe, scratch or generated file. `git status --porcelain -- packages/runner/src/evidence/` is empty.\n\nFOREIGN-COMMIT INCIDENT, reported not caused: commit 42f1c21 (task-4a3b5ec0) swept 8 of my evidence/ files in before I had committed them, so evidence/ history is split across 42f1c21 and 1be8e2c and the earlier half carries another task's message. Already raised by qa-cbad3a29 and worker-e46fb0dc as a harness-level auto-commit problem; I added my instance to the thread.",
+      "startedAt": "2026-08-08T20:49:58.283Z",
+      "completedAt": "2026-08-08T20:56:50.893Z"
     }
   ],
   "status": "WORKING",
@@ -186,12 +224,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.486Z",
-  "updatedAt": "2026-08-08T20:41:21.330Z",
+  "updatedAt": "2026-08-08T20:56:50.893Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:22:19.012Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 11
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -203,7 +241,12 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:24:28.594Z",

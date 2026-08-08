@@ -21,30 +21,42 @@
     {
       "stepId": "step-1",
       "description": "DECIDE WHICH WORLD YOU ARE IN before writing anything — this task's dependencies were incomplete when it was planned and will have moved. On disk (working tree, NOT `git ls-files` — the supervisor directory has been untracked throughout this slice), check for: child 1's modules (effect-kernel, effect-shape, effect-parse, effect-lifecycle, effect-activation, effect-grant, lease-mirror, effect-test-fixtures); child 2's (launch-lock.ts, drain-table.ts, drain-reconciliation.ts, restart-reconstruction.ts); and child 3's apps/daemon/src/work/**. Record exactly which exist. If ALL THREE children are present, run this plan straight through. If child 2 or 3 is still absent, build steps 2-3 (the harness engine, which depends on none of them and is never wasted work) and then moe.report_blocked naming the specific missing modules — do NOT proceed to write slice invariants against code that is not there, and above all do NOT trim the expected outcome-kind list to match a partial slice. Then transcribe, BY HAND from the design and from the children's exported vocabularies, the expected outcome-kind list this gate asserts against; a list derived from a harness run cannot check that run.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "WORLD DECISION (on-disk working-tree check, not git ls-files):\n- Child 1 (task-2580a578, DONE): PRESENT. effect-kernel.ts 266, effect-shape.ts 238, effect-parse.ts 165, effect-lifecycle.ts 262, effect-activation.ts 257, effect-grant.ts 148, lease-mirror.ts 113, effect-test-fixtures.ts 191.\n- Child 2 (task-4a3b5ec0, REVIEW): PRESENT (commit 7528e00). launch-lock.ts 138, duplicate-delivery.ts 153, process-observation.ts 88, drain-table.ts 210, drain-disposition.ts 107, drain-fence.ts 63, drain-reconciliation.ts 227, restart-records.ts 141, restart-reconstruction.ts 188.\n- Child 3 (task-ba3a45f9, PLANNING): ABSENT. `apps/daemon/src/work/` does not exist; apps/daemon/src holds only bootstrap/, index.ts, graph-preview-request.test.ts. apps/daemon/package.json dependencies are @moe/contracts + @moe/scheduler ONLY - the approved @moe/runner ownership amendment has not landed.\n\nCONSEQUENCE: steps 2-6 (harness engine, harness self-test, supervisor races, DoD-2 invariants, restart races) all target children 1+2 and are fully buildable now - they will be built. Step 7 (apps/daemon/src/work/work-races.test.ts: mirror-vs-fenceAuthority verdict-equality drift test + work-service orderings) is genuinely blocked: it needs @moe/runner in apps/daemon/package.json, which is child 3's owned amendment, and needs child 3's work services to drive. Will report_blocked on step 7 rather than write invariants against absent code or trim the expected outcome-kind list to a partial slice.\n\nHAND-TRANSCRIBED EXPECTED OUTCOME-KIND LIST (from the children's exported frozen vocabularies + the refusal paths read in source, NOT from any harness run). Label grammar: `OK:<family>:<detail>` for accepted outcomes, `NO:<layer>:<code>` for refusals - layer included because epic rail 6 requires naming WHICH layer refused, and the same code (e.g. RESTART_SAFE_HANDOFF_ABSENT) is deliberately emitted at two layers.\nLIFECYCLE accept: OK:LIFE:CLAIMED, OK:LIFE:ARMED, OK:LIFE:CANCEL_REQUESTED, OK:LIFE:MUST_DRAIN, OK:LIFE:SUCCEEDED, OK:LIFE:FAILED, OK:LIFE:UNKNOWN, OK:LIFE:CANCELLED; TOMBSTONE accept: OK:TOMB:CANCELLED; ACTIVATION accept: OK:ACT:ACTIVATED; GRANT accept: OK:GRANT:CONSUMED; DUPLICATE accept: OK:DUP:ADOPTED, OK:DUP:EXIT_BEFORE_LAUNCH; DRAIN accept: OK:DRAIN:TOMBSTONED, OK:DRAIN:TERMINALIZED, OK:DRAIN:DRAINING, OK:DRAIN:ATOMIC_ACTIVATION, OK:DRAIN:RECONCILE_ONLY; RESTART accept (all 7 RESTART_POST_STATES): OK:RESTART:ACTIVE_ADOPTED, TOMBSTONED, DRAINING, TERMINAL_PROVEN, RECONCILE_ONLY, SUSPECT, UNKNOWN.\nRefusals: NO:KERNEL:{EFFECT_INTENT_MALFORMED, EFFECT_COMMAND_MALFORMED, EFFECT_TOMBSTONE_MALFORMED, EFFECT_GRANT_MALFORMED, EFFECT_CLAIM_MALFORMED, EFFECT_ATTEMPT_MALFORMED}; NO:LIFECYCLE:{EFFECT_TRANSITION_NOT_ADMITTED, EFFECT_TERMINAL_ABSORBED, EFFECT_TOMBSTONE_DOES_NOT_DOMINATE, EFFECT_SETTLEMENT_TARGET_NOT_ADMITTED, EFFECT_SETTLEMENT_EVIDENCE_INVALID, EFFECT_UNCERTAINTY_EVIDENCE_REQUIRED, EFFECT_UNCERTAINTY_EVIDENCE_UNEXPECTED}; NO:ACTIVATION:{ACTIVATION_INTENT_NOT_ARMED, ACTIVATION_LOCK_IDENTITY_MISMATCH, EFFECT_TOMBSTONED, ATTEMPT_BINDING_MISMATCH, ATTEMPT_NOT_LAUNCH_REQUESTED, ACTIVATION_GRAPH_EPOCH_MISMATCH, ACTIVATION_DESIRED_STATE_MISMATCH, ACTIVATION_DEPENDENCY_WITNESS_STALE, PROVIDER_CAPABILITY_CHANGED}; NO:LEASE_MIRROR:{LEASE_MIRROR_MALFORMED, LEASE_MIRROR_STALE, LEASE_MIRROR_STALE_EPOCH, LEASE_MIRROR_SUPERSEDED_AUTHORITY}; NO:GRANT:{GRANT_WRAPPER_MISMATCH, GRANT_ALREADY_CONSUMED}; NO:LAUNCH_LOCK:{LAUNCH_LOCK_MALFORMED, LAUNCH_LOCK_SUSPECT, LAUNCH_LOCK_REGISTRATION_ABSENT, LAUNCH_LOCK_IDENTITY_CONFLICT}; NO:DRAIN:{DRAIN_ROW_NOT_ADMITTED, DRAIN_RESOURCE_UNRECONCILED, DRAIN_DISPOSITION_NOT_MONOTONIC, RESTART_SAFE_HANDOFF_ABSENT}; NO:RESTART:{RESTART_RECORDS_INCOHERENT, RESTART_PREMATURE_TERMINAL, RESTART_SAFE_HANDOFF_ABSENT, DRAIN_ROW_NOT_ADMITTED, DRAIN_RESOURCE_UNRECONCILED}.\nDeliberately EXCLUDED as unreachable from this harness's alphabet and argued in source: EFFECT_COUNTER_EXHAUSTED (needs a MAX_SUPERVISOR_COUNT version, which no world step can reach in 240 steps and which the focused suites already pin), ACTIVATION_COMMIT_INCOHERENT at layer ACTIVATION (reachable only via validateActivationCommit, which restart re-stamps as RESTART_RECORDS_INCOHERENT), LAUNCH_LOCK_CREDENTIAL_REUSED and PROCESS_OBSERVATION_MALFORMED and DRAIN_POST_ACTIVATION_MUTATION_REFUSED (registerLaunchLock/intakeProcessObservation/admitPostActivationMutation are not in the plan's 10-command alphabet).",
+      "startedAt": "2026-08-08T20:43:40.369Z",
+      "completedAt": "2026-08-08T20:48:49.149Z"
     },
     {
       "stepId": "step-2",
       "description": "Build the seeded harness engine — pure, dependency-free, and buildable regardless of children 2-3. Create packages/runner/src/supervisor/race-harness.ts following the lease-core pattern in mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff: a deterministic PRNG seeded from a FIXED LITERAL seed array (no Math.random, no clock anywhere, so every failing schedule is reproducible); a command alphabet covering claim, arm, activate, requestCancel, settle, consumeGrant, tombstone, duplicate-delivery, restart and drain; an asserted-good state pool of at least five members so the schedule explores real states rather than one; a documented honest/tamper bias (the lease core used 70/30 — document whatever you choose); and an outcome recorder that accumulates observed outcome KINDS with PER-KIND COUNTS. The recorder is the load-bearing part: it must expose both the observed kind set and the counts, because DoD 1 requires set equality against a hand-written list AND counts quoted in the evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/race-harness.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/race-harness.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/race-harness.ts",
+        "packages/runner/src/supervisor/race-world.ts",
+        "packages/runner/src/supervisor/race-scenarios.ts"
+      ],
+      "note": "Harness engine built as three focused modules (split for the per-file cap, all well under 250 lines): race-harness.ts (xorshift PRNG seeded from the fixed literal RACE_SEEDS=[3,11,29,61,127], RACE_STEPS=240, documented 70/30 HONEST_IN_TEN bias, OutcomeRecorder with per-kind counts + undeclared-kind throw, StepRecord/RaceEvent, checkGrantOrdering, runTrace); race-world.ts (10-command alphabet, World, 5-member asserted-good statePool built by real applyEffectCommand/activateEffect transitions, per-command honest+tamper application); race-scenarios.ts (stratified hand-written drain/restart input pools + 16 activation leg tampers). No Date.now, no Math.random, no clock. `pnpm --filter @moe/runner typecheck` exit 0.",
+      "startedAt": "2026-08-08T20:51:25.129Z",
+      "completedAt": "2026-08-08T20:56:26.265Z"
     },
     {
       "stepId": "step-3",
       "description": "Test the harness itself, because a harness nobody checks is the easiest place for this whole gate to become vacuous. Create packages/runner/src/supervisor/race-harness.test.ts asserting: the same seed produces the identical schedule twice (reproducibility — without it a failure cannot be investigated); different seeds produce different schedules (the seed is actually used); the requested step count is actually executed rather than short-circuited; the tamper bias produces both honest and tampered commands in roughly the documented proportion, asserting BOTH are non-zero so a bias of 100/0 cannot pass; and the outcome recorder counts what it observes, verified by feeding it a known sequence and asserting exact counts. Also assert the harness fails loudly on an unknown outcome kind rather than dropping it, since a silently ignored kind would defeat the set-equality assertion this gate is built on.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/supervisor/race-harness.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/race-harness.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-08T20:56:31.086Z"
     },
     {
       "stepId": "step-4",
@@ -120,7 +132,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-d1ecc56a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,17 +144,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-08T20:32:37.961Z",
+  "updatedAt": "2026-08-08T20:56:31.086Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:30:47.157Z",
     "plannedStepCount": 11,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:32:35.926Z",
   "planningNotes": {
@@ -162,5 +178,9 @@
   "budget": {
     "wallClockMs": 28800000
   },
-  "planApprovedAt": "2026-08-08T20:32:37.961Z"
+  "planApprovedAt": "2026-08-08T20:32:37.961Z",
+  "contextFetchedBy": [
+    "worker-d1ecc56a"
+  ],
+  "workStartedAt": "2026-08-08T20:43:40.369Z"
 }

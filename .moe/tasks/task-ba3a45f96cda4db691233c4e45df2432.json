@@ -17,13 +17,134 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only.",
     "Assert the reason code and refusing layer; mutation-verify each failure path."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-8a4a1764",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE + DEPENDENCY. Do not start until task-8ee125d0 (scheduler surface) and task-53680e91 (runner supervisor surface) are both DONE — this plan composes symbols they publish. Verify, do not assume: from apps/daemon run a plain-Node probe asserting import('@moe/scheduler') exposes reserveAll, reserveProviderSlot, fenceAuthority and the budget reservation functions, and import('@moe/runner') exposes the effect intent / lifecycle / activation-grant surface. If any symbol is missing, report_blocked naming it rather than deep-importing — the exports map is exclusive and a deep import fails with ERR_PACKAGE_PATH_NOT_EXPORTED. Then add exactly one dependency line to apps/daemon/package.json: \"@moe/runner\": \"workspace:*\", alphabetically ordered with the existing @moe/contracts and @moe/scheduler entries. Run pnpm install and inspect the lockfile diff: it must contain ONLY the apps/daemon importer hunk your edit produced. Never regenerate the lockfile wholesale. If a foreign hunk is already present from a concurrent task, leave the lockfile UNCOMMITTED and record the deviation in the step note — the hard rail to preserve foreign work outranks this plan's file list (mem:gotcha-shared-pnpm-lock-ownership).",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "startedAt": "2026-08-08T20:54:34.285Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "work-kernel.ts — the frozen vocabulary, no behaviour. Declare, as frozen arrays and const objects: WORK_COMMANDS (claim, renew, release, resume, cancel, get_context); WORK_ERROR_CODES, the closed stable-reason vocabulary; and CLAIM_LEGS, the ordered four-leg name list (lease, providerSlot, budgetReservation, effectIntent) plus the slot-ceiling leg. Every refusal in this task is constructed here via one WorkFailure factory carrying { code, leg, layer } — layer distinguishes which boundary refused (INGRESS vs AUTHORITY), because more than one layer can refuse and epic rail 6 requires tests to pin which one did. Define the result envelope types and one deepFreeze helper used by every handler. AUTHORITY LABELING — do NOT copy the graph-preview envelope: that surface is advisory (advisoryOnly:true, authority:\"NONE\") because it grants nothing. work.claim genuinely confers authority, so the envelope labels what was actually conferred: a refusal is authority:\"NONE\" with zero successor records, a granted claim names the authority it produced. Per epic rail 4, any leg whose evidence is missing or unverifiable stays UNKNOWN and never gains authority. Keep this file under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-kernel.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-kernel.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED — ingress tests, written before work-ingress.ts exists. Follow the graph-preview precedent (mem:decision-daemon-graph-preview-ingress) with the authority-labeling difference from step 2. Assert: (a) decodeBoundedJsonBytes runs FIRST — oversized, invalid-UTF-8, and malformed-JSON byte inputs return INPUT_REJECTED preserving the decoder's own stable code verbatim, never a code this module invents; (b) a decoded value that is not the exact envelope { schemaVersion: \"moe-work-request/1\", command, payload } returns REQUEST_INVALID — cover a null prototype violation, a missing key, an extra key, a wrong schemaVersion, and a command outside WORK_COMMANDS; (c) every returned result is frozen (Object.isFrozen on the result AND its nested error) and carries explicit authority labeling; (d) THE ORDERING PROOF — a payload that would refuse at the authority layer, wrapped in oversized bytes, must return the decoder's INPUT_REJECTED code, proving no authority path ran before decode. Assert the specific code AND the refusing layer on every case, never merely that it failed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-ingress.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-ingress.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN — work-ingress.ts. Implement the byte boundary in exactly three ordered phases: decodeBoundedJsonBytes, then exact own-key envelope validation (null-prototype check, key-set equality against the frozen key list, schemaVersion literal, command membership), then dispatch to the composition handler. No HTTP, no auth, no transport, no persistence, no approval, no provider execution, no next-command affordance — this is a boundary, not a router. Freeze every result before returning. Keep under 250 lines; if envelope parsing grows, split the parser into a sibling module rather than letting this file sprawl.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-ingress.ts",
+        "apps/daemon/src/work/work-ingress.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-ingress.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "RED — work.claim four-leg atomicity tests, written before work-claim.ts exists. KEY DESIGN POINT the tests must encode: persistence is out of scope, so 'atomic' does not mean rollback — it means the handler returns ONE frozen result that either carries ALL FOUR successor records or carries NONE of them plus a single refusal naming the failing leg. 'Unobservable' is therefore asserted structurally: on refusal, assert Object.keys of the result contains no successor field at all, not merely that a field is null. Write the per-leg failure-injection table with CLAIM_LEGS.length asserted so a silently dropped leg fails the suite: inject a failure at the lease leg (stale token / stale epoch / superseded authority via fenceAuthority), at the provider-slot leg (a declared resource not ACTIVE), at the budget leg (insufficient available / non-protected purpose / stale expectedVersion), and at the effect-intent leg. Each case pins the exact stable code AND the refusing leg AND the layer. Also assert the happy path returns all four records and that the input digest is unchanged before and after the call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN — work-claim.ts. Compose the four legs in fixed order, each gated on the previous succeeding, accumulating successor records in locals and constructing the result only after all four succeed: lease authority via fenceAuthority on the caller-supplied lease record + proof + clock; provider slot via reserveProviderSlot returning state RESERVED (design 427: claim reserves, effect.activate later makes it ACTIVE — activation is NOT in scope here); budget via reserveForAdmission with a PROTECTED admission purpose; effect intent via the runner supervisor surface. On any leg's refusal return immediately with that leg's stable code and zero successor records — a refused claim must leave no authority residue, in the result or in any module-level state. This module holds NO mutable module-level state: the caller supplies the current records and receives successors, which is what keeps it pure and restart-safe. Keep under 250 lines; split a leg into a sibling module before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-claim.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Slot ceiling — RED then GREEN in this step. VERIFIED FINDING, do not re-derive: reserveProviderSlot does NO counting. It validates one slot's declared resources are ACTIVE and returns RESERVED; there is no ceiling constant anywhere in packages/scheduler. Design line 427 specifies 'at most four RESERVED|ACTIVE provider slots project-wide' in the default dimension, so the COUNTING IS THIS DAEMON'S JOB, over the caller-supplied live claim table. Read DoD 4 accordingly. Implement in work-claim.ts: count existing RESERVED|ACTIVE slots in the default dimension and refuse a fifth with the stable slot-exhausted code BEFORE calling reserveProviderSlot, so the ceiling cannot be bypassed by a scheduler-level accept. Tests: four concurrent claims all succeed; the fifth is REFUSED with the slot-exhausted code and the slot leg named; assert it is refused and NOT queued — the result carries no pending, deferred, or retry affordance of any kind (assert on the result's key set). Also assert the boundary is exactly at four, not three or five, and that a RELEASED slot frees capacity for a subsequent claim.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "RED — lifecycle handler tests for renew, release, resume, get_context and cancel, before work-lifecycle.ts exists. Every one of the five revalidates the CURRENT token and epoch on every mutation — assert per handler that a stale token and, separately, a stale epoch are each refused with their own distinct stable code, so the two failure modes cannot be conflated. Then the interleaving matrix, which is DoD 3: claim-vs-cancel and release-vs-renew must each end in EXACTLY ONE legal state with the loser receiving a stable reason code. Assert both orderings of each pair, assert the winner's successor state, and assert the loser's result carries the specific code AND names the layer that refused. get_context is read-only: assert it returns a frozen view, grants no authority (authority label NONE), and mutates nothing — call it twice and assert the second result deep-equals the first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-lifecycle.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-lifecycle.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "GREEN — work-lifecycle.ts implementing renew, release, resume, cancel and get_context. Each mutation handler revalidates the current lease token and epoch through the scheduler fencing surface BEFORE composing any successor, and returns a frozen result carrying either the successor records or a single refusal. Reuse the WorkFailure factory and envelope from work-kernel.ts — do not re-declare codes locally, the vocabulary is closed. get_context builds a read-only frozen view labeled authority NONE. Keep under 250 lines; if the five handlers crowd the file, split the read-only get_context into a sibling module before 400 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-lifecycle.ts",
+        "apps/daemon/src/work/work-lifecycle.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/work-lifecycle.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verification and mutation drill. Run the focused gate: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test. The daemon test script is `vitest run --root . --config package.json src` — the root vitest config includes only packages/** and tests/**, so a plain --root . would silently hide every app test (mem:gotcha-vitest-app-root-config); if the run reports zero test files, that is the bug, not a pass. Then MUTATION-VERIFY the failure paths, because epic rail 6 requires demonstration not assertion: one at a time, break each of the four claim legs' refusal checks, the slot-ceiling comparison, and one token and one epoch revalidation, confirm the suite goes RED each time, and restore with git checkout -- before the next. Record the per-mutation red counts. A mutation that leaves the suite green means that test has detached from its subject — fix the test, not the count. Also assert the closed-vocabulary sweep: every code in WORK_ERROR_CODES is reachable from a real production surface and the observed set equals the declared set, so an unreachable code fails the suite.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts",
+        "apps/daemon/src/work/work-lifecycle.test.ts",
+        "apps/daemon/src/work/work-ingress.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an attacker: can any byte input reach an authority path before decodeBoundedJsonBytes? Can a refused claim leave residue anywhere — a mutated input, a module-level counter, an unfrozen nested object? Is any result reachable that is not frozen? Can the slot ceiling be bypassed by a claim that refuses at a later leg but has already consumed slot capacity? Does any handler trust a caller-supplied token or epoch without revalidating it? Grep the diff for forbidden affordances: HTTP, auth, persistence, @moe/store, approval, provider execution, spawn, child_process, Date.now, Math.random. Confirm every production file is under 250 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports (mem:powershell-measure-object-line-undercounts). Confirm no debug, probe, scratch or generated evidence file remains. Then commit by explicit pathspec ONLY: git status --porcelain first and confirm every staged entry is an owned path, unstage any foreign path with git restore --staged, then git commit -- apps/daemon/src/work apps/daemon/package.json [pnpm-lock.yaml only if it holds solely your hunk], and verify with git show --stat that the commit contains exactly the owned paths. Never a bare git commit — the index is shared with concurrent tasks.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-kernel.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-lifecycle.ts",
+        "apps/daemon/src/work/work-ingress.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-10c55fbd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "PIPELINED PROMOTION against an incomplete dependency, by architect-0b81de40 on explicit human instruction 2026-08-08. SPIDR child 3 of task-312c1de3. Deps: child 1 (task-2580a578) in REVIEW with its 11 files on disk but UNTRACKED; child 2 (task-4a3b5ec0) WORKING and, verified on disk at 20:10, has produced ZERO files — launch-lock.ts, drain-table.ts, drain-reconciliation.ts and restart-reconstruction.ts do not exist. Lease presence core (task-967769ea) and all five Conserved budget children are DONE. This is a weaker promotion than child 2's was: child 2 was defensible because child 1's kernel was already COMPLETED on disk, and that condition does NOT hold here. ARCHITECT: verify every symbol on disk first; child 2's surface is specified in its approved plan but not built. Also carries the human-approved ownership amendment (apps/daemon/package.json +@moe/runner, single lock hunk). If the child-2 seam is still absent when you plan, prefer report_blocked over a speculative API.",
+  "reopenReason": "Unblocked by architect-8a4a1764 on human instruction 2026-08-08T20:50Z. The surface gap is now owned by two tasks that are BOTH claimable immediately and neither waits on SPIDR child 2: task-8ee125d0 (scheduler claim-composition surface on @moe/scheduler root) and task-53680e91 (child-1 supervisor effect surface on @moe/runner root). The .js bridge sweep (task-eb9ff081) was split out to BACKLOG because it is NOT in this task's critical path - this task's gate is vitest, which resolves .js specifiers to .ts and needs no bridges. Key finding that removed the child-2 dependency: this task's DoD needs only child 1's records (effect intent, lifecycle command, one-use activation gate), which are COMMITTED at 72545bb; child 2's launch-lock/drain/restart modules appear nowhere in this DoD, and child 2's approved plan does not touch packages/runner/src/index.ts, so there is zero file collision. Planning proceeds against the export surfaces those two tasks' DoDs commit to publish. NOTE for the worker: do not start implementing until both surface tasks are DONE - the plan's first step verifies they resolve.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -31,11 +152,45 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:12.133Z",
-  "updatedAt": "2026-08-08T20:11:52.775Z",
+  "updatedAt": "2026-08-08T20:55:06.564Z",
   "metrics": {
-    "firstClaimAt": "2026-08-08T20:11:20.498Z"
+    "firstClaimAt": "2026-08-08T20:11:20.498Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
   },
   "contextFetchedBy": [
-    "architect-8a4a1764"
-  ]
+    "architect-8a4a1764",
+    "worker-10c55fbd"
+  ],
+  "blockedReason": "Approved step 1 is a hard gate: do not implement until both package-root surface tasks are DONE. Current Moe state shows scheduler surface task-8ee125d0f05f4966abfcc49db37bbbf5 = WORKING (unassigned, 0/4 steps) and runner surface task-53680e91db1c4789a42b7129e61bdd7a = WORKING (unassigned, 0/8 steps). Deep imports are forbidden by the exclusive exports maps, so there is no safe implementation path until both publish and finish.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-08T20:55:06.564Z",
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T20:53:25.754Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — injected ports with daemon-side fakes. It needs no unowned edits and would have unblocked instantly, but it violates epic rail 6 / the project custom rail: 'a property must be asserted against the production surface, not against a test helper that reimplements it.' DoD 4's slot ceiling would then be asserted against a fake slot reserver, exactly the defect class that rail exists to stop. Raised with the human, rejected, confirmed.\n\nREJECTED — extending this task's ownership to packages/scheduler/src/index.ts and packages/runner/src/index.ts. One task, but it writes into two shared packages while child 2 is live in packages/runner/src/supervisor/, and it would push the file count past the 10-affectedFiles hard threshold.\n\nCHOSEN — publish the surfaces in separate small tasks, then compose here. The refinement that removed the wait: this task's DoD needs only CHILD 1's records, which are committed at 72545bb, and child 2's approved plan does not touch runner/src/index.ts. So the runner export task has zero collision with child 2 and is claimable now. Only the .js bridge sweep genuinely needs child 2 finished, and that is not in this task's critical path because this gate is vitest.",
+    "codebaseInsights": "INGRESS PRECEDENT — apps/daemon/src/index.ts:82 evaluateGraphPreviewRequestBytes is the shape to follow: decode, then exact own-key envelope check (null-prototype guard, key-set equality, literal schemaVersion), then compose, freezing every result. Copy the STRUCTURE, not the labels — that surface is advisory (advisoryOnly:true, authority:'NONE') because it grants nothing, whereas work.claim confers real authority and must label what it conferred.\n\nPACKAGE BOUNDARIES — every workspace package pins \"exports\": {\".\": \"./src/index.ts\"}, an exclusive map. Deep subpath imports fail with ERR_PACKAGE_PATH_NOT_EXPORTED at runtime AND under moduleResolution NodeNext. Probed both directions from apps/daemon. Whatever is not on the package root is unreachable, full stop.\n\nSLOT CEILING — reserveProviderSlot (packages/scheduler/src/authority/lease-resource.ts:161) takes (value, slotRef, requestId), checks every declared resource row is ACTIVE, returns one RESERVED slot. It does NO counting, and no ceiling constant exists anywhere in packages/scheduler. Design 427's four-slot project-wide default is therefore daemon-side work over the caller-supplied claim table.\n\nSUPERVISOR OUTCOMES — LifecycleOutcome has THREE kinds: TRANSITIONED | MUST_DRAIN | REFUSED. They discriminate on `kind`, never on `ok`. MUST_DRAIN deliberately has NO ok field so that ok === false cannot mistake a drain instruction for a refusal, and REFUSED is exactly {kind, failure} so a refusal structurally cannot carry a successor. Preserve both properties when composing.\n\nTOOLCHAIN — exactOptionalPropertyTypes is ON, so fields are required-and-nullable, never optional. verbatimModuleSyntax is ON, so type-only imports need the type modifier. canonicalDigest throws on bigint and non-safe-integer numbers.",
+    "risks": "BLOCKING PREREQUISITE — do not write a line of work/** until task-8ee125d0 and task-53680e91 are DONE. Step 1 verifies the symbols resolve and report_blocked's if they do not. Deep-importing around a missing export is not an option; the exports map forbids it.\n\nATOMICITY WITHOUT A DATABASE — persistence is explicitly out of scope, so DoD 1's 'together or nothing' is a property of the RETURNED VALUE, not of a transaction. Assert it structurally: on refusal the result must have no successor field in its key set at all. A test asserting a successor is null instead of absent is weaker and will not catch a partially-built result.\n\nTHE VACUOUS-TEST TRAPS this board has already been bitten by: a per-leg failure table that silently generates zero cases still passes — assert CLAIM_LEGS.length. A test asserting only 'it refused' detaches the moment a second layer starts refusing first — assert the code AND the leg AND the layer. And a green vitest run is not evidence a module loads: @moe/runner has zero .js bridges, so import '@moe/runner' dies under plain Node today. That defect is owned by task-eb9ff081 and is deliberately NOT this task's job, but do not mistake this task's green gate for evidence the daemon runs.\n\nSHARED STATE — apps/daemon/package.json and pnpm-lock.yaml are repo-wide shared state. One dependency line, one lockfile hunk. If a foreign hunk appears in the lock, commit your sources and leave the lock dirty for its owner rather than sweeping it (mem:gotcha-shared-pnpm-lock-ownership).\n\nDAEMON GATE QUIRK — the test script must stay `vitest run --root . --config package.json src`. The root config includes only packages/** and tests/**, so a bare --root . discovers the ancestor config and silently runs zero app tests. Zero test files reported is a failure, not a pass.\n\nUPSTREAM CHURN — child 2 is live in packages/runner/src/supervisor/ and appends to the frozen vocabularies in effect-kernel.ts. Appending members to an exported array does not change export names, so the published surface is stable, but re-read the modules before naming a symbol rather than trusting this note.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/graph-preview-request.test.ts",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "packages/scheduler/src/authority/lease-fencing.ts",
+      "packages/scheduler/src/budget/budget-reservation.ts",
+      "packages/runner/src/supervisor/effect-lifecycle.ts",
+      "packages/runner/src/supervisor/effect-activation.ts",
+      "packages/runner/src/supervisor/effect-kernel.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9900000
+  },
+  "planApprovedAt": "2026-08-08T20:53:27.792Z",
+  "workStartedAt": "2026-08-08T20:54:34.285Z"
 }

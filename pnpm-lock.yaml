@@ -16,7 +16,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3))
+        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)
 
   apps/control-room:
     dependencies:
@@ -65,16 +65,22 @@ importers:
         version: 8.2.1(@types/node@24.13.3)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3))
+        version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)
 
   apps/daemon:
     dependencies:
       '@moe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@moe/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@moe/scheduler':
         specifier: workspace:*
         version: link:../../packages/scheduler
+      '@moe/store':
+        specifier: workspace:*
+        version: link:../../packages/store
 
   packages/context: {}
 
@@ -87,6 +93,18 @@ importers:
         version: link:../contracts
 
   packages/control-room-model: {}
+
+  packages/coordination:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@moe/core':
+        specifier: workspace:*
+        version: link:../core
+      '@moe/store':
+        specifier: workspace:*
+        version: link:../store
 
   packages/core:
     dependencies:
@@ -1216,7 +1234,6 @@ packages:
       '@vitest/ui': 4.1.10
       happy-dom: '*'
       jsdom: '*'
-      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -2223,7 +2240,7 @@ snapshots:
       '@types/node': 24.13.3
       fsevents: 2.3.3
 
-  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)):
+  vitest@4.1.10(@types/node@24.13.3)(jsdom@30.0.1):
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@8.2.1(@types/node@24.13.3))
@@ -2249,7 +2266,18 @@ snapshots:
       '@types/node': 24.13.3
       jsdom: 30.0.1
     transitivePeerDependencies:
+      - '@vitejs/devtools'
+      - esbuild
+      - jiti
+      - less
       - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - yaml
 
   w3c-xmlserializer@5.0.0:
     dependencies:

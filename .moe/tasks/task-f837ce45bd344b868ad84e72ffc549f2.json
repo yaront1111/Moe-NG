@@ -88,7 +88,7 @@
     {
       "stepId": "step-4",
       "description": "Implement the coordination service endpoints around the codec and mailbox with fail-closed dependency ports. For every send/read/acknowledge/replay request, pass the canonical request digest, endpoint kind, credential/proof presentation, transport, current time, and exact coordination scope to an injected identity authenticator; accept only a frozen positive binding whose principal/session matches the request, and keep auth material out of stored bytes. Resolve every recipient through an injected registry before storage and require exact send-kind/recipient or mailbox read/ack/replay capability. For terminal/effect-wrapper addresses, require a current positive effectId+sessionId binding; throws, UNKNOWN, stale, or mismatched answers return TERMINAL_BINDING_INVALID at ADDRESS without mailbox mutation. On RESPONSE send, load the referenced durable REQUEST and require reversed addresses and identical correlation id. Stamp time/sequence server-side, refuse already-expired sends and full mailboxes, expose no dispatch/lifecycle/effect callback, and ensure free-form advisory text remains immutable data with no authority or next-command affordance. Add the one-line runtime bridge.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/coordination/src/coordination-service.test.ts",
         "packages/coordination/src/coordination-contracts.ts",
@@ -98,12 +98,23 @@
         "packages/coordination/src/coordination-service.ts",
         "packages/coordination/src/coordination-service.js"
       ],
-      "startedAt": "2026-08-08T20:42:02.606Z"
+      "modifiedFiles": [
+        "packages/coordination/src/coordination-ports.ts",
+        "packages/coordination/src/coordination-ports.js",
+        "packages/coordination/src/coordination-service.ts",
+        "packages/coordination/src/coordination-service.js",
+        "packages/coordination/src/coordination-service-input.ts",
+        "packages/coordination/src/coordination-service-input.js",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Implemented the four coordination endpoints over the codec and mailbox with fail-closed ports. coordination-ports.ts declares the injected authenticator / recipient registry / effect-binding ports and the ONLY answer shapes that authorize: readBinding accepts a frozen, exact-key, positive binding with identifier principal/session and a bounded identifier capability list - anything unfrozen, partial, extra-keyed, non-record, or thrown is indistinguishable from no answer; isKnownRecipient and isBoundEffect apply the same frozen-and-exact discipline, and the effect answer must name the exact effectId AND sessionId queried. coordination-service.ts passes every endpoint a domain-separated canonical request digest (SEND digests the canonical envelope bytes; READ/REPLAY/ACKNOWLEDGE digest the mailbox address plus their own arguments), together with the endpoint kind, presentation, transport, current time and the single COORDINATION_SCOPE; the presentation is never handed to the mailbox, so auth material cannot reach stored bytes. The authenticated sessionId must own the addressed identity (COORDINATION_SENDER_MISMATCH at AUTHENTICATION) and must hold the exact grant from coordinationCapability - send is scoped per envelope kind AND recipient session, mailbox endpoints per mailbox session. Every address the endpoint touches (send sender AND recipient, and the mailbox address on read/ack/replay) is resolved through the registry before any storage, and any effectId-bearing address additionally needs a current positive binding; throws, UNKNOWN, stale, or mismatched answers return COORDINATION_TERMINAL_BINDING_INVALID at ADDRESS with no mailbox mutation. coordination-service-input.ts re-decodes caller-supplied mailbox addresses through the same strict reader the envelope uses, bounds the page limit (INPUT_INVALID vs LIMIT_EXCEEDED at DECODE), and enforces RESPONSE correlation: the referenced message must be a durable REQUEST in the responder's own mailbox, its addresses must reverse exactly, and its correlation id must be identical. Time and sequence stay server-stamped, already-expired sends and full mailboxes are refused, the service object is frozen with exactly acknowledge/read/replay/send and no dispatch, lifecycle, or effect callback, and advisory text stays immutable frozen data. Added the three .js bridges. FRESH RESULT: pnpm --filter @moe/coordination typecheck exits 0 and the focused suite is now fully GREEN - 1 file, 33 tests passed. Per-file lines: service-input 69, ports 91, service 230 - all under the 250 target.",
+      "startedAt": "2026-08-08T20:42:02.606Z",
+      "completedAt": "2026-08-08T20:45:03.042Z"
     },
     {
       "stepId": "step-5",
       "description": "Create the curated public entrypoint and finish the integration/restart cases. Export only the five envelope contracts, limits/codes/layers, dependency-port types, durable mailbox constructor, and service constructor; do not export store internals, raw SQL, credential material, or an envelope-to-command executor. Exercise the public entrypoint against a real file-backed SqliteEventStore: enqueue ordered mixed-kind messages, observe redelivery before ack, close/reopen, replay and acknowledge, reopen again, and prove the next read resumes strictly after the durable ack with identical message ids/digests/sequences. Add concurrent sends, response lookup, expiry boundary, mailbox-limit N/N+1, cursor-ahead/gap, store throw/ambiguous outcome, unknown recipient, revoked/expired/replayed auth, missing capability, and terminal-binding cases. Use mkdtemp under the OS temp directory with finally cleanup after every store close, and include a plain-Node source-entrypoint import smoke assertion so missing .js bridges cannot hide behind Vitest resolution.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/coordination/package.json",
         "packages/coordination/src/coordination-service.test.ts",
@@ -113,29 +124,55 @@
       ],
       "newFiles": [
         "packages/coordination/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/coordination/src/index.ts",
+        "packages/coordination/src/coordination-integration.test.ts",
+        "packages/coordination/src/coordination-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "Created the curated entrypoint and the durable integration/restart cases. src/index.ts exports exactly 14 runtime names - the vocabularies (codes/layers/endpoints/kinds/roles/control kinds/forbidden fields), versions, limits, coordinationCapability, createDurableMailbox, createCoordinationService - plus the five envelope contracts, result/delivery types and dependency-port types. Deliberately NOT exported: the codec (decodeCoordinationEnvelope/decodeStoredEnvelope/canonicalEnvelopeBytes/digestBytes), the strict shape readers, mailbox id derivation, the reader factory, refuse(), any store internal or raw SQL, any credential material, and any envelope-to-command executor. coordination-integration.test.ts drives ONLY the public entrypoint against a real file-backed SqliteEventStore under mkdtemp with finally cleanup after every close: enqueues four ordered mixed-kind messages (EVENT/REQUEST/CONTROL/HANDOFF at sequences 1-4), proves redelivery before ack, closes and reopens, replays from 0, acknowledges sequence 2, proves replay did NOT advance the cursor, reopens a third time and proves the next read resumes strictly after the durable ack with identical message ids, digests, sequences and sentAt stamps. Also covers concurrent duplicate send (DEDUPLICATED at the original sequence/digest), RESPONSE lookup against a durable REQUEST written by a previous process plus an orphan response (REPLY_TARGET_MISSING at CORRELATION), revoked/expired/replayed/throwing auth verdicts (all COORDINATION_AUTHENTICATION_FAILED at AUTHENTICATION, each asserting the durable mailbox stayed empty afterwards), mailbox-limit N then N+1 (COORDINATION_MAILBOX_FULL at MAILBOX), cursor-ahead CURSOR_GAP carrying both positions, and the exact TTL boundary (DELIVERABLE at expiresAt-1, EXPIRED at expiresAt, then explicitly acknowledgeable). coordination-entrypoint-smoke-worker.mjs loads ./index.ts in a plain-Node --experimental-strip-types Worker, asserts the exact 14-name export list, zero undefined exports, zero leaked internals, a frozen 4-method service, and a real COORDINATION_AUTHENTICATION_FAILED refusal. PROVED THE PROBE IS NOT VACUOUS: deleting coordination-ports.js reddened exactly the smoke test with \"Cannot find module ...coordination-ports.js imported from ...coordination-service.ts\" while all 38 other tests stayed green - the precise blind spot the memory warns about - and restoring the bridge returned the suite to green. Bridge audit: every non-test, non-entrypoint .ts has its sibling .js (10 bridges, no orphans). FRESH RESULT: typecheck exit 0, 2 test files, 39 tests passed.",
+      "startedAt": "2026-08-08T20:45:07.147Z",
+      "completedAt": "2026-08-08T20:47:45.806Z"
     },
     {
       "stepId": "step-6",
       "description": "Perform the single adversarial review over the owned diff before the final gate. Attack double/concurrent send and ack, replay after restart, null/array/proxy/revoked-proxy inputs, empty/negative/fractional/huge limits and TTLs, Unicode byte limits, expiry at the exact boundary, response-to-nonrequest and address swaps, recipient/effect disappearance, stale auth, store throw/OUTCOME_UNKNOWN, and advisory payloads shaped like runtime commands, shell argv, or credentials. Confirm every failure test asserts the specific code and refusing layer and every generated sweep asserts a positive case count. Mutation-drill at least authentication bypass, terminal-binding bypass, idempotency-conflict mapping, cursor-gap detection, and advisoryOnly on the production surface; each named test must go red. Restore exact owned bytes in a finally path, confirm no scratch/evidence files remain, and verify each production .ts file is at most 250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/coordination/src/coordination-contracts.ts",
         "packages/coordination/src/durable-mailbox.ts",
         "packages/coordination/src/coordination-service.ts",
         "packages/coordination/src/index.ts",
         "packages/coordination/src/coordination-service.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/coordination/src/coordination-service.ts",
+        "packages/coordination/src/coordination-mailbox.ts",
+        "packages/coordination/src/coordination-shape.ts",
+        "packages/coordination/src/coordination-parts.ts",
+        "packages/coordination/src/coordination-contracts.ts",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Adversarial pass over the owned diff. THREE REAL DEFECTS FIXED, none of which had a failing test before review. (1) Validated-one-thing-used-another: read/replay/acknowledge re-decoded the caller's mailbox address through the strict reader but then handed the RAW caller object to the mailbox, which re-read role/sessionId/effectId to derive the aggregate id. openMailbox now returns the validated frozen address and that is what travels onward. (2) Ack monotonicity race: the regression check ran ONCE before the bounded retry loop, so a second writer that landed a higher ack while this one retried could be walked backwards, regressing the durable cursor and redelivering already-acked messages. The cursor is now re-read and re-checked on EVERY attempt. (3) Shape-vs-size code conflation: a prototype-tampered, accessor-backed, sparse, or record-posing-as-array list was refused with COORDINATION_LIMIT_EXCEEDED, so a smuggling attempt read as a harmless size complaint. readBoundedList now reports tooLong separately and shape failures map to COORDINATION_INPUT_INVALID. Also removed COORDINATION_VERSION_UNSUPPORTED: nothing could emit it, and an unreachable stable code is a false promise in the contract - the remaining 20 codes were each traced to a reachable production site. New adversarial cases added: revoked Proxy, subclassed array, accessor array element, record wearing a length, over-count list, multibyte (2-byte) data string at the UTF-8 budget, and store-failure mapping driven by a GENUINE DurableStoreError from @moe/store rather than only a hand-shaped stub (storeErrorCode is now proven against the real class). MUTATION DRILL - five mutations on the production surface, each reddening exactly its named test, files restored and verified byte-identical with git hash-object: (1) readBinding accepting an unfrozen answer -> \"refuses every endpoint at AUTHENTICATION when the binding is not positive\" RED; (2) checkAddress always treating an effect as bound -> \"requires a current positive effect binding for a terminal address\" RED; (3) replayed() skipping the eventId proof -> \"maps a reused message id with different bytes to an idempotency conflict\" RED; (4) page() dropping the cursor-ahead check -> BOTH \"reports a cursor ahead of the mailbox as a typed gap\" and the integration gap test RED; (5) decodeAdvisory accepting advisoryOnly!==true -> the DECODE matrix RED. Separately proved the bridge probe is not vacuous by deleting coordination-ports.js (only the smoke test reddened; 38 others stayed green). Every failure test asserts code AND layer; every sweep asserts a positive case count. Reviewed and accepted as safe: concurrent same-message send resolves through the receipt path to DEDUPLICATED; guard() maps any unexpected throw to STORE_UNAVAILABLE and never claims delivery; OUTCOME_UNKNOWN stays ambiguous. NOTE FOR QA - foreign action, not mine: commit 42f1c21 (task-4a3b5ec0) swept mid-flight packages/coordination/** and packages/context/** into its own commit via a broad add, so my files already exist in HEAD in a half-built state. I did not reset, revert, or rewrite anything; my commit brings the owned paths to their finished state. Flagged in chan-75ef142c. No scratch or evidence files remain. Every production .ts is at or below 250 physical lines (largest: coordination-mailbox.ts 247). Fresh focused run: typecheck exit 0, 2 files, 40 tests passed.",
+      "startedAt": "2026-08-08T20:47:50.355Z",
+      "completedAt": "2026-08-08T20:52:50.903Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the one required foreground verification command exactly: pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test. Record fresh exit 0 and test counts as completion evidence. Then run git status --porcelain, ensure every staged entry is one of the ten owned packages/coordination paths and pnpm-lock.yaml is neither modified nor staged, unstage any foreign path without altering it, and commit only explicit owned pathspecs with git commit -- <owned paths>. Verify git show --stat contains only packages/coordination/** before calling moe.complete_task; do not push, merge, reset, stash, or use a broad add/commit.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/coordination/src/coordination-service.ts",
+        "packages/coordination/src/coordination-suite.test.ts"
+      ],
+      "note": "Ran the required verification command exactly, in the foreground: pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test -> exit 0, 2 test files, 40 tests passed. Also ran the repo-wide pnpm typecheck (recursive) as a regression check: every package including @moe/coordination reports Done, no sibling broken. One more real defect caught at commit time and fixed before finishing: git reported coordination-service.ts as \"Bin 9937 bytes\" - two literal U+0000 bytes had leaked in where a space separator was intended, joining the mailbox address components before hashing. An invisible byte deciding a digest, in a file with no reviewable diff. Fixed properly rather than cosmetically: the address components are now passed to digestBytes as separate parts, and since that function already length-frames every part the framing is unambiguous by construction with no separator byte at all. A third NUL was in the refusal-detail test fixture; that test now spells its hostile inputs as escapes and sweeps four of them (leading space, embedded NUL, DEL, interior space), each asserting COORDINATION_INPUT_INVALID at DECODE plus a positive case count. A whole-package byte scan now reports zero stray control bytes in any owned file. Commit hygiene: pnpm-lock.yaml is neither modified nor staged (workspace links were materialized as node_modules junctions, which are gitignored). Staged by explicit file list only - never git add -A - and committed with git commit -F <message file> -- <explicit owned pathspecs>. Two commits, 2428083 (feature) and bee5159 (NUL fix); git show --name-only on each confirms every path is under packages/coordination/**, zero foreign paths. No push, merge, reset, stash, revert, or amend. Judgement call worth recording for QA: at the first pre-commit audit the shared index held foreign staged entries under packages/runner/src/evidence/**. The task rail says to unstage foreign paths, but epic rail 3 opens with \"preserve foreign work\", and a pathspec-limited commit cannot capture unstaged-for paths anyway - so unstaging would have destroyed a live sibling's in-flight staging for no safety gain. I left it alone; the sibling committed it themselves as 1be8e2c moments later. Separately, commit 42f1c21 (task-4a3b5ec0) had already swept my mid-flight packages/coordination/** and a third task's packages/context/** into its own commit via a broad add. I did not rewrite history; my commits bring the owned paths to their finished state. Flagged in chan-75ef142c. Final state: git status --porcelain over packages/coordination is empty.",
+      "startedAt": "2026-08-08T20:52:58.282Z",
+      "completedAt": "2026-08-08T20:57:00.609Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-e46fb0dc",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -154,12 +191,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:14.683Z",
-  "updatedAt": "2026-08-08T20:42:02.606Z",
+  "updatedAt": "2026-08-08T20:58:44.883Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:09:52.155Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -171,7 +208,11 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:22:19.383Z",
@@ -194,5 +235,40 @@
     "wallClockMs": 6300000
   },
   "planApprovedAt": "2026-08-08T20:22:21.421Z",
-  "workStartedAt": "2026-08-08T20:23:03.978Z"
+  "workStartedAt": "2026-08-08T20:23:03.978Z",
+  "reviewStartedAt": "2026-08-08T20:58:44.883Z",
+  "verification": {
+    "command": "pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/coordination/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  2 passed (2)\n      Tests  40 passed (40)\n   Start at  23:56:41\n   Duration  1.01s (transform 967ms, setup 0ms, import 1.23s, tests 412ms, environment 0ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-08T20:58:44.883Z"
+  },
+  "filesModified": [
+    "packages/coordination/package.json",
+    "packages/coordination/tsconfig.json",
+    "packages/coordination/src/coordination-suite.test.ts",
+    "packages/coordination/src/coordination-contracts.ts",
+    "packages/coordination/src/coordination-contracts.js",
+    "packages/coordination/src/coordination-shape.ts",
+    "packages/coordination/src/coordination-shape.js",
+    "packages/coordination/src/coordination-parts.ts",
+    "packages/coordination/src/coordination-parts.js",
+    "packages/coordination/src/coordination-codec.ts",
+    "packages/coordination/src/coordination-codec.js",
+    "packages/coordination/src/coordination-mailbox-ids.ts",
+    "packages/coordination/src/coordination-mailbox-ids.js",
+    "packages/coordination/src/coordination-mailbox-reads.ts",
+    "packages/coordination/src/coordination-mailbox-reads.js",
+    "packages/coordination/src/coordination-mailbox.ts",
+    "packages/coordination/src/coordination-mailbox.js",
+    "packages/coordination/src/coordination-ports.ts",
+    "packages/coordination/src/coordination-ports.js",
+    "packages/coordination/src/coordination-service.ts",
+    "packages/coordination/src/coordination-service.js",
+    "packages/coordination/src/coordination-service-input.ts",
+    "packages/coordination/src/coordination-service-input.js",
+    "packages/coordination/src/index.ts",
+    "packages/coordination/src/coordination-integration.test.ts",
+    "packages/coordination/src/coordination-entrypoint-smoke-worker.mjs"
+  ]
 }
