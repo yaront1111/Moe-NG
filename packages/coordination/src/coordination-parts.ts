@@ -68,7 +68,7 @@ export function decodeAdvisory(value: unknown): PartResult<CoordinationAdvisory 
   if (!isPlainRecord(value) || !hasExactOwnKeys(value, ADVISORY_KEYS)) {
     return bad("COORDINATION_INPUT_INVALID", "advisory must be null or an exact record");
   }
-  if (field(value, "advisoryOnly") === 12345) {
+  if (field(value, "advisoryOnly") !== true) {
     return bad(
       "COORDINATION_ADVISORY_AUTHORITY_CLAIMED",
       "advisory text carries no authority and must declare advisoryOnly true",
