@@ -299,10 +299,18 @@ describe("coordination envelope codec", () => {
   });
 
   it("never echoes hostile bytes back in the refusal detail", () => {
-    const result = decodeCoordinationEnvelope(draft("EVENT", { correlationId: " <script>" }));
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.detail).not.toContain("<script>");
+    // Escapes, never literal bytes: a raw control character in a source file is invisible
+    // in review and turns the file binary to git.
+    const hostile = ["\u0020<script>", "corr\u0000null", "corr\u007f", "co rr"];
+    expect(hostile.length).toBeGreaterThan(0);
+    for (const correlationId of hostile) {
+      const result = decodeCoordinationEnvelope(draft("EVENT", { correlationId }));
+      expect(result.ok, JSON.stringify(correlationId)).toBe(false);
+      if (result.ok) continue;
+      expect(result.code, JSON.stringify(correlationId)).toBe("COORDINATION_INPUT_INVALID");
+      expect(result.layer, JSON.stringify(correlationId)).toBe("DECODE");
+      expect(result.detail).not.toContain("<script>");
+    }
   });
 });
 
