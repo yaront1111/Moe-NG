@@ -42,9 +42,17 @@ export interface AdmittedTransition {
 }
 
 /**
- * The closed arc table, exported as data. Child 2 adds the design-776
- * `ACTIVE -> CANCEL_REQUESTED` edge by extending this array; no reducer below
- * invents an edge that is not listed here.
+ * The closed arc table, exported as data; no reducer below invents an edge that
+ * is not listed here.
+ *
+ * `ACTIVE -> CANCEL_REQUESTED` (design 776) is admitted here but is NOT reachable
+ * from a bare `requestCancel` command: `applyEffectCommand` still answers
+ * `MUST_DRAIN` for that cell. Design 13.1 is explicit that once activation has
+ * committed, a later cancel must treat effect and attempt as active and
+ * drain/reconcile them, so the successor is authorised inside the drain
+ * transaction — `drain-reconciliation.ts` consults this row before emitting it —
+ * rather than by a lone reducer call that would move the state while the
+ * external action is still live.
  */
 export const ADMITTED_EFFECT_TRANSITIONS: readonly AdmittedTransition[] = deepFreeze([
   { from: "PENDING", command: "claim", to: ["CLAIMED"] },
@@ -53,6 +61,7 @@ export const ADMITTED_EFFECT_TRANSITIONS: readonly AdmittedTransition[] = deepFr
   { from: "CLAIMED", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
   { from: "ARMED", command: "activate", to: ["ACTIVE"] },
   { from: "ARMED", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
+  { from: "ACTIVE", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
   { from: "ACTIVE", command: "settle", to: ["SUCCEEDED", "FAILED", "UNKNOWN"] },
   { from: "CANCEL_REQUESTED", command: "settle", to: ["CANCELLED", "UNKNOWN"] },
 ] as const satisfies readonly AdmittedTransition[]);

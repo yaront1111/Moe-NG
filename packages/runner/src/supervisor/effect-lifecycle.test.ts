@@ -26,11 +26,12 @@ import {
 } from "./effect-test-fixtures.js";
 
 /**
- * Hand-written from the pinned design lines 774-775. This list is NOT derived
+ * Hand-written from the pinned design lines 774-776. This list is NOT derived
  * from `ADMITTED_EFFECT_TRANSITIONS`: a matrix whose expectations came from the
  * table it is checking would stay green after a row was deleted from that table.
- * Design 776 (`ACTIVE -> CANCEL_REQUESTED`) is deliberately absent — it is the
- * declared child-2 extension of the table.
+ * Design 776 (`ACTIVE -> CANCEL_REQUESTED`) was added by child 2 to both this
+ * list and the production table; the cell still answers `MUST_DRAIN` to a bare
+ * command, which the matrix below pins separately.
  */
 const DESIGN_ARCS = [
   { from: "PENDING", command: "claim", to: ["CLAIMED"] },
@@ -39,6 +40,7 @@ const DESIGN_ARCS = [
   { from: "CLAIMED", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
   { from: "ARMED", command: "activate", to: ["ACTIVE"] },
   { from: "ARMED", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
+  { from: "ACTIVE", command: "requestCancel", to: ["CANCEL_REQUESTED"] },
   { from: "ACTIVE", command: "settle", to: ["SUCCEEDED", "FAILED", "UNKNOWN"] },
   { from: "CANCEL_REQUESTED", command: "settle", to: ["CANCELLED", "UNKNOWN"] },
 ] as const;

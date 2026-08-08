@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { canonicalDigest } from "../canonical.js";
+import { upgradeDisposition } from "./drain-disposition.js";
+import { admitPostActivationMutation } from "./drain-fence.js";
+import { resolveDrainRow } from "./drain-reconciliation.js";
+import { resolveDuplicateDelivery } from "./duplicate-delivery.js";
 import { activateEffect } from "./effect-activation.js";
 import { consumeActivationGrant, validateActivationCommit } from "./effect-grant.js";
+import { registerLaunchLock } from "./launch-lock.js";
+import { intakeProcessObservation } from "./process-observation.js";
+import { reconstructAfterRestart } from "./restart-reconstruction.js";
 import {
   SUPERVISOR_ERROR_CODES,
   type SupervisorFailure,
@@ -14,6 +21,7 @@ import {
   DIGEST,
   makeActivationRequest,
   makeAttempt,
+  makeClaim,
   makeGrant,
   makeIntent,
   makeLease,
@@ -52,6 +60,101 @@ function settle(target: string, overrides: Record<string, unknown> = {}): unknow
 const active = makeIntent({ state: "ACTIVE" });
 const commit = activateEffect(makeActivationRequest());
 const activated = commit.kind === "ACTIVATED" ? commit.commit : null;
+
+const REGISTRATION = {
+  lockIdentity: "lock-1",
+  wrapperIdentity: "wrapper-1",
+  processIdentity: "process-1",
+  bootstrapCredentialDigest: DIGEST.authority,
+  registeredAt: AT,
+};
+
+const CANCEL_DISPOSITION = {
+  reasons: ["WORK_CANCEL"],
+  strongestReason: "WORK_CANCEL",
+  terminalTarget: "CANCELLED",
+};
+
+function drain(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    attemptState: "RUNNING",
+    effectState: "ACTIVE",
+    resourceFact: "ACTIVE",
+    activationRequested: false,
+    disposition: CANCEL_DISPOSITION,
+    reconciliation: null,
+    safeHandoff: null,
+    ...overrides,
+  };
+}
+
+function delivery(overrides: Record<string, unknown> = {}): unknown {
+  return {
+    claim: makeClaim(),
+    registration: null,
+    lockState: "HELD",
+    effectState: "ARMED",
+    ...overrides,
+  };
+}
+
+/**
+ * The launch-lock, drain and restart half of the vocabulary, added with those
+ * layers. Kept in one function so the sweep below stays a single list: the codes
+ * live in one closed array, so their reachability proof has to be one list too.
+ */
+function runtimeRefusals(): ReadonlyArray<readonly [string, unknown]> {
+  const released = drain({
+    resourceFact: "PROVEN_RELEASED",
+    reconciliation: makeSettlement(),
+    disposition: {
+      reasons: ["WORK_RELEASE_OR_PAUSE"],
+      strongestReason: "WORK_RELEASE_OR_PAUSE",
+      terminalTarget: "RELEASED",
+    },
+  });
+  return [
+    ["LAUNCH_LOCK_MALFORMED", registerLaunchLock({}, makeClaim(), null)],
+    ["LAUNCH_LOCK_CREDENTIAL_REUSED", registerLaunchLock(REGISTRATION, makeClaim(), REGISTRATION)],
+    [
+      "LAUNCH_LOCK_IDENTITY_CONFLICT",
+      registerLaunchLock({ ...REGISTRATION, lockIdentity: "lock-9" }, makeClaim(), null),
+    ],
+    ["LAUNCH_LOCK_REGISTRATION_ABSENT", resolveDuplicateDelivery(delivery())],
+    ["LAUNCH_LOCK_SUSPECT", resolveDuplicateDelivery(delivery({ lockState: "UNKNOWN" }))],
+    ["PROCESS_OBSERVATION_MALFORMED", intakeProcessObservation({ kind: "VANISHED" }, null)],
+    ["DRAIN_ROW_NOT_ADMITTED", resolveDrainRow("RUNNING")],
+    ["DRAIN_RESOURCE_UNRECONCILED", resolveDrainRow(drain({ resourceFact: "PROVEN_RELEASED" }))],
+    [
+      "DRAIN_DISPOSITION_NOT_MONOTONIC",
+      upgradeDisposition(
+        { ...CANCEL_DISPOSITION, reasons: ["URGENT_REVOKE", "WORK_CANCEL"] },
+        "GOAL_CANCEL",
+      ),
+    ],
+    ["DRAIN_POST_ACTIVATION_MUTATION_REFUSED", admitPostActivationMutation("DRAINING", "step.start")],
+    ["RESTART_RECORDS_INCOHERENT", reconstructAfterRestart({})],
+    [
+      "RESTART_PREMATURE_TERMINAL",
+      reconstructAfterRestart({
+        intent: makeIntent({ state: "SUCCEEDED" }),
+        attempt: null,
+        attemptState: "TERMINAL",
+        claim: null,
+        grant: null,
+        tombstone: null,
+        registration: null,
+        lockState: "RELEASED",
+        observation: null,
+        reconciliation: null,
+        resourceFact: "PROVEN_RELEASED",
+        disposition: CANCEL_DISPOSITION,
+        safeHandoff: null,
+      }),
+    ],
+    ["RESTART_SAFE_HANDOFF_ABSENT", resolveDrainRow(released)],
+  ];
+}
 
 /**
  * Every refusal the closed vocabulary declares, driven from a real production
@@ -136,6 +239,7 @@ const REFUSALS: ReadonlyArray<readonly [string, unknown]> = [
       "ACTIVE",
     ]),
   ],
+  ...runtimeRefusals(),
 ];
 
 describe("refusal sweep", () => {
