@@ -149,7 +149,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-e46fb0dc",
   "branch": null,
   "prLink": null,
@@ -162,7 +162,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-08T21:15:51.727Z",
+  "updatedAt": "2026-08-08T21:22:44.595Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -200,5 +200,9 @@
   "contextFetchedBy": [
     "worker-e46fb0dc"
   ],
-  "workStartedAt": "2026-08-08T20:59:42.000Z"
+  "workStartedAt": "2026-08-08T20:59:42.000Z",
+  "blockedReason": "Harness half BUILT and COMMITTED (69663dc, 9 files, +1387, zero foreign paths). Journey half BLOCKED, exactly as approved step 1 instructed. I did NOT stub, mock or narrow a journey to make it pass. FULL REPORT: #governors msg-028dcf3d.\n\nSteps 1-4 done. Fresh foreground evidence: pnpm test:e2e exit 0 (34 tests); tsc -p tests/e2e/foundation/tsconfig.json exit 0; pnpm typecheck exit 0. Eight mutation drills each red on the intended test, restore verified.\n\nBLOCKED AT STEP 5: no daemon command surface to drive. Measured on disk, not read off status fields. apps/daemon exports map is \".\" : \"./src/index.ts\" only, and index.ts exports one function, evaluateGraphPreviewRequestBytes, explicitly advisoryOnly:true authority:\"NONE\". The three handler tables (BOOTSTRAP_HANDLERS; GOAL_HANDLERS goal-services.ts:66; PLANNING_HANDLERS planning-services.ts:158) are unreachable from the package root, the same exports-map wall that blocked task-ba3a45f9. Against J1's three human actions (design 1095): goal.create handler exists but unreachable; plan.approve exists only as a core contract kind (planning-command-contract.ts:18) with NO daemon handler; final acceptance has no command, no handler, no review flow.\n\nMISSING, named: task-2f6ac0d1 2/11; task-ba3a45f9 BLOCKED 0/11; task-2d1f94f9 0/11; task-58029c26 0/11 (blocks J4); task-52ec1406 0/10 (blocks J3); task-1e512b95 11/11 steps not DONE; task-f837ce45 REVIEW not DONE; task-312c1de3 BLOCKED. Cleanup lane, an explicit hard dependency, zero of three done: task-8ee125d0, task-53680e91, task-eb9ff081.\n\nSECOND BLOCKER ON DoD 1, foreign: pnpm test is RED at HEAD. tests/fault/foundation/j4-replan-stale.test.ts (task-18c7921f) declares PRODUCTION_BEHAVIOR_ABSENT for probe:scheduler-authority-lease while fenceAuthority IS exported from packages/scheduler/src/index.ts at HEAD. Ratchet firing as designed; its owner must update the entry.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-08T21:22:44.595Z"
 }

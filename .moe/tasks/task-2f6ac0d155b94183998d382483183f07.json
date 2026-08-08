@@ -206,7 +206,7 @@
       "completedAt": "2026-08-08T21:18:36.649Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -226,12 +226,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.266Z",
-  "updatedAt": "2026-08-08T21:20:04.079Z",
+  "updatedAt": "2026-08-08T21:27:06.510Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:19:12.207Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-08T21:27:06.510Z",
+    "wallClockMs": 4074303
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -271,7 +273,8 @@
   },
   "planApprovedAt": "2026-08-08T20:22:11.993Z",
   "contextFetchedBy": [
-    "worker-964ae3f0"
+    "worker-964ae3f0",
+    "qa-cbad3a29"
   ],
   "workStartedAt": "2026-08-08T20:22:33.456Z",
   "blockedReason": null,
@@ -300,5 +303,8 @@
     "apps/daemon/src/planning/planning-services.ts",
     "apps/daemon/src/planning/planning-services.test.ts",
     "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T21:27:06.510Z",
+  "reviewCompletedAt": "2026-08-08T21:27:06.510Z",
+  "reviewSummary": "APPROVED. Detail: mem:task-task-2f6ac0d155b94183998d382483183f07-qa-verdict.\n\nGATE re-run by me: daemon typecheck exit 0; daemon test -> 5 files / 74 tests passed. Matches worker claim.\n\nMUTATION DRILL I ran, 7 operands: 5 killed, 2 survived. Operand-to-constant only, out-of-tree backup, tree clean after each. Killed: replayOf commandKind; commitAccepted effectDisposition; prerequisite gate (5 tests/2 suites); approval exactRevisionHash gate (2 tests/2 suites); schemaVersion literal. Survived: hasExactKeys' count and membership operands singly - mutually redundant plus backstopped by isExactEnvelope's isRef checks; every path returns BOOTSTRAP_REQUEST_INVALID from DAEMON_INGRESS; whole-function mutation goes red. No detached assertion, no reachable single-fault fail-open, so not a rail-6 violation.\n\nDoD1: COMMAND_PREREQUISITES gates project.activate on durable register+bind+probe; 4 tests each asserting code AND refusing layer AND store read-back; M3 kills all 4.\nDoD2: it.each over bootstrapSequence() through the production pipeline plus a separate toHaveLength(9)+set-equality test, so the sweep cannot generate zero cases; each case asserts DECIDED then REPLAYED, identical decisionId/resultSha256, decisionCount === before+1 on BOTH calls.\nDoD3: STALE_VERSION -> CORE_REDUCER/EXPECTED_VERSION_CONFLICT; WRONG_HASH -> DAEMON_PREREQUISITE/BOOTSTRAP_REVISION_HASH_MISMATCH; MISSING_PROBE; UNKNOWN_POLICY. Both halves asserted; each negative gate has a positive counterpart.\nDoD4: gate exits 0.\n\nRAILS: largest production file bootstrap-ledger.ts 267, all under the 400 cap. Task LOC not weighed. No scratch files. b8a2381 and 4fc116c are per-file pathspec, owned paths only; 306546b is the completion hook, attributed away by path.\n\nFOLLOW-UP for architect, not a rejection: decideApproval binds only record.exactRevisionHash to durable state; actorKind HUMAN / truthClass HUMAN_APPROVED stay caller-supplied."
 }

@@ -165,18 +165,29 @@
     {
       "stepId": "step-10",
       "description": "Whole-slice adversarial pass and docs sweep, both of which this task owns as the closing gate. Adversarial: re-read the entire slice — children 1, 2 and 3's production code, not just this task's tests — asking whether any refusal asserts only that something failed rather than which code and which layer; whether any sweep can generate zero cases and still pass; whether the expected outcome-kind list was hand-written or quietly derived from the implementation; whether any invariant would survive a deliberately broken input; whether uncertainty anywhere gains authority instead of staying SUSPECT or UNKNOWN; and whether any redaction rule leaks a lease token, bootstrap credential, or expected digest. Docs: inline why-comments where the reasoning is non-obvious, and update docs/ ONLY if a public surface actually changed — do not add a contract document for an internal module. Confirm every production file in the slice is under the 400 hard cap with wc -l, not PowerShell Measure-Object -Line, and record the counts.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-08T21:17:25.888Z"
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/supervisor-restart.test.ts",
+        "packages/runner/src/supervisor/supervisor-restart-authority.test.ts",
+        "packages/runner/src/supervisor/race-restart-scenarios.ts",
+        "packages/runner/src/supervisor/supervisor-races.test.ts"
+      ],
+      "note": "WHOLE-SLICE ADVERSARIAL PASS (children 1 and 2 production code plus this task's tests; child 3 does not exist).\n\n1. Refusal asserts code AND layer, never just \"it failed\"? PASS. Child 2's launch-lock.test.ts routes every SUSPECT/REFUSED through a `codeAndLayer` helper; child 1's effect-properties.test.ts asserts observed refusal codes against SUPERVISOR_ERROR_CODES.length so every declared code is proven reachable; my files assert `[code, layer]` tuples throughout. Swept for `kind).toBe(\"REFUSED\")` and `toThrow()` with no follow-up: none left undressed.\n\n2. Can a sweep generate zero cases and still pass? FIXED IN MINE. My two heavy files iterate with plain for-loops, and a loop over nothing passes - a short or empty schedule would have left them green having asserted nothing. Added import-time hard guards: supervisor-races.test.ts throws unless ALL_STEPS.length === RACE_SEEDS.length * RACE_STEPS, supervisor-restart.test.ts throws on an empty crash-point table. Also added `checked > 0` counters to the two loops that filter to RECONSTRUCTED outcomes, which would otherwise pass on a table of nothing but refusals. Children's sweeps already carry non-zero guards (drain-reconciliation 10 length assertions; launch-lock guards `states` and `cases`; effect-properties pins REFUSALS against the code vocabulary).\n\n3. Was the expected outcome-kind list hand-written or quietly derived? HAND-WRITTEN. All 66 entries were transcribed into the step-1 note from the exported frozen vocabularies and the refusal paths read in source, BEFORE any harness run, and matched the observed set exactly with zero edits to the expected list.\n\n4. Would any invariant survive a deliberately broken input? VERIFIED NO, by mutating production twice. Disabling the reconciliation check in reconstructTerminalAttempt turned 5 tests red across both files including the race gate's set equality; collapsing duplicate-delivery's held-lock-no-registration SUSPECT arm turned the set equality red. Both reverted, `git diff` on those two files empty. Five more load-bearing checks feed checkGrantOrdering deliberately broken synthetic logs.\n\n5. Does uncertainty anywhere gain authority? NO, and it is asserted rather than assumed: an UNKNOWN resource never collapses into PROVEN_RELEASED (drain refuses DRAIN_RESOURCE_UNRECONCILED), an unreadable lock becomes SUSPECT not EXIT_BEFORE_LAUNCH, restart prefers UNKNOWN/SUSPECT over a guessed terminal (four-case written-out admitted set), and duplicate delivery has no fourth optimistic arm (set equality against the frozen three-member list).\n\n6. Does any redaction rule leak a lease token, bootstrap credential, or expected digest? NO. Child 1 sweeps the lease token, the expected runtime digest and the claim timestamp; child 2 sweeps the credential digest and asserts a SUSPECT outcome carries no processIdentity and no grantId; I added the restart surface, which had none. Checked for duplication before adding.\n\n7. Determinism: `grep` for Date.now, Math.random, new Date(, child_process, spawn(, process.hrtime across the entire slice returns ZERO hits - the only match is the comment in race-harness.ts saying so.\n\n8. Concurrency (skill checklist): every slice module is a pure function over caller-supplied records with no shared mutable state; the harness threads World immutably and asserts inputMutated === false on all 3200 steps. The one retry hazard is documented, not hidden: `consumeActivationGrant` handed the same UNUSED record twice consumes twice, which child 1 states is intentional (store grant-id uniqueness and the OS launch lock are the backstops), and the harness deliberately records no launch for a grant the world never held.\n\n9. Dead defensive arm, noted not changed: `fromDrain`'s ATOMIC_ACTIVATION case in restart-reconstruction.ts is unreachable from `reconstructAfterRestart` because `routeToDrain` always passes activationRequested: false. Harmless and defensible; flagged so a reviewer does not read it as covered.\n\n10. Foreign cap observation, noted not edited: child 1's effect-properties.test.ts is 408 lines, over this task's 400-line test-file rail. It belongs to a DONE task and splitting it is scope creep.\n\nSIZE (wc -l, not PowerShell Measure-Object). Mine, production: race-world 140, race-scenarios 164, race-restart-scenarios 171, race-harness 231, race-steps 259. Mine, tests: race-harness.test 175, supervisor-restart-authority.test 197, supervisor-races.test 286, supervisor-restart.test 287. Split supervisor-restart.test.ts during this pass because it had reached 448 lines, over the 400 rail: the crash-point table, capacity holds and redaction stay in supervisor-restart.test.ts, and the re-proof-of-authority and premature-terminal halves moved to supervisor-restart-authority.test.ts, with the shared restart helpers exported from race-restart-scenarios.ts. Slice production files unchanged by me all sit between 63 and 266 lines, every one under the 400 hard cap.\n\nDOCS: no docs/ contract added or changed, correc",
+      "startedAt": "2026-08-08T21:17:25.888Z",
+      "completedAt": "2026-08-08T21:22:12.780Z"
     },
     {
       "stepId": "step-11",
       "description": "Commit by explicit pathspec, with the slice's contamination hazard front of mind. `packages/runner/src/supervisor/` has been shared and untracked throughout this slice, so a directory pathspec would sweep sibling work into this commit. Run git status --porcelain first, confirm every staged entry is an owned path of THIS task, and stage and commit by EXPLICIT PER-FILE pathspec — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, never a directory. Owned here are the harness and test files this task created plus any defect fixes inside packages/runner/src/supervisor/** and apps/daemon/src/work/**. If children 1-3's files are still uncommitted when you reach this step, do NOT commit them on their owners' behalf; raise it with the governor instead. Unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only owned paths landed and that no probe, scratch, debug, or generated evidence file is present — DoD 5 names that explicitly.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "NOTHING LEFT TO COMMIT: a third concurrent broad-pathspec commit had already swept every file of this task into git before I reached this step. `git status --porcelain -- packages/runner/src/supervisor/` is EMPTY - the working tree matches HEAD exactly, so there is no delta for an explicit-pathspec commit to carry.\n\nWho took them, verified with `git log -- <file>`:\n- 34a3d11 (task-f837ce45, Session coordination fabric) and c42b578 (task-1e512b95, Evidence receipt pipeline) took the first race-*.ts files while they were untracked.\n- 306546b (task-2f6ac0d1, Bootstrap application services) took the rest, including supervisor-races.test.ts, supervisor-restart.test.ts, supervisor-restart-authority.test.ts and the effect-test-fixtures.ts boundary fix.\n\nI did NOT try to repair this. Rewriting history is forbidden by the epic rails, and `mem:gotcha-shared-git-index-amend-captures-foreign-work` says an amend against this shared index would capture live foreign work - the cure would be worse than the disease. Reported to #architects/#governors (msg-1e2432dd, msg-83d22320).\n\nCONTENT VERIFIED IN HEAD instead of committed by me. All nine files are tracked: race-harness.ts, race-harness.test.ts, race-world.ts, race-steps.ts, race-scenarios.ts, race-restart-scenarios.ts, supervisor-races.test.ts, supervisor-restart.test.ts, supervisor-restart-authority.test.ts. `git show HEAD:packages/runner/src/supervisor/effect-test-fixtures.ts` carries the reworded boundary comment. Because the working tree equals HEAD, every gate below was run against exactly the committed bytes.\n\nNO probe, scratch, debug or generated evidence file exists in the slice directory (checked by listing and by grep for console./probe/scratch/debug/tmp). The single console.log is the per-kind outcome-count line DoD 1 requires in the test output.\n\nFINAL FRESH GATES, run from the repo root against HEAD content:\n- `pnpm --filter @moe/runner typecheck` exit 0\n- `pnpm --filter @moe/runner test` exit 0 - 21 files / 721 tests\n- `pnpm --filter @moe/daemon typecheck` exit 0\n- `pnpm --filter @moe/daemon test` exit 0 - 5 files / 74 tests\n- `pnpm test` exit 1 - 1 failed / 2644 passed / 1 skipped across 152 files. The single failure is `tests/fault/foundation/j4-replan-stale.test.ts > schedule:j4-stale-lease-enforcement produces its declared outcome`, the designed absence ratchet fired by task-8ee125d0's commit 239aa4f publishing the scheduler lease/authority fencing surface. Foreign path, foreign cause, reported.",
+      "startedAt": "2026-08-08T21:22:17.983Z",
+      "completedAt": "2026-08-08T21:23:49.591Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-d1ecc56a",
   "branch": null,
   "prLink": null,
@@ -189,12 +200,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-08T21:17:25.888Z",
+  "updatedAt": "2026-08-08T21:28:24.107Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:30:47.157Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 10
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -208,7 +219,9 @@
     "step-5",
     "step-6",
     "step-8",
-    "step-9"
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:32:35.926Z",
@@ -233,5 +246,9 @@
   "contextFetchedBy": [
     "worker-d1ecc56a"
   ],
-  "workStartedAt": "2026-08-08T20:43:40.369Z"
+  "workStartedAt": "2026-08-08T20:43:40.369Z",
+  "blockedReason": "STEP 7 BLOCKED ON CHILD 3 — the world step 1 of the plan said to block on. Steps 1-6 and 8-11 DONE and in HEAD; evidence is in those step notes.\n\nVERIFIED ON DISK NOW: `apps/daemon/src/work/` DOES NOT EXIST (apps/daemon/src holds only bootstrap/, goals/, planning/, index.ts, graph-preview-request.test.ts). apps/daemon/package.json deps are @moe/contracts, @moe/core, @moe/scheduler, @moe/store — NO @moe/runner. That dep is child 3's approved ownership amendment; not an owned path here. Child 3 (task-ba3a45f9) is itself BLOCKED.\n\nWHY IT CANNOT MOVE: @moe/runner depends only on @moe/contracts, so a runner test cannot import @moe/scheduler and cannot compare fenceMirroredLease against fenceAuthority. apps/daemon is the only place both meet. I did NOT trim the expected outcome-kind list to a partial slice and did NOT edit a foreign path to unblock myself.\n\nDELIVERED: DoD 1-5 met except the drift test. 8 seeds x 400 steps = 3200; outcome-kind SET equals a 66-entry HAND-WRITTEN list (step-1 note, written before any run, zero edits), every kind >=3 hits. No grant spent before its committed ARMED->ACTIVE + LAUNCH_REQUESTED->RUNNING pair; duplicate delivery by set equality vs the frozen kinds. 19 restart crash points, all 7 post states, authority re-proved with named code AND layer. No production defect; two harness defects fixed red-first. Gates: runner and daemon typecheck+test all exit 0 (721 and 74 tests).\n\nNEEDS ACTION: (1) root `pnpm test` exit 1 on ONE FOREIGN file, tests/fault/foundation/j4-replan-stale.test.ts > schedule:j4-stale-lease-enforcement — the absence ratchet firing after task-8ee125d0 commit 239aa4f published the scheduler lease/authority surface. That task must retire the manifest entry; it BLOCKS ANY final-task completion on this epic. msg-83d22320. (2) Commits 34a3d11, c42b578, 306546b swept this task's untracked files into their commits (rail 3 breach). msg-1e2432dd. RESUME: mem:task-49acb856-handoff.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-08T21:28:24.107Z"
 }
