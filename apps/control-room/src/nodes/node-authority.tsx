@@ -34,7 +34,9 @@ function readValue(fact: SuppliedFact): string | null {
     return null;
   }
   const { value } = fact;
-  return typeof value === "string" && value !== "" ? value : null;
+  // Whitespace counts as absent: a blank-looking value beside a confident chip is
+  // exactly the "never blank" case the spec forbids.
+  return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
 /** Whether the payload supplied a usable value for this fact. */
@@ -42,9 +44,14 @@ export function isSupplied(fact: SuppliedFact): boolean {
   return readValue(fact) !== null;
 }
 
+/** Whether the payload named this record well enough to address it. */
+export function isIdentified(identity: string): boolean {
+  return typeof identity === "string" && identity.trim() !== "";
+}
+
 /** A supplied identity, or the UNKNOWN marker when the payload omitted one. */
 export function readIdentity(identity: string): string {
-  return typeof identity === "string" && identity !== "" ? identity : UNKNOWN_FACT_VALUE;
+  return isIdentified(identity) ? identity : UNKNOWN_FACT_VALUE;
 }
 
 export interface FactRowProps {

@@ -55,10 +55,10 @@ function JournalList(props: {
   }
   return (
     <div>
-      {entries.map((entry) => {
+      {entries.map((entry, index) => {
         const shownId = readIdentity(entry.entryId);
         return (
-          <article data-testid={`cr.inspector.journal.${shownId}`} key={shownId}>
+          <article data-testid={`cr.inspector.journal.${shownId}`} key={`${String(index)}:${shownId}`}>
             <FactList
               onProvenance={onProvenance}
               rows={[[`journal.${shownId}.summary`, "Dead-end journal", entry.summary]]}
@@ -104,7 +104,9 @@ function TranscriptDisclosure(props: {
  * receiving the latter. Nothing here decides whether the attempt succeeded.
  */
 export function AttemptDetail(props: AttemptDetailProps): JSX.Element {
-  const { attemptId, currentBinding, journal, onProvenance, receipts, recovery, source } = props;
+  const {
+    attemptId, currentBinding, journal, onProvenance, receipts, recovery, source, transcript,
+  } = props;
   return (
     <div data-testid={`cr.attemptdetail.${readIdentity(attemptId)}`}>
       <Panel heading="Attempt" testId="cr.attemptdetail.section.identity">
@@ -143,7 +145,7 @@ export function AttemptDetail(props: AttemptDetailProps): JSX.Element {
           ]}
         />
       </Panel>
-      <TranscriptDisclosure attemptId={attemptId} lines={props.transcript} />
+      <TranscriptDisclosure attemptId={attemptId} lines={transcript} />
     </div>
   );
 }

@@ -160,7 +160,7 @@ describe("absent proof refuses the diff instead of implying acceptance", () => {
   it("refuses the diff when the base SHA alone is missing", () => {
     const base = reviewProps();
     const { container } = render(
-      <ReviewSurface {...base} diff={{ ...base.diff, baseSha: { value: "" } }} />,
+      <ReviewSurface {...base} diff={{ ...base.diff, baseSha: { value: "   " } }} />,
     );
     expect(valueOf("review.diff.basesha")).toBe(UNKNOWN_FACT_VALUE);
     expect(valueOf("review.diff.headsha")).toBe(HEAD_SHA);

@@ -187,6 +187,23 @@ describe("absent and malformed authority facts stay honest", () => {
     }
   });
 
+  it("treats a whitespace-only value as absent rather than rendering a blank", () => {
+    const base = authorityProps();
+    render(
+      <NodeAuthority
+        {...base}
+        identity={{ ...base.identity, writeScope: { truthClass: "DAEMON_VERIFIED", value: "   " } }}
+      />,
+    );
+    // A blank value beside a confident chip is the one presentation the spec bans
+    // outright: it reads as an answered question.
+    expect(valueOf("node.writescope")).toBe(UNKNOWN_FACT_VALUE);
+    const chip = chipOf("node.writescope");
+    expect(chip.getAttribute("data-truth-class")).toBe("UNKNOWN");
+    expect(chip.getAttribute("data-origin")).toBe("ABSENT");
+    expect(chip.getAttribute("data-provenance-note")).toBe(TRUTH_ABSENT_PROVENANCE);
+  });
+
   it("reports TRUTH_CLASS_INVALID for a present but unsupported class", () => {
     const base = authorityProps();
     render(

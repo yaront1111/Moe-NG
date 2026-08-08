@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 
-import { FactList, NONE_SUPPLIED, Panel, readIdentity } from "./node-authority.js";
+import { FactList, NONE_SUPPLIED, Panel, isIdentified, readIdentity } from "./node-authority.js";
 import type { ProvenanceHandler, SuppliedFact } from "./node-authority.js";
 
 /** One receipt exactly as supplied; this module never reruns or re-scores it. */
@@ -56,8 +56,7 @@ function EvidenceLink(props: {
 }): JSX.Element | null {
   const { identity, kind, provenanceRef } = props;
   const resolvable =
-    typeof identity === "string" && identity !== ""
-    && typeof provenanceRef === "string" && provenanceRef !== "";
+    isIdentified(identity) && typeof provenanceRef === "string" && provenanceRef.trim() !== "";
   if (!resolvable) {
     return null;
   }
@@ -78,10 +77,10 @@ export function ReceiptList(props: {
   }
   return (
     <div>
-      {receipts.map((receipt) => {
+      {receipts.map((receipt, index) => {
         const shownId = readIdentity(receipt.receiptId);
         return (
-          <article data-testid={`cr.inspector.receipt.${shownId}`} key={shownId}>
+          <article data-testid={`cr.inspector.receipt.${shownId}`} key={`${String(index)}:${shownId}`}>
             <FactList
               onProvenance={onProvenance}
               rows={[
@@ -111,10 +110,10 @@ function ArtifactList(props: {
   }
   return (
     <div>
-      {artifacts.map((artifact) => {
+      {artifacts.map((artifact, index) => {
         const shownId = readIdentity(artifact.artifactId);
         return (
-          <article data-testid={`cr.inspector.artifact.${shownId}`} key={shownId}>
+          <article data-testid={`cr.inspector.artifact.${shownId}`} key={`${String(index)}:${shownId}`}>
             <FactList
               onProvenance={onProvenance}
               rows={[
@@ -144,10 +143,10 @@ export function FindingList(props: {
   }
   return (
     <div>
-      {findings.map((finding) => {
+      {findings.map((finding, index) => {
         const shownId = readIdentity(finding.findingId);
         return (
-          <article data-testid={`cr.inspector.finding.${shownId}`} key={shownId}>
+          <article data-testid={`cr.inspector.finding.${shownId}`} key={`${String(index)}:${shownId}`}>
             <FactList
               onProvenance={onProvenance}
               rows={[
@@ -173,10 +172,10 @@ function BlockerList(props: {
   }
   return (
     <div>
-      {blockers.map((blocker) => {
+      {blockers.map((blocker, index) => {
         const shownId = readIdentity(blocker.blockerId);
         return (
-          <article data-testid={`cr.inspector.blocker.${shownId}`} key={shownId}>
+          <article data-testid={`cr.inspector.blocker.${shownId}`} key={`${String(index)}:${shownId}`}>
             <FactList
               onProvenance={onProvenance}
               rows={[

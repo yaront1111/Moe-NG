@@ -1,6 +1,8 @@
 import type { JSX } from "react";
 
-import { FactList, NONE_SUPPLIED, Panel, isSupplied, readIdentity } from "../nodes/node-authority.js";
+import {
+  FactList, FactRow, NONE_SUPPLIED, Panel, isSupplied, readIdentity,
+} from "../nodes/node-authority.js";
 import type { ProvenanceHandler, SuppliedFact } from "../nodes/node-authority.js";
 import { FindingList, ReceiptList } from "../nodes/node-evidence.js";
 import type { EvidenceFinding, EvidenceReceipt } from "../nodes/node-evidence.js";
@@ -68,7 +70,7 @@ function DiffPaths(props: { readonly paths: readonly ReviewPath[] }): JSX.Elemen
   }
   return (
     <ul>
-      {paths.map((entry) => {
+      {paths.map((entry, index) => {
         // Anything but an explicit in-scope verdict is flagged: an unreadable
         // verdict must warn the reviewer, never quietly clear the path.
         const flagged = entry.outOfScope !== false;
@@ -76,7 +78,7 @@ function DiffPaths(props: { readonly paths: readonly ReviewPath[] }): JSX.Elemen
           <li
             data-out-of-scope={String(flagged)}
             data-testid={`cr.review.row.${entry.path}`}
-            key={entry.path}
+            key={`${String(index)}:${entry.path}`}
           >
             <span>{entry.path}</span>
             {flagged ? <span> out of declared write scope</span> : null}
@@ -97,11 +99,11 @@ function CriteriaList(props: {
   }
   return (
     <div>
-      {criteria.map((criterion) => {
+      {criteria.map((criterion, index) => {
         const shownId = readIdentity(criterion.criterionId);
         return (
           <FactList
-            key={shownId}
+            key={`${String(index)}:${shownId}`}
             onProvenance={onProvenance}
             rows={[
               [`criterion.${shownId}.statement`, "Criterion", criterion.statement],

@@ -151,6 +151,25 @@ describe("missing evidence is UNKNOWN and offers no active link", () => {
     expect(within(anonymous).queryByRole("link")).toBeNull();
   });
 
+  it("keeps every anonymous record visible instead of collapsing them into one", () => {
+    const props = evidenceProps();
+    const { container } = render(
+      <NodeEvidence
+        {...props}
+        artifacts={[
+          { artifactId: "", artifactType: observed("blob"), digest: verified("sha256:one"), provenanceRef: "receipt/rcpt-1" },
+          { artifactId: "  ", artifactType: observed("blob"), digest: verified("sha256:two"), provenanceRef: "receipt/rcpt-2" },
+        ]}
+      />,
+    );
+    // Both artifacts lost their identity, so both address the same UNKNOWN id; a
+    // shared React key would let one of them silently disappear.
+    expect(container.querySelectorAll("[data-testid='cr.inspector.artifact.UNKNOWN']").length)
+      .toBe(2);
+    expect(container.querySelectorAll("[data-testid^='cr.evidence.link.artifact.']").length)
+      .toBe(0);
+  });
+
   it("reports TRUTH_CLASS_INVALID for a malformed supplied class", () => {
     const props = evidenceProps();
     render(
