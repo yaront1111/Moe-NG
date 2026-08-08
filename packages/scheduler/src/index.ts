@@ -1,16 +1,34 @@
 /**
- * @moe/scheduler — pure structural graph-analysis kernel.
+ * @moe/scheduler — three zero-minting composition areas on one entry point.
  *
- * Public surface:
+ * 1. Structural graph analysis and preview:
  *  - validateGraphSnapshot: fail-closed structural validation -> ValidatedGraph.
  *  - analyzeGraphStructure: deterministic structural facts about a ValidatedGraph.
  *  - analyzeHardEdgeCounterfactuals: review-only source-edge pressure facts.
  *  - partitionFrontier: readiness partition from caller-supplied frontier facts.
  *  - previewGraphSnapshot: zero-authority validation/frontier/analysis composition.
  *
- * The kernel is contract-neutral: it reports exact structural facts and never
- * invents independence, deletes edges, infers semantic dependency truth, or
- * claims a decomposition is faster. See ./graph-model.ts for the full rationale.
+ * 2. Caller-supplied authority fencing and resource reservation:
+ *  - fenceAuthority and its parsers: the design-749 check order over a lease
+ *    record and a proof the CALLER supplies; no lease, token, or epoch is minted.
+ *  - reserveAll / adapterConfirm / adapterFail / grantSuccessorCapacity /
+ *    reserveProviderSlot: all-or-none acquisition over a caller-supplied
+ *    capacity snapshot. No slot is counted or activated here.
+ *
+ * 3. Caller-supplied conserved-budget admission reservation:
+ *  - reserveForAdmission / cancelReservation: units move all-or-none between the
+ *    AVAILABLE and RESERVED buckets of a caller-supplied account view; the
+ *    caller's own view is never mutated, a shifted one is returned.
+ *  - activateReservation: binds an attempt and moves NO units, because
+ *    RESERVED -> COMMITTED belongs to settlement.
+ *  - No policy is re-evaluated and no approval is composed — a supplied gate
+ *    must already read ALLOW / APPROVE+CURRENT or the admission is refused.
+ *
+ * Every area is contract-neutral and stays that way: the package reports exact
+ * facts and never invents dependency, policy, lease, or execution authority. It
+ * does not infer independence, delete edges, infer semantic dependency truth,
+ * claim a decomposition is faster, mint authority, or create budget. See
+ * ./graph-model.ts for the structural rationale.
  */
 
 export { validateGraphSnapshot } from "./validate-graph.js";
@@ -32,6 +50,32 @@ export {
   resolveGraphPolicy,
 } from "./graph-policy.js";
 export { createTraversalCounter } from "./graph-model.js";
+
+export {
+  adapterConfirm,
+  adapterFail,
+  grantSuccessorCapacity,
+  reserveAll,
+  reserveProviderSlot,
+} from "./authority/lease-resource.js";
+export {
+  fenceAuthority,
+  parseClock,
+  parseLeaseRecord,
+  parseProof,
+} from "./authority/lease-fencing.js";
+export { SLOT_STATES } from "./authority/resource-model.js";
+export {
+  ADMISSION_PURPOSES,
+  ADMISSION_PURPOSE_RESERVE_CONTRACT,
+  BUDGET_RESERVATION_ISSUE_CODES,
+  PROTECTED_ADMISSION_PURPOSES,
+  RESERVATION_STATES,
+  activateReservation,
+  cancelReservation,
+  deriveReservationId,
+  reserveForAdmission,
+} from "./budget/budget-reservation.js";
 
 export type {
   BlockedNode,
@@ -79,3 +123,52 @@ export type {
   HardEdgeCounterfactual,
   HardEdgeCounterfactualAnalysis,
 } from "./hard-edge-counterfactual-model.js";
+
+export type {
+  AuthorityErrorCode,
+  AuthorityIssue,
+  AuthorityOutcome,
+  AuthorityProof,
+  AuthorityRejection,
+  ClockObservation,
+  LeaseKind,
+  LeaseRecord,
+  LeaseState,
+  RejectionSecurityRecord,
+} from "./authority/authority-kernel.js";
+export type { Fenced } from "./authority/lease-fencing.js";
+export type {
+  AcquisitionFailure,
+  AcquisitionSet,
+  AcquisitionState,
+  DeclaredResource,
+  ProviderSlotReservation,
+  ReserveAllRequest,
+  ReserveAllResult,
+  ResourceRow,
+  ResourceWaitRequest,
+  SlotState,
+} from "./authority/resource-model.js";
+export type {
+  AdmissionAmount,
+  AdmissionGate,
+  AdmissionHumanApproval,
+  AdmissionPolicyAllowance,
+  AdmissionPurpose,
+  AdmissionRequest,
+  BudgetAvailableView,
+  BudgetReservationIssue,
+  BudgetReservationIssueCode,
+  BudgetReservationResult,
+  ReservationActivateCommand,
+  ReservationCancelCommand,
+  ReservationLine,
+  ReservationRecord,
+  ReservationState,
+} from "./budget/budget-reservation.js";
+export type {
+  BudgetAccountState,
+  BudgetMeterBuckets,
+  BudgetPolicyOutcome,
+  BudgetReservePurpose,
+} from "./budget/budget-contract.js";
