@@ -60,30 +60,29 @@ function itemTestId(item: ApprovalInboxItem): string {
 }
 
 /**
- * One control, rendered from a resolved gating verdict.
+ * The canonical rendering of one resolved control; every approval surface reuses it.
  *
  * An `ABSENT` verdict renders nothing: the daemon returned neither the command nor a reason,
- * and a disabled control with guessed text is exactly what spec §8.1 forbids.
+ * and a disabled control with guessed text is exactly what spec §8.1 forbids. `onActivate`
+ * only ever fires for an enabled control, so a refused control cannot reach a handler.
  */
-function ControlButton(props: {
+export function DecisionControl(props: {
   readonly control: ApprovalControl;
-  readonly onDecide?: ((commandId: string) => void) | undefined;
+  readonly onActivate?: ((control: ApprovalControl) => void) | undefined;
 }): JSX.Element | null {
-  const { control, onDecide } = props;
+  const { control, onActivate } = props;
   if (control.state === "ABSENT") {
     return null;
   }
-  const { commandId } = control;
+  const enabled = control.state === "ENABLED" && control.commandId !== null;
   return (
     <span>
       <button
         data-reason-code={control.reasonCode ?? undefined}
         data-refused-by={control.refusedBy ?? undefined}
         data-testid={control.testId}
-        disabled={control.state !== "ENABLED"}
-        onClick={
-          commandId === null || onDecide === undefined ? undefined : () => onDecide(commandId)
-        }
+        disabled={!enabled}
+        onClick={enabled && onActivate !== undefined ? () => onActivate(control) : undefined}
         type="button"
       >
         {control.label}
@@ -111,7 +110,15 @@ function InlineChoices(props: {
   return (
     <div>
       {controls.map((control) => (
-        <ControlButton control={control} key={control.testId} onDecide={onDecide} />
+        <DecisionControl
+          control={control}
+          key={control.testId}
+          onActivate={
+            onDecide === undefined
+              ? undefined
+              : (activated) => onDecide(activated.commandId as string)
+          }
+        />
       ))}
     </div>
   );
