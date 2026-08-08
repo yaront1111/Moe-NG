@@ -132,6 +132,11 @@ export function FactWithProvenance({ fact }: { readonly fact: FixtureFact }): JS
   const { open } = useContext(ProvenanceContext);
   const shortcut = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== PROVENANCE_SHORTCUT_KEY) return;
+    // Only when a chip itself holds focus. Without this the shortcut would swallow
+    // a literal "p" typed into any field a later surface renders inside a fact slot.
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("[data-testid^='cr.chip.']") === null) return;
     event.preventDefault();
     open(fact.provenance);
   };

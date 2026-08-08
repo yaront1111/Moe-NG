@@ -1,5 +1,6 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
+import type { JSX } from "react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { BOARD_J1_COLUMNS, BoardJ1 } from "../board/board-j1.js";
@@ -162,6 +163,24 @@ describe("J1 is operable from the board and inbox alone", () => {
     );
     expect(actions.length).toBeGreaterThan(0);
     for (const action of actions) expect(action.disabled).toBe(true);
+  });
+
+  it("ignores the p shortcut unless a truth chip holds focus", () => {
+    render(<J1App affordance={connectedAffordance()} />);
+    const slot = screen.getByTestId("cr.factslot.goal.title");
+    // Raised on the slot itself rather than the chip: a later surface may render a
+    // text field here, and a literal "p" must reach it.
+    fireEvent.keyDown(slot, { key: "p" });
+    expect(screen.queryByTestId("cr.chip.provenance")).toBeNull();
+  });
+
+  it("shows a failing receipt exit code as itself, never softened", () => {
+    render(
+      <ShellFrame affordance={connectedAffordance()}>
+        <EvidenceJ1 facts={factsFor("evidence")} receipt={{ ...J1_RECEIPT, exitCode: 1 }} />
+      </ShellFrame>,
+    );
+    expect(screen.getByTestId("cr.evidence.receipt.exit").textContent).toBe("exit 1");
   });
 
   it("submits the goal draft locally without reaching any transport", async () => {
