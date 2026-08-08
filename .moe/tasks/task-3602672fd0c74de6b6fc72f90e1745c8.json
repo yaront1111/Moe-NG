@@ -133,8 +133,8 @@
       "completedAt": "2026-08-08T09:17:28.906Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-6fd67108",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,12 +153,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:58.147Z",
-  "updatedAt": "2026-08-08T09:19:22.353Z",
+  "updatedAt": "2026-08-08T09:22:44.477Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T08:27:39.376Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-08T09:22:44.477Z",
+    "wallClockMs": 3305101
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -206,5 +208,8 @@
     "packages/scheduler/src/budget/budget-settlement.test.ts",
     "packages/scheduler/src/budget/budget-settlement.ts",
     "packages/scheduler/src/budget/budget-settlement.js"
-  ]
+  ],
+  "completedAt": "2026-08-08T09:22:44.477Z",
+  "reviewCompletedAt": "2026-08-08T09:22:44.477Z",
+  "reviewSummary": "APPROVED. Money module — verified the conservation algebra by hand, then mutation-tested it.\n\nGATE re-run by me (task's pinned command): typecheck exit 0 + 46 tests passed. Matches task.verification.\n\nMUTATIONS I RAN MYSELF: (a) made dispose() refund the PARTIAL remainder to `available` instead of `quarantined` — laundering unproven units into spendable budget -> 2 red, the LOWER_BOUND test and the conservation meta-test. (b) dropped the QUARANTINED legs from the close guard -> 2 red, both quarantined-close rows. Restored to identical hash 45d2925a both times, tree clean.\n\nHAND-CHECKED THE ALGEBRA in dispose(): settle path sums -hold + quantity + rest = 0 when quantity<=hold, and = overrun exactly when quantity>hold, so buckets = authorized + recorded overrun. Reconcile uses delta = quantity - credited, kept >= 0 by the MEASUREMENT_CONFLICT guard, so committed never moves backwards. INSUFFICIENT_RESERVED / INSUFFICIENT_QUARANTINED bound each drain, so no bucket goes negative.\n\nDoD 1-6 PASS. One thing I first read as a defect then cleared: line 206 refuses a never-started proof whenever any line has committed>0, which looked like it contradicted DoD-3. It does not — attempt.count is a sibling VIEW bucket, not a settlement line, and the test at :115 asserts bucket(AT,9,0,0,1) survives the refund untouched while MS returns to 100.\n\nTESTS per epic rail: 33-row rejection matrix, each asserting ONE exact code, result.view identical BY REFERENCE (zero effect) plus a JSON snapshot, frozen result and issue. Meta-test pins ROWS.length===33, conserved===12, and observed === published codes exactly.\n\nRAILS: production 250, test 245, both <=250 physical. Bridge is one line, byte-identical to all four siblings. Predecessors untouched (last commit 05b0dbf). Worker commit 4f9c119 = 2 owned paths, zero foreign.\n\nREGRESSION: full scheduler package 31 files / 519 tests green."
 }

@@ -17,12 +17,12 @@
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Pipelined promotion by governor-38d884e4 on human request. Deps are SPIDR steps 1-4: step 1 (task-a602b3d4) DONE, step 2 (task-82989467) DONE, step 3 (task-071173ab) DONE, step 4 (task-7617c00d) is WORKING at 5/7 with implementation COMPLETE and the suite green — subscription-{contracts,doc-codec,internals,writes,read-page}.ts all exist on disk. Remaining steps 6-7 are mutation drill and pathspec commit, not API design, so the surface this task plans against is concrete rather than speculative. Architect: verify the API on disk before naming symbols, and if step-4's adversarial review reshapes it, amend rather than re-plan. This is the closing gate that lets Projection outbox core (task-55d5a898) close and unblocks 3 downstream tasks.",
   "createdBy": "WORKER",
   "parentTaskId": "task-55d5a898264b4880a99bf2c5b3be120b",
   "priority": "HIGH",
@@ -30,7 +30,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:42.088Z",
-  "updatedAt": "2026-08-07T21:55:32.079Z",
+  "updatedAt": "2026-08-08T16:13:12.784Z",
   "contextFetchedBy": [
     "architect-c4babdf9"
   ]

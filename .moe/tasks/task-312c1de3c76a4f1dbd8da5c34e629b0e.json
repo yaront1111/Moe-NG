@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-e9f16b5b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-38d884e4 on human request, as a judgment call with a named risk — not a clean dependency pass. 4 of 5 hard deps are DONE: Lease presence core (task-967769ea), Conserved budget core (task-d5c4b086), Claude runtime adapter (task-5ff2b39d), Planning graph lifecycle core (task-1ade51c0). The 5th, Projection outbox core (task-55d5a898), is a SPIDR shell whose landed substance — projections, upcasters, transactional outbox relay — is already committed; only subscription cursors (step 4, in flight) and crash/rebuild hardening (step 5, PLANNING) remain. RATIONALE: this task's owned paths are packages/runner/src/supervisor/** and apps/daemon/src/work/**, disjoint from packages/store/**, and its scope (atomic work claim, lease/slot/budget reservation, one-use activation, process observation, restart reconciliation) reads current projection state rather than following a durable cursor feed. ARCHITECT: verify that assumption first. If planning shows this genuinely consumes subscription cursors or the crash/rebuild guarantees, report_blocked and I will move it back to BACKLOG - that is a cheap reversal, not a failure. CRITICAL priority and the second chokepoint on the board: it gates Codex runtime adapter, which in turn gates most of epic-f02c6977 and epic-bf111658.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -29,5 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.373Z",
-  "updatedAt": "2026-08-07T11:50:15.373Z"
+  "updatedAt": "2026-08-08T16:14:36.509Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-08T16:14:31.225Z"
+  },
+  "contextFetchedBy": [
+    "architect-e9f16b5b"
+  ]
 }

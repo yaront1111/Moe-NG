@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Superseded by a SPIDR split — do NOT plan or claim; traceability shell only. architect blocked it: the five-responsibility budget core cannot meet the <=400 net-LOC and 1-3-file task size without oversized production and tests, and planning the parent before its children's interfaces land would be speculative. Children created and verified present: task-7dc2e4870d7d4096a1be7b5991e50e94 (Budget contract vocabulary), task-a5def097bcb7495e935204bd845160b4 (Hierarchical budget ledger), task-318c0732094c417f96932b5c83e7388b (Protected budget reservations), task-3602672fd0c74de6b6fc72f90e1745c8 (Budget settlement reconciliation). Same pattern as task-55d5a898 and task-50874e67. Governor to archive once a human confirms.",
+  "reopenReason": "SPIDR decomposition shell, closed on explicit human approval (governor-38d884e4). NOT a QA verdict — no reviewer examined this parent; it passed through REVIEW only because BACKLOG->DONE is a disallowed transition. Basis: all 5 children DONE and independently QA-approved — task-7dc2e487 (17.01 contract vocabulary), task-a5def097 (17.02 hierarchical ledger), task-318c0732 (17.03 protected reservations), task-5ee5b801 (17.04 usage measurement truth), task-3602672f (17.05 settlement reconciliation). Owned path packages/scheduler/src/budget/** fully landed: budget-{account,contract,measurement,reservation,settlement}.ts plus tests. Zero residual work; the parent held only a phantom dependency edge against External effect supervisor, Fair scheduler production, and Expansion admission protocol.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:45:45.265Z",
-  "updatedAt": "2026-08-07T21:56:56.231Z",
+  "updatedAt": "2026-08-08T15:23:00.571Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T20:17:26.969Z"
   },

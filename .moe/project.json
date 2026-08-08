@@ -9,7 +9,10 @@
     "requiredPatterns": [],
     "formatting": "",
     "testing": "",
-    "customRules": []
+    "customRules": [
+      "Assert the reason code, not just the outcome.\n\nA test covering a failure, refusal, or rejection path must assert the specific stable reason code (and, where more than one layer can refuse, which layer refused) — never merely that the operation did not succeed. Epic rail 4 requires production code to fail closed with stable reason codes; this rail requires the tests to pin them.\n\nCorollaries, all three drawn from defects found on this board:\n- A test asserting only \"refused\"/\"threw\"/\"returned an error\" is one added layer away from vacuous: a second refusal layer can start answering first and the test stays green while no longer testing its subject.\n- A generated or swept case must assert that the case was actually generated. A sweep that silently produces zero cases passes.\n- A property must be asserted against the production surface, not against a test helper that reimplements it.\n\nReview guidance: the failure mode is an assertion that has quietly detached from the thing it was written",
+      "The 250/400 line cap is PER PRODUCTION FILE, not per task. Target <=250 physical lines per production source; split before 400. There is no per-task net-LOC budget. Task size is bounded by plan shape — the daemon's taskSizing thresholds on step count (<=12) and distinct affectedFiles (<=10) — never by summed lines changed.\n\nConsequences, binding on all roles:\n- ARCHITECTS: do not SPIDR-split a task because its total diff is projected over 400 lines. Split when the plan exceeds the step/file thresholds, when a single production FILE would exceed 400 lines, or when responsibilities are genuinely separable. A large task made of small focused files is compliant.\n- QA: task-level net LOC is never a rejection reason, at plan time or post-commit. The per-FILE cap remains strictly enforced and is a valid rejection reason.\n- GOVERNORS: do not route size exceptions for task-level LOC; there is no bar to except. Per-file violations remain real and are worker-fixable by splitting the file."
+    ]
   },
   "settings": {
     "approvalMode": "SPEED",
@@ -26,5 +29,5 @@
     "reviewStaleTimeoutMs": 1800000
   },
   "createdAt": "2026-08-07T10:32:37.002284400Z",
-  "updatedAt": "2026-08-07T11:52:26.447Z"
+  "updatedAt": "2026-08-08T16:15:53.529Z"
 }
