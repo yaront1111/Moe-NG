@@ -209,6 +209,8 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
     { measurements: R4.measurements, neverStartedProofRef: "proof:1" }), "EVIDENCE_AMBIGUOUS"],
   ["a reconcile carrying no evidence at all",
     onReconcile({ measurements: null, neverStartedProofRef: null }), "EVIDENCE_AMBIGUOUS"],
+  ["a reconcile whose receipt array is empty, which is no evidence either",
+    onReconcile({ measurements: [], neverStartedProofRef: null }), "EVIDENCE_AMBIGUOUS"],
   ["a reconcile at a stale settlement version", onReconcile(R4, (h) => h,
     { ...RECONCILE, expectedSettlementVersion: 1 }), "STALE_VERSION"],
   ["a reconcile against a view holding fewer quarantined units", onReconcile(R4, (h) => ({ ...h,
@@ -236,7 +238,7 @@ it.each(ROWS)("refuses %s with a single frozen code and zero effect", (_name, th
   if (!result.ok) expect(Object.isFrozen(result.issues[0])).toBe(true);
 });
 it("generates every refusal case, covers the published codes exactly, and conserves on every path", () => {
-  expect(ROWS.length).toBe(32);
+  expect(ROWS.length).toBe(33);
   expect(Object.isFrozen(BUDGET_SETTLEMENT_ISSUE_CODES)).toBe(true);
   expect([...observed].sort()).toEqual([...BUDGET_SETTLEMENT_ISSUE_CODES].sort());
   expect(conserved).toBe(12);
