@@ -7,7 +7,8 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
-  CONTROL_ROOM_FIXTURES, CONTROL_ROOM_FIXTURE_KIND, buildControlRoomFixtures,
+  CONTROL_ROOM_FIXTURES, CONTROL_ROOM_FIXTURE_KIND, MUTATION_BLOCK_ISOLATION,
+  buildControlRoomFixtures, type FixtureConnectionState,
 } from "./fixtures.js";
 import {
   ControlRoomScaffold, Fact, TRUTH_ABSENT_PROVENANCE, TRUTH_INVALID_PROVENANCE, TruthChip,
@@ -171,17 +172,38 @@ describe("fixtures are deterministic and carry no authority", () => {
   it("derives mutation enablement from daemon-supplied affordances only", () => {
     const byState = new Map(CONTROL_ROOM_FIXTURES.affordances.map((s) => [s.connection, s]));
     expect([...byState.keys()]).toEqual(["CONNECTED", "LAGGING", "DISCONNECTED", "HISTORICAL"]);
+    // Fixed expectations, never re-derived from production's own formula: a changed
+    // formula must fail here rather than be tracked by the assertion.
+    const expected: Record<FixtureConnectionState, boolean> = {
+      CONNECTED: true, DISCONNECTED: false, HISTORICAL: false, LAGGING: true,
+    };
     for (const snap of CONTROL_ROOM_FIXTURES.affordances) {
-      const live = snap.connection !== "DISCONNECTED" && !snap.requiresAffordanceRefresh;
-      expect(snap.mutationsEnabled).toBe(live && snap.nextAllowedCommands.length > 0);
+      expect(snap.mutationsEnabled).toBe(expected[snap.connection]);
     }
-    expect(byState.get("CONNECTED")?.mutationsEnabled).toBe(true);
-    expect(byState.get("LAGGING")?.mutationsEnabled).toBe(true);
     expect(byState.get("LAGGING")?.statusLabel).not.toBe("");
-    expect(byState.get("DISCONNECTED")?.mutationsEnabled).toBe(false);
     expect(byState.get("DISCONNECTED")?.nextAllowedCommands).toEqual([]);
-    expect(byState.get("HISTORICAL")?.mutationsEnabled).toBe(false);
     expect(byState.get("HISTORICAL")?.requiresAffordanceRefresh).toBe(true);
+  });
+
+  it("blocks mutation on each gate leg independently of the others", () => {
+    // Each fixture leaves every OTHER condition permitting, so exactly one leg can
+    // be holding the gate closed. Delete any single leg and one of these goes true.
+    const [dropped, refreshRequired, noAffordances] = MUTATION_BLOCK_ISOLATION;
+    expect(MUTATION_BLOCK_ISOLATION.length).toBe(3);
+    expect(Object.isFrozen(MUTATION_BLOCK_ISOLATION)).toBe(true);
+    for (const snap of MUTATION_BLOCK_ISOLATION) {
+      expect(Object.isFrozen(snap)).toBe(true);
+      expect(snap.mutationsEnabled).toBe(false);
+    }
+    expect(dropped?.connection).toBe("DISCONNECTED");
+    expect(dropped?.requiresAffordanceRefresh).toBe(false);
+    expect(dropped?.nextAllowedCommands.length).toBeGreaterThan(0);
+    expect(refreshRequired?.connection).toBe("CONNECTED");
+    expect(refreshRequired?.requiresAffordanceRefresh).toBe(true);
+    expect(refreshRequired?.nextAllowedCommands.length).toBeGreaterThan(0);
+    expect(noAffordances?.connection).toBe("CONNECTED");
+    expect(noAffordances?.requiresAffordanceRefresh).toBe(false);
+    expect(noAffordances?.nextAllowedCommands).toEqual([]);
   });
 
   it("rejects any affordance the daemon parser would not have produced", () => {

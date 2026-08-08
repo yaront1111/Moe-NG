@@ -39,13 +39,7 @@ export interface FixtureFact {
   readonly value: string;
 }
 
-export type FixtureSurfaceId =
-  | "goals"
-  | "board"
-  | "node"
-  | "approval"
-  | "evidence"
-  | "doctor";
+export type FixtureSurfaceId = "goals" | "board" | "node" | "approval" | "evidence" | "doctor";
 
 export interface FixtureSurface {
   readonly facts: readonly FixtureFact[];
@@ -54,11 +48,7 @@ export interface FixtureSurface {
 }
 
 /** Transport states the shell must render differently. */
-export type FixtureConnectionState =
-  | "CONNECTED"
-  | "LAGGING"
-  | "DISCONNECTED"
-  | "HISTORICAL";
+export type FixtureConnectionState = "CONNECTED" | "LAGGING" | "DISCONNECTED" | "HISTORICAL";
 
 export interface FixtureAffordanceSnapshot {
   readonly connection: FixtureConnectionState;
@@ -82,11 +72,7 @@ const LINK_ACTORS: Record<ProvenanceLinkKind, string> = {
 };
 
 type FactSeed = readonly [
-  factId: string,
-  label: string,
-  value: string,
-  truthClass: unknown,
-  linkKind: ProvenanceLinkKind,
+  factId: string, label: string, value: string, truthClass: unknown, linkKind: ProvenanceLinkKind,
 ];
 
 function provenanceFor(seed: FactSeed, index: number): FixtureProvenance {
@@ -108,13 +94,7 @@ function provenanceFor(seed: FactSeed, index: number): FixtureProvenance {
 
 function factFrom(seed: FactSeed, index: number): FixtureFact {
   const [factId, label, value, truthClass] = seed;
-  return Object.freeze({
-    factId,
-    label,
-    provenance: provenanceFor(seed, index),
-    truthClass,
-    value,
-  });
+  return Object.freeze({ factId, label, provenance: provenanceFor(seed, index), truthClass, value });
 }
 
 /**
@@ -237,6 +217,21 @@ function buildAffordances(): readonly FixtureAffordanceSnapshot[] {
     ),
   ]);
 }
+
+/**
+ * One snapshot per blocking leg, each built so EVERY other condition would permit
+ * mutation — the named leg is the only thing holding the gate closed. The canonical
+ * four states cannot serve this: each blocked state is blocked by more than one leg
+ * at once, so every individual leg is deletable without a test noticing.
+ *
+ * The first is why this is load-bearing rather than theoretical: a view that keeps
+ * its last-known affordances when the transport drops must still refuse to act.
+ */
+export const MUTATION_BLOCK_ISOLATION: readonly FixtureAffordanceSnapshot[] = Object.freeze([
+  snapshot("DISCONNECTED", j1Commands(), false, "Dropped while holding last-known affordances."),
+  snapshot("CONNECTED", j1Commands(), true, "Connected; affordances must be refreshed first."),
+  snapshot("CONNECTED", EMPTY_NEXT_ALLOWED_COMMANDS, false, "Connected; no affordances supplied."),
+]);
 
 /** Rebuilds the fixture set. Two calls are deep-equal and JSON-identical. */
 export function buildControlRoomFixtures(): ControlRoomFixtures {
