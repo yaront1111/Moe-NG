@@ -132,8 +132,8 @@
       "completedAt": "2026-08-08T09:04:28.550Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f4052923",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -145,12 +145,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:03.373Z",
-  "updatedAt": "2026-08-08T09:05:39.054Z",
+  "updatedAt": "2026-08-08T09:11:51.453Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T08:28:34.310Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-08T09:11:51.453Z",
+    "wallClockMs": 2597143
   },
   "contextFetchedBy": [
     "architect-e54ba2b5",
@@ -199,5 +201,8 @@
     "packages/store/src/outbox-relay/transactional-outbox-relay.js",
     "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
     "packages/store/src/outbox-relay/outbox-relay-contracts.js"
-  ]
+  ],
+  "completedAt": "2026-08-08T09:11:51.453Z",
+  "reviewCompletedAt": "2026-08-08T09:11:51.453Z",
+  "reviewSummary": "APPROVED on the worker's commit 2443a6a (7 files, +959, all packages/store/src/outbox-relay/**), not on HEAD. Gate re-run by QA: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> exit 0, 25 files / 201 tests, twice (before probes, again after restore). DoD1: confirmed at event-ledger-transaction.ts:114-147 that writeCommitEffects (domain_events+outbox_messages) then applyWithinCommit (projection+inbox) both run before the shared COMMIT; fault matrix fires RAISE(ABORT) at all four tables, asserting the DB is EMPTY after each. DoD2: redelivery gives ALREADY_APPLIED/INBOX, commit null, zero reducer calls, DB byte-identical, labelled apart from COMMAND_RECEIPT replay; altered envelope bytes on the same identity refuse OUTBOX_RELAY_INBOX_CONFLICT at INBOX. DoD3: store closed and reopened, redelivery with fresh IDs at the bumped expectedVersion still returns INBOX — dedupe is the inbox_receipts table, no in-memory set in the diff. DoD4: 2443a6a holds owned paths only. Three of my own mutation probes, out-of-tree backups, hash 95d8def6 re-verified after each: (a) neutering the inbox check -> 3 red including the restart proof; (b) skipping the projection state_digest compare -> stale-state test red because it asserts OUTBOX_RELAY_PROJECTION_CONFLICT specifically (the fallback still refuses, but as PROJECTION_WRITE_FAILED), so it bites on the reason code, not on \"did not succeed\"; (c) writeOnce swallowing the SQLite error -> both partial-write cases red, so the all-or-none assertions are load-bearing. Sweeps assert their own label lists; digests observed via the persisted state_digest column. Owned paths left clean. Two notes, neither a rejection ground: relay is 266 lines vs the plan's \"<=250\", compliant with epic rail 5 (250 target / 400 split); commit 0e4903a carries this task's title but is the wrapper post-flight sweep, already logged by the governor as an infra defect no worker can fix."
 }

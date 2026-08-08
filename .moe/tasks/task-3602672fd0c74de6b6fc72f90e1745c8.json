@@ -60,49 +60,81 @@
     {
       "stepId": "step-4",
       "description": "GREEN, part 1 — create packages/scheduler/src/budget/budget-settlement.ts: header comment MAX 12 lines (the 250 cap is the binding constraint; siblings landed at 249-250 with smaller surfaces, so density is mandatory: derived messages, Check tuple tables, shared transition guard). Contents: (1) imports — type-only from ./budget-contract.js (BudgetMeterBuckets, BudgetAccountState), MAX_BUDGET_VERSION from ./budget-account.js, deriveReservationId + types (BudgetAvailableView, ReservationRecord) from ./budget-reservation.js, type NormalizedMeasurement from ./budget-measurement.js, hostile-input readers (isPlainRecord, isPlainArray, hasOnlyOwnStringKeys, readOwnDataProperty) from ../runtime-shape.js; (2) BUDGET_SETTLEMENT_ISSUE_CODES — closed frozen union of EXACTLY the 16 codes named in the test matrix, prefix BUDGET_SETTLEMENT_, message DERIVED from code (slice prefix, lowercase, underscores to spaces — the 17.03 compaction; do not hand-write messages); (3) SETTLEMENT_STATES = ['QUARANTINED','SETTLED','WRITTEN_OFF'], LINE_DISPOSITIONS = ['EXACT','LOWER_BOUND','UNKNOWN_HELD','CONSERVATIVE_WRITE_OFF','NEVER_STARTED_REFUND']; (4) types: SettlementLine {meter, reserved, committed, refunded, quarantined, disposition, identity: string|null, sequence: number|null} (identity/sequence of the settling measurement, consulted by reconcile ordering); SettlementRecord {settlementId, reservationId, accountId, attemptRef, version, state, lines, unknownExternalLiability: boolean, overrun: readonly {meter,amount}[]}; deriveSettlementId(reservationId) = `settlement:${reservationId.length}:${reservationId}` (length-prefixed, injective); BudgetSettlementResult = {ok:true, settlement, view} | {ok:false, settlement: SettlementRecord|null, view, issues} — refusal returns the caller's view BY REFERENCE, deepFrozen result, single first-failing-check code via ordered Check tables; (5) local private clones: deepFreeze, isCount, isRef, firstOf, readRecord (unavoidable — siblings do not export them); (6) settleReservation(view, reservation, evidence {measurements: readonly NormalizedMeasurement[]}, cmd {expectedViewVersion, expectedReservationVersion, prior: SettlementRecord|null}): guards in pinned order malformed > identity (deriveReservationId recheck + accountId===view.accountId) > not-activated > duplicate/already-settled (prior same reservationId: byte-identical full inputs return PRIOR BY REFERENCE as ok; different bytes refuse ALREADY_SETTLED) > stale versions > counter exhausted > uncorrelated (each measurement.measurement.providerRunRef === reservation.attemptRef) > duplicate meter > unknown meter (measurement meter must be in reservation totals) > insufficient reserved. Per-meter disposition over totalPerMeter(reservation.lines) recomputed locally: COMPLETE qty<=hold commits qty, refunds hold-qty; COMPLETE qty>hold commits the FULL measured qty into COMMITTED (the hold from RESERVED plus the excess minted against an explicit overrun entry {meter, amount: qty-hold}) and sets view.state OVERDRAWN — the conservation equation (design 610-613) balances because bucket sum grows by exactly the recorded overrun; PARTIAL commits qty (lower bound), quarantines hold-qty; UNKNOWN or missing measurement quarantines the full hold with committed 0 and disposition UNKNOWN_HELD (never a zero-committed EXACT — that would launder unknown to zero). Record state QUARANTINED iff any line quarantined>0 else SETTLED; view.version+1; no bucket may go negative anywhere.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-settlement.ts"
       ],
-      "startedAt": "2026-08-08T08:58:19.558Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.ts"
+      ],
+      "note": "GREEN part 1: budget-settlement.ts created with the 16 closed BUDGET_SETTLEMENT_ codes (messages derived from the code string, no hand-written prose), SETTLEMENT_STATES, LINE_DISPOSITIONS, the record/line/command types, private clones of deepFreeze/isCount/isRef/oneOf/firstOf/readRecord (none are exported by any sibling), and settleReservation. Two deviations from the plan text, both deliberate and both smaller than the alternative: (1) the per-meter engine is ONE function `dispose(meter, hold, credited, from, reading)` shared by settle and reconcile, because a reconcile receipt quantity is the TOTAL measured use for that meter, so the committed delta is quantity - credited and settle is just the credited=0 case; this is also what makes MEASUREMENT_CONFLICT (receipt below the committed lower bound) expressible at all. (2) The prior/ALREADY_SETTLED comparison is byte-identity against the freshly computed candidate, so it necessarily runs LAST rather than mid-table — a byte-identical replay returns the caller's prior record by reference with the caller's view by reference, any other prior refuses. Published settle precedence: MALFORMED > IDENTITY_MISMATCH > NOT_ACTIVATED > COUNTER_EXHAUSTED > STALE_VERSION > UNCORRELATED > DUPLICATE_METER > UNKNOWN_METER > INSUFFICIENT_RESERVED > ALREADY_SETTLED. Record state is stateOf(lines): SETTLED only when every line has quarantined 0 AND a resolved disposition (EXACT / CONSERVATIVE_WRITE_OFF / NEVER_STARTED_REFUND), so a PARTIAL line whose remainder happens to be zero still reads QUARANTINED rather than silently closing an unresolved measurement. Overrun: measured excess enters COMMITTED and is recorded in settlement.overrun, view.state becomes OVERDRAWN, and the conservation equation balances by exactly that amount. Typecheck clean.",
+      "startedAt": "2026-08-08T08:58:19.558Z",
+      "completedAt": "2026-08-08T09:11:00.036Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN, part 2 — same file, staying <=250 physical lines total: (7) reconcileSettlement(view, settlement, evidence {measurements: readonly NormalizedMeasurement[]|null, neverStartedProofRef: string|null}, cmd {expectedViewVersion, expectedSettlementVersion}): exactly one evidence arm non-null else EVIDENCE_AMBIGUOUS; settlement.state must be QUARANTINED else ALREADY_SETTLED; stale/counter guards as above. Receipt arm: per measurement, meter must be a quarantined line (UNKNOWN_METER), providerRunRef must equal settlement.attemptRef (UNCORRELATED_MEASUREMENT), sequence must advance strictly past the stored line sequence (SEQUENCE_STALE), qty below the line's already-committed lower bound is MEASUREMENT_CONFLICT; commits exact from QUARANTINED->COMMITTED, refunds proven remainder QUARANTINED->AVAILABLE, excess above quarantined follows the same explicit-overrun+OVERDRAWN rule as settle. Never-started arm: any line with committed>0 contradicts never-started -> MEASUREMENT_CONFLICT; otherwise every quarantined unit refunds QUARANTINED->AVAILABLE with disposition NEVER_STARTED_REFUND; COMMITTED buckets are never touched (already-committed attempt.count stays spent, design exit 2). Resulting state SETTLED when no quarantined units remain. (8) conservativeSettle(view, settlement, cmd {expectedViewVersion, expectedSettlementVersion, acknowledgementRef: string, enforceableUpperBound: boolean}): acknowledgementRef must be a non-empty bounded ref else ACKNOWLEDGEMENT_MISSING (design line 1039: conservative settlement requires human acknowledgement — model it as a required evidence ref exactly like 17.03 models approvals; no policy re-evaluation); state QUARANTINED required; commits ALL quarantined units QUARANTINED->COMMITTED, disposition CONSERVATIVE_WRITE_OFF, refunds NOTHING (design exit 3); enforceableUpperBound===false additionally sets persistent unknownExternalLiability:true (design exit 4 — never represented as exact spend); result state WRITTEN_OFF. (9) closeSettledView(view, settlements: readonly SettlementRecord[], cmd {expectedVersion}): shape-checks every supplied settlement; refuses ILLEGAL_CLOSE unless view.state===OPEN AND every meter has available===0 && reserved===0 && quarantined===0 (design 664: no account closes with RESERVED or QUARANTINED units; available must be returned to the parent by the ledger first; OVERDRAWN close refused — the design gives OVERDRAWN no exit here and continuing after overrun is a human policy decision) AND no supplied settlement is state QUARANTINED; terminal state is CLOSED_WITH_UNKNOWN_LIABILITY iff ANY supplied settlement carries unknownExternalLiability:true, else CLOSED — the linkage is structural (record in, state out), with the caveat that a pure module cannot force the caller to supply every settlement (same class of limitation as 17.03's at-most-one caveat; document it in the header, one line). Also document in the header: SETTLING is deliberately unused here (it is a ledger-level lifecycle needing account-wide knowledge this narrow view lacks). Every unit-moving op bumps view.version by exactly 1.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.ts"
+      ],
+      "note": "GREEN part 2 landed in the same file; final size exactly 250 physical lines, typecheck clean, focused suite 45/45. reconcileSettlement, conservativeSettle and closeSettledView share one preamble `openQuarantine(view, settlement, cmd, extra)` that re-reads the settlement (readSettlement re-derives settlementId from reservationId so a forgery cannot transition), requires state QUARANTINED (else ALREADY_SETTLED), runs the op-specific extra checks, then the shared version fence, then INSUFFICIENT_QUARANTINED — that extraction is what made three ops fit under the cap. reconcile: exactly one evidence arm (EVIDENCE_AMBIGUOUS when both or neither); receipt arm checks correlation against settlement.attemptRef, duplicate meter, meter-must-be-a-quarantined-line, strictly advancing sequence, and receipt-below-committed-lower-bound, then commits qty - alreadyCommitted out of QUARANTINED, refunds the proven remainder to AVAILABLE, and mints explicit overrun + OVERDRAWN on excess exactly like settle; never-started arm refuses when any line already committed and otherwise moves QUARANTINED -> AVAILABLE only, so COMMITTED (the design-exit-2 attempt.count) is provably untouched. conservativeSettle requires acknowledgementRef AND the boolean bound classification as ONE evidence requirement (recovery matrix 1039 names both), commits every quarantined unit as CONSERVATIVE_WRITE_OFF, refunds nothing, sets state WRITTEN_OFF, and ORs in persistent unknownExternalLiability when the bound was unenforceable. closeSettledView refuses unless state OPEN and every meter has available+reserved+quarantined === 0 and no supplied settlement is still QUARANTINED (so OVERDRAWN and already-CLOSED both refuse), and picks CLOSED_WITH_UNKNOWN_LIABILITY structurally from the supplied records rather than from a caller flag. Every op routes movement through one `shift()` that bumps view.version by exactly 1, including close. Documented limitation, same class as 17.03's: a pure module cannot force the caller to hand close every settlement of the account.",
+      "startedAt": "2026-08-08T09:11:02.409Z",
+      "completedAt": "2026-08-08T09:11:15.278Z"
     },
     {
       "stepId": "step-6",
       "description": "Create packages/scheduler/src/budget/budget-settlement.js containing EXACTLY one line: export * from \"./budget-settlement.ts\"; — byte-identical convention to the landed sibling bridges (verify against budget-reservation.js before writing). Run the focused suite to green: pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-settlement.test.ts. Iterate implementation (never the predecessor modules) until 0 failures. If after full compaction (derived messages, Check tables, merged guards) the production file genuinely cannot fit 250 physical lines, STOP and call moe.report_blocked rather than splitting into a fourth unowned file or trimming guards.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/budget/budget-settlement.js"
       ],
       "newFiles": [
         "packages/scheduler/src/budget/budget-settlement.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.js"
+      ],
+      "note": "Bridge created: exactly one line `export * from \"./budget-settlement.ts\";` with a trailing LF and no BOM. Proved byte-identical to the landed convention by diffing against the sibling with the module name substituted: `cmp <(sed 's/reservation/settlement/' budget-reservation.js) budget-settlement.js` exits 0. Focused suite is green: 45/45, 1 file passed, typecheck exits 0. No report_blocked needed — the production file landed at exactly 250 physical lines without dropping a single guard: the compactions that bought the room were (a) one shared `dispose()` per-meter engine for settle and reconcile, (b) one shared `openQuarantine()` preamble for all three quarantine-exit ops, (c) one shared `fence()` emitting the COUNTER_EXHAUSTED/STALE_VERSION check pair for all four ops, (d) messages derived from the code string, (e) ordered Check tuple tables with firstOf. Longest line is 176 chars, within the range the landed siblings already use.",
+      "startedAt": "2026-08-08T09:11:18.258Z",
+      "completedAt": "2026-08-08T09:11:28.968Z"
     },
     {
       "stepId": "step-7",
       "description": "MUTATION RED-CHECK + adversarial review (epic rail: failure-path tests must be proven able to go red). Before mutating, read Serena memories gotcha-mutation-testing-restore-safety and gotcha-mutation-harness-windows-decode and follow their restore rules: copy the pristine file OUT of the tree first, restore by copy, verify with git hash-object that the restored blob matches the committed/pristine hash after EVERY mutation. Mutations, each must turn the suite red: (1) overrun branch commits only the hold (drops the excess) — conservation + overrun tests red; (2) UNKNOWN disposition writes committed=qty??0 (zero-commit laundering) — DoD 2 tests red; (3) correlation guard removed (accept any providerRunRef) — UNCORRELATED matrix row red; (4) unknownExternalLiability never set on enforceableUpperBound:false — liability + close tests red; (5) close legality drops the quarantined===0 conjunct — ILLEGAL_CLOSE rows red; (6) duplicate no-op returns a rebuilt {...prior} instead of the prior reference — toBe duplicate test red; (7) ACKNOWLEDGEMENT_MISSING guard removed — that row red; (8) never-started arm also refunds COMMITTED — attempt.count-intact test red. Record each mutation and its red count for complete_task evidence. Adversarial checklist: two competitors settling the same reservation from the same stale view (pure-function caveat: the version fence plus prior mechanism is the compare-and-swap seam, the store enforces at-most-one — assert the loser refuses when applied to the winner's successor artifacts); hostile measurement objects with prototype-carried keys; empty measurements array (must not silently settle as all-UNKNOWN without quarantining — decide and test: empty array quarantines every hold, which is the fail-closed reading); -0 and MAX_SAFE_INTEGER quantities; a reservation whose lines sum above the view's reserved bucket.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.ts",
+        "packages/scheduler/src/budget/budget-settlement.test.ts"
+      ],
+      "note": "MUTATION RED-CHECK: 12 mutations, 12 RED, zero survivors. Baseline before/after 46/46 green; out-of-tree backup taken before the first mutation, restore by copy in a finally, git hash-object verified after every one (final hash 45d2925a441424d3c757db5b2a4e2c242fa6111d). Results (failed/total): 1 overrun commits only the hold 2/46; 2 UNKNOWN laundered to zero-committed EXACT 17/46; 3 settle correlation guard removed 2/46; 4 unknownExternalLiability never set on an unenforceable bound 3/46; 5 close legality drops the quarantined===0 conjunct 1/46; 6 duplicate no-op returns a rebuilt {...prior} instead of the reference 2/46; 7 ACKNOWLEDGEMENT_MISSING guard removed 2/46; 8 never-started arm refunds out of COMMITTED instead of QUARANTINED 2/46; 9 never-started-vs-already-committed conflict guard removed 1/46; 10 reconcile sequence-advance guard removed 2/46; 11 shift stops bumping view.version 8/46; 12 empty-receipt-array-is-not-evidence guard removed 1/46. Mutation 8 replaces the plan's wording because with the UNKNOWN hold that line has committed 0, so \"also refunds COMMITTED\" would have moved nothing and survived — refunding OUT OF committed instead of quarantined is what actually exercises design exit 2, and guard 9 is what stops an already-spent attempt.count being refunded at all. ADVERSARIAL PROBES (node --experimental-strip-types inline eval, no scratch files): two competitors settling from the same stale view both succeed in isolation (pure-function caveat, same as 17.03), but the loser applied to the winner's successor view refuses STALE_VERSION — the version fence plus prior is the CAS seam and the store enforces at-most-one; -0, 1.5 and MAX_SAFE_INTEGER+2 quantities all refuse MALFORMED; exactly MAX_SAFE_INTEGER commits with explicit overrun, OVERDRAWN, and no negative bucket; a prototype-carried measurement refuses MALFORMED; settling on an already-frozen input view works because shift() builds fresh bucket objects. ONE REAL DEFECT FOUND AND FIXED: reconcileSettlement accepted `measurements: []` as a receipt arm, returning ok while moving nothing and burning a view version — no evidence must not be an exit. An empty receipt array is now no evidence and refuses EVIDENCE_AMBIGUOUS; matrix grew to 33 rows and mutation 12 proves the new guard load-bearing. Sizes still 250 production / 245 test. Re-learned the Windows console lesson: printing vitest's box-glyph summary crashed the harness on cp1252 ENCODE (the existing memory covers decode); the finally-restore saved the file and the rerun strips non-ASCII first.",
+      "startedAt": "2026-08-08T09:15:04.415Z",
+      "completedAt": "2026-08-08T09:15:18.279Z"
     },
     {
       "stepId": "step-8",
       "description": "VERIFICATION + regression + commit. (1) Focused gate (the task's pinned command): pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-settlement.test.ts — must exit 0; capture fresh output as complete_task evidence. (2) Package regression: pnpm --filter @moe/scheduler test — must exit 0 (proves predecessor suites untouched). (3) Line caps from the INDEX, not the working tree: after staging, git show :packages/scheduler/src/budget/budget-settlement.ts | wc -l and same for the test file — both <=250; bridge exactly 1 line. (4) git status --porcelain — confirm the only staged entries are the three owned paths; unstage any foreign path with git restore --staged -- <path>. (5) Commit by explicit pathspec ONLY: git add then git commit -- packages/scheduler/src/budget/budget-settlement.ts packages/scheduler/src/budget/budget-settlement.js packages/scheduler/src/budget/budget-settlement.test.ts with message feat(task-3602672fd0c74de6b6fc72f90e1745c8): Budget settlement reconciliation. (6) git show --stat HEAD — exactly 3 files. index.ts, package.json, pnpm-lock.yaml, and every predecessor budget file must be untouched. No debug/probe/scratch files anywhere in the commit; use the node --experimental-strip-types inline-eval probe technique from the 17.04 handoff if ad-hoc probing is needed.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/scheduler/src/budget/budget-settlement.ts",
+        "packages/scheduler/src/budget/budget-settlement.js",
+        "packages/scheduler/src/budget/budget-settlement.test.ts"
+      ],
+      "note": "VERIFIED AND COMMITTED as 4f9c119 on moe/work-2026-08-08. Pinned gate run fresh AFTER the commit: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-settlement.test.ts` -> exit 0, \"Test Files 1 passed (1) / Tests 46 passed (46)\". Package regression `pnpm --filter @moe/scheduler test` -> exit 0, 31 files / 519 tests, which proves all four predecessor budget suites are untouched (their last commit is still 05b0dbf / 1125ed6; index.ts, package.json and pnpm-lock.yaml were not touched by me at all). Caps measured from HEAD, not the working tree: budget-settlement.ts 250, budget-settlement.test.ts 245, budget-settlement.js exactly 1. IMPORTANT PROVENANCE — the commit contains 2 paths, not 3, and that is correct: foreign commit 0e4903a (task-071173ab, \"Transactional outbox relay\") swept all three of my in-flight files into ITS commit at their intermediate 329-line state, exactly the documented shared-tree sweep. `git ls-files --error-unmatch` confirms all three owned paths are tracked; the .js bridge was swept byte-identical to its final form so it had nothing left to commit. My commit was made by explicit pathspec with the staged list verified beforehand — the only staged entries were my two owned paths, and the four dirty `.moe/` daemon files were deliberately left unstaged. ADVERSARIAL SELF-REVIEW findings, none blocking, all recorded rather than hidden: (1) SettlementRecord.overrun is CUMULATIVE for the reservation — reconcile carries prior overrun entries forward, which is right for the design equation measured against the original authorization but means a per-step conservation check must subtract the pre-existing entries; the tested reconcile paths start from an overrun-free hold so no test pins this, and OVERDRAWN is decided by overrun-array GROWTH, not by non-emptiness, so it stays correct. (2) deepFreeze on the result freezes the caller's view, and readSettlement does not clone line objects, so accepting a reconcile freezes the caller's untouched line objects too — landed sibling behaviour (17.03 documented the same for refusals), deliberate, but it is a side effect on the caller's input. (3) A reservation meter absent from the view refuses INSUFFICIENT_RESERVED rather than UNKNOWN_METER (bucketOf misses default to -1); fail-closed, but it differs from the sibling which has a separate unknown-meter probe. (4) Individual amounts are bounded to safe integers, but a committed bucket can reach MAX_SAFE_INTEGER, so a subtree sum beyond 2^53 would lose precision — same characteristic as the landed ledger. (5) A caller-supplied `prior` is only shape-checked with isPlainRecord; it must JSON-stringify byte-identically to the freshly computed settlement to be returned, so a forged prior cannot move units, but a getter-bearing object that stringifies equal would be handed back by reference.",
+      "startedAt": "2026-08-08T09:15:20.929Z",
+      "completedAt": "2026-08-08T09:17:28.906Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40ee2326",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-6fd67108",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -111,24 +143,37 @@
   "parentTaskId": "task-d5c4b086d5a34fea808729877ea8bda3",
   "priority": "HIGH",
   "order": 17.05,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-99abbc10a6b14ebf88a2933eec79c6de",
+      "author": "worker-40ee2326",
+      "content": "Correction to one number in my completion summary, so QA does not read it as a discrepancy: there are 12 acceptance specs, not 13, and the meta test asserts `conserved === 12`, not 13. The arithmetic that checks out against the run: 12 acceptance + 33 matrix rows + 1 meta = 46 tests. Everything else in the summary stands.",
+      "timestamp": "2026-08-08T09:19:22.352Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T21:47:58.147Z",
-  "updatedAt": "2026-08-08T08:58:19.558Z",
+  "updatedAt": "2026-08-08T09:19:22.353Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T08:27:39.376Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 3
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-d89636d1",
-    "worker-40ee2326"
+    "worker-40ee2326",
+    "qa-6fd67108"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T08:38:08.005Z",
@@ -149,5 +194,17 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-08T08:38:10.038Z",
-  "workStartedAt": "2026-08-08T08:44:40.342Z"
+  "workStartedAt": "2026-08-08T08:44:40.342Z",
+  "reviewStartedAt": "2026-08-08T09:19:08.501Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/budget/budget-settlement.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  1 passed (1)\n      Tests  46 passed (46)\n   Start at  12:17:07\n   Duration  175ms (transform 59ms, setup 0ms, import 77ms, tests 8ms, environment 0ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-08T09:19:08.501Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/budget/budget-settlement.test.ts",
+    "packages/scheduler/src/budget/budget-settlement.ts",
+    "packages/scheduler/src/budget/budget-settlement.js"
+  ]
 }
