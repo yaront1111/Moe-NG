@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "Decide whether the journey half can run at all, and transcribe the journeys by hand. First, check the board: this canary drives the daemon bootstrap and work services, the HTTP/stream seam, review flow, crash reconciliation, evidence receipts, the context journal handoff package and session coordination — all of which were in flight when this was planned. Record which are DONE and which are not. The harness half (steps 2-4) is buildable regardless and is never wasted; the journey half (steps 5-8) needs its features. If the features are absent, build the harness and then moe.report_blocked naming exactly which ones are missing — do NOT stub, mock, or narrow a journey to make it pass, because this is the epic's cutover acceptance gate and a canary trimmed until it goes green certifies a cutover that never happened. Second, transcribe BY HAND from the pinned design (read-only, epic rail 1) the exact assertions for J1 (line 1095: exactly three human actions — goal.create, plan/initial-graph approval, final acceptance), J3 (line 1099) and J4 (line 1101), plus the exit condition at line 1324. That hand-written list is the specification for steps 5-8; a list derived from the implementation would assert only that the system does what it does. Produce no code.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T20:59:42.000Z"
     },
     {
       "stepId": "step-2",
@@ -123,7 +124,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-e46fb0dc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -135,7 +136,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-08T20:58:43.710Z",
+  "updatedAt": "2026-08-08T20:59:42.001Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -163,5 +164,9 @@
   "budget": {
     "wallClockMs": 28800000
   },
-  "planApprovedAt": "2026-08-08T20:58:43.710Z"
+  "planApprovedAt": "2026-08-08T20:58:43.710Z",
+  "contextFetchedBy": [
+    "worker-e46fb0dc"
+  ],
+  "workStartedAt": "2026-08-08T20:59:42.000Z"
 }

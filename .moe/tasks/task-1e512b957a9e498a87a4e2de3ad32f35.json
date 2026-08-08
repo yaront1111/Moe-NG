@@ -204,8 +204,8 @@
       "completedAt": "2026-08-08T20:56:50.893Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f8533806",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -224,7 +224,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.486Z",
-  "updatedAt": "2026-08-08T20:56:50.893Z",
+  "updatedAt": "2026-08-08T21:01:48.039Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:22:19.012Z",
     "plannedStepCount": 11,
@@ -271,5 +271,25 @@
   "contextFetchedBy": [
     "worker-f8533806"
   ],
-  "workStartedAt": "2026-08-08T20:27:58.708Z"
+  "workStartedAt": "2026-08-08T20:27:58.708Z",
+  "reviewStartedAt": "2026-08-08T21:01:48.039Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nEXIT=0\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  18 passed (18)\n      Tests  663 passed (663)\n   Start at  00:00:54\n   Duration  707ms (transform 2.34s, setup 0ms, import 3.35s, tests 859ms, environment 1ms)",
+    "reportedAt": "2026-08-08T21:01:48.039Z"
+  },
+  "filesModified": [
+    "packages/runner/src/evidence/evidence-contract.ts",
+    "packages/runner/src/evidence/verification-recipe.test.ts",
+    "packages/runner/src/evidence/verification-recipe.ts",
+    "packages/runner/src/evidence/candidate-rematerialization.test.ts",
+    "packages/runner/src/evidence/candidate-rematerialization.ts",
+    "packages/runner/src/evidence/candidate-reconciliation.ts",
+    "packages/runner/src/evidence/evidence-receipt.test.ts",
+    "packages/runner/src/evidence/evidence-receipt.ts",
+    "packages/runner/src/evidence/receipt-obligations.ts",
+    "packages/runner/src/evidence/verifier-execution.ts",
+    "packages/runner/src/evidence/evidence-pipeline.test.ts"
+  ]
 }

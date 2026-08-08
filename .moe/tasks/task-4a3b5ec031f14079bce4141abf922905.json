@@ -122,7 +122,7 @@
     {
       "stepId": "step-8",
       "description": "Implement packages/runner/src/supervisor/restart-reconstruction.ts to green. Pure re-derivation over durable records only — effect intent, attempt slice, claim, grant, tombstone, launch-lock registration, and any bound reconciliation. It must produce exactly one legal state, never a set and never a guess: where the records admit more than one reading, that ambiguity is itself the answer and resolves to UNKNOWN or SUSPECT with a stable code, because epic rail 4 forbids unverifiable evidence from gaining authority. It must never label a terminal it cannot prove; a terminal claim without its evidence refuses RESTART_PREMATURE_TERMINAL. RELEASED is the strictest arm and requires the exact safe handoff, refusing RESTART_SAFE_HANDOFF_ABSENT when it is missing — a distinct code, so a reviewer can tell 'no handoff' from 'records disagree'. Reuse child 1's validateActivationCommit for partial-commit detection rather than re-implementing that check, and route drain decisions through drain-reconciliation.ts rather than duplicating the table. Refuse at layer RESTART. Target under 250 lines; split before 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/restart-reconstruction.ts",
         "packages/runner/src/supervisor/restart-reconstruction.test.ts"
@@ -130,29 +130,38 @@
       "newFiles": [
         "packages/runner/src/supervisor/restart-reconstruction.ts"
       ],
-      "startedAt": "2026-08-08T20:58:48.209Z"
+      "note": "Revalidated settled restart implementation after exact-label test hardening: 188 lines, imports validateActivationCommit and resolveDrainRow instead of duplicating either mechanism; focused restart suite 27/27 green. No production change required.",
+      "startedAt": "2026-08-08T20:58:48.209Z",
+      "completedAt": "2026-08-08T20:59:02.187Z"
     },
     {
       "stepId": "step-9",
       "description": "Prove the new assertions are load-bearing, and sweep the two rails that a green suite cannot see. MUTATION DRILL at each mechanism's SINGLE source, per task rail 5: neutralise the credential-reuse check, the registration-absent branch, the SUSPECT mapping, the monotonic-upgrade guard in drain-reconciliation.ts, the row-match fallthrough, and the premature-terminal guard — replace the operand with a constant, NEVER delete a line, since a deleted line from a multi-line condition yields a syntax error that reddens zero tests and reads as 'survived'. Count failed SUITES as well as failed tests. Back each file up out-of-tree and verify the restore with git hash-object. Then two static sweeps: (a) REDACTION — grep the new modules and their outputs for any path that could put a bootstrap credential, lease token, or expected observation digest into a message, a detail field, or an outcome, and assert it in a test rather than only by eye; this is a security property, not a style note. (b) FENCE — grep the new files for child_process, spawn, kill, Date.now, Math.random and confirm zero hits, since task rail 2 forbids all five outright. Finally confirm every code added to SUPERVISOR_ERROR_CODES in step 2 is actually reachable from a caller-visible surface — an unreachable code is one no test can pin, and adding one would be a defect introduced by this task.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Reopen mutation work targeted the two detached assertions only: M5 wrong-layer is now killed (2 failing tests) and UNKNOWN->SUSPECT is killed (1 failing test); both production files restored hash-identical and focused suites returned green. Per QA instruction did not redo the four previously killed mutants. Fresh FENCE sweep has zero hits; redaction sink review finds bootstrapCredentialDigest only in registration validation/comparison, never outcome/failure sinks; all 13 new codes have >=1 producer occurrence outside the vocabulary.",
+      "startedAt": "2026-08-08T20:59:06.216Z",
+      "completedAt": "2026-08-08T20:59:31.943Z"
     },
     {
       "stepId": "step-10",
       "description": "Run the gate and attribute every failure honestly. From the repo root, fresh, capturing real output as the evidence: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Do NOT add .js bridge files — @moe/runner has zero of them package-wide and that is correct for this package (NodeNext plus vitest resolve a .js specifier to its .ts sibling); the opposite rule holds in @moe/store and applying it here would be wrong. supervisor/ also stays off index.ts. Attribute red by path, never by a remembered count: packages/runner/src/supervisor/ is SHARED with child 1's in-flight task right now, so a failure in effect-*.test.ts may well be theirs — check whether task-2580a578 is still working before claiming or fixing it, and never edit a child-1 test to make your suite green. The scope-observation real-git test has a known 5s-timeout flake on this machine: re-run once, report the result, do not chase it. Anything red in the files this task created is unambiguously yours. Also confirm with wc -l (not PowerShell Measure-Object -Line, which skips blank lines and only ever reports room) that every production file this task touched or created is under the 400 hard cap, and record each count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/launch-lock.ts",
         "packages/runner/src/supervisor/drain-reconciliation.ts",
         "packages/runner/src/supervisor/restart-reconstruction.ts"
-      ]
+      ],
+      "note": "Fresh named gate from repo root passed after preserving/attributing child-4's transient TDD-red: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`, exit 0, 18 files / 663 tests. wc -l: kernel 266, lifecycle 262, launch-lock 138, duplicate-delivery 153, process-observation 88, drain-table 210, drain-disposition 107, drain-fence 63, drain-reconciliation 227, restart-records 141, restart-reconstruction 188; all under 400.",
+      "startedAt": "2026-08-08T20:59:40.026Z",
+      "completedAt": "2026-08-08T21:01:18.338Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then the commit — which is the highest-risk step on this task, not the code. Review your own diff as an attacker: can any uncertain state reach a launch grant by a path the tests do not cover; does any refusal assert only that something failed rather than which code and which layer; is the 786/787 row list or the strength order derived from the resolver instead of hand-written from the design; can a disposition downgrade through any route; does any outcome or message leak a bootstrap credential, lease token, or expected digest; did any frozen vocabulary get reordered rather than appended. THEN COMMIT, and treat this as the contamination hazard it is: child 1's ELEVEN files sit uncommitted in the same working directory, so a pathspec of packages/runner/src/supervisor/ would sweep their entire in-flight task into your commit. Run git status --porcelain first, stage and commit by EXPLICIT PER-FILE pathspec naming only this task's files — git commit -- <file> <file> ... — never a bare git commit, never git commit -a, never git add -A, and never the directory. effect-kernel.ts and effect-lifecycle.ts need particular care: they are child 1 files you EXTENDED, so their working-tree content also carries child 1's uncommitted work, and committing them would publish that work under your task. Do not resolve that alone — ask the governor in #governors how they want those two files handled before staging either, and commit your own new files meanwhile. Unstage any foreign path with git restore --staged. After committing, verify with git show --stat that only owned paths landed and no debug, probe, scratch, or generated evidence file is present.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-08T21:01:29.632Z"
     }
   ],
   "status": "WORKING",
@@ -168,7 +177,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:19:48.762Z",
-  "updatedAt": "2026-08-08T20:58:48.209Z",
+  "updatedAt": "2026-08-08T21:01:29.632Z",
   "contextFetchedBy": [
     "qa-cbad3a29",
     "worker-9337a867"
@@ -177,7 +186,7 @@
     "firstClaimAt": "2026-08-08T18:25:20.970Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 18,
+    "executedStepCount": 21,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -192,7 +201,10 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [
     {

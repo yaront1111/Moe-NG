@@ -49,25 +49,36 @@
     {
       "stepId": "step-3",
       "description": "Test the harness itself, because a harness nobody checks is the easiest place for this whole gate to become vacuous. Create packages/runner/src/supervisor/race-harness.test.ts asserting: the same seed produces the identical schedule twice (reproducibility — without it a failure cannot be investigated); different seeds produce different schedules (the seed is actually used); the requested step count is actually executed rather than short-circuited; the tamper bias produces both honest and tampered commands in roughly the documented proportion, asserting BOTH are non-zero so a bias of 100/0 cannot pass; and the outcome recorder counts what it observes, verified by feeding it a known sequence and asserting exact counts. Also assert the harness fails loudly on an unknown outcome kind rather than dropping it, since a silently ignored kind would defeat the set-equality assertion this gate is built on.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/race-harness.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/race-harness.test.ts"
       ],
-      "startedAt": "2026-08-08T20:56:31.086Z"
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/race-harness.test.ts",
+        "packages/runner/src/supervisor/race-harness.ts",
+        "packages/runner/src/supervisor/race-world.ts",
+        "packages/runner/src/supervisor/race-steps.ts",
+        "packages/runner/src/supervisor/race-scenarios.ts",
+        "packages/runner/src/supervisor/race-restart-scenarios.ts"
+      ],
+      "note": "race-harness.test.ts: 17 tests, all green. Covers reproducibility (same seed = identical trace), seed sensitivity (different seed = different trace), seeded(0) throws on the xorshift fixed point, exact requested step count with ordered indices, whole command alphabet drawn, honest AND tampered counts both non-zero plus the 70/30 proportion held within 0.6-0.8, the 5-member asserted-good pool states, grant present only on the ACTIVE member, recorder exact per-kind counts on a known sequence, recorder THROWS on an undeclared kind, recorder hands back a defensive copy, and five load-bearing checks on checkGrantOrdering fed deliberately broken synthetic logs (reordered launch, forged grant id, half pair, null pair). Also split the engine to hold the <=250 per-file target: race-harness.ts 192, race-world.ts 140, race-steps.ts 259, race-scenarios.ts 164, race-restart-scenarios.ts 146. Added StepOutcome.outcomeKind carrying the production surface's own `kind` verbatim so a test can compare against a frozen exported vocabulary rather than a label the harness invented.",
+      "startedAt": "2026-08-08T20:56:31.086Z",
+      "completedAt": "2026-08-08T21:01:14.152Z"
     },
     {
       "stepId": "step-4",
       "description": "Drive the supervisor slice through the harness — DoD 1 and DoD 3. Create packages/runner/src/supervisor/supervisor-races.test.ts running at least 5 seeds x at least 200 steps per seed across claim/activate/cancel/duplicate-delivery/restart orderings over child 1's and child 2's surfaces. Assert the observed outcome-kind SET EQUALS the hand-written expected list from step 1 — no unexpected kind, no missing kind — and record per-kind counts in the test output for the completion evidence. Assert on EVERY step, as harness invariants rather than spot checks: versionDelta is in {0,1} and a state change implies exactly 1; strongest-reason monotonicity, so a disposition never downgrades; and that every race ends in exactly one legal state. Note the invariant child 1 warned about — a NO_OP returns a fresh object at the SAME version, so 'a new object implies version+1' is WRONG and would fail spuriously. Treat any expected kind whose count is zero as a coverage failure to investigate, not a pass.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/supervisor/supervisor-races.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/supervisor/supervisor-races.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-08T21:01:33.387Z"
     },
     {
       "stepId": "step-5",
@@ -144,12 +155,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-08T20:56:31.086Z",
+  "updatedAt": "2026-08-08T21:01:33.387Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:30:47.157Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -157,7 +168,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T20:32:35.926Z",

@@ -107,7 +107,7 @@ describe("the outcome recorder counts what it observes and drops nothing", () =>
   it("hands back a copy, so a caller cannot edit the tally it is judged on", () => {
     const recorder = createRecorder();
     recorder.record("OK:LIFE:ARMED");
-    recorder.counts().set("OK:LIFE:ARMED", 99);
+    (recorder.counts() as Map<string, number>).set("OK:LIFE:ARMED", 99);
     expect(recorder.counts().get("OK:LIFE:ARMED")).toBe(1);
   });
 });

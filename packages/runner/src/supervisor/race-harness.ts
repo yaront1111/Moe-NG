@@ -52,6 +52,8 @@ export interface StepRecord {
   readonly command: RaceCommand;
   readonly honest: boolean;
   readonly label: string;
+  /** The production surface's own outcome `kind`, reported verbatim. */
+  readonly outcomeKind: string;
   readonly effectState: EffectState;
   readonly versionDelta: number;
   readonly stateChanged: boolean;
@@ -169,6 +171,7 @@ export function runTrace(seed: number, steps: number): Trace {
       command,
       honest,
       label: stepped.label,
+      outcomeKind: stepped.outcomeKind,
       effectState: stepped.world.intent.state,
       versionDelta: stepped.world.intent.version - world.intent.version,
       stateChanged: stepped.world.intent.state !== world.intent.state,
