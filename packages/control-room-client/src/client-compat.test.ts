@@ -8,6 +8,7 @@ import {
   GENERATED_ERROR_TABLE,
   GENERATED_QUERY_BUILDERS,
   GENERATED_TELEMETRY_KINDS,
+  GENERATED_WIRE_PROTOCOL_VERSION,
 } from "./generated/generated-client.js";
 import * as packageRoot from "./index.js";
 
@@ -28,13 +29,14 @@ it("exposes the generated surface when the distribution report pins match exactl
   expect(gate.ok).toBe(true);
   if (!gate.ok) return;
   expect(Object.keys(gate.client).sort()).toEqual([
-    "commands", "errors", "pins", "queries", "telemetryKinds",
+    "commands", "errors", "pins", "queries", "telemetryKinds", "wireProtocolVersion",
   ]);
   expect(gate.client.commands).toBe(GENERATED_COMMAND_BUILDERS);
   expect(gate.client.queries).toBe(GENERATED_QUERY_BUILDERS);
   expect(gate.client.errors).toBe(GENERATED_ERROR_TABLE);
   expect(gate.client.pins).toBe(GENERATED_CONTRACT_PINS);
   expect(gate.client.telemetryKinds).toBe(GENERATED_TELEMETRY_KINDS);
+  expect(gate.client.wireProtocolVersion).toBe(GENERATED_WIRE_PROTOCOL_VERSION);
   expect(Object.isFrozen(gate)).toBe(true);
   expect(Object.isFrozen(gate.client)).toBe(true);
 });

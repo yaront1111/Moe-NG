@@ -6,6 +6,7 @@ import {
   RUNTIME_COMMAND_ENVELOPE_VERSION,
   RUNTIME_COMMAND_KINDS,
   RUNTIME_ERROR_CODES,
+  RUNTIME_ERROR_REGISTRY_VERSION,
   RUNTIME_QUERY_ENVELOPE_VERSION,
   RUNTIME_QUERY_KINDS,
   RUNTIME_TELEMETRY_KINDS,
@@ -21,6 +22,7 @@ import {
   GENERATED_ERROR_TABLE,
   GENERATED_QUERY_BUILDERS,
   GENERATED_TELEMETRY_KINDS,
+  GENERATED_WIRE_PROTOCOL_VERSION,
   QUERY_ENVELOPE_KEYS,
 } from "./generated/generated-client.js";
 import type { CommandAffordance } from "./generated/generated-client.js";
@@ -30,7 +32,7 @@ import type { CommandAffordance } from "./generated/generated-client.js";
  * regenerate (`pnpm --filter @moe/control-room-client generate`), review the diff,
  * then update both constants. That ritual is the whole point of committing output.
  */
-const GENERATED_FILE_SHA256 = "ad292bf487677731431892d3b5af7a09980f0a9cfe480132479b50aa964d741c";
+const GENERATED_FILE_SHA256 = "4e8ced247aa5687cdf3ec6674f0b5c8675c79031d3c7e9dd76f1f5b5248e109a";
 const CONTRACT_DIGEST = "1d96f39e6399ce63090405ca6168175540cce1c783154a52007a8905eaa47106";
 
 const GENERATED_FILE = fileURLToPath(new URL("./generated/generated-client.ts", import.meta.url));
@@ -98,6 +100,19 @@ it("pins the envelope and registry versions plus the contract digest", () => {
     queryEnvelopeVersion: RUNTIME_QUERY_ENVELOPE_VERSION,
   });
   expect(Object.isFrozen(GENERATED_CONTRACT_PINS)).toBe(true);
+});
+
+/**
+ * The pin must be COMPOSED from the live registry constants, not written down. Asserting
+ * it against a hard-coded string would pass even if the generator emitted a literal that
+ * had drifted from the registry, which is the exact failure this pin exists to prevent.
+ */
+it("composes the wire protocol pin from the live registry constants", () => {
+  expect(GENERATED_WIRE_PROTOCOL_VERSION).toBe(
+    `${RUNTIME_COMMAND_ENVELOPE_VERSION}+${RUNTIME_QUERY_ENVELOPE_VERSION}`
+    + `+${RUNTIME_ERROR_REGISTRY_VERSION}`,
+  );
+  expect(GENERATED_WIRE_PROTOCOL_VERSION.split("+")).toHaveLength(3);
 });
 
 it("matches the committed golden hash of the generated file", () => {

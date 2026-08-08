@@ -10,6 +10,7 @@ import {
   GENERATED_ERROR_TABLE,
   GENERATED_QUERY_BUILDERS,
   GENERATED_TELEMETRY_KINDS,
+  GENERATED_WIRE_PROTOCOL_VERSION,
 } from "./generated/generated-client.js";
 import type {
   GeneratedCommandBuilders,
@@ -47,13 +48,20 @@ export interface DistributionCompatibilityReport {
   readonly sourceSha?: string;
 }
 
-/** The whole generated surface, reachable only through a matching gate. */
+/**
+ * The whole generated surface, reachable only through a matching gate.
+ *
+ * `wireProtocolVersion` lives here rather than on the package root deliberately: the root
+ * exports the gate and nothing else, and a build whose pins do not match should not even
+ * learn the protocol string it failed to match.
+ */
 export interface ControlRoomClientSurface {
   readonly commands: GeneratedCommandBuilders;
   readonly errors: GeneratedErrorTable;
   readonly pins: GeneratedContractPins;
   readonly queries: GeneratedQueryBuilders;
   readonly telemetryKinds: typeof GENERATED_TELEMETRY_KINDS;
+  readonly wireProtocolVersion: typeof GENERATED_WIRE_PROTOCOL_VERSION;
 }
 
 /**
@@ -145,6 +153,7 @@ const CLIENT_SURFACE: ControlRoomClientSurface = Object.freeze({
   pins: GENERATED_CONTRACT_PINS,
   queries: GENERATED_QUERY_BUILDERS,
   telemetryKinds: GENERATED_TELEMETRY_KINDS,
+  wireProtocolVersion: GENERATED_WIRE_PROTOCOL_VERSION,
 });
 
 const ADMITTED: CompatGateResult = Object.freeze({ client: CLIENT_SURFACE, ok: true as const });

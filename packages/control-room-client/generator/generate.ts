@@ -309,6 +309,16 @@ function pinSection(digest: string): readonly string[] {
     "  errorRegistryVersion: RUNTIME_ERROR_REGISTRY_VERSION,",
     "  queryEnvelopeVersion: RUNTIME_QUERY_ENVELOPE_VERSION,",
     "});",
+    "",
+    "/**",
+    " * The wire protocol version a caller presents on every request. COMPOSED from the three",
+    " * registry constants rather than written down, so this client and the daemon seam cannot",
+    " * drift into two compatibility rules: both compose the same three values in the same",
+    " * order, and a registry bump moves both at once. This is a pin, not a second gate --",
+    " * `createCompatGate` remains the only place that decides admission.",
+    " */",
+    "export const GENERATED_WIRE_PROTOCOL_VERSION =",
+    "  `${RUNTIME_COMMAND_ENVELOPE_VERSION}+${RUNTIME_QUERY_ENVELOPE_VERSION}+${RUNTIME_ERROR_REGISTRY_VERSION}` as const;",
   ];
 }
 
