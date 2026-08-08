@@ -117,8 +117,8 @@
       "completedAt": "2026-08-08T21:36:25.616Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-cbad3a29",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,12 +130,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T20:50:14.358Z",
-  "updatedAt": "2026-08-08T21:38:23.301Z",
+  "updatedAt": "2026-08-08T21:43:26.754Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:53:00.964Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-08T21:43:26.754Z",
+    "wallClockMs": 3025790
   },
   "stepsCompleted": [
     "step-1",
@@ -183,5 +185,8 @@
   "filesModified": [
     "packages/runner/src/index-surface.test.ts",
     "packages/runner/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T21:43:26.754Z",
+  "reviewCompletedAt": "2026-08-08T21:43:26.754Z",
+  "reviewSummary": "APPROVED 9bfaa3b. 2 owned files (+396): index.ts 70->162 additive-only, index-surface.test.ts new. Gate re-run by me twice from repo root -> exit 0, 22 files/799 tests. Detail: mem:task-task-53680e91db1c4789a42b7129e61bdd7a-qa-verdict.\n\nDoD1: 40 values + 32 types, each cross-checked against grep '^export' on all 7 modules (kernel 14/14, parse 9/9, lifecycle 3/3, grant 6/6, activation 1, mirror 1, shape 6). No duplicate: activation.ts:36 re-exports the 5 grant symbols, index takes them from effect-grant.js only.\nDoD2: imports ONLY bare root @moe/runner (lines 16,25). No relative/deep path in file.\nDoD3 MUTATION-DRILLED BY ME both ways (rail 6): removed withLeg -> 3 red BY NAME + set equality \"[Array(65)] to deeply equal [Array(66)] - withLeg\"; added unreviewed isRef -> \"+ isRef\". 78 tests still COLLECTED on red, not \"(0 test)\", so no module-scope fixture reaches into the subject. Restored byte-identical (git diff --exit-code 9bfaa3b clean).\nDoD4: REFUSED keys exactly [\"failure\",\"kind\"] (:153); MUST_DRAIN keys [\"drainRequired\",\"intent\",\"kind\",\"versionDelta\"] + explicit \"ok\" in outcome === false (:220). All 3 kinds obtained by CALLING exported applyEffectCommand. 10 reason codes + refusing LAYER pinned.\nDoD5: git show --name-only = exactly the 2 paths; 0 .js, 0 supervisor/, 0 package.json; fixtures unexported. BEFORE/AFTER VERIFIED INDEPENDENTLY: 799/22 minus new file's 78/1 = 721/21 = stated pre-task count. Zero regressions.\nDoD6: exit 0. index.ts 162 lines wc -l (<250). 32 types machine-checked used (noUnusedLocals).\n\nNARROWING vs plan step-2 ACCEPTED: MIRRORED_LEASE_KEYS/MIRRORED_PROOF_KEYS withheld - shape.ts:60,:74 are the only arrays lacking Object.freeze and parsers read them per call, so publishing = live tamper vector; freezing would edit a supervisor module (rail 1).\n\nBLEMISH not a reject: step-6/7 notes say 801/80, reality 799/78 - stale after step 8 dropped 2 exports. 721->799 holds; I measured it."
 }
