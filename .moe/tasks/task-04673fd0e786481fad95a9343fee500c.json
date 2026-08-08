@@ -66,7 +66,7 @@
     {
       "stepId": "step-4",
       "description": "TDD red then green — the six J1 slices in their CANONICAL DOWNSTREAM DIRECTORIES (each <=250; the five surface tasks BUILD OVER these in place — minimal J1 only, spec §6.1 lines 499-509): src/goals/goals-j1.tsx (goal creation form fields per 503 — fixture-submit only, no network); src/board/board-j1.tsx (five columns cr.board.column.* with name/phase/chip cards — NO joinstrip, NO silence timer, NO terminated filter); src/approvals/approval-j1.tsx (approval detail + cr.action.approval-decide.approve for plan+acceptance kinds from affordances); src/nodes/node-inspector-j1.tsx (chipped facts only — no §10.5 attempt detail); src/evidence/evidence-j1.tsx (receipt exit-0 + base/head SHAs line); src/doctor/doctor-j1.tsx (cr.health.status summary only). Every fact rendered through the kernel TruthChip (cr.fact.* wrapper guarantees a cr.chip.* descendant — spec 742 bar 3; 24px hit target, aria-label, UNKNOWN dashed border via the kernel descriptor). Plus src/shell/j1-flow.test.tsx (<=250): the J1 operable-flow test — render frame + surfaces on the connected fixture, walk goal->board->node->approval->evidence->doctor, assert the three-human-action J1 shape is reachable, AND the never-mounted assertion: no element with a cr.graph.* testid exists at ANY point of the flow (mutation-red-check: temporarily render a cr.graph.* stub locally, watch it fail, revert). FIXTURE TRIPWIRES re-checked: no scheduler path literals in any string, no 'foundation/' import specifiers.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/goals/goals-j1.tsx",
         "apps/control-room/src/board/board-j1.tsx",
@@ -85,29 +85,50 @@
         "apps/control-room/src/doctor/doctor-j1.tsx",
         "apps/control-room/src/shell/j1-flow.test.tsx"
       ],
-      "startedAt": "2026-08-08T08:31:59.200Z"
+      "modifiedFiles": [
+        "apps/control-room/src/goals/goals-j1.tsx",
+        "apps/control-room/src/board/board-j1.tsx",
+        "apps/control-room/src/approvals/approval-j1.tsx",
+        "apps/control-room/src/nodes/node-inspector-j1.tsx",
+        "apps/control-room/src/evidence/evidence-j1.tsx",
+        "apps/control-room/src/doctor/doctor-j1.tsx",
+        "apps/control-room/src/shell/j1-flow.test.tsx"
+      ],
+      "note": "Six J1 slices + j1-flow.test.tsx: 6/6 green, all 10 owned files <=250 (largest production 219, largest test 247; slices are 28-89).\n\nSlices, each in its canonical downstream dir, minimal J1 only: goals-j1 (all four §4.2 fields + Cancel/Create, local draft state, onCreate callback — no transport); board-j1 (exactly the five cr.board.column.{plan|ready|executing|review|accepted}, cards with name/phase/TruthChip; NO joinstrip, silence timer, or terminated filter); approval-j1 (detail per decision point, controls only via ActionBar); node-inspector-j1 (identity+phase chipped facts, no §10.5 attempt detail); evidence-j1 (receipt command + exit + base/head SHAs); doctor-j1 (cr.health.status summary, zero actions per CR-DOC-001). All six render claims through FactWithProvenance -> kernel Fact, so a fact cannot lose its chip. Every slice takes its data as props and derives nothing.\n\nONE DESIGN DECISION worth review: the description said cr.action.approval-decide.approve should serve BOTH plan and acceptance kinds, but emitting one testid twice makes getByTestId ambiguous and would let a duplicate hide a missing control. The fixture supplies approval.decide (plan) and integration.accept_output (acceptance), so each section renders the control for the command that actually carries its decision — plan -> cr.action.approval-decide.approve (spec-pinned id preserved), acceptance -> cr.action.integration-accept-output. Both J1 decision points are covered and every control still maps 1:1 to a supplied command.\n\nMUTATION RED-CHECKS (backups out of tree; both files restored to identical git hash-object, re-verified green after):\n- M4 graph placeholder relabelled cr.graph.canvas: 1 failed / 5 passed — the \"stub that looks right\" is caught.\n- M5 cr.graph.minimap mounted in the always-visible board: 2 failed / 4 passed.\n- M6 card TruthChip replaced by a chipless cr.fact.orphan wrapper: 2 failed / 4 passed — bar-3 audit is load-bearing.\nThe flow test also guards its own audit with wrappers.length >= 12, so a slice rendering zero facts fails instead of passing vacuously.\n\nTRIPWIRES all clean across the 10 owned files: no @moe/scheduler or scheduler/src literal; no 'foundation/' import specifier; no Date.now/Math.random/new Date(); authority hunt finds no dispatch, fetch, XMLHttpRequest, WebSocket, createCompatGate, or buildNextAllowedCommands (the one grep hit in frame.tsx is the prose word \"dispatches\" in a comment explaining that it does not).\n\nSHARED-TREE EVENTS (governor: two rail-3 issues, neither mine):\n1. Commit 2139fcd \"feat(task-975f8d673a0c45238b117f91682fbbec): Node attempt workspace\" SWEPT UP my four in-flight shell files (frame.tsx, provenance-panel.tsx, gating-keyboard.test.tsx, j1-flow.test.tsx@184) plus .moe state into THEIR commit. That is not an explicit-pathspec commit and it captured another task's work, exactly what epic rail 3 forbids. My files are now attributed to their task in history.\n2. A third agent's red-phase file src/approvals/approval-gating.test.tsx (imports ./approval-fixtures.js + ./approval-gating.js, neither existing) landed INSIDE my owned src/approvals/ after my 11:35 green run. It is red right now.\nConsequence for my gate: at 11:35:26 the focused command was genuinely exit 0 (8 files / 96 tests). Re-run at 11:36 is exit 1 with the sole failure being that foreign collection error — my 96 tests still all pass. I will not submit the stale green as fresh evidence; step 5 re-runs and attributes.",
+      "startedAt": "2026-08-08T08:31:59.200Z",
+      "completedAt": "2026-08-08T08:37:03.244Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification gate. (1) `wc -l apps/control-room/src/shell/*.tsx apps/control-room/src/*/[a-z]*-j1.tsx` — every file <=250 (per-file rail; no per-task bar). (2) Fresh `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> exit 0 — complete_task evidence with that exact command. (3) `pnpm --filter @moe/control-room build` -> exit 0. (4) Collision audit: `git status --porcelain -- apps/control-room` shows ONLY the ten owned Task-B paths — zero edits to A's files (main.tsx/kernel.tsx/fixtures.ts/config); if Task A landed its final step mid-task, re-run the focused gate against the updated tree and attribute. (5) Root gate `pnpm typecheck && pnpm test` (scheduler boundary scan covers the new .tsx contents at root — tripwire check) with foreign-red by-path attribution. (6) Run focused suite twice — identical.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/shell/frame.tsx",
         "apps/control-room/src/board/board-j1.tsx"
-      ]
+      ],
+      "note": "All six verification gates pass.\n\n(1) Per-file rail: 219 frame.tsx / 151 provenance-panel.tsx / 247 gating-keyboard.test.tsx / 185 j1-flow.test.tsx / 89 goals / 69 board / 49 approvals / 40 nodes / 40 evidence / 28 doctor. All <=250. Ten files exactly.\n(2) `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> EXIT 0, 9 files / 119 tests (11:38:04). This is the complete_task evidence.\n(3) `vite build` -> exit 0, 47 modules, dist/assets/index-CBIskMWx.js 212.40 kB.\n(4) Collision audit CLEAN: `git diff --stat HEAD` over main.tsx, kernel.tsx, fixtures.ts, package.json, tsconfig.json, vite.config.ts, index.html, pnpm-lock.yaml is EMPTY — zero edits to any Task A or config file.\n(5) Root gate `pnpm typecheck && pnpm test` -> BOTH exit 0, 121 files / 1739 passed / 1 skipped. This is the gate that matters for the tripwires: the scheduler package-boundary scan reads apps/** .tsx CONTENTS and the testkit foundation-spec scan reads apps/** import specifiers, and both pass over my ten new files. No foreign red anywhere.\n(6) Determinism: owned suites run twice, identical 2 files / 19 tests both times.\n\nThe shared-tree foreign red resolved itself while I ran these: the third agent landed approval-fixtures.ts and approval-gating.ts at 11:37 and their approval-gating.test.tsx went green. Sequence for the record — 11:35:26 green, 11:36 red (their red-phase file only), 11:38:04 green. I did not submit the 11:35 green as evidence once it went stale; the number above is a fresh post-resolution run.\n\nnode:util / dead-bundle check (mem:gotcha-vite-build-exit-0-hides-a-dead-bundle): the build warning is present as expected and is pre-existing (bounded-json.ts). I did NOT run a new mask test and am not claiming one. The reasoning it is covered: scaffold.test.tsx already masks node:util and loads fixtures.js + kernel.js, which proves the @moe/contracts entry loads under the mask; my modules import from that same entry and my authority-hunt grep confirms I call none of its parsers/validators — only the EMPTY_NEXT_ALLOWED_COMMANDS frozen constant. So my modules add no new Node-only call site. Worth a follow-up to extend the existing mask test to the shell module graph; I did not extend it because scaffold.test.tsx is Task A's file and out of my owned paths.",
+      "startedAt": "2026-08-08T08:37:06.174Z",
+      "completedAt": "2026-08-08T08:38:23.720Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarial self-review + explicit-pathspec commit. Load Skill adversarial-self-review. Red-team: (a) authority hunt — no code path constructs a command envelope or dispatches anything (grep for createCompatGate/dispatch/fetch/XMLHttpRequest/WebSocket -> zero usage; affordances are render-only); (b) gating inversions — disconnected+enabled coexistence impossible (mutation-check: force an enabled action under the banner locally, test red, revert); lag never disables; guessed disabled-text impossible (no string fallback path); (c) never-mounted Graph re-checked after every surface added; (d) keyboard trap hunt — tab cycle through the full frame+surfaces, no focus trap, provenance focus restore; (e) tripwire greps one final time ('scheduler/src', '@moe/scheduler/', foundation-import) -> zero; (f) no scratch files (auto-commit sweep). Commit per epic rail 3: `git status --porcelain`, unstage foreign paths, `git add` + `git commit -- apps/control-room/src/shell/frame.tsx apps/control-room/src/shell/provenance-panel.tsx apps/control-room/src/shell/gating-keyboard.test.tsx apps/control-room/src/shell/j1-flow.test.tsx apps/control-room/src/goals/goals-j1.tsx apps/control-room/src/board/board-j1.tsx apps/control-room/src/approvals/approval-j1.tsx apps/control-room/src/nodes/node-inspector-j1.tsx apps/control-room/src/evidence/evidence-j1.tsx apps/control-room/src/doctor/doctor-j1.tsx`; `git show --stat` lists exactly these 10 paths. Completion note: main.tsx frame-mount is a deferred one-line follow-up owned by the governor's routing (A owned the file through this task's lifetime).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/shell/frame.tsx",
         "apps/control-room/src/shell/provenance-panel.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/provenance-panel.tsx",
+        "apps/control-room/src/shell/j1-flow.test.tsx"
+      ],
+      "note": "Adversarial self-review found two real defects in my own code; both fixed and locked with tests.\n\nDEFECT 1 (latent keyboard trap, would have bitten a downstream surface task): FactWithProvenance's 'p' handler fired on ANY keydown bubbling through the fact slot and called preventDefault. Today only the chip is focusable inside a slot, so nothing broke — but the five surface tasks build over these slices in place, and the first one to render a text field inside a fact slot would find the letter \"p\" silently swallowed and a popover opening instead. Fixed by requiring the event target to be inside a cr.chip.* element. Locked by a new test that raises keydown on the slot itself and asserts no panel opens; mutation-verified (guard removed -> 1 failed / 7 passed, restored to identical hash).\nDEFECT 2 (untested docstring claim): evidence-j1's comment asserted a failing run \"is still displayed as itself, never relabelled\", but every test used the exit-0 fixture, so the claim was unverified. Added a test rendering exitCode 1 and asserting the line reads exactly \"exit 1\".\n\nRest of the checklist: (a) AUTHORITY — the only onClick in the frame or any slice is the projection-tab setState; ActionButton has none. Zero fetch/XMLHttpRequest/WebSocket/dispatch/createCompatGate/buildNextAllowedCommands. No envelope is ever constructed. (b) GATING INVERSIONS — all mutation-verified earlier this task: forced-enabled 3 failed, banner removed 2 failed (including the bannersSeen guard), stale forced false 1 failed. No string path can produce disabled-reason text (source scan asserts the literals are absent). (c) GRAPH — re-checked after every surface: cr.graph.canvas relabel 1 failed, cr.graph.minimap in board 2 failed. (d) KEYBOARD — focus restore on Escape tested; the panel is intentionally NOT a focus trap (spec 685 wants DOM-order reachability), so tabbing past it is possible and Escape only closes while focus is inside the panel — noted as a known limit for the a11y hardening task rather than papered over. (e) TRIPWIRES — final greps clean. (f) No scratch files; XSS surface nil (no innerHTML/dangerouslySetInnerHTML anywhere).\nTheoretical, not fixed, flagged for the approvals surface task: two supplied approval.decide commands would both render the spec-pinned testid cr.action.approval-decide.approve and collide under getByTestId. The fixture supplies one. Each control carries a unique data-command-id, so downstream can select on that.\n\nCOMMIT ad4419f, explicit pathspec, contains EXACTLY 8 paths — all owned, zero foreign. frame.tsx and gating-keyboard.test.tsx are absent from it only because commit 2139fcd (another task's broad commit) had already captured them byte-identically; all 10 owned files are confirmed tracked. The four foreign in-flight files in src/approvals/ (approval-fixtures.ts, approval-gating.ts, approval-gating.test.tsx, approval-inbox.test.tsx) were deliberately left untracked for their owner. `git add` was per-file, never `git add src/approvals/`, which would have swept them.\n\nVERIFICATION: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` -> EXIT 0, 10 files / 135 tests at 11:41:50, current and post-commit.\nShared-tree note for the governor: the approvals agent commits red test files before their production files, so this package's gate flickered red four times during my task (11:22, 11:36, 11:40:30, 11:41) purely from their in-flight TDD in MY owned src/approvals/ directory. I polled rather than submitted a stale green. Each red was 100% foreign; my suites passed throughout.\nDEFERRED (governor routing): the one-line main.tsx mount of ShellFrame is still not done — Task A owned that file for this task's lifetime and I never touched it. The frame is proven by direct jsdom render instead. main.tsx still mounts ControlRoomScaffold, so the built bundle does not yet show the frame.",
+      "startedAt": "2026-08-08T08:38:28.699Z",
+      "completedAt": "2026-08-08T08:42:18.084Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40ee2326",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-6fd67108",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -119,12 +140,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T22:15:02.258Z",
-  "updatedAt": "2026-08-08T08:31:59.200Z",
+  "updatedAt": "2026-08-08T08:43:39.553Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T07:39:03.367Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -132,7 +153,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-08T07:40:26.537Z",
@@ -153,7 +177,27 @@
   },
   "planApprovedAt": "2026-08-08T07:40:28.570Z",
   "contextFetchedBy": [
-    "worker-40ee2326"
+    "worker-40ee2326",
+    "qa-6fd67108"
   ],
-  "workStartedAt": "2026-08-08T08:22:00.708Z"
+  "workStartedAt": "2026-08-08T08:22:00.708Z",
+  "reviewStartedAt": "2026-08-08T08:43:32.987Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  10 passed (10)\n      Tests  135 passed (135)\n   Start at  11:41:50\n   Duration  1.58s (transform 881ms, setup 0ms, import 2.26s, tests 2.91s, environment 4.59s)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-08T08:43:32.987Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/shell/gating-keyboard.test.tsx",
+    "apps/control-room/src/shell/frame.tsx",
+    "apps/control-room/src/shell/provenance-panel.tsx",
+    "apps/control-room/src/goals/goals-j1.tsx",
+    "apps/control-room/src/board/board-j1.tsx",
+    "apps/control-room/src/approvals/approval-j1.tsx",
+    "apps/control-room/src/nodes/node-inspector-j1.tsx",
+    "apps/control-room/src/evidence/evidence-j1.tsx",
+    "apps/control-room/src/doctor/doctor-j1.tsx",
+    "apps/control-room/src/shell/j1-flow.test.tsx"
+  ]
 }

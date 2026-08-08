@@ -16,9 +16,81 @@
     "Fail closed with stable reason codes; a partial write is never acceptable.",
     "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-e54ba2b5",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and pin the prerequisite contracts before writing: confirm the current signatures and behavior of SqliteEventStore.commitWithApply/CommitApplyContext, snapshotCommitInput/SnapshotCommitInput, the StoredEvent constants, foldProjection and its refusal union, and the exact projections/inbox_receipts/outbox_messages DDL. Confirm packages/store/src/outbox-relay/** is still unowned/absent and inspect git status without altering foreign paths. If the REVIEW-stage fold API has changed from the committed shape, report the dependency drift for re-planning; do not edit packages/store/src/projections/** or any schema/ledger file.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Pinned prerequisites at HEAD; no dependency drift. commitWithApply(input, apply) -> CommitResult; CommitApplyContext={database:DatabaseSync, summary:CommitResult}; apply runs only for COMMITTED, after writeCommitEffects has already inserted domain_events+outbox_messages, before the shared COMMIT. A throwing apply becomes DurableStoreError(\"PROJECTION_APPLY_FAILED\", ...) with {cause: original} (event-ledger-transaction.ts:129-147), and withCommandTransaction rethrows DurableStoreError unchanged after ROLLBACK (event-ledger-recovery.ts:42-45) -> the relay can unwrap a private sentinel off .cause. A raw SQLite error raised before apply normalizes to STORE_UNAVAILABLE (\"commit command effects failed\"), STORE_BUSY when busy (store-runtime.ts:282). snapshotCommitInput(rawInput, byteBudget?) -> SnapshotCommitInput (store-input-commit.ts:32); requireDataRecord rejects proxies and alien prototypes. aggregate_sequence = previousVersion + eventIndex + 1 (event-ledger-append.ts:167). DDL confirmed: projections(projection_name PK, last_applied_position TEXT NOT NULL, state_digest TEXT); inbox_receipts(consumer_id, message_id, receipt_digest, PK(consumer_id,message_id)) (sqlite-schema-manifest.ts:205-219). foldProjection({checkpoint,events,reducers,state,upcaster}) union and ProjectionFoldCode/Layer/UpcastFailure unchanged from the committed shape; compileStoredEventUpcaster refuses an unregistered eventType as SCHEMA_VERSION_UNSUPPORTED (projection-upcast.ts:121-125). packages/store/src/outbox-relay/** absent and unowned. Probed node:sqlite v24.16.0: CREATE TEMP TRIGGER ... ON main.<table> BEGIN SELECT RAISE(ABORT,...) works, aborts the statement only, leaves isTransaction true, and vanishes on close — usable as the scoped fault injector. git status inspected; only foreign control-room/.moe paths dirty, untouched.",
+      "startedAt": "2026-08-08T08:37:51.335Z",
+      "completedAt": "2026-08-08T08:41:37.207Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: create the focused integration suite against the intended relay production surface. Prove one successful delivery returns frozen APPLIED and, by direct SQLite inspection, leaves exactly the command event, its EventDraft.outbox message, the projection checkpoint/state digest, and the (consumer_id,message_id,receipt_digest) inbox row. Add a named fault matrix for aborts at domain_events, outbox_messages, projections, and inbox_receipts (install a scoped SQLite RAISE(ABORT) trigger after opening the disposable store); assert the matrix contains all four labels, assert each stable refusal/error code and layer, then query that command's event/outbox/inbox rows and the prior projection row to prove all-or-none rollback. Add a fold-refusal case that asserts the exact ProjectionFoldCode, INPUT/REDUCER/UPCAST layer, and nested upcast code where applicable, plus zero persisted effects. Add same-envelope redelivery with fresh downstream command/event/outbox IDs: it must return ALREADY_APPLIED with deduplicatedBy INBOX, make zero reducer calls on the duplicate, enqueue no second outbox row, and leave the projection unchanged. Same consumer/message key with changed immutable envelope bytes must refuse OUTBOX_RELAY_INBOX_CONFLICT at layer INBOX. Close and reopen the database, redeliver with fresh downstream IDs, and assert the same durable INBOX outcome. Also pin command-receipt REPLAYED as a separately labeled ALREADY_APPLIED outcome and stale projection checkpoint/digest as OUTBOX_RELAY_PROJECTION_CONFLICT with full rollback. Run only this new test file to capture the expected missing-module/red failure before implementation.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ],
+      "startedAt": "2026-08-08T08:41:37.793Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement domain-separated deterministic digests for the relay in outbox-relay-digests.ts with its one-line .js bridge. Snapshot the inbound immutable envelope fields before hashing; length-frame strings and byte arrays so concatenations cannot collide, and exclude retry-variant deliveryAttempts while binding consumer-visible messageId/topic/payload/headers. Canonically hash ProjectionState with explicit type tags, sorted object keys, array order, bigint text, and distinct encodings for -0/non-finite numbers so the same state has the same lowercase SHA-256 on Windows, macOS, and Linux. Keep helpers synchronous, total over the fold's validated plain-data output, focused, and <=250 lines; tests must observe their production use through receipt/state_digest rows and the same-ID/different-content path rather than reimplementing the algorithm in test helpers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js"
+      ],
+      "newFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement transactional-outbox-relay.ts and its one-line .js bridge, keeping the production source <=250 lines. Expose frozen discriminated outcomes: APPLIED with the CommitResult and folded checkpoint/state/stateDigest; ALREADY_APPLIED with deduplicatedBy INBOX or COMMAND_RECEIPT; and typed refusals carrying a stable code plus the refusing layer. Validate/snapshot consumerId, the message envelope, CommitInput, projection name/checkpoint/state/reducers/upcaster before entering the transaction. Call store.commitWithApply using that snapshot. Inside apply, first SELECT inbox_receipts by (consumer_id,message_id): matching digest raises a private relay rollback sentinel for INBOX ALREADY_APPLIED before any reducer call; differing digest raises OUTBOX_RELAY_INBOX_CONFLICT. SELECT the new command's CAST(global_position AS TEXT), event_id, and command_event_index rows through context.database, validate exact count/order/IDs against the normalized snapshot and summary, and construct detached StoredEvent values with the committed versions/bytes. Verify the durable projection row matches the supplied prior checkpoint and canonical prior-state digest (absence is legal only at checkpoint 0), otherwise roll back as OUTBOX_RELAY_PROJECTION_CONFLICT. Drive foldProjection with exactly that materialized array; on refusal roll back while preserving its code, layer, eventId, detail, and nested upcast failure. On success compare-and-set/upsert projections to the new checkpoint/digest and insert the inbox receipt, checking SQLite change counts and translating each known persistence failure to its own stable PROJECTION or INBOX refusal. Do not insert outbox_messages: EventDraft.outbox was already written by writeCommitEffects under the same outer transaction. Outside the callback, unwrap only the private sentinel from PROJECTION_APPLY_FAILED into the frozen result; map a store REPLAYED result to COMMAND_RECEIPT ALREADY_APPLIED, and rethrow unrecognized errors/OUTCOME_UNKNOWN so uncertainty never gains authority.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js"
+      ],
+      "newFiles": [
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarially review the complete five-file diff before the gate. Exercise the checklist for two concurrent/redelivered calls, null/accessor/proxy/sparse/oversized inputs, same identity with altered bytes, command replay that skips apply, stale checkpoint/digest, reducer/upcaster throws, SQLite faults at every write boundary, and an attempted async callback; confirm there is no nested transaction, external IO, post-commit apply, swallowed OUTCOME_UNKNOWN, or exactly-once external-effect claim. Mutation-check the production surface with out-of-tree backups: remove the matching-inbox early rollback (duplicate test must go red), weaken the projection compare-and-set (stale-state test must go red), bypass fold-refusal rollback (atomic/refusal test must go red), and swap a PROJECTION/INBOX persistence code or layer (failure-matrix assertion must go red). Restore each file and confirm its hash. Run git diff --check and line counts, and inspect git status so only the five owned paths are attributable to this task; make no cleanup edits to foreign paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single required fresh foreground verification command exactly: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Require exit 0 and retain the output tail for complete_task evidence; do not substitute a focused green test if the named package gate is red. Then run git status --porcelain, unstage any foreign staged entry with git restore --staged -- <foreign-path> while leaving its working bytes untouched, stage only the five owned outbox-relay paths, recheck that every staged entry is owned, and commit with an explicit pathspec (never bare commit, -a, git add -A, reset, stash, merge, or push). Verify git show --stat --oneline HEAD contains only those five paths and report the exact verification evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/outbox-relay/outbox-relay-digests.ts",
+        "packages/store/src/outbox-relay/outbox-relay-digests.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.js",
+        "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-7e037598",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,11 +102,37 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T13:42:03.373Z",
-  "updatedAt": "2026-08-08T08:28:34.525Z",
+  "updatedAt": "2026-08-08T08:41:37.793Z",
   "metrics": {
-    "firstClaimAt": "2026-08-08T08:28:34.310Z"
+    "firstClaimAt": "2026-08-08T08:28:34.310Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-e54ba2b5"
-  ]
+    "architect-e54ba2b5",
+    "worker-7e037598"
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-08T08:37:36.949Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the existing SqliteEventStore.commitWithApply seam rather than opening a second writer or changing the event ledger. The existing event append already enqueues EventDraft.outbox rows before invoking the apply callback, so the relay must not insert outbox_messages itself. A post-commit projection, an in-memory dedupe set, and a caller-supplied opaque receipt digest were rejected because they do not prove atomicity, restart durability, or same-ID/different-content conflict detection. Calling store.readEvents from the apply callback was also rejected: it starts BEGIN DEFERRED and would nest a transaction. The chosen design snapshots the commit input before entry, selects only the newly written positions through context.database, constructs the exact StoredEvent batch from the normalized snapshot and commit summary, and keeps all projection/inbox work under the outer BEGIN IMMEDIATE.",
+    "codebaseInsights": "HEAD contains SqliteEventStore.commitWithApply(input, apply); apply receives {database, summary}, runs only for COMMITTED (never REPLAYED), and is guarded against thenables. writeCommitEffects has already appended domain_events and outbox_messages when apply begins, but the shared COMMIT has not occurred. The v3 schema provides projections(projection_name,last_applied_position,state_digest) and inbox_receipts(consumer_id,message_id,receipt_digest). foldProjection returns a frozen success/refusal union, refuses missing reducers, preserves INPUT/REDUCER/UPCAST layer and child upcast failure, and its source is already exactly 250 lines, so consume it without edits. Runtime .js bridge files re-export sibling .ts files throughout this package.",
+    "risks": "The prerequisite fold task is still in REVIEW; if QA changes its exported shape, stop and request re-plan rather than editing packages/store/src/projections/**. commandWithApply skips the callback on command replay, so the result contract must distinguish command-receipt replay from inbox-receipt dedupe; the restart proof must use a fresh downstream command/event/outbox identity so it actually reaches the durable inbox check. Check inbox before reducer execution. Treat same (consumerId,messageId) plus a different canonical immutable-envelope digest as OUTBOX_RELAY_INBOX_CONFLICT, never as a duplicate. Compare-and-set the durable projection checkpoint and prior state digest so concurrent/stale callers cannot overwrite newer state. Do no network/provider/process IO and issue no BEGIN/COMMIT/ROLLBACK inside apply. Preserve OUTCOME_UNKNOWN and unrecognized failures by rethrowing; only unwrap the relay's own rollback sentinel. Foreign shared-tree work and the staged index must remain untouched.",
+    "keyFiles": [
+      "packages/store/src/event-ledger-transaction.ts",
+      "packages/store/src/event-ledger-outbox.ts",
+      "packages/store/src/store-input-commit.ts",
+      "packages/store/src/sqlite-schema-manifest.ts",
+      "packages/store/src/projections/projection-fold.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-08T08:37:38.985Z",
+  "workStartedAt": "2026-08-08T08:37:51.335Z"
 }

@@ -179,7 +179,7 @@
       "completedAt": "2026-08-08T08:32:41.644Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -205,12 +205,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.821Z",
-  "updatedAt": "2026-08-08T08:33:27.834Z",
+  "updatedAt": "2026-08-08T08:37:37.106Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:33:50.977Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-08T08:37:37.106Z",
+    "wallClockMs": 47026129
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -219,7 +221,8 @@
   "contextFetchedBy": [
     "architect-c4babdf9",
     "worker-7e037598",
-    "governor-95f824a1"
+    "governor-95f824a1",
+    "qa-6fd67108"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -272,5 +275,8 @@
     "apps/control-room/src/nodes/node-evidence.tsx",
     "apps/control-room/src/attempts/attempt-detail.tsx",
     "apps/control-room/src/attempts/review-surface.tsx"
-  ]
+  ],
+  "completedAt": "2026-08-08T08:37:37.106Z",
+  "reviewCompletedAt": "2026-08-08T08:37:37.106Z",
+  "reviewSummary": "APPROVED. Ran `npx vitest run src/nodes src/attempts` myself: 5 files / 52 tests PASSED, exit 0 (authority 12, context 10, evidence 10, attempt 10, review 10). Package gate `pnpm --filter @moe/control-room typecheck && test` exits 1, but all 8 tsc errors and the only failed suite are foreign - sibling RED file src/shell/j1-flow.test.tsx, unresolved ../board/board-j1.js, ../doctor/doctor-j1.js, ../nodes/node-inspector-j1.js. Package run still 90 passed / 7 files, zero owned failures. Worker evidence was truthful when run: git ls-tree -r 8dbe3df shows no src/shell/** at that path-limited commit; j1-flow.test.tsx arrived later in wrapper commit 2139fcd. DoD1: authority, lease, plan, binding, input, result, context, receipts, findings, recovery each render as separate pinned facts - renewal vs activity silence, started revision vs current binding version, input vs result digest, contextDigest vs providerInputDigest stay distinct. DoD2: ReviewSurfaceProps declares no transcript/journal/selfAssessment/handoff key (compile-time [Contaminant] extends [never] guard) and destructures only named fields, so a hostile spread renders nothing (asserted on DOM); attempt history uses its own cr.attemptdetail.section.* namespace with the transcript quarantined in a collapsed details at cr.inspector.transcript.{attemptId}. DoD3: truth class travels with the value, whitespace counts as absent, missing SHA refuses the diff with a stable line and no accept wording. DoD4 met. Failure tests assert reason codes (TRUTH_INVALID_PROVENANCE containing TRUTH_CLASS_INVALID; TRUTH_ABSENT_PROVENANCE with origin ABSENT), not bare outcomes. Mutation-checked 4 failure paths, all went red (diff anchor to true: 2 failed; value.trim to value: 1; EvidenceLink resolvable to true: 2; transcript guard to -1: 1), each restored from an out-of-tree copy with git hash-object verified equal. Ten owned files all under 250 normalized lines (max 247). No fetch, route, store, clock, or command construction."
 }
