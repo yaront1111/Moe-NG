@@ -45,6 +45,98 @@ export {
 } from "./scope/scope-git.js";
 export { observeScope } from "./scope/scope-observation.js";
 
+/**
+ * The supervisor effect seam, curated rather than blanket re-exported: a consumer
+ * can create an effect intent, apply a lifecycle command, consume and validate a
+ * one-use activation grant, and mirror-fence a lease. `effect-shape`'s generic
+ * hostile-input guards stay internal — they carry no supervisor domain meaning —
+ * as do its raw key lists, which are unfrozen arrays the mirror parsers read on
+ * every call. The test-only fixture module is never published.
+ */
+export {
+  activateEffect,
+  type ActivationCommit,
+  type ActivationOutcome,
+} from "./supervisor/effect-activation.js";
+export {
+  activationDigestInput,
+  consumeActivationGrant,
+  deriveGrantId,
+  grantRefusal,
+  initialGrantBinding,
+  validateActivationCommit,
+  type CommitCheck,
+  type GrantOutcome,
+} from "./supervisor/effect-grant.js";
+export {
+  ATTEMPT_SLICE_STATES,
+  EFFECT_CALLER_CONTRACT,
+  EFFECT_COMMANDS,
+  EFFECT_STATES,
+  GRANT_STATES,
+  SUPERVISOR_ACTIVATION_VERSION,
+  SUPERVISOR_EFFECT_PROTOCOL_VERSION,
+  SUPERVISOR_ERROR_CODES,
+  SUPERVISOR_LAYERS,
+  SUPERVISOR_RESULT_VERSION,
+  TERMINAL_EFFECT_STATES,
+  isTerminalEffectState,
+  supervisorFailure,
+  withLeg,
+  type ActivationGrant,
+  type AttemptSlice,
+  type AttemptSliceState,
+  type DependencyWitness,
+  type EffectClaim,
+  type EffectCommand,
+  type EffectIntent,
+  type EffectResult,
+  type EffectState,
+  type EffectTombstone,
+  type GrantState,
+  type SettlementEvidence,
+  type SupervisorErrorCode,
+  type SupervisorFailure,
+  type SupervisorFailureDetail,
+  type SupervisorLayer,
+  type TerminalEffectState,
+  type UncertaintyEvidence,
+} from "./supervisor/effect-kernel.js";
+export {
+  ADMITTED_EFFECT_TRANSITIONS,
+  applyEffectCommand,
+  applyEffectTombstone,
+  type AdmittedTransition,
+  type LifecycleOutcome,
+} from "./supervisor/effect-lifecycle.js";
+export {
+  parseActivationGrant,
+  parseAttemptSlice,
+  parseCommandInput,
+  parseDependencyWitness,
+  parseEffectClaim,
+  parseEffectIntent,
+  parseEffectTombstone,
+  parseSettlementEvidence,
+  parseUncertaintyEvidence,
+  type EffectCommandInput,
+  type SettleCommand,
+  type SimpleCommand,
+} from "./supervisor/effect-parse.js";
+export {
+  MAX_SUPERVISOR_COUNT,
+  MAX_SUPERVISOR_TEXT_CHARS,
+  MIRRORED_LEASE_KINDS,
+  MIRRORED_LEASE_STATES,
+  parseMirroredLease,
+  parseMirroredProof,
+  type MirroredLeaseKind,
+  type MirroredLeaseProof,
+  type MirroredLeaseRecord,
+  type MirroredLeaseState,
+} from "./supervisor/effect-shape.js";
+export { fenceMirroredLease, type MirrorVerdict } from "./supervisor/lease-mirror.js";
+
 export {
   MAX_WORKSPACE_ENTRIES,
   RUNNER_WORKSPACE_ERROR_CODES,
