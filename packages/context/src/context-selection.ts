@@ -1,5 +1,3 @@
-import { Buffer } from "node:buffer";
-
 import {
   type MandatoryContextItem,
   type OptionalContextItem,
@@ -9,6 +7,10 @@ import {
   deepFreeze,
   encodeCanonical,
 } from "./canonical-digest.js";
+import {
+  renderedItemByteLength,
+  selectionByteLength,
+} from "./context-wire.js";
 
 export const CONTEXT_SELECTION_OUTCOME_KINDS = Object.freeze([
   "ADMITTED",
@@ -41,6 +43,12 @@ export interface AdmittedContextSelection {
 
 export type ContextSelectionResult =
   | Readonly<{ kind: "ADMITTED"; selection: AdmittedContextSelection }>
+  | Readonly<{
+      kind: "REFUSED";
+      code: "INVALID_CONTEXT_BUDGET";
+      layer: "CONTEXT_SELECTION";
+      byteBudget: number;
+    }>
   | Readonly<{
       kind: "REFUSED";
       code: "CONTEXT_TOO_LARGE";
@@ -90,19 +98,21 @@ function cloneOptional(item: OptionalContextItem): OptionalContextItem {
   return { ...item };
 }
 
-function contentBytes(item: MandatoryContextItem | OptionalContextItem): number {
-  return Buffer.byteLength(item.content, "utf8");
-}
-
-function sumContentBytes(
-  items: readonly (MandatoryContextItem | OptionalContextItem)[],
-): number {
-  return items.reduce((total, item) => total + contentBytes(item), 0);
+function invalidBudget(byteBudget: number): ContextSelectionResult {
+  return deepFreeze({
+    kind: "REFUSED",
+    code: "INVALID_CONTEXT_BUDGET",
+    layer: "CONTEXT_SELECTION",
+    byteBudget,
+  });
 }
 
 export function selectContext(input: ContextSelectionInput): ContextSelectionResult {
+  if (!Number.isSafeInteger(input.byteBudget) || input.byteBudget < 0) {
+    return invalidBudget(input.byteBudget);
+  }
   const mandatory = input.mandatory.map(cloneMandatory).sort(compareItemIdentity);
-  const mandatoryBytes = sumContentBytes(mandatory);
+  const mandatoryBytes = selectionByteLength(mandatory, []);
   if (mandatoryBytes > input.byteBudget) {
     return deepFreeze({
       kind: "REFUSED",
@@ -120,7 +130,8 @@ export function selectContext(input: ContextSelectionInput): ContextSelectionRes
   let selectedBytes = mandatoryBytes;
   for (const candidate of candidates) {
     if (excludedIds.has(candidate.id)) continue;
-    const nextBytes = selectedBytes + contentBytes(candidate);
+    const separatorBytes = mandatory.length + selected.length === 0 ? 0 : 1;
+    const nextBytes = selectedBytes + separatorBytes + renderedItemByteLength(candidate);
     if (nextBytes > input.byteBudget) break;
     selected.push(candidate);
     selectedBytes = nextBytes;

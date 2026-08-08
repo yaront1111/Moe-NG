@@ -10,6 +10,7 @@ import {
   type ContextExclusion,
 } from "./context-selection.js";
 import { canonicalSha256, deepFreeze } from "./canonical-digest.js";
+import { renderSelectionBytes } from "./context-wire.js";
 
 export type ContextDigestBoundField =
   | "optionalSelection"
@@ -53,13 +54,6 @@ function cloneExclusions(
   return exclusions.map((exclusion) => ({ ...exclusion }));
 }
 
-function renderExactBytes(selection: AdmittedContextSelection): number[] {
-  const chunks = [...selection.mandatory, ...selection.optional].map(
-    ({ content }) => content,
-  );
-  return Array.from(new TextEncoder().encode(chunks.join("")));
-}
-
 export function digestContextManifest(binding: ContextDigestBinding): string {
   return canonicalSha256({
     version: CONTEXT_MANIFEST_VERSION,
@@ -70,7 +64,7 @@ export function digestContextManifest(binding: ContextDigestBinding): string {
 export function renderContext(
   selection: AdmittedContextSelection,
 ): RenderedContext {
-  const bytes = renderExactBytes(selection);
+  const bytes = renderSelectionBytes(selection.mandatory, selection.optional);
   const binding: ContextDigestBinding = {
     optionalSelection: cloneOptionalItems(selection.optional),
     journalCountLimit: MAX_JOURNAL_ENTRY_COUNT,

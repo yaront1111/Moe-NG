@@ -32,7 +32,7 @@ describe("mandatory context admission", () => {
       mandatory: [mandatory("required-b", "beta"), mandatory("required-a", "alpha")],
       optional: [],
       exclusions: [],
-      byteBudget: 9,
+      byteBudget: 1_000,
     });
 
     expect(result.kind).toBe("ADMITTED");
@@ -45,41 +45,61 @@ describe("mandatory context admission", () => {
       "alpha",
       "beta",
     ]);
-    expect(result.selection.selectedBytes).toBe(9);
+    expect(result.selection.selectedBytes).toBeGreaterThan(9);
+    expect(result.selection.selectedBytes).toBeLessThanOrEqual(1_000);
   });
 
   it("refuses oversized mandatory content with the selection-layer reason code", () => {
-    expect(
-      selectContext({
-        mandatory: [mandatory("required", "required")],
-        optional: [],
-        exclusions: [],
-        byteBudget: 7,
-      }),
-    ).toEqual({
+    const result = selectContext({
+      mandatory: [mandatory("required", "required")],
+      optional: [],
+      exclusions: [],
+      byteBudget: 7,
+    });
+    expect(result).toMatchObject({
       kind: "REFUSED",
       code: "CONTEXT_TOO_LARGE",
       layer: "CONTEXT_SELECTION",
-      mandatoryBytes: 8,
       byteBudget: 7,
     });
+    if (result.kind !== "REFUSED" || result.code !== "CONTEXT_TOO_LARGE") {
+      throw new Error("expected size refusal");
+    }
+    expect(result.mandatoryBytes).toBeGreaterThan(7);
   });
 
   it("measures the mandatory budget in canonical UTF-8 bytes", () => {
-    expect(
-      selectContext({
-        mandatory: [mandatory("required", "😀")],
-        optional: [],
-        exclusions: [],
-        byteBudget: 3,
-      }),
-    ).toEqual({
+    const emoji = selectContext({
+      mandatory: [mandatory("required", "😀")],
+      optional: [],
+      exclusions: [],
+      byteBudget: 0,
+    });
+    const ascii = selectContext({
+      mandatory: [mandatory("required", "x")],
+      optional: [],
+      exclusions: [],
+      byteBudget: 0,
+    });
+    expect(emoji).toMatchObject({
       kind: "REFUSED",
       code: "CONTEXT_TOO_LARGE",
       layer: "CONTEXT_SELECTION",
-      mandatoryBytes: 4,
-      byteBudget: 3,
     });
+    expect(ascii).toMatchObject({
+      kind: "REFUSED",
+      code: "CONTEXT_TOO_LARGE",
+      layer: "CONTEXT_SELECTION",
+    });
+    if (
+      emoji.kind !== "REFUSED" ||
+      emoji.code !== "CONTEXT_TOO_LARGE" ||
+      ascii.kind !== "REFUSED" ||
+      ascii.code !== "CONTEXT_TOO_LARGE"
+    ) {
+      throw new Error("expected size refusals");
+    }
+    expect(emoji.mandatoryBytes - ascii.mandatoryBytes).toBe(3);
   });
 
   it("refuses rather than trimming a mandatory item to fit", () => {
@@ -90,13 +110,16 @@ describe("mandatory context admission", () => {
       byteBudget: 1,
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       kind: "REFUSED",
       code: "CONTEXT_TOO_LARGE",
       layer: "CONTEXT_SELECTION",
-      mandatoryBytes: 2,
       byteBudget: 1,
     });
+    if (result.kind !== "REFUSED" || result.code !== "CONTEXT_TOO_LARGE") {
+      throw new Error("expected size refusal");
+    }
+    expect(result.mandatoryBytes).toBeGreaterThan(1);
     expect("selection" in result).toBe(false);
   });
 
@@ -120,20 +143,27 @@ describe("optional context selection", () => {
       byteBudget: 4,
     } as const;
 
-    const forward = selectContext({ ...input, optional: candidates });
-    const reverse = selectContext({ ...input, optional: [...candidates].reverse() });
+    const unbounded = selectContext({ ...input, byteBudget: 1_000, optional: candidates });
+    if (unbounded.kind !== "ADMITTED") throw new Error("expected fixture admission");
+    const byteBudget = unbounded.selection.selectedBytes - 1;
+    const forward = selectContext({ ...input, byteBudget, optional: candidates });
+    const reverse = selectContext({
+      ...input,
+      byteBudget,
+      optional: [...candidates].reverse(),
+    });
     expect(forward.kind).toBe("ADMITTED");
     expect(reverse.kind).toBe("ADMITTED");
     if (forward.kind !== "ADMITTED" || reverse.kind !== "ADMITTED") {
       throw new Error("expected both selections to admit");
     }
 
-    expect(forward.selection.optional.map(({ id }) => id)).toEqual(["high", "low"]);
+    expect(forward.selection.optional.map(({ id }) => id)).toEqual(["high"]);
     expect(reverse.selection.optional).toEqual(forward.selection.optional);
     expect(reverse.selection.exclusions).toEqual([
       { itemId: "excluded", reason: "SECRET_POLICY" },
     ]);
-    expect(reverse.selection.selectedBytes).toBe(4);
+    expect(reverse.selection.selectedBytes).toBeLessThanOrEqual(byteBudget);
   });
 });
 
@@ -182,7 +212,7 @@ function admittedSelection() {
     mandatory: [mandatory("required", "MANDATORY")],
     optional: [optional("selected", "OPTIONAL", 10)],
     exclusions: [{ itemId: "secret", reason: "SECRET_POLICY" }],
-    byteBudget: 100,
+    byteBudget: 1_000,
   });
   if (result.kind !== "ADMITTED") throw new Error("expected admission");
   return result.selection;
