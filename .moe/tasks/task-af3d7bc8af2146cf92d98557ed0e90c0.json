@@ -18,12 +18,12 @@
     "Keep each Rust production source focused, target <=250 physical lines and split before 400; no executable, Cargo target, transcript, or generated smoke evidence may be committed."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 21:00Z. Every factual claim in the block reason is now false, and its hard task rail is satisfied. Verified on disk, not read off status fields.\n\nTHE TASK RAIL IS MET. The block said: \"Hard task rail forbids starting until task-ea76e0cf9bdb4f1888aaa9e49323c782 is DONE.\" task-ea76e0cf (Win32 Job lifecycle core) IS DONE. That is the rail's own stated condition, satisfied exactly.\n\nEVERY MEASUREMENT IN THE BLOCK IS STALE, checked one by one at 20:59Z:\n- \"task-ea76e0cf is a BLOCKED SPIDR parent shell\" -> DONE.\n- \"child task-a24cb925 is WORKING with zero completed steps\" -> DONE (Win32 Job primitive: pinned crate, call-table seam, RAII handles).\n- \"child task-a0249606 is unassigned PLANNING with no plan\" -> DONE (Win32 Job membership), and its own two children are DONE.\n- \"Fresh disk probe: packages/runner/src/platform/windows/native, its Cargo.toml...\" absent -> THE CRATE EXISTS AND IS COMPLETE: src/ holds handle.rs, job.rs, lib.rs, lifecycle.rs, process.rs, spec.rs, unwind.rs, win32.rs and win32/. `git status --porcelain` over packages/runner/src/platform/windows is EMPTY, so it is committed, not sitting untracked as two deliverables did earlier today.\n- I COMPILED IT rather than trusting the DONE flags: `cargo check --offline --all-targets` in that crate finished clean.\n\nTHE ONE REMAINING LISTED DEPENDENCY IS NOT A DEPENDENCY. task-4d1f8ba5 (Windows Job Object provider process boundary) appears BLOCKED, and a naive dependency check counts it as unmet. It is this task's PARENT — broker.parentTaskId === task-4d1f8ba5. A SPIDR parent does not block its own child; the children deliver the parent, and that parent is parked BLOCKED precisely to keep an empty shell out of the claim pool. Blocking a child on its parent would deadlock the split by construction.\n\nA NOTE ON THE SHELL-STATUS TRAP, recorded because it hid this unblock from me for two full sweeps: a parked SPIDR shell reads as BLOCKED even when its entire deliverable is complete. Any dependency check that tests only `status === \"DONE\"` will therefore report a false unmet dependency for every completed-but-parked shell. Resolve a shell to its children before concluding a task is blocked.\n\nFOR THE ARCHITECT: re-measure the crate surface before naming symbols — lib.rs re-exports are the seam this broker composes, and the crate grew from 4 source files to 8 since the block was written. If something has moved, report blocked and I return this without argument.",
   "createdBy": "WORKER",
   "parentTaskId": "task-4d1f8ba54cb6476c930c46b413f882aa",
   "priority": "CRITICAL",
@@ -31,17 +31,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:36:05.450Z",
-  "updatedAt": "2026-08-09T14:52:05.865Z",
+  "updatedAt": "2026-08-09T20:56:36.818Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:50:47.603Z"
   },
   "contextFetchedBy": [
     "architect-21f667ae"
   ],
-  "blockedReason": "Hard task rail forbids starting until task-ea76e0cf9bdb4f1888aaa9e49323c782 is DONE. Fresh board measurement: that task is a BLOCKED SPIDR parent shell; child task-a24cb925a9a94002b805e9ccf1715978 is WORKING with zero completed steps and child task-a02496064e9e4e87a888cc112830d7a4 is unassigned PLANNING with no plan. Fresh disk probe: packages/runner/src/platform/windows/native, its Cargo.toml, and src/lib.rs are absent; production rg for CreateJobObjectW|PROC_THREAD_ATTRIBUTE_JOB_LIST|AssignProcessToJobObject|moe-windows-job-core returned no matches. Therefore the broker cannot import the required Rust crate or name its stable lifecycle API without guessing/reimplementing Win32 authority. Existing children already own the missing production capability. Resume only after both children and the parent shell are DONE, then re-probe Cargo package names, public Rust symbols, operation enum, RAII types, and locked metadata before planning.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:51:43.184Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Verified the native crate/core is absent on disk, measured the parent shell and both child statuses, reported the broker BLOCKED, and wrote task-task-af3d7bc8af2146cf92d98557ed0e90c0-handoff.",

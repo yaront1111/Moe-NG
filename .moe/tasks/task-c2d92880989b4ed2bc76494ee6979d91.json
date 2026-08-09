@@ -189,7 +189,7 @@
       "completedAt": "2026-08-09T20:42:15.235Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -199,20 +199,30 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 6.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-cdcd77771b4b49f3967bf9a89447e2f6",
+      "author": "qa-ed8ebade",
+      "content": "QA VERDICT: APPROVE. Full evidence (qa_approve summary is capped at 2000 chars, so it lives here).\n\nGATE, re-run by QA rather than read off the worker's notes:\n  pnpm typecheck -> exit 0 (every package Done)\n  pnpm test      -> exit 0, \"Test Files 214 passed (214) | Tests 4041 passed | 1 skipped (4042)\"\nZERO foreign red anywhere in the run, so the path-attributed baseline was not needed at all. The planning-time expectation of a scheduler package-boundary red did not reproduce.\n\nCOLLECTION IS REAL (the vacuity risk this plan was built around):\n  pnpm exec vitest list | grep -c \"adapters/ide-contract\" -> 33\nUnder the ROOT config. The vitest.config.ts include edit is load-bearing; 33 adapters tests actually execute in the command DoD 7 names.\n\nPLAIN-NODE IMPORT PROBE (DoD 4), run standalone by QA from adapters/ide-contract, verbatim stdout:\n{\"outcome\":\"IMPORTED\",\"hasNamedExports\":true,\"undefinedBindingCount\":0,\"keys\":[\"IDE_ADAPTER_LAYER\",\"IDE_ADAPTER_LAYERS\",\"IDE_ADAPTER_REASON_CODES\",\"decideControlRoomOpen\",\"decideDaemonDiscovery\",\"decideDaemonStart\"],\"layer\":\"IDE_ADAPTER\",\"codes\":14,\"decision\":{\"code\":\"DAEMON_START_UNVERIFIED\",\"detail\":\"no listener\",\"layer\":\"IDE_ADAPTER\",\"outcome\":\"UNKNOWN\"}}\nReal values survive strip-types, and a decision function is callable through the bare specifier via Node's self-reference rule.\n\nFIVE MUTATION DRILLS, run by QA, each red for the NAMED reason, each restored byte-exact (git hash-object before/after — git diff is blind here since the files were untracked when written):\n1. rm src/index.js          -> \"Tests 3 failed | 30 passed\". The bridge is load-bearing; vitest alone stays green without it.\n2. layer DAEMON_DISCOVERY_PORT -> IDE_ADAPTER on the UNDETERMINED path -> \"discovery that cannot determine daemon state is UNKNOWN, never an optimistic success\" RED. The layer is pinned, not a constant.\n3. drop \"EVIDENCE_MALFORMED\" from the frozen tuple -> \"produces every declared reason code from the production surface\" RED, plus the probe's reasonCodeCount 14 -> 13. A shrinking vocabulary cannot pass quietly.\n4. UNDETERMINED returns ok(\"DAEMON_RUNNING\") -> 2 failed. Fail-closed (task rail 4 / epic rail 4) is enforced by test, not by prose.\n5. plant \"vscode\" in index.ts -> \"contains no editor-specific identifier anywhere in the owned deliverable\" RED. The guard is falsifiable; it also asserts its own self-exclusion happened and carries a 5-file floor.\nFinal `git status --porcelain` over adapters/, vitest.config.ts, pnpm-workspace.yaml, tests/ -> EMPTY after every restore.\n\nDoD, item by item:\n1. adapters/ exists and resolves. pnpm-lock.yaml gained exactly `adapters/ide-contract: {}`. pnpm-workspace.yaml line 3 now reads \"External integrations; populated by adapters/ide-contract. task-9fd52b41 owns adapters/jetbrains/**.\" — one line changed, the glob untouched.\n2. src/index.ts IS the contract and the package root: IDE_ADAPTER_LAYER, frozen IDE_ADAPTER_LAYERS (4), frozen IDE_ADAPTER_REASON_CODES (14), and three pure decision functions over injected evidence. Ports are interfaces only. Nothing spawns, launches or opens a socket.\n3. Total failure paths. isEvidence() closes the null/undefined hole that would have thrown a TypeError carrying no code, and it.each([null, undefined]) covers all three operations. All 17 cases assert the WHOLE result object (code + layer + outcome), never \"it did not succeed\". Sweep asserts length > 0 AND == 17; the code sweep asserts seen.size > 0 AND == IDE_ADAPTER_REASON_CODES.length AND sorted set equality. Two distinct refusing layers exist by design (PORT refused vs CONTRACT refused to trust the port), so the layer assertion is not tautological.\n4. Covered by the probe above; drill 1 proves the bridge matters.\n5. Covered by drill 5.\n6. task-9fd52b41 and task-05ce9b8f are named by id in the module header and pinned by a test that reddens if either is removed. Naming them by id rather than by editor is what keeps DoD 5 and DoD 6 compatible.\n7. Covered by the gate above.\n\nRAILS: per-FILE lines by grep -c '' — index.ts 234 (<=250 target), index.js 1, tests 362 and 216 (<400). Task-level LOC is not a bar and was not applied. Committed bytes == gated bytes: git hash-object of index.ts/index.js equals git rev-parse HEAD:<path>. The only foreign hunk in the base-ref lockfile diff is `@moe/mcp` under apps/daemon, attributable to commit 921ff53 (task-f6c9011b) — not this task's.\n\nONE OUT-OF-PLAN EDIT, PROVEN FORCED rather than accepted on prose: checking tests/runtime/package-loadability.test.ts back out at base 1e3057ab and running it gives \"tolerates a workspace glob whose base directory is absent\" RED. That test pinned `adapters/*` expanding to [] — the ABSENCE of this deliverable — so this diff necessarily falsified it. It is not path-excusable foreign red and the worker was right not to treat it as such. They also kept expandWorkspacePattern's missing-directory property alive by re-pointing it at `no-such-workspace-base/*` instead of deleting the assertion. Correct call, correctly disclosed.\n\nNo debug/probe/scratch files remain: the package is exactly package.json, tsconfig.json, src/index.ts, src/index.js and the two test files.",
+      "timestamp": "2026-08-09T21:05:47.075Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T19:57:53.146Z",
-  "updatedAt": "2026-08-09T20:43:04.784Z",
+  "updatedAt": "2026-08-09T21:06:10.886Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T19:58:16.781Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-09T21:06:10.886Z",
+    "wallClockMs": 4074105
   },
   "contextFetchedBy": [
     "architect-8ee37119",
     "worker-a87e980a",
-    "worker-6f88f298"
+    "worker-6f88f298",
+    "qa-ed8ebade"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -281,5 +291,8 @@
     "adapters/ide-contract/src/index.ts",
     "adapters/ide-contract/src/index.js",
     "adapters/ide-contract/src/ide-adapter-runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T21:06:10.886Z",
+  "reviewCompletedAt": "2026-08-09T21:06:10.886Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-cdcd7777 (this field caps at 2000 chars).\n\nGATE re-run by QA: pnpm typecheck exit 0; pnpm test exit 0, \"Test Files 214 passed (214) | Tests 4041 passed | 1 skipped\". Zero foreign red, so path attribution was not needed.\n\nNOT VACUOUS: `vitest list | grep -c adapters/ide-contract` = 33 under the ROOT config — the vitest.config include edit really collects this task's tests in the command DoD 7 names.\n\nPLAIN-NODE PROBE (DoD 4), run standalone by QA: {\"outcome\":\"IMPORTED\",\"hasNamedExports\":true,\"undefinedBindingCount\":0,\"layer\":\"IDE_ADAPTER\",\"codes\":14,\"decision\":{\"code\":\"DAEMON_START_UNVERIFIED\",\"layer\":\"IDE_ADAPTER\",\"outcome\":\"UNKNOWN\"}}.\n\n5 QA MUTATION DRILLS, each red for the NAMED reason, each restored byte-exact by git hash-object: (1) rm src/index.js -> 3 failed, bridge load-bearing; (2) flip the discovery refusing layer -> UNKNOWN case reddens, layer is pinned not constant; (3) drop EVIDENCE_MALFORMED from the frozen tuple -> code sweep reddens + probe count 14->13; (4) return ok(DAEMON_RUNNING) on UNDETERMINED -> 2 red, fail-closed enforced; (5) plant \"vscode\" -> neutrality guard reddens, and it asserts its own self-exclusion plus a 5-file floor.\n\nSCOPE/RAILS: base-ref diff 1e3057ab..HEAD = 9 files. Per-FILE lines index.ts 234, tests 362/216. pnpm-workspace.yaml and vitest.config.ts 1 line each; lockfile adds only `adapters/ide-contract: {}` (the @moe/mcp hunk is foreign, 921ff53). Committed bytes == gated bytes.\n\nOUT-OF-PLAN EDIT PROVEN FORCED, not taken on prose: reverting tests/runtime/package-loadability.test.ts to base reddens \"tolerates a workspace glob whose base directory is absent\" — it pinned `adapters/*` -> [], the absence of this deliverable. Worker kept the missing-directory property by re-pointing at a genuinely absent base. Correct.\n\nDoD 1-7 evidenced. Consumers task-9fd52b41 / task-05ce9b8f named by id in the header, machine-checked. No editor identifier, no spawn, no browser, no scratch files."
 }

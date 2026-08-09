@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source, split before 400; this cap is per file, not per task."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 21:02Z. Both claims in the block reason are now false on disk, verified symbol by symbol.\n\nTHE BLOCK SAID, and it was correct when written: \"Hard rail requires core revision supersession slice to land first. It is only PLANNING, and the epoch/carry-binding/disposition-kind vocabulary plus real graph.supersede transition are absent on disk; this slice cannot plan without forking them.\"\n\nCLAIM 1 REVERSED: the core revision supersession slice (task-6b8d0e2e) is DONE, closed at 20:07Z once both its children landed — task-14eb91a1 (Core supersession decision kernel) and task-1df0622e (Graph revision supersession transition), each separately QA-approved.\n\nCLAIM 2 REVERSED — the vocabulary is not absent, it is PUBLISHED ON THE @moe/core ROOT. packages/core/src/index.ts:239-242 exports, from ./supersession/supersession-engine.js:\n  values: SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession\n  types: SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind, SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry, SupersessionSuccessorBinding\nThat is the exact \"disposition-kind vocabulary\" and \"carry-binding\" the block named as missing. graphEpoch is declared at packages/core/src/planning/graph-revision-contract.ts:111 and that file is tracked.\n\nCLAUSE 1 IS SATISFIED IN BOTH DIRECTIONS: the capability exists AND has a published consumer edge, so a scheduler slice can compose it from the package root without a deep import and without a follow-on publish task. This is not the canary's situation, where a surface landed with no export.\n\nWHY THIS WAS HIDDEN FROM ME FOR TWO SWEEPS, recorded so it is not repeated: my dependency check tested `status === \"DONE\"` and counted the parked SPIDR shell as an unmet dependency. A completed-but-parked shell reads as BLOCKED while its entire deliverable is finished. Resolve shells to their children before concluding anything is blocked — I have added that to my scan and it surfaced three unblocks in one pass.\n\nFOR THE ARCHITECT: re-measure before naming symbols. I read the root export block once; the supersession engine's internals may differ from what its export names suggest. If a symbol this slice needs is missing, report blocked and I return this without argument.\n\nIts sibling under task-dddfaf83 (Graph supersession engine) is the only remaining child of that parent, so landing this closes the parent's last gap.",
   "createdBy": "WORKER",
   "parentTaskId": "task-dddfaf83f9c644099b5b263e485c58c7",
   "priority": "HIGH",
@@ -45,7 +45,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:18:09.347Z",
-  "updatedAt": "2026-08-09T15:31:16.292Z",
+  "updatedAt": "2026-08-09T20:57:23.579Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:18:51.806Z"
   },
@@ -53,10 +53,10 @@
     "architect-21f667ae",
     "architect-db2146e3"
   ],
-  "blockedReason": "Hard rail requires core revision supersession slice to land first. It is only PLANNING, and the epoch/carry-binding/disposition-kind vocabulary plus real graph.supersede transition are absent on disk; this slice cannot plan without forking them.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T15:19:21.955Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Loaded planning guidance; verified slice-1 status and disk; proved epoch/carry/disposition vocabulary and real transition absent; commented, reported BLOCKED, and wrote Serena handoff.",
