@@ -81,10 +81,20 @@ import type {
   RecoveryIncarnationErrorCode,
   RecoveryIncarnationKeyPair,
   RecoveryIncarnationMinted,
+  RecoveryIncarnationProof,
   RecoveryIncarnationRefused,
   RecoveryIncarnationRequest,
   RecoveryIncarnationResult,
   RecoveryIncarnationService,
+  RecoverySuccessionChain,
+  RecoverySuccessionChainResult,
+  RecoverySuccessionErrorCode,
+  RecoverySuccessionRecord,
+  RecoverySuccessionRecorded,
+  RecoverySuccessionRefused,
+  RecoverySuccessionRequest,
+  RecoverySuccessionResult,
+  RecoverySuccessionService,
   ReviewAccepted,
   ReviewCommandHandler,
   ReviewCommandKind,
@@ -174,6 +184,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PREREQUISITE_REFUSAL_CODES", "object"],
   ["RECOVERY_INCARNATION_ERROR_CODES", "object"],
   ["RECOVERY_INCARNATION_SCHEMA_VERSION", "string"],
+  ["RECOVERY_SUCCESSION_ERROR_CODES", "object"],
+  ["RECOVERY_SUCCESSION_LAYER", "string"],
+  ["RECOVERY_SUCCESSION_SCHEMA_VERSION", "string"],
   ["REVIEW_HANDLERS", "object"],
   ["SERVICE_REFUSED_BY", "object"],
   ["SLOT_CEILING_LEG", "string"],
@@ -184,17 +197,21 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LAYERS", "object"],
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
+  ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
+  ["createRecoverySuccessionService", "function"],
   ["decodeBootstrapRequestBytes", "function"],
   ["evaluateDoctorCommandBytes", "function"],
   ["evaluateGraphPreviewRequestBytes", "function"],
   ["handleCommandRequest", "function"],
   ["isDependencyProvider", "function"],
   ["parseWorkRequest", "function"],
+  ["readAnchoredIncarnation", "function"],
   ["readEventPage", "function"],
+  ["readSuccessionChain", "function"],
   ["refuseEntry", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
@@ -224,7 +241,7 @@ const surface: Readonly<Record<string, unknown>> = daemon;
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(51);
+    expect(EXPECTED_EXPORTS.length).toBe(58);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -449,6 +466,40 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<RecoveryIncarnationCryptoPort>();
     expectTypeOf<ReturnType<RecoveryIncarnationCryptoPort["generateSigningKey"]>>()
       .toEqualTypeOf<Promise<RecoveryIncarnationKeyPair>>();
+  });
+
+  it("names every recovery succession branch and keeps a succession non-authoritative", () => {
+    expectTypeOf<(typeof daemon.RECOVERY_SUCCESSION_ERROR_CODES)[number]>()
+      .toEqualTypeOf<RecoverySuccessionErrorCode>();
+    expectTypeOf<RecoverySuccessionResult>()
+      .toEqualTypeOf<RecoverySuccessionRecorded | RecoverySuccessionRefused>();
+    expectTypeOf<RecoverySuccessionRecorded["record"]>().toEqualTypeOf<RecoverySuccessionRecord>();
+    // Recording a succession proves lineage, never authority: an anchor still
+    // owns PREPARED, exactly as it does for a mint.
+    expectTypeOf<RecoverySuccessionRecorded["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoverySuccessionRefused["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoverySuccessionRefused["truth"]>().toEqualTypeOf<"UNKNOWN">();
+    expectTypeOf<RecoverySuccessionRefused["layer"]>().toEqualTypeOf<"RECOVERY_SUCCESSION">();
+    // The record carries a proof, not a key: the successor's signature is the
+    // only cryptographic thing that ever becomes durable.
+    expectTypeOf<RecoverySuccessionRecord["proof"]>().toEqualTypeOf<RecoveryIncarnationProof>();
+    expectTypeOf<RecoverySuccessionRequest["predecessorIncarnationRef"]>()
+      .toEqualTypeOf<string>();
+    expectTypeOf<Parameters<typeof daemon.createRecoverySuccessionService>>()
+      .toEqualTypeOf<[port: RecoveryIncarnationCryptoPort]>();
+    expectTypeOf<ReturnType<typeof daemon.createRecoverySuccessionService>>()
+      .toEqualTypeOf<RecoverySuccessionService>();
+    expectTypeOf<ReturnType<RecoverySuccessionService["succeed"]>>()
+      .toEqualTypeOf<Promise<RecoverySuccessionResult>>();
+    expectTypeOf<ReturnType<typeof daemon.readSuccessionChain>>()
+      .toEqualTypeOf<RecoverySuccessionChainResult>();
+    expectTypeOf<RecoverySuccessionChainResult>()
+      .toEqualTypeOf<RecoverySuccessionChain | RecoverySuccessionRefused>();
+    expectTypeOf<RecoverySuccessionChain["links"]>()
+      .toEqualTypeOf<readonly RecoverySuccessionRecord[]>();
+    expectTypeOf<ReturnType<typeof daemon.readAnchoredIncarnation>>()
+      .toEqualTypeOf<RecoveryIncarnationBinding | null>();
+    expectTypeOf<ReturnType<typeof daemon.anchorIncarnation>>().toEqualTypeOf<boolean>();
   });
 
   it("keeps graph preview branches advisory through the published root", () => {

@@ -208,6 +208,22 @@ export {
   type RecoveryIncarnationRequest, type RecoveryIncarnationResult,
   type RecoveryIncarnationService,
 } from "./recovery/recovery-incarnation.js";
+// The durable half of the same identity. `anchorIncarnation` is published
+// alongside the succession service because an ORIGIN incarnation has to be
+// anchored by whoever mints it: without it a root consumer could never place
+// the first link, and every chain walk would refuse NOT_FOUND forever.
+export {
+  anchorIncarnation, readAnchoredIncarnation,
+} from "./recovery/recovery-incarnation-anchor.js";
+export {
+  RECOVERY_SUCCESSION_ERROR_CODES, RECOVERY_SUCCESSION_LAYER,
+  RECOVERY_SUCCESSION_SCHEMA_VERSION, createRecoverySuccessionService, readSuccessionChain,
+  type RecoverySuccessionChain, type RecoverySuccessionChainResult,
+  type RecoverySuccessionErrorCode, type RecoverySuccessionRecord,
+  type RecoverySuccessionRecorded, type RecoverySuccessionRefused,
+  type RecoverySuccessionRequest, type RecoverySuccessionResult,
+  type RecoverySuccessionService,
+} from "./recovery/recovery-succession.js";
 
 const SCHEMA_VERSION = "moe-graph-preview-request/1";
 const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);

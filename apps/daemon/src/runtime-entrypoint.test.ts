@@ -51,6 +51,25 @@ try {
 }
 `;
 
+const REPORT_SUCCESSION_SURFACE = `
+const report = (value) => process.stdout.write(JSON.stringify(value));
+try {
+  const ns = await import("@moe/daemon");
+  report({
+    outcome: "IMPORTED",
+    anchorIncarnation: typeof ns.anchorIncarnation,
+    codesFrozen: Object.isFrozen(ns.RECOVERY_SUCCESSION_ERROR_CODES),
+    createRecoverySuccessionService: typeof ns.createRecoverySuccessionService,
+    layer: ns.RECOVERY_SUCCESSION_LAYER,
+    readAnchoredIncarnation: typeof ns.readAnchoredIncarnation,
+    readSuccessionChain: typeof ns.readSuccessionChain,
+    schemaVersion: ns.RECOVERY_SUCCESSION_SCHEMA_VERSION,
+  });
+} catch (error) {
+  report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
+}
+`;
+
 const REPORT_TEST_TIER_MODULE = `
 const report = (value) => process.stdout.write(JSON.stringify(value));
 try {
@@ -76,6 +95,24 @@ it("loads the @moe/daemon root namespace under Node with no undefined binding", 
     evaluateGraphPreviewRequestBytes: "function",
     goalHandlersFrozen: true,
     readEventPage: "function",
+  });
+});
+
+it("loads the recovery succession and anchor surface under plain Node", async () => {
+  // DoD 6. Two NEW .js bridges ship with this surface, and vitest resolves a
+  // `./foo.js` specifier back to `foo.ts` — so an absent or misnamed bridge is
+  // invisible to every in-process suite and only a real child Node process can
+  // see it. Values are reported, not just typeofs, so a binding that resolved
+  // to the wrong module cannot pass.
+  expect(await probe(REPORT_SUCCESSION_SURFACE)).toEqual({
+    outcome: "IMPORTED",
+    anchorIncarnation: "function",
+    codesFrozen: true,
+    createRecoverySuccessionService: "function",
+    layer: "RECOVERY_SUCCESSION",
+    readAnchoredIncarnation: "function",
+    readSuccessionChain: "function",
+    schemaVersion: "moe-recovery-succession/1",
   });
 });
 
