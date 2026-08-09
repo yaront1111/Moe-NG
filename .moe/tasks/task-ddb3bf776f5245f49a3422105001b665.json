@@ -172,8 +172,8 @@
       "completedAt": "2026-08-09T17:06:21.547Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-97d6df26",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-5be1a8d6",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -204,7 +204,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:31:05.230Z",
-  "updatedAt": "2026-08-09T17:06:21.547Z",
+  "updatedAt": "2026-08-09T17:07:49.783Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:12:44.496Z",
     "plannedStepCount": 10,
@@ -252,7 +252,8 @@
   "contextFetchedBy": [
     "worker-2bc13005",
     "worker-a0eaa020",
-    "worker-97d6df26"
+    "worker-97d6df26",
+    "qa-5be1a8d6"
   ],
   "workStartedAt": "2026-08-09T14:15:02.636Z",
   "blockedReason": null,
@@ -262,8 +263,8 @@
   "verification": {
     "command": "pnpm --filter @moe/control-room test",
     "exitCode": 0,
-    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  39 passed (39)\n      Tests  569 passed (569)\n   Start at  18:27:59\n   Duration  6.19s (transform 8.69s, setup 0ms, import 16.82s, tests 26.49s, environment 41.87s)\n\nEXIT=0\n\n(Companion leg: pnpm --filter @moe/control-room typecheck -> $ tsc --project tsconfig.json / EXIT=0.)",
-    "reportedAt": "2026-08-09T15:30:30.705Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  40 passed (40)\n      Tests  578 passed (578)\n   Start at  20:06:53\n   Duration  5.82s (transform 9.48s, setup 0ms, import 18.18s, tests 28.06s, environment 40.81s)\n\nEXIT=0",
+    "reportedAt": "2026-08-09T17:07:27.248Z"
   },
   "filesModified": [
     "apps/control-room/src/runs/runs-surface.test.tsx",
@@ -273,8 +274,8 @@
     "apps/control-room/src/resources/resources-surface.test.tsx",
     "apps/control-room/src/shell/circuit-breaker-banner.tsx",
     "apps/control-room/src/shell/circuit-breaker-banner.test.tsx",
-    "apps/control-room/src/shell/frame.tsx",
-    "apps/control-room/src/approvals/narrow-parity.test.tsx"
+    "apps/control-room/src/shell/frame.tsx"
   ],
-  "reviewSummary": "APPROVED — closing the reversal I opened at 15:03. This time I graded against the governor's 14:39:08 text clause by clause, which is precisely what I failed to do at 14:46.\n\nTHE AUTHORISATION, CHECKED WORD BY WORD:\n- \"a real parity assertion over the new runs/resources surfaces\" — `RunsSurface` and `ResourcesSurface` are now actually MOUNTED, not scanned as source text.\n- \"IN THE SAME SHAPE THE FILE ALREADY USES FOR EVERY OTHER SURFACE\" — `mountAt(fixture, WIDE)` -> `surfaceTestIds` -> `cleanup()` -> `mountAt(fixture, NARROW)` -> `surfaceTestIds` -> compare. Identical to the 15-surface sweep above it.\n- \"assert both narrow and wide id sets are NON-EMPTY before comparing\" — `expect(wide.size).toBeGreaterThan(0)` and the same for narrow, BEFORE `expect(sorted(narrow)).toEqual(sorted(wide))`.\n\nMY OWN DRILL, the one @worker-5981deec proposed and I said I would look for. I made `cr.runs.suspect` render only above 960px — a field silently dropped at narrow width. RED: `renders the same field set wide and narrow on runs-surface`, and the diff NAMES the missing id, `- \"cr.runs.suspect\"`. The old source-text scan would have stayed green, since the literal is still in the source. That is the difference between the two assertions, demonstrated rather than argued. Restored, `git hash-object` == 140e89f5.\n\nBEYOND THE REQUIREMENT, three guards I did not ask for: `TABLE_SURFACES.length` pinned at 2; `RUN_COMMANDS`/`RESOURCE_COMMANDS` each asserted `toHaveLength(1)` — a defence against their OWN earlier finding that `buildNextAllowedCommands` silently drops an unknown kind, which would empty the action subtree and shrink the compared set without failing anything; and an explicit assertion that the new fixtures are NOT in the 15-surface sweep, so the a11y task's tripwire stays untouched.\n\nTHE EXISTENCE SCAN IS RETAINED alongside, as instructed — it is a working ratchet for a different fact.\n\nGATES RE-RUN BY ME: control-room test exit 0, 39 files / 569 tests; typecheck exit 0."
+  "reviewSummary": "APPROVED — closing the reversal I opened at 15:03. This time I graded against the governor's 14:39:08 text clause by clause, which is precisely what I failed to do at 14:46.\n\nTHE AUTHORISATION, CHECKED WORD BY WORD:\n- \"a real parity assertion over the new runs/resources surfaces\" — `RunsSurface` and `ResourcesSurface` are now actually MOUNTED, not scanned as source text.\n- \"IN THE SAME SHAPE THE FILE ALREADY USES FOR EVERY OTHER SURFACE\" — `mountAt(fixture, WIDE)` -> `surfaceTestIds` -> `cleanup()` -> `mountAt(fixture, NARROW)` -> `surfaceTestIds` -> compare. Identical to the 15-surface sweep above it.\n- \"assert both narrow and wide id sets are NON-EMPTY before comparing\" — `expect(wide.size).toBeGreaterThan(0)` and the same for narrow, BEFORE `expect(sorted(narrow)).toEqual(sorted(wide))`.\n\nMY OWN DRILL, the one @worker-5981deec proposed and I said I would look for. I made `cr.runs.suspect` render only above 960px — a field silently dropped at narrow width. RED: `renders the same field set wide and narrow on runs-surface`, and the diff NAMES the missing id, `- \"cr.runs.suspect\"`. The old source-text scan would have stayed green, since the literal is still in the source. That is the difference between the two assertions, demonstrated rather than argued. Restored, `git hash-object` == 140e89f5.\n\nBEYOND THE REQUIREMENT, three guards I did not ask for: `TABLE_SURFACES.length` pinned at 2; `RUN_COMMANDS`/`RESOURCE_COMMANDS` each asserted `toHaveLength(1)` — a defence against their OWN earlier finding that `buildNextAllowedCommands` silently drops an unknown kind, which would empty the action subtree and shrink the compared set without failing anything; and an explicit assertion that the new fixtures are NOT in the 15-surface sweep, so the a11y task's tripwire stays untouched.\n\nTHE EXISTENCE SCAN IS RETAINED alongside, as instructed — it is a working ratchet for a different fact.\n\nGATES RE-RUN BY ME: control-room test exit 0, 39 files / 569 tests; typecheck exit 0.",
+  "reviewStartedAt": "2026-08-09T17:07:27.248Z"
 }
