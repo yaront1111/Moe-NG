@@ -1,0 +1,9 @@
+# The repo-root .gitignore covers dist/, which is where the verification
+# command sends --target-dir. It does NOT cover this crate's own target/:
+#   git check-ignore -v dist/windows-job-native   -> .gitignore:4:dist/
+#   git check-ignore -v <this dir>/target/        -> (no match)
+#
+# So a bare `cargo build` run here without --target-dir would leave a TRACKED
+# target directory and break the "no build artifact is committed" gate. This
+# file is that guard; it is not cosmetic.
+target/

@@ -1,0 +1,32 @@
+[package]
+name = "moe-windows-job-core"
+version = "0.1.0"
+edition = "2021"
+# Never published to crates.io. This crate is an internal native primitive
+# consumed by the Node runner, not a distributable library.
+publish = false
+
+# windows-sys is declared per-target: this crate implements a Windows-only
+# primitive and deliberately has NO non-Windows fallback. A fallback would be
+# untested authority on a host that cannot exercise it.
+#
+# The leading `=` is an EXACT version pin, not a caret range. `=0.61.2` forbids
+# 0.61.3; a plain "0.61.2" would silently accept it.
+#
+# Win32_Security is required, not convenience: CreateJobObjectW is declared
+# `#[cfg(feature = "Win32_Security")]` because its first parameter is
+# *const SECURITY_ATTRIBUTES. Without it the function does not exist. We pass
+# NULL for that parameter, but the feature still gates the declaration.
+#
+# Win32_System_Threading is deliberately ABSENT (task rail 5 — it belongs to
+# child 2). That is why this crate configures the Job through
+# JOBOBJECT_BASIC_LIMIT_INFORMATION rather than the EXTENDED struct: the
+# extended one is `#[cfg(feature = "Win32_System_Threading")]` because it embeds
+# Threading::IO_COUNTERS. KILL_ON_JOB_CLOSE is a documented basic LimitFlag, so
+# nothing is lost.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+] }
