@@ -14,22 +14,121 @@ import type { JsonObject } from "@moe/contracts";
  * refusal renders verbatim, which is correct behavior rather than a failure.
  */
 
+// Shapes mirror the daemon's committed J1 fixtures (bootstrap-test-fixtures.ts)
+// on the live default subjects the affordance surface derives versions for.
+const hex64 = (seed: string): string =>
+  (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
+
+const GOAL_ID = "goal-live-1";
+const RUN_ID = "run-live-1";
+const POLICY_REF = hex64("a1b2c3");
+const SUBMISSION_HASH = hex64("dec0de");
+
+const PLANNING_CHAIN: readonly JsonObject[] = [
+  {
+    commandId: "chain-create", expectedVersion: 0, goalRef: GOAL_ID,
+    kind: "planning.create_draft", runId: RUN_ID, runKind: "INITIAL",
+  },
+  {
+    commandId: "chain-ready", expectedVersion: 1, kind: "planning.ready",
+    witness: {
+      acceptanceCriteriaRef: "criteria-1", intentBaseRef: "intent-1",
+      planningBudgetRef: "budget-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
+  {
+    commandId: "chain-claim", expectedVersion: 2, kind: "planning.claim",
+    witness: {
+      attemptRef: "attempt-1", contextRef: "context-1", leaseRef: "lease-1",
+      providerSlotRef: "slot-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
+  {
+    commandId: "chain-propose",
+    effectTerminalProof: {
+      effectTerminalRef: "effect-terminal-1", resourcesTerminalRef: "resources-terminal-1",
+      truthClass: "DAEMON_VERIFIED",
+    },
+    expectedVersion: 3, kind: "plan.propose", proposalKind: "INITIAL",
+    submissionHash: SUBMISSION_HASH,
+    witness: {
+      attemptRef: "attempt-1", submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
+];
+
 export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze({
   "approval.decide": {
-    activation: {}, command: {}, graphRevisionRef: "rev-1", record: {}, runId: "run-live-1",
+    activation: {
+      activationRef: "activation-1", budgetHash: hex64("b0"), expectedGoalVersion: 1,
+      goalDraftNoActiveRevision: true, graphHash: hex64("6a"), policyHash: hex64("b1"),
+      qualityHash: hex64("dd"), truthClass: "HUMAN_APPROVED",
+    },
+    command: {
+      decision: "APPROVE", decisionReason: "reason-1", kind: "approval.decide",
+      stepUpAuthRef: "stepup-1",
+    },
+    graphRevisionRef: "graph-revision-1",
+    record: {
+      actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
+      approvalRef: "approval-1", approvedNodeScope: ["node-1"], budgetRef: hex64("bb"),
+      criteriaRef: hex64("cc"), decision: null, decisionReason: null,
+      dependencyChanges: { additions: [], challenges: [], removals: [] },
+      exactRevisionHash: SUBMISSION_HASH, lifecycle: "PENDING",
+      planQualityAssessmentRef: hex64("dd"), policyDecisionRef: null, riskTier: "R2",
+      stepUpAuthRef: "stepup-1", truthClass: "HUMAN_APPROVED", validity: "CURRENT",
+    },
+    runId: RUN_ID,
   },
-  "goal.close": { closureWitness: {}, goalId: "goal-live-1", zeroAuthorityWitness: {} },
+  "goal.close": {
+    closureWitness: {
+      acceptanceClosureRef: "acceptance-1", completionNodeAcceptedRef: "completion-node-1",
+      noCurrentPreparationGeneration: true, noPendingDraftOrSupersession: true,
+      obligationsHoldRef: "obligations-1", truthClass: "HUMAN_APPROVED",
+    },
+    goalId: GOAL_ID,
+    zeroAuthorityWitness: {
+      truthClass: "DAEMON_VERIFIED", zeroAuthorityProofRef: "zero-authority-1",
+    },
+  },
   "goal.create": {
-    budgetAccountRef: "budget-live-1", goalId: "goal-live-1",
-    planningRunRef: "run-live-1", witness: {},
+    budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID,
+    witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
   },
-  "plan.propose": { commands: [{ kind: "plan.propose" }], runId: "run-live-1" },
-  "policy.install": { slice: {} },
-  "policy.validate": { input: {} },
-  "project.activate": { witness: {} },
-  "project.bind_repository": { observation: {} },
+  "plan.propose": { commands: PLANNING_CHAIN, runId: RUN_ID },
+  "policy.install": {
+    slice: { autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF },
+  },
+  "policy.validate": {
+    input: {
+      action: "plan.approve", actor: "principal-1", callerRiskHint: null,
+      decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
+      evaluatorVersion: "evaluator-1", facts: [], graphNodeRevisionRefs: [],
+      policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
+      sliceChain: [{ autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF }],
+      waivers: [],
+    },
+  },
+  "project.activate": {
+    witness: {
+      artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",
+      distributionManifestHash: hex64("cafe"), policyRevisionHash: hex64("face"),
+      providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
+      storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
+  "project.bind_repository": {
+    observation: {
+      baseRevisionHash: hex64("beef"), repositoryRef: "repo-1", scopeRef: "scope-1",
+      truthClass: "DAEMON_VERIFIED",
+    },
+  },
   "project.register": { owner: "operator-local" },
-  "provider.probe": { observation: {} },
+  "provider.probe": {
+    observation: {
+      providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
   "session.open": {
     capabilities: ["goal.write"], credentialSha256: "a".repeat(64),
     expiresAt: "2027-01-01T00:00:00.000Z", sessionId: "sess-ui-1",
