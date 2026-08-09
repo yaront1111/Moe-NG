@@ -149,7 +149,7 @@
       "completedAt": "2026-08-09T17:08:22.826Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -169,12 +169,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:24.731Z",
-  "updatedAt": "2026-08-09T17:08:47.283Z",
+  "updatedAt": "2026-08-09T17:18:22.074Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:27:05.232Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T17:18:22.074Z",
+    "wallClockMs": 10276842
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -183,7 +185,8 @@
     "worker-4addc779",
     "architect-5b5302ee",
     "worker-d61b2685",
-    "worker-1a528e3e"
+    "worker-1a528e3e",
+    "qa-5be1a8d6"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -269,5 +272,8 @@
     "packages/core/src/planning/planning-expansion-validation.ts",
     "packages/core/src/planning/planning-expansion-validation.js",
     "packages/core/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T17:18:22.074Z",
+  "reviewCompletedAt": "2026-08-09T17:18:22.074Z",
+  "reviewSummary": "APPROVED. Re-verified independently, not from worker summaries.\n\nGATE (QA re-ran, foreground, unpiped so exit code is not masked): `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` = exit 0, 20 files / 332 tests. Run twice, pre- and post-my-mutation-drills, identical.\n\nBYTES: a646660 carries exactly the six owned paths (+1042/-17), no debug/generated artifacts. All six `git hash-object` == `git rev-parse HEAD:<path>`; owned `git status --porcelain` EMPTY. grep -c '' lines: command 249, event 194, expansion-validation 243, index 249, bridge 1 — all <=250 per-FILE. planning-validation.ts byte-untouched (last commit bcdc2f6). Bridge is exact one-line LF (od -c).\n\nDoD 1-3: HoldBinding pins 11 keys, ProposalIdentity 3; discriminated on runKind/proposalKind so a binding is not representable on INITIAL/REVISION (@ts-expect-error both directions). INITIAL create bytes pinned through reducePlanningRun; REVISION returns exact PLANNING_KIND_UNSUPPORTED; EXPANSION also still UNSUPPORTED, so schema alone grants no transition. Authority sweep over EXPANSION-only keys has a positive control proving it can fail.\n\nDoD 4 — I ran TWO of my own mutation drills:\n(1) truthClass === \"DAEMON_VERIFIED\" -> !== undefined: RED, \"refuses every invalid HOLD_BINDING with its exact code and layer\", 5 truthClass labels.\n(2) removed runKind === \"EXPANSION\" from validExpansionCreateCommand: RED naming \"cross-kind: INITIAL carrying a binding\" and \"cross-kind: REVISION carrying a binding\".\nBoth restored; hashes re-verified == HEAD. Case counts are a HAND-WRITTEN literal table (7 targets, 269 total) cross-checked against generator arithmetic, so the sweep cannot police itself.\n\nDoD 5: consumer task-93b0314e09f248118e21f92699989468 recorded in code.\n\nForeign red disclosed, not attributable: repo-wide typecheck (apps/daemon session-authority WIP) and scheduler package-boundary shebang defect. Neither intersects owned paths."
 }

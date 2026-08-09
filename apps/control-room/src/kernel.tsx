@@ -65,6 +65,8 @@ export function presentTruthClass(input: unknown): ShellTruthPresentation {
 }
 
 export interface TruthChipProps {
+  /** Prefixes the shared truth description when several chips need distinct names. */
+  readonly contextLabel?: string | undefined;
   readonly onProvenance?: ((shown: ShellTruthPresentation) => void) | undefined;
   readonly truthClass?: unknown;
 }
@@ -91,13 +93,14 @@ function chipStyle(descriptor: TruthPresentationDescriptor): CSSProperties {
  * it, so selecting `cr.chip.*` counts chips exactly. The inner parts are `cr.glyph`
  * and `cr.shortlabel`, which also avoids colliding with the wrapper's `cr.label`.
  */
-export function TruthChip({ onProvenance, truthClass }: TruthChipProps): JSX.Element {
+export function TruthChip({ contextLabel, onProvenance, truthClass }: TruthChipProps): JSX.Element {
   const shown = presentTruthClass(truthClass);
   const { descriptor } = shown;
-  const ariaLabel =
+  const truthLabel =
     shown.provenanceNote === ""
       ? descriptor.ariaLabel
       : `${descriptor.ariaLabel} ${shown.provenanceNote}`;
+  const ariaLabel = contextLabel === undefined ? truthLabel : `${contextLabel}. ${truthLabel}`;
   return (
     <button
       aria-label={ariaLabel}

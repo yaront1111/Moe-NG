@@ -7,7 +7,7 @@
     font-size: clamp(1.7rem, 3vw, 2.7rem);
   }
 
-  [data-testid="cr.surface.board"] {
+  .cr-board-lanes {
     grid-template-columns: repeat(5, minmax(6.5rem, 1fr));
   }
 }
@@ -32,6 +32,7 @@
     background: var(--cr-surface);
     inset: 100% 0 auto;
     max-inline-size: none;
+    padding-inline: 0.5rem;
     position: absolute;
   }
 
@@ -64,17 +65,13 @@
     grid-template-columns: 1fr;
   }
 
-  [data-testid="cr.surface.board"] {
+  .cr-board-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .cr-board-lanes {
     grid-template-columns: repeat(5, minmax(13rem, 72vw));
     scroll-snap-type: x proximity;
-  }
-
-  [data-testid="cr.surface.board"] > [data-testid^="cr.factslot."] {
-    grid-column: span 2;
-  }
-
-  [data-testid="cr.surface.board"] > [data-testid^="cr.factslot."]:nth-child(2) {
-    grid-column: span 3;
   }
 
   [data-testid^="cr.board.column."] {

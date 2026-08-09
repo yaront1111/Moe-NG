@@ -1,0 +1,109 @@
+.cr-dossier-source-list details {
+  min-inline-size: 0;
+}
+
+.cr-dossier-source-list summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 0.12rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-block-size: 44px;
+  padding-block: 0.2rem;
+}
+
+.cr-dossier-source-list summary::after {
+  color: var(--cr-attention-text);
+  content: "+";
+  font-size: 1rem;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.cr-dossier-source-list details[open] summary::after {
+  content: "−";
+}
+
+.cr-dossier-source-list li:target {
+  background: var(--cr-attention-wash);
+  border-radius: var(--cr-radius-xs);
+  outline: 2px solid color-mix(in srgb, var(--cr-attention) 42%, transparent);
+  outline-offset: 0.25rem;
+}
+
+.cr-dossier-candidate a {
+  align-items: center;
+  color: var(--cr-link);
+  display: inline-flex;
+  font-family: var(--cr-font-utility);
+  font-size: 0.65rem;
+  min-block-size: 24px;
+  overflow-wrap: anywhere;
+  padding-inline: 0.2rem;
+}
+
+.cr-dossier-provenance {
+  background: color-mix(in srgb, var(--cr-action) 8%, var(--cr-surface));
+  border: 1px solid color-mix(in srgb, var(--cr-action) 28%, var(--cr-line));
+  border-radius: var(--cr-radius-sm);
+  display: grid;
+  font-size: 0.68rem;
+  gap: 0.15rem 0.65rem;
+  grid-template-columns: auto 1fr;
+  margin-block-end: 0.65rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.cr-dossier-provenance span {
+  color: var(--cr-link);
+  font-family: var(--cr-font-utility);
+}
+
+.cr-dossier-provenance p {
+  color: var(--cr-ink-soft);
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.cr-dossier-provenance .cr-dossier-provenance-sources {
+  color: var(--cr-ink);
+  font-family: var(--cr-font-utility);
+}
+
+.cr-dossier-provenance small {
+  color: var(--cr-attention-text);
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1199px) {
+  .cr-dossier-body {
+    grid-template-columns: 1fr;
+  }
+
+  .cr-dossier-sources,
+  .cr-dossier-decomposition {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .cr-dossier-sources {
+    border-block-start: 1px solid var(--cr-line);
+    border-inline-start: 0;
+  }
+}
+
+@media (max-width: 959px) {
+  .cr-dossier-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .cr-dossier-candidates {
+    grid-template-columns: 1fr;
+  }
+
+  .cr-dossier-candidate a {
+    min-block-size: 32px;
+  }
+}

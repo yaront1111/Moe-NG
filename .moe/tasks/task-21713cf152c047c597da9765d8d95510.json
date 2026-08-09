@@ -80,7 +80,7 @@
     {
       "stepId": "step-5",
       "description": "Implement protocol v1 and concrete proof verification — create session-authority-protocol.ts plus its exact LF bridge. Snapshot exact own data properties once; build the domain plus eleven u32be-length-framed canonical scalar byte sequences in the approved order; expose the canonical challenge/request digest functions so production and tests share one surface. Validate safe integer/time bounds, lowercase hex lengths, canonical Ed25519 DER SPKI by createPublicKey/asymmetricKeyType/export round-trip, SHA-256 clientKeyId, and exact 64-byte signature before `node:crypto.verify(null,...)`; contain all crypto/parser throws as false. Derive the replay aggregate/key only from SHA-256 of the framed sessionId/generation/clientKeyId/nonce tuple so no raw nonce/proof/signature is returned or persisted. For rotation, require current and proposed keys to verify the identical canonical challenge whose requestDigest binds nextCredentialId, next clientKeyId/SPKI, and next generation. Keep this leaf deterministic, synchronous, IO-free, and <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/identity/session-authority-protocol.ts",
         "apps/daemon/src/identity/session-authority-protocol.js",
@@ -90,12 +90,19 @@
         "apps/daemon/src/identity/session-authority-protocol.ts",
         "apps/daemon/src/identity/session-authority-protocol.js"
       ],
-      "startedAt": "2026-08-09T16:58:35.152Z"
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Protocol v1 leaf landed: session-authority-protocol.ts (241 physical lines, under the 250 target) plus its exact one-line LF bridge `export * from \"./session-authority-protocol.ts\";`.\n\nSurface: canonicalSessionProofBytes (domain `moe.session-proof.v1` + eleven u32be-length-framed scalars in the approved order principalId, projectId, sessionId, credentialId, generation, clientKeyId, transportId, requestId, requestDigest, issuedAt, nonce; strings UTF-8, safe integers unsigned decimal ASCII, hex fields as their lowercase-hex ASCII), sessionAuthorityRequestDigest (sorted-key canonical JSON, depth-bounded, safe-integer only), sessionReplayDigest (SHA-256 over the framed sessionId/generation/clientKeyId/nonce tuple under a `/replay` domain, so no raw nonce can be returned or persisted), sessionClientKeyId / isCanonicalSessionPublicKey (lowercase-hex 44-byte DER SPKI, createPublicKey + asymmetricKeyType===\"ed25519\" + export round-trip equality, then SHA-256 of the SPKI bytes), readSessionProof (exact 5-key snapshot, protocolVersion 1, algorithm Ed25519, 16-byte lowercase-hex nonce, 64-byte lowercase-hex signature, inclusive 60s age / 30s future skew), verifySessionProofSignature and verifySessionProofOverChallenge (node:crypto.verify(null,...) with every crypto/parser throw contained as false). All untrusted reads go through one readExactOwn snapshot, so hostile getters, proxies, and extra keys are contained rather than propagated. Deterministic, synchronous, IO-free.\n\nDISCLOSURE — I corrected one pinned literal in my own step-2 test file. The canonical-bytes test asserted BOTH a hex literal and `toHaveLength(232)`; the hand-transcribed literal decoded to 227 bytes (clientKeyId and requestDigest frames were each 4 bytes short of their 0x40 headers, and the nonce frame carried 35 bytes against its 0x20 header), so the two assertions were mutually unsatisfiable and no implementation could pass. I regenerated the literal from the approved framing rule, verified it is exactly 232 bytes and self-consistent with every u32be header, and replaced it. The assertion is unchanged in strength: still a byte-exact pin of the full challenge, still paired with the independent 232 length check.\n\nVerification run: `npx tsc --noEmit -p apps/daemon/tsconfig.json` reports zero errors in session-authority-protocol.ts / -contracts.ts; the only remaining session-authority diagnostic is `session-authority.test.ts(36,40): error TS2307: Cannot find module './session-authority.js'`, which is the intended RED for step 6.",
+      "startedAt": "2026-08-09T16:58:35.152Z",
+      "completedAt": "2026-08-09T17:10:37.985Z"
     },
     {
       "stepId": "step-6",
       "description": "Implement durable folding and the authority service — create session-authority-store.ts/.js and session-authority.ts/.js. In the store leaf, namespace deterministic principal/session/replay aggregates, page all aggregate events, strictly decode exact schema/event payloads, return UNKNOWN on any gap/unknown/malformed bytes, and use only public SqliteEventStore commitExpectedVersionDecision/read APIs. Store fixed-order redacted request/result bytes and public facts/digests; return the original persisted mutation result/receipt on replay and delegate version/store failures with their exact code under DURABLE_STORE. In the service factory, expose frozen createPrincipal/openSession/renewSession/rotateCredential/closeSession/authenticate/readSessionAuthority/readActiveSession methods. Build all core records through createPrincipal/createSession/createCredential/rotateCredential; open requires the durable principal and a fresh self-proof; renew/rotate/close require current core authentication. `authenticate` owns concrete verifyProof/checkReplay closures, commits the hashed replay marker at expected version 0, passes only durable records into authenticateSession, and returns a module-private nominally branded frozen success with sessionVersion/authorityDigest/replayDigest. Re-read current state for readActiveSession; CLOSED/expired/generation/key/profile/project mismatches never become active. Keep each production .ts <=250 where practical and strictly below 400.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/identity/session-authority-store.ts",
         "apps/daemon/src/identity/session-authority-store.js",
@@ -108,12 +115,23 @@
         "apps/daemon/src/identity/session-authority-store.js",
         "apps/daemon/src/identity/session-authority.ts",
         "apps/daemon/src/identity/session-authority.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Durable fold and authority service landed; the focused suite is GREEN at 16/16 and the whole daemon suite is 41 files / 767 tests passing.\n\nSTORE LEAF (session-authority-store.ts, 387 lines + exact LF bridge): namespaced `moe.session-authority.v1/{principal,session,replay}/<id>` aggregates; `readAllEvents` pages every aggregate page and refuses any aggregateSequence gap; `decodePayload` requires the exact domainSchemaVersion and a fatal-UTF-8 JSON object; the fold requires SessionAuthorityOpened first, refuses any event after CLOSED, and every record is minted by the core factories createPrincipal/createSession/createCredential so the fold cannot invent its own shapes. Any gap, unknown type, foreign schema, or malformed payload returns UNKNOWN, never a partial positive. `commitAuthorityDecision` is the single mutation seam: it pre-checks the decision for a foreign commandKind under the kind-less decision key, commits canonical fixed-key-order request/result bytes through commitExpectedVersionDecision, surfaces a NO_BUSINESS_EFFECT expected-version conflict under its own code, and maps IDEMPOTENCY/COMMAND_ID/DURABLE_ID conflicts to SESSION_AUTHORITY_COMMAND_CONFLICT and everything else to its exact DurableStoreErrorCode, all under DURABLE_STORE. `observeReplayMarker` burns only the hashed identity at expected version 0.\n\nSERVICE (session-authority.ts, 392 lines + exact LF bridge): frozen createPrincipal/openSession/renewSession/rotateCredential/closeSession/authenticate/readSessionAuthority/readActiveSession. Open requires the durable principal plus a fresh self-proof whose requestDigest binds the profile revision, key, scopes, and generation 1. Authenticate owns concrete verifyProof/checkReplay closures over durable material only and passes durable records into core authenticateSession; the presented input carries no verdict callbacks. Renew/rotate/close each require a fresh current-generation authentication, and each commit answers from a re-read fold rather than from what the module intended to write.\n\nDESIGN NOTE worth QA's attention: authenticate binds core's session record to the clientKeyId of the PRESENTED credential's own durable record, not to the current one. Without that, a superseded generation is rejected at core BINDING as an unbound key and can never reach the GENERATION layer the DoD requires. The key is durable material either way, and on the success path the presented credential is the current one, so the returned facts stay truthful.\n\nTWO TEST DEFECTS FIXED IN MY OWN STEP-2/3 SUITE, both in the harness rather than in an assertion:\n1. The renewal-cap loop advanced its clock 14 minutes per iteration while `renewRequest` always stamped issuedAt at the constant NOW, so every renewal presented a 14-minute-old proof and production correctly refused AUTHENTICATION_FAILED/PROOF. Added an issuedAt parameter and passed the loop's current clock. The freshness rail is untouched and still pinned by the inclusive/exclusive boundary test.\n2. (Recorded at step 5) the canonical-bytes hex literal was mis-transcribed at 227 bytes while the same test asserted 232; regenerated it from the approved framing.\n\nLine counts, all under the 400 hard cap: contracts 220, protocol 306, store 387, service 392. The 250 target is missed on three files because the approved plan fixes exactly four production leaves and nine owned paths; splitting further would exceed the plan's file list. To keep the service under the cap I moved the presented-authentication vocabulary (readPresentedAuthentication, presentedChallenge, readTransportScopes, PresentedAuthentication) into the protocol leaf, where the canonical wire vocabulary already lives.\n\nVerification run: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/identity/session-authority.test.ts` -> 16/16 passed; `pnpm --filter @moe/daemon test` -> 41 files / 767 tests passed; `npx tsc --noEmit -p apps/daemon/tsconfig.json` reports no session-authority diagnostics.",
+      "startedAt": "2026-08-09T17:15:16.362Z",
+      "completedAt": "2026-08-09T17:29:48.951Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review and mutation drill — inspect the exact nine-path diff for same-ID/different-bytes replay, concurrent same/different nonce behavior, read/rotate/close orderings, off-by-one TTL/skew/expiry/absolute lifetime, unsafe integers, noncanonical DER/hex/UTF-8/frame lengths, duplicate/unsorted/huge scopes, hostile getters/proxies/cycles, unreadable event pages, store recreation, partial positive folds, mutable nested results, and accidental secret/command/recipient/effect/mailbox authority. Enumerate every persisted payload/result/identifier and assert no private key, plaintext credential, signature, nonce, raw proof, or challenge bytes occur. Temporarily bypass real Ed25519 verification, replay-key existence, generation revocation, and transport matching one at a time; run the focused production test and require RED at the exact expected core code/layer, then restore verified bytes. Mutate the production canonical frame order and require the real signature test to fail. Reconfirm generated counts are >0, all four bridges are exact LF, all production files remain <400 (target <=250), consumers are recorded, and status/diff contains only the nine owned paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/identity/session-authority-contracts.ts",
         "apps/daemon/src/identity/session-authority-contracts.js",
@@ -124,12 +142,19 @@
         "apps/daemon/src/identity/session-authority.ts",
         "apps/daemon/src/identity/session-authority.js",
         "apps/daemon/src/identity/session-authority.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority-protocol.ts"
+      ],
+      "note": "Adversarial review and five mutation drills done. Every drill was applied to PRODUCTION, run, and reverted; `sha256sum -c` over all nine owned paths reports OK for all nine afterwards, and the focused suite is green again at 16/16.\n\nDRILL 1 - bypass real Ed25519 verification (verifyProof closure returns true): RED in 2 tests. The forged `signatureHex: \"00\".repeat(64)` case returned ok:true with facts and a burned replay receipt instead of AUTHENTICATION_FAILED/PROOF.\nDRILL 2 - bypass durable replay refusal (always answer FRESH): RED in 3 tests, and this is the strongest evidence for epic rail 6. The outcome stayed `ok:false` at the SAME layer REPLAY while only the code moved SESSION_REPLAYED -> AUTHENTICATION_FAILED, and the tests still went red. An \"asserted only that it refused\" suite would have stayed green.\nDRILL 3 - bypass generation revocation (rebuild the core credential at the current generation, revoked:false): RED in 2 tests; the superseded-generation request authenticated instead of SESSION_REPLAYED/GENERATION.\nDRILL 4 - bypass transport matching (append the presented transportId to the session scopes): RED in 1 test; the unlisted transport authenticated instead of CAPABILITY_DENIED/TRANSPORT.\nDRILL 5 - swap the first two entries of the production CHALLENGE_ORDER: RED in the byte-exact framing pin.\n\nHONEST LIMIT ON DRILL 5, disclosed rather than glossed: only the pinned-bytes test caught it, not the real-signature tests. That is structural, not a gap in coverage - epic rail 6 requires tests to sign through the PRODUCTION encoder, so signer and verifier reorder together and stay self-consistent. The byte-exact literal is therefore the only defence against frame-order drift, which is exactly why the mis-transcribed literal I found and corrected at step 5 mattered.\n\nSTATIC REVIEW of the nine-path diff: no `any` and no non-null assertions in the new production code; no RuntimeCommandKind, colon-derived capability, recipient, effect, mailbox, or lifecycle-dispatch surface (the only matches are the doc comments disclaiming them); all four bridges are exactly `export * from \"./<name>.ts\";` with LF and no BOM; every file is ASCII (`file` reports \"ASCII text\" - I caught and removed a stray NUL byte a tool had written into a template literal). Line counts: contracts 220, protocol 306, store 387, service 392, all below the 400 hard cap. Persisted surface enumerated by hand: event payloads, requestFacts, resultFacts, aggregate ids, command ids, and event ids carry only ids, SHA-256 digests, the public SPKI hex, timestamps, versions, and scope arrays - the redaction test proves no private key, injected plaintext credential, signature, nonce, or challenge bytes appear anywhere in the event or decision corpus. Generated counts are hand-written and nonzero (3, 4, 4, 4, 5 subcases plus a matrix pinned to SESSION_AUTH_LAYERS.length). Both consumers, task-04e4367443214a588ed6277b92969a33 and task-4afcb06422ed4adb89430b7ea9758d7f, are recorded in the contracts doc comment.\n\nKNOWN HAZARD, DISCLOSED, NOT REPAIRED: HEAD has moved from 88a42e0 to 08eb98c and foreign commit 501030b \"feat(control-room,daemon): narrow-mode shell, operator surfaces, session authority WIP\" swept three of my in-progress owned files (session-authority-contracts.ts/.js and session-authority.test.ts) into another task's whole-tree commit. Per the project rail I did not amend, reset, or create an empty commit; QA should review this task by base-ref diff over the nine owned paths rather than by looking for a commit bearing this task id. The step-1 repo-wide baseline is stale as a result, so step 8 will re-measure it at the current merge-base and HEAD.",
+      "startedAt": "2026-08-09T17:30:19.808Z",
+      "completedAt": "2026-08-09T17:32:59.121Z"
     },
     {
       "stepId": "step-8",
       "description": "Single final gate, no edits afterward — first rerun repo-wide `pnpm test` and the exact-command legs against the step-1 baseline, normalize/report every foreign failing line/path verbatim, and require the HEAD-minus-baseline delta intersected with these nine paths to be empty; the current foreign task-fcad40b6 core red cannot be called green or waived from the task's named command, so wait/report blocked if it persists. Recheck nonzero daemon test discovery, real-file cleanup on Windows/macOS/Linux, <400 line counts (target <=250), exact LF bridges, secret/authority scans, and explicit-path status/diff. Then run LAST in the foreground with no subsequent edits: `pnpm --filter @moe/core test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`; it must exit 0 for complete_task evidence. If committing manually, unstage every foreign entry and use only `git commit -- apps/daemon/src/identity/session-authority-contracts.ts apps/daemon/src/identity/session-authority-contracts.js apps/daemon/src/identity/session-authority-protocol.ts apps/daemon/src/identity/session-authority-protocol.js apps/daemon/src/identity/session-authority-store.ts apps/daemon/src/identity/session-authority-store.js apps/daemon/src/identity/session-authority.ts apps/daemon/src/identity/session-authority.js apps/daemon/src/identity/session-authority.test.ts`, then verify the commit contains only those paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/identity/session-authority-contracts.ts",
         "apps/daemon/src/identity/session-authority-contracts.js",
@@ -140,11 +165,25 @@
         "apps/daemon/src/identity/session-authority.ts",
         "apps/daemon/src/identity/session-authority.js",
         "apps/daemon/src/identity/session-authority.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js",
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Final gate run in the foreground, LAST, with no source edits afterward.\n\nEXACT NAMED COMMAND, exit 0:\n`pnpm --filter @moe/core test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`\n- @moe/core test: 20 files / 332 tests passed (the foreign task-fcad40b6 expansion red recorded in the step-1 baseline is gone; it landed as commit 884742f).\n- @moe/daemon typecheck: clean.\n- @moe/daemon test: 41 files / 767 tests passed, nonzero discovery confirmed.\n- pnpm typecheck: recursive over 16 workspace projects, all Done.\n\nPATH-ATTRIBUTED REPO-WIDE BASELINE. `pnpm test` at HEAD: 2 failed / 202 passed files, 2 failed / 3869 passed / 1 skipped tests. Both failures are foreign to this task's nine owned paths and neither is in the named command's legs:\n1. `packages/scheduler/src/package-boundary.test.ts > keeps scheduler registrars behind the package-root import boundary` - `Error: boundary scan failed for apps\\daemon\\src\\daemon-main.ts: Error: unterminated regular expression source token`. Pre-existing and documented: the scanner's tokenizer treats the `#!` shebang at daemon-main.ts:1 as regex-prefix punctuation. That shebang landed in 749eb46 (task-f01ef545), long before this task; I have never touched daemon-main.ts. I checked my own files for the same trap: my only regex literal is `const LOWERCASE_HEX = /^[0-9a-f]*$/u;`, properly terminated in a valid regex-prefix position, and none of my files carries a shebang.\n2. `packages/store/src/store-runtime-entrypoint.test.ts > loads the public TypeScript entrypoint in Node's strip-types runtime` - `Error: EPERM, Permission denied: ...\\Temp\\moe-runtime-entrypoint-oKquHn` in its rmSync teardown. A Windows temp-cleanup failure in packages/store, not an owned path. My own real-file suite avoids that hazard by closing every SqliteEventStore handle before rmSync in afterEach, and it cleans up green.\nThe HEAD-minus-baseline failing-path delta intersected with these nine owned paths is EMPTY.\n\nCOMMIT. Committed by explicit pathspec only, never `git add -A` and never a bare `git commit`: 48a1558 `feat(task-21713cf152c047c597da9765d8d95510): durable daemon session authority`. `git show --stat` lists exactly 7 owned paths (1091 insertions); session-authority-contracts.ts/.js contributed nothing because foreign whole-tree commit 501030b had already swept those two files unchanged. `git status --porcelain -- apps/daemon/src/identity/` is now empty, and a blob-by-blob sha256 comparison of `git show HEAD:<path>` against the working tree reports MATCH for all nine paths, so the committed bytes are exactly the gated bytes.\n\nFINAL CHECKS: contracts 220, protocol 306, store 387, service 392 physical lines, all below the 400 hard cap; all four bridges are exactly `export * from \"./<name>.ts\";` with LF; every file is ASCII; no debug, probe, scratch, or generated evidence file is in the commit.",
+      "startedAt": "2026-08-09T17:33:03.239Z",
+      "completedAt": "2026-08-09T17:34:57.435Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a87e980a",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -169,12 +208,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:03.226Z",
-  "updatedAt": "2026-08-09T17:03:44.348Z",
+  "updatedAt": "2026-08-09T17:36:20.593Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:54.104Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-21f667ae",
@@ -205,7 +244,11 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:58:07.197Z",
@@ -230,5 +273,23 @@
     "escalatedAt": "2026-08-09T15:58:44.208Z"
   },
   "planApprovedAt": "2026-08-09T15:58:09.238Z",
-  "workStartedAt": "2026-08-09T16:09:41.379Z"
+  "workStartedAt": "2026-08-09T16:09:41.379Z",
+  "reviewStartedAt": "2026-08-09T17:36:20.593Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  20 passed (20)\n      Tests  332 passed (332)\n\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  41 passed (41)\n      Tests  767 passed (767)\n\n$ pnpm --recursive typecheck\nScope: 16 of 17 workspace projects\npackages/store typecheck: Done\npackages/core typecheck: Done\npackages/coordination typecheck: Done\npackages/scheduler typecheck: Done\npackages/runner typecheck: Done\npackages/review typecheck: Done\napps/control-room typecheck: Done\napps/daemon typecheck: Done\nEXIT=0",
+    "reportedAt": "2026-08-09T17:36:20.593Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/identity/session-authority.test.ts",
+    "apps/daemon/src/identity/session-authority-contracts.ts",
+    "apps/daemon/src/identity/session-authority-contracts.js",
+    "apps/daemon/src/identity/session-authority-protocol.ts",
+    "apps/daemon/src/identity/session-authority-protocol.js",
+    "apps/daemon/src/identity/session-authority-store.ts",
+    "apps/daemon/src/identity/session-authority-store.js",
+    "apps/daemon/src/identity/session-authority.ts",
+    "apps/daemon/src/identity/session-authority.js"
+  ]
 }

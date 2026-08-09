@@ -1,0 +1,234 @@
+.cr-dossier {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--cr-surface) 96%, var(--cr-attention)),
+      var(--cr-surface));
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-lg);
+  box-shadow: var(--cr-shadow-low);
+  margin-block: 1rem;
+  overflow: clip;
+  position: relative;
+}
+.cr-dossier::before {
+  background: var(--cr-attention);
+  block-size: 3px;
+  content: "";
+  inset: 0 0 auto;
+  position: absolute;
+}
+.cr-dossier-header {
+  align-items: end;
+  border-block-end: 1px solid var(--cr-line);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.85rem 1rem 0.75rem;
+}
+.cr-dossier-header span,
+.cr-dossier-sources header span,
+.cr-dossier-decomposition > header span,
+.cr-dossier-candidate > header span,
+.cr-dossier-candidate nav > span {
+  color: var(--cr-attention-text);
+  font-family: var(--cr-font-utility);
+  font-size: 0.65rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.cr-dossier-header h2 {
+  font-size: 1.05rem;
+  margin: 0.25rem 0 0;
+}
+
+.cr-dossier-header > code {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+}
+
+.cr-dossier-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(14rem, 0.78fr);
+}
+
+.cr-dossier-sources,
+.cr-dossier-decomposition {
+  min-inline-size: 0;
+  padding: 0.8rem 1rem 0.9rem;
+}
+
+.cr-dossier-sources {
+  background: color-mix(in srgb, var(--cr-surface-muted) 60%, transparent);
+  border-inline-start: 1px solid var(--cr-line);
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.cr-dossier-decomposition {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.cr-dossier-sources header,
+.cr-dossier-decomposition > header {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: space-between;
+  margin-block-end: 0.7rem;
+}
+
+.cr-dossier-sources header,
+.cr-dossier-decomposition > header > div {
+  align-items: start;
+  display: flex;
+  flex-direction: column;
+}
+
+.cr-dossier-sources header strong,
+.cr-dossier-decomposition > header strong {
+  font-size: 0.82rem;
+}
+
+.cr-dossier-source-list {
+  display: grid;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.15rem;
+  position: relative;
+}
+
+.cr-dossier-source-list::before {
+  background: color-mix(in srgb, var(--cr-attention) 58%, var(--cr-line));
+  content: "";
+  inline-size: 1px;
+  inset: 0 auto 0 0.28rem;
+  position: absolute;
+}
+
+.cr-dossier-source-list li {
+  display: grid;
+  gap: 0.18rem;
+  position: relative;
+  scroll-margin-block-start: 7rem;
+}
+
+.cr-dossier-source-list li::before {
+  background: var(--cr-surface);
+  block-size: 0.5rem;
+  border: 2px solid var(--cr-attention);
+  border-radius: 50%;
+  content: "";
+  inline-size: 0.5rem;
+  inset: 0.2rem auto auto -1.12rem;
+  position: absolute;
+}
+
+.cr-dossier-source-list summary > span {
+  font-size: 0.75rem;
+  font-weight: 720;
+}
+
+.cr-dossier-source-list code {
+  color: var(--cr-link);
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+
+.cr-dossier-source-list p {
+  color: var(--cr-ink-soft);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  margin: 0.18rem 0 0;
+}
+
+.cr-dossier-quality {
+  align-items: center;
+  background: color-mix(in srgb, var(--cr-surface-muted) 72%, transparent);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-sm);
+  display: grid;
+  font-size: 0.63rem;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  margin-block-end: 0.65rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.cr-dossier-quality span:first-child {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+}
+
+.cr-dossier-boundary {
+  color: var(--cr-attention-text);
+  font-size: 0.68rem;
+  margin: 0 0 0.8rem;
+}
+
+
+.cr-dossier-candidates {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cr-dossier-candidate {
+  background: color-mix(in srgb, var(--cr-surface) 78%, transparent);
+  border: 1px dashed var(--cr-line-strong);
+  border-inline-start: 3px solid var(--cr-attention);
+  border-radius: var(--cr-radius-sm);
+  display: grid;
+  gap: 0.48rem;
+  padding: 0.65rem;
+}
+
+.cr-dossier-candidate > header {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  justify-content: space-between;
+}
+
+.cr-dossier-candidate h3 {
+  font-size: 0.82rem;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.cr-dossier-candidate dl {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.cr-dossier-candidate dl > div {
+  align-items: start;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.66rem;
+  gap: 0.12rem;
+}
+
+.cr-dossier-candidate dt {
+  color: var(--cr-ink-soft);
+}
+
+.cr-dossier-candidate dd {
+  font-family: var(--cr-font-utility);
+  margin: 0;
+}
+
+.cr-dossier-candidate nav {
+  border-block-start: 1px solid var(--cr-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  padding-block-start: 0.42rem;
+}
+
+.cr-dossier-candidate nav > span {
+  flex-basis: 100%;
+}

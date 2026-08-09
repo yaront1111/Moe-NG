@@ -80,8 +80,11 @@ describe("J1 is operable from the board and inbox alone", () => {
 
     // 2. Board: five columns, the node card carrying name + phase + chip.
     for (const column of BOARD_J1_COLUMNS) {
-      expect(screen.getByTestId(`cr.board.column.${column}`)).toBeTruthy();
+      expect(within(screen.getByTestId("cr.board.lanes"))
+        .getByTestId(`cr.board.column.${column}`)).toBeTruthy();
     }
+    expect(within(screen.getByTestId("cr.board.summary"))
+      .getAllByTestId(/^cr\.factslot\./u)).toHaveLength(factsFor("board").length);
     const card = screen.getByTestId("cr.board.card.node-j1");
     expect(card.textContent ?? "").toContain("Fix the stale-port crash");
     expect(within(card).getByTestId("cr.board.card.phase").textContent).toBe("WORK_REVIEW");

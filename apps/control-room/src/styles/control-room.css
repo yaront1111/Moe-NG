@@ -5,5 +5,7 @@
 @import "./inspector.css";
 @import "./surfaces.css";
 @import "./workspace.css";
+@import "./document-dossier.css";
+@import "./document-dossier-disclosure.css";
 @import "./preview-board.css";
 @import "./responsive.css";

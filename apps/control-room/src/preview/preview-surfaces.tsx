@@ -5,6 +5,7 @@ import { BoardJ1 } from "../board/board-j1.js";
 import { DoctorJ1 } from "../doctor/doctor-j1.js";
 import { EvidenceJ1 } from "../evidence/evidence-j1.js";
 import { FactWithProvenance } from "../shell/provenance-panel.js";
+import { DocumentDossier } from "./document-dossier.js";
 import {
   PREVIEW_BOARD_CARDS, PREVIEW_RECEIPT, previewFacts, previewRunFacts,
 } from "./preview-data.js";
@@ -27,9 +28,9 @@ export function GoalWorkspace(): JSX.Element {
   return (
     <div className="cr-workspace" data-testid="cr.workspace.goal">
       <SurfaceLead
-        eyebrow="Current operation / J1"
-        summary="One goal, one review boundary, and every claim linked back to its source."
-        title="The work that needs a decision—nothing else."
+        eyebrow="Project dossier / J1"
+        summary="Project sources become traceable work candidates; nothing reaches the board without admission."
+        title="Moe reads the project before it plans the work."
       />
       <section aria-label="Goal brief" className="cr-workspace-brief"
         data-testid="cr.surface.goals">
@@ -37,12 +38,13 @@ export function GoalWorkspace(): JSX.Element {
           <FactWithProvenance fact={fact} key={fact.factId} />
         ))}
       </section>
+      <DocumentDossier />
       <BoardJ1 cards={PREVIEW_BOARD_CARDS} facts={previewFacts("board")} />
       <div className="cr-workspace-disclosures">
         <details data-testid="cr.workspace.goalcomposer">
           <summary>
-            <span>Start another goal</span>
-            <small>One sentence is enough to begin</small>
+            <span>Describe work without docs</span>
+            <small>The one-sentence path remains available when needed</small>
           </summary>
           <div className="cr-preview-unavailable" role="status">
             <span>Preview boundary</span>

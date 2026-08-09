@@ -119,9 +119,102 @@ describe("production control-room composition", () => {
     const composer = screen.getByTestId("cr.workspace.goalcomposer");
     expect(composer.tagName).toBe("DETAILS");
     expect((composer as HTMLDetailsElement).open).toBe(false);
-    expect(within(composer).getByText("Start another goal")).toBeTruthy();
+    expect(within(composer).getByText("Describe work without docs")).toBeTruthy();
     expect(within(composer).getByText(/attach the daemon/iu)).toBeTruthy();
     expect(within(composer).queryByTestId("cr.goals.create")).toBeNull();
+  });
+
+  it("treats project documents as the default source of proposed work", () => {
+    render(<ControlRoomScaffold />);
+    const dossier = screen.getByTestId("cr.preview.dossier");
+    expect(dossier.getAttribute("data-authority")).toBe("none");
+    expect(within(dossier).getByText("Stale-port recovery dossier")).toBeTruthy();
+    expect(within(dossier).getByText("3 sample work candidates · not submitted"))
+      .toBeTruthy();
+    expect(within(dossier).getByText(
+      "No daemon attached; no task records were created.",
+    )).toBeTruthy();
+
+    const sourceLinks = within(dossier).getAllByTestId(/^cr\.preview\.decomposition\.source\./u);
+    expect(sourceLinks.map((link) => link.textContent)).toEqual([
+      "Incident note", "Startup contract", "Recovery acceptance",
+      "Startup contract", "Incident note", "Recovery acceptance",
+    ]);
+    for (const link of sourceLinks) {
+      const href = link.getAttribute("href") ?? "";
+      expect(href).toMatch(/^#cr-preview-source-[a-z-]+$/u);
+      expect(document.querySelector(href)).not.toBeNull();
+    }
+    for (const source of within(dossier)
+      .getAllByTestId(/^cr\.preview\.dossier\.source\./u)) {
+      const disclosure = source.querySelector("details") as HTMLDetailsElement | null;
+      expect(disclosure).not.toBeNull();
+      expect(disclosure?.open).toBe(false);
+    }
+
+    const candidates = within(dossier)
+      .getAllByTestId(/^cr\.preview\.decomposition\.task\./u);
+    expect(candidates).toHaveLength(3);
+    expect(candidates.map((card) => within(card).getByRole("heading").textContent)).toEqual([
+      "Write the recovery contract",
+      "Guard startup ownership",
+      "Prove stale-record recovery",
+    ]);
+    for (const card of candidates) {
+      expect(card.textContent).toContain("Candidate · not submitted");
+      expect(card.textContent).toContain("Unassigned");
+      expect(card.textContent).toContain("Not started");
+      expect(within(card).getByTestId("cr.chip.agent_reported")).toBeTruthy();
+    }
+    expect(within(dossier).getByTestId("cr.preview.decomposition.quality")
+      .querySelector("[data-testid='cr.chip.unknown']")).not.toBeNull();
+    expect(dossier.querySelectorAll("[data-testid^='cr.action.']")).toHaveLength(0);
+  });
+
+  it("opens contextual evidence for document-derived truth chips", async () => {
+    const user = userEvent.setup();
+    render(<ControlRoomScaffold />);
+    const dossier = screen.getByTestId("cr.preview.dossier");
+    const candidate = within(dossier)
+      .getByTestId("cr.preview.decomposition.task.recovery-contract");
+    const chip = within(candidate).getByRole("button", {
+      name: /provenance for write the recovery contract/iu,
+    });
+
+    await user.click(chip);
+
+    const provenance = within(dossier).getByTestId("cr.preview.dossier.provenance");
+    expect(provenance.textContent).toContain("Write the recovery contract");
+    expect(provenance.textContent).toContain("Asserted by an agent; not independently verified.");
+    expect(provenance.textContent).toContain("Incident note · Startup contract");
+    expect(provenance.textContent)
+      .toContain("Preview fixture only; no daemon event, actor, session, or receipt exists.");
+  });
+
+  it("keeps decomposition first in visual, DOM, and focus order and opens linked sources", async () => {
+    const user = userEvent.setup();
+    render(<ControlRoomScaffold />);
+    const dossier = screen.getByTestId("cr.preview.dossier");
+    const decomposition = within(dossier).getByTestId("cr.preview.decomposition");
+    const source = within(dossier).getByTestId("cr.preview.dossier.source.incident-note");
+    expect(decomposition.compareDocumentPosition(source) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    await user.click(within(decomposition).getAllByRole("link", { name: "Incident note" })[0]!);
+
+    expect((source.querySelector("details") as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it("keeps document candidates outside the daemon-confirmed board", () => {
+    render(<ControlRoomScaffold />);
+    const dossier = screen.getByTestId("cr.preview.dossier");
+    const board = screen.getByTestId("cr.surface.board");
+    expect(dossier.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(board).getAllByTestId(/^cr\.board\.card\./u)
+      .filter((node) => node.tagName === "ARTICLE").map((node) => node.getAttribute("data-testid")))
+      .toEqual(["cr.board.card.node-j1"]);
+    expect(board.querySelector("[data-testid^='cr.preview.decomposition.task.']")).toBeNull();
   });
 
   it("keeps preview affordances visible but disabled without live authority", async () => {

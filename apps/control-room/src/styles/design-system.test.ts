@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 const DIRECTORY = resolve(process.cwd(), "src/styles");
 const STYLE_FILES = [
   "tokens.css", "base.css", "shell.css", "chrome.css", "inspector.css", "surfaces.css",
-  "workspace.css", "preview-board.css", "responsive.css",
+  "workspace.css", "document-dossier.css", "document-dossier-disclosure.css",
+  "preview-board.css", "responsive.css",
 ] as const;
 
 function read(name: string): string {
@@ -89,9 +90,28 @@ describe("Quiet Orchestration Ledger design system", () => {
   });
 
   it("fits all five board lanes at comfortable width and widens them only in narrow mode", () => {
-    expect(read("preview-board.css")).toContain("repeat(5, minmax(7.25rem, 1fr))");
+    const board = read("preview-board.css");
+    expect(board).toContain(".cr-board-summary");
+    expect(board).toContain(".cr-board-lanes");
+    expect(board).toContain("repeat(5, minmax(7.25rem, 1fr))");
     const responsive = read("responsive.css");
     expect(responsive).toContain("@media (max-width: 959px)");
+    expect(responsive).toContain(".cr-board-summary");
     expect(responsive).toContain("repeat(5, minmax(13rem, 72vw))");
+  });
+
+  it("gives document lineage a dedicated responsive visual layer", () => {
+    expect(read("control-room.css")).toContain('@import "./document-dossier.css";');
+    const dossier = `${read("document-dossier.css")}\n${read("document-dossier-disclosure.css")}`;
+    expect(dossier).toContain(".cr-dossier-source-list::before");
+    expect(dossier).toContain(".cr-dossier-candidates");
+    expect(dossier).toContain(".cr-dossier-source-list details");
+    expect(dossier).toContain("min-block-size: 24px;");
+    expect(dossier).toContain("min-block-size: 44px;");
+    expect(dossier).toContain(".cr-dossier-source-list summary::after");
+    expect(dossier).toMatch(/\.cr-dossier-decomposition\s*\{[^}]*grid-column:\s*1;/su);
+    expect(dossier).toMatch(/\.cr-dossier-sources\s*\{[^}]*grid-column:\s*2;/su);
+    expect(dossier).toContain("@media (max-width: 959px)");
+    expect(dossier).not.toMatch(/display\s*:\s*none|text-overflow\s*:\s*ellipsis/u);
   });
 });

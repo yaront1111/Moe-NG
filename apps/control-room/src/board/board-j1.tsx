@@ -50,20 +50,24 @@ function Card({ card }: { readonly card: BoardJ1Card }): JSX.Element {
 export function BoardJ1({ cards, facts }: BoardJ1Props): JSX.Element {
   return (
     <section aria-label="Board" data-testid="cr.surface.board">
-      {facts.map((fact) => (
-        <FactWithProvenance fact={fact} key={fact.factId} />
-      ))}
-      {BOARD_J1_COLUMNS.map((column) => (
-        <div aria-label={COLUMN_TITLES[column]} data-testid={`cr.board.column.${column}`}
-          key={column}>
-          <h2>{COLUMN_TITLES[column]}</h2>
-          {cards
-            .filter((card) => card.column === column)
-            .map((card) => (
-              <Card card={card} key={card.nodeId} />
-            ))}
-        </div>
-      ))}
+      <div className="cr-board-summary" data-testid="cr.board.summary">
+        {facts.map((fact) => (
+          <FactWithProvenance fact={fact} key={fact.factId} />
+        ))}
+      </div>
+      <div className="cr-board-lanes" data-testid="cr.board.lanes">
+        {BOARD_J1_COLUMNS.map((column) => (
+          <div aria-label={COLUMN_TITLES[column]} data-testid={`cr.board.column.${column}`}
+            key={column}>
+            <h2>{COLUMN_TITLES[column]}</h2>
+            {cards
+              .filter((card) => card.column === column)
+              .map((card) => (
+                <Card card={card} key={card.nodeId} />
+              ))}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

@@ -19,7 +19,7 @@
     "Reuse child 1's crate, call-table trait, RAII handle and Job operations; do not recreate or fork them."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": "architect-5aba94da",
   "branch": null,
   "prLink": null,
@@ -32,14 +32,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:47:35.019Z",
-  "updatedAt": "2026-08-09T17:02:22.020Z",
+  "updatedAt": "2026-08-09T17:10:56.364Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:51:43.754Z"
   },
-  "blockedReason": null,
+  "blockedReason": "SPLIT, NOT STUCK. This is now a SPIDR parent shell. Blocking only to keep it out of the PLANNING claim pool; it must not be planned or implemented directly. Its DoD items 1-6 are redistributed across two children and are satisfied THERE.\n\nCHILDREN (both created, parentTaskId set to this task):\n- task-885a46e9fb274a94b12faa826ba580dc -- child 2a, PLANNING, order 74.1. Suspended process, atomic JOB_LIST membership, assignment proof, resume. 8 files.\n- task-af99cf146c9b4f4d99b49d8c00caed63 -- child 2b, BLOCKED behind 2a, order 74.2. Lifecycle, reverse-order unwind, real-Windows acceptance. 6 files.\n\nWHY SPLIT, on plan shape and never on lines (epic rail 5). The single plan re-measured to 10 distinct affectedFiles and 12 steps -- BOTH exactly at the daemon hard ceiling, zero slack -- because of three facts measured on disk at HEAD 025dc49 that this description could not have known:\n\n1. `grep -c '' src/win32.rs` => 252. Child 1's win32.rs ALREADY EXCEEDS this task's own DoD item 6 (<=250 lines). Its lib.rs:31 claims \"sits at 246 of its 250-line target\" -- no longer true. So win32.rs cannot absorb the process-side arms; it must be split FIRST, and that split is unbudgeted work this description never names.\n\n2. `tests/job_sweep.rs:169` asserts `assert_eq!(produced, all)` against `NativeOp::ALL`, a closed `[NativeOp; 6]`. Adding ANY process variant breaks that passing test. Child 1's test file is therefore a file this work must edit -- a 10th file this description does not name.\n\n3. All 19 windows-sys symbols verified present in the pinned =0.61.2; `Win32_System_Threading` must be added to Cargo.toml. AssignProcessToJobObject and IsProcessInJob are already reachable. Baseline gate green: 7 passed, 0 failed.\n\nThe human confirmed this split in the REPL before either child was created.\n\nFOR WHOEVER PICKS THIS UP: do not re-plan this shell. Claim 2a. Once both children are DONE, close this shell via a REVIEW transit hop -- direct BLOCKED -> DONE is not legal.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T17:10:56.364Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Nothing planned, deliberately. Confirmed its dependency task-a24cb925a9a94002b805e9ccf1715978 is only AWAITING_APPROVAL, so the crate, call table, NativeOp enum, handle type and Job operations this task must reuse do not exist on disk yet.",
