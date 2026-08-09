@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
-import { ControlRoomScaffold } from "./kernel.js";
+import { AppComposition } from "./app-composition.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
 
@@ -34,7 +34,7 @@ export function mountControlRoom(container: Element, clock: Clock = BROWSER_CLOC
   root.render(
     <StrictMode>
       <ClockProvider clock={clock}>
-        <ControlRoomScaffold />
+        <AppComposition />
       </ClockProvider>
     </StrictMode>,
   );
