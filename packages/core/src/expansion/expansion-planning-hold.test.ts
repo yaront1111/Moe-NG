@@ -272,9 +272,11 @@ describe("expansion planning hold creation", () => {
       { ...base, effectsTerminal: false },
       { ...base, resourcesTerminal: false },
       { ...base, disposition: { ...base.disposition, resumable: false } },
+      { ...base, disposition: { ...base.disposition, strongestReason: "GOAL_CANCEL" } },
       { ...base, disposition: { ...base.disposition, terminalTarget: "REVOKED" } },
+      { ...base, handoff: { ...base.handoff, ref: "handoff:other" } },
     ];
-    expect(unsafe).toHaveLength(10);
+    expect(unsafe).toHaveLength(12);
     expect(unsafe.length).toBeGreaterThan(0);
     for (const release of unsafe) {
       expectRefusal(
