@@ -141,9 +141,15 @@ describe("graph revision refusal and terminal authority", () => {
   });
 
   it("never moves an active revision backward and never mutates its content", () => {
+    let refused = 0;
     for (const kind of GRAPH_REVISION_COMMAND_KINDS) {
+      if (kind === "graph.supersede") continue;
       expectIllegal(reduceGraphRevision(state("ACTIVE"), commandFor(kind)), kind, "ACTIVE");
+      refused += 1;
     }
+    expect(refused).toBe(GRAPH_REVISION_COMMAND_KINDS.length - 1);
+    const forward = accepted(reduceGraphRevision(state("ACTIVE"), commandFor("graph.supersede")));
+    expect(forward).toMatchObject({ lifecycle: "SUPERSEDED", version: 8 });
     const mutation = { ...commandFor("graph_revision.submit"), graphContentHash: STALE_HASH,
       planHash: STALE_HASH };
     const next = accepted(reduceGraphRevision(state("DRAFT"), mutation as GraphRevisionCommand));
@@ -154,15 +160,6 @@ describe("graph revision refusal and terminal authority", () => {
     for (const kind of GRAPH_REVISION_COMMAND_KINDS) {
       expectError(reduceGraphRevision(state("SUPERSEDED"), commandFor(kind)),
         "SUPERSEDED_AUTHORITY");
-    }
-  });
-
-  it("refuses the Phase 5 supersession command from every lifecycle", () => {
-    for (const lifecycle of RUNTIME_LIFECYCLES.GRAPH_REVISION) {
-      const result = reduceGraphRevision(state(lifecycle), commandFor("graph.supersede"));
-      expect(result.ok).toBe(false);
-      if (result.ok) continue;
-      expect(["ILLEGAL_TRANSITION", "SUPERSEDED_AUTHORITY"]).toContain(result.error.code);
     }
   });
 });

@@ -50,29 +50,42 @@
     {
       "stepId": "step-4",
       "description": "Regenerate the lockfile, guarding against the one hazard that makes this step unsafe in a shared working directory. pnpm-lock.yaml is a WHOLE-WORKSPACE artifact: any foreign manifest edit that happens to be dirty when install runs gets baked into the lock and lands in this task's commit. So first run `git status --porcelain -- '*package.json' 'pnpm-lock.yaml' pnpm-workspace.yaml` and confirm the ONLY dirty manifest is packages/coordination/package.json. If any other package.json is dirty, stop and wait for its owner rather than regenerating over it -- packages/store/package.json was dirty from a foreign task earlier today, so this is a live hazard and not a hypothetical. Then run `pnpm install`, and inspect the resulting `git diff -- pnpm-lock.yaml`: it should show the removal of the coordination -> @moe/core edge and nothing else. A lockfile diff touching unrelated packages means a foreign manifest was picked up; discard and retry when the tree is clean.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "pnpm-lock.yaml"
       ],
-      "startedAt": "2026-08-09T15:17:39.001Z"
+      "modifiedFiles": [
+        "pnpm-lock.yaml"
+      ],
+      "note": "Lockfile regeneration verified consistent; the safety precondition that blocked this step at 15:19Z is now clear. `git status --porcelain -- '*package.json' pnpm-lock.yaml pnpm-workspace.yaml` returns ZERO entries (the earlier foreign dirty package.json/packages/store/package.json collision is gone — governor committed the contended manifests at 71af97c). `pnpm install` -> \"Scope: all 17 workspace projects / Already up to date\", exit 0, and re-running the same status command after install still returns ZERO, so the lock needed no change and no foreign manifest was baked in. Committed bytes verified at HEAD rather than assumed: `git show HEAD:packages/coordination/package.json` declares only @moe/contracts and @moe/store (@moe/core absent); the coordination importer block in pnpm-lock.yaml lists only those two links. The two surviving `@moe/core` hits in the lock (lines 81, 140) belong to apps/daemon and packages/review, both genuine. No unrelated lock importer changed.",
+      "startedAt": "2026-08-09T15:17:39.001Z",
+      "completedAt": "2026-08-09T18:49:17.473Z"
     },
     {
       "stepId": "step-5",
       "description": "Verify, then commit by pathspec. Run the exact verification command `pnpm install && pnpm typecheck && pnpm test`. The typecheck leg is the one that matters here: it is what would catch a removal that was actually load-bearing, because if anything in packages/coordination did import @moe/core the removal would surface as an unresolved module rather than as a silent runtime failure later. Both other legs are repo-wide in a shared working directory, so if either is red apply the path-attributed baseline rail -- record failures at the merge-base, then at HEAD, and complete only if the delta intersected with this task's owned paths (packages/coordination/package.json, pnpm-workspace.yaml, pnpm-lock.yaml) is EMPTY, disclosing any foreign red verbatim with its exact failing file paths rather than hiding it or claiming a green it did not get. Then confirm with `git status --porcelain` that no foreign path is staged and commit by explicit pathspec only: `git commit -- packages/coordination/package.json pnpm-workspace.yaml pnpm-lock.yaml`. Verify with `git show --stat` that exactly those three files landed. In the completion note, state explicitly that the scheduler and control-room clauses of the stored DoD item 1 were struck by the governor at 14:56Z and were deliberately NOT implemented, and quote the two measurements that falsified them, so QA reads the corrected scope rather than the stale DoD text.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/coordination/package.json",
         "pnpm-workspace.yaml",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/coordination/package.json",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml"
+      ],
+      "note": "SCOPE CORRECTION, restated for QA as step 5 requires. The stored definitionOfDone item 1 is STALE. The governor struck its scheduler and control-room clauses at 14:56Z (the field is not editable via any MCP tool, so reopenReason carries the correction). Those clauses were DELIBERATELY NOT IMPLEMENTED. A diff adding any dependency is a rejection, not compliance. The two falsifying measurements, both re-verified by me at HEAD:\n(a) SCHEDULER: `git grep -nE 'from \"@moe/[a-z-]+\"' -- packages/scheduler/src` returns exactly one hit, packages/scheduler/src/package-boundary.test.ts, and it is an entry in the `allowedContentCases` fixture table labelled \"an unrelated import\" holding the string 'import { decode } from \"@moe/contracts\";'. Zero real cross-package @moe imports. packages/scheduler/package.json today declares only \"@moe/context\" (added by sibling task-cda6bddf, not by me) — @moe/contracts is absent, as required.\n(b) CONTROL-ROOM: apps/control-room/package.json dependencies are @moe/contracts, @moe/control-room-client, @moe/control-room-model, react, react-dom; devDependencies are testing-library x3, @types/react, @types/react-dom, @vitejs/plugin-react, jsdom, typescript, vite, vitest. Neither @moe/store nor @moe/testkit was added.\n\nWHAT LANDED. The three surviving changes are all on disk at HEAD, verified by reading committed bytes rather than assumed:\n1. packages/coordination/package.json — @moe/core removed. Exact hunk, in commit 501030b: `-    \"@moe/core\": \"workspace:*\",` with @moe/contracts and @moe/store retained. `git show HEAD:packages/coordination/package.json` confirms.\n2. pnpm-workspace.yaml — one comment added above the retained glob, in commit 71af97c: `+  # Reserved, not yet populated: external integrations; task-9fd52b41 owns adapters/jetbrains/**.` The `- adapters/*` glob is retained and the four settings below are unchanged.\n3. pnpm-lock.yaml — the coordination importer block lists only '@moe/contracts' -> link:../contracts and '@moe/store' -> link:../store. The two surviving @moe/core lock entries (lines 81, 140) belong to apps/daemon and packages/review, both genuine.\n\nNO COMMIT BEARS THIS TASK'S ID, and per the epic's committed-by-a-foreign-hook rail that is not a defect and not a rejection reason. Foreign whole-tree sweeps carried this task's bytes: 501030b took the coordination manifest, 71af97c took pnpm-workspace.yaml (its message names task-4d226307 explicitly). Step 5's `git commit -- <three paths>` therefore had nothing to commit; I did NOT create an empty commit, amend, or reset. QA should review the two hunks quoted above plus `git show HEAD:packages/coordination/package.json` and `git show HEAD:pnpm-workspace.yaml`.\n\nADVERSARIAL CHECK on the one risky change: `git grep -n \"@moe/core\" -- packages/coordination` returns ZERO (exit 1) — no bare-string, dynamic `import()`, `require`, or tsconfig path reference either, not just no `from` imports. The removal cannot be load-bearing.\n\nVERIFICATION, with foreign red disclosed verbatim rather than hidden. Owned legs GREEN: `pnpm install` -> \"Scope: all 17 workspace projects / Already up to date\", exit 0 (lock already consistent, no drift after install); `pnpm --filter @moe/coordination typecheck` exit 0; `pnpm --filter @moe/coordination test` -> Test Files 2 passed (2), Tests 40 passed (40), exit 0.\n\nRepo-wide legs RED on foreign paths, path-attributed per the baseline rail. Failing-path set at HEAD:\n- `apps/daemon/src/identity/session-authenticator.test.ts(8,3): error TS6133: 'OPENER' is declared but its value is never read.` — pnpm typecheck exit 1. Introduced by commit 5ef522c \"feat(daemon): durable work claiming — agents pick their own work\", which landed DURING this session (HEAD moved from bb29326 to 5ef522c mid-run). `git log -1 -- apps/daemon/src/identity/session-authenticator.test.ts` -> 5ef522c. Not an owned path; my diff contains no daemon byte. Note `packages/coordination typecheck: Done` in the same run — the leg that would catch a load-bearing removal passed.\n- `tests/property/schedule/schedule-coverage.test.ts` — 2 failed, Test Files 1 failed | 206 passed (207), Tests 2 failed | 3937 passed | 1 skipped (3940). \"keeps the authored tables in lockstep with every landed reducer\": AssertionError, received is missing \"ACTIVE|graph.supersede\". \"classifies every empty landed table row as genesis or never-legal\": received ['graph.supersede','graph_revision.create'] vs expected ['graph_revision.create']. Inputs are packages/testkit/src/schedule/schedule-universe-tables.ts (authored) against packages/core/src/planning/graph-revision-reducer.ts (landed) — a live graph.supersede rollout, with three foreign files still dirty at packages/core/src/planning/graph-revision-{reducer.test.ts,supersession.test.ts,test-fixtures.ts}. Not owned paths.\n\nDELTA INTERSECTED WITH OWNED PATHS IS EMPTY. Owned paths are packages/coordination/package.json, pnpm-workspace.yaml, pnpm-lock.yaml; the failing-path set is {apps/daemon/src/identity/session-authe",
+      "startedAt": "2026-08-09T18:49:21.064Z",
+      "completedAt": "2026-08-09T18:52:10.897Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "RE-UNBLOCKED by governor-f70d1157 at 14:56Z with a SECOND DoD correction. architect-21f667ae re-measured as my 14:48 reason instructed and found claim (1) is also falsified. They were right, and the instruction to re-measure is what caught it.\n\nCLAIM 1 FALSIFIED — DO NOT ADD @moe/contracts TO packages/scheduler. Verified by me against the committed tree at 14:55Z: `git grep -n \"@moe/contracts\" HEAD -- packages/scheduler/src` returns exactly two hits, and NEITHER is an import:\n- budget-measurement.ts:15 is a PROSE COMMENT that literally says \"No @moe/core or @moe/contracts import\"\n- package-boundary.test.ts:258 is a TEST FIXTURE STRING labelled \"an unrelated import\", used to prove a ban bites\n`git grep -nE 'from \"@moe/contracts\"' HEAD -- packages/scheduler/src` returns only that fixture line. There are ZERO real import specifiers.\n\nTHIS IS THE SAME DEFECT AS CLAIM 2, WHICH I CORRECTED AT 14:48. Both were produced by a grep that counted ban-test artifacts and comments as imports. Three of the description's four claims were wrong in exactly one way, and the task's own objective — \"make workspace manifests match real imports\" — is what they violate: adding either dependency would DECLARE A PACKAGE NOTHING IMPORTS, creating the defect this task exists to remove.\n\nCLAIM 3 HOLDS, verified: packages/coordination/package.json declares @moe/core in dependencies, and `git grep -nE 'from \"@moe/core\"' HEAD -- packages/coordination/src` returns ZERO. The declaration is genuinely unused. Remove it.\n\nCLAIM 4 — governor decision recorded at 14:48 and unchanged: KEEP the adapters/* glob and add the reserved comment. The design reserves it for external integration boundaries, task-9fd52b41 owns adapters/jetbrains/**, and several blocked tasks await that surface. A glob for a path the plan intends to populate is correct, not dead config.\n\nTHE CORRECTED SCOPE, which is now genuinely small: (a) remove @moe/core from packages/coordination/package.json, (b) regenerate the lockfile, (c) add the one-line reserved comment to the adapters/* entry in pnpm-workspace.yaml. Nothing else. Do NOT add any dependency to any package.\n\nDoD ITEM 1 THEREFORE READS: coordination no longer declares @moe/core; lockfile regenerated. The scheduler and control-room clauses are struck.\n\nFOR QA: a diff that ADDS @moe/contracts to scheduler, or @moe/store/@moe/testkit to control-room, is a REJECTION — not compliance. Both were measured false against the committed tree by two independent agents.\n\nI cannot edit definitionOfDone; no MCP tool exposes it and this task has no plan steps to amend. This reason field is the durable record and QA inherits it. That limitation has now bitten twice on one task — worth the human knowing.",
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 18:47Z. The blocking collision is gone and steps 2-3 are already applied AND committed.\n\nTHE BLOCK, and it was correct when written: \"Blocked at step 4 by the plan's explicit whole-workspace lockfile safety precondition and live file collision. git status --porcelain -- '*package.json' pnpm-lock.yaml pnpm-workspace.yaml shows foreign dirty package.json (task-b5e9bd64 test:fault/test:security scripts) and packages/store/package.json...\"\n\nRESOLVED. I committed the contended manifests myself at 71af97c after the fleet went down, keeping the three tasks' hunks together because they shared package.json and pnpm-lock.yaml and could not be separated without rewriting hunks. Measured at 18:46Z: `git status --porcelain -- '*package.json' pnpm-lock.yaml pnpm-workspace.yaml` returns ZERO. No collision remains.\n\nTHIS TASK'S OWN WORK IS ALREADY LANDED, verified rather than assumed:\n- step 2: packages/coordination/package.json no longer declares @moe/core — confirmed, the key is absent.\n- step 3: pnpm-workspace.yaml carries the reserved comment on adapters/* — confirmed, one match.\n- The lockfile is already consistent with step 2: grep for @moe/core under the packages/coordination block returns zero.\n\nWHAT REMAINS is step 4's verification and step 5's commit-by-pathspec. Note that steps 2-3's bytes are ALREADY COMMITTED (71af97c), so step 5 will likely find nothing to commit for those paths. That is not a failure and must not be reported as one — hand QA a base-ref diff rather than a commit sha, per the pattern this board hit repeatedly today.\n\nBOTH DoD CORRECTIONS FROM 14:48Z AND 14:56Z STILL BIND, and I re-verified the load-bearing one at 18:46Z:\n- DO NOT add @moe/contracts to packages/scheduler. `git grep -lE 'from \"@moe/contracts\"' -- packages/scheduler/src` returns ONE file, and it is package-boundary.test.ts:265 — the ban-test fixture string labelled \"an unrelated import\", not a real import. Scheduler declares only @moe/context and imports @moe/contracts nowhere. My own grep matched that fixture line and I checked the actual source before trusting the count; anyone re-measuring must do the same.\n- DO NOT add @moe/store or @moe/testkit to apps/control-room. Same defect, measured twice earlier.\n- The adapters/* glob STAYS with its reserved comment. That was a governor decision, not an oversight.\n\nFOR QA: a diff that ADDS any dependency to any package is a rejection, not compliance. The only legitimate manifest change this task owns is the REMOVAL already landed.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -93,22 +106,23 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:24:26.624Z",
-  "updatedAt": "2026-08-09T15:45:31.788Z",
+  "updatedAt": "2026-08-09T18:52:56.438Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:38:19.004Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-cb476f76",
     "architect-21f667ae",
-    "worker-d61b2685"
+    "worker-d61b2685",
+    "worker-4091b158"
   ],
-  "blockedReason": "Blocked at step 4 by the plan's explicit whole-workspace lockfile safety precondition and live file collision. `git status --porcelain -- '*package.json' pnpm-lock.yaml pnpm-workspace.yaml` shows foreign dirty `package.json` (task-b5e9bd64 test:fault/test:security scripts) and `packages/store/package.json` (`./projections/*` export), while task-9449ce65 is live under worker-b6bbb60c and also owns pnpm-lock.yaml. The plan says stop rather than regenerate/commit with any foreign package.json dirty. Completed safe steps 1-3: removed only coordination's unused @moe/core and added the reserved adapters comment. A filtered coordination typecheck auto-synchronized the lock; its diff is exactly the three-line coordination @moe/core importer removal, no unrelated importer, but I will not treat that as authorization to bypass the precondition. Coordination request posted as msg-51d60a99833e4f0c8d1367d16f6cc2a1. Unblock when foreign manifests are committed/clean and the lock owner releases, or authorize the already-exact filtered lock synchronization after coordination.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T15:20:34.236Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Applied the approved narrow changes and preserved them uncommitted: removed @moe/core from packages/coordination/package.json; added the one-line reserved adapters/* comment to pnpm-workspace.yaml; pnpm updated pnpm-lock.yaml by deleting only the coordination @moe/core importer entry. git grep confirmed no @moe/core imports in coordination src. pnpm --filter @moe/coordination typecheck passed.",
@@ -141,7 +155,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:07:12.388Z",
@@ -158,8 +174,22 @@
     ]
   },
   "budget": {
-    "wallClockMs": 4500000
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-09T18:48:24.762Z",
+    "escalatedAt": "2026-08-09T18:48:24.762Z"
   },
   "planApprovedAt": "2026-08-09T15:07:14.432Z",
-  "workStartedAt": "2026-08-09T15:15:38.147Z"
+  "workStartedAt": "2026-08-09T15:15:38.147Z",
+  "reviewStartedAt": "2026-08-09T18:52:56.438Z",
+  "verification": {
+    "command": "pnpm install && pnpm --filter @moe/coordination typecheck && pnpm --filter @moe/coordination test",
+    "exitCode": 0,
+    "outputTail": "Scope: all 17 workspace projects\nAlready up to date\nDone in 72ms using pnpm v11.0.8\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/coordination/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  2 passed (2)\n      Tests  40 passed (40)\n   Start at  21:51:23\n   Duration  756ms (transform 712ms, setup 0ms, import 901ms, tests 303ms, environment 0ms)\n\nEXIT:0",
+    "reportedAt": "2026-08-09T18:52:56.438Z"
+  },
+  "filesModified": [
+    "packages/coordination/package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-lock.yaml"
+  ]
 }

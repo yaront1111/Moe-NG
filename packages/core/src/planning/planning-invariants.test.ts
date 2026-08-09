@@ -12,10 +12,14 @@ import { PLANNING_RUN_COMMAND_KINDS, reducePlanningRun } from "./planning-run-re
 
 describe("planning aggregate properties", () => {
   it("never moves either aggregate backward and is deterministic per seed", () => {
+    const observed = new Set<unknown>();
     for (const seed of SEEDS) {
       expect(runTrace(seed, 1)).toEqual(runTrace(seed, 1));
-      expect(revisionTrace(seed)).toEqual(revisionTrace(seed));
+      const trace = revisionTrace(seed);
+      expect(trace).toEqual(revisionTrace(seed));
+      for (const entry of trace) if (Array.isArray(entry)) observed.add(entry[1]);
     }
+    expect(observed.has("SUPERSEDED")).toBe(true);
   });
 
   it("keeps every multi-node graph out of plan review, approval, and activation", () => {
@@ -111,19 +115,30 @@ describe("planning aggregate properties", () => {
     }
   });
 
-  it("freezes an active revision against every further command", () => {
+  it("freezes an active revision against every command except the supersession replacing it", () => {
     const approved = approvedRevision();
     const active = reduceGraphRevision(approved,
-      revisionCommand("graph.approve", approved.version, 1));
+      revisionCommand("graph.approve", approved.version, 1, approved));
     expect(active.ok).toBe(true);
     if (!active.ok) return;
     expect(active.state.lifecycle).toBe("ACTIVE");
     const before = JSON.stringify(active.state);
+    let refused = 0;
     for (const kind of GRAPH_REVISION_COMMAND_KINDS) {
+      if (kind === "graph.supersede") continue;
       const result = reduceGraphRevision(active.state,
-        revisionCommand(kind, active.state.version, 1));
+        revisionCommand(kind, active.state.version, 1, active.state));
       expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("ILLEGAL_TRANSITION");
       expect(JSON.stringify(active.state)).toBe(before);
+      refused += 1;
     }
+    expect(refused).toBe(GRAPH_REVISION_COMMAND_KINDS.length - 1);
+    const superseded = reduceGraphRevision(active.state,
+      revisionCommand("graph.supersede", active.state.version, 1, active.state));
+    expect(superseded.ok).toBe(true);
+    if (!superseded.ok) return;
+    expect(superseded.state.lifecycle).toBe("SUPERSEDED");
+    expect(JSON.stringify(active.state)).toBe(before);
   });
 });

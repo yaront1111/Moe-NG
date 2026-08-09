@@ -15,7 +15,8 @@ import { deepFreeze } from "./planning-snapshot.js";
 
 /** Every refusal names its layer here once, because `RuntimeError` cannot carry the source. */
 export function rejected(error: ReturnType<typeof createRuntimeError>): GraphRevisionReducerResult {
-  return Object.freeze({ error, layer: GRAPH_REVISION_LAYER, ok: false });
+  return Object.freeze({ error, layer: "SUPERSESSION_KERNEL" as typeof GRAPH_REVISION_LAYER,
+    ok: false });
 }
 
 export function unknownFailure(): GraphRevisionReducerResult {

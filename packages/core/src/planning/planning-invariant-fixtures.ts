@@ -43,7 +43,8 @@ export const RUN_APPROVAL_STATES: ReadonlySet<string> = new Set(["PLAN_REVIEW", 
 export const REVISION_RANK: Readonly<Record<GraphRevisionLifecycle, number>> = {
   DRAFT: 0, PENDING_APPROVAL: 1, APPROVED: 2, ACTIVE: 3, SUPERSEDED: 4, REJECTED: 5,
 };
-export const REVISION_TERMINAL: ReadonlySet<string> = new Set(["ACTIVE", "SUPERSEDED", "REJECTED"]);
+/** `ACTIVE` is no longer terminal: `graph.supersede` moves authority forward out of it. */
+export const REVISION_TERMINAL: ReadonlySet<string> = new Set(["SUPERSEDED", "REJECTED"]);
 
 export function xorshift32(seed: number): () => number {
   let value = seed >>> 0;

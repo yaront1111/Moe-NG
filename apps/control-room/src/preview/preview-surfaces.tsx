@@ -6,6 +6,7 @@ import { DoctorJ1 } from "../doctor/doctor-j1.js";
 import { EvidenceJ1 } from "../evidence/evidence-j1.js";
 import { FactWithProvenance } from "../shell/provenance-panel.js";
 import { DocumentDossier } from "./document-dossier.js";
+import { PREVIEW_DOCUMENT_DOSSIER_STATE } from "./document-preview-data.js";
 import {
   PREVIEW_BOARD_CARDS, PREVIEW_RECEIPT, previewFacts, previewRunFacts,
 } from "./preview-data.js";
@@ -38,7 +39,7 @@ export function GoalWorkspace(): JSX.Element {
           <FactWithProvenance fact={fact} key={fact.factId} />
         ))}
       </section>
-      <DocumentDossier />
+      <DocumentDossier state={PREVIEW_DOCUMENT_DOSSIER_STATE} />
       <BoardJ1 cards={PREVIEW_BOARD_CARDS} facts={previewFacts("board")} />
       <div className="cr-workspace-disclosures">
         <details data-testid="cr.workspace.goalcomposer">

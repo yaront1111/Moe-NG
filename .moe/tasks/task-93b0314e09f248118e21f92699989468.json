@@ -19,19 +19,23 @@
     {
       "stepId": "step-1",
       "description": "Baseline before writing a byte. Confirm the dependency surface is committed and clean: `git ls-tree -r HEAD --name-only -- packages/core/src/planning/planning-expansion-validation.ts` and `git status --porcelain -- packages/core/src/planning packages/core/src/expansion` (must be EMPTY). Run the owned-package gate FIRST and record it: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. An empty diff at this moment is what proves any later red is yours. Record physical line counts with `grep -c ''` for the 5 existing owned files (measured 2026-08-09: planning-run-reducer 192, planning-run-submission 186, planning-results 121, planning-run-test-fixtures 156, planning-run-reducer.test 228). NOTE the task's own DoD 5 says 'below 400 lines' — that is WRONG for these paths: planning-source-size.test.ts hard-caps every .ts in src/planning at 250 physical lines with no allowlist and sweeps tests, fixtures and drivers equally. Treat 250 as the bar.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline at HEAD bb293263c0a64a412504d594f3d97c7a655f28e0 (NOT 025dc49 as planningNotes said; tree moved forward). Dependency committed: git ls-tree -r HEAD -- packages/core/src/planning/planning-expansion-validation.ts returns the path. git status --porcelain -- packages/core/src/planning packages/core/src/expansion is NOT empty: ' M packages/core/src/planning/graph-revision-test-fixtures.ts' — foreign in-flight work by task-1df0622e, zero overlap with my owned paths. Owned gate leg 1: pnpm --filter @moe/core typecheck exit 0. Leg 2: pnpm --filter @moe/core test EXIT 1 AT BASELINE — 'Test Files 1 failed | 20 passed (21) / Tests 2 failed | 337 passed (339)', and a second run failed 2 different names (a live TDD loop mutating between runs). Every failure across both runs is in graph-revision-*: 'refuses changed or unknown carry evidence with the consequence code', 'refuses supersede from every lifecycle except active with that state's exact code', 'never moves an active revision backward and never mutates its content', 'refuses the Phase 5 supersession command from every lifecycle'. All in graph-revision-reducer.test.ts / graph-revision-supersession.test.ts, consuming the uncommitted graph-revision-test-fixtures.ts. This red pre-dates any byte of mine — that is what the empty owned-path diff proves. Physical line counts via grep -c '' (NOT Measure-Object, which skips blanks): planning-run-reducer 192, planning-run-submission 186, planning-results 121, planning-run-test-fixtures 156, planning-run-reducer.test 228, planning-expansion-validation 243, planning-source-size.test 136. Bar is 250 per file (planning-source-size.test.ts hard cap over src/planning, no allowlist), NOT the 400 in DoD 5.",
+      "startedAt": "2026-08-09T18:47:55.790Z",
+      "completedAt": "2026-08-09T18:48:46.834Z"
     },
     {
       "stepId": "step-2",
       "description": "RED first (TDD). Create packages/core/src/planning/planning-run-expansion.test.ts driving the PRODUCTION reducer — never a helper that reimplements validation. It must fail for the right reason before any production edit: today reducer.ts:77 and submission.ts:52 both answer unsupported('PLANNING_KIND_UNSUPPORTED') for every non-INITIAL kind. Cover: (a) an EXPANSION create_draft carrying a valid hold binding is ACCEPTED and lands DRAFT with runKind EXPANSION, the hold binding on state, and sealedProposal null; (b) REVISION create_draft still answers exactly `{ ok: false, reason: 'PLANNING_KIND_UNSUPPORTED', unsupported: true }` — assert the whole discriminated shape, not just ok===false; (c) an EXPANSION plan.propose whose sealedProposal binds submissionHash and witness.submissionRef seals and emits PlanningSubmissionSealed carrying proposalKind EXPANSION; (d) a mismatched sealedProposal.proposalHash, a cross-kind carrier (INITIAL command carrying an `expansion` key), a stale proposalBaseHash, a non-ACTIVE hold lifecycle and a wrong graphEpoch each refuse with exact ILLEGAL_TRANSITION and details `{ aggregateKind: 'PLANNING_RUN', commandKind, sourceState }`; (e) duplicate replay of the same EXPANSION submissionHash is accepted idempotently with no new event, exactly as the INITIAL path at submission.ts:53-56; (f) a multi-node EXPANSION finalize with child + integrator nodes SEALS instead of refusing; (g) every refusal leaves input state byte-identical (JSON.stringify before/after). Keep this file at or below 250 physical lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/planning-run-expansion.test.ts"
       ],
       "newFiles": [
         "packages/core/src/planning/planning-run-expansion.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T18:52:59.939Z"
     },
     {
       "stepId": "step-3",
@@ -127,11 +131,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:37.588Z",
-  "updatedAt": "2026-08-09T18:47:43.833Z",
+  "updatedAt": "2026-08-09T18:52:59.939Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:29:22.558Z",
     "plannedStepCount": 10,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -156,7 +161,9 @@
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T18:47:22.306Z",
   "planningNotes": {
@@ -178,5 +185,6 @@
     "warnedAt": "2026-08-09T18:47:43.753Z",
     "escalatedAt": "2026-08-09T18:47:43.753Z"
   },
-  "planApprovedAt": "2026-08-09T18:47:24.345Z"
+  "planApprovedAt": "2026-08-09T18:47:24.345Z",
+  "workStartedAt": "2026-08-09T18:47:55.790Z"
 }

@@ -105,7 +105,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": "worker-a87e980a",
   "branch": null,
   "prLink": null,
@@ -115,13 +115,20 @@
   "parentTaskId": "task-a02496064e9e4e87a888cc112830d7a4",
   "priority": "CRITICAL",
   "order": 74.2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-605d262f02824b11a02302b91999cacc",
+      "author": "architect-5aba94da",
+      "content": "STEP 5 AMENDMENT (architect-5aba94da). moe.amend_plan_step is refused for me -- team-f261a960 has `role: null` so the daemon cannot confirm my architect role -- so this comment IS the amendment. Treat it as replacing step 5's instructions. Everything else in the plan stands.\n\nYour step-1 report was right that the SEAM did not move. These are two BUDGET / FAULT-SURFACE facts, out of scope for that gate, measured by me at HEAD 3c27205 after 2a finished.\n\n=== 1. THERE ARE THREE UNWIND REGIMES, NOT TWO ===\n\n2a added `fn validate(spec)` at process.rs:144, called as the FIRST line of `create`, before any handle or attribute list exists. It refuses with NativeOp::CreateProcess code 0. The plan predates it.\n\n- NOTHING-ACQUIRED (validate refuses, or init_attribute_list fails): NOTHING to unwind. Return the error. Terminating a process that was never created is a defect, not defensive coding. The sweep must prove NO terminate arm appears in the call log for this regime.\n- PRE-MEMBERSHIP (created, membership not yet proven): a child exists that the Job may not contain -- terminate THAT PROCESS by its retained handle and wait for it directly.\n- POST-MEMBERSHIP (membership proven): the Job owns the child -- terminate the JOB (child 1's terminate_job) and WAIT for ActiveProcesses==0 (child 1's query_active_processes). Wait for it to reach zero; TerminateJobObject returns before the processes are gone, so a single sample is a flake.\n\nBoundary is still the MEMBERSHIP PROOF, not CreateProcessW. Three paths, three distinct whole-vector call-log assertions. A shared path that happens to satisfy all three fails DoD item 3. Step 7's regime tests need a third case accordingly.\n\n=== 2. LINE BUDGET, MEASURED ===\n\nsrc/process.rs landed at 228 physical lines against the 250 hard cap -- 22 lines of headroom, and step 5 edits it. The original step pre-authorised splitting lifecycle.rs but said nothing about process.rs.\n\nPut the unwind protocol in lifecycle.rs; keep the process.rs edit to the smallest call site, ideally one delegating call per regime plus a doc comment. TWO PRE-AUTHORISED SPLITS if you still breach:\n- process.rs > 250 -> move create_suspended, prepare, prove_membership, resume and validate into a new src/construction.rs, leaving process.rs owning only the ContainedProcess type and its impl.\n- lifecycle.rs > 250 -> split the unwind into src/unwind.rs.\nSplit by responsibility, never by reformatting, and never by deleting doc or SAFETY comments.\n\n=== FYI, NOT ACTION ===\n\nYour block correctly flagged that 2a's bytes sat in foreign commit 6daa942 (the motion-guard task's whole-tree sweep). That is the known hook hazard, it is NOT a defect of 2a's, and per project rail it is never a QA rejection reason. 2a has since committed the remainder as 3c27205, the tree is clean, and 2a is in REVIEW with failedDodItems []. When you build your own base-ref diff, note 2a's work spans BOTH 6daa942 and 3c27205.",
+      "timestamp": "2026-08-09T18:48:24.586Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:40.833Z",
-  "updatedAt": "2026-08-09T18:45:30.051Z",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T18:45:30.051Z",
-  "blockedReason": "Step-1 hard gate tripped on condition (a). SEQUENCING ONLY — seam did NOT move, steps 2-10 need NO amendment. Full evidence: chan-ced99359 msg-ebd709fc.\n\nPASSES, measured at HEAD 6daa942: (b) `pub const ALL: [NativeOp; 15]` win32.rs:56, 15 variants ending ResumeThread. (c) `ProcessCalls` has `type AttributeList` (process_calls.rs:66) + the ten named methods, `is_process_in_job -> Result<bool,_>` (:93), `resume_thread -> Result<u32,_>` (:104). (d) `create(calls, job: &Job<'c,C>, spec)` process.rs:83, fields process/thread/pid/creation_time, Job not retained. (e) `pub(crate) fn handle()` job.rs:47.\n\nFAILS (a). ls-tree lists all five files plus a sixth, win32/system_process_attrs.rs (2a's pre-authorised split) — but those bytes sit in commit 6daa942, the motion-guard task's whole-tree sweep, not a 2a commit. `git status --porcelain` over the crate is NOT clean: ` M src/lib.rs`, doc header only.\n\nDECISIVE: worker-1a528e3e is ALIVE, CODING, holding task-885a46e9, which is `step-10 IN_PROGRESS`, steps 1-9 COMPLETED. Step 10 is 2a's verify / MUTATION-DRILL / commit step. Two live hazards:\n1. The drill restores production files by rewriting contents — win32.rs, process.rs, process_sweep.rs. Bytes I add mid-drill are clobbered by that restore, git status clean after, loss invisible.\n2. Step 10 ends `git commit -- <2a's owned paths>`: lib.rs, win32.rs, process.rs, process_sweep.rs — four of my eight owned files.\n\nI did NOT take the pre-diff baseline: a run mid-drill records foreign red, or green over mutated bytes, as MY baseline — worse than none. Only ran `cargo check --offline --all-targets` to a throwaway target dir (exit 0); dir deleted, nothing staged. Zero bytes written to any owned file.\n\nUNBLOCK WHEN: task-885a46e9 DONE/REVIEW AND `git status --porcelain -- packages/runner/src/platform/windows` clean. On resume: re-run gate, take real baseline, execute 2-10 unchanged.\n\nSize: win32.rs already 174 lines, system_process.rs 189 — splits in steps 2 and 6 look required.",
+  "updatedAt": "2026-08-09T18:48:41.905Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "blockedResourceId": null,
   "contextFetchedBy": [
     "architect-5aba94da",

@@ -18,9 +18,12 @@ import {
 } from "./document-work-service.js";
 
 const PROJECT_ID = "project-1";
+const AGGREGATE_ID =
+  "document-work/769304b95ae0ac97b229f401563babf7152fd02686b8839826c9d80b1fba4052";
+const EVENT_ID =
+  "document-work-proposal/6e303ee0883b1013f729e63b94f4ec53f87a3408926c3543e3e19c7dd5a77670";
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
-const HASH_C = "c".repeat(64);
 const encoder = new TextEncoder();
 
 function bytes(value: unknown): Uint8Array {
@@ -124,6 +127,22 @@ function expectRefusal(
 }
 
 describe("document-work proposal persistence", () => {
+  it("forwards the bounded contracts refusal before any mutation", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const result = recordDocumentWorkProposal(store, input(encoder.encode("{")));
+      expectRefusal(
+        result,
+        "DOCUMENT_WORK_PROPOSAL_INPUT_REJECTED",
+        "BOUNDED_JSON",
+      );
+      expect(store.readEventsAfter(0n).items).toStrictEqual([]);
+      expect(store.readCommandDecisionsAfter(0n).items).toStrictEqual([]);
+    } finally {
+      store.close();
+    }
+  });
+
   it("refuses a caller/project provenance mismatch before any mutation", () => {
     const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
     try {
@@ -166,11 +185,11 @@ describe("document-work proposal persistence", () => {
         outcome: result.outcome,
       }).toStrictEqual({
         advisoryOnly: true,
-        aggregateId: "document-work/project-1",
+        aggregateId: AGGREGATE_ID,
         authority: "NONE",
         currentVersion: 1,
         disposition: "DECIDED",
-        eventId: "document-work-proposal/document-command-1",
+        eventId: EVENT_ID,
         outcome: "RECORDED",
       });
       expect(result.proposal.sources.map((entry) => entry.sourceRef))
@@ -180,16 +199,16 @@ describe("document-work proposal persistence", () => {
       expect(result.proposal.candidates[1]?.sourceRefs)
         .toStrictEqual(["source-0", "source-1"]);
 
-      const events = store.readEvents("document-work/project-1");
+      const events = store.readEvents(AGGREGATE_ID);
       expect(events.map((event) => ({
         aggregateId: event.aggregateId,
         domainSchemaVersion: event.domainSchemaVersion,
         eventId: event.eventId,
         eventType: event.eventType,
       }))).toStrictEqual([{
-        aggregateId: "document-work/project-1",
+        aggregateId: AGGREGATE_ID,
         domainSchemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
-        eventId: "document-work-proposal/document-command-1",
+        eventId: EVENT_ID,
         eventType: "DocumentWorkProposalRecorded",
       }]);
       const decoded = decodeDocumentWorkProposalBytes(events[0]?.payload);
@@ -203,7 +222,7 @@ describe("document-work proposal persistence", () => {
         resultCode: decision.resultCode,
       }))).toStrictEqual([{
         commandKind: "document-work.record",
-        eventIds: ["document-work-proposal/document-command-1"],
+        eventIds: [EVENT_ID],
         resultCode: "EFFECTS_COMMITTED",
       }]);
       expect(events.map((event) => event.eventType)).not.toContain("PlanProposed");
@@ -233,6 +252,73 @@ describe("document-work proposal persistence", () => {
       expect(() => recordDocumentWorkProposal(store, input(changed)))
         .toThrowError(IdempotencyConflictError);
       expect(store.readEvents(documentWorkAggregateId(PROJECT_ID))).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("hashes a maximum-length command into an exact bounded control-free event id", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const result = recordDocumentWorkProposal(store, input(undefined, {
+        commandId: "x".repeat(512),
+      }));
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("recording was refused");
+      expect(result.eventId).toBe(
+        "document-work-proposal/e5a0f4f0e33fabe58fa92d920429926dc2bcc5bc9e4787a3ef2e66449b7e2844",
+      );
+      expect(encoder.encode(result.eventId).byteLength).toBeLessThanOrEqual(512);
+      expect(/[\u0000-\u001f\u007f]/u.test(result.eventId)).toBe(false);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("binds event identity to the complete store idempotency scope", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const first = recordDocumentWorkProposal(store, input());
+      const second = recordDocumentWorkProposal(store, input(undefined, {
+        expectedVersion: 1,
+        principalId: "agent-2",
+      }));
+      expect(first.ok && second.ok).toBe(true);
+      if (!first.ok || !second.ok) throw new Error("recording was refused");
+      expect([first.eventId, second.eventId]).toStrictEqual([
+        EVENT_ID,
+        "document-work-proposal/12e77561d2eea093301ed207b8cc93dee7d300cb0ff967142c83349f61148d08",
+      ]);
+      expect(store.readEvents(AGGREGATE_ID).map((event) => event.eventId))
+        .toStrictEqual([first.eventId, second.eventId]);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("hashes a 512-byte valid project id for persistence and tail reads", () => {
+    const projectId = "😀".repeat(128);
+    const aggregateId =
+      "document-work/30df12326b3e4186c20265e9a564005df1a2610ef5bb7e7e7ac2cdf5bca5a516";
+    const store = SqliteEventStore.openEphemeralForProjectTest(projectId);
+    try {
+      const raw = bytes(proposal({ projectId }));
+      const result = recordDocumentWorkProposal(store, input(raw, {
+        commandId: "document-command-astral",
+        projectId,
+      }));
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error("recording was refused");
+      expect(result.aggregateId).toBe(aggregateId);
+      expect(result.eventId).toBe(
+        "document-work-proposal/44493ad114979548a07594b4d186e38830e85cce65002ec880838b31525ac845",
+      );
+      expect(documentWorkAggregateId(projectId)).toBe(aggregateId);
+      const dossier = readLatestDocumentWorkDossier(store, projectId);
+      expect(dossier.ok).toBe(true);
+      if (!dossier.ok) throw new Error("dossier read was refused");
+      expect(dossier.aggregateId).toBe(aggregateId);
+      expect(dossier.proposal.projectId).toBe(projectId);
     } finally {
       store.close();
     }
@@ -299,10 +385,11 @@ describe("latest document-work dossier read", () => {
         title: dossier.proposal.candidates[0]?.title,
       }).toStrictEqual({
         advisoryOnly: true,
-        aggregateId: "document-work/project-1",
+        aggregateId: AGGREGATE_ID,
         aggregateSequence: 2,
         authority: "NONE",
-        eventId: "document-work-proposal/document-command-2",
+        eventId:
+          "document-work-proposal/d4e5c4ee203f5f6ee09d6dddde1f4466e758c0b30a43cc6d39d5092108a21eda",
         outcome: "DOSSIER",
         title: "Candidate 1",
       });

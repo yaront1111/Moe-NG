@@ -8,95 +8,51 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 import { describe, expect, it } from "vitest";
 
-import type { CarryForwardInput } from "../policy/approval-contract.js";
 import { decideSupersession } from "../supersession/supersession-engine.js";
-import type {
-  SupersessionDisposition,
-  SupersessionInput,
-  SupersessionPredecessorBinding,
-} from "../supersession/supersession-engine.js";
-import type {
-  GraphRevisionCommand,
-  GraphRevisionReducerResult,
-  GraphRevisionState,
-} from "./graph-revision-contract.js";
+import type { SupersessionDisposition, SupersessionInput } from
+  "../supersession/supersession-engine.js";
+import type { GraphRevisionReducerResult, GraphRevisionState } from
+  "./graph-revision-contract.js";
 import { reduceGraphRevision } from "./graph-revision-reducer.js";
 import {
+  BINDING_HASH,
+  CARRY,
+  CARRY_HASH,
   GRAPH_HASH,
   STALE_HASH,
+  SUCCESSOR_HASH,
   accepted,
+  carryFact,
+  changedCarryInput,
   expectError,
   expectIllegal,
-  hash,
+  predecessorOf,
+  staleEpochInput,
   state,
+  supersedeCommand,
+  supersessionInput,
 } from "./graph-revision-test-fixtures.js";
-
-const SUCCESSOR_HASH = hash("88");
-const CARRY_HASH = hash("44");
-const BINDING_HASH = hash("66");
-const CANONICALIZER = "canon-v1";
-
-function carryFact(digest: string): CarryForwardInput {
-  return {
-    canonicalizerVersion: CANONICALIZER, dependenciesPresent: true,
-    environmentClosureUnchanged: true, policySliceUnchanged: true,
-    predecessorResultUnchanged: true, sourceHash: digest, targetHash: digest,
-  };
-}
-
-const CARRY: SupersessionDisposition = {
-  kind: "CARRY", nodeKey: "node-carry", predecessorAuthorityHash: CARRY_HASH,
-  safeCarry: { authority: carryFact(CARRY_HASH), inputBinding: carryFact(BINDING_HASH) },
-  successorAuthorityHash: CARRY_HASH,
-};
-
-function predecessorOf(current: GraphRevisionState): SupersessionPredecessorBinding {
-  return {
-    graphContentHash: current.graphContentHash, graphEpoch: current.graphEpoch,
-    revisionId: current.revisionId,
-  };
-}
-
-function supersessionInput(
-  current: GraphRevisionState,
-  overrides: Partial<SupersessionInput> = {},
-): SupersessionInput {
-  const predecessor = predecessorOf(current);
-  return {
-    dispositions: [CARRY],
-    expectedPredecessor: predecessor,
-    successor: {
-      graphContentHash: SUCCESSOR_HASH, graphEpoch: predecessor.graphEpoch + 1,
-      predecessorGraphContentHash: predecessor.graphContentHash,
-      predecessorRevisionId: predecessor.revisionId, revisionId: "graph-revision-2",
-    },
-    supportedCanonicalizerVersions: [CANONICALIZER],
-    ...overrides,
-  };
-}
-
-function supersedeWith(
-  current: GraphRevisionState,
-  supersession: SupersessionInput,
-): GraphRevisionCommand {
-  return {
-    commandId: "cmd-supersede", expectedVersion: current.version,
-    kind: "graph.supersede", supersession,
-  };
-}
 
 /** Drives one refusal case and proves the refused command left the state byte-identical. */
 function refuses(
   current: GraphRevisionState,
-  overrides: Partial<SupersessionInput>,
+  supersession: SupersessionInput,
   code: string,
 ): GraphRevisionReducerResult {
   const before = JSON.stringify(current);
-  const result = reduceGraphRevision(current,
-    supersedeWith(current, supersessionInput(current, overrides)));
+  const result = reduceGraphRevision(current, supersedeCommand(current, supersession));
   expectError(result, code);
   expect(JSON.stringify(current)).toBe(before);
   return result;
+}
+
+/** Drives one refusal case built as a single deliberate drift from the well-formed input. */
+function refusesDrift(
+  current: GraphRevisionState,
+  overrides: Partial<SupersessionInput>,
+  code: string,
+): GraphRevisionReducerResult {
+  return refuses(current, supersessionInput(current, overrides), code);
 }
 
 describe("graph revision supersession", () => {
@@ -108,7 +64,7 @@ describe("graph revision supersession", () => {
     expect(decided.ok).toBe(true);
     if (!decided.ok) throw new Error("kernel refused a well-formed supersession");
     expect(decided.decision.successor.graphEpoch).toBe(source.graphEpoch + 1);
-    const result = reduceGraphRevision(source, supersedeWith(source, input));
+    const result = reduceGraphRevision(source, supersedeCommand(source, input));
     expect(accepted(result)).toMatchObject({
       graphContentHash: GRAPH_HASH, graphEpoch: source.graphEpoch, lifecycle: "SUPERSEDED",
       version: source.version + 1,
@@ -127,10 +83,35 @@ describe("graph revision supersession", () => {
     const drifted: readonly Partial<SupersessionInput>[] = [
       { expectedPredecessor: { ...predecessorOf(source), revisionId: "graph-revision-9" } },
       { expectedPredecessor: { ...predecessorOf(source), graphContentHash: STALE_HASH } },
-      { expectedPredecessor: { ...predecessorOf(source), graphEpoch: source.graphEpoch + 1 } },
     ];
-    expect(drifted).toHaveLength(3);
-    for (const overrides of drifted) refuses(source, overrides, "REVISION_REBOUND");
+    expect(drifted).toHaveLength(2);
+    for (const overrides of drifted) refusesDrift(source, overrides, "REVISION_REBOUND");
+    refuses(source, staleEpochInput(source), "REVISION_REBOUND");
+  });
+
+  /**
+   * Every other drift case is also refusable by the successor binding, so only a SELF-CONSISTENT
+   * foreign predecessor proves the reducer hands the kernel the LIVE state rather than echoing
+   * the command's own claim back at it.
+   */
+  it("refuses a self-consistent supersession naming a predecessor that is not this one", () => {
+    const source = state("ACTIVE");
+    const foreign: readonly Partial<SupersessionInput>[] = [
+      { expectedPredecessor: { ...predecessorOf(source), revisionId: "graph-revision-9" },
+        successor: { graphContentHash: SUCCESSOR_HASH, graphEpoch: source.graphEpoch + 1,
+          predecessorGraphContentHash: source.graphContentHash,
+          predecessorRevisionId: "graph-revision-9", revisionId: "graph-revision-2" } },
+      { expectedPredecessor: { ...predecessorOf(source), graphContentHash: STALE_HASH },
+        successor: { graphContentHash: SUCCESSOR_HASH, graphEpoch: source.graphEpoch + 1,
+          predecessorGraphContentHash: STALE_HASH,
+          predecessorRevisionId: source.revisionId, revisionId: "graph-revision-2" } },
+      { expectedPredecessor: { ...predecessorOf(source), graphEpoch: source.graphEpoch + 4 },
+        successor: { graphContentHash: SUCCESSOR_HASH, graphEpoch: source.graphEpoch + 5,
+          predecessorGraphContentHash: source.graphContentHash,
+          predecessorRevisionId: source.revisionId, revisionId: "graph-revision-2" } },
+    ];
+    expect(foreign).toHaveLength(3);
+    for (const overrides of foreign) refusesDrift(source, overrides, "REVISION_REBOUND");
   });
 
   it("refuses a successor epoch that is not exactly predecessor epoch plus one", () => {
@@ -138,7 +119,7 @@ describe("graph revision supersession", () => {
     const successor = supersessionInput(source).successor;
     let cases = 0;
     for (const delta of [0, 2, -1] as const) {
-      refuses(source, { successor: { ...successor, graphEpoch: source.graphEpoch + delta } },
+      refusesDrift(source, { successor: { ...successor, graphEpoch: source.graphEpoch + delta } },
         "REVISION_REBOUND");
       cases += 1;
     }
@@ -154,18 +135,16 @@ describe("graph revision supersession", () => {
       { successor: { ...successor, revisionId: source.revisionId } },
     ];
     expect(unbound).toHaveLength(3);
-    for (const overrides of unbound) refuses(source, overrides, "REVISION_REBOUND");
+    for (const overrides of unbound) refusesDrift(source, overrides, "REVISION_REBOUND");
   });
 
   it("refuses changed or unknown carry evidence with the consequence code", () => {
     const source = state("ACTIVE");
-    const changed: SupersessionDisposition = { ...CARRY, safeCarry: {
-      authority: carryFact(STALE_HASH), inputBinding: carryFact(BINDING_HASH) } };
+    refuses(source, changedCarryInput(source), "SUPERSESSION_CONSEQUENCE_CHANGED");
     const unknown: SupersessionDisposition = { ...CARRY, safeCarry: {
       authority: { ...carryFact(CARRY_HASH), canonicalizerVersion: "canon-unknown" },
       inputBinding: carryFact(BINDING_HASH) } };
-    refuses(source, { dispositions: [changed] }, "SUPERSESSION_CONSEQUENCE_CHANGED");
-    refuses(source, { dispositions: [unknown] }, "SUPERSESSION_CONSEQUENCE_CHANGED");
+    refusesDrift(source, { dispositions: [unknown] }, "SUPERSESSION_CONSEQUENCE_CHANGED");
   });
 
   it("re-shapes the kernel layer so the refusing layer is observable on the result", () => {
@@ -176,7 +155,7 @@ describe("graph revision supersession", () => {
     const kernel = decideSupersession(predecessorOf(source),
       supersessionInput(source, overrides));
     expect(kernel).toEqual({ code: "REVISION_REBOUND", layer: "SUPERSESSION_KERNEL", ok: false });
-    const result = refuses(source, overrides, "REVISION_REBOUND");
+    const result = refusesDrift(source, overrides, "REVISION_REBOUND");
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.layer).toBe("GRAPH_REVISION");
@@ -189,8 +168,7 @@ describe("graph revision supersession", () => {
       if (lifecycle === "ACTIVE") continue;
       const source = state(lifecycle);
       const before = JSON.stringify(source);
-      const result = reduceGraphRevision(source,
-        supersedeWith(source, supersessionInput(source)));
+      const result = reduceGraphRevision(source, supersedeCommand(source));
       if (lifecycle === "SUPERSEDED") expectError(result, "SUPERSEDED_AUTHORITY");
       else expectIllegal(result, "graph.supersede", lifecycle);
       expect(JSON.stringify(source)).toBe(before);

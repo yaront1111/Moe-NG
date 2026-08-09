@@ -9,6 +9,7 @@ import type {
   GraphRevisionCommand, GraphRevisionCommandKind, GraphRevisionState,
 } from "./graph-revision-contract.js";
 import { GRAPH_REVISION_COMMAND_KINDS, reduceGraphRevision } from "./graph-revision-reducer.js";
+import { supersessionInput } from "./graph-revision-test-fixtures.js";
 import type {
   PlanningRunCommand, PlanningRunCommandKind, PlanningRunLifecycle, PlanningRunState,
 } from "./planning-contract.js";
@@ -108,10 +109,15 @@ export function runTrace(seed: number, bearing: number): readonly unknown[] {
   return entries;
 }
 
+/**
+ * `current` builds a WELL-FORMED supersession bound to the walked state, so the walk actually
+ * reaches `SUPERSEDED`. A malformed body would keep this suite green while never testing it.
+ */
 export function revisionCommand(
   kind: GraphRevisionCommandKind,
   expectedVersion: number,
   roll: number,
+  current?: GraphRevisionState,
 ): GraphRevisionCommand {
   const base = { commandId: `cmd-${kind}-${roll}`, expectedVersion };
   const refusal = { findingsRef: "findings-1", truthClass: "DAEMON_VERIFIED" };
@@ -125,7 +131,8 @@ export function revisionCommand(
         truthClass: "HUMAN_APPROVED" } }),
       ...(roll % 3 === 0 ? {} : { activation: REVISION_ACTIVATION }) },
     "graph_revision.reject": { witness: refusal },
-    "graph.supersede": { witness: refusal },
+    "graph.supersede": current === undefined ? {}
+      : { supersession: supersessionInput(current) },
   };
   return { ...base, kind, ...bodies[kind] } as unknown as GraphRevisionCommand;
 }
@@ -145,7 +152,8 @@ export function revisionTrace(seed: number): readonly unknown[] {
     const expected = next() % 5 === 0 ? actual + 1 : actual;
     const before = current === undefined ? undefined : JSON.stringify(current);
     const source = current?.lifecycle;
-    const result = reduceGraphRevision(current, revisionCommand(kind, expected, next()));
+    const result = reduceGraphRevision(current,
+      revisionCommand(kind, expected, next(), current));
     expectDeepFrozen(result);
     if (!result.ok) {
       expect(current === undefined ? undefined : JSON.stringify(current)).toBe(before);
@@ -224,7 +232,8 @@ export function approvedRevision(): GraphRevisionState {
     ["graph_revision.create", 1], ["graph_revision.submit", 1], ["graph.approve", 3],
   ];
   for (const [kind, roll] of steps) {
-    const result = reduceGraphRevision(current, revisionCommand(kind, current?.version ?? 0, roll));
+    const result = reduceGraphRevision(current,
+      revisionCommand(kind, current?.version ?? 0, roll, current));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`sequence failed at ${kind}`);
     current = result.state;

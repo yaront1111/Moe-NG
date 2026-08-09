@@ -104,39 +104,60 @@
     {
       "stepId": "step-7",
       "description": "Fixtures. In graph-revision-test-fixtures.ts: (1) make state() emit graphEpoch lifecycle-aware exactly like the existing boundHashes/submissionRef defaults — 1 for ACTIVE and SUPERSEDED, 0 otherwise — so the create() assertion at reducer.test.ts:32 (`toEqual(state(\"DRAFT\", { version: 1 }))`) keeps passing unchanged. (2) Make commandFor(\"graph.supersede\") build a WELL-FORMED SupersessionInput: expectedPredecessor matching state() (revisionId \"graph-revision-1\", graphContentHash GRAPH_HASH, graphEpoch 1), a successor at exactly graphEpoch 2 naming the predecessor's revisionId and content hash, at least one disposition, and supportedCanonicalizerVersions. Add named exports for a stale-epoch variant and a changed-carry variant so the step-2 tests need no local reimplementation. (3) Extend expectError to assert `result.layer` is \"GRAPH_REVISION\" on every refusal — that single change upgrades every existing refusal assertion in the suite to pin the refusing layer, satisfying epic rail 6 across the file. Budget ~18 lines against 154 free.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-test-fixtures.ts"
       ],
-      "startedAt": "2026-08-09T18:47:08.353Z"
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-test-fixtures.ts",
+        "packages/core/src/planning/graph-revision-supersession.test.ts"
+      ],
+      "note": "Fixtures landed and the step-2 test now owns zero local builders. test-fixtures 96 -> 177 lines; supersession.test 201 -> 153 (the builders moved out). Both under 250.\n\n(1) state() emits graphEpoch lifecycle-aware via a new EPOCH_BOUND = [\"ACTIVE\",\"SUPERSEDED\"] — deliberately NOT reusing BOUND, which includes APPROVED, mirroring the production validation split. So state(\"DRAFT\", {version:1}) still equals the created draft and reducer.test.ts:32 passes untouched. (2) commandFor(\"graph.supersede\") now builds a WELL-FORMED SupersessionInput from state(\"ACTIVE\"): expectedPredecessor {graph-revision-1, GRAPH_HASH, epoch 1}, successor at exactly epoch 2 naming that revisionId and content hash, one CARRY disposition with valid safeCarry, supportedCanonicalizerVersions [\"canon-v1\"]. (3) Named variants exported: staleEpochInput() and changedCarryInput(), plus supersessionInput()/supersedeCommand()/predecessorOf()/carryFact()/CARRY, all consumed by the supersession test. (4) expectError now asserts result.layer === \"GRAPH_REVISION\" — one change that upgrades EVERY refusal assertion in both reducer suites to pin the refusing layer.\n\nNew file suite: `vitest run ... src/planning/graph-revision-supersession.test.ts` -> Tests 7 passed (7), exit 0. Full core suite is now down to exactly the two assertions the plan predicted: `pnpm --filter @moe/core test` -> Test Files 1 failed | 20 passed (21), Tests 2 failed | 337 passed (339). Both in graph-revision-reducer.test.ts: \"never moves an active revision backward...\" (the all-kinds-illegal-from-ACTIVE loop, now false for graph.supersede alone) and \"refuses the Phase 5 supersession command from every lifecycle\" (obsolete). Step 8 fixes exactly those two.\n\nVACUITY FLAG for step 9, confirmed by measurement not inference: planning-invariants.test.ts is currently GREEN. It should not be. Its driver still builds `\"graph.supersede\": {witness: refusal}`, which the kernel refuses as REVISION_REBOUND every single time, so the random walk never reaches SUPERSEDED and the REVISION_TERMINAL assertion never fires. That is precisely the detached-assertion defect step 9 exists to close.",
+      "startedAt": "2026-08-09T18:47:08.353Z",
+      "completedAt": "2026-08-09T18:49:26.724Z"
     },
     {
       "stepId": "step-8",
       "description": "Update ONLY the two genuinely invalidated assertions in graph-revision-reducer.test.ts; every other assertion in the 222-line file must pass untouched (task rail 4). (a) :143-151 'never moves an active revision backward and never mutates its content' — the loop `for (const kind of GRAPH_REVISION_COMMAND_KINDS) expectIllegal(..., \"ACTIVE\")` is now false for graph.supersede alone. Skip that one kind in the loop and immediately assert the positive: a well-formed supersede from ACTIVE is ACCEPTED and lands SUPERSEDED. Do not silently narrow the loop without the positive assertion — a skip with nothing in its place is the vacuous-sweep defect epic rail 6 names. (b) :160-167 'refuses the Phase 5 supersession command from every lifecycle' — delete it entirely; step 2's file replaces it with real per-lifecycle assertions. DO NOT TOUCH: :153-157 (SUPERSEDED_AUTHORITY from SUPERSEDED, still true for all kinds) and :204-221 (the kind x lifecycle sweep, which reads GRAPH_REVISION_TRANSITIONS and self-adjusts, and already asserts a positive `seen.size` count). Deleting (b) frees ~8 lines against the ~10 that (a) adds, so the file stays near 222.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts"
+      ],
+      "note": "Exactly the two invalidated assertions changed; 222 -> 219 lines. Full core suite now GREEN: `pnpm --filter @moe/core test` -> Test Files 21 passed (21), Tests 338 passed (338), exit 0.\n\n(a) \"never moves an active revision backward and never mutates its content\": the all-kinds loop now skips graph.supersede, counts the kinds it DID refuse and asserts `refused === GRAPH_REVISION_COMMAND_KINDS.length - 1` (so the loop can never silently shrink to zero), and immediately follows with the positive: a well-formed supersede from ACTIVE is ACCEPTED and lands {lifecycle: \"SUPERSEDED\", version: 8}. The skip is never left standing alone. (b) \"refuses the Phase 5 supersession command from every lifecycle\" deleted whole — its replacement in graph-revision-supersession.test.ts asserts per-lifecycle exact codes (SUPERSEDED_AUTHORITY vs ILLEGAL_TRANSITION with commandKind/sourceState details) instead of the old toContain-one-of-two, which would have passed on either code.\n\nUntouched as instructed: the SUPERSEDED_AUTHORITY-from-SUPERSEDED loop and the kind x lifecycle sweep (it reads GRAPH_REVISION_TRANSITIONS and self-adjusted to the new ACTIVE entry with no edit, and still asserts seen.size === kinds x lifecycles). RUNTIME_LIFECYCLES import verified still live at :205 and :217, so deleting (b) left no unused import.\n\nNote the whole file's refusal assertions silently got STRONGER this step without being edited: expectError/expectIllegal now also pin result.layer === \"GRAPH_REVISION\".",
+      "startedAt": "2026-08-09T18:49:29.071Z",
+      "completedAt": "2026-08-09T18:50:02.820Z"
     },
     {
       "stepId": "step-9",
       "description": "Make the planning invariant property non-vacuous — OWNED-PATH EXPANSION, read this justification. planning-invariant-fixtures.ts is NOT in the task's stated 8 owned paths but is mandatory, taking the task to exactly 10 distinct files (at, not over, the hard cap). Measurement: planning-invariant-fixtures.ts:46 declares `REVISION_TERMINAL = new Set([\"ACTIVE\", \"SUPERSEDED\", \"REJECTED\"])`, and planning-invariant-drivers.ts:156 asserts `expect(REVISION_TERMINAL.has(source)).toBe(false)` on every ACCEPTED result — so the moment supersede is accepted from ACTIVE, that assertion fails. ACTIVE is genuinely no longer terminal. (1) invariant-fixtures: remove \"ACTIVE\" from REVISION_TERMINAL. REVISION_RANK at :43-45 already ranks SUPERSEDED 4 above ACTIVE 3, so the monotonic-rank assertion at drivers:157 holds unchanged — do not touch it. (2) invariant-drivers: replace the refusal-only `\"graph.supersede\": { witness: refusal }` body at :128 with a well-formed SupersessionInput built from the walked state, so the random walk actually reaches SUPERSEDED instead of always refusing. Leaving it malformed would keep the suite GREEN while testing nothing — the exact detached-assertion defect. Only ~15 lines of headroom here (235/250): if it does not fit, move the body builder into planning-invariant-fixtures.ts, which has 162 free. (3) planning-invariants.test.ts:114-128 'freezes an active revision against every further command' — the loop is now false for supersede alone; except that kind, and assert positively that supersede is the ONE command an ACTIVE revision accepts and that it lands SUPERSEDED. Leave :49-68 (the perturbed-digest REVISION_REBOUND property) and every planning-run assertion untouched.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-invariant-fixtures.ts",
         "packages/core/src/planning/planning-invariant-drivers.ts",
         "packages/core/src/planning/planning-invariants.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts",
+        "packages/core/src/planning/planning-invariants.test.ts"
+      ],
+      "note": "Invariant property is now non-vacuous, and I PROVED it rather than assuming it. Core suite green: 21 files, 338 tests, exit 0. Lines: invariant-fixtures 88 -> 89, invariant-drivers 235 -> 244 (6 free, tightest file in the task), invariants.test 129 -> 144. All under 250.\n\n(1) REVISION_TERMINAL is now Set([\"SUPERSEDED\",\"REJECTED\"]) — ACTIVE removed with a comment saying why. REVISION_RANK untouched (SUPERSEDED 4 > ACTIVE 3 already), so drivers' monotonic-rank assertion holds unchanged. (2) revisionCommand gained an optional `current?: GraphRevisionState` 4th param and builds \"graph.supersede\" as a WELL-FORMED SupersessionInput from the walked state by calling the shared production-facing builder `supersessionInput` from graph-revision-test-fixtures.js — no second copy of the input shape, no policy restated. Both driver call sites (revisionTrace, approvedRevision's driveRun loop) now pass `current`. The builder fit in the drivers file, so the invariant-fixtures escape hatch was not needed. (3) \"freezes an active revision...\" renamed and rewritten: excludes graph.supersede from the loop, now asserts the exact ILLEGAL_TRANSITION code for the other four kinds (it previously asserted only ok === false), counts them (refused === kinds - 1), and then positively asserts the supersede is ACCEPTED and lands SUPERSEDED with the ACTIVE state still byte-identical.\n\nThe anti-vacuity check the step demanded, measured not assumed: I extended the determinism property to collect every lifecycle the revision random walk actually reaches across all 5 seeds and assert `observed.has(\"SUPERSEDED\")`. It passes — the walk genuinely reaches SUPERSEDED now. Before this step the same assertion would have failed, because the malformed refusal-witness body made every supersede refuse REVISION_REBOUND. That assertion is permanent, so the sweep can never silently stop generating supersede cases again.\n\nUntouched as instructed: the perturbed-digest REVISION_REBOUND property and every planning-run assertion.",
+      "startedAt": "2026-08-09T18:50:06.535Z",
+      "completedAt": "2026-08-09T18:52:10.135Z"
     },
     {
       "stepId": "step-10",
       "description": "Mutation drills (DoD 5), then restore byte-exact. Each drill must redden a NAMED test in an owned file, and the drill must target a guard THIS task added — a kernel-side guard reddening a kernel test proves nothing about this transition. Drill each and record the test name that failed: (a) reducer.ts GRAPH_REVISION_TRANSITIONS graph.supersede ACTIVE -> add another lifecycle; (b) the supersede() predecessor binding — pass a wrong revisionId or graphContentHash into decideSupersession; (c) drop graphEpoch from the binding the reducer hands the kernel; (d) make supersessionRefused return the kernel's code unmapped, or the wrong layer, to prove the layer assertion is live; (e) validation.ts validGraphEpochPlacement — accept 0 for ACTIVE; (f) remove the SUPERSEDED guard at reducer.ts:196 and confirm the SUPERSEDED_AUTHORITY test reddens. Two shared-worktree hazards, both previously observed on this board: `git diff` is BLIND to untracked files, so never verify restoration of the new test file by an empty diff — hash it before and after; and another agent's whole-tree completion hook can COMMIT your drill edit, after which git status looks clean while the mutation is live — re-run the suite after every restore and confirm it is green, do not trust status alone.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-reducer.ts",
         "packages/core/src/planning/graph-revision-validation.ts",
         "packages/core/src/planning/graph-revision-results.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T18:52:12.673Z"
     },
     {
       "stepId": "step-11",
@@ -180,12 +201,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:30:12.550Z",
-  "updatedAt": "2026-08-09T18:47:08.354Z",
+  "updatedAt": "2026-08-09T18:52:12.673Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:44:35.057Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
@@ -216,7 +237,10 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T18:22:13.844Z",

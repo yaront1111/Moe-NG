@@ -156,6 +156,7 @@ export function expectError(
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error(`expected ${code} rejection`);
   expect(result.error.code).toBe(code);
+  expect(result.layer).toBe("GRAPH_REVISION");
   if (details !== undefined) expect({ ...result.error.details }).toEqual(details);
 }
 

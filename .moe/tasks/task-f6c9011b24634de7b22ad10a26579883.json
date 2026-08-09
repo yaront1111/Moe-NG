@@ -155,7 +155,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-705f0380",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,7 +167,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:18:36.217Z",
-  "updatedAt": "2026-08-09T18:35:18.198Z",
+  "updatedAt": "2026-08-09T18:52:01.268Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
     "worker-5981deec"
@@ -206,7 +206,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-09T18:52:01.267Z",
+    "escalatedAt": "2026-08-09T18:52:01.267Z"
   },
   "planApprovedAt": "2026-08-09T15:02:11.536Z",
   "workStartedAt": "2026-08-09T15:02:32.595Z",

@@ -167,6 +167,34 @@
   margin: 0 0 0.8rem;
 }
 
+.cr-dossier-state {
+  align-items: center;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-block-size: 7rem;
+  padding: 1rem;
+}
+
+.cr-dossier-state > span {
+  color: var(--cr-attention-text);
+  font-family: var(--cr-font-utility);
+  font-size: 1.15rem;
+}
+
+.cr-dossier-state strong {
+  font-size: 0.82rem;
+}
+
+.cr-dossier-state p {
+  color: var(--cr-ink-soft);
+  font-size: 0.68rem;
+  margin: 0.2rem 0 0;
+}
+
+.cr-dossier-state--error {
+  background: color-mix(in srgb, var(--cr-attention-wash) 42%, transparent);
+}
 
 .cr-dossier-candidates {
   display: grid;
