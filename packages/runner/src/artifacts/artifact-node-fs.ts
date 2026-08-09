@@ -4,6 +4,7 @@ import {
   fsyncSync,
   mkdirSync,
   openSync,
+  opendirSync,
   readFileSync,
   renameSync,
   unlinkSync,
@@ -11,7 +12,12 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
-import type { ArtifactFsPort } from "./artifact-contract.js";
+import {
+  MAX_ARTIFACT_ENUMERATION_ENTRIES,
+  type ArtifactDirectoryEntry,
+  type ArtifactDirectoryEntryKind,
+  type ArtifactFsPort,
+} from "./artifact-contract.js";
 
 /**
  * Makes a rename durable.
@@ -39,6 +45,44 @@ function writeAll(fd: number, bytes: Uint8Array): void {
     // equal the digest the caller staged.
     offset += writeSync(fd, bytes, offset, bytes.byteLength - offset);
   }
+}
+
+function entryKind(entry: { isFile(): boolean; isDirectory(): boolean }): ArtifactDirectoryEntryKind {
+  if (entry.isFile()) return "FILE";
+  if (entry.isDirectory()) return "DIRECTORY";
+  return "OTHER";
+}
+
+/**
+ * Reads a directory incrementally through a handle rather than slurping it.
+ *
+ * `readdirSync` allocates the whole listing before anyone can bound it, so a
+ * directory with millions of entries would be materialised in full before the
+ * ceiling could reject it. The handle stops at N+1 and the `finally` closes it
+ * on the normal path, the overflow path and the error path alike — an unclosed
+ * directory handle on win32 keeps the directory locked against later renames.
+ *
+ * Only the basename and a coarse kind escape: no raw path and no OS error text.
+ * Symlinks report OTHER rather than being followed, so the store can refuse
+ * them explicitly instead of reading through them.
+ */
+function listDirectory(path: string): readonly ArtifactDirectoryEntry[] {
+  const entries: ArtifactDirectoryEntry[] = [];
+  const handle = opendirSync(path);
+  try {
+    for (;;) {
+      const entry = handle.readSync();
+      if (entry === null) break;
+      if (entries.length === MAX_ARTIFACT_ENUMERATION_ENTRIES) {
+        entries.push(Object.freeze({ name: entry.name, kind: entryKind(entry) }));
+        break;
+      }
+      entries.push(Object.freeze({ name: entry.name, kind: entryKind(entry) }));
+    }
+  } finally {
+    handle.closeSync();
+  }
+  return Object.freeze(entries);
 }
 
 /**
@@ -71,5 +115,6 @@ export function createNodeArtifactFs(): ArtifactFsPort {
     unlink(path: string): void {
       unlinkSync(path);
     },
+    listDirectory,
   });
 }

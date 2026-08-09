@@ -2,7 +2,17 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 
 import { isCommitIdentity } from "../canonical.js";
-import { ScopeObserverError, type GitObserver, type ScopePathObserver } from "./scope-contract.js";
+import {
+  ScopeObserverError,
+  type GitObserver,
+  type GitRefListing,
+  type ScopePathObserver,
+} from "./scope-contract.js";
+import { parseRefListing } from "./scope-refs.js";
+
+// Re-exported so the ref grammar stays reachable through the module that owns
+// the observer, exactly as it was before the parser moved to its own file.
+export { parseRefListing } from "./scope-refs.js";
 
 export const MAX_SCOPE_OBSERVATION_BYTES = 8 * 1024 * 1024;
 const GIT_TIMEOUT_MS = 30_000;
@@ -68,13 +78,29 @@ function runGit(
   } catch (error) {
     // A truncated observation is worse than none: the overflow gets its own code.
     if ((error as { code?: unknown }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-      throw new ScopeObserverError(
-        "RUNNER_SCOPE_OBSERVATION_OVERFLOW",
-        `git ${label} exceeded ${MAX_SCOPE_OBSERVATION_BYTES} bytes`,
+      throw withCause(
+        new ScopeObserverError(
+          "RUNNER_SCOPE_OBSERVATION_OVERFLOW",
+          `git ${label} exceeded ${MAX_SCOPE_OBSERVATION_BYTES} bytes`,
+        ),
+        error,
       );
     }
-    throw new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_FAILED", `git ${label} failed`);
+    throw withCause(
+      new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_FAILED", `git ${label} failed`),
+      error,
+    );
   }
+}
+
+/**
+ * Preserves the spawn fault behind the coded refusal. Purely additive: the code
+ * and the message are untouched, so every existing caller classifies exactly as
+ * before. It exists so an operation-scoped wrapper can inspect the original
+ * errno without runGit having to widen its own mapping for all six methods.
+ */
+function withCause(error: ScopeObserverError, cause: unknown): ScopeObserverError {
+  return Object.assign(error, { cause });
 }
 
 function decodeUtf8(bytes: Uint8Array, label: string): string {
@@ -167,7 +193,49 @@ export function createNodeGitObserver(
         decodeNulList(git(["ls-files", "-z", "--stage"], "ls-files-stage"), "ls-files-stage"),
       );
     },
+    listRefs(): GitRefListing {
+      // Classification is scoped to THIS operation so the shared runGit mapping
+      // stays byte-identical for every existing caller. Real win32 execFileSync
+      // can report an overflow as ENOBUFS, which runGit does not currently
+      // recognise; widening runGit itself would change how the other five
+      // methods classify their failures.
+      let bytes: Uint8Array;
+      try {
+        bytes = git(
+          [
+            "for-each-ref",
+            "--sort=refname",
+            "--format=%(refname)%00%(objectname)%00%(objecttype)%00",
+            "refs/heads",
+            "refs/remotes",
+          ],
+          "for-each-ref",
+        );
+      } catch (error) {
+        throw retagRefFailure(error);
+      }
+      return parseRefListing(bytes, "for-each-ref");
+    },
   });
+}
+
+/** Attaches the refusing layer, and treats ENOBUFS as the overflow it is. */
+function retagRefFailure(error: unknown): ScopeObserverError {
+  if (error instanceof ScopeObserverError) {
+    const overflowed =
+      error.code === "RUNNER_SCOPE_OBSERVATION_OVERFLOW" ||
+      (error as { cause?: { code?: unknown } }).cause?.code === "ENOBUFS";
+    return new ScopeObserverError(
+      overflowed ? "RUNNER_SCOPE_OBSERVATION_OVERFLOW" : error.code,
+      error.message,
+      "GIT_OBSERVER",
+    );
+  }
+  return new ScopeObserverError(
+    "RUNNER_SCOPE_OBSERVATION_FAILED",
+    "git for-each-ref failed",
+    "GIT_OBSERVER",
+  );
 }
 
 export function createNodeScopePaths(): ScopePathObserver {

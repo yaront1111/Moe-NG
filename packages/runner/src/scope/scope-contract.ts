@@ -65,6 +65,12 @@ export interface GitObserver {
   /** Explicit: the ignored class is not derivable from default porcelain v2 output. */
   lsFilesIgnored(): readonly string[];
   submodulePaths(): readonly string[];
+  /**
+   * Bounded enumeration of refs/heads and refs/remotes. OPTIONAL so the
+   * caller-supplied observers already in this repository stay source-compatible;
+   * the shipped createNodeGitObserver always provides it.
+   */
+  listRefs?(): GitRefListing;
 }
 
 export interface ScopePathObserver {
@@ -72,15 +78,50 @@ export interface ScopePathObserver {
   exists(path: string): boolean;
 }
 
-/** Lets an adapter surface a precise cause (maxBuffer overflow, for one). */
+/**
+ * Which boundary refused. Closed on purpose: when more than one layer can
+ * answer, a caller seeing only the code cannot tell whether the layer it meant
+ * to test is still the one refusing.
+ */
+export const SCOPE_OBSERVER_LAYERS = Object.freeze(["GIT_OBSERVER"] as const);
+
+export type ScopeObserverLayer = (typeof SCOPE_OBSERVER_LAYERS)[number];
+
+/**
+ * Lets an adapter surface a precise cause (maxBuffer overflow, for one).
+ *
+ * `layer` is OPTIONAL and third so every existing two-argument throw keeps its
+ * exact behaviour; only call sites that opt in are attributed. Requiring it
+ * would have forced a code change at boundaries this task must not touch.
+ */
 export class ScopeObserverError extends Error {
   readonly code: RunnerScopeErrorCode;
 
-  constructor(code: RunnerScopeErrorCode, message: string) {
+  readonly layer: ScopeObserverLayer | undefined;
+
+  constructor(code: RunnerScopeErrorCode, message: string, layer?: ScopeObserverLayer) {
     super(message);
     this.name = "ScopeObserverError";
     this.code = code;
+    this.layer = layer;
   }
+}
+
+/** One ref and the commit it points at, exactly as git reported them. */
+export interface GitRefObservation {
+  readonly refName: string;
+  readonly targetCommit: string;
+}
+
+/**
+ * `observationDigest` is what stops an empty listing being bare proof of
+ * absence: "observed, nothing there" carries a digest, "never observed" has no
+ * listing at all.
+ */
+export interface GitRefListing {
+  readonly refs: readonly GitRefObservation[];
+  readonly refCount: number;
+  readonly observationDigest: string;
 }
 
 export interface ObserveScopeInput {

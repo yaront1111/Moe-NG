@@ -6,6 +6,7 @@ import {
   refMatches,
   refRejection,
   sha256Hex,
+  type ArtifactEnumerationResult,
   type ArtifactRef,
   type ArtifactReferenceProof,
   type ArtifactStore,
@@ -14,6 +15,7 @@ import {
   type StageArtifactResult,
   type VerifyArtifactResult,
 } from "./artifact-contract.js";
+import { enumerateArtifactsAt } from "./artifact-enumeration.js";
 
 /**
  * Content-addressed artifact staging.
@@ -201,5 +203,9 @@ export function createArtifactStore(options: ArtifactStoreOptions): ArtifactStor
     return Object.freeze({ ok: true as const, deleted: true });
   };
 
-  return Object.freeze({ stageArtifact, verifyArtifact, deleteArtifact });
+  /** Reports what is on disk; it never stages, verifies-into, or deletes. */
+  const enumerateArtifacts = (): ArtifactEnumerationResult =>
+    enumerateArtifactsAt(fs, objectsDirectory);
+
+  return Object.freeze({ stageArtifact, verifyArtifact, deleteArtifact, enumerateArtifacts });
 }
