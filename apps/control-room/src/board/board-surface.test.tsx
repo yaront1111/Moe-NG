@@ -216,7 +216,7 @@ describe("board columns are the daemon's supplied placement, not a client phase 
 
 describe("board lanes stay honest while loading, empty, and degraded", () => {
   it("keeps Ready drawn while loading, because absent data is not an empty lane", () => {
-    renderBoard({ cards: [], loading: true });
+    renderBoard({ cards: [], loadedEmptyColumns: ["ready"], loading: true });
     expect(screen.getByTestId("cr.board.column.ready")).toBeTruthy();
     expect(screen.queryByTestId("cr.board.column.ready.collapsed")).toBeNull();
     expect(screen.getAllByTestId("cr.board.skeleton")).toHaveLength(COLUMNS.length);
@@ -274,19 +274,16 @@ describe("board cards render the supplied node facts and nothing else", () => {
   it("shows owner, lease, progress, claim, blocker, wait, budget, and path as supplied", () => {
     renderBoard();
     const expected: readonly (readonly [string, string])[] = [
-      ["owner", "w-3"], ["lease.state", "ACTIVE"], ["lease.epoch", "7"],
+      ["owner", "w-3"], ["lease.state", "ACTIVE"], ["lease.epoch", "7"], ["slack", "slack 0m"],
       ["lease.expiry", "2026-08-08T09:41:00.000Z"], ["progress", "steps 2/3"],
       ["latestclaim", "retry endpoint returns 202"], ["blocker.type", "DEPENDENCY_UNPROVEN"],
       ["blocker.owner", "human/operator-1"], ["blocker.reason", "waiting on schema fixture"],
       ["wait.owner", "agent/session-a"], ["wait.reason", "intentional wait: fixture milestone"],
       ["wait.recheck", "recheck in 5m"], ["budget.spent", "$18 of $50"],
       ["budget.basis", "metered provider receipts"], ["criticalpath", "on critical path"],
-      ["slack", "slack 0m"],
     ];
     expect(expected).toHaveLength(16);
-    for (const [suffix, value] of expected) {
-      expect(valueOf(`node.api-endpnt.${suffix}`)).toBe(value);
-    }
+    for (const [suffix, value] of expected) expect(valueOf(`node.api-endpnt.${suffix}`)).toBe(value);
   });
 
   it("shows overlays exactly as supplied and leaves absent overlays UNKNOWN", () => {
@@ -347,6 +344,9 @@ describe("board summaries and actions repeat the daemon verbatim", () => {
       ["cmd-blocker-1", "blocker.open", "run-api-endpnt"],
       ["cmd-release-1", "work.release", "run-api-endpnt"],
     ]);
+    await userEvent.click(screen.getByTestId("cr.action.blocker-open"));
+    expect(activated).toHaveLength(1);
+    expect(at(activated, 0)).toBe(BLOCKER_OPEN);
     cleanup();
     renderBoard({}, affordance([FOREIGN]));
     expect(document.querySelectorAll("[data-testid^='cr.action.']")).toHaveLength(0);
@@ -366,13 +366,5 @@ describe("board summaries and actions repeat the daemon verbatim", () => {
     await userEvent.click(button);
     await userEvent.click(button);
     expect(activated).toEqual([]);
-  });
-
-  it("hands the caller the identical supplied command object on activation", async () => {
-    const activated: NextAllowedCommand[] = [];
-    renderBoard({ onActivateCommand: (cmd) => activated.push(cmd) }, affordance([BLOCKER_OPEN]));
-    await userEvent.click(screen.getByTestId("cr.action.blocker-open"));
-    expect(activated).toHaveLength(1);
-    expect(at(activated, 0)).toBe(BLOCKER_OPEN);
   });
 });

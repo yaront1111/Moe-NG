@@ -204,7 +204,7 @@
       "completedAt": "2026-08-09T09:46:12.715Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -217,16 +217,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:09:43.201Z",
-  "updatedAt": "2026-08-09T09:47:37.024Z",
+  "updatedAt": "2026-08-09T09:52:19.722Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:29:09.881Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-09T09:52:19.722Z",
+    "wallClockMs": 1389841
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
-    "worker-29cc6667"
+    "worker-29cc6667",
+    "qa-017ee6b6"
   ],
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -301,5 +304,8 @@
     "packages/core/src/planning/*.js",
     "packages/core/src/policy/*.js",
     "packages/core/src/project/*.js"
-  ]
+  ],
+  "completedAt": "2026-08-09T09:52:19.722Z",
+  "reviewCompletedAt": "2026-08-09T09:52:19.722Z",
+  "reviewSummary": "APPROVED — 3e7081d (26 bridges + 1 test). Numbers RE-DERIVED by QA. Detail: mem:task-task-386fcb4c6d0241289f177cec9a3010e8-qa-verdict.\n\nGATE re-run: typecheck && test exit 0, 16 files/239 tests (was 15/235; new file has exactly 4 its).\n\nDoD 1+2 via my OWN reachability walker, not the test's: nonTest=34 (matches description), reachable=30, bridges=30, MISSING=0, UNEXPECTED=0, holes=[]. Excluded = exactly the 4 planning test-only modules. Rule valid: exclusive exports {\".\":\"./src/index.ts\"} verified.\n\nBYTES over COMMITTED BLOBS: SWEPT=30 BAD=0; length computed per file from its OWN basename, cr=0, last=0a, content equal to `export * from \"./<own-name>.ts\";` so a mis-targeted bridge can't pass. Fed the checker a CRLF file outside the repo: it said BAD.\n\nDoD 3+4 plain-Node probe v24.16.0 from repo ROOT: POSITIVE 39 exports, undefinedNames=[]. REGRESSION scheduler 36/store 26/runner 66. NEGATIVE all four test-only paths raise the LITERAL ERR_MODULE_NOT_FOUND. Consumer import(\"@moe/core\") from apps/daemon cwd through the real exports map: 39/0 — unblocks task-6054520b.\n\nDoD 5: test spawns a real Node child, asserts BINDINGS (7 exports typed function + POLICY_OUTCOMES frozen), not exit code. FOUR MUTATION DRILLS by me, all killed: delete project-reducer.js (2 red); bridge planning-invariant-drivers (2 red); CRLF-flip goal-reducer.js (1 red, wrongContent); bridge planning-run-test-fixtures — the negative control's OWN subject — 3 red incl. the ERR_MODULE_NOT_FOUND assertion, proving the reason code is live. Restores verified by od + re-green.\n\nDoD 6: git diff 5d77dde HEAD -- packages/core .ts lists ONE file, the new test; index.ts untouched; no scratch files. DoD 7: commit pathspec-clean.\n\nNot rejected on: test shows M not A (foreign c699422 swept it first); a6e46f6 is an automated whole-tree wrapper commit bearing this task's id but 65 foreign files and ZERO packages/core files — harness, not worker."
 }

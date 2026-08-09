@@ -28,8 +28,11 @@
     {
       "stepId": "step-1",
       "description": "Re-derive all three module sets and reproduce the three failures. Run `find packages/skills/src packages/mcp/src packages/control-room-client/src -name '*.ts' -not -name '*.test.ts'` and record exact counts against the 5, 10 and 3 measured when this task was written. CRITICALLY, identify the test-only modules: `packages/mcp/src/http/http-server-test-helpers.ts` matches the `*-test-helpers.ts` convention and must get NO bridge, which makes the real bridge count 5 + 9 + 3 = 17 rather than 18 — confirm that on disk and re-check whether any further test-helper or fixture module has appeared. Note the directory structure, because a top-level-only sweep would silently miss seven bridges: mcp has `http/` and `stdio/`, control-room-client has `generated/`. Reproduce the defect with a valid probe on all three entries, expecting ERR_MODULE_NOT_FOUND naming `skill-contract.js`, `stdio/stdio-server.js` and a `client-*.js`, and run a KNOWN-GOOD control in the same breath — without it a cwd mistake looks exactly like the defect. Read `packages/core/src/identity/identity-session.js` with `cat -A` to confirm the exact bridge bytes. Produce no code.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Step 1 done. No code produced. Two plan-affecting discoveries.\n\nMODULE SETS RE-DERIVED ON DISK (find, non-test .ts) — all three match the description exactly:\n  skills              all_ts=7  nontest_ts=5   js_on_disk=0   (measured 5 -> confirmed 5)\n  mcp                 all_ts=16 nontest_ts=10  js_on_disk=0   (measured 10 -> confirmed 10)\n  control-room-client all_ts=6  nontest_ts=3   js_on_disk=0   (measured 3 -> confirmed 3)\nDirectories: skills flat; mcp = src/, src/http/, src/stdio/; control-room-client = src/, src/generated/. All three package.json pin an EXCLUSIVE exports map {\".\": \"./src/index.ts\"}, so the reachability rule from mem:gotcha-core-bridge-set-needs-reachability-not-name-or-closure is applicable here.\n\nDEFECT REPRODUCED, plain Node v24.16.0 from repo root, per-entry separate processes:\n  SUBJECT skills    IMPORT_FAILED ERR_MODULE_NOT_FOUND file:///D:/projexts/moe-next/packages/skills/src/skill-contract.js\n  SUBJECT mcp       IMPORT_FAILED ERR_MODULE_NOT_FOUND file:///D:/projexts/moe-next/packages/mcp/src/stdio/stdio-server.js\n  SUBJECT crc       IMPORT_FAILED ERR_MODULE_NOT_FOUND file:///D:/projexts/moe-next/packages/control-room-client/src/client-compat.js\nKNOWN-GOOD CONTROLS in the same sweep (proves it is not a cwd mistake): scheduler IMPORTED 36/0 undefined, store 26/0, runner 66/0, core 39/0, contracts 46/0. All reproduce the plan-time numbers.\nNEGATIVE CONTROL already valid pre-fix: http-server-test-helpers.js -> ERR_MODULE_NOT_FOUND.\nNo probe failure named a node_modules path. @modelcontextprotocol/sdk resolves fine — the mcp failure is a missing bridge at packages/mcp/src/stdio/stdio-server.js, inside the repo. Nothing to report under DoD 4 so far.\n\nBRIDGE BYTES CONFIRMED by od on packages/core/src/identity/identity-session.js: 39 bytes, `export * from \"./identity-session.ts\";` + 0a, no 0d.\n\nBEFORE test counts (all exit 0): skills 2 files / 75 passed + 1 skipped; mcp 6 files / 125 passed; control-room-client 3 files / 26 passed.\n\nDISCOVERY 1 — THE BRIDGE COUNT IS 16, NOT 17. The plan says mcp gets 9, excluding only http/http-server-test-helpers.ts. A second mcp module is test-only and must also be skipped: packages/mcp/src/dispatch-conformance.ts imports { describe, expect, it } from \"vitest\" at module scope and is referenced ONLY by five *.test.ts files (http-parity, http-server-lifecycle, http-server, stdio-server tests) plus one prose comment. It is a test-tier module with no test suffix — exactly mem:gotcha-test-tier-modules-have-no-test-suffix, and exactly the class the @moe/core sweep deliberately left unbridged. Bridging it would publish a vitest import on the runtime surface, which task rail \"Never bridge a test-only module\" forbids and which no downstream gate would complain about. So: skills 5 + mcp 8 + control-room-client 3 = 16. I will make dispatch-conformance a SECOND negative control in step 5 rather than a bridge. Flagging because it contradicts the plan's explicit \"nine bridges, NOT ten\".\n\nDISCOVERY 2 — A TRACKED TEST NAMES THIS TASK AS ITS ALLOWLIST OWNER. tests/runtime/package-loadability.test.ts (tracked, landed in a6e46f6) holds allowedPackageFailures entries for @moe/skills, @moe/mcp and @moe/control-room-client, each with ownerTaskId: \"task-17b03331e4ee488a994635144cae4a53\". tests/runtime/package-loadability-support.ts:243 emits \"<pkg>: allowlist entry is stale\" the moment a package IMPORTS while still allowlisted. So the instant my bridges land, that test goes RED unless the three entries are removed in the same commit. The allowance names my task as owner, so retiring it is this task's designed handoff, but the file is outside the paths enumerated in the task description — recording the scope addition explicitly rather than silently widening. Will announce in channel before committing.",
+      "startedAt": "2026-08-09T09:48:50.584Z",
+      "completedAt": "2026-08-09T09:52:14.551Z"
     },
     {
       "stepId": "step-2",
@@ -96,7 +99,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-29cc6667",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,16 +111,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:48.516Z",
-  "updatedAt": "2026-08-09T09:33:42.084Z",
+  "updatedAt": "2026-08-09T09:52:14.551Z",
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:33:40.061Z",
   "metrics": {
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "firstClaimAt": "2026-08-09T09:48:15.764Z",
+    "executedStepCount": 1
   },
   "planningNotes": {
     "approachesConsidered": "(1) THREE PACKAGES, ONE TASK — justified because it is one mechanical concern with one probe harness, and the three are individually tiny (5, 10 and 3 modules). But this is the LEAST uniform of the three sweep tasks and the plan says so explicitly: @moe/mcp has two subdirectories and a third-party dependency, and @moe/control-room-client contains generated output. Those two wrinkles get their own steps rather than being buried in a bulk sweep.\n(2) THE EXCLUSION RULE HAS A REAL TARGET HERE, unlike its sibling task. `packages/mcp/src/http/http-server-test-helpers.ts` matches the `*-test-helpers.ts` convention and must get NO bridge. That is also the natural aim for the probe's negative control: after the sweep, importing `http-server-test-helpers.js` must STILL fail with ERR_MODULE_NOT_FOUND, which simultaneously proves the probe can detect failure and that test-only files were correctly skipped. The sibling task had to invent a non-existent specifier for this; here the real thing exists.\n(3) GENERATED OUTPUT GETS A HAND-WRITTEN BRIDGE. `src/generated/generated-client.ts` still needs `generated-client.js` beside it, but the bridge is hand-written source — do NOT teach the generator to emit bridges and do NOT hand-edit generated files. The package already ships generator-determinism and generated-coverage tests that will catch either mistake.\n(4) EXTERNAL DEPENDENCY FAILURES ARE NOT THIS TASK'S DEFECT. @moe/mcp depends on @modelcontextprotocol/sdk; a probe failure naming node_modules is a different defect with a different owner and must be reported, never papered over with a bridge.",
@@ -136,5 +143,9 @@
   "budget": {
     "wallClockMs": 10800000
   },
-  "planApprovedAt": "2026-08-09T09:33:42.084Z"
+  "planApprovedAt": "2026-08-09T09:33:42.084Z",
+  "contextFetchedBy": [
+    "worker-29cc6667"
+  ],
+  "workStartedAt": "2026-08-09T09:48:50.584Z"
 }

@@ -199,8 +199,8 @@
       "completedAt": "2026-08-08T21:23:49.591Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -231,12 +231,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:38.488Z",
-  "updatedAt": "2026-08-09T09:38:10.141Z",
+  "updatedAt": "2026-08-09T09:47:49.297Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:30:47.157Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T09:47:49.297Z",
+    "wallClockMs": 47822140
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -286,5 +288,8 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "completedAt": "2026-08-09T09:47:49.297Z",
+  "reviewCompletedAt": "2026-08-09T09:47:49.297Z",
+  "reviewSummary": "APPROVED. The foreign red is gone. Re-ran the named five-leg chain: CHAIN_EXIT=0 — runner typecheck 0, runner test 30/980, daemon typecheck 0, daemon test 16/367, root pnpm test 165 files/3030 passed/1 skipped. The daemon leg cleared when the .js bridges landed at 3e7081d; nothing here changed.\n\nDoD1 PASS: seeds>=5, steps>=200, exact step count asserted in-test; per-kind table emitted (66 kinds, min count 3); SET EQUALITY vs a hand-written list on both gates. Determinism proven: two runs gave byte-identical 2447-byte count tables.\n\nDoD2 PASS and load-bearing, drilled on the PRODUCTION surface. Changing effect-activation.ts:234 so activation commits without moving the attempt to RUNNING reddens 4 tests, including \"mints every grant from a full ARMED->ACTIVE plus LAUNCH_REQUESTED->RUNNING pair\". Restored byte-clean, 0658689b. The pair is COMPUTED from the real activateEffect commit at race-steps.ts:142, not stamped, so rail 5 holds.\n\nDoD3 PASS: version delta in {0,1} and =1 exactly when state changed; no input mutation; dispositionRank and reasonCount monotonic per seed with a non-vacuity tail assertion; refusals leave before===after by identity.\n\nDoD4/5 PASS: every slice test file under the 400 cap, max 287. Commit 6844e17 clean by pathspec, 7 files, all under apps/daemon/src/work. No drill residue.\n\nTWO FOLLOW-UPS, not rejection grounds. (1) effect-grant.ts:128 — the attempt-not-RUNNING half of the coherence check can be deleted and all 980 runner tests stay green; only primeEvents reads it, permissively, so no invariant fires. (2) supervisor-races.test.ts:252 asserts code and layer only, and four clauses share ACTIVATION_COMMIT_INCOHERENT, so it survives that mutation; pinning the message, as work-races.test.ts already does, closes it."
 }

@@ -105,9 +105,29 @@
     {
       "stepId": "step-6",
       "description": "Prove zero behaviour change, run both gates, then commit by explicit pathspec. Confirm with `git status --porcelain` and `git diff --stat` that the diff contains ONLY added `.js` files plus the two new tests — no `.ts` file modified anywhere, including either index.ts. Record each suite's test count BEFORE and AFTER as explicit numbers; both after-counts must be greater than or equal to their before-counts since this task only adds suites. Run the gates fresh: `pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test` and `pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test`, all exiting 0 — while remembering that this green run is NOT the evidence for this task; the step-4 probe is, and both must be reported. Adversarial pass before committing: does every bridge point at its OWN sibling rather than a neighbour's name; did any file get CRLF; does the negative control assert the literal ERR_MODULE_NOT_FOUND; would the audit loop actually catch a missing bridge, verified by temporarily deleting one and confirming it reports MISSING before restoring; did a module get added by a concurrent task after step 1, leaving the sweep incomplete — re-run the audit immediately before committing to catch exactly that. Then commit by EXPLICIT PATHSPEC covering the new .js files and the two tests; never a bare git commit, never git add -A, and never a directory pathspec under packages/, since other tasks have uncommitted work there. Verify with `git show --stat` that no .ts file appears.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T09:47:35.740Z"
+      "modifiedFiles": [
+        "packages/context/src/canonical-digest.js",
+        "packages/context/src/context-contract.js",
+        "packages/context/src/context-render.js",
+        "packages/context/src/context-selection.js",
+        "packages/context/src/context-wire.js",
+        "packages/context/src/dead-end-journal.js",
+        "packages/context/src/index.js",
+        "packages/context/src/release-handoff.js",
+        "packages/context/src/runtime-entrypoint.test.ts",
+        "packages/review/src/canonical.js",
+        "packages/review/src/index.js",
+        "packages/review/src/review-contract.js",
+        "packages/review/src/review-findings.js",
+        "packages/review/src/review-package.js",
+        "packages/review/src/reviewer-eligibility.js",
+        "packages/review/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "Adversarial review read the full owned path-limited diff top-to-bottom. No mutable runtime state/concurrency surface was introduced; child failures return structured FAILED/code output and JSON/parsing/launch failures reject the test. Both tests use package self-reference from package cwd rather than a weaker relative import. Final mutation proved the static audit detects exactly review-findings.js as MISSING=1 and exact-byte restoration succeeded. Final audit re-derived context=8/review=6 after tests were added: MISSING=0 UNEXPECTED=0 BADCONTENT=0 CRLF=0; test files also CR=0/final byte=10. Final Node probe: context 19 exports/0 undefined; review 23/0; scheduler control 36/0; deliberately missing negative literal ERR_MODULE_NOT_FOUND. Fresh focused gate exit 0: context 5 files/24 tests vs baseline 4/23; review 3 files/91 tests vs baseline 2/90; both typechecks pass.\n\nShared-tree attribution: before I could make the mandated explicit-path commit, foreign Moe completion-hook commit a6e46f6 swept these 16 unstaged owned files plus extensive foreign WIP. Per the established hook rule, I did not revert or manufacture a no-op. Posted #general msg-e565180a348c41029c999708115d40bf. Path-limited parent diff shows exactly 16 additions and zero modified .ts files; current owned paths are clean. QA should review a6e46f6^..a6e46f6 limited to packages/context/src and packages/review/src.",
+      "startedAt": "2026-08-09T09:47:35.740Z",
+      "completedAt": "2026-08-09T09:50:59.164Z"
     }
   ],
   "status": "WORKING",
@@ -123,13 +143,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:16.556Z",
-  "updatedAt": "2026-08-09T09:47:35.740Z",
+  "updatedAt": "2026-08-09T09:50:59.164Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:32:38.806Z",
@@ -137,7 +158,7 @@
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
     "firstClaimAt": "2026-08-09T09:40:04.077Z",
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planningNotes": {
     "approachesConsidered": "(1) ONE TASK FOR TWO PACKAGES is right here and the daemon's 'split on and' warning does not apply: both packages are flat, tiny, greenfield from this epic, have zero existing bridges, and share one mechanical concern with one probe harness. Splitting would duplicate the harness and the controls for 6 and 8 files respectively.\n(2) THE PROBE IS THE DELIVERABLE, NOT THE BRIDGES. Writing 14 one-line files is trivial; a script does it in seconds. What makes the task correct is the plain-Node probe WITH ITS THREE CONTROLS, because this entire defect class exists precisely because a green vitest suite was repeatedly mistaken for evidence. Two of the six steps write bridges; the rest is proof.\n(3) BOTH PACKAGES OR NEITHER — a sweep that bridges one and leaves the other is the exact silent incompleteness this defect is known for, and it is invisible to every vitest gate.\n(4) NO SUBDIRECTORIES in either package, which keeps this the simplest of the three sweep tasks; the glob set is one per package.",

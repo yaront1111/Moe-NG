@@ -66,19 +66,24 @@
     {
       "stepId": "step-4",
       "description": "TDD RED for the canonical board in board-surface.test.tsx. Build an independent exact-length corpus carrying sourceAggregate, exact phase fact, and separately supplied placement; include same-spelled aggregate states and deliberately contradictory phase/placement so a phase-folding implementation fails. Assert all five declared columns, exact phase/source preservation, Ready visible while loading but collapsed only after an authoritative loaded-empty lane, terminated hidden by default then shown only by the controlled filter, unknown placement retained in `cr.board.unmapped`, first ShellFrame render showing Board with zero `cr.graph.*`, and caller order without sorting/dedupe. For cards pin owner/lease state/epoch/expiry, renewal and activity silence as distinct facts, progress, latest claim, typed blocker and intentional wait owner/reason/recheck, per-card budget/basis, critical-path/slack, SUSPECT/held/disposition/qualification overlays exactly as supplied, one chip per fact, provenance callback IDs, duplicate/blank identities not dropping records, and hostile extra secret fields absent from DOM. Pin supplied frontier lanes READY_NOW/UNBLOCK_NEXT/INTENTIONAL_WAIT/UNSAFE_OR_UNKNOWN with cursor/graph epoch/idle capacity/readiness explanation, and the polite live join strip. Assert rendered action `(commandId, kind, target)` tuples exactly equal matching supplied context commands; empty/foreign-target contexts render none and disabled actions never activate.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/board/board-surface.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/board/board-surface.test.tsx"
       ],
-      "startedAt": "2026-08-09T09:44:17.955Z"
+      "modifiedFiles": [
+        "apps/control-room/src/board/board-surface.test.tsx"
+      ],
+      "note": "RED written: board-surface.test.tsx, 17 cases in 4 describes, 370 physical lines (headroom kept under the 400 cap for step 6's keyboard block). Independent hand-written corpus of 13 cards, asserted with `expect(CARDS.length).toBe(13)` and `expect(FRONTIER.length).toBe(4)` so no sweep can pass vacuously. The corpus is built to break a phase-folding implementation: same-spelled-a (PlanningRun/READY, placement plan) and same-spelled-b (WorkItem/READY, placement ready) spell the same state in different aggregates and different lanes, and `contradiction` carries phase EXECUTING with placement plan, so honoring placement is the only way to pass. Pins: five declared columns with column-major caller order equal to a hand-written VISIBLE_ORDER (duplicate nodeId rendered twice, blank identity as cr.board.card.UNKNOWN, no sort/dedupe), exact phase value plus data-source-aggregate preservation, unplaced record retained in cr.board.unmapped and absent from every column, terminated hidden by default with a controlled cr.board.filter.terminated that reports true but does not self-reveal, Ready still drawn while loading with five skeletons, Ready collapsed only via loadedEmptyColumns with exact collapse copy while executing keeps its \"Nothing executing\" hint, degraded as-of note with role=\"status\", and first ShellFrame render showing cr.surface.board under cr.shell.main with zero cr.graph.* nodes. Card pins: the exact 23 declared fact kinds in order with exactly one cr.chip.* each; renewal silence \"renewed 41s ago\" and activity silence \"quiet 41m\" as two separate facts with the activity fact wrapped in the spec's cr.board.card.silence.{nodeId}; a 16-pair table (length-asserted) for owner/lease/progress/claim/typed blocker/intentional wait/budget+basis/critical path/slack; SUSPECT/held/disposition/qualification exactly as supplied with an absent qualification rendering UNKNOWN + data-origin=\"ABSENT\"; node-qualified provenance callback ids; and a hostile card carrying sessionToken \"shhh-bearer-secret\" that must not appear anywhere in the DOM. Frontier pins all four supplied lanes READY_NOW/UNBLOCK_NEXT/INTENTIONAL_WAIT/UNSAFE_OR_UNKNOWN with cursor/graph epoch/idle capacity/readiness explanation (the unsafe lane's absent readiness stays UNKNOWN) plus the aria-live=\"polite\" join strip with supplied summary and exact input identities. Action pins: rendered (commandId, kind, target) tuples exactly equal the two matching supplied context commands with the foreign-target command excluded, activation returns the identical frozen object (toBe), foreign-only and empty command sets render zero cr.action.* controls, and a mutationsEnabled=false snapshot leaves the control disabled with zero callbacks after two clicks. Confirmed RED for the right reason: `Error: Failed to resolve import \"./board-surface.js\" from \"src/board/board-surface.test.tsx\". Does the file exist?` (exit 1, no tests run).",
+      "startedAt": "2026-08-09T09:44:17.955Z",
+      "completedAt": "2026-08-09T09:48:42.018Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN the board presentation in board-contract.ts, board-card.tsx, and board-surface.tsx. Define local presentation contracts (not wire DTOs) with SuppliedFact fields, opaque source aggregate/exact phase, daemon-supplied placement `plan|ready|executing|review|accepted|terminated|null`, controlled loading/degraded/terminated state, and readonly frontier/join/card arrays. BoardCard renders only named properties through FactRow, keeps renewal/activity silence and overlays orthogonal, composes shared target-scoped SuppliedActions, and uses index-qualified keys so malformed duplicate identities remain visible. BoardSurface renders column-major supplied order, five columns plus explicit unmapped/terminated regions, authoritative loaded-empty Ready collapse, per-column loading/empty hints, last-known degraded data, verbatim frontier/join summaries, and no phase mapping, readiness/frontier/budget/truth calculation, lifecycle rule, sorting, dedupe, optimistic transition, transport, or graph surface. Keep every production TS/TSX <=250 lines and turn the board RED suite green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/board/board-contract.ts",
         "apps/control-room/src/board/board-card.tsx",
@@ -89,7 +94,16 @@
         "apps/control-room/src/board/board-contract.ts",
         "apps/control-room/src/board/board-card.tsx",
         "apps/control-room/src/board/board-surface.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/board/board-contract.ts",
+        "apps/control-room/src/board/board-card.tsx",
+        "apps/control-room/src/board/board-surface.tsx",
+        "apps/control-room/src/board/board-surface.test.tsx"
+      ],
+      "note": "GREEN: 18/18 in src/board/board-surface.test.tsx, `pnpm --filter @moe/control-room typecheck` exit 0. board-contract.ts (105 lines) declares presentation contracts explicitly documented as NOT wire DTOs, with SuppliedFact fields, opaque sourceAggregate, exact phase, daemon-supplied placement plan|ready|executing|review|accepted|terminated|null, a separate actionTargetId (never derived from nodeId), controlled loading/degraded/showTerminated/loadedEmptyColumns state, and readonly frontier/join/card arrays. board-card.tsx (85 lines) renders only the 23 named properties through FactRow, keeps renewal and activity silence as two facts with the activity fact wrapped in cr.board.card.silence.{id}, keeps SUSPECT/held/disposition/qualification orthogonal, uses readIdentity so a blank identity renders as UNKNOWN rather than disappearing, and composes the shared target-scoped SuppliedActions. board-surface.tsx (194 lines) selects each lane by supplied placement only, renders column-major supplied order with index-qualified keys, five columns plus explicit unmapped and terminated regions, collapse gated on !loading && loadedEmpty && no cards (so unknown never collapses), per-column skeletons and empty hints, a degraded as-of note, and verbatim frontier lanes plus a polite join strip. No phase-to-column table, readiness/frontier/budget/truth calculation, lifecycle rule, sorting, dedupe, optimistic transition, transport, or cr.graph.* surface. Two corrections made while going green, both recorded: the card title test id was cr.board.card.title, which the prefix query counted as a card, so it is now cr.board.cardtitle; and the loading case now supplies loadedEmptyColumns: [\"ready\"] so the !loading guard is genuinely load-bearing instead of vacuously satisfied by an empty authoritative list. All three production files are under the 250-line target; the test file is 370 lines with headroom for step 6.",
+      "startedAt": "2026-08-09T09:49:33.867Z",
+      "completedAt": "2026-08-09T09:51:42.620Z"
     },
     {
       "stepId": "step-6",
@@ -150,12 +164,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T09:44:17.955Z",
+  "updatedAt": "2026-08-09T09:51:42.620Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:08:15.396Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -167,7 +181,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:26:51.791Z",

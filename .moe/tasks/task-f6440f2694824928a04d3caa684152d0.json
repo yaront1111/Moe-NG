@@ -163,18 +163,43 @@
     {
       "stepId": "step-10",
       "description": "Adversarial self-review, then commit — and THE COMMIT IS THE DANGEROUS PART OF THIS TASK. Measured at plan time, the shared working directory holds task-6054520b's live uncommitted work in the very package you are editing: `apps/daemon/src/index.ts` is MODIFIED and `apps/daemon/src/index-surface.test.ts` is UNTRACKED, both foreign. A pathspec of `git commit -- apps/daemon/src` would capture both and publish another task's mid-flight work under your commit. Commit by EXPLICIT PER-FILE pathspec only: each new .js bridge by name, plus apps/daemon/src/graph-preview-request.test.ts and apps/daemon/src/runtime-entrypoint.test.ts. Run `git status --porcelain apps/daemon` first, confirm every staged entry is one of yours, unstage anything foreign with `git restore --staged --`, and per task rail 4 REPORT the foreign paths in your completion note rather than reverting them. Verify with `git show --stat` that the commit contains exactly your bridges plus those two test files and NO .ts service module and NO index.ts. Review questions before committing: is any bridge pointing at a sibling other than its own name? Did `git diff --stat -- '*.ts'` show anything beyond the two test files? Is any work-race module now bridged? Does the sealed-subpath ERR_PACKAGE_PATH_NOT_EXPORTED test still pass? Confirm no debug, probe or scratch file remains.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/graph-preview-request.test.ts",
         "apps/daemon/src/runtime-entrypoint.test.ts",
         "apps/daemon/src/bootstrap/*.js",
         "apps/daemon/src/work/*.js"
       ],
-      "startedAt": "2026-08-09T09:47:31.519Z"
+      "modifiedFiles": [
+        "apps/daemon/src/index.js",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.js",
+        "apps/daemon/src/bootstrap/bootstrap-ledger.js",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.js",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.js",
+        "apps/daemon/src/bootstrap/bootstrap-services.js",
+        "apps/daemon/src/goals/goal-services.js",
+        "apps/daemon/src/http/event-stream-contract.js",
+        "apps/daemon/src/http/event-stream.js",
+        "apps/daemon/src/http/http-adapter.js",
+        "apps/daemon/src/http/http-contract.js",
+        "apps/daemon/src/planning/planning-services.js",
+        "apps/daemon/src/recovery/doctor-commands.js",
+        "apps/daemon/src/work/work-claim.js",
+        "apps/daemon/src/work/work-ingress.js",
+        "apps/daemon/src/work/work-kernel.js",
+        "apps/daemon/src/work/work-lease.js",
+        "apps/daemon/src/work/work-lifecycle.js",
+        "apps/daemon/src/work/work-slot-ceiling.js",
+        "apps/daemon/src/graph-preview-request.test.ts",
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW - findings, each checked rather than asserted:\n- `export *` silently drops a default export. Grepped all 27 non-test daemon modules: ZERO `export default`. Safe.\n- The audit test's import regex is /from\\s+\"(\\.[^\"]*)\\.js\"/ so it would miss a side-effect-only `import \"./x.js\"`, a single-quoted specifier, or a dynamic `import()`. Grepped: none of the three exists in any daemon runtime module. And the miss would be caught anyway by the plain-Node probe, which fails on the first unresolvable specifier - the two directions cover each other.\n- TOCTOU in the audit's readdirSync/statSync walk: a concurrent agent deleting a file under apps/daemon/src mid-run would throw. Theoretical only (this package is not being edited by anyone else right now), same shape as the landed @moe/runner precedent. Flagging, not fixing.\n- The namespace probe pins claimWork / evaluateGraphPreviewRequestBytes / readEventPage / GOAL_HANDLERS. That couples the file to task-6054520b's published surface, deliberately: asserting only \"exit 0\" is the weak assertion this whole defect class lives in. index-surface.test.ts already pins the full set by exact equality, so no new coupling class is introduced.\n- Windows path separators appear only in failure messages (`relative()`); all comparisons go through `resolve()`. Proven by drill A, which correctly named `work\\work-kernel.ts`.\n- runtime-entrypoint.test.ts = 175 lines, under the 250 cap. No debug/probe/scratch file anywhere: every probe was inline `node -e`, both /tmp backup dirs removed, `git status` shows no stray file.\n- Sealed-subpath ERR_PACKAGE_PATH_NOT_EXPORTED (line 281) and the forbidden-key loop (line 224) both still present and green.\n\nTHE COMMIT - IT DID NOT GO AS PLANNED, AND THIS IS THE HEADLINE FOR QA.\n`git add -- <21 explicit paths>` exited 0 and staged NOTHING (staged_count=0). Not a .gitignore problem (`git check-ignore` clean); `git ls-files` showed all 21 paths already TRACKED. Between my last green gate and my `git add`, the worker on task-386fcb4c landed commit **a6e46f6** - a 65-file WHOLE-TREE sweep, message `feat(task-386fcb4c...): Add package-wide .js runtime bridges to @moe/core` - which captured every one of my paths. There was nothing left for me to commit, and epic rail 3 forbids reset/rewrite, so per task rail 4 I am REPORTING it rather than reverting.\n\nVerified after the fact instead of assumed:\n- `git show --name-only a6e46f6 -- apps/daemon` = exactly my 19 bridges + graph-preview-request.test.ts (-4) + runtime-entrypoint.test.ts (+175) = 21 files, 194 insertions / 4 deletions. NO index.ts, NO .ts service module rode along.\n- All 19 committed BLOBS re-read with `git show HEAD:<path>`: each is the exact one-line form naming its own sibling, zero 0x0D bytes. content_bad=0. (This mattered - a whole-tree sweep commits whatever is on disk at that instant, so had it fired mid-drill it would have committed a mutated file while `git status` read clean.)\n- Working tree == HEAD for apps/daemon (`git status --porcelain apps/daemon` empty).\n- FOREIGN uncommitted work still present elsewhere and left untouched: apps/control-room/src/{evidence,timeline,goals,board}/** (another agent, mid-flight) and the .moe/** board files.\n\nFresh re-verification AT HEAD after all of this: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` -> exit 0, 16 files / 367 tests passed; plain-Node root probe -> `LOADED exports=31 undefinedBindings=[]`, exit 0.\n\nReview questions answered: no bridge points at a sibling other than its own (byte-compared per file, and drill B proves the check reddens). `git diff --stat -- '*.ts'` showed no daemon .ts beyond graph-preview-request.test.ts. No work-race module is bridged (all five raise ERR_MODULE_NOT_FOUND under Node). Sealed-subpath test passes.",
+      "startedAt": "2026-08-09T09:47:31.519Z",
+      "completedAt": "2026-08-09T09:51:22.941Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0b27a5cc",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-812c17a0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -193,16 +218,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:31:00.270Z",
-  "updatedAt": "2026-08-09T09:47:31.519Z",
+  "updatedAt": "2026-08-09T09:52:24.803Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:33:45.886Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 9
+    "executedStepCount": 10
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
-    "worker-0b27a5cc"
+    "worker-0b27a5cc",
+    "qa-812c17a0"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -217,7 +243,8 @@
     "step-6",
     "step-7",
     "step-8",
-    "step-9"
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:37:44.966Z",
@@ -236,5 +263,38 @@
     "wallClockMs": 9000000
   },
   "planApprovedAt": "2026-08-09T09:37:47.002Z",
-  "workStartedAt": "2026-08-09T09:38:29.856Z"
+  "workStartedAt": "2026-08-09T09:38:29.856Z",
+  "reviewStartedAt": "2026-08-09T09:52:18.655Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  16 passed (16)\n      Tests  367 passed (367)\n   Start at  12:51:45\n   Duration  1.17s (transform 5.89s, setup 0ms, import 7.99s, tests 1.24s, environment 1ms)\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-09T09:52:18.655Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/index.js",
+    "apps/daemon/src/bootstrap/bootstrap-contracts.js",
+    "apps/daemon/src/bootstrap/bootstrap-ledger.js",
+    "apps/daemon/src/bootstrap/bootstrap-policy-services.js",
+    "apps/daemon/src/bootstrap/bootstrap-sequence.js",
+    "apps/daemon/src/bootstrap/bootstrap-services.js",
+    "apps/daemon/src/goals/goal-services.js",
+    "apps/daemon/src/planning/planning-services.js",
+    "apps/daemon/src/recovery/doctor-commands.js",
+    "apps/daemon/src/http/event-stream-contract.js",
+    "apps/daemon/src/http/event-stream.js",
+    "apps/daemon/src/http/http-adapter.js",
+    "apps/daemon/src/http/http-contract.js",
+    "apps/daemon/src/work/work-claim.js",
+    "apps/daemon/src/work/work-ingress.js",
+    "apps/daemon/src/work/work-kernel.js",
+    "apps/daemon/src/work/work-lease.js",
+    "apps/daemon/src/work/work-lifecycle.js",
+    "apps/daemon/src/work/work-slot-ceiling.js",
+    "apps/daemon/src/bootstrap/*.js",
+    "apps/daemon/src/http/*.js",
+    "apps/daemon/src/work/*.js",
+    "apps/daemon/src/graph-preview-request.test.ts",
+    "apps/daemon/src/runtime-entrypoint.test.ts"
+  ]
 }
