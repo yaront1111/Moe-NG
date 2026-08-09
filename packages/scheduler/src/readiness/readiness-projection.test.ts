@@ -210,6 +210,23 @@ describe("fail-closed refusals", () => {
     const projection = project();
     expect(projection.graphIdentity).toBe(devGraph().graphIdentity);
   });
+
+  it("refuses a graph this runtime did not validate, before reading its nodes", () => {
+    const forged = {
+      completionNodeKey: DEV_READY,
+      edges: [],
+      graphIdentity: "forged",
+      nodes: [{ nodeKey: DEV_READY, executionBearing: true }],
+    } as unknown as Parameters<typeof projectReadiness>[0];
+    const result = projectReadiness(forged, devInput());
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("unreachable");
+    }
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "GRAPH_VALIDATION_PROVENANCE_INVALID",
+    ]);
+  });
 });
 
 describe("immutability", () => {

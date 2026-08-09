@@ -140,3 +140,77 @@ export function devBundlesWith(
 ): Record<string, unknown>[] {
   return devBundles().map((entry) => (entry["nodeKey"] === nodeKey ? bundle : entry));
 }
+
+/**
+ * `recheckAtGate` must not sit past `deadlineGate` or the record is malformed
+ * rather than expired, so an expired fixture has to move BOTH gates behind the
+ * bundle's `currentGate` of EXECUTOR_CLAIM.
+ */
+export function devWait(
+  deadlineGate = "REVIEW_QUALIFICATION",
+  recheckAtGate = "EXECUTOR_CLAIM",
+): Record<string, unknown> {
+  return {
+    waitRef: "wait:dev",
+    ownerNodeKey: DEV_CAPABILITY,
+    reason: "awaiting an external approval window",
+    predicate: {
+      predicateRef: "predicate:approval-window",
+      schemaId: "schema:approval",
+      schemaVersion: 1,
+      parametersDigest: DEV_DIGEST,
+    },
+    affectedScope: [DEV_CAPABILITY],
+    recheckAtGate,
+    deadlineGate,
+    escalation: { kind: "ESCALATE_TO_HUMAN", ref: "escalation:dev" },
+    binding: {
+      graphIdentity: "graph:dev",
+      sourceFactVersions: [{ sourceFactRef: "fact:approval", version: 2 }],
+    },
+  };
+}
+
+/**
+ * A second fixture with real descendants, for the failed-predecessor case:
+ *
+ *   dev-producer HARD-> dev-consumer HARD-> dev-done   (both edges UNSATISFIED)
+ *   dev-free     HARD-> dev-done                       (SATISFIED, unrelated)
+ */
+export const DEV_PRODUCER = "dev-producer";
+export const DEV_CONSUMER = "dev-consumer";
+export const DEV_FREE = "dev-free";
+
+export const DEV_CHAIN_SNAPSHOT: GraphSnapshot = {
+  completionNodeKey: DEV_DONE,
+  nodes: [
+    { nodeKey: DEV_PRODUCER, executionBearing: true },
+    { nodeKey: DEV_CONSUMER, executionBearing: true },
+    { nodeKey: DEV_FREE, executionBearing: true },
+    { nodeKey: DEV_DONE, executionBearing: true },
+  ],
+  edges: [
+    { edgeKey: "dev-edge-produce", kind: "HARD", producerNodeKey: DEV_PRODUCER, consumerNodeKey: DEV_CONSUMER },
+    { edgeKey: "dev-edge-consume", kind: "HARD", producerNodeKey: DEV_CONSUMER, consumerNodeKey: DEV_DONE },
+    { edgeKey: "dev-edge-free", kind: "HARD", producerNodeKey: DEV_FREE, consumerNodeKey: DEV_DONE },
+  ],
+};
+
+export function devChainGraph(): ValidatedGraph {
+  const validated = validateGraphSnapshot(DEV_CHAIN_SNAPSHOT);
+  if (!validated.ok) {
+    throw new Error("readiness chain fixture graph must validate");
+  }
+  return validated.graph;
+}
+
+export function devChainInput(): Record<string, unknown> {
+  return {
+    hardEdgeFacts: [
+      { edgeKey: "dev-edge-produce", state: "UNSATISFIED" },
+      { edgeKey: "dev-edge-consume", state: "UNSATISFIED" },
+      { edgeKey: "dev-edge-free", state: "SATISFIED" },
+    ],
+    nodeFacts: [DEV_PRODUCER, DEV_CONSUMER, DEV_FREE, DEV_DONE].map((key) => devBundle(key)),
+  };
+}

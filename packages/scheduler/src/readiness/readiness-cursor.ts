@@ -150,14 +150,19 @@ export function buildReadinessCursor(
   }
   const withheld = withholdReason(graph, facts);
   const nodeAvailabilityFacts = graph.nodes.map((node) => {
+    // An advisory/organizational node has NO execution authority (design 8.3
+    // rule 5), so `false` is the confirmed truth about it rather than an
+    // encoding of its (possibly UNKNOWN) facts. partitionFrontier skips these
+    // nodes before it reads either value in any case.
+    if (!node.executionBearing || withheld !== null) {
+      return { nodeKey: node.nodeKey, admissionEligible: false, dispatchAvailable: false };
+    }
     const supplied = facts.get(node.nodeKey)!;
-    return withheld === null
-      ? {
-        nodeKey: node.nodeKey,
-        admissionEligible: supplied.admission === "CONFIRMED_TRUE",
-        dispatchAvailable: supplied.dispatch === "CONFIRMED_TRUE",
-      }
-      : { nodeKey: node.nodeKey, admissionEligible: false, dispatchAvailable: false };
+    return {
+      nodeKey: node.nodeKey,
+      admissionEligible: supplied.admission === "CONFIRMED_TRUE",
+      dispatchAvailable: supplied.dispatch === "CONFIRMED_TRUE",
+    };
   });
   return {
     ok: true,

@@ -14,6 +14,7 @@
  */
 import { deepFreeze } from "../admission/admission-model.js";
 import { partitionFrontier } from "../frontier.js";
+import { hasValidatedGraphProvenance } from "../graph-provenance.js";
 import type {
   BlockedNode,
   BlockedReason,
@@ -162,6 +163,17 @@ export function projectReadiness(
   graph: ValidatedGraph,
   input: unknown,
 ): ReadinessProjectionResult {
+  // Before ANY graph property is read: a hand-built object cast past
+  // validateGraphSnapshot must be refused here, not read for its node list.
+  // The landed code is passed through, never re-coded as a readiness synonym.
+  if (!hasValidatedGraphProvenance(graph)) {
+    return refuseReadiness([
+      makeReadinessIssue(
+        "GRAPH_VALIDATION_PROVENANCE_INVALID",
+        "graph was not produced by this runtime's validateGraphSnapshot",
+      ),
+    ]);
+  }
   const built = buildReadinessCursor(graph, input);
   if (!built.ok) {
     return built;
@@ -213,13 +225,16 @@ export function projectReadiness(
   }
 
   return deepFreeze({
-    graphIdentity: partitioned.partition.graphIdentity,
-    logicalReady: [...logicalReady],
-    blocked: [...blocked],
-    admissionReady: admissionReady.sort(),
-    dispatchable: dispatchable.sort(),
-    partition: built.withheld === null ? partitioned.partition : null,
-    withheld: built.withheld,
-    nodes: nodes.sort((a, b) => (a.nodeKey < b.nodeKey ? -1 : a.nodeKey > b.nodeKey ? 1 : 0)),
+    ok: true,
+    projection: {
+      graphIdentity: partitioned.partition.graphIdentity,
+      logicalReady: [...logicalReady],
+      blocked: [...blocked],
+      admissionReady: admissionReady.sort(),
+      dispatchable: dispatchable.sort(),
+      partition: built.withheld === null ? partitioned.partition : null,
+      withheld: built.withheld,
+      nodes: nodes.sort((a, b) => (a.nodeKey < b.nodeKey ? -1 : a.nodeKey > b.nodeKey ? 1 : 0)),
+    },
   });
 }
