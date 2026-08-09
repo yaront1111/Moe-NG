@@ -330,6 +330,11 @@ function fromEnv(): DaemonDependencyProvider & { close(): void } {
 
 /** Bin entry: `--dependencies=src/daemon-store-dependencies.js`. Env is read lazily. */
 const provider: DaemonDependencyProvider = Object.freeze({
+  affordances: () => {
+    const port = fromEnv().affordances;
+    if (port === undefined) throw new Error("unreachable: affordances is always wired");
+    return port();
+  },
   provide: () => fromEnv().provide(),
   subscriptions: () => {
     const port = fromEnv().subscriptions;
