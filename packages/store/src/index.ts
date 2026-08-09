@@ -44,3 +44,20 @@ export type {
   StoredEvent,
   StoreHealth,
 } from "./sqlite-event-store.js";
+export {
+  BACKUP_GENERATION_MANIFEST_VERSION,
+  BACKUP_GENERATION_REASONS,
+  BACKUP_OBJECT_CATEGORIES,
+} from "./backup-generation-contracts.js";
+export type {
+  BackupGenerationContainer,
+  BackupGenerationManifest,
+  BackupGenerationReason,
+  BackupGenerationTrust,
+  BackupGenerationVerifyResult,
+  BackupKeyChainEntry,
+  BackupObjectCategory,
+  BackupObjectDescriptor,
+} from "./backup-generation-contracts.js";
+export { createBackupGeneration, verifyBackupGeneration } from "./backup-generation.js";
+export type { BackupGenerationCreateResult } from "./backup-generation.js";
