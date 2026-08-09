@@ -148,8 +148,8 @@
       "completedAt": "2026-08-09T13:07:22.508Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b2df68b9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,17 +168,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.845Z",
-  "updatedAt": "2026-08-09T13:09:16.245Z",
+  "updatedAt": "2026-08-09T13:12:52.714Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:39:17.209Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T13:12:52.714Z",
+    "wallClockMs": 2015505
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
     "architect-8c9073cd",
-    "worker-2bc13005"
+    "worker-2bc13005",
+    "qa-b2df68b9"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -241,5 +244,8 @@
     "packages/runner/src/evidence/verifier-process-capture.js",
     "packages/runner/src/surface/evidence-surface.ts",
     "packages/runner/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T13:12:52.714Z",
+  "reviewCompletedAt": "2026-08-09T13:12:52.714Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATE RE-RUN BY QA: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0, 38 files / 1139 tests. Owned paths clean.\n\nPLAIN-NODE ROOT SMOKE, mine: 124 root exports, all 8 new names present, 12 codes, 5 layers. I also called `hermeticVerifierEnvironment({PATH, SECRET_TOKEN, SystemRoot})` directly: returns only [LC_ALL, PATH, SystemRoot], drops SECRET_TOKEN. No daemon secret reaches the child — checked, not read.\n\nTWO DRILLS RE-RUN BY QA, restores verified by `git hash-object` against f4e12bf blobs:\n- run-registry lookup bypassed: 4 red — all three duplicate-delivery cases (in-flight adoption, settled replay, divergent recipe) plus \"reaches every declared code and every declared layer\". DoD 4's invocation-count assertion is real.\n- grant consumption neutralised: 1 red, \"refuses an already consumed grant at the supervisor's own layer\" — the supervisor's code passes through verbatim.\n\nSHELL-FREE BOUNDARY: `shell: false` at launcher.ts:70, no exec/execSync/shell string, .cmd/.bat/.ps1 refused at the gate because a shim needs a shell. Gate order refuses cancellation, seal, manifest, workspace and executable BEFORE the grant is spent, so a refused launch never burns a one-use activation.\n\nROOT GUARD CO-CHANGE, the thing I said I would reject on: index-surface.test.ts gains all 8 names as literals AND cardinality moves 116 -> 124, exactly +8. No bare bump, no loosening; set equality intact. Unowned but required co-change.\n\nMETADATA NOTE, not a defect: task.filesModified lists four unowned files (verifier-execution, effect-grant, effect-activation.test, scope-git). The diff shows zero changes to any — step-1 reads recorded as affectedFiles. Nothing foreign edited.\n\nSizes 49/209/127/94/235/102/112, all <=250. The 12th code (GRANT_RUN_DIVERGENT at REGISTRY) exists so no layer carries dead vocabulary; drill 1 proves the sweep covers it."
 }

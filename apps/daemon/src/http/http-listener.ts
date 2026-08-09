@@ -1,40 +1,40 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
+import type { SubscriptionPort } from "./event-stream-contract.js";
+import { readEventPage } from "./event-stream.js";
 import { handleCommandRequest } from "./http-adapter.js";
-import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
+import {
+  CONTROL_ROOM_LISTENER_LAYER,
+  authorityOf,
+  checkHeaders,
+  credentialOf,
+  isLoopbackHost,
+  originOf,
+  protocolVersionOf,
+  readBoundedBody,
+  readEventRequest,
+  refuse,
+  statusFor,
+} from "./http-listener-guards.js";
+import type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guards.js";
+
+export {
+  CONTROL_ROOM_LISTENER_LAYER,
+  LISTENER_REFUSAL_CODES,
+} from "./http-listener-guards.js";
+export type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guards.js";
 
 /**
  * The socket, and only the socket.
  *
  * Everything from authentication onward is already committed in
- * `handleCommandRequest`, which begins at `authenticate` and never sees headers.
- * So this module owns exactly what the adapter cannot: the bind, the Host and
- * Origin checks, the CSRF token and the body bound. It performs NO
- * authentication, NO capability check, NO decode and NO error mapping of its
- * own — duplicating any of those would be a second authority that can drift
- * from the first.
+ * `handleCommandRequest`, and the resumable stream is already committed in
+ * `readEventPage`. This module binds, guards the headers the adapter never
+ * sees, and routes. It performs NO authentication, NO capability check, NO
+ * decode of a command and NO error mapping of its own — duplicating any of
+ * those would be a second authority that can drift from the first.
  */
-export const CONTROL_ROOM_LISTENER_LAYER = "CONTROL_ROOM_LISTENER" as const;
-
-/**
- * Every refusal this layer can emit. Frozen and closed so a consumer can switch
- * exhaustively; a code produced here but absent from this list is a defect.
- */
-export const LISTENER_REFUSAL_CODES = Object.freeze([
-  "LISTENER_BODY_TOO_LARGE",
-  "LISTENER_CSRF_INVALID",
-  "LISTENER_HOST_INVALID",
-  "LISTENER_NON_LOOPBACK_BIND",
-  "LISTENER_ORIGIN_INVALID",
-  "LISTENER_ROUTE_UNKNOWN",
-  "LISTENER_BIND_FAILED",
-] as const);
-export type ListenerRefusalCode = (typeof LISTENER_REFUSAL_CODES)[number];
-
-/** Only these may be bound. A hostname is not accepted: it could resolve off-loopback. */
-const LOOPBACK_HOSTS = Object.freeze(["127.0.0.1", "::1"]);
-
 export interface ControlRoomListener {
   close(): Promise<void>;
   readonly ok: true;
@@ -42,33 +42,21 @@ export interface ControlRoomListener {
   readonly port: number;
 }
 
-export interface ListenerRefused {
-  readonly code: ListenerRefusalCode;
-  readonly layer: typeof CONTROL_ROOM_LISTENER_LAYER;
-  readonly ok: false;
-}
-
 export type StartListenerResult = ControlRoomListener | ListenerRefused;
 
 export interface StartListenerOptions {
-  readonly credential?: string;
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
   readonly port?: number;
+  /** Absent means the stream route refuses rather than inventing an empty page. */
+  readonly subscriptions?: SubscriptionPort;
 }
 
-function refuse(code: ListenerRefusalCode): ListenerRefused {
-  return Object.freeze({ code, layer: CONTROL_ROOM_LISTENER_LAYER, ok: false } as const);
-}
-
-function statusFor(code: ListenerRefusalCode): number {
-  if (code === "LISTENER_BODY_TOO_LARGE") return 413;
-  if (code === "LISTENER_ROUTE_UNKNOWN") return 404;
-  return 403;
-}
+const COMMAND_PATH = "/command";
+const EVENT_PAGE_PATH = "/events/read";
 
 function reply(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -80,40 +68,43 @@ function refuseRequest(response: ServerResponse, code: ListenerRefusalCode): voi
   reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER });
 }
 
-/**
- * Reads the body while enforcing the committed bound, and STOPS at the limit
- * rather than buffering the whole payload first — a limit enforced only after
- * the bytes are already in memory is not a limit.
- */
-async function readBoundedBody(request: IncomingMessage): Promise<string | null> {
-  let total = 0;
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    const buffer = chunk as Buffer;
-    total += buffer.byteLength;
-    if (total > HTTP_INPUT_BOUNDS.maxBodyBytes) return null;
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-function checkHeaders(
+function serveCommand(
+  response: ServerResponse,
   request: IncomingMessage,
-  expectedAuthority: string,
-  origin: string,
-  csrfToken: string,
-): ListenerRefusalCode | null {
-  if (request.headers.host !== expectedAuthority) return "LISTENER_HOST_INVALID";
-  // Absent and foreign are both refused: a missing Origin is not a safe default
-  // for a state-changing request.
-  if (request.headers.origin !== origin) return "LISTENER_ORIGIN_INVALID";
-  if (request.headers["x-moe-csrf"] !== csrfToken) return "LISTENER_CSRF_INVALID";
-  return null;
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  // The body stays RAW here. `credential` and `protocolVersion` travel out of
+  // band precisely so authenticate and compatibility can both answer before
+  // anything parses it — parsing first would move a decode ahead of
+  // authenticate and change the committed refusal order.
+  const result: HttpCommandResult = handleCommandRequest(options.deps, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  // Serialized verbatim. The adapter chose the status and owns the codes.
+  reply(response, result.httpStatus, result);
 }
 
-/** Serialized verbatim. The adapter chose the status and owns the codes. */
-function replyWithAdapterResult(response: ServerResponse, result: HttpCommandResult): void {
-  reply(response, result.httpStatus, result);
+function serveEventPage(
+  response: ServerResponse,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  if (options.subscriptions === undefined) {
+    refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
+    return;
+  }
+  const request = readEventRequest(body);
+  if (request === null) {
+    refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
+    return;
+  }
+  // Always 200: the frame IS the answer and carries its own outcome, code and
+  // layer. Minting an HTTP status per frame would be the translation table the
+  // seam is forbidden to hold.
+  reply(response, 200, readEventPage(options.subscriptions, request));
 }
 
 async function serve(
@@ -126,9 +117,10 @@ async function serve(
   options.onRequest?.();
   // Logged without the credential and without a query string, so neither can
   // leak into a log line (design 19.2).
-  options.log?.(`${request.method ?? "?"} ${(request.url ?? "").split("?")[0]}`);
+  const path = (request.url ?? "").split("?")[0] ?? "";
+  options.log?.(`${request.method ?? "?"} ${path}`);
 
-  if ((request.url ?? "").split("?")[0] !== "/command") {
+  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
   }
@@ -143,18 +135,8 @@ async function serve(
     return;
   }
 
-  // The body stays RAW here. `credential` and `protocolVersion` travel out of
-  // band precisely so authenticate and compatibility can both answer before
-  // anything parses it — parsing first would move a decode ahead of
-  // authenticate and change the committed refusal order.
-  replyWithAdapterResult(
-    response,
-    handleCommandRequest(options.deps, {
-      body,
-      credential: options.credential ?? null,
-      protocolVersion: request.headers["x-moe-protocol-version"] ?? null,
-    }),
-  );
+  if (path === COMMAND_PATH) serveCommand(response, request, options, body);
+  else serveEventPage(response, options, body);
 }
 
 export async function startControlRoomListener(
@@ -164,12 +146,12 @@ export async function startControlRoomListener(
   // Refuses to START, not warns. Design 19.2: loopback is the only default
   // bind, and a transport that reaches a public interface on a host also
   // running agent processes is an exposure rather than a convenience.
-  if (!LOOPBACK_HOSTS.includes(host)) return refuse("LISTENER_NON_LOOPBACK_BIND");
+  if (!isLoopbackHost(host)) return refuse("LISTENER_NON_LOOPBACK_BIND");
 
   let server: Server | null = null;
   try {
     server = createServer((request, response) => {
-      void serve(request, response, options, authorityOf(), originOf()).catch(() => {
+      void serve(request, response, options, authorityOf(host, port), originOf(host, port)).catch(() => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket.
         if (!response.headersSent) reply(response, 500, { layer: CONTROL_ROOM_LISTENER_LAYER });
@@ -190,17 +172,10 @@ export async function startControlRoomListener(
     }
     const port = address.port;
 
-    function authorityOf(): string {
-      return `${host}:${port}`;
-    }
-    function originOf(): string {
-      return `http://${host}:${port}`;
-    }
-
     return Object.freeze({
       close: () => closeServer(bound),
       ok: true,
-      origin: originOf(),
+      origin: originOf(host, port),
       port,
     } as const);
   } catch {

@@ -1,4 +1,19 @@
 export { createCompatGate } from "./client-compat.js";
+export {
+  CONTROL_ROOM_TRANSPORT_LAYER,
+  TRANSPORT_REFUSAL_CODES,
+  createControlRoomTransport,
+} from "./client-transport.js";
+export type {
+  ControlRoomTransport,
+  DaemonAnswer,
+  EventPageRequest,
+  FetchLike,
+  SendResult,
+  TransportOptions,
+  TransportRefusalCode,
+  TransportRefused,
+} from "./client-transport.js";
 export type {
   ApiCompatibilityRange,
   CompatGateResult,

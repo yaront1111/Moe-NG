@@ -10,8 +10,10 @@ import {
 import type { ControlRoomListener } from "./http-listener.js";
 import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
 import type { CommandAdapterDeps } from "./http-contract.js";
+import { streamPort } from "./event-stream-fixtures.js";
 import {
   CAPABILITY,
+  GOOD_CREDENTIAL,
   authenticator,
   decisionPort,
   envelopeObject,
@@ -61,6 +63,8 @@ async function send(
   listener: ControlRoomListener,
   init: {
     readonly body?: string;
+    readonly connectHost?: string;
+    readonly credential?: string | null;
     readonly csrf?: string | null;
     readonly host?: string;
     readonly method?: string;
@@ -74,6 +78,11 @@ async function send(
   };
   if (init.origin !== null) headers.origin = init.origin ?? listener.origin;
   if (init.csrf !== null) headers["x-moe-csrf"] = init.csrf ?? CSRF;
+  // The credential travels per REQUEST in a header, so one listener can serve
+  // many principals and none of them appears in a URL.
+  if (init.credential !== null) {
+    headers["x-moe-session-credential"] = init.credential ?? GOOD_CREDENTIAL;
+  }
 
   // node:http, NOT fetch. undici treats `Host` as a forbidden header and drops
   // it silently, so a Host-validation test written with fetch cannot set the
@@ -83,7 +92,7 @@ async function send(
     const request = httpRequest(
       {
         headers: { ...headers, "content-length": Buffer.byteLength(payload) },
-        host: "127.0.0.1",
+        host: init.connectHost ?? "127.0.0.1",
         method: init.method ?? "POST",
         path: init.path ?? "/command",
         port: listener.port,
@@ -151,6 +160,36 @@ it("REFUSES TO START on a non-loopback bind rather than warning", async () => {
   expect(started).not.toHaveProperty("port");
 });
 
+it("REFUSES a hostname, which could resolve off-loopback, as well as a public address", async () => {
+  // "localhost" looks loopback but is a NAME: its resolution is controlled by
+  // the hosts file and by DNS, so admitting it would move the security decision
+  // off this guard and onto the resolver.
+  for (const host of ["localhost", "::", "192.168.1.10"]) {
+    const started = await startControlRoomListener({ csrfToken: CSRF, deps: deps(), host });
+    expect(started).toMatchObject({
+      code: "LISTENER_NON_LOOPBACK_BIND",
+      layer: CONTROL_ROOM_LISTENER_LAYER,
+      ok: false,
+    });
+  }
+});
+
+it("brackets an IPv6 loopback authority so a ::1 bind is actually reachable", async () => {
+  await withListener(
+    async (listener) => {
+      // Unbracketed, the expected authority would be "::1:port" and every real
+      // Host header would refuse — bound, yet unreachable.
+      expect(listener.origin).toBe(`http://[::1]:${listener.port}`);
+      const reply = await send(listener, {
+        connectHost: "::1",
+        host: `[::1]:${listener.port}`,
+      });
+      expect(reply.body).not.toMatchObject({ code: "LISTENER_HOST_INVALID" });
+    },
+    { host: "::1" },
+  );
+});
+
 it("refuses a Host header that is not the bound loopback authority", async () => {
   await withListener(async (listener) => {
     expectListenerRefusal(
@@ -202,15 +241,42 @@ it("never puts a credential in a URL or a log line", async () => {
   const lines: string[] = [];
   await withListener(
     async (listener) => {
-      await send(listener, {});
-      await send(listener, { csrf: null });
+      // Sent the REAL way, in the header the listener actually reads, so this
+      // exercises the production credential path rather than an unused option.
+      await send(listener, { credential: "secret-credential" });
+      await send(listener, { credential: "secret-credential", csrf: null });
       expect(lines.length).toBeGreaterThan(0);
       for (const line of lines) {
         expect(line).not.toContain(CSRF);
         expect(line).not.toContain("secret-credential");
       }
     },
-    { credential: "secret-credential", log: (line: string) => lines.push(line) },
+    { log: (line: string) => lines.push(line) },
+  );
+});
+
+it("refuses the event page route when no subscription port is wired, without inventing a page", async () => {
+  await withListener(async (listener) => {
+    expectListenerRefusal(
+      await send(listener, { body: JSON.stringify({ projection: "goal", subscriberId: "s-1" }), path: "/events/read" }),
+      "LISTENER_STREAM_UNAVAILABLE",
+    );
+  });
+});
+
+it("refuses a malformed event page body with its own code, naming this layer", async () => {
+  await withListener(
+    async (listener) => {
+      expectListenerRefusal(
+        await send(listener, { body: "{not json", path: "/events/read" }),
+        "LISTENER_STREAM_REQUEST_INVALID",
+      );
+      expectListenerRefusal(
+        await send(listener, { body: JSON.stringify({ projection: 7 }), path: "/events/read" }),
+        "LISTENER_STREAM_REQUEST_INVALID",
+      );
+    },
+    { subscriptions: streamPort() },
   );
 });
 
