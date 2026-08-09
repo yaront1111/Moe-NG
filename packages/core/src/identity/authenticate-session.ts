@@ -1,4 +1,7 @@
-import { isCurrentGeneration, isSessionUsableAt } from "./identity-session.js";
+import {
+  isCurrentGeneration,
+  isSessionUsableAt,
+} from "./identity-session.js";
 import type { Credential, Principal, Session } from "./identity-session.js";
 
 export const SESSION_AUTH_LAYERS = Object.freeze([
@@ -71,6 +74,7 @@ interface BoundSession {
   readonly credential: Credential;
   readonly projectId: string;
   readonly transportId: string;
+  readonly now: number;
   readonly requestId: string;
   readonly requestDigest: string;
   readonly verifyProof: SessionAuthenticationInput["verifyProof"];
@@ -81,39 +85,77 @@ function isNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function snapshotBindings(input: SessionAuthenticationInput): BoundSession | null {
-  const { principal, session, credential, proof } = input;
-  if (principal === null || session === null || credential === null) return null;
-  if (proof === null || typeof proof !== "object") return null;
-  if (!Number.isSafeInteger(input.now)) return null;
-  if (!isNonEmpty(input.projectId) || !isNonEmpty(input.transportId)) return null;
-  if (!isNonEmpty(input.requestId) || !isNonEmpty(input.requestDigest)) return null;
-  if (!isNonEmpty(input.presentedCredentialId)) return null;
-  if (credential.sessionId !== session.sessionId) return null;
-  if (principal.principalId !== session.principalId) return null;
-  if (principal.profileRevisionId !== session.profileRevisionId) return null;
-  if (input.presentedCredentialId !== credential.credentialId) return null;
-  if (proof.credentialId !== credential.credentialId) return null;
-  if (proof.commandId !== input.requestId) return null;
-  if (proof.requestDigest !== input.requestDigest) return null;
-  if (proof.clientKeyId !== session.clientKeyId) return null;
-  return snapshotBoundSession(input, principal, session, credential);
-}
-
-function snapshotBoundSession(
-  input: SessionAuthenticationInput,
+function snapshotRecords(
   principal: Principal,
   session: Session,
   credential: Credential,
-): BoundSession {
+): Pick<BoundSession, "principal" | "session" | "credential"> {
+  const transportIds = session.transportIds;
+  if (!Array.isArray(transportIds)) throw new TypeError("invalid session transports");
   return Object.freeze({
-    principal: Object.freeze({ ...principal }),
-    session: Object.freeze({ ...session }),
-    credential: Object.freeze({ ...credential }),
-    projectId: input.projectId,
-    transportId: input.transportId,
-    requestId: input.requestId,
-    requestDigest: input.requestDigest,
+    principal: Object.freeze({
+      principalId: principal.principalId,
+      kind: principal.kind,
+      profileRevisionId: principal.profileRevisionId,
+    }),
+    session: Object.freeze({
+      sessionId: session.sessionId,
+      principalId: session.principalId,
+      profileRevisionId: session.profileRevisionId,
+      clientKeyId: session.clientKeyId,
+      transportIds: Object.freeze([...transportIds]),
+      status: session.status,
+      expiresAt: session.expiresAt,
+      generation: session.generation,
+    }),
+    credential: Object.freeze({
+      credentialId: credential.credentialId,
+      sessionId: credential.sessionId,
+      generation: credential.generation,
+      revoked: credential.revoked,
+    }),
+  });
+}
+
+function snapshotBindings(input: SessionAuthenticationInput): BoundSession | null {
+  const rawPrincipal = input.principal;
+  const rawSession = input.session;
+  const rawCredential = input.credential;
+  const proof = input.proof;
+  const projectId = input.projectId;
+  const transportId = input.transportId;
+  const now = input.now;
+  const requestId = input.requestId;
+  const requestDigest = input.requestDigest;
+  const presentedCredentialId = input.presentedCredentialId;
+  if (rawPrincipal === null || rawSession === null || rawCredential === null) return null;
+  const { principal, session, credential } = snapshotRecords(
+    rawPrincipal,
+    rawSession,
+    rawCredential,
+  );
+  if (proof === null || typeof proof !== "object") return null;
+  if (!Number.isSafeInteger(now)) return null;
+  if (!isNonEmpty(projectId) || !isNonEmpty(transportId)) return null;
+  if (!isNonEmpty(requestId) || !isNonEmpty(requestDigest)) return null;
+  if (!isNonEmpty(presentedCredentialId)) return null;
+  if (credential.sessionId !== session.sessionId) return null;
+  if (principal.principalId !== session.principalId) return null;
+  if (principal.profileRevisionId !== session.profileRevisionId) return null;
+  if (presentedCredentialId !== credential.credentialId) return null;
+  if (proof.credentialId !== credential.credentialId) return null;
+  if (proof.commandId !== requestId) return null;
+  if (proof.requestDigest !== requestDigest) return null;
+  if (proof.clientKeyId !== session.clientKeyId) return null;
+  return Object.freeze({
+    principal,
+    session,
+    credential,
+    projectId,
+    transportId,
+    now,
+    requestId,
+    requestDigest,
     verifyProof: input.verifyProof,
     checkReplay: input.checkReplay,
   });
@@ -155,10 +197,7 @@ function accept(bound: BoundSession): SessionAuthenticationResult {
   });
 }
 
-function authenticateBoundSession(
-  bound: BoundSession,
-  now: number,
-): SessionAuthenticationResult {
+function authenticateBoundSession(bound: BoundSession): SessionAuthenticationResult {
   const challenge: ProofChallenge = Object.freeze({
     commandId: bound.requestId,
     requestDigest: bound.requestDigest,
@@ -173,7 +212,7 @@ function authenticateBoundSession(
     return refuse("SESSION_REPLAYED", "GENERATION");
   }
   if (bound.session.status !== "ACTIVE") return refuse("SESSION_REPLAYED", "SESSION_STATE");
-  if (!isSessionUsableAt(bound.session, now)) return refuse("SESSION_EXPIRED", "EXPIRY");
+  if (!isSessionUsableAt(bound.session, bound.now)) return refuse("SESSION_EXPIRED", "EXPIRY");
   if (!bound.session.transportIds.includes(bound.transportId)) {
     return refuse("CAPABILITY_DENIED", "TRANSPORT");
   }
@@ -187,7 +226,7 @@ export function authenticateSession(
   try {
     const bound = snapshotBindings(input);
     if (bound === null) return refuse("AUTHENTICATION_FAILED", "BINDING");
-    return authenticateBoundSession(bound, input.now);
+    return authenticateBoundSession(bound);
   } catch {
     return refuse("AUTHENTICATION_FAILED", "BINDING");
   }

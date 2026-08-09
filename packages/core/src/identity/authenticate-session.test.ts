@@ -89,6 +89,18 @@ const REFUSAL_CASES = Object.freeze([
   { name: "transport unlisted", overrides: { transportId: "remote-http" }, code: "CAPABILITY_DENIED", layer: "TRANSPORT" },
 ] satisfies readonly RefusalCase[]);
 
+const MALFORMED_SCALAR_CASES = Object.freeze([
+  ["empty project id", { projectId: "" }],
+  ["empty transport id", { transportId: "" }],
+  ["empty request id", { requestId: "", proof: { ...proof, commandId: "" } }],
+  ["empty request digest", { requestDigest: "", proof: { ...proof, requestDigest: "" } }],
+  ["empty presented credential id", {
+    presentedCredentialId: "",
+    credential: Object.freeze({ ...credential, credentialId: "" }),
+    proof: { ...proof, credentialId: "" },
+  }],
+] satisfies readonly (readonly [string, Partial<SessionAuthenticationInput>])[]);
+
 describe("session authentication refusals", () => {
   it("pins the generated case count and every declared layer", () => {
     expect(Object.isFrozen(REFUSAL_CASES)).toBe(true);
@@ -120,6 +132,62 @@ describe("session authentication refusals", () => {
     });
     expect(Object.keys(result)).toEqual(["ok", "code", "layer"]);
   });
+
+  it("contains a hostile record getter at BINDING", () => {
+    const hostile = { kind: "HUMAN", profileRevisionId: "pr-1" } as Record<string, unknown>;
+    Object.defineProperty(hostile, "principalId", {
+      enumerable: true,
+      get: () => { throw new Error("hostile getter"); },
+    });
+
+    const result = authenticateSession(input({
+      principal: hostile as unknown as SessionAuthenticationInput["principal"],
+    }));
+
+    expect(result).toEqual({
+      ok: false,
+      code: "AUTHENTICATION_FAILED",
+      layer: "BINDING",
+    });
+    expect(Object.keys(result)).toEqual(["ok", "code", "layer"]);
+  });
+
+  it("does not let proof verification mutate transport authority", () => {
+    const transportIds = ["local-ipc"];
+    const mutableSession = { ...session, transportIds };
+    const result = authenticateSession(input({
+      session: mutableSession,
+      transportId: "remote-http",
+      verifyProof: () => {
+        transportIds.push("remote-http");
+        return true;
+      },
+    }));
+
+    expect(result).toEqual({
+      ok: false,
+      code: "CAPABILITY_DENIED",
+      layer: "TRANSPORT",
+    });
+    expect(Object.keys(result)).toEqual(["ok", "code", "layer"]);
+  });
+
+  it("pins every scalar-only binding case", () => {
+    expect(MALFORMED_SCALAR_CASES).toHaveLength(5);
+  });
+
+  for (const [name, overrides] of MALFORMED_SCALAR_CASES) {
+    it(`refuses ${name} at BINDING`, () => {
+      const result = authenticateSession(input(overrides));
+
+      expect(result).toEqual({
+        ok: false,
+        code: "AUTHENTICATION_FAILED",
+        layer: "BINDING",
+      });
+      expect(Object.keys(result)).toEqual(["ok", "code", "layer"]);
+    });
+  }
 });
 
 describe("successful session authentication", () => {
