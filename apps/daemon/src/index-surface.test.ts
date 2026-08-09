@@ -15,6 +15,8 @@ import type {
   ClaimLeg,
   ClaimSuccessors,
   CommandHandler,
+  DeltaClassification,
+  DeltaNodeClassification,
   DoctorAuthorityStale,
   DoctorCommandKind,
   DoctorCommandResult,
@@ -42,6 +44,26 @@ import type {
   HandlerContext,
   HandlerTable,
   PrerequisiteRefusalCode,
+  ReviewAccepted,
+  ReviewCommandHandler,
+  ReviewCommandKind,
+  ReviewDaemonLayer,
+  ReviewDaemonRefusalCode,
+  ReviewDecodeRefusal,
+  ReviewDecodeResult,
+  ReviewHandlerContext,
+  ReviewHandlerTable,
+  ReviewIngressRefusalCode,
+  ReviewInputRejected,
+  ReviewLedger,
+  ReviewOutcome,
+  ReviewPrerequisiteRefusalCode,
+  ReviewRefused,
+  ReviewRefusedBy,
+  ReviewRequest,
+  ReviewRequestAccepted,
+  ReviewRequestRefused,
+  ReviewRoundRecord,
   ServiceAccepted,
   ServiceOutcome,
   ServiceRefused,
@@ -96,6 +118,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["MAX_EVENT_PAGE_SIZE", "number"],
   ["PLANNING_HANDLERS", "object"],
   ["PREREQUISITE_REFUSAL_CODES", "object"],
+  ["REVIEW_HANDLERS", "object"],
   ["SERVICE_REFUSED_BY", "object"],
   ["SLOT_CEILING_LEG", "string"],
   ["WORK_AUTHORITY_LABELS", "object"],
@@ -114,6 +137,14 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["runBootstrapCommand", "function"],
 ];
 
+/** Transcribed from review-services.ts; the table is frozen and owns exactly these kinds. */
+const REVIEW_HANDLER_KINDS = [
+  "escalation.decide",
+  "integration.accept_output",
+  "qualification.replan",
+  "review.submit",
+] as const;
+
 const FORBIDDEN_FIXTURES = [
   "LEDGER_EVENT_IDS",
   "PROJECTION",
@@ -128,7 +159,7 @@ const surface: Readonly<Record<string, unknown>> = daemon;
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(31);
+    expect(EXPECTED_EXPORTS.length).toBe(32);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -137,6 +168,15 @@ describe("daemon package root", () => {
 
   it.each(EXPECTED_EXPORTS)("publishes %s as %s", (name, kind) => {
     expect(typeof surface[name]).toBe(kind);
+  });
+
+  it("publishes the review command table by name with exactly its four handlers", () => {
+    expect(Object.hasOwn(daemon, "REVIEW_HANDLERS")).toBe(true);
+    expect(typeof surface["REVIEW_HANDLERS"]).toBe("object");
+    expect(Object.keys(daemon.REVIEW_HANDLERS).sort()).toEqual([...REVIEW_HANDLER_KINDS]);
+    for (const kind of REVIEW_HANDLER_KINDS) {
+      expect(typeof daemon.REVIEW_HANDLERS[kind]).toBe("function");
+    }
   });
 
   it("guards the explicit fixture deny-list", () => {
@@ -241,6 +281,34 @@ describe("daemon package-root type closure", () => {
     >();
     expectTypeOf<ReturnType<typeof daemon.evaluateDoctorCommandBytes>>()
       .toEqualTypeOf<DoctorCommandResult>();
+  });
+
+  it("names every review request, refusing layer and outcome branch", () => {
+    expectTypeOf<ReviewDecodeRefusal>()
+      .toEqualTypeOf<ReviewInputRejected | ReviewRequestRefused>();
+    expectTypeOf<ReviewDecodeResult>()
+      .toEqualTypeOf<ReviewInputRejected | ReviewRequestAccepted | ReviewRequestRefused>();
+    expectTypeOf<ReviewRequestAccepted["request"]>().toEqualTypeOf<ReviewRequest>();
+    expectTypeOf<ReviewRequest["kind"]>().toEqualTypeOf<ReviewCommandKind>();
+    expectTypeOf<ReviewDaemonRefusalCode>()
+      .toEqualTypeOf<ReviewIngressRefusalCode | ReviewPrerequisiteRefusalCode>();
+    expectTypeOf<ReviewDaemonLayer>()
+      .toEqualTypeOf<Extract<ReviewRefusedBy, `DAEMON_${string}`>>();
+    expectTypeOf<ReviewRefused["refusedBy"]>().toEqualTypeOf<ReviewRefusedBy>();
+    expectTypeOf<ReviewRefused["kind"]>().toEqualTypeOf<ReviewCommandKind | null>();
+    expectTypeOf<ReviewAccepted["kind"]>().toEqualTypeOf<ReviewCommandKind>();
+    expectTypeOf<ReviewOutcome>().toEqualTypeOf<ReviewAccepted | ReviewRefused>();
+
+    expectTypeOf<ReviewHandlerContext["ledger"]>().toEqualTypeOf<ReviewLedger>();
+    expectTypeOf<ReviewHandlerContext["request"]>().toEqualTypeOf<ReviewRequest>();
+    expectTypeOf<ReviewLedger["rounds"]>().toEqualTypeOf<readonly ReviewRoundRecord[]>();
+    expectTypeOf<DeltaNodeClassification["classification"]>().toEqualTypeOf<DeltaClassification>();
+    expectTypeOf<Parameters<ReviewCommandHandler>>()
+      .toEqualTypeOf<[context: ReviewHandlerContext]>();
+    expectTypeOf<ReturnType<ReviewCommandHandler>>().toEqualTypeOf<ReviewOutcome>();
+    expectTypeOf<ReviewHandlerTable[ReviewCommandKind]>()
+      .toEqualTypeOf<ReviewCommandHandler | undefined>();
+    expectTypeOf(daemon.REVIEW_HANDLERS).toEqualTypeOf<ReviewHandlerTable>();
   });
 
   it("keeps graph preview branches advisory through the published root", () => {

@@ -113,6 +113,33 @@ export {
   type DoctorReported,
   type DoctorRequestInvalid,
 } from "./recovery/doctor-commands.js";
+export { REVIEW_HANDLERS } from "./review/review-services.js";
+export type {
+  DeltaClassification,
+  DeltaNodeClassification,
+  ReviewCommandKind,
+  ReviewDecodeRefusal,
+  ReviewDecodeResult,
+  ReviewIngressRefusalCode,
+  ReviewInputRejected,
+  ReviewPrerequisiteRefusalCode,
+  ReviewRefusedBy,
+  ReviewRequest,
+  ReviewRequestAccepted,
+  ReviewRequestRefused,
+} from "./review/review-contracts.js";
+export type {
+  CommandHandler as ReviewCommandHandler,
+  HandlerContext as ReviewHandlerContext,
+  HandlerTable as ReviewHandlerTable,
+  ReviewAccepted,
+  ReviewDaemonLayer,
+  ReviewDaemonRefusalCode,
+  ReviewLedger,
+  ReviewOutcome,
+  ReviewRefused,
+  ReviewRoundRecord,
+} from "./review/review-ledger.js";
 
 const SCHEMA_VERSION = "moe-graph-preview-request/1";
 const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);
