@@ -19,7 +19,9 @@ import type { SessionOutcome } from "./identity/session-ledger.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
+import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
 import { createAffordancePort } from "./http/affordance-read.js";
+import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
@@ -338,9 +340,14 @@ export function createStoreDependencies(
     store,
   });
 
+  const documentDossiers = (): DocumentDossierReadPort => Object.freeze({
+    readLatest: (projectId: string) => readLatestDocumentWorkDossier(store, projectId),
+  });
+
   return Object.freeze({
     affordances,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
+    documentDossiers,
     provide,
     subscriptions,
   });
@@ -358,6 +365,11 @@ const provider: DaemonDependencyProvider = Object.freeze({
   affordances: () => {
     const port = fromEnv().affordances;
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
+    return port();
+  },
+  documentDossiers: () => {
+    const port = fromEnv().documentDossiers;
+    if (port === undefined) throw new Error("unreachable: document dossiers are always wired");
     return port();
   },
   provide: () => fromEnv().provide(),

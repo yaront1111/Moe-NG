@@ -44,7 +44,7 @@ describe("document dossier proposal state", () => {
       dossierIdentity: "retry-recovery@a",
       origin: "DAEMON",
       proposal: input,
-    }) as Record<string, unknown>;
+    }) as unknown as Record<string, unknown>;
 
     expect(Object.keys(state).sort()).toEqual([
       "dossierIdentity", "origin", "proposal", "status",

@@ -2,10 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { readAffordanceRequest } from "./affordance-contract.js";
 import type { AffordancePort } from "./affordance-contract.js";
-import {
-  DOCUMENT_DOSSIER_PATH,
-  handleDocumentDossierReadRequest,
-} from "./document-dossier-read.js";
+import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { readEventPage } from "./event-stream.js";

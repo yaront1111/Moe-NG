@@ -115,27 +115,40 @@
     {
       "stepId": "step-7",
       "description": "DoD 5 mutation drills — coverage handling that cannot go red proves nothing. Run each drill, confirm the NAMED case kills it, revert, and confirm green before the next. Record the exact failing assertion for each.\n\n  1. Make the provider enumerator return { status: \"ENUMERATED\", items: [], complete: true, negativeProofDigest: null } for an empty probe. The NEGATIVE_PROOF_MISSING case must go RED — this is the \"an empty list is not COMPLETE\" invariant.\n  2. Make a quiet/unobserved process read as terminated. The unobserved-is-not-death case must go RED.\n  3. Make the workspace enumerator merge two entries sharing one external identity instead of refusing. The duplicate case must go RED naming RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE.\n  4. Drop one registration from the composed registry. The ENUMERATOR_UNREGISTERED case must go RED rather than the class silently disappearing from the report.\n\nBack up mutated bytes OUTSIDE the repo and restore with verified sha256 equality.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it sits on disk — three such commits landed today (71af97c, a646660, 1e3057a). After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof. Leave no drill residue.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts"
       ],
-      "startedAt": "2026-08-09T19:29:48.917Z"
+      "note": "FIVE mutation drills run (the plan named four; I split drill 2 because \"quiet process reads as terminated\" and \"quiet process no longer truncates\" are two different guards). Each applied, run, the NAMED case observed red with its exact assertion recorded, reverted, and byte-identity verified before the next.\n\nDRILL 1 - empty population mints a proof anyway. Mutated negativeProof() to return the digest even when RUN_ENUMERATION_NEGATIVE_PROOF is UNSUPPORTED. RED: exactly 2 failed / 91 passed. \"refuses with NEGATIVE_PROOF_MISSING when no provider can prove absence\" and \"still refuses when only one of the two providers can prove absence\", both AssertionError: expected { truth: 'COMPLETE', code: null } to deeply equal { truth: 'UNKNOWN' }. NOTE ON THE PLAN TEXT: step 7 says to make the enumerator return negativeProofDigest:null for an empty probe - that is already the correct behaviour and is what the green test asserts, so mutating TO it proves nothing. The killing mutation is the inverse, and that is what I ran.\n\nDRILL 2a - a quiet process reads as terminated. Mutated `ended: processExit.kind !== \"UNOBSERVED\"` to a tautology. RED: exactly 1 failed / 92 passed, \"keeps an unobserved process visible and never reports it as ended\", with the diff naming the fact: -\"ended\": false / +\"ended\": true.\n\nDRILL 2b - a quiet process no longer truncates. Neutralised `if (!reading.proven) complete = false`. RED: 4 failed / 89 passed - \"drives the class to UNKNOWN rather than to COMPLETE\" (-reason RESULT_TRUNCATED/-truth UNKNOWN vs +reason null/+truth COMPLETE), \"never lets a later COMPLETE launder an earlier UNKNOWN\", the facts arm, AND the coverage sweep counter (14 vs 15) because the laundering arm died before its proofFor. The sweep guard demonstrably detects a lost case.\n\nDRILL 3 - workspace merges a colliding identity. Added a last-writer-wins dedupe by normalized identity before returning. RED: exactly 2 failed / 91 passed. \"refuses rather than merging them\" with -\"code\": \"RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE\" / +\"code\": null and -truth UNKNOWN / +truth COMPLETE, plus \"normalizes both spellings onto a single identity key\" (expected 2 rows, got 1).\n\nDRILL 4 - a registration dropped from the composed tuple. Removed workspaceInventoryRegistration from the both-COMPLETE arm. RED: 2 failed / 91 passed, \"reports COMPLETE for both...\" with +\"reason\": \"ENUMERATOR_UNREGISTERED\" against the expected null, plus the sweep counter. The class did NOT vanish from the report - it answered UNREGISTERED, which is the invariant.\n\nRESTORE PROOF (git diff is blind here - all six files were untracked when the drills began, so a clean diff would have been meaningless). Backups were taken OUTSIDE the repo before any mutation; after each revert I ran cmp against the backup and a grep for the literal injected text. Final sha256 of all three mutated files equals the pre-drill backup exactly:\n  8796cf59a88147864fef2ca755f25bed7f3a7c69596c63672490ce91147c5c43 provider-lock-inventory.ts\n  25caf97799b9a20e659d9fce412168743b8e7aa4c16f097f44ad935b814c90a8 workspace-inventory.ts\n  19cb510d444381e4038bc206238dcdb319b992386bdb8a4d7b675311dd38629a workspace-inventory.test.ts\nSuite green after the last revert: 3 files / 93 tests, 0 failures.\n\n*** SHARED-WORKTREE HAZARD FIRED, EXACTLY AS THE PLAN PREDICTED. *** HEAD moved from my baseline c1990885 to 9bb652c during this step and TWO FOREIGN WHOLE-TREE COMMITS captured my files: 3eaaca1 (task-af99cf146c9b4f4d99b49d8c00caed63) took provider-lock-inventory.{ts,js,test.ts}, and 9bb652c (task-93b0314e09f248118e21f92699989468) took workspace-inventory.{ts,js,test.ts}. Per project rail 5 I did NOT amend, reset, stash or create a claiming commit. I verified instead:\n- git show HEAD:<path> | cmp - <path> passes for all six files, so the committed bytes are the gated bytes.\n- 3eaaca1's copy of provider-lock-inventory.ts is byte-identical to the clean backup and greps clean for all three injected drill strings, so NO drill residue was captured into history by the commit that landed mid-drill.\nQA should review by base-ref diff, not by commit membership: git diff c1990885..HEAD -- packages/runner/src/recovery-inventory/ shows exactly my 6 files, 1380 insertions, 0 deletions. recovery-inventory.ts, index.ts and index-surface.test.ts show ZERO changes across that range. No moe-recovery-ws-* fixture directory exists anywhere in the repo.",
+      "startedAt": "2026-08-09T19:29:48.917Z",
+      "completedAt": "2026-08-09T19:32:48.229Z"
     },
     {
       "stepId": "step-8",
       "description": "DoD 6 — verification and adversarial review. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test\n\nBoth legs must exit 0 with nonzero discovery. Recorded baseline on this package from the sibling task: 43 files / 1366 tests. Your run must show MORE files — two new test files. A flat file count means your tests never ran.\n\nPath-attributed baseline per project rail: record repo-wide failures at merge-base and at HEAD, require the (HEAD minus merge-base) failing set intersected with owned paths to be EMPTY, and disclose foreign red verbatim with exact lines and paths. Foreign red INSIDE @moe/runner is a BLOCK, not a disclosure — the baseline never excuses package-local red.\n\nAdversarial review before complete_task:\n- Did I edit recovery-inventory.ts, index.ts or index-surface.test.ts? I must NOT have. Confirm with `git diff --stat`.\n- Is launch-lock.ts still unpublished — absent from the root seam?\n- Does any test assert against a helper that reimplements probe, manifest or observation authority? That is the epic rail 6 defect; properties must go through collectRecoveryInventory or the shipped surface.\n- Does every refusal test pin the exact reason code AND the INVENTORY_ADAPTER layer, not merely that it refused?\n- Did each of the two classes generate at least one coverage case with a non-zero asserted count?\n- Both .js bridges present with trailing LF, od -c verified?\n- No temp fixture directory left inside the repo; no scratch or generated-evidence files in the diff.\n- Per-file line counts under 400, target 250, measured with `grep -c ''`.\n- GLOBAL RAIL CLAUSE 1: name daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa as the production consumer in your completion evidence. Do NOT land the consumer edge here.\n- Stage and commit by EXPLICIT pathspec over the six owned files only. Never git add -A.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts",
         "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.js",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.js",
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
+      ],
+      "note": "GATE GREEN, FRESH, FOREGROUND, RUN LAST. pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test -> exit 0. Test Files 45 passed (45), Tests 1403 passed (1403). Discovery moved the right way against the plan's recorded baseline of 43 files / 1366 tests: +2 files (my two) and +37 tests (20 provider + 17 workspace), so the tests demonstrably ran.\n\nPATH-ATTRIBUTED BASELINE. Repo-wide typecheck (pnpm -r typecheck) is RED at HEAD with exactly one failing path, disclosed verbatim:\n  apps/daemon typecheck: src/identity/session-authenticator.test.ts(8,3): error TS6133: 'OPENER' is declared but its value is never read.\n  [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @moe/daemon@0.0.0 typecheck: Exit status 1\nAttribution, measured not assumed: that file's last commit is 5ef522c (\"feat(daemon): durable work claiming\"), git merge-base --is-ancestor 5ef522c c1990885 returns TRUE, and the file is clean in the working tree - so its bytes at HEAD equal its bytes at my merge-base and the error was already in the merge-base failing set. TS6133 is decided by that file's own bytes alone. (HEAD failing set MINUS merge-base failing set) INTERSECT owned paths = EMPTY. My owned package legs are exit 0, so this is a disclosure, never an excuse: no red inside @moe/runner.\n\nADVERSARIAL REVIEW, every item walked:\n- recovery-inventory.ts / index.ts / index-surface.test.ts: ZERO changes across c1990885..HEAD. Confirmed by git diff --stat over those three paths returning empty.\n- launch-lock.ts still unpublished: grep \"launch-lock\" packages/runner/src/index.ts finds nothing. My two modules are also deliberately absent from the root seam.\n- No test asserts against a reimplemented authority. Probe doubles sit at the probes' own input.port.report() boundary; workspace fixtures are real files on disk; the duplicate property is asserted with the SHIPPED readIdentity + identityKey, and every refusal goes through collectRecoveryInventory.\n- Every refusal arm pins truth+code+reason+layer together by whole-object equality, never \"it refused\".\n- Both classes generated coverage cases with exact hand-written counts: provider file 19, workspace file 15 WORKSPACE + 4 PROVIDER, each also asserted non-zero. Drill 2b and drill 4 both reddened these counters, so the guard is live.\n- .js bridges present, one line each, trailing LF verified with od -c.\n- No fixture directory anywhere in the repo (find for moe-recovery-ws-* is empty); temp roots are mkdtemp under the OS temp dir and removed in afterEach. Drill backups lived outside the repo and are deleted. No scratch or evidence files in the diff.\n- Per-file physical lines by grep -c '': provider-lock-inventory.ts 248, workspace-inventory.ts 250, tests 405 and 475, bridges 1 each. Every production file at or under the 250 target and far under 400.\n\nHOSTILE-INPUT WALK (findings, all fail-closed, none fixed because none is a defect): a lying port that returns a non-array from launchLockRecords/processRecords/list makes the for..of throw and the aggregate answers ENUMERATOR_FAILED. A file deleted between readdir and readFile (TOCTOU) sets provenTotal false -> RESULT_TRUNCATED rather than crashing or silently dropping the path. A Windows directory junction reports neither isFile nor isDirectory -> truncation, not absence. A workspace tree above 4096 entries makes buildInputManifest refuse -> ENUMERATOR_UNAVAILABLE. An injected clock outside the request window makes every row fail the window check -> ITEM_REJECTED. An identity above 400 chars is rejected by readInventoryItem -> ITEM_REJECTED. No shared mutable module state exists by construction (that is the whole reason registration is a factory), so there is no check-then-act and no cross-collection race; no handles, sockets or subprocesses are held on any path.\n\nCONSUMER, global rail clause 1: the production consumer that will compose these two registrations into createRecoveryInventoryRegistry is the daemon coordinator, task-cf7fb147bd1c47698cbd65c9535370aa. The consumer edge is deliberately NOT landed here, per this task's scope.\n\nCOMMIT: nothing for me to stage. Both foreign whole-tree commits described in step 7 already captured all six files (3eaaca1 took the provider trio, 9bb652c the workspace trio); git status --porcelain over packages/runner/src/recovery-inventory/ is EMPTY and git show HEAD:<path> | cmp - <path> passes for all six, so the committed bytes are the gated bytes. Per project rail 5 I did not amend, reset, stash or add a claiming commit. QA should verify by base-ref diff: git diff c1990885..HEAD -- packages/runner/src/recovery-inventory/ -> 6 files, 1380 insertions, 0 deletions.",
+      "startedAt": "2026-08-09T19:32:54.061Z",
+      "completedAt": "2026-08-09T19:34:58.146Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-901cc711",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -154,12 +167,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T19:29:48.917Z",
+  "updatedAt": "2026-08-09T19:36:27.361Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T18:57:07.679Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -170,7 +183,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T19:02:24.895Z",
@@ -197,5 +212,20 @@
   "contextFetchedBy": [
     "worker-901cc711"
   ],
-  "workStartedAt": "2026-08-09T19:08:09.563Z"
+  "workStartedAt": "2026-08-09T19:08:09.563Z",
+  "reviewStartedAt": "2026-08-09T19:36:27.361Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  45 passed (45)\n      Tests  1403 passed (1403)\n   Start at  22:33:42\n   Duration  3.14s (transform 9.12s, setup 0ms, import 13.02s, tests 8.01s, environment 3ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-09T19:36:27.361Z"
+  },
+  "filesModified": [
+    "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
+    "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+    "packages/runner/src/recovery-inventory/provider-lock-inventory.js",
+    "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
+    "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+    "packages/runner/src/recovery-inventory/workspace-inventory.js"
+  ]
 }

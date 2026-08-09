@@ -1,0 +1,103 @@
+.cr-dossier-token {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.cr-dossier-metadata {
+  border-block-end: 1px solid var(--cr-line);
+  display: grid;
+  gap: 0.45rem 0.8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0.7rem 1rem;
+}
+
+.cr-dossier-metadata > div {
+  display: grid;
+  gap: 0.12rem;
+  min-inline-size: 0;
+}
+
+.cr-dossier-metadata dt,
+.cr-dossier-source-evidence dt,
+.cr-dossier-provenance dt {
+  color: var(--cr-ink-soft);
+  font-size: 0.62rem;
+}
+
+.cr-dossier-metadata dd,
+.cr-dossier-source-evidence dd,
+.cr-dossier-provenance dd {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.cr-dossier-metadata code {
+  font-family: var(--cr-font-utility);
+  font-size: 0.67rem;
+}
+
+.cr-dossier-source-list details:target {
+  background: var(--cr-attention-wash);
+  border-radius: var(--cr-radius-xs);
+  outline: 2px solid color-mix(in srgb, var(--cr-attention) 42%, transparent);
+  outline-offset: 0.25rem;
+}
+
+.cr-dossier-source-evidence {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0;
+}
+
+.cr-dossier-source-evidence > div {
+  display: grid;
+  gap: 0.12rem;
+  min-inline-size: 0;
+}
+
+.cr-dossier-source-evidence dd {
+  font-family: var(--cr-font-utility);
+  font-size: 0.66rem;
+}
+
+.cr-dossier-objective {
+  color: var(--cr-ink-soft);
+  font-size: 0.7rem;
+  margin: 0;
+}
+
+.cr-dossier-candidate nav {
+  border-block-start: 1px solid var(--cr-line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  padding-block-start: 0.42rem;
+}
+
+.cr-dossier-candidate nav > span {
+  flex-basis: 100%;
+}
+
+.cr-dossier-candidate nav a {
+  align-items: flex-start;
+  flex-direction: column;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.cr-dossier-candidate nav code {
+  color: var(--cr-ink-soft);
+  font-size: 0.58rem;
+  overflow-wrap: anywhere;
+}
+
+.cr-dossier-provenance dl,
+.cr-dossier-provenance dl > div {
+  display: contents;
+}
+
+.cr-dossier-provenance dd {
+  overflow-wrap: anywhere;
+}

@@ -146,8 +146,11 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
   }
 
   const ports = resolveOptionalDaemonPorts(provider);
-  if (ports === null) return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
-  return Object.freeze({ deps: provided, ok: true, ...ports } as const);
+  if (!ports.ok) {
+    return refuseEntry(ports.failure === "THREW"
+      ? "DAEMON_ENTRY_PROVIDER_THREW" : "DAEMON_ENTRY_DEPENDENCIES_INVALID");
+  }
+  return Object.freeze({ deps: provided, ok: true, ...ports.ports } as const);
 }
 
 const ALREADY_STOPPED = Object.freeze({

@@ -335,3 +335,57 @@ it("preserves PROVIDER_THREW when an optional factory accessor throws", async ()
     ok: false,
   });
 });
+
+it("preserves the existing optional-port order and stops at the first malformed port", async () => {
+  const calls: string[] = [];
+  const result = await startDaemon({
+    dependencies: {
+      affordances: () => {
+        calls.push("affordances");
+        return { readSurface: () => ({ outcome: "SURFACE" }) } as never;
+      },
+      documentDossiers: () => {
+        calls.push("documentDossiers");
+        return { readLatest: () => SERVICE_REFUSAL };
+      },
+      provide: fixtureDependencies,
+      subscriptions: () => {
+        calls.push("subscriptions");
+        return {} as never;
+      },
+    },
+  });
+  expect(result).toStrictEqual({
+    code: "DAEMON_ENTRY_DEPENDENCIES_INVALID",
+    layer: "DAEMON_ENTRY",
+    ok: false,
+  });
+  expect(calls).toStrictEqual(["subscriptions"]);
+});
+
+it("resolves the new dossier factory after the two existing optional factories", async () => {
+  const calls: string[] = [];
+  const started = await startDaemon({
+    dependencies: {
+      affordances: () => {
+        calls.push("affordances");
+        return { readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }) };
+      },
+      documentDossiers: () => {
+        calls.push("documentDossiers");
+        return { readLatest: () => SERVICE_REFUSAL };
+      },
+      provide: fixtureDependencies,
+      subscriptions: () => {
+        calls.push("subscriptions");
+        return {
+          readPage: () => ({ code: "TEST", detail: "test", layer: "TEST", outcome: "REFUSED" }),
+          reseat: () => ({ code: "TEST", detail: "test", layer: "TEST", outcome: "REFUSED" }),
+        };
+      },
+    },
+  });
+  if (!started.ok) throw new Error(`daemon failed: ${started.code}`);
+  await started.shutdown();
+  expect(calls).toStrictEqual(["subscriptions", "affordances", "documentDossiers"]);
+});
