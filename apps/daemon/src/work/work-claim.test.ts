@@ -447,13 +447,25 @@ describe("work.claim — the design-427 provider slot ceiling", () => {
     expect(Object.keys(refusal)).not.toContain("successors");
   });
 
-  it("checks the ceiling BEFORE the slot leg, so a scheduler accept cannot bypass it", () => {
+  it("refuses at the ceiling even when the slot leg would accept", () => {
     // Resources are ACTIVE here, so reserveProviderSlot WOULD accept. The
-    // ceiling must still refuse, and must name its own leg rather than the
-    // provider-slot leg, proving it ran first.
+    // ceiling must still refuse and name its own leg. The next case separately
+    // pins ordering by making both guards capable of refusing.
     const refusal = refusalOf(claimWithLive(live(4)));
     expect(refusal.failure.leg).toBe("slotCeiling");
     expect(refusal.failure.leg).not.toBe("providerSlot");
+    expect(refusal.failure.upstreamCode).toBeNull();
+  });
+
+  it("checks the ceiling before the slot leg when both would refuse", () => {
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      payload["liveClaims"] = live(4);
+      firstOf(listAt(payload, ["slot"], "rows"))["state"] = "PENDING_ACQUIRE";
+    })));
+
+    expect(refusal.failure.code).toBe("WORK_SLOT_EXHAUSTED");
+    expect(refusal.failure.leg).toBe("slotCeiling");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
     expect(refusal.failure.upstreamCode).toBeNull();
   });
 
