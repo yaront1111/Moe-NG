@@ -214,32 +214,32 @@ export type {
 } from "./policy/approval-contract.js";
 
 export {
-  EXPANSION_HOLD_CAUSES,
-  EXPANSION_HOLD_COMMAND_KINDS,
-  EXPANSION_HOLD_ERROR_CODES,
-  EXPANSION_HOLD_LAYERS,
-  reduceExpansionPlanningHold,
+  EXPANSION_HOLD_CAUSES, EXPANSION_HOLD_COMMAND_KINDS,
+  EXPANSION_HOLD_ERROR_CODES, EXPANSION_HOLD_LAYERS, reduceExpansionPlanningHold,
 } from "./expansion/expansion-planning-hold.js";
 export type {
   CreateExpansionHoldCommand, ExpansionHandoffBinding, ExpansionHoldCause,
   ExpansionHoldErrorCode, ExpansionHoldLayer, ExpansionHoldLifecycle,
-  ExpansionPlanningHoldCommand, ExpansionPlanningHoldEvent,
-  ExpansionPlanningHoldResult, ExpansionPlanningHoldState,
-  ExpansionReleaseEvidence, ExpansionTerminalProof,
+  ExpansionPlanningHoldCommand, ExpansionPlanningHoldEvent, ExpansionPlanningHoldResult,
+  ExpansionPlanningHoldState, ExpansionReleaseEvidence, ExpansionTerminalProof,
   TransitionExpansionHoldCommand,
 } from "./expansion/expansion-planning-hold.js";
 
 export {
   PLANNING_EXPANSION_ERROR_CODES, PLANNING_EXPANSION_LAYERS, PLANNING_EXPANSION_TARGETS,
-  inspectPlanningExpansionContract, snapshotPlanningRunContractState,
-  validExpansionCreateCommand, validExpansionCreatedEvent, validExpansionHoldBinding,
-  validExpansionProposalIdentity, validExpansionProposeCommand, validExpansionSealedEvent,
-  validPlanningRunContractState,
+  inspectPlanningExpansionContract, snapshotPlanningRunContractState, validExpansionCreateCommand,
+  validExpansionCreatedEvent, validExpansionHoldBinding, validExpansionProposalIdentity,
+  validExpansionProposeCommand, validExpansionSealedEvent, validPlanningRunContractState,
 } from "./planning/planning-expansion-validation.js";
 export type { PlanningExpansionErrorCode, PlanningExpansionInspection,
   PlanningExpansionLayer, PlanningExpansionTarget } from "./planning/planning-expansion-validation.js";
 export type { PlanningExpansionHoldBinding, PlanningExpansionProposalIdentity } from "./planning/planning-command-contract.js";
 export type { PlanningRunContractState } from "./planning/planning-event-contract.js";
+
+export { SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession } from "./supersession/supersession-engine.js";
+export type { SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind,
+  SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry,
+  SupersessionSuccessorBinding } from "./supersession/supersession-engine.js";
 
 /**
  * Identity is re-exported through its own curated area seam rather than as per-module blocks:
