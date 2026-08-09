@@ -69,13 +69,19 @@
     {
       "stepId": "step-4",
       "description": "Run the one final foreground verification command exactly: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Record exit 0 and explicit before/after daemon file/test/pass/fail/skip counts, showing the final count is at least the baseline and accounting exactly for every new index-surface case. Inspect `git diff -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` to prove re-export-only scope, run `git status --porcelain`, unstage foreign entries without altering them, and stage/commit only the two owned paths with `git commit -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts`. Verify `git show --stat` contains exactly those two paths and no package/bridge/service module before calling moe.complete_task.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T09:18:32.252Z"
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Step 4 complete. Resumed from worker-064d1267 at 3/4; I re-verified their deliverable from disk rather than trusting the step notes, then ran the gate.\n\nNAMED CHAIN, exit 0: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`.\n- apps/daemon typecheck: Done\n- daemon suite: 16 files / 367 tests, 0 failed, 0 skipped\n- pnpm typecheck: all 15 projects Done, zero TS errors\n\nCOUNTS. Baseline recorded at step 1 was 13 files / 300 tests. Now 16 / 367. Attribution measured, not assumed: this task's index-surface.test.ts contributes exactly 46 tests (ran alone: 1 file / 46 passed). The remaining +2 files / +21 tests are FOREIGN, from task-f6440f26's bridge work. Final count is above baseline, as DoD 6 requires.\n\nTHE BLOCKER IS GENUINELY GONE, AND I PROVED IT THE ONLY WAY THAT COUNTS. This task blocked because plain Node died with ERR_MODULE_NOT_FOUND on src/bootstrap/bootstrap-contracts.js while vitest stayed 46/46 green — vitest resolves a NodeNext \".js\" specifier back to \".ts\" and is structurally blind to a missing bridge. A green suite is therefore NOT evidence for a task whose objective is \"an external consumer can drive it\". I ran the plain-Node probe myself from apps/daemon:\n  node --experimental-strip-types -e \"import('@moe/daemon')...\"\n  ROOT IMPORT OK, runtime export count = 31\n  GOAL_HANDLERS object / PLANNING_HANDLERS object / decodeBootstrapRequestBytes function /\n  claimWork function / parseWorkRequest function / evaluateDoctorCommandBytes function /\n  readEventPage function / EVENT_STREAM_REFUSAL_CODES object\n  forbidden fixture names present: NONE\nThat is DoD 1 and DoD 2 demonstrated against the real external surface, plus DoD 5 (no fixture leaked).\n\nDoD 4 also proved at runtime through the published root, not through a fixture: calling the exported evaluateGraphPreviewRequestBytes on `{}` bytes returns outcome REQUEST_INVALID, code GRAPH_PREVIEW_REQUEST_INVALID, advisoryOnly true, authority NONE. Publication did not promote an advisory result.\n\nDoD 3 / rail 4: no `export *` in index.ts, no event-stream-fixtures reference, and index-surface.test.ts imports ONLY \"@moe/daemon\" — zero relative or deep daemon specifiers.\n\nDoD 6 zero behaviour change: every added line in index.ts vs base 9e0f123 is an export statement, an export-block member, or a comment; no logic. index.ts is 222 lines (<=250 rail).\n\nON THE RETRACTED BRIDGE RAIL. Task rail 5 said \"add no .js bridge\"; the architect retracted it in their ruling, and 19 bridges now exist under apps/daemon from task-f6440f26. None came from this task — my owned paths are the two files, and neither is a bridge. DoD 6's \"no .js bridge is added\" holds for this task's diff.\n\nNOTHING TO COMMIT — same shared-tree sweep as my last task. `git status --porcelain` over both owned paths is empty; the two files are already committed inside FOREIGN commit c699422 (task-e17da1c9 \"Predecessor input materializer\"), which swept the whole tree. A pathspec commit would be empty and amending a foreign commit would violate epic rail 3, so I made no commit and rewrote no history. QA should diff with:\n  git diff 9e0f123 HEAD -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts\n\nGATE OSCILLATED FOR ~5 MINUTES on the third leg, entirely foreign. apps/control-room was red on recovery/*.test.tsx (TS2307 modules not yet on disk), doctor-console.test.tsx and goals/supplied-actions.tsx (TS6133), from three concurrent workers mid-TDD. apps/daemon typecheck reported Done in every one of those runs. I did not report the daemon legs as if they were the full chain, did not touch a foreign file, and waited for a genuine full-chain green — confirmed twice, by a foreground run and an independent retry loop. I flagged the shared-gate coupling in #general and gave the recovery owner the concrete fix for their TS2322 (\"LIVE\" is not in FixtureConnectionState; the union is CONNECTED | LAGGING | DISCONNECTED | HISTORICAL).\n\nMethod note worth keeping: the plain-Node probe requires `cd apps/daemon`, and shell cwd PERSISTS between tool calls, so every later repo-relative `git ... -- <path>` silently matched nothing and printed empty output — indistinguishable from \"clean tree\". I nearly recorded a wrong conclusion from it. Recorded in mem:pattern-prove-a-published-package-root-with-plain-node.",
+      "startedAt": "2026-08-09T09:18:32.252Z",
+      "completedAt": "2026-08-09T10:13:25.357Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f2e587cb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,21 +100,25 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T08:46:23.406Z",
-  "updatedAt": "2026-08-09T10:07:03.606Z",
+  "updatedAt": "2026-08-09T10:16:31.232Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:01:44.105Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 3
+    "executedStepCount": 4,
+    "doneAt": "2026-08-09T10:16:31.232Z",
+    "wallClockMs": 4487127
   },
   "contextFetchedBy": [
     "architect-da724bb7",
-    "worker-f2e587cb"
+    "worker-f2e587cb",
+    "qa-812c17a0"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:06:49.201Z",
@@ -152,5 +162,19 @@
       "releasedBy": "worker-064d1267",
       "reason": "Human explicitly requested the next task; releasing this blocked assignment with a complete handoff so another worker can resume after governance amends the rails."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-09T10:14:16.683Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  16 passed (16)\n      Tests  367 passed (367)\n   Start at  13:12:46\n   Duration  1.67s\n\nCHAIN_EXIT=0\n--- root typecheck tail ---\npackages/review typecheck: Done\napps/daemon typecheck: Done\napps/control-room typecheck: Done",
+    "reportedAt": "2026-08-09T10:14:16.683Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/index.ts"
+  ],
+  "completedAt": "2026-08-09T10:16:31.232Z",
+  "reviewCompletedAt": "2026-08-09T10:16:31.232Z",
+  "reviewSummary": "APPROVED. Full named chain green, re-run by me: daemon typecheck 0, daemon test 16 files/367, root pnpm typecheck 0 across all 15 projects.\n\nPROVEN FROM AN EXTERNAL CONSUMER POSITION, not from vitest. Plain-Node import of @moe/daemon: 31 runtime exports, undefinedBindings [], forbidden fixture names present NONE, all three handler tables typeof object, and decodeBootstrapRequestBytes, runBootstrapCommand, claimWork, parseWorkRequest, readEventPage, resumeFromSnapshot and evaluateDoctorCommandBytes all callable. That is DoD1, DoD2 and DoD5 against the real surface. DoD4 likewise through the published root: evaluateGraphPreviewRequestBytes on empty-object bytes returns REQUEST_INVALID / GRAPH_PREVIEW_REQUEST_INVALID / advisoryOnly:true / authority NONE, so publication did not promote an advisory result.\n\nDoD3 drilled BOTH directions, both restored to 2bf258ff:\n- Removal: dropped GOAL_HANDLERS. Reddens both axes, set equality AND the named case \"publishes GOAL_HANDLERS as object\", so a dropped export fails by name.\n- Unreviewed addition: published the real-but-unapproved HTTP_BOUNDARY_ERROR_CODES. Reddens set equality and names the extra key.\n\nDoD6 PASS exactly. index.ts is +111/-0 over base 9e0f123, pure addition with zero deletions, and grepping the added lines for function/const/let/var/if/return/arrow/class/await/assignment returns nothing, so it is re-export only. No .js bridge in either owned path. Counts: baseline 13 files/300, now 16/367; index-surface.test.ts alone is 46, the remaining +2 files/+21 are foreign from task-f6440f26.\n\nRails: no export-star, no fixture reference, index.ts 222 lines under the 250 target, and index-surface.test.ts imports only @moe/daemon and vitest, zero relative or deep specifiers.\n\nCommit clause: same harness sweep, files landed in foreign commit c699422. The worker did exactly what I asked the board to do — declined to fake a commit or amend foreign history and handed me the base-ref diff. Verified that way."
 }

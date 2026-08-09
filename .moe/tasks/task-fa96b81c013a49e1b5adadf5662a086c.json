@@ -19,30 +19,40 @@
     {
       "stepId": "step-1",
       "description": "Explore and pin before naming a symbol. Read design 8.2, which defines all three predicates verbatim and is the specification for this task: logical ready (every hard DependencyContract currently satisfied and no semantic/policy/evidence/unknown predicate holds), admission ready (phase/ownership, exact plan, NodeInputManifest, context, downstream-proof budget, capability and risk policy permit a claim), dispatchable (logical + admission + all required resources confirmed ACTIVE or atomically local, one provider slot atomically reservable, and no active lease, pause, supersession or reconciliation hold). It also fixes the explanation vocabulary: only a dispatchable node is READY_NOW; UNBLOCK_NEXT means EXACTLY ONE current typed predicate/artifact/resource confirmation remains AND its producer/recovery command is known; more than one remains fully enumerated but sorts AFTER one-step items; INTENTIONAL_WAIT requires a CURRENT wait record; anything missing, stale, incompatible or unresolvable is UNSAFE_OR_UNKNOWN, and UI optimism cannot place it nearer to ready. Then read in-repo: packages/scheduler/src/frontier.ts and the FrontierPartition / NodeAvailabilityFact / BlockedReason / BlockedNode / BlockedReasonCode block in packages/scheduler/src/graph-model.ts (lines ~244-305), and packages/scheduler/src/admission/admission-model.ts for the issue/refusal style this package already uses. Confirm none of READY_NOW, UNBLOCK_NEXT, INTENTIONAL_WAIT or UNSAFE_OR_UNKNOWN exists yet — measured at plan time they do not, so this task introduces that vocabulary. Produce no files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Explored, no files produced. Pinned: design 8.2 (lines 368-378 of docs/plans/2026-08-05-moe-rebuild-design.md) read verbatim — three predicates, READY_NOW only for dispatchable, UNBLOCK_NEXT = exactly-one-remaining AND producer/recovery known, INTENTIONAL_WAIT needs a CURRENT wait record, everything missing/stale/incompatible/unresolvable is UNSAFE_OR_UNKNOWN, legal choices = retry predecessor / substitute compatible approved result / propose superseding rewire / cancel. In repo: partitionFrontier at frontier.ts:71 (logicalReady pushed at :388 BEFORE any availability read — confirms logical layer is availability-independent; executionBearing gate at :361); graph-model.ts:244-301 NodeAvailabilityFact/FrontierCursor/BlockedReason(Code)/BlockedNode/FrontierPartition; withhold contract at :252-260. Reusable helpers confirmed: admission-model.ts exports deepFreeze/record/dense/oneOf/isRef/isDigest/isVersion + MAX_ADMISSION_ITEMS=256 bound-before-read; admission-wait.ts exports IntentionalWait + validateIntentionalWait and its header explicitly names task-fa96b81c as the consumer; dependency-contract.ts exports DEPENDENCY_GATES + DependencyFactBinding{sourceFactRef,sourceFactVersion,sourceFactDigest} (= provenance shape, reused not redeclared); dependency-witness.ts exports isWithinHorizon(gate,horizon) for CURRENT/stale; graph-internal.ts exports buildHardGraphIndex with hardOut for the affected-descendant closure. Grepped: READY_NOW/UNBLOCK_NEXT/INTENTIONAL_WAIT/UNSAFE_OR_UNKNOWN absent from packages/scheduler/src — this task introduces them. index-surface.test.ts hand-transcribes the root namespace, so NOT exporting readiness from index.ts (unowned) keeps it green. tests/runtime/package-loadability allowlist does not name this task.",
+      "startedAt": "2026-08-09T10:09:38.249Z",
+      "completedAt": "2026-08-09T10:13:18.645Z"
     },
     {
       "stepId": "step-2",
       "description": "readiness-model.ts — vocabulary only, no derivation. Declare: READINESS_CLASSES as a frozen array (READY_NOW, UNBLOCK_NEXT, INTENTIONAL_WAIT, UNSAFE_OR_UNKNOWN) with its derived union; READINESS_REASON_CODES, the closed typed-reason vocabulary covering each admission and dispatch input named in design 8.2 (phase/ownership, plan exactness, input manifest binding, context, downstream-proof budget, capability, risk policy, resource confirmation, provider slot, lease, pause, supersession, reconciliation hold); a FactConfidence union of exactly CONFIRMED_TRUE | CONFIRMED_FALSE | UNKNOWN — three arms, never a boolean, because graph-model.ts:247 states that `false` must never encode UNKNOWN and a two-arm type makes that error unrepresentable-by-accident impossible to avoid; a ReadinessReason record carrying code, layer, the offending nodeKey/edgeKey, and PROVENANCE (which supplied fact, its version and digest) since DoD 2 requires provenance and not just a code; and the LEGAL_CHOICES vocabulary from design 8.2 (retry predecessor, substitute a compatible approved result, propose a superseding rewire, cancel). REUSE BlockedReason, BlockedNode and BlockedReasonCode from ../graph-model.js rather than redeclaring them — graph-model.ts is NOT an owned path here, so extend around it, never edit it. Keep under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-model.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-model.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-model.ts"
+      ],
+      "note": "readiness-model.ts, 183 lines, vocabulary only — no derivation, no fact reads. Declared: READINESS_CLASSES (frozen, 4 members) + ReadinessClass; READINESS_CLASS_RANK (READY_NOW 0 / UNBLOCK_NEXT 1 / INTENTIONAL_WAIT 2 / UNSAFE_OR_UNKNOWN 3) so a multi-predicate node in the conservative bucket can never sort ahead of a one-step item; READINESS_LAYERS; FACT_CONFIDENCES + FactConfidence with exactly three arms; ADMISSION_REASON_CODES (7: phase/ownership, exact plan, input manifest, context, downstream-proof budget, capability, risk policy) + DISPATCH_REASON_CODES (6: resource confirmed ACTIVE, provider slot reservable, no active lease, no pause, no supersession, no reconciliation hold) + STRUCTURAL_REASON_CODES, composed into the closed READINESS_REASON_CODES; READINESS_REASON_LAYERS as the single code->layer source of truth; ReadinessReason{code,layer,confidence,nodeKey,edgeKey,provenance,recoveryRef}; LEGAL_CHOICES (4, design 8.2); READINESS_ISSUE_CODES; MAX_READINESS_ITEMS=256. REUSED not redeclared: BlockedReasonCode + GraphKey from ../graph-model.js (ReadinessReason.code is a union with it, so a logical blocker keeps its landed code), DependencyFactBinding from ../dependencies/dependency-contract.js as the provenance triple. ReadinessProvenance is nullable on purpose: an absent fact has no ref/version/digest and inventing one is the same class of error as encoding UNKNOWN as false. graph-model.ts and frontier.ts untouched. pnpm --filter @moe/scheduler typecheck exit 0.",
+      "startedAt": "2026-08-09T10:13:29.187Z",
+      "completedAt": "2026-08-09T10:14:33.810Z"
     },
     {
       "stepId": "step-3",
       "description": "RED — fact-parsing tests before readiness-facts.ts exists. @moe/scheduler declares NO dependencies at all (verified: its package.json has no dependencies field), so it cannot import @moe/runner's materialization or anything else. Every input — dependency truth, NodeInputManifest binding, policy, budget, lease, hold, resource confirmation, wait record — arrives as caller-supplied DATA and is structurally validated here. Tests: each fact parser returns CONFIRMED_TRUE, CONFIRMED_FALSE or UNKNOWN and NEVER coerces a malformed or absent fact to false — assert UNKNOWN explicitly for absent, malformed, wrong-typed, stale-versioned and null cases, with the specific reason code and the layer that refused; a hostile shape battery (null prototype violation, extra key, getter-bearing object, oversized list) refuses on the bound before any element read, following the budget-contract.ts:137 precedent; and a wait record that is not CURRENT does not yield INTENTIONAL_WAIT, because design 8.2 requires a current record and an expired one is UNKNOWN, not an intention.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:14:36.808Z"
     },
     {
       "stepId": "step-4",
@@ -136,7 +146,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-29cc6667",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -148,20 +158,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.026Z",
-  "updatedAt": "2026-08-09T10:07:45.348Z",
+  "updatedAt": "2026-08-09T10:14:36.808Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T10:04:33.189Z",
     "plannedStepCount": 11,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
-    "architect-8a4a1764"
+    "architect-8a4a1764",
+    "worker-29cc6667"
   ],
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:43.282Z",
   "planningNotes": {
@@ -172,5 +187,6 @@
   "budget": {
     "wallClockMs": 9900000
   },
-  "planApprovedAt": "2026-08-09T10:07:45.348Z"
+  "planApprovedAt": "2026-08-09T10:07:45.348Z",
+  "workStartedAt": "2026-08-09T10:09:38.249Z"
 }

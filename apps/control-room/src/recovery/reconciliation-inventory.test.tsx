@@ -125,7 +125,7 @@ function snapshot(
   commands: readonly NextAllowedCommand[] = COMMANDS,
 ): FixtureAffordanceSnapshot {
   return {
-    connection: "LIVE",
+    connection: "CONNECTED",
     mutationsEnabled: true,
     nextAllowedCommands: commands,
     requiresAffordanceRefresh: false,
@@ -198,6 +198,17 @@ describe("reconciliation rows keep the record's quarantine visible", () => {
     expect(screen.getByTestId(`cr.health.reconciliation.narrative.${RECORD_A}`).textContent)
       .toBe(`${RECORD_A} failed integrity checks during import: UNKNOWN. It is quarantined `
         + "— it cannot be scheduled and everything derived from it shows UNKNOWN.");
+  });
+
+  it("names an unidentified record UNKNOWN rather than opening with a blank", () => {
+    const container = renderInventory({ rows: [{ ...ROW_A, recordId: "  " }] });
+    const narrative = container.querySelector(
+      "[data-reconciliation-row] > [data-testid^='cr.health.reconciliation.narrative.']",
+    );
+    expect(narrative?.textContent)
+      .toBe("UNKNOWN failed integrity checks during import: owner ambiguous (two "
+        + "claimants in legacy files). It is quarantined — it cannot be scheduled and "
+        + "everything derived from it shows UNKNOWN.");
   });
 
   it("renders quarantine, schedulability, disposition, and derived state as separate facts", () => {
@@ -280,8 +291,11 @@ describe("reconciliation choices come only from current affordances", () => {
   });
 
   it("renders no control outside a truth chip or a recovery action group", () => {
-    const container = renderInventory();
-    for (const control of container.querySelectorAll<HTMLButtonElement>("button")) {
+    renderInventory();
+    const surface = screen.getByTestId("cr.health.reconciliation");
+    const controls = [...surface.querySelectorAll<HTMLButtonElement>("button")];
+    expect(controls.length).toBeGreaterThan(10);
+    for (const control of controls) {
       const testId = control.getAttribute("data-testid") ?? "";
       const inGroup = control.closest("[data-recovery-actions]") !== null;
       expect(testId.startsWith("cr.chip.") || inGroup, `${testId} is a loose control`)

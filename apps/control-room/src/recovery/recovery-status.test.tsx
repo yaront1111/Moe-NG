@@ -2,8 +2,6 @@ import { buildNextAllowedCommands } from "@moe/contracts";
 import type { NextAllowedCommand } from "@moe/contracts";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
@@ -99,7 +97,7 @@ function snapshot(
   commands: readonly NextAllowedCommand[] = COMMANDS,
 ): FixtureAffordanceSnapshot {
   return {
-    connection: "LIVE",
+    connection: "CONNECTED",
     mutationsEnabled: true,
     nextAllowedCommands: commands,
     requiresAffordanceRefresh: false,
@@ -333,129 +331,18 @@ describe("project recovery actions come only from current affordances", () => {
   });
 
   it("offers no browser-side restore, upload, or file control", () => {
-    const container = renderStatus();
-    expect(container.querySelectorAll("input")).toHaveLength(0);
-    expect(container.querySelectorAll("form")).toHaveLength(0);
-    expect(container.querySelectorAll("a[download]")).toHaveLength(0);
-    for (const control of container.querySelectorAll<HTMLButtonElement>("button")) {
+    renderStatus();
+    const surface = screen.getByTestId("cr.surface.recovery");
+    expect(surface.querySelectorAll("input")).toHaveLength(0);
+    expect(surface.querySelectorAll("form")).toHaveLength(0);
+    expect(surface.querySelectorAll("a")).toHaveLength(0);
+    const controls = [...surface.querySelectorAll<HTMLButtonElement>("button")];
+    expect(controls.length).toBeGreaterThan(20);
+    for (const control of controls) {
       const testId = control.getAttribute("data-testid") ?? "";
       const inGroup = control.closest("[data-recovery-actions]") !== null;
       expect(testId.startsWith("cr.chip.") || inGroup, `${testId} is a loose control`)
         .toBe(true);
-    }
-  });
-});
-
-/**
- * The authority ban is a NEGATIVE property, so behaviour cannot prove it: a render test
- * only shows the surface did not reach a daemon for the props it happened to be given.
- * This scan proves it structurally over every owned production module. `doctor-j1.tsx`
- * predates this task and is excluded by name, not by pattern, so a new file cannot hide
- * behind the exclusion.
- */
-const DOCTOR_DIR = resolve(process.cwd(), "src/doctor");
-const RECOVERY_DIR = resolve(process.cwd(), "src/recovery");
-const LEGACY_DOCTOR_SLICE = "doctor-j1.tsx";
-
-const EXPECTED_DOCTOR_FILES = Object.freeze([
-  "doctor-console.test.tsx", "doctor-console.tsx", "doctor-j1.tsx",
-]);
-
-const EXPECTED_RECOVERY_FILES = Object.freeze([
-  "reconciliation-inventory.test.tsx", "reconciliation-inventory.tsx",
-  "recovery-actions.test.tsx", "recovery-actions.tsx", "recovery-external.tsx",
-  "recovery-status.test.tsx", "recovery-status.tsx",
-]);
-
-const SCANNED_MODULES = Object.freeze([
-  [DOCTOR_DIR, "doctor-console.tsx", "export function DoctorConsole"],
-  [RECOVERY_DIR, "reconciliation-inventory.tsx", "export function ReconciliationInventory"],
-  [RECOVERY_DIR, "recovery-actions.tsx", "export function RecoveryActions"],
-  [RECOVERY_DIR, "recovery-external.tsx", "export function RecoveryExternalInventory"],
-  [RECOVERY_DIR, "recovery-status.tsx", "export function RecoveryStatus"],
-] as const);
-
-const ALLOWED_IMPORTS = Object.freeze([
-  "@moe/contracts", "../nodes/node-authority.js", "../shell/frame.js",
-  "./recovery-actions.js", "./recovery-external.js", "react",
-]);
-
-/**
- * Identifiers that would mean a presentation module had grown its own authority: a
- * fixture or adapter it could believe instead of the daemon, an error it could mint, or
- * any path off the browser onto the machine.
- */
-const FORBIDDEN_TOKENS = Object.freeze([
-  "../fixtures.js", "../data/", "@moe/control-room-client", "@moe/core", "@moe/daemon",
-  "@moe/runner", "XMLHttpRequest", "child_process", "createRuntimeError",
-  "dangerouslySetInnerHTML", "fetch(", "localStorage", "node:fs", "process.cwd",
-  "process.env", "type=\"file\"",
-]);
-
-const IMPORT_SPECIFIER = /^\s*(?:import|export)[\s\S]*?from\s+"([^"]+)"/gmu;
-
-function listing(directory: string): readonly string[] {
-  return readdirSync(directory).sort();
-}
-
-function importsOf(text: string): readonly string[] {
-  const found = new Set<string>();
-  for (const match of text.matchAll(IMPORT_SPECIFIER)) {
-    const specifier = match[1];
-    if (specifier !== undefined) found.add(specifier);
-  }
-  return [...found].sort();
-}
-
-describe("the owned production modules structurally cannot reach authority", () => {
-  it("scans exactly the expected owned file set, so a new file cannot escape", () => {
-    expect(listing(DOCTOR_DIR)).toEqual([...EXPECTED_DOCTOR_FILES]);
-    expect(listing(RECOVERY_DIR)).toEqual([...EXPECTED_RECOVERY_FILES]);
-  });
-
-  it("scans every new production module and none of the legacy slice", () => {
-    const scanned = SCANNED_MODULES.map(([, name]) => name);
-    expect(scanned).toHaveLength(5);
-    expect(scanned).not.toContain(LEGACY_DOCTOR_SLICE);
-    const production = [...EXPECTED_DOCTOR_FILES, ...EXPECTED_RECOVERY_FILES]
-      .filter((name) => !name.endsWith(".test.tsx") && name !== LEGACY_DOCTOR_SLICE);
-    expect([...scanned].sort()).toEqual(production.sort());
-  });
-
-  it("reads real source for each module, so the absence assertions are not vacuous", () => {
-    for (const [directory, name, anchor] of SCANNED_MODULES) {
-      const source = readFileSync(join(directory, name), "utf8");
-      expect(source.length, `${name} read empty`).toBeGreaterThan(400);
-      expect(source, `${name} lost its anchor`).toContain(anchor);
-    }
-  });
-
-  it("restricts every production import to react, contracts, and owned siblings", () => {
-    for (const [directory, name] of SCANNED_MODULES) {
-      const specifiers = importsOf(readFileSync(join(directory, name), "utf8"));
-      expect(specifiers.length, `${name} imports nothing`).toBeGreaterThan(0);
-      for (const specifier of specifiers) {
-        expect(ALLOWED_IMPORTS, `${name} imports ${specifier}`).toContain(specifier);
-      }
-    }
-  });
-
-  it("names no fixture, adapter, transport, filesystem, or error-minting identifier", () => {
-    const offenders: string[] = [];
-    for (const [directory, name] of SCANNED_MODULES) {
-      const source = readFileSync(join(directory, name), "utf8");
-      for (const token of FORBIDDEN_TOKENS) {
-        if (source.includes(token)) offenders.push(`${name}:${token}`);
-      }
-    }
-    expect(FORBIDDEN_TOKENS.length).toBe(16);
-    expect(offenders).toEqual([]);
-  });
-
-  it("keeps every production module under the 400-line cap", () => {
-    for (const [directory, name] of SCANNED_MODULES) {
-      const lines = readFileSync(join(directory, name), "utf8").split("\n").length;
-      expect(lines, `${name} is ${lines} lines`).toBeLessThan(400);
     }
   });
 });

@@ -108,7 +108,7 @@
     {
       "stepId": "step-6",
       "description": "TDD RED→GREEN for keyboard/narrow behavior and the authority boundary. Extend board-surface.test.tsx to assert exact focused node after j/k within a column, h/l and Left/Right across visible columns preserving/clamping row index, Enter opening that exact node, column-jump focusing its first card, and column-major DOM order with unequal/empty lanes. Add board-layout.css with horizontal overflow, sticky column headings, 2px-or-greater focus-visible rings, a column-jump control enabled below 960px, no hidden card/action content, and reduced-motion handling. Because jsdom does not apply viewport media queries, read the CSS from `process.cwd()` with a positive file anchor and pin `max-width: 959px`, overflow, and sticky declarations. Add goals-board-ban.test.ts with a nonzero exact canonical-production file set/import allow-list and bans on fixtures/data-adapter plus @moe/core/store/scheduler, lifecycle tables, and transition/authority derivation imports; assert the guard case count itself. Keep all tests/modules <400 lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/board/board-layout.css",
         "apps/control-room/src/board/board-surface.test.tsx",
@@ -118,12 +118,20 @@
         "apps/control-room/src/board/board-layout.css",
         "apps/control-room/src/board/goals-board-ban.test.ts"
       ],
-      "startedAt": "2026-08-09T09:52:47.840Z"
+      "modifiedFiles": [
+        "apps/control-room/src/board/board-surface.test.tsx",
+        "apps/control-room/src/board/board-surface.tsx",
+        "apps/control-room/src/board/board-layout.css",
+        "apps/control-room/src/board/goals-board-ban.test.ts"
+      ],
+      "note": "Keyboard, narrow-window layout, and the structural ban are in. src/board + src/goals: 45/45 pass; typecheck exit 0. Keyboard (§11.2) is implemented in board-surface.tsx as a cursor over VISIBLE lanes only: j/k step within a lane and clamp at its end, h/l and ArrowLeft/ArrowRight step across visible columns carrying the row index and clamping it into the shorter lane, Enter opens the exact focused node by nodeId, and the column-jump control focuses the target column's first card. Tests pin exact focused nodes: j lands on plan-doc, jjj reaches contradiction, k+Enter opens same-spelled-a; from plan row 2, l clamps into ready row 1 (same-spelled-b, not ready-1 — this is what kills a row-0 horizontal mutant), ArrowRight preserves row 1 into executing (dup), and h/ArrowLeft/h returns and clamps at the first column. The jump test collapses ready authoritatively and asserts the option list is exactly the four visible columns and that DOM order stays column-major over unequal and empty lanes. Collapse is now computed once by isCollapsed() in BoardSurface and passed down, so the keyboard's visible-lane set and the rendered set cannot drift. board-layout.css (77 lines) hangs off the stable test-id grammar and carries horizontal overflow, sticky column headings, 2px focus-visible outlines with offset, an @media (max-width: 959px) block naming the column-jump control, and a prefers-reduced-motion block. goals-board-ban.test.ts (156 lines, 6 cases) asserts the exact file listing of both owned directories, a nonzero canonical production set of exactly 5 modules, an exact import allow-list plus an independent forbidden-fragment scan (@moe/core, data-adapter, fixtures, scheduler, store), forbidden identifiers covering transition/column-fold/truth-ranking/readiness derivation and the client-authored \"50\"/\"normal\" policy defaults, and reads board-layout.css from process.cwd() with a positive anchor (path suffix, length > 400, known selector present) before pinning max-width: 959px, overflow-x: auto, position: sticky, :focus-visible, outline: 2px solid, and the reduced-motion query, plus negative pins that no overflow: hidden, ellipsis, display: none, or visibility: hidden hides card or action content. Two decisions worth recording: (1) the stylesheet is imported by board-surface.tsx so it actually ships, which needed a `/// <reference types=\"vite/client\" />` line because tsc rejected the bare CSS side-effect import with TS2882; (2) that triple-slash form is a type-shaped hole in an import scan, so the ban test now also extracts every /// <reference types=\"...\"/> from canonical production and asserts the set equals exactly [\"vite/client\"]. Owned file sizes: 64/248/343/105/85/244/77/399/156. NOTE for step 8: the full app suite currently shows one FOREIGN failure, src/recovery/recovery-status.test.tsx, an in-flight RED from the concurrently working Recovery doctor task (task-a7ba291e) whose production module does not exist yet; 340 tests pass and every one of mine is green.",
+      "startedAt": "2026-08-09T09:52:47.840Z",
+      "completedAt": "2026-08-09T10:10:10.001Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review and mutation proof. Load adversarial-self-review, then use OS-temp backups plus SHA-256 restoration for one-at-a-time production mutants: remove target filtering so a foreign affordance renders; relocate a card instead of honoring supplied placement; upgrade a missing fact to DAEMON_VERIFIED/zero; merge renewal with activity silence; invert terminated-default or loaded-empty Ready behavior; and force horizontal keyboard navigation to row 0. Each must make its named focused test red; assert every exercised corpus/sweep count is >0, restore exact bytes after every mutant, and leave no probe/scratch/generated evidence. Red-team null/blank/huge arrays, duplicate IDs, extra secret-shaped fields, disabled double activation, empty/nonuniform columns, absent provenance, and contradictory overlays; confirm no computed authority/readiness/evidence strength and that J1 files/dist/package/lockfile remain untouched. Use a cross-platform Node physical-line count and split before any production file reaches 400 (target <=250).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/goals/supplied-actions.tsx",
         "apps/control-room/src/goals/goals-home.tsx",
@@ -133,12 +141,18 @@
         "apps/control-room/src/board/board-surface.test.tsx",
         "apps/control-room/src/goals/goals-home.test.tsx",
         "apps/control-room/src/board/goals-board-ban.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/board/board-surface.tsx"
+      ],
+      "note": "Mutation proof: 8 one-at-a-time mutants, ALL KILLED, every one restored byte-exact (SHA-256 compared before/after). Each drill first ran its named test UNMUTATED and required a \"Tests N passed\" line, so no drill could pass against a name filter that matched nothing. Results: (1) supplied-actions.tsx target filter neutered -> \"renders no creation control when the supplied command targets another aggregate\" red; (2) board-surface.tsx placement `?? \"plan\"` relocation -> \"retains an unplaced record in the unmapped region\" red; (3) board-card.tsx missing fact upgraded to {DAEMON_VERIFIED,\"0\"} -> \"shows overlays exactly as supplied and leaves absent overlays UNKNOWN\" red; (4) same upgrade in goals-home.tsx -> \"renders a missing or blank fact as UNKNOWN with no borrowed truth class\" red; (5) renewal silence sourced from activitySilence -> \"keeps renewal silence and activity silence as two separate facts\" red; (6) terminated default inverted -> \"hides terminated records until the controlled filter asks for them\" red; (7) loaded-empty Ready collapse stripped of its !loading guard -> \"keeps Ready drawn while loading\" red; (8) horizontal navigation forced to row 0 -> \"moves across visible columns with h/l and arrows, clamping the row\" red. Drill script and backups lived in the OS temp dir and were deleted; no probe, scratch, or generated evidence file exists in the repo. Structural red-team: grep over all five owned production modules finds no .sort/.slice/.splice/.reverse/.reduce (so no silent cap or reordering on huge arrays), no dangerouslySetInnerHTML, no fetch/XMLHttpRequest/window.location/localStorage, and no setTimeout/setInterval/Math.random/Date.now. Behavioural red-team is covered by live cases: null and whitespace-blank facts, absent provenance handler, duplicate node ids, blank identity, hostile extra secret field, disabled double activation, empty and non-uniform columns, and contradictory overlays (REBOUND disposition beside INVALIDATED qualification on one card). One real defect found and FIXED during review: the column-jump control returned early when the chosen lane held no card, so selecting an empty column silently did nothing and the select snapped back — the cursor now moves regardless, so an empty lane reads as empty rather than as a dead control (board-surface.tsx now 249 lines, 45/45 owned tests still green). Theoretical items noted, not fixed, with reasons: the creation draft does not re-seed when the daemon supplies new policy defaults (re-seeding would destroy operator input mid-typing); two supplied commands of the same kind against the same aggregate produce two identical cr.action.* test ids (React keys on commandId so both controls render — hiding one would hide a real affordance); and cr.board.card.silence.{nodeId} shares the cr.board.card. prefix, which is spec §2.2's own id, so any consumer counting cards by that prefix must exclude it as the tests do. Boundary confirmed: J1 files byte-identical (goals-j1.tsx 37590E48…F34580, board-j1.tsx 49DC3A41…472170) and absent from every recent commit; no package.json, pnpm-lock, or dist change. IMPORTANT FINDING for step 8: all nine owned files were already swept into HEAD by other agents' whole-tree commit hooks (a6e46f6 for the three goals files, 5a63049 for board-contract/board-card, 2735f2b for board-surface/layout/test/ban), so `git diff HEAD` for those paths was empty before this step's fix. Only the columnjump fix is now uncommitted and stageable.",
+      "startedAt": "2026-08-09T10:10:13.415Z",
+      "completedAt": "2026-08-09T10:13:42.827Z"
     },
     {
       "stepId": "step-8",
       "description": "Run the single final verification gate in the foreground: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`; record fresh file/test counts and exit 0 as completion evidence (the app-scoped test is mandatory because root Vitest skips apps). Then inspect `git status --porcelain`, unstage any foreign staged path without altering its worktree bytes, explicitly stage only the nine owned new paths, and commit only by explicit pathspec—never bare commit/add -A. Verify `git show --stat --oneline HEAD` contains exactly those paths and that both J1 files are absent from the diff.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/goals/supplied-actions.tsx",
         "apps/control-room/src/goals/goals-home.tsx",
@@ -149,11 +163,17 @@
         "apps/control-room/src/board/board-layout.css",
         "apps/control-room/src/board/board-surface.test.tsx",
         "apps/control-room/src/board/goals-board-ban.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/board/board-surface.tsx"
+      ],
+      "note": "Final gate run fresh in the foreground: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test` exit 0 — typecheck clean, 25 test files / 369 tests passed (baseline at step 1 was 16 files / 221 tests; the growth is my 3 files / 45 tests plus the concurrently landing recovery and doctor sibling files). The app-scoped run is the one that counts because root Vitest skips apps. Git: `git status --porcelain` showed nothing staged, so there was no foreign staged path to unstage and no foreign worktree byte was touched. Eight of the nine owned files were already in HEAD — other agents' whole-tree commit hooks swept them into a6e46f6 (supplied-actions.tsx, goals-home.tsx, goals-home.test.tsx), 5a63049 (board-contract.ts, board-card.tsx) and 2735f2b (board-surface.tsx, board-layout.css, board-surface.test.tsx, goals-board-ban.test.ts) before this step, and `git diff HEAD` over those paths was empty. The only remaining owned change was step 7's column-jump fix, committed by explicit pathspec as 82f4a35 (`git add <path>` then `git commit -F - -- <path>`; no bare commit, no add -A, no push, no merge, no reset, no stash). `git show --stat --oneline HEAD` contains exactly apps/control-room/src/board/board-surface.tsx and nothing else; both J1 files are absent from that diff and from all three sweeping commits, and their SHA-256 values are unchanged (goals-j1.tsx 37590E48A9B389E1399E758B03948DF652482F8C6D44FBD709D0A822C6F34580, board-j1.tsx 49DC3A418397119689EF2DBD40A4B8DED3C84CE586B002E835F3AA68D7472170). No package.json, pnpm-lock, or dist path was modified; sibling recovery/doctor work remains uncommitted and byte-untouched by me. Final owned file sizes (physical lines, counted with Node): supplied-actions.tsx 64, goals-home.tsx 248, goals-home.test.tsx 343, board-contract.ts 105, board-card.tsx 85, board-surface.tsx 249, board-layout.css 77, board-surface.test.tsx 399, goals-board-ban.test.ts 156 — every production file under the 250 target and every module under 400.",
+      "startedAt": "2026-08-09T10:13:45.906Z",
+      "completedAt": "2026-08-09T10:14:52.094Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-023d39fd",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -165,12 +185,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T09:52:47.840Z",
+  "updatedAt": "2026-08-09T10:16:33.290Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:08:15.396Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 5
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -184,7 +204,10 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:26:51.791Z",
@@ -204,8 +227,28 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-09T10:10:10.040Z",
+    "escalatedAt": "2026-08-09T10:10:10.040Z"
   },
   "planApprovedAt": "2026-08-09T09:26:53.829Z",
-  "workStartedAt": "2026-08-09T09:34:29.226Z"
+  "workStartedAt": "2026-08-09T09:34:29.226Z",
+  "reviewStartedAt": "2026-08-09T10:16:33.290Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  25 passed (25)\n      Tests  369 passed (369)\n   Start at  13:15:05\n   Duration  5.49s (transform 5.13s, setup 0ms, import 10.07s, tests 18.37s, environment 26.74s)",
+    "reportedAt": "2026-08-09T10:16:33.290Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/goals/goals-home.test.tsx",
+    "apps/control-room/src/goals/supplied-actions.tsx",
+    "apps/control-room/src/goals/goals-home.tsx",
+    "apps/control-room/src/board/board-surface.test.tsx",
+    "apps/control-room/src/board/board-contract.ts",
+    "apps/control-room/src/board/board-card.tsx",
+    "apps/control-room/src/board/board-surface.tsx",
+    "apps/control-room/src/board/board-layout.css",
+    "apps/control-room/src/board/goals-board-ban.test.ts"
+  ]
 }

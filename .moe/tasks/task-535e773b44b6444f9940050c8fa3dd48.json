@@ -109,13 +109,19 @@
     {
       "stepId": "step-7",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the suite as an attacker: could it pass without spawning a real Node process anywhere — the single failure that would make it worthless; is the package list discovered or quietly hard-coded; would a package added tomorrow be enrolled automatically; do BOTH controls exist and would the suite notice if the harness itself broke; does the negative control assert the literal ERR_MODULE_NOT_FOUND code rather than message text; does an allowlisted package that starts passing actually FAIL the suite, verified by the step-5 drill rather than by reading the code; does a failure name both the package and the unresolvable specifier; is a child-process timeout reported distinctly instead of silently passing; did any package's bridges get 'helpfully' fixed here, stealing another task's deliverable. Then stage and commit by EXPLICIT PATHSPEC — never a bare git commit, never git commit -a, never git add -A — since several agents share this working directory and other tasks have uncommitted work in packages/. Run `git status --porcelain` first, unstage any foreign path with `git restore --staged`, and verify with `git show --stat` that only tests/runtime/ (plus root package.json if the amendment was granted) landed, with no probe, scratch or debug files.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T09:52:48.421Z"
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts",
+        "tests/runtime/package-loadability-support.ts"
+      ],
+      "note": "Adversarial review completed against current bytes. The gate cannot pass without real child processes: process.execPath + --experimental-strip-types is the only import path and both the stdout marker control and bridge-removal mutation prove it. Discovery contains no package list, is non-empty, equals manifest directories, rejects duplicate package names, and exactly partitions all manifests; apps/control-room is the sole explicit justified NO_RUNTIME_ENTRY. Positive/negative controls remain in-suite; negative pins literal ERR_MODULE_NOT_FOUND; timeout is distinct; imported namespaces require >0 exports and no undefined bindings; failures name package+specifier. Review found and fixed two fail-open edges: an entry-file ENOENT can no longer be mistaken for a missing manifest, and parser selects the child's final marker rather than an earlier package stdout lookalike. Strict ad-hoc tsc over both root-test files passes. Final exact `pnpm typecheck && pnpm test` exited 0: 170 files / 3050 passed / 1 skipped. Fresh report shows all 14 Node-entry packages import with defined exports, so the self-retiring allowlist is now empty; browser-only control-room remains classified. Commit daadf47 contains only the two tests/runtime files and both are clean; all foreign control-room WIP is untouched. Attribution: the harness initially landed via foreign whole-tree sweep commits a6e46f6 and 5a63049 while this task was in progress; daadf47 is the explicit-path finishing delta. No package bridges were changed by this task.",
+      "startedAt": "2026-08-09T09:52:48.421Z",
+      "completedAt": "2026-08-09T10:13:59.329Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-533a53ab",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -134,14 +140,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:11:33.693Z",
-  "updatedAt": "2026-08-09T09:52:48.421Z",
+  "updatedAt": "2026-08-09T10:14:55.836Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:31:19.372Z",
@@ -149,7 +156,7 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
     "firstClaimAt": "2026-08-09T09:31:37.646Z",
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "planningNotes": {
     "approachesConsidered": "(1) SCOPE DECISION — the task description left this to the architect and I am making it: LAND THE GATE WITH A DATED, PER-ENTRY-JUSTIFIED ALLOWLIST, not red. A permanently-red gate in the repo-wide lane teaches everyone to ignore a red lane, and this fleet runs `pnpm test` as the final gate on multiple tasks — a standing red would block every one of them and would be routed around within the hour. The allowlist keeps the lane green and honest simultaneously: each of the six entries names its owning sweep task, and the suite FAILS if an allowlisted package starts passing (so a sweep landing forces the entry's removal, exactly like the absence ratchet that this repo already runs). That inverts the usual allowlist rot — the list cannot outlive its cause.\n(2) SPAWN REAL NODE, NEVER IN-PROCESS. An in-process `import()` inside vitest reproduces vitest's own `.js`->`.ts` rewriting, which is the precise blindness this gate exists to defeat. It must be a child process with --experimental-strip-types.\n(3) DISCOVER, NEVER LIST. @moe/context and @moe/review shipped with zero bridges days after being created; a hand-maintained package list would have missed both. Read pnpm-workspace.yaml globs, expand them, and assert the discovered set equals the directories on disk so a new package is covered the day it appears.\n(4) CONTROLS ARE NOT OPTIONAL HERE, and I have direct evidence why: my first probe while gathering this task's data used bare package names, reported ALL TEN packages failing including correctly-bridged @moe/scheduler, and was pure harness artifact. Only a passing control exposed it. A gate that can cry repo-wide catastrophe without a self-check will be disabled rather than believed.",
@@ -174,5 +181,16 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-09T10:14:55.836Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm test",
+    "exitCode": 0,
+    "outputTail": "packages/coordination typecheck: Done\npackages/review typecheck: Done\napps/daemon typecheck: Done\napps/control-room typecheck: Done\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  170 passed (170)\n      Tests  3050 passed | 1 skipped (3051)\n   Start at  13:13:20\n   Duration  8.83s (transform 38.34s, setup 0ms, import 59.94s, tests 40.92s, environment 18ms)\n\n$ pnpm --recursive typecheck\n$ vitest run",
+    "reportedAt": "2026-08-09T10:14:55.836Z"
+  },
+  "filesModified": [
+    "tests/runtime/package-loadability.test.ts",
+    "tests/runtime/package-loadability-support.ts"
+  ]
 }

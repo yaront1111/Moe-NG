@@ -19,13 +19,16 @@
     {
       "stepId": "step-1",
       "description": "Read design section 21 and transcribe the specification by hand before writing anything. Lines 1273-1290 of the pinned design are the authority for this task (read-only — epic rail 1 forbids editing it). Transcribe, into the step note, exactly what items 2, 3, 4, 5, 6 and 7 require: hash every source file and emit a manifest BEFORE import, never changing source content or mtime; preserve raw source digests/blobs and import provenance; never activate a legacy assignment or resource claim, importing it as historical/suspended; import legacy containment and dependsOn-style links ONLY as historical CONTAINS|RELATED evidence that never becomes a hard edge, blocker or hold; report exact counts plus unknown fields, dangling refs, cycles, split ownership, corrupt/invalid bytes and case/path conflicts, with ambiguity becoming NEEDS_RECONCILIATION and never a guess; and derive imported IDs, ordering, provenance times and canonical payloads from source digests and the manifest rather than wall-clock import time, so identical bytes produce identical canonical hashes and an interrupted import commits wholly or not at all. Confirm items 9-13 (cutover preview, quiesce, activate) are NOT in scope. Also confirm on disk that packages/import/ and tests/migration/ do not exist and that `pnpm test:migration` is absent from root scripts. Produce no code.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Explored; no code produced. Design section 21 read at lines 1273-1290 of the pinned design (read-only, not edited).\n\nHAND-TRANSCRIBED SPEC, the six items this task implements:\n- 21.2 READ-ONLY MANIFEST FIRST: \"Before import, hash every source file and emit a manifest; never change source content or mtime intentionally.\"\n- 21.3 PROVENANCE: \"Preserve raw source digests/blobs and import provenance. Map lifecycle and BLOCKED to phase plus orthogonal blocker.\"\n- 21.4 NEVER ACTIVATE: \"Never activate a legacy assignment/resource claim. Import it as historical/suspended and require an authenticated new lease.\"\n- 21.5 LINKS ARE EVIDENCE ONLY: \"Legacy epic/task containment, prose order, and dependsOn-style links import only as historical CONTAINS|RELATED evidence; none becomes a hard edge, blocker, or hold without a new typed DependencyContract and the current approval path.\" Note the exact wording — best-effort legacy activity is \"untrusted history, not authoritative v2 events\".\n- 21.6 AMBIGUITY: \"Report exact counts, unknown fields, dangling refs, cycles, split ownership, corrupt/invalid bytes, and case/path conflicts. Ambiguity becomes NEEDS_RECONCILIATION, never a guess.\"\n- 21.7 DETERMINISM + ATOMICITY: \"imported IDs, ordering, provenance times (source time or manifest-defined deterministic sentinel), and canonical event payloads derive from source digests/manifest, not wall-clock import time. Identical bytes produce identical canonical DB/export hashes; an interrupted import commits wholly or not at all.\"\n\nOUT OF SCOPE CONFIRMED: 21.1 (freeze/characterize legacy baseline) is a host activity, 21.8 (shadow comparison) is a separate epic task, and 21.9-21.13 (cutover.preview, GO_QUIESCE, IMPORT_VERIFIED, GO_ACTIVATE, cutover.abort) are all cutover, explicitly not this task.\n\nTHREE DISK PREMISES CONFIRMED:\n1. packages/import/ does NOT exist. 2. tests/migration/ does NOT exist (tests/ holds e2e, fault, instruction-contract, property, runtime). 3. `test:migration` is ABSENT from root scripts — current set is typecheck, test, test:meta, test:property, test:e2e, test:store, verify:foundation, verify:store.\n\nGovernor's dependency premises re-verified rather than taken on report: packages/runner/src/artifacts/ ships artifact-contract/artifact-node-fs/artifact-store (plus .js bridges and a test); packages/store/src/sqlite-schema-migration.ts exists; packages/runner/src/canonical.ts exists.\n\nFINDING THAT CHANGES STEP 2, and the architect should see it before I request the amendment. The root vitest config globs BOTH \"packages/**/*.test.ts\" AND \"tests/**/*.test.ts\". Consequences:\n- Creating tests/migration/import/*.test.ts and packages/import/src/*.test.ts widens root `pnpm test` AUTOMATICALLY, with no package.json edit at all. The plan's step-2 instruction to \"verify the existing pnpm test covers the same suite set\" cannot hold: this deliverable necessarily widens it. That is inherent to producing the files, not a side effect of the amendment, and every other task's root-suite baseline will move by my test count. I will state the exact delta rather than pretend it is unchanged.\n- So the amendment is ONLY about adding the named script `test:migration`. Following the `test:property` precedent exactly, the one-line addition is: \"test:migration\": \"vitest run tests/migration\".\n- Without it, the task's own named verification command does not exist and moe.complete_task cannot be satisfied with a real exit-0 run.\n\nScaffold template confirmed: packages/scheduler/package.json is private ESM, exports {\".\": \"./src/index.ts\"}, scripts typecheck (tsc --project tsconfig.json) and test (vitest run --root ../.. packages/scheduler/src); tsconfig extends ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"], own tsBuildInfoFile. pnpm-workspace.yaml globs packages/* so it needs NO edit — confirmed on disk.\n\nCOLLISION NOTED: the daemon flagged a package.json file collision with task-535e773b (repo-wide runtime-loadability gate), which is currently BLOCKED on an unrelated ruling. If both land a root package.json hunk they will conflict; mine is a single scripts line. Raising it in #general with the amendment request.",
+      "startedAt": "2026-08-09T10:14:45.820Z",
+      "completedAt": "2026-08-09T10:15:52.418Z"
     },
     {
       "stepId": "step-2",
       "description": "OWNERSHIP AMENDMENT plus package scaffold. The task's stated verification is `pnpm test:migration`, which does not exist in root package.json — and root package.json is outside this task's owned paths (packages/import/**, tests/migration/import/**). Request the amendment naming the exact one-line script addition, following the existing `test:property` precedent (`vitest run tests/property`), and WAIT for confirmation; do not self-approve. Verify before and after that the existing `pnpm test` covers the same suite set, since silently widening or narrowing the repo-wide gate would affect every other task's evidence. Then scaffold packages/import from the @moe/scheduler template: private ESM package @moe/import, `exports: {\".\": \"./src/index.ts\"}`, typecheck and test scripts, and a tsconfig extending ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"] and its own tsBuildInfoFile. pnpm-workspace.yaml globs packages/* so it needs no edit; confirm `git diff --stat pnpm-lock.yaml` shows only the single new importer entry, since that file is shared with every in-flight task. Confirm the empty package typechecks before writing logic.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/import/package.json",
         "pnpm-lock.yaml",
@@ -33,7 +36,8 @@
       ],
       "newFiles": [
         "packages/import/package.json"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:15:57.436Z"
     },
     {
       "stepId": "step-3",
@@ -129,7 +133,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-f2e587cb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -148,17 +152,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-09T10:07:41.176Z",
+  "updatedAt": "2026-08-09T10:15:57.436Z",
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:39.151Z",
   "metrics": {
     "plannedStepCount": 11,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "firstClaimAt": "2026-08-09T10:14:28.760Z",
+    "executedStepCount": 1
   },
   "planningNotes": {
     "approachesConsidered": "(1) DETERMINISM COMES FROM DIGESTS, NOT FROM CARE. Design 21.7 is explicit: imported IDs, ordering, provenance times and canonical event payloads derive from source digests and the manifest, NEVER from wall-clock import time. So the design is a pure function from (frozen source bytes) to (canonical import), with the clock and the filesystem pushed to the edges. That is what makes DoD 1 provable rather than merely likely: the same bytes imported twice on two machines must produce byte-identical output, and the test asserts it by importing the SAME fixture twice and comparing canonical hashes, not by inspecting the code for `Date.now`.\n(2) READ-ONLY IS A PROPERTY OF THE SOURCE, AND MUST BE PROVEN, NOT PROMISED. Design 21.2 says never change source content or mtime. The proof is a before/after digest AND mtime snapshot of every source file, asserted unchanged after a full import, an interrupted import, and a failed import. A code review saying 'we only call readFile' is not that proof.\n(3) AMBIGUITY IS A FIRST-CLASS OUTCOME, NOT AN ERROR. Design 21.6 enumerates SEVEN classes (unknown fields, dangling refs, cycles, split ownership, corrupt bytes, case/path conflicts, plus exact counts) and says ambiguity becomes NEEDS_RECONCILIATION, never a guess. So the reconciler returns a typed classification per record and the import still completes; it does not throw. Each of the seven gets its own fixture, because a single 'bad input' case would let six of them regress unseen.\n(4) ATOMICITY REUSES THE STORE, IT DOES NOT REIMPLEMENT IT. @moe/store already commits all-or-nothing under BEGIN IMMEDIATE with proven crash behaviour (the projection crash/rebuild work drilled exactly this). The importer composes that seam rather than inventing a second transaction discipline.\n(5) WHY A NEW PACKAGE RATHER THAN A DAEMON SERVICE: owned paths say packages/import/**, the importer must be drivable offline with no daemon running, and M4 rail 1 says portability consumes frozen contracts rather than forking them.",
@@ -177,5 +185,9 @@
   "budget": {
     "wallClockMs": 28800000
   },
-  "planApprovedAt": "2026-08-09T10:07:41.176Z"
+  "planApprovedAt": "2026-08-09T10:07:41.176Z",
+  "contextFetchedBy": [
+    "worker-f2e587cb"
+  ],
+  "workStartedAt": "2026-08-09T10:14:45.820Z"
 }

@@ -101,7 +101,7 @@ function snapshot(
   overrides: Partial<FixtureAffordanceSnapshot> = {},
 ): FixtureAffordanceSnapshot {
   return {
-    connection: "LIVE",
+    connection: "CONNECTED",
     mutationsEnabled: true,
     nextAllowedCommands: commands,
     requiresAffordanceRefresh: false,
@@ -200,6 +200,33 @@ describe("recovery actions exist only because a current affordance exists", () =
       .toHaveLength(2);
     renderActions({ presentations: [COMPLETE] }, snapshot(duplicated));
     expect(actionIds()).toEqual([]);
+  });
+
+  it("never joins two unnamed identities, even if both sides are blank", () => {
+    const unnamed = Object.freeze({
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "  ",
+      commandKind: "recovery.complete", expectedVersion: 1,
+      inputSchemaVersion: "moe-runtime-command-input/1", targetAggregateId: "  ",
+    }) as unknown as NextAllowedCommand;
+    renderActions(
+      { presentations: [{ ...COMPLETE, commandId: "  ", targetAggregateId: "  " }] },
+      snapshot([unnamed]),
+    );
+    expect(actionIds()).toEqual([]);
+  });
+
+  it("renders both of two identical presentations rather than deduplicating them", () => {
+    renderActions({ presentations: [COMPLETE, COMPLETE] });
+    expect(actionIds()).toEqual([
+      "cr.action.recovery-complete", "cr.action.recovery-complete",
+    ]);
+  });
+
+  it("falls back to the daemon's command kind when the label is blank", () => {
+    renderActions({ presentations: [{ ...COMPLETE, label: "   " }] });
+    const control = button("cr.action.recovery-complete");
+    expect(control.textContent).toBe("recovery.complete");
+    expect(control.getAttribute("aria-label")).toBe(`recovery.complete: ${PROJECT}`);
   });
 
   it("grants nothing at all when rendered outside a shell frame", () => {

@@ -15,12 +15,6 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
-function at<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new Error(`corpus entry ${index} is missing`);
-  return item;
-}
-
 const obs = (value: string): PresentedFact => ({ truthClass: "OBSERVED", value });
 const ver = (value: string): PresentedFact => ({ truthClass: "DAEMON_VERIFIED", value });
 const unk = (value: string): PresentedFact => ({ truthClass: "UNKNOWN", value });

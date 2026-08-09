@@ -162,8 +162,8 @@
       "completedAt": "2026-08-09T10:06:19.376Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -175,7 +175,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:48.516Z",
-  "updatedAt": "2026-08-09T10:08:43.268Z",
+  "updatedAt": "2026-08-09T10:11:41.693Z",
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
@@ -194,7 +194,9 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
     "firstClaimAt": "2026-08-09T09:48:15.764Z",
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T10:11:41.693Z",
+    "wallClockMs": 1405929
   },
   "planningNotes": {
     "approachesConsidered": "(1) THREE PACKAGES, ONE TASK — justified because it is one mechanical concern with one probe harness, and the three are individually tiny (5, 10 and 3 modules). But this is the LEAST uniform of the three sweep tasks and the plan says so explicitly: @moe/mcp has two subdirectories and a third-party dependency, and @moe/control-room-client contains generated output. Those two wrinkles get their own steps rather than being buried in a bulk sweep.\n(2) THE EXCLUSION RULE HAS A REAL TARGET HERE, unlike its sibling task. `packages/mcp/src/http/http-server-test-helpers.ts` matches the `*-test-helpers.ts` convention and must get NO bridge. That is also the natural aim for the probe's negative control: after the sweep, importing `http-server-test-helpers.js` must STILL fail with ERR_MODULE_NOT_FOUND, which simultaneously proves the probe can detect failure and that test-only files were correctly skipped. The sibling task had to invent a non-existent specifier for this; here the real thing exists.\n(3) GENERATED OUTPUT GETS A HAND-WRITTEN BRIDGE. `src/generated/generated-client.ts` still needs `generated-client.js` beside it, but the bridge is hand-written source — do NOT teach the generator to emit bridges and do NOT hand-edit generated files. The package already ships generator-determinism and generated-coverage tests that will catch either mistake.\n(4) EXTERNAL DEPENDENCY FAILURES ARE NOT THIS TASK'S DEFECT. @moe/mcp depends on @modelcontextprotocol/sdk; a probe failure naming node_modules is a different defect with a different owner and must be reported, never papered over with a bridge.",
@@ -246,5 +248,8 @@
     "packages/skills/src/skills-runtime-entrypoint.test.ts",
     "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
     "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T10:11:41.693Z",
+  "reviewCompletedAt": "2026-08-09T10:11:41.693Z",
+  "reviewSummary": "APPROVED. The only task this session with a proper scoped pathspec commit.\n\nPROBE RUN BY ME from the repo root, all three controls. POSITIVE: skills 15 exports, mcp 12, control-room-client 1 — each with undefined:[] so DoD5 holds, every export DEFINED not merely resolvable. REGRESSION CONTROL: scheduler 36. NEGATIVE: http-server-test-helpers.js and dispatch-conformance.js both raise the literal ERR_MODULE_NOT_FOUND. No node_modules failure occurred, so the sdk hazard never materialised and there is nothing to report separately.\n\nCOUNTS re-derived by me: skills 5 modules/5 bridges, control-room-client 3/3, mcp 10 non-test .ts with 8 bridged — the 2 unbridged are exactly the named test-tier negative controls, and the entry loading proves neither is reachable. 16 bridges, 0 CR bytes across all of them, each exactly export-star-from-.ts plus LF.\n\nDRILL A: deleted the GENERATED module's bridge. Reddens 4 of 6 tests including \"loads @moe/control-room-client with createCompatGate defined\" — a real Node child asserting a NAMED export, not exit 0 — and the entry-reachability closure. Restored f514b5f9.\nDRILL B: rewrote a subdirectory bridge as CRLF, byte-different but text-identical. Caught by wrongContent, proving \"verify the BYTES, not the apparent text\" is genuinely enforced. Restored 7a4c8c65.\n\nGATES: skills typecheck 0, 3 files/80 passed +1 skipped; mcp 0, 7/131; control-room-client 0, 4/32; root loadability 1 file/6 passed. Generated output untouched — generated-client.ts last changed at 369ea08 under a different task — and the generator was not taught to emit bridges.\n\nDoD8 PASS exactly: git diff --name-status 22898bc~1..HEAD over the three packages is ALL additions, zero modifications. 16 bridges + 3 runtime-entrypoint tests, no .ts touched.\n\nCommit 22898bc holds precisely those 19 files. The later 2735f2b carrying this task's title is the harness whole-tree sweep with foreign control-room work; reported, not reverted."
 }

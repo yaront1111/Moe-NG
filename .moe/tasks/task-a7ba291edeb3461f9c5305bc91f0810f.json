@@ -88,30 +88,46 @@
     {
       "stepId": "step-5",
       "description": "GREEN reconciliation-inventory.tsx as a general recovery/reconciliation presentation, not an import-only workflow. Model ordered supplied rows with canonical record/case identity, finding, disposition, quarantine/unschedulable state, affected record/effect IDs, evidence, coverage limitation, and action presentations. Render every claim through FactRow with entity-qualified provenance IDs; NEEDS_RECONCILIATION-derived claims remain visibly UNKNOWN. Compose the canonical reconciliation sentence from the supplied record/finding, render 'Choose:' followed only by presentations backed by a current affordance or an explicit daemon reason, and never hard-code three legal mutations. Preserve empty/partial inventory limitations, supplied order, and j/k/Enter row behavior; delegate every button to RecoveryActions so advisory prose cannot mutate, resume history, or grant authority. Make the inventory suite green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/recovery/reconciliation-inventory.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/recovery/reconciliation-inventory.tsx"
       ],
-      "startedAt": "2026-08-09T10:08:34.911Z"
+      "modifiedFiles": [
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx"
+      ],
+      "note": "reconciliation-inventory.tsx GREEN: `npx vitest run src/recovery/reconciliation-inventory.test.tsx` -> Test Files 1 passed (1), Tests 18 passed (18), exit 0. 190 physical lines. Rows are a general recovery/reconciliation presentation, not an import workflow: ReconciliationRowPresentation carries record identity, case type, finding, disposition, quarantine, schedulability, derived state, evidence, ordered affected record/effect IDs, and action presentations, and the surface carries a coverageLimitation of its own. Every claim renders through FactRow under entity-qualified fact IDs (reconciliation.{recordId}.{suffix} and .affected.{index}), so a NEEDS_RECONCILIATION disposition and its derived-state claim keep whatever truth class the daemon attached — the suite pins both as UNK chips — and provenance IDs are unique across rows. The §8.7 sentence is composed as record + supplied finding + a single canonical tail constant, with UNKNOWN substituted when the finding is absent. 'Choose:' is a label followed by a RecoveryActions group and nothing else: the module contains no list of legal repairs, so the unreturned repair choice is simply absent (pinned) while a daemon-explained held choice stays visible with its code and layer. Empty inventory renders EMPTY_COPY, which explicitly refuses to read empty as proof, and the coverage limitation renders in both the empty and populated cases. Supplied row order is preserved and j/k/Enter clamps at both ends without reordering. One test correction during GREEN: the loose-control sweep originally scanned the whole render container and so caught ShellFrame's own nav-rail buttons; it now scopes to the cr.health.reconciliation panel and asserts the scanned control count is >10 first, so the sweep cannot pass by scanning nothing. Every button inside the panel is either a kernel truth chip or inside a [data-recovery-actions] group — advisory prose has no path to a mutation.",
+      "startedAt": "2026-08-09T10:08:34.911Z",
+      "completedAt": "2026-08-09T10:09:52.292Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN recovery-status.tsx with focused supplied-only sections for outbox, versions, backup/export/RPO, and disaster-recovery inventory. Render applied and emitted cursors plus lag/poison/aggregate state independently; render engine/SQLite version, required minimum, and daemon-evaluated compatibility independently; render one BackupGeneration's generation, committed cursor/RPO, manifest digest, object digest/size coverage, byte verification and key chain without mixing generations. Always state that acknowledged events after the backup cursor are outside that RPO, keep missing proof UNKNOWN, and distinguish a non-authoritative export at one committed sequence from a restorable backup. Render the exact seven inventory classes—workspaces, effect locks/wrappers, provider runs, resources, branches/refs, integration targets, artifact staging—with supplied coverage window, negative-proof completeness, items, dispositions and blind spots; an empty item list never proves completeness. Delegate project actions to RecoveryActions, so recovery.complete/inspect/reconcile/export/resume appear only when supplied and no restore, filesystem, subprocess, remote-shell, or optimistic repair path exists. Make the status suite and a focused package typecheck green; measure physical lines with a cross-platform newline counter and split before any production file reaches 400 (target <=250).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/recovery/recovery-status.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/recovery/recovery-status.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/recovery/recovery-status.tsx",
+        "apps/control-room/src/recovery/recovery-external.tsx",
+        "apps/control-room/src/recovery/recovery-import-ban.test.ts",
+        "apps/control-room/src/recovery/recovery-status.test.tsx",
+        "apps/control-room/src/doctor/doctor-console.test.tsx"
+      ],
+      "note": "recovery-status.tsx + recovery-external.tsx GREEN. `npx vitest run src/doctor src/recovery` -> Test Files 5 passed (5), Tests 90 passed (90), exit 0. Focused package typecheck `npx tsc --project tsconfig.json` -> exit 0, no diagnostics. Physical lines via `wc -l` (newline counter, not PowerShell Measure-Object which skips blanks): doctor-console.tsx 249, recovery-actions.tsx 248, reconciliation-inventory.tsx 190, recovery-external.tsx 134, recovery-status.tsx 149 — every production file at or under the 250 target, far under 400. recovery-status.tsx renders four supplied-only panels: cr.health.outbox (applied cursor, emitted cursor, lag state, poison, aggregates — five independent facts, no subtraction), cr.health.versions (engine, schema, required minimum, and the daemon's own compatibility verdict as a separate fact that stays UNKNOWN when unsupplied even though both versions are present), cr.health.backup (exactly one BackupGeneration: generation, committed cursor, RPO, manifest digest, object digest/size coverage, byte verification, key rotation chain — one BackupPresentation prop so two generations cannot be mixed), and cr.health.export. The RPO_LIMIT sentence renders unconditionally, including when every backup proof is null, because \"acknowledged events after this cursor are outside this RPO\" is a property of backups rather than of this generation's proofs; EXPORT_NOTE states in the export panel that an export names one committed sequence and carries no RPO, key chain, or restore authority. Split at step-6's instruction rather than growing one file: recovery-external.tsx owns the seven design-978 classes (workspaces, effect-locks, provider-runs, resources, branches-refs, integration-targets, artifact-staging) in design order with the design's own labels, each rendering coverage window, negative-proof completeness, per-item identity and disposition, and declared blind spots; an empty item list renders EMPTY_COPY saying an empty list is not a completeness proof, and a class with no declared blind spot renders UNKNOWN rather than \"none\". Project actions delegate entirely to RecoveryActions under cr.recovery.project, so recovery.complete is absent when unreturned even with a wholly empty inventory (pinned), and the surface contains no input, form, anchor, filesystem, subprocess, or restore path. Also split the structural authority scan out of recovery-status.test.tsx into its own recovery-import-ban.test.ts (mirroring data/data-ban.test.ts): recovery-status.test.tsx went 464 -> 348 lines, below the repo's largest existing suite, and the scan now asserts the exact file listing of both owned directories including its own name, so adding any new file to either directory reddens it.",
+      "startedAt": "2026-08-09T10:09:55.130Z",
+      "completedAt": "2026-08-09T10:12:34.116Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarially review the complete eight-file slice, then perform hash-restored one-at-a-time mutation drills from an OS temp location (leave no repo evidence). Required mutants must each turn a named focused test red: coerce UNKNOWN_TRUTH to HEALTHY; drop a supplied check's evidence/affected ID; turn an offline suggestion into a button; remove commandId uniqueness or target matching; ignore actionsEnabled or the non-live authority-mode guard; incorrectly use stale/lag as a blanket command block; synthesize reconciliation choices from prose; treat an empty orphan list as complete; compute SQLite compatibility/outbox lag/backup completeness client-side; remove the post-cursor RPO warning; or suppress the supplied refusal layer while retaining its code. Assert every mutant anchor and generated corpus is nonzero/exact, restore identical hashes after each, and rerun focused green tests. Review hostile empty/duplicate/large arrays, duplicate React/test IDs, immutable input order, provenance identity, keyboard focus at list edges, fact/chip equality excluding no non-truth badge, and verify the structural scan truly reads all four canonical production files from process.cwd().",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/doctor/doctor-console.tsx",
         "apps/control-room/src/doctor/doctor-console.test.tsx",
@@ -121,7 +137,8 @@
         "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
         "apps/control-room/src/recovery/recovery-status.tsx",
         "apps/control-room/src/recovery/recovery-status.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:12:37.129Z"
     },
     {
       "stepId": "step-8",
@@ -152,7 +169,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T10:08:34.911Z",
+  "updatedAt": "2026-08-09T10:12:37.129Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-0b27a5cc"
@@ -161,7 +178,7 @@
     "firstClaimAt": "2026-08-09T09:29:04.600Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -170,7 +187,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:44:48.304Z",

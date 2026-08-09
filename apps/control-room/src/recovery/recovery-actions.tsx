@@ -88,14 +88,24 @@ function slug(commandKind: string, qualifier: string | undefined): string {
   return qualifier === undefined || qualifier.trim() === "" ? dashed : `${dashed}.${qualifier}`;
 }
 
+function identified(value: string): boolean {
+  return typeof value === "string" && value.trim() !== "";
+}
+
 /**
  * Exactly one current command, or none. Two matches are ambiguity, not a menu: acting
  * on a guess about which one the operator meant is the failure this returns null for.
+ *
+ * A blank command ID or target is not an identity, so it can never match — otherwise
+ * two records the payload failed to name would join each other.
  */
 function resolve(
   commands: readonly NextAllowedCommand[],
   presentation: RecoveryCommandPresentation,
 ): NextAllowedCommand | null {
+  if (!identified(presentation.commandId) || !identified(presentation.targetAggregateId)) {
+    return null;
+  }
   const matched = commands.filter(
     (command) => command.commandId === presentation.commandId
       && command.targetAggregateId === presentation.targetAggregateId,
@@ -128,14 +138,15 @@ function UnavailableAction(props: {
 }): JSX.Element {
   const { presentation } = props;
   const id = slug(presentation.commandKind, presentation.qualifier);
+  const label = stated(presentation.label);
   return (
     <span>
       <button
-        aria-label={`${presentation.label}: ${stated(presentation.unavailable.reasonCode)}`}
+        aria-label={`${label}: ${stated(presentation.unavailable.reasonCode)}`}
         data-command-kind={presentation.commandKind} data-testid={`cr.action.${id}`}
         disabled type="button"
       >
-        {presentation.label}
+        {label}
       </button>
       <Reason reason={presentation.unavailable} testId={`cr.recovery.unavailable.${id}`} />
     </span>
@@ -149,9 +160,12 @@ function CommandAction(props: {
   readonly presentation: RecoveryCommandPresentation;
 }): JSX.Element {
   const { command, enabled, onRequestConfirmation, presentation } = props;
+  // A blank label would render a nameless control. The daemon's own command kind is the
+  // only other name in evidence here, so it stands in rather than an invented one.
+  const label = identified(presentation.label) ? presentation.label : command.commandKind;
   return (
     <button
-      aria-label={`${presentation.label}: ${command.targetAggregateId}`}
+      aria-label={`${label}: ${command.targetAggregateId}`}
       data-command-id={command.commandId} data-command-kind={command.commandKind}
       data-command-target={command.targetAggregateId}
       data-testid={`cr.action.${slug(command.commandKind, presentation.qualifier)}`}
@@ -161,7 +175,7 @@ function CommandAction(props: {
       }}
       type="button"
     >
-      {presentation.label}
+      {label}
     </button>
   );
 }
@@ -222,11 +236,11 @@ export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
 
   return (
     <div data-authority-mode={authorityMode} data-recovery-actions={testId} data-testid={testId}>
-      {resolved.map((entry) => (
+      {resolved.map((entry, index) => (
         <CommandAction
           command={entry.command}
           enabled={enabled}
-          key={entry.command.commandId}
+          key={`${entry.command.commandId}#${index}`}
           onRequestConfirmation={onRequestConfirmation}
           presentation={entry.presentation}
         />
@@ -240,8 +254,8 @@ export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
       {!enabled && resolved.length > 0 ? (
         <p data-testid="cr.recovery.disabledcopy">{stated(disabledCopy)}</p>
       ) : null}
-      {shown.map((entry) => (
-        <Feedback feedback={entry} key={entry.commandId} />
+      {shown.map((entry, index) => (
+        <Feedback feedback={entry} key={`${entry.commandId}#${index}`} />
       ))}
     </div>
   );

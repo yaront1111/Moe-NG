@@ -15,9 +15,131 @@
     "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and pin. Read every module under packages/runner/src/providers/claude/ — claude-observation, claude-capabilities, claude-probe, claude-stream-anomalies, claude-stream, claude-render, claude-cancel-reconcile — and mem:task-task-5ff2b39df70c4451ae07a44c92935b42-handoff, which records the decisions that must not be re-litigated. Read packages/testkit/src/providers/claude/claude-golden-streams.ts for the cross-package corpus protocol. Read packages/runner/src/supervisor/ (effect-kernel, effect-shape, effect-activation, effect-lifecycle, drain-reconciliation, restart-reconstruction) to confirm the seam this adapter must NOT cross: cancellation is an INPUT and process death is a caller-supplied observation. Verify every symbol you intend to name actually exists — the governor's promotion note is explicit that the parent shell's description never described code. Confirm the shape of ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED) and CLAUDE_RECONCILED_OUTCOMES, which the parity step will compare against. Produce no files.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T10:14:20.497Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "codex-observation.ts — ProviderRuntimeObservation plus the shared failure shape, mirroring claude-observation.ts. Declare CODEX_RUNTIME_OBSERVATION_VERSION = \"moe-codex-runtime-observation/1\", the closure/pinning/truth vocabularies, bounded constants, and CodexFailure<Code> / codexFailure as the ONE rejection shape for this whole adapter. DO NOT import claudeFailure: adapters are per-provider and independently replaceable, and importing one provider's module into another couples two things that must be able to diverge. Mirror it structurally instead; step 9 proves the two stay congruent. Carry forward two decisions from the Claude handoff, both load-bearing: the runtime closure is SORTED BY PATH BEFORE HASHING, because discovery order is not a fact about the runtime and letting it into the observation digest would make the wrapper's pre-activate comparison report drift that never happened — and duplicate paths are REFUSED, never deduped. And truthClass is INDEPENDENT of pinningMethod: an honestly observed runtime that cannot be pinned is still honestly observed, so keep the launch question a separate predicate. Guard a lying probe port: a non-array closure or non-record entry returns a typed failure rather than crashing on .length. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-observation.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-observation.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "codex-capabilities.ts — the closed capability vocabulary and proof rules. This is DoD 1: every unproven capability is typed UNSUPPORTED, never guessed, which is also task rail 3. Mirror claude-capabilities.ts: a frozen capability list, statuses SUPPORTED | UNSUPPORTED with no third arm, proof methods, and an UNPROVEN_PROBE_REPORT constant that is the safe default. THE CENTRAL RULE, carried from Claude: PROOF IS OBSERVATION, NOT CLAIM. The probe port returns observation records, and a record that contradicts its own claim proves the OPPOSITE — childrenAfter > 0 makes PROCESS_TREE_TERMINATION UNSUPPORTED regardless of what the CLI advertises. Help text is carried for diagnostics and proves nothing. Pin RESUME to UNSUPPORTED in v1 as Claude does. Probe-report fields are REQUIRED AND NULLABLE, never optional: with exactOptionalPropertyTypes an omitted field reads as a deliberate absence, so a port that forgot to observe something would be indistinguishable from one that proved it absent. Tests assert the specific capability code AND the status, never merely that something was unsupported. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-capabilities.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-capabilities.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "codex-probe.ts — probeCodexRuntime, binding the capability profile to the runtime observation, mirroring claude-probe.ts (the smallest module at 120 lines, so this should stay compact). The profile and the observation must be bound to each other so a capability claim cannot be read against a different runtime than the one observed. The result is immutable — DoD 1 requires probe and runtime closure be immutable, so freeze deeply and assert it. A probe that cannot observe returns UNPROVEN_PROBE_REPORT rather than a partially filled one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-probe.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-probe.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "codex-stream.ts — structured/raw dual record with bounded retention, mirroring claude-stream.ts and claude-stream-anomalies.ts. Split framing and the anomaly vocabulary into a sibling module if the file approaches 250 lines. FOUR DECISIONS FROM CLAUDE THAT MUST NOT BE SIMPLIFIED, each of which was a real bug: GAP is computed over the SET of sequences, not delivery order, or out-of-order delivery (1,3,2) falsely raises GAP; a malformed record COUNTS as occupying a slot, or (1, unreadable, 3) invents a gap; COUNTER_REGRESSION suppresses gap analysis entirely, because contiguity is undefined across a restart; and the first record establishes the origin and is never gap-checked, so RESUME_DISCONTINUITY keys on an explicit resumedFrom and never on 'first seq != 1'. Retention is bounded but digest coverage is not: past the size cap the record flips to an artifact reference while sha256 and byteLength still span every byte, and per-event line bytes are suppressed too — omitting that reintroduces the unbounded buffer through the back door. Bound the event COUNT as well as the byte size; Claude needed a separate event-limit refusal because the events array was unbounded even when raw retention was capped. Keep UNKNOWN_SCHEMA distinct from any pre-activation refusal code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-stream.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-stream.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "testkit codex golden streams. Create packages/testkit/src/providers/codex/codex-golden-streams.ts using the EXACT cross-package protocol claude-golden-streams.ts established, because runner tests CANNOT import testkit TypeScript (rootDir \"src\" plus composite puts the file outside the project). The corpus is ONE JSON document inside a template literal between two marker comments, both exported as string constants; runner tests readFileSync the module, lastIndexOf both markers, slice and JSON.parse. CRITICAL AND COUNTERINTUITIVE: each case's sha256 is over the RAW DECODED BYTES, not canonical JSON. That is deliberate — it means the reader needs only a sha256 implementation, so runner's canonicalJson and testkit's canonicalize never have to agree byte-for-byte, and a cross-package gate that depended on two independent canonicalizers agreeing would be a latent trap. Keep corpus-level stability in-package by pinning a corpus digest constant. Mark the corpus DEVELOPMENT_ONLY. Do NOT add a .js bridge for this file and do NOT touch packages/testkit/src/index.ts — claude-golden-streams.ts has neither, because the corpus is not on the testkit entrypoint and nothing loads it from the Node runtime path. Include at least one CRLF case; Claude's round-trips byte-exact and proved the framing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/providers/codex/*.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/providers/codex/*.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "codex-render.ts — the deterministic provider-input render, and the module the human's roadmap amendment of 2026-08-07 speaks to directly: the Codex adapter must consume the SAME provider-neutral validated skill snapshot and canonical AGENTS.md contract as Claude, record exact rendered bytes and digest, respect scoped instruction precedence, and never let skill or prompt text grant command or effect authority. Mirror SkillRendererInput structurally with the version literal \"moe-skill-renderer-input/1\" pinned rather than taking a @moe/skills dependency — that would touch packages/runner/package.json, outside owned paths, and drift is caught by the version-literal refusal. TWO TRAPS: use renderedBase64, NEVER a Uint8Array, because Object.freeze throws on a non-empty typed array AND runner's deepFreeze treats one as a plain record, so a bytes field inside a frozen record crashes at construction. And the render output must have NO command, effect, or lease field to set — assert the EXACT sorted key list so a future field that could carry authority breaks the test rather than slipping in. That assertion is DoD 3. Bound the mirrored skill count and file count, and check the mandatory size BEFORE framing since framing only grows the payload. Wrap any tokenizer port in try/catch and return a typed refusal; a caller exception escaping a function whose contract is typed refusal is a defect. Split before 400 lines — claude-render.ts is 372.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-render.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-render.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "codex-cancel-reconcile.ts — typed reconciliation outcomes, mirroring claude-cancel-reconcile.ts (131 lines, the shape to match). Declare CODEX_RECONCILIATION_VERSION, the frozen reconciled-outcome vocabulary, the process-exit union (EXITED with code | SIGNALLED with signal | UNOBSERVED) and reconcileCodexRun. THE SUPERVISOR FENCE IS ABSOLUTE HERE: zero child_process, zero spawn, zero .kill, zero Date.now, zero Math.random anywhere in this adapter. Cancellation is an INPUT and process death is a caller-supplied observation — UNOBSERVED is a first-class arm and must never be collapsed into a guess. Launch locks, job-object death proof, ARMED/SUSPECT and relaunch belong to packages/runner/src/supervisor/, which this adapter feeds and must not reimplement (task rail 1: adapters cannot fork lifecycle or authority semantics). Every reconciliation test asserts the specific outcome code, not merely that reconciliation returned something.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "PARITY TEST — the step that gives 'reconciliation parity' from the objective real teeth, and the reason mirroring is safe rather than merely duplicative. Both adapters live in @moe/runner, so a single test file CAN import both and compare them directly. Assert, against the PRODUCTION surfaces of both providers and never against a local re-declaration: the reconciled-outcome vocabularies are SET-EQUAL; the process-exit unions admit the same three arms including UNOBSERVED; the capability STATUS vocabulary is set-equal (SUPPORTED | UNSUPPORTED, no third arm on either side); the observation truth classes are set-equal; and the failure record shape is structurally congruent. Assert the compared sets are NON-EMPTY first — a parity test over two empty arrays passes while proving nothing, which is the sweep-generated-zero-cases failure the epic rail names. Where the two providers legitimately DIFFER — the capability lists themselves, since the providers genuinely have different capabilities — assert the difference explicitly with a hand-written expected list rather than leaving it unasserted, so a capability silently vanishing from either side fails here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/*.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Bridges, then verification and the mutation drill. Every non-test module under packages/runner/src/providers/codex/ needs its sibling .js bridge — the runner package now has 45+ of them and the claude modules all carry one, so the codex modules must too; a repo-wide runtime-loadability gate (task-535e773b) is landing that will enforce it. Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — copy an existing claude bridge. The testkit corpus gets NO bridge, matching claude-golden-streams.ts. Verify bytes: final byte 0x0A, no 0x0D. Then run pnpm --filter @moe/runner test and pnpm --filter @moe/testkit test, stating before/after test AND suite counts as explicit numbers — count suites, because a file that fails to parse reports zero tests and reads as a pass. Mutation-verify one at a time, restoring between each: flip one nibble of the pinned corpus digest (both suites must fail at module load, before any assertion consumes the fixture — this is how Claude's was red-teamed); make an unproven capability default to SUPPORTED; remove the closure path sort; let a contradicting observation still report SUPPORTED; compute GAP over delivery order instead of the sequence set; drop the malformed-record-occupies-a-slot rule; add a command field to the render output. Every one must go red. Verify restores with git diff on the specific file, not git status (mem:mutation-drills-in-shared-worktree).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/*.js",
+        "packages/runner/src/providers/codex/*.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/codex/*.js"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit. Read the diff as an attacker. Can any provider output reach a field that grants authority or satisfies verification — that is DoD 3, and the exact-sorted-key assertion on the render output is its proof, so re-check it covers every returned record and not just the top level. Can an unproven capability reach SUPPORTED by any path? Can a lying probe port crash the adapter instead of receiving a typed refusal? Is any returned record unfrozen or does any hold a Uint8Array? Grep the whole codex tree for the fence — child_process, spawn, .kill, Date.now, Math.random, new Date, performance.now — and expect ZERO code hits; the only permitted matches are doc comments stating the fence is not crossed. Confirm each production file is under 400 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe or scratch file remains. Then commit by explicit pathspec only: `git status --porcelain` first, confirm every staged entry is under packages/runner/src/providers/codex or packages/testkit/src/providers/codex, unstage anything foreign with `git restore --staged --`, then `git commit -- packages/runner/src/providers/codex packages/testkit/src/providers/codex` and verify with `git show --stat`. BE AWARE: on the Claude adapter the harness auto-commit swept all 13 files into three FOREIGN tasks' commits before the worker's own commit ran (mem:gotcha-moe-wrapper-autocommit). If that happens again, verify content integrity with git show HEAD:<path> rather than rewriting history, and report it in the completion note — the epic rails forbid reset.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/codex/codex-observation.ts",
+        "packages/runner/src/providers/codex/codex-capabilities.ts",
+        "packages/runner/src/providers/codex/codex-render.ts",
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-064d1267",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,15 +158,38 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-09T10:06:27.514Z",
+  "updatedAt": "2026-08-09T10:14:20.497Z",
   "metrics": {
-    "firstClaimAt": "2026-08-07T19:02:08.922Z"
+    "firstClaimAt": "2026-08-07T19:02:08.922Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 9
   },
   "contextFetchedBy": [
-    "architect-d89636d1"
+    "architect-d89636d1",
+    "architect-8a4a1764",
+    "worker-064d1267"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T10:12:36.679Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — importing claudeFailure / ClaudeFailure into the codex adapter. It removes a duplicated ~10-line shape, but it couples two provider adapters that must be independently replaceable and puts a claude-named symbol on codex's rejection surface. Mirror structurally instead, and make step 9's parity test the thing that keeps them congruent — that converts an unenforced convention into a failing test.\n\nREJECTED — extracting a shared providers/provider-contract.ts. Cleanest in the abstract, but it is not an owned path (owned paths are providers/codex/** and testkit providers/codex/** only), it would edit the proven Claude adapter, and task rail 1 says portability consumes frozen contracts. If a shared contract is genuinely wanted it is a separate task with both adapters in scope.\n\nREJECTED — taking a @moe/skills dependency for the render input. It would touch packages/runner/package.json, outside owned paths, and make runner the first dependent of a package it needs only a shape from. Claude mirrors SkillRendererInput with the version literal pinned and catches drift by refusing on the literal; do the same.\n\nREJECTED — SPIDR-splitting this into probe/stream/render tasks. It fits at 11 steps and 9 files with headroom under both hard thresholds, and a half-adapter cannot be parity-tested against Claude, which is the step that makes the mirroring trustworthy. Per epic rail 5 the projected diff size is explicitly NOT a reason to split.",
+    "codebaseInsights": "MIRROR TARGET, verified on disk — packages/runner/src/providers/claude/ holds claude-observation.ts (300), claude-capabilities.ts (289), claude-probe.ts (120), claude-stream-anomalies.ts (265), claude-stream.ts (215), claude-render.ts (372), claude-cancel-reconcile.ts (131), each with a .js bridge already present. Both codex directories are greenfield, so there is no collision with anything in flight.\n\nTHE PRIOR HANDOFF IS THE MOST VALUABLE ARTEFACT HERE — mem:task-task-5ff2b39df70c4451ae07a44c92935b42-handoff records decisions that each fixed a real defect: closure sorted before hashing with duplicates refused; truthClass independent of pinningMethod; proof is observation not claim, and a self-contradicting record proves the opposite; GAP over the sequence SET with malformed records occupying a slot and COUNTER_REGRESSION suppressing analysis; bounded retention with unbounded digest coverage plus a separate event-count limit; renderedBase64 never Uint8Array; render output with no authority-bearing field, pinned by an exact sorted-key assertion. Read it before writing code, not after.\n\nCROSS-PACKAGE CORPUS PROTOCOL — runner tests cannot import testkit TypeScript (rootDir \"src\" + composite). The corpus ships as one JSON document in a template literal between two exported marker constants; runner tests readFileSync, lastIndexOf both markers, slice, JSON.parse. Per-case sha256 is over RAW DECODED BYTES, not canonical JSON, specifically so the two packages' canonicalizers never have to agree.\n\nBRIDGES — runner is fully bridged now (task-eb9ff081), so codex modules need theirs. Testkit is NOT fully bridged (15 .js against 41 non-test .ts) and claude-golden-streams.ts deliberately has none because it is not on the testkit entrypoint. Mirror that exactly; do not add one.\n\nHUMAN AMENDMENT ON THIS TASK (2026-08-07) — the Codex adapter must consume the same provider-neutral validated skill snapshot and canonical AGENTS.md contract as Claude, record exact rendered bytes and digest, respect scoped instruction precedence, and never let skill or prompt text grant command or effect authority. It is a comment, not a DoD item, so it is easy to miss; step 7 carries it.",
+    "risks": "THE FENCE IS THE SECURITY PROPERTY — zero child_process, spawn, .kill, Date.now, Math.random in the whole adapter. Cancellation is an INPUT; process death is a caller-supplied observation with UNOBSERVED as a first-class arm that must never be collapsed into a guess. Launch locks, job-object death proof and relaunch belong to the supervisor, which this adapter feeds. Task rail 1 forbids an adapter forking lifecycle or authority semantics.\n\nA PARITY TEST OVER EMPTY SETS PASSES — assert the compared vocabularies are non-empty BEFORE asserting set equality. This is precisely the 'a sweep that silently produces zero cases passes' defect the epic rail names, and a parity test is unusually prone to it.\n\nWHERE THE PROVIDERS LEGITIMATELY DIFFER, ASSERT THE DIFFERENCE — the capability LISTS should not be equal, since the providers genuinely differ. Leaving that unasserted means a capability silently vanishing from either side is invisible. Pin both lists by hand.\n\nUINT8ARRAY CRASHES AT CONSTRUCTION — Object.freeze throws on a non-empty typed array and runner's deepFreeze treats one as a plain record. Any bytes field must be base64. This is not a style preference; it is a runtime crash.\n\nDIGEST-PINNED CORPUS FAILS AT MODULE LOAD — that is the desired behaviour and the red-team evidence: flipping one nibble must fail BOTH suites with 'no tests' before any assertion consumes the fixture. Count suites, not just tests, or that reads as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax).\n\nHARNESS AUTO-COMMIT — on the Claude adapter the wrapper swept all 13 files into three FOREIGN tasks' commits before the worker's explicit-pathspec commit could run, leaving no commit of the worker's own (mem:gotcha-moe-wrapper-autocommit). Content was intact; only attribution was wrong. If it recurs, verify integrity with git show HEAD:<path>, report it, and do NOT rewrite history — the epic rails forbid reset."
+  },
+  "budget": {
+    "wallClockMs": 9900000,
+    "warnedAt": "2026-08-09T10:13:51.078Z",
+    "escalatedAt": "2026-08-09T10:13:51.078Z"
+  },
+  "planApprovedAt": "2026-08-09T10:12:38.732Z",
+  "workStartedAt": "2026-08-09T10:14:20.497Z"
 }
