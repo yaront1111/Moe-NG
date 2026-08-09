@@ -1,0 +1,61 @@
+{
+  "id": "task-93b0314e09f248118e21f92699989468",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Planning-run expansion submission",
+  "description": "Objective: enable the existing authoritative PlanningRun reducer to process exactly bound EXPANSION drafts and compound plan.propose submissions without weakening INITIAL behavior. Depends on task-fcad40b6d26243439cd19fd3e49c924d. Deliverable: PlanningRun validates the active hold-bound EXPANSION schema, seals one immutable multi-node proposal/refusal, and remains zero-authority until later approval. NOT in scope: REVISION support, scheduler admission, automatic approval, resource/budget preparation, graph activation, or persistence. Owned paths: packages/core/src/planning/planning-run-reducer.ts, planning-run-submission.ts, planning-run-reducer.test.ts. Production consumers: scheduler/core expansion children and task-9634ed3b72014fe781591c7df9674da2. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "PlanningRun accepts EXPANSION creation/proposal only when the exact active hold, parent/handoff, proposal-base hash, goal version, graph epoch, planning authority, and finalized runner boundary match; REVISION remains explicitly unsupported.",
+    "The compound submission seals the complete child/integrator proposal identity or one stable expansion refusal; malformed, stale, wrong-kind, mismatched-hold, incomplete, or changed multi-node inputs refuse with exact code and layer and leave state unchanged.",
+    "INITIAL behavior and its single-node fence remain unchanged, and no EXPANSION accepted/refused result contains child run, lease, effect, slot, resource, budget allocation, graph activation, dispatch, or partial proposal authority.",
+    "Focused tests cover INITIAL compatibility, EXPANSION success, duplicate replay, refusal precedence, changed base/epoch/hold, competing finalize/cancel schedules, nonzero generated permutations, and production guard mutations with exact code plus layer.",
+    "The exact verification command exits 0, production files remain below 400 lines, and the named downstream consumers are recorded."
+  ],
+  "taskRails": [
+    "Extend the existing PlanningRun authority; do not implement a parallel expansion submission reducer.",
+    "One sealed proposal is all-or-none and immutable.",
+    "Manual review remains required after submission."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 19,
+  "comments": [
+    {
+      "id": "comment-0b05bacaccad466dabae296175b8c9df",
+      "author": "architect-8c9073cd",
+      "content": "Planning gate audit (2026-08-09): this task's exact dependency task-fcad40b6d26243439cd19fd3e49c924d is BLOCKED with no approved plan or committed contract surface. Its producer task-7f089e11daea44e9a483197ff139d725 is still WORKING (1/7); packages/core/src/expansion currently contains foreign untracked WIP, while the owned PlanningRun production still rejects every non-INITIAL run/proposal with PLANNING_KIND_UNSUPPORTED. I will not infer the hold/binding schema from an in-flight diff or plan against unstable bytes. Reclaim only after task-fcad40 is DONE and its committed, clean EXPANSION command/state/event validation surface is visible; then remeasure INITIAL compatibility and exact refusal vocabulary before planning.",
+      "timestamp": "2026-08-09T14:30:58.560Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:45:37.588Z",
+  "updatedAt": "2026-08-09T14:31:27.286Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:29:22.558Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ],
+  "blockedReason": "Cannot plan PlanningRun EXPANSION behavior before its exact Planning expansion contract binding dependency lands. task-fcad40 is BLOCKED; transitive producer task-7f089e11 is WORKING 1/7 with foreign untracked expansion WIP, and current committed PlanningRun still fail-closes all non-INITIAL submissions as PLANNING_KIND_UNSUPPORTED. Planning now would guess unstable command/state/event fields and refusal precedence.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:31:05.708Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified dependency/task status and current disk surface; documented block in comment comment-0b05bacaccad466dabae296175b8c9df; reported BLOCKED; wrote Serena handoff task-task-93b0314e09f248118e21f92699989468-handoff.",
+      "whatRemains": "After task-fcad40 is DONE and committed, reclaim and inspect its exact EXPANSION schema/refusal surface, then submit the PlanningRun reducer plan.",
+      "pitfalls": "Do not plan from task-7f's foreign untracked WIP or preserve a guessed parallel schema. Current committed reducer/submission intentionally refuse non-INITIAL with PLANNING_KIND_UNSUPPORTED.",
+      "openQuestions": "None until the dependency lands.",
+      "releasedAt": "2026-08-09T14:31:27.285Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit architect handoff after recording a verified dependency block."
+    }
+  ]
+}

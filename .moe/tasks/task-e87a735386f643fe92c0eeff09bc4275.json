@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "BACKLOG",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Restored after unblock_worker(retryTask:false) freed the architect but mechanically flipped the legitimately blocked task. Block remains: wait for task-f01ef545b1554a2cb5df340ce78f6a5c, task-ba9e59482fdd41da8d1b2af575d42186, the Security fault-matrix G0 test:fault lane, and a real Linux host.",
+  "reopenReason": "Deferred BLOCKED -> BACKLOG by governor-f70d1157 at 14:32Z on human direction. This is a SCOPE DEFERRAL, not a block, and the distinction matters: BLOCKED says \"someone should fix this\"; BACKLOG-deferred says \"this is correctly out of reach until the environment changes\".\n\nWHY IT CAN NEVER PASS HERE. Measured: process.platform is win32 x64. DoD 4 requires live Linux process/lock/signal observation. No amount of landed code fixes that — it needs an actual Linux host. Global rail Clause 2 forbids the substitute (off-host fixture-driven schedules certify the fixture, not the platform), and epic rail 4 forbids inventing a pass. So on this machine the task is unsatisfiable by construction, and six architects have now each paid a full context load to re-derive that.\n\nWHAT ACTUALLY CHANGED IN ITS FAVOUR, so this is not written off: packages/runner/src/platform/ NOW EXISTS. task-f01ef545 landed linux-boundary.ts, linux-facts.ts, linux-observation.ts, platform-contract.ts and platform-instant.ts with .js bridges, and published PLATFORM_BOUNDARIES, PLATFORM_LAYERS, PLATFORM_ERROR_CODES, observeLinuxPlatform and classifyLinuxBoundary on the @moe/runner root. That was DoD 1's blocker and it is gone. DoD 2 was always meetable (Linux path/symlink policy is pure logic, permitting typed UNKNOWN by its own wording).\n\nREMAINING, precisely: DoD 3 needs the doctor runtime inventory (task-1cafc7f9, WORKING at 6/7 — nearly landed). DoD 4 needs a Linux host and the test:fault lane (task-b5e9bd64); root package.json still has neither test:fault nor test:security, and tests/fault/ contains only foundation/.\n\nMILESTONE JUSTIFICATION, not just convenience: this task belongs to epic-f02c6977 (M4 Portability). The active epic-bd387eeb is M1 Foundation Preview, whose own description scopes it to \"a Windows+Claude single-node vertical slice\". Cross-OS conformance is a later milestone by the epic's own definition, so deferring it is consistent with the plan rather than a retreat from it.\n\nDO NOT PROMOTE THIS TO PLANNING on a Windows host. Promote when a Linux host is available AND task-1cafc7f9 and task-b5e9bd64 are DONE. If someone wants the honest half now, the correct move is a NEW narrow task covering DoD 2 only (pure path/symlink policy, typed UNKNOWN elsewhere) — not a re-plan of this one with its DoD quietly narrowed, which Clause 2 forbids.\n\nNOTE ON ORDERING: the human asked for these to sit last. I cannot set `order` — no MCP tool exposes it and hand-editing .moe/tasks JSON while the daemon is live would race other agents. BACKLOG already removes it from the claimable queue, which achieves the operative half.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.116Z",
-  "updatedAt": "2026-08-09T11:57:21.672Z",
+  "updatedAt": "2026-08-09T14:32:06.539Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8a4a1764",
@@ -38,8 +38,8 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T10:45:10.551Z"
   },
-  "blockedReason": "Restored after unblock_worker(retryTask:false) freed the architect but mechanically flipped the legitimately blocked task. Block remains: wait for task-f01ef545b1554a2cb5df340ce78f6a5c, task-ba9e59482fdd41da8d1b2af575d42186, the Security fault-matrix G0 test:fault lane, and a real Linux host.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T11:57:21.672Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

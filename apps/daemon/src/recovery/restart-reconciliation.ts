@@ -1,12 +1,19 @@
-import { classifyCrash, RECOVERY_OUTCOME_KINDS } from "@moe/runner";
+import { classifyCrash, PREDECESSOR_RELEASES, RECOVERY_OUTCOME_KINDS } from "@moe/runner";
 import type {
   CrashClassification,
+  PredecessorRelease,
   RecoveryLayer,
   RecoveryOutcomeKind,
 } from "@moe/runner";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
-export const RESTART_RECONCILIATION_SCHEMA_VERSION = "moe-restart-reconciliation/1" as const;
+/**
+ * `/2` adds the runner-derived continuation evidence. The bump is not cosmetic:
+ * a `/1` row carries no derived release, so decoding one as `/2` would leave the
+ * boundary facts absent and a reader free to supply them. Legacy rows fail the
+ * version check and stay non-authoritative rather than being upgraded.
+ */
+export const RESTART_RECONCILIATION_SCHEMA_VERSION = "moe-restart-reconciliation/2" as const;
 
 /**
  * The one command kind reconciliation rows are written under. Exported so a
@@ -38,6 +45,14 @@ export interface ReconciliationRecord {
   readonly layer: string | null;
   readonly message: string | null;
   readonly postState: string | null;
+  /**
+   * The predecessor's release boundary and committed handoff, DERIVED by the
+   * runner from the durable record set and persisted here. Continuation reads
+   * these; it never accepts them from a request. See `@moe/runner`'s
+   * `ContinuationEvidence` for why the direction matters.
+   */
+  readonly predecessorRelease: PredecessorRelease;
+  readonly safeHandoff: string | null;
   readonly schemaVersion: typeof RESTART_RECONCILIATION_SCHEMA_VERSION;
   readonly truthClass: RestartTruthClass;
 }
@@ -85,11 +100,16 @@ function recordBase(classification: RestartRecordClassification, attemptRef: str
 function recordOf(attemptRef: string, result: CrashClassification): ReconciliationRecord {
   const base = recordBase(result.kind, attemptRef);
   if (result.kind === "REFUSED") {
+    // A refusal produced no classification, so it produced no evidence either.
+    // UNKNOWN/null is the honest pair: epic rail 4 leaves an unverifiable fact
+    // without authority rather than defaulting it toward release.
     return Object.freeze({
       ...base,
       code: result.failure.code,
       layer: result.failure.layer,
       message: result.failure.message,
+      predecessorRelease: "UNKNOWN" as const,
+      safeHandoff: null,
       truthClass: "UNKNOWN" as const,
     });
   }
@@ -102,6 +122,11 @@ function recordOf(attemptRef: string, result: CrashClassification): Reconciliati
     effectRef: result.effectRef,
     held: result.kind === "QUARANTINED" ? Object.freeze([...result.held]) : base.held,
     postState: result.kind === "ADOPTED" || result.kind === "SUSPECT" ? result.postState : null,
+    // Copied off the classification, never recomputed here: a second derivation
+    // in the daemon would be a second authority that could disagree with the one
+    // the runner actually classified against.
+    predecessorRelease: result.continuationEvidence.predecessorRelease,
+    safeHandoff: result.continuationEvidence.safeHandoff,
     truthClass,
   });
 }
@@ -123,6 +148,11 @@ function decodeRecord(bytes: Uint8Array): ReconciliationRecord | null {
   if (typeof item["attemptRef"] !== "string" || typeof item["truthClass"] !== "string") return null;
   if (!RESTART_RECORD_CLASSIFICATIONS.includes(item["classification"] as RestartRecordClassification)) return null;
   if (!Array.isArray(item["held"]) || !item["held"].every((entry) => typeof entry === "string")) return null;
+  // The derived evidence is validated as strictly as the classification. A row
+  // missing it, or carrying a release outside the runner's lattice, decodes to
+  // null and is simply not there — it never reaches continuation as a default.
+  if (!(PREDECESSOR_RELEASES as readonly unknown[]).includes(item["predecessorRelease"])) return null;
+  if (!isStringOrNull(item["safeHandoff"])) return null;
   for (const key of ["code", "command", "detail", "effectRef", "layer", "message", "postState"] as const) {
     if (!isStringOrNull(item[key])) return null;
   }

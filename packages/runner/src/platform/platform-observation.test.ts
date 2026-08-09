@@ -129,6 +129,7 @@ const CRASH: CrashClassification = {
   ok: true,
   effectRef: "effect-linux-1",
   postState: "ACTIVE_ADOPTED",
+  continuationEvidence: { predecessorRelease: "UNKNOWN", safeHandoff: null },
 };
 
 const CONTEXT = { host: { ...LINUX_HOST }, asOf: AS_OF, maxFactAgeMs: MAX_AGE_MS };

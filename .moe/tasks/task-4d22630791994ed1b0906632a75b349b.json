@@ -1,0 +1,33 @@
+{
+  "id": "task-4d22630791994ed1b0906632a75b349b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Workspace manifest hygiene: undeclared and unused @moe dependencies",
+  "description": "Objective: make workspace manifests match real imports. MEASURED at HEAD 7183c04 (grep of imports vs package.json) on 2026-08-09: (1) packages/scheduler imports @moe/contracts but does not declare it - works only via hoisting; add the workspace dependency. (2) apps/control-room test files import @moe/store and @moe/testkit undeclared; add both as devDependencies. (3) packages/coordination declares @moe/core and never imports it; remove the entry. (4) pnpm-workspace.yaml lists adapters/* but the directory does not exist; the design reserves adapters/* for external integration boundaries, so KEEP the glob and add a one-line comment marking it reserved - removing it would be a design deviation needing a governor decision. NOT in scope: version bumps, any dependency beyond the three named, code changes. Owned paths: packages/scheduler/package.json, apps/control-room/package.json, packages/coordination/package.json, pnpm-workspace.yaml, pnpm-lock.yaml (regeneration only). Verification: pnpm install && pnpm typecheck && pnpm test.",
+  "definitionOfDone": [
+    "scheduler declares @moe/contracts; control-room declares @moe/store and @moe/testkit as devDependencies; coordination no longer declares @moe/core; lockfile regenerated",
+    "adapters/* glob kept with a reserved-comment, or an explicit governor decision recorded for its removal",
+    "pnpm install, pnpm typecheck and pnpm test all exit 0"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-cb476f76",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 70,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:24:26.624Z",
+  "updatedAt": "2026-08-09T14:38:25.530Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:38:19.004Z"
+  },
+  "contextFetchedBy": [
+    "architect-cb476f76"
+  ]
+}

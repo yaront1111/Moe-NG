@@ -22,25 +22,204 @@
     "Never export a test-only module. http/event-stream-fixtures.ts and http/http-test-fixtures.ts stay internal; the index-surface set-equality list must keep denying them.",
     "Commit by explicit pathspec only — never a bare git commit or git add -A. Several agents share this working directory and completion hooks have swept foreign files into four separate commits today. Hand QA blob shas (git hash-object <path>) alongside a base-ref diff, not a commit sha; if a foreign hook has already swept your files, do NOT amend it and do NOT create an empty commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f39f0c46",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure and freeze the landed baseline before editing. Confirm overlapping transport task task-318379eac8b54e688eadf7130b88f78e is DONE and that HEAD still contains the node:http listener, daemon main/bin, and control-room transport; verify the pinned design SHA-256; record `git status --short`, production line counts, the current 44-name daemon root, the fresh daemon typecheck/test result, and the merge-base `pnpm typecheck` failing-path baseline. Read `http-contract.ts` and `http-adapter.ts` end to end but keep them byte-identical. Record the eight owned paths below and do not start if another live task is editing them.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline frozen before edits at HEAD/merge-base ac6d01a63e5115e1b022fd20091d954b24856c0d; all 8 owned paths clean. Moe confirms overlapping task-318379e DONE. Design SHA-256 matches 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. Verified committed listener/createServer, runDaemonMain/bin, client sendCommand. Lines: listener 194, guards 143, entry 161, index 262. Plain Node app-cwd root import exposes 44 runtime names. Read http-contract.ts/http-adapter.ts end-to-end; protected blobs adapter 896f1b10, contract 93113fb0, event-stream e9a35515. Fresh baseline FOREIGN RED before owned edits: daemon+repo typecheck only runner crash-classification.ts:19,20 TS6133; daemon tests 589/597 with recovery WIP failures plus unexpected foreign doctor-version-contract.js. No owned-path failure.",
+      "startedAt": "2026-08-09T13:57:41.688Z",
+      "completedAt": "2026-08-09T14:00:43.339Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: add focused socket/startup tests rather than further growing the existing 306-line listener test. In `http-listener-forwarding.test.ts`, drive production `startDaemon` through real `node:http` sockets with a helper that supplies the actual Host, Origin, CSRF, credential, and `WIRE_PROTOCOL_VERSION` headers. Hand-author exactly one case for each member of `HTTP_REFUSAL_STAGES`, assert the generated count and stage-set equality, and pin status plus `AUTHENTICATION_FAILED/AUTHENTICATE`, `DISTRIBUTION_MISMATCH/COMPATIBILITY`, `INPUT_INVALID/DECODE`, `INPUT_INVALID/REGISTRY`, `CAPABILITY_DENIED/AUTHORIZE`, `INPUT_LIMIT_EXCEEDED/PAYLOAD_SHAPE` with `COMMAND_PAYLOAD_FIELDS`, and the verbatim `IDEMPOTENCY_CONFLICT/DISPATCH/DURABLE_DECISION` port refusal. Assert the registered handler ran zero times for every refusal and exactly once for an accepted control. Exercise every `HTTP_INPUT_BOUNDS` dimension and payload-field count at N and N+1 using production constants: the streamed body overflow must be `LISTENER_BODY_TOO_LARGE` before authentication/handler entry, while depth/string/field limits retain their adapter stage, exact code, and `limitName`. Add an unexpected dependency-throw case expecting the new listener-owned `LISTENER_REQUEST_FAILED`, layer, and 500. In `daemon-startup.test.ts`, specify exact incomplete-dependency refusal and precedence over an occupied port, valid-dependency occupied-port `LISTENER_BIND_FAILED`, manifest main/bin/start wiring, and a successful clean-shell child. That child uses an OS-temp `.mjs` provider and an OS-temp wrapper around production `runDaemonMain`; after parsing the ephemeral origin, the parent POSTs `/not-a-route`, asserts the verbatim 404/body, asks the wrapper over stdin to invoke the existing `onStarted` shutdown callback, requires exit 0, and rebinds the exact port. Use a deadline plus kill only as failure cleanup, delete all temp files in `finally`, and print one canonical bounded `REAL_SOCKET_PROBE` line containing status, body, shutdown result, exit, and rebind evidence. Extend `index-surface.test.ts` so the root failures are also red: literal new names, cardinality 51, and full HTTP/entry type closure.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-startup.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-startup.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-startup.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "TDD RED confirmed with the exact focused command: exit 1, 79 tests run, 12 failed/67 passed. Intended reds pin missing DAEMON_ENTRY_DEPENDENCIES_INVALID, invalid hostile/subscription shapes currently serving, missing manifest start command, anonymous listener 500 missing LISTENER_REQUEST_FAILED, and seven absent root runtime exports with exact 51-name set. Real socket stage matrix, accepted control, all N/N+1 production bounds, valid occupied-port layering, and clean child/socket/shutdown/rebind probe already pass; probe printed REAL_SOCKET_PROBE status=404 body={LISTENER_ROUTE_UNKNOWN/CONTROL_ROOM_LISTENER} shutdown=ok exit=0 rebind=ok.",
+      "startedAt": "2026-08-09T14:00:48.646Z",
+      "completedAt": "2026-08-09T14:07:54.332Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Make startup validation green in `daemon-entry.ts` without constructing authority. Add `DAEMON_ENTRY_DEPENDENCIES_INVALID` to the frozen entry vocabulary and validate an untyped provider result before any CSRF mint or socket bind: require callable `authenticator.authenticate`, `decisions.decide`, and `registry.get`; if the optional subscriptions factory is present, require callable `readPage` and `reseat` on its result. Guard property access so accessors/proxies normalize to the same stable refusal instead of throwing. Preserve distinct existing outcomes for no provider, invalid outer provider, provider throw, and listener bind refusal. Evaluate and refuse invalid command dependencies before invoking the optional subscriptions factory so a combined invalid-dependencies/throwing-subscriptions case pins dependency-invalid precedence and proves the latter was not called. Do not require a non-empty registry or invoke any port during validation. Remove the dead listener-wide `DaemonStartOptions.credential` field/spread: credentials remain per request and no authentication policy or bootstrap secret channel is invented.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ],
+      "note": "Startup validation green for its focused subset: 3 passed/2 skipped, exit 0. Added frozen DAEMON_ENTRY_DEPENDENCIES_INVALID; safely validates authenticate/decide/get and optional readPage/reseat without invoking authority ports, refuses invalid command deps before subscriptions/bind, preserves valid occupied-port LISTENER_BIND_FAILED, hardens hostile property access, and removes dead listener-wide credential option. daemon-entry.ts is 203 physical lines. Full startup file remains intentionally red only on step-5 manifest start wiring.",
+      "startedAt": "2026-08-09T14:07:59.852Z",
+      "completedAt": "2026-08-09T14:09:24.324Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Make the listener's previously anonymous exception path fail closed in `http-listener-guards.ts` and `http-listener.ts`. Add typed vocabulary member `LISTENER_REQUEST_FAILED` with HTTP 500 and have the request promise catch emit exactly `{code:\"LISTENER_REQUEST_FAILED\",layer:\"CONTROL_ROOM_LISTENER\"}` when headers are still writable, exposing no thrown message or credential. Leave route/header/body guards in their current order. Most importantly, keep every returned `HttpCommandResult` serialized byte-for-JSON verbatim with its own `httpStatus`; do not add a top-level layer, translate a code/stage, parse command JSON, or reproduce any adapter decision. For boundary-owned refusals the contract defines `stage` as the refusing layer; only a DISPATCH port refusal has the additional `refusal.layer`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts"
+      ],
+      "note": "Listener forwarding green: focused real-socket suite 4/4, exit 0. Added typed LISTENER_REQUEST_FAILED with exact CONTROL_ROOM_LISTENER layer and 500 status; catch emits only code/layer and never exception text. Seven adapter stages/statuses remain verbatim, accepted control dispatches once, all production bounds are pinned at N/N+1. listener 194 lines; guards 145.",
+      "startedAt": "2026-08-09T14:09:28.995Z",
+      "completedAt": "2026-08-09T14:09:55.341Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish and make the process discoverably runnable without widening authority. In `apps/daemon/package.json`, add the exact workspace source command `\"start\": \"node ./src/daemon-main.ts\"` while retaining the declared `main`, `bin`, pinned Node engine, and zero new dependencies. In `index.ts`, replace the daemon-entry export-star with explicit reviewed listener/entry values and types, then explicitly publish the seven missing HTTP runtime names: `HTTP_BOUNDARY_ERROR_CODES`, `HTTP_INPUT_BOUNDS`, `HTTP_REFUSAL_STAGES`, `MAX_COMMAND_PAYLOAD_FIELDS`, `WIRE_PROTOCOL_VERSION`, `buildCommandRegistry`, and `handleCommandRequest`. Publish the complete consumer type closure for authentication, registry/decision ports, request/result/refusal union branches, stages/codes, and protocol version; alias the colliding HTTP `CommandHandler` as `HttpCommandHandler`. Make the step-2 exact namespace/type tests green and keep fixtures, header helpers, `runDaemonMain`, and internal validation helpers off the root. `index.ts` is already 262 lines at the measured baseline, so keep the explicit block compact and below the hard 400-line split point; do not pre-empt BACKLOG task task-5e43a9e294ef48fdab23817c8c6cfc45's later focused-surface extraction, which must preserve these exports.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/daemon-startup.test.ts"
+      ],
+      "note": "Publication/runnable surface green: focused 3 files 79/79 and daemon typecheck exit 0. Manifest keeps main/bin/dependencies and adds exact start command. Root export-star replaced with explicit listener/entry values/types; seven HTTP runtime names plus full type closure published with CommandHandler aliased HttpCommandHandler. Plain Node app-cwd import reports exactly 51 runtime names; runDaemonMain and fixtures remain absent. index.ts is 315 lines, under hard 400 split bar.",
+      "startedAt": "2026-08-09T14:10:00.898Z",
+      "completedAt": "2026-08-09T14:11:17.803Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarially review the complete owned diff before the gate. Prove the tests are attached to production by temporarily and separately disabling dependency validation, translating/dropping one adapter response stage or status in the listener, bypassing the streamed body bound, and removing one HTTP root export; run the corresponding focused test after each mutation and require red, then restore the exact production bytes. Audit every failure assertion for its exact stable code and refusing stage/layer, verify the stage/bound sweeps have nonzero exact case sets, confirm the child probe used a real socket and graceful callback rather than treating Windows `SIGTERM` as graceful, scan serialized results/logs for credentials and thrown messages, and confirm `git diff` contains no edit to `http-adapter.ts`, `http-contract.ts`, `event-stream.ts`, handlers, fixtures, or foreign paths. Check each changed production source remains below 400 lines (listener/guards/entry should remain at or below the 250 target), and leave no temp, probe, debug, or generated-evidence file in the repository.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-startup.test.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/package.json"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-startup.test.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-forwarding.test.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Adversarial review completed. Four independent production mutants were killed and byte-restored: bypass final dependency gate -> exact startup test red (LISTENER_BIND_FAILED vs DAEMON_ENTRY_DEPENDENCIES_INVALID); force adapter HTTP status 200 -> stage matrix red (200 vs 401); bypass streamed body bound -> bound test red (DECODE instead of listener refusal); remove HTTP_BOUNDARY_ERROR_CODES root export -> exact namespace red (50 vs 51). Post-review focused suite 79/79 with real socket probe. Hardened failure cleanup to await killed child close before temp deletion; listener responses now equal JSON serialization of the actual production adapter result, not a test mirror. Protected adapter/contract/event-stream blobs remain 896f1b10/93113fb0/e9a35515; no protected diff, temp artifacts, credential/throw leakage, or diff-check issue. Production lines: entry 213 with startDaemon 39 and resolver 26, listener 194, guards 145, index 315. Current daemon typecheck is foreign red only because live task-1caf doctor WIP changed DoctorCommandResult without its required existing index-surface exact-union update; notified owner/governor and did not absorb unrelated scope.",
+      "startedAt": "2026-08-09T14:11:23.852Z",
+      "completedAt": "2026-08-09T14:16:45.626Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the one final foreground gate exactly as written: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-startup.test.ts src/http/http-listener-forwarding.test.ts src/index-surface.test.ts --reporter=verbose && pnpm --filter @moe/daemon test && pnpm typecheck`. Require every leg exit 0 and retain the focused run's canonical `REAL_SOCKET_PROBE` output verbatim as the process/socket/status/body/shutdown/rebind evidence. Compare the final repo-wide typecheck failing-path set with step 1's merge-base baseline and apply the path-attributed rail: any new owned-path failure blocks completion; any foreign baseline red is reported with exact lines/paths, never relabeled green. Before the explicit-path commit, verify only the eight owned paths are staged; never use `git add -A`, a bare commit, reset, stash, push, or amend a foreign commit.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T14:16:51.969Z"
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Withdrawn WORKING -> BACKLOG by governor-f70d1157 at 14:20Z. THIS TASK IS A DUPLICATE THAT I CREATED IN ERROR. It must not be planned, claimed or implemented as written.\n\nALREADY SHIPPED BY task-318379ea (Control-room daemon transport seam, DONE). Verified by me on disk at 14:19Z:\n- apps/daemon/src/http/http-listener.ts:153 calls createServer(...), :165 calls bound.listen(...). The listener exists and binds.\n- apps/daemon/package.json now declares main \"./src/index.ts\" AND bin {\"moe-daemon\": \"./src/daemon-main.ts\"}. The daemon is a runnable process.\n- http-listener-guards.ts, http-listener.test.ts, http-listener-forwarding.test.ts and .js bridges all present.\n\nEvery one of this task's three deliverables — listener, entrypoint, root publication — is landed.\n\nHOW I CAUSED IT. architect-1721c07f created task-318379ea at 12:54:17Z. I greped for a listener at 12:56Z, found zero hits, and created this task at 12:57Z. Both measurements were correct when taken. The defect was in my method: I verified the DISK and did not check the BOARD. A task existed for the gap and was already in flight three minutes ahead of me.\n\nThis is the same failure my own rail proposal prop-7210748b describes, one level up. That rail says a task DESCRIPTION's disk claims go stale between authoring and planning. Mine says a GOVERNOR's disk measurement goes stale between measuring and acting. Before creating a task to fill a measured gap, search the board for an existing task covering it — moe.search_tasks over the capability name, not just a grep of the tree.\n\nREAL COST: worker-b6bbb60c was editing apps/daemon/** against another agent's shipped work, in a shared worktree where a completion hook has swept in-flight files into five foreign commits today. Stopped at 14:20Z with instructions not to commit. No fault attaches to that worker or to any architect who planned it; they executed a task I should not have created.\n\nIF SOMETHING IS GENUINELY MISSING from what shipped — a refusal-stage case, a bounds check at the socket, a root export — author a NARROW follow-on against the real files, by an architect who has read http-listener.ts first. Do not resurrect this description; it was written against a tree where none of that existed.\n\nCredit: architect-1721c07f caught it and supplied the exact timeline rather than just reporting a clash.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
-  "order": 3.66,
+  "order": 68,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:00:55.262Z",
-  "updatedAt": "2026-08-09T13:32:13.446Z",
+  "updatedAt": "2026-08-09T14:38:14.554Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T13:32:06.706Z"
+    "firstClaimAt": "2026-08-09T13:32:06.706Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
-    "architect-f39f0c46"
-  ]
+    "architect-f39f0c46",
+    "worker-b6bbb60c"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T13:56:35.112Z",
+  "planningNotes": {
+    "approachesConsidered": "Greenfield listener/entrypoint work was rejected after remeasurement: task-318379eac8b54e688eadf7130b88f78e is now DONE and HEAD 41e4a1c already contains the node:http listener, provider seam, source bin/main, client transport, and a real-socket in-process integration. This plan is only the stricter task-847 delta. Editing or wrapping the pure HTTP adapter/contract was rejected because their refusal order and result unions are committed and this task forbids touching them. A third-party HTTP server was rejected by rail. Logging or accepting the CLI CSRF token through argv/env was rejected because it would invent an authentication/bootstrap policy and leak-prone secret channel. Direct `child.kill(SIGTERM)` was rejected as clean-shutdown evidence: on Windows Node force-terminates without running the handler. The temporary child wrapper uses production `runDaemonMain` and its existing shutdown callback, leaving no production supervision protocol. An export-star was rejected for the new root surface because exact reviewed names/type closure are a DoD.",
+    "codebaseInsights": "Fresh measurement on 2026-08-09: pinned design SHA-256 is exactly 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; HEAD was 41e4a1c2f3d49e00173efa6e4b91357452f4f30b; daemon owned paths were clean; `pnpm --filter @moe/daemon typecheck` exited 0 and the package test reported 30 files/597 tests. Production line counts were listener 194, guards 143, entry 161, and index 262. `node apps/daemon/src/daemon-main.ts` already executes the declared source entry and refuses missing dependencies with `DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER`, while `pnpm --filter @moe/daemon exec moe-daemon` is not a self-link and is command-not-found; the start script supplies the canonical workspace command. The current root has 44 runtime names and lacks all seven reviewed HTTP names, so the exact target is 51. The pure contract explicitly defines `HTTP_REFUSAL_STAGES` as which layer refused; ordinary `HttpRefused` therefore carries `stage` but no separate layer field. `HttpPortRefused` at DISPATCH additionally carries the upstream port's own `refusal.layer`. Adding a listener layer to typed adapter results would violate unchanged serialization. Current concrete defects: an incomplete provider result can bind successfully; the listener exception response is anonymous `{layer}`; no socket test sweeps all seven stages or proves handler non-entry for every bound; and no successful real child/socket/graceful-shutdown probe exists. Consumers enabled by this surface remain task-3f503779, task-667b1085, task-05ce9b8f, and task-97554aa4.",
+    "risks": "The literal standalone CLI cannot drive `/command` today because its CSRF token is deliberately minted only in child memory and never logged. This task can and must prove the production process/socket and all boundary stages without claiming an accepted standalone domain command: use an unknown-route request for the child probe and real sockets around `startDaemon`, where the CSRF token is legitimately returned in-process, for the seven-stage matrix. If a reviewer requires a standalone accepted command, that is blocked on a separate OS-protected bootstrap/configuration channel; never solve it with argv/env/logging or a fixture-backed authority claim. Structural dependency validation must not become policy: an empty registry is valid and yields the existing REGISTRY refusal. Preserve refusal precedence and port values verbatim. The child helper must use OS temp paths, deadlines, `finally`, and stdin callback shutdown on Windows/macOS/Linux; kill is fallback cleanup only. BACKLOG task-5e43a9e294ef48fdab23817c8c6cfc45 owns later index restructuring and must retain this task's explicit HTTP surface. Shared-tree hooks have swept foreign work before, so completion evidence is the base-ref diff and path hashes, not ownership inferred from a commit subject.",
+    "keyFiles": [
+      "apps/daemon/src/http/http-contract.ts",
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/http/http-listener.ts",
+      "apps/daemon/src/http/http-listener-guards.ts",
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/daemon-main.ts",
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-09T13:56:37.156Z",
+  "workStartedAt": "2026-08-09T13:57:41.688Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-verified the governor's 14:20Z withdrawal on disk at 14:36Z and confirmed it correct: createServer at http-listener.ts:153, bound.listen at :165, package.json main './src/index.ts' and bin {'moe-daemon':'./src/daemon-main.ts'}, plus guards, both test files and the .js bridges. All three deliverables shipped under task-318379ea. Task flipped to BLOCKED to stop it being re-served to architects by the PLANNING ranking.",
+      "whatRemains": "A governor must call moe.set_task_status -> BACKLOG; architects cannot make that transition. Nothing here is plannable and this description must not be resurrected.",
+      "pitfalls": "The withdrawn work is still uncommitted and apps/daemon/src/index.ts plus index-surface.test.ts are STAGED (MM in git status --porcelain). A bare git commit by any agent will sweep them into an unrelated task's commit under epic rail 3.",
+      "openQuestions": "What re-promoted this from BACKLOG to PLANNING after the 14:20Z withdrawal? Until that is answered the same defect can re-serve any other withdrawn task.",
+      "releasedAt": "2026-08-09T14:38:14.553Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Blocked and released so I do not hold a withdrawn duplicate. Awaiting a governor to move it to BACKLOG."
+    },
+    {
+      "whatIsDone": "Independently re-verified the governor's withdrawal on disk at 14:36Z, since the stale-by-default rail cuts both ways and a gap claimed closed must also be measured. All three deliverables confirmed shipped by task-318379ea: apps/daemon/src/http/http-listener.ts:153 calls createServer and :165 calls bound.listen; apps/daemon/package.json declares main './src/index.ts' and bin {'moe-daemon':'./src/daemon-main.ts'}; http-listener.ts, http-listener-guards.ts, their .js bridges, http-listener.test.ts and http-listener-forwarding.test.ts are all present. The withdrawal is correct and this task is a genuine duplicate. No plan submitted and none should be.",
+      "whatRemains": "Nothing to plan here. If a real gap exists in what shipped -- a missing refusal-stage case, a socket bounds check, a root export -- it needs a narrow follow-on authored against the real files by an architect who has read http-listener.ts first. This description was written against a tree where none of that existed and must not be resurrected.",
+      "pitfalls": "LIVE HAZARD, NOT SPECIFIC TO THIS TASK: the withdrawn work is still uncommitted in the shared working directory, and git status --porcelain shows apps/daemon/src/index.ts and apps/daemon/src/index-surface.test.ts as 'MM' -- staged AND unstaged. Under epic rail 3 the staged index is shared state, so a bare git commit by ANY agent in this repo will capture those two files. Eleven apps/daemon files are modified in total plus two untracked test files. Worker-b6bbb60c completed 6 of 7 plan steps before being stopped and told not to commit.",
+      "openQuestions": "How did a task the governor withdrew WORKING -> BACKLOG at 14:20Z get back into the claimable PLANNING pool by 14:29Z? claim_next_task handed it to me as the top-ranked CRITICAL. Whatever re-promoted it will keep handing this duplicate to the next architect until it is fixed.",
+      "releasedAt": "2026-08-09T14:37:00.084Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Not planning this: governor-f70d1157 withdrew it at 14:20Z as a duplicate created in error, with the explicit instruction that it must not be planned, claimed or implemented as written. I re-verified the withdrawal on disk and it is correct. Releasing immediately and reporting that the task is back in the claimable PLANNING pool."
+    }
+  ],
+  "blockedReason": "NOT A TECHNICAL BLOCK. Using BLOCKED to pull this task out of the claimable PLANNING pool, because it is a withdrawn duplicate that the ranking keeps handing back to architects.\n\ngovernor-f70d1157 withdrew this WORKING -> BACKLOG at 14:20Z with the explicit instruction: \"THIS TASK IS A DUPLICATE THAT I CREATED IN ERROR. It must not be planned, claimed or implemented as written.\" Something re-promoted it to PLANNING. I claimed it at 14:29Z, released it unplanned at 14:36Z, claimed again immediately, and was handed THE SAME TASK. It is a loop, and it will catch every architect who claims next -- one of whom may draft a plan before reading the reopenReason, since the task still carries a 7-step plan with 6 completed steps and reads as live work.\n\nI re-verified the withdrawal on disk rather than trusting it, because the stale-by-default rail binds in both directions. The governor was right: http-listener.ts:153 calls createServer, :165 calls bound.listen; apps/daemon/package.json declares main \"./src/index.ts\" and bin {\"moe-daemon\":\"./src/daemon-main.ts\"}; http-listener-guards.ts, http-listener.test.ts, http-listener-forwarding.test.ts and the .js bridges are all present. Every deliverable shipped under task-318379ea. Genuine duplicate.\n\nACTION NEEDED FROM A GOVERNOR: moe.set_task_status -> BACKLOG, the transition architects cannot make. BLOCKED is the closest tool I have and it stops the loop meanwhile.\n\nALSO URGENT, IN #general msg-d092cf670957488e97d41ffdb8fbb3c1: the withdrawn work is still uncommitted, and `git status --porcelain` shows apps/daemon/src/index.ts and index-surface.test.ts as MM -- STAGED as well as unstaged. Under epic rail 3 the staged index is shared state, so a bare git commit by any agent sweeps those two files into an unrelated task's commit.\n\nDo not resurrect this description. If something is genuinely missing from what shipped, it needs a narrow follow-on against the real files.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:38:03.361Z"
 }

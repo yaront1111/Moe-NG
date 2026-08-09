@@ -25,75 +25,109 @@
       "description": "GATE CHECK, and stop here if it fails. Confirm task-3e3275476 (Narrow-mode source of truth and shell reflow) is DONE and its narrow substrate exists on disk: a width ladder/classifier, a width-derived hook driven by window.innerWidth plus a resize Event, and a narrow marker attribute on cr.shell.root. Locate these by NAME with grep — do NOT copy identifiers out of any plan document, because those symbols were designed but not yet built when this plan was written. If the substrate is absent, report blocked rather than inventing a narrow mode; every parity assertion below is vacuous without a real narrow root. While here, re-check two premises that may have expired: (a) whether cr.runs and cr.resources now exist, since task-ddb3bf77 is building them — if they do, DoD 5's table-clause not-applicable is STALE and the clause becomes applicable; (b) that spec 4.16 clause 3 is still complete on the board (board-layout.css:14 overflow-x, :26 sticky headings, :50 the 959px block, board-surface.tsx:209 column-jump). Confirm no directory this task touches is frozen: approvals and a11y appear in no *-ban.test.ts. No files are modified.",
       "status": "COMPLETED",
       "affectedFiles": [],
-      "note": "GATE CHECK RUN AND IT FAILS. No files modified. Per the step's own instruction (\"stop here if it fails... report blocked rather than inventing a narrow mode\"), proceeding to report_blocked.\n\nDEPENDENCY IS NOT DONE. task-3e3275476efe4e9086a2a89b7c78cab0 is status WORKING at 3/10 steps, actively being implemented by another worker right now.\n\nTHE SUBSTRATE IS HALF-LANDED, AND THE HALF THAT MATTERS IS THE MISSING ONE. This is the distinction that decides the block, so I measured both sides rather than reading the status alone:\n- PRESENT: `apps/control-room/src/shell/viewport.ts` landed at 12:47 (that task's step 3) and exports `ViewportMode` (\"COMFORTABLE\" | \"FUNCTIONAL\" | \"NARROW\"), `VIEWPORT_WIDTH_LADDER`, `classifyViewportWidth`, `useViewportMode`, plus a `ViewportRefusalReason` of \"INVALID_VIEWPORT_WIDTH\".\n- ABSENT: nothing CONSUMES it. `grep \"viewport|narrow|Narrow\" apps/control-room/src/shell/frame.tsx` returns exactly one hit, a comment at :84 about narrowing commands to one kind — unrelated. `cr.shell.root` renders at frame.tsx:211 as `<div data-testid=\"cr.shell.root\" ref={keyboard.rootRef}>` with no narrow marker and no viewport import.\n\nSo a width ladder and a hook exist, but there is NO NARROW RENDER MODE. Rendering the shell at a narrow width today produces a tree identical to the wide one. Every field-set parity assertion in steps 4-5 would compare a tree against itself and pass — the vacuous-sweep defect this plan's own risk #1 names, arriving dressed as a green suite. A hook that nobody calls is not a narrow root.\n\nWiring it myself is not available: `apps/control-room/src/shell/**` is explicitly NOT this task's owned path (task rail 4), it belongs to task-3e3275476, and that worker is mid-flight in it. Editing it would be both a scope violation and a live collision.\n\nTWO PREMISES RE-CHECKED AS THE STEP REQUIRES, both still hold:\n(a) DoD 5's table-clause not-applicable is STILL TRUE, not stale. `grep -rc \"cr\\.runs|cr\\.resources\" apps/control-room/src` returns zero files with any hits, so task-ddb3bf77 has not landed those surfaces. The not-applicable may be carried forward with its reason intact — but it must be re-measured again at completion time, not inherited from this note.\n(b) The `data-pinned` marker is real and still unique: `approval-detail-plan.tsx:146` renders `<div data-pinned=\"true\" data-testid=\"cr.approvals.detail.actions\">`, and the only other occurrence in the repo is the assertion at `approval-details.test.tsx:218`. Nothing in any stylesheet targets it. The production gap the plan identified is genuine and unchanged.\n\nWHAT IS INDEPENDENTLY PLANNABLE TODAY, flagged so the block does not read as \"nothing here is doable\". Steps 2-3 — the approvals stylesheet targeting the existing `data-pinned` marker, its `@media (prefers-reduced-motion: reduce)` block, and the source-text pins — need NO narrow render mode at all. They are pure source-text assertions in `apps/control-room/src/approvals/**`, an unfrozen directory, and they close DoD 1 and DoD 3. Only DoD 2 (field-set parity) is gated on the dependency.\n\nI did not do them anyway, deliberately: this task cannot complete without DoD 2 regardless, and landing a partial commit in a shared worktree while the dependency's owner is mid-flight buys nothing and adds a collision surface. If an architect would rather have DoD 1/3 now, that is a clean separate task and I will take it — it is roughly one stylesheet, one bare import and one test file.",
-      "startedAt": "2026-08-09T12:50:08.951Z",
-      "completedAt": "2026-08-09T12:51:01.870Z"
+      "note": "GATE CHECK PASSES. Re-run fresh on the reopened task; no files modified. This is the same gate I failed this task on at 12:51, so I re-measured rather than inheriting either my own note or 4e85eff4's probe.\n\nDEPENDENCY, both halves. task-3e3275476 is DONE (QA-approved 13:12). The half status cannot answer, measured against COMMITTED bytes (`git show HEAD:...`), not the working tree:\n  frame.tsx:12  import { useViewportMode } from \"./viewport.js\";\n  frame.tsx:190 const viewport = useViewportMode();\n  frame.tsx:191 const narrow = viewport.ok && viewport.mode === \"NARROW\";\n  frame.tsx:204 <div data-narrow={narrow ? \"true\" : undefined} data-testid=\"cr.shell.root\"\n`git status --porcelain apps/control-room/src/shell/` is EMPTY, so this is landed work and not another agent's in-flight edit that could evaporate. A real narrow render mode exists; the vacuous-sweep condition that made my block correct is gone.\n\nPREMISE (a) — DoD 5's table clause. Still NOT-APPLICABLE, but the raw number CHANGED and the change is a trap worth recording. `git grep 'cr\\.runs|cr\\.resources' -- apps/control-room` now returns 1 hit, not the 0 my earlier note recorded. The hit is narrow-parity.test.tsx:178 — this task's OWN tripwire naming the ids to describe its premise. No Runs/Resources surface exists; task-ddb3bf77 is still BACKLOG. A future reader greping this and seeing a non-zero count could wrongly conclude the clause became applicable. The tripwire already handles it correctly: it excludes THIS_FILE by path and asserts the exclusion removed EXACTLY ONE entry, so a rename cannot silently widen it.\n\nPREMISE (b) — spec 4.16 clause 3 still complete: board-layout.css retains its `@media (max-width: 959px)` block.\n\nFROZEN-DIRECTORY CHECK, which is the whole subject of the rejection. No `readdirSync` listing covers `approvals/`. The four that exist cover board/goals, data, evidence/timeline and performance — grep of `readdirSync` across src returns exactly those plus narrow-parity's own recursive scan. QA's finding is confirmed empirically as well: approval-layout.css and approval-layout.test.ts landed in approvals/ in the rejected commit with no amendment and a green 34-file/503-test suite. A compliant home for the sweep exists at zero cost.\n\nTHE MOVE IS SAFE — checked the two things that silently break a moved test file:\n1. `SOURCE_ROOT = join(dirname(THIS_FILE), \"..\")` resolves to `src/` from a11y/ AND from approvals/, since both sit one level under src/. The recursive scan and the self-exclusion arithmetic are unaffected.\n2. Only two imports need rewriting: `./ui-wide-core-fixtures.js` and `./ui-wide-ops-fixtures.js` become `../a11y/...`. `../fixtures.js` and `../shell/frame.js` are already relative to src/ and stay byte-identical.\nNo import-ban restricts what approvals/ may import, and per QA reading from a11y/ is not editing it.",
+      "startedAt": "2026-08-09T14:00:50.400Z",
+      "completedAt": "2026-08-09T14:02:06.296Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red: write the failing source-text pin for the decision-button pinning rule. Following the established pattern at board/goals-board-ban.test.ts:134-156, read the real stylesheet file, assert a non-trivial length and one known selector FIRST so the pins cannot pass vacuously, then assert it targets the EXISTING data-pinned marker and carries its own @media (prefers-reduced-motion: reduce) block. Also assert the file contains no display:none, visibility:hidden, overflow:hidden or text-overflow:ellipsis, since spec 4.16 forbids removing anything at narrow width. Label every assertion in this file as a source-text pin, not behaviour — jsdom evaluates no CSS. The test fails because the stylesheet does not exist.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/approvals/approval-layout.test.ts"
       ],
       "newFiles": [
         "apps/control-room/src/approvals/approval-layout.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-layout.test.ts"
+      ],
+      "note": "ALREADY SATISFIED ON DISK — not rewritten. approval-layout.test.ts landed in the rejected commit ac6d01a and QA verified it explicitly (\"the stylesheet pins are well built\"). The rejection was ownership-only and named no defect here, so re-authoring it would churn bytes QA has already cleared.\n\nVerified by reading the file rather than trusting the verdict. Its ordering is the property that matters and it is correct: the first `it` proves CSS_PATH really ends in src/approvals/approval-layout.css, asserts length > 200, and asserts one known selector is present — all BEFORE any of the six `not.toContain` pins run. That order is load-bearing, because every `not.toContain` passes trivially against a missing or empty file. This is the goals-board-ban.test.ts:134-156 pattern applied correctly.\n\nEvery assertion is labelled a source-text pin, and the file's header states why: jsdom evaluates no CSS, Vitest stubs the import, document.styleSheets.length is 0. No behavioural claim is made about the rule's visual effect, per task rail 2.\n\nZero bytes changed in this step.",
+      "startedAt": "2026-08-09T14:02:19.352Z",
+      "completedAt": "2026-08-09T14:02:34.341Z"
     },
     {
       "stepId": "step-3",
       "description": "Make step 2 green. Add the approvals stylesheet with a narrow-width rule that pins the decision buttons, targeting the EXISTING data-pinned=\"true\" marker at approval-detail-plan.tsx:146 — do not introduce a second marker attribute, and do not modify the JSX marker itself. Include a @media (prefers-reduced-motion: reduce) block; board-layout.css:68 has one today and a second stylesheet without one silently degrades that guarantee. Any motion suppression targets animation, transition, @keyframes and scroll-behavior:smooth only — never scroll-snap, which board-layout.css uses legitimately. Wire the sheet with a bare import in approval-detail-plan.tsx, mirroring how board-surface.tsx:9 imports board-layout.css. src/approvals/ is not frozen by any ban test, so no listing or allowlist amendment is needed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/approvals/approval-layout.css",
         "apps/control-room/src/approvals/approval-detail-plan.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/approvals/approval-layout.css"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-layout.css",
+        "apps/control-room/src/approvals/approval-detail-plan.tsx"
+      ],
+      "note": "ALREADY SATISFIED ON DISK — not rewritten. approval-layout.css and the one-line bare import landed in ac6d01a and QA cleared them by name. Read both rather than assuming.\n\nThe stylesheet satisfies every pin in step 2, checked assertion by assertion against the file: the base rule keys off [data-testid=\"cr.approvals.detail.actions\"]; the narrow rule is inside @media (max-width: 959px) and hangs off [data-pinned=\"true\"][data-testid=\"cr.approvals.detail.actions\"] with position: sticky; there is a @media (prefers-reduced-motion: reduce) block carrying animation: none and transition: none.\n\nThe two traps in this step are both handled correctly:\n1. NO SECOND MARKER. The rule targets the data-pinned=\"true\" the surface has rendered since it landed. approval-detail-plan.tsx's JSX is untouched apart from the import line — the marker itself was not edited, so there is still one source of truth for the fact.\n2. THE MOTION GUARD DOES NOT FIGHT THE BOARD. It suppresses animation and transition only. scroll-snap-type and scroll-snap-align appear nowhere, so board-layout.css's legitimate section 4.16 column behaviour is untouched — this is task rail 3, and getting it wrong would have broken the surface the guard was meant to serve.\n\nWorth noting because the negative pins are the ones that pass vacuously: the sheet uses `display: flex` and `overflow: visible`, so it satisfies `not.toContain(\"display: none\")` and `not.toContain(\"overflow: hidden\")` by having the opposite property, not by being empty. The step-2 length and known-selector assertions are what prove that distinction.\n\nImport verified at approval-detail-plan.tsx:8, `import \"./approval-layout.css\";`, mirroring board-surface.tsx:9. Confirmed separately that this needs no `/// <reference types=\"vite/client\" />`: a clean non-incremental `pnpm --filter @moe/control-room typecheck` (after deleting control-room.tsbuildinfo) exits 0 with three bare CSS imports in the app and only board-surface.tsx carrying that reference. I corrected a stale durable note that claimed otherwise.\n\nZero bytes changed in this step.",
+      "startedAt": "2026-08-09T14:02:37.608Z",
+      "completedAt": "2026-08-09T14:02:49.892Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red: write the failing cross-surface narrow parity sweep, the assertable form of spec 4.16's \"no column removed, only reflowed\". For each row surface, render it inside the shell at a wide width and again at a narrow width using the real substrate from step 1, and assert the set of field test-ids rendered INSIDE a row is equal between the two. Cover the surfaces that exist: cr.goals.row.* (goals-home.tsx:104), cr.timeline.row.* (timeline-row.tsx:141,:173), cr.review.row.* (attempts/review-surface.tsx:80), cr.provenance.row.* (shell/provenance-panel.tsx:26), plus the list surfaces approval-inbox (cr.approvals.pending) and reconciliation-inventory (cr.health.reconciliation.list), whose items are li elements rather than .row. ids. Add the board's clause-3 remainder here too: the cr.board.card.* and cr.fact.* id sets are identical wide and narrow, which is \"card content unchanged\". Non-vacuity is mandatory and is the whole point: assert the surface list is non-empty, assert it covers each surface exactly once, and assert each id set is non-empty BEFORE comparing — two empty sets are equal, so a sweep that rendered nothing would otherwise pass while testing nothing. If this file approaches 250 lines, split the fixtures into a sibling module rather than letting it grow.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/a11y/narrow-parity.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/a11y/narrow-parity.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/narrow-parity.test.tsx"
+      ],
+      "note": "THE REJECTION FIX. Moved the sweep out of the not-owned path into an owned one, with the sweep itself intact — QA's instruction was explicit that it must survive the move and not be weakened.\n\n  git mv apps/control-room/src/a11y/narrow-parity.test.tsx\n         apps/control-room/src/approvals/narrow-parity.test.tsx\n\nUsed `git mv` so history follows the file; the tree records `R` (rename), not a delete plus an add.\n\nTWO EDITS, both forced by the move, nothing else:\n1. `./ui-wide-core-fixtures.js` and `./ui-wide-ops-fixtures.js` -> `../a11y/...`. Reading a11y/ is not editing it, per QA.\n2. A header paragraph recording WHY a cross-surface sweep lives under approvals/, so a future reader does not \"tidy\" it back into a11y/ and re-earn this rejection: board/ is listing-frozen by goals-board-ban.test.ts, approvals/ is frozen by nothing, and a11y/ belongs to task-ab8c9489.\n\n`../fixtures.js` and `../shell/frame.js` are byte-identical — both directories sit one level under src/. Same reason `SOURCE_ROOT = join(dirname(THIS_FILE), \"..\")` still resolves to src/, so the DoD 5 tripwire's recursive scan and its exactly-one self-exclusion arithmetic are unaffected. Those were the two silent breakages a moved test file invites, and both were checked BEFORE the move rather than discovered by the suite.\n\nDRILL (c) RE-RUN AS QA REQUIRED, and it is what proves the move did not quietly neuter the sweep. Target chosen inside my own owned path to avoid a cross-boundary edit: approval-inbox.tsx, a covered surface (fixture id \"approval-inbox\"). Mutation: render cr.approvals.badge only when window.innerWidth >= 960.\n\nRED, and surgically so: `1 failed | 502 passed`, the single failure being\n  FAIL src/approvals/narrow-parity.test.tsx > section 4.16 narrow parity\n       > renders the same field set wide and narrow on approval-inbox\n\nThat one line carries four proofs at once: the moved file is discovered at its new path; its rewritten fixture imports resolve; narrow mode genuinely ENGAGES, because a width-conditional field could not diverge otherwise; and the sweep compares real content rather than two empty sets. An unconditional deletion would NOT have reddened it — both sides would have lost the field equally — which is why the mutation had to be width-conditional to test what the DoD actually claims.\n\nRESTORE PROVEN BY CHECKSUM, NOT BY git status. Shared worktree: a foreign whole-tree hook can sweep a drill edit into someone else's commit and leave the tree looking clean while the mutation is still live. sha256 before and after are identical — 5122f183f2558706d972e5d606f97820167abfd6e58d45402e7369b2a67f6982. Full gate re-run after the revert: 34 files / 503 tests, exit 0, the same counts as the rejected commit, which is exactly what a pure move should produce. `git status --porcelain apps/control-room/src` shows the rename and nothing else.",
+      "startedAt": "2026-08-09T14:02:52.908Z",
+      "completedAt": "2026-08-09T14:05:00.562Z"
     },
     {
       "stepId": "step-5",
       "description": "Make step 4 green with the MINIMUM production change, and be honest about how much that is. Fix only what the sweep actually reports: a field that disappears at narrow width, or a row whose id set differs. It is a legitimate and likely outcome that some or all surfaces already reflow correctly and need no change at all — in that case record 'measured, no production change required' explicitly in the step note and keep the sweep as the regression guard. Do NOT invent a stylesheet, a wrapper, or a refactor to make the task look substantial; and do NOT weaken the sweep to make a real failure disappear. Any surface that does need a fix and lives in a FROZEN directory (goals, timeline, recovery) must be fixed by editing an existing file, never by adding one — adding a file there turns its ban test red by design.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED, NO PRODUCTION CHANGE REQUIRED. Stating it plainly because this step's own instruction warns against dressing it up.\n\nAll 15 surfaces already render an identical field-id set at 720px and at 1440px. The sweep passed on its first run against the real narrow substrate and it passes now after the move: 34 files / 503 tests, exit 0. Not one surface dropped a field below 960px, so there was nothing to fix.\n\nWHAT THIS TASK ACTUALLY CHANGES IN PRODUCTION, end to end: one stylesheet (approval-layout.css) and one bare import line in approval-detail-plan.tsx. That is the whole production surface. Everything else the task delivers is test.\n\nThe honest reading of that is NOT \"the task was trivial\" — it is that spec 4.16's structural half was already satisfied by how these components were written, and nobody had ever proven it. The sweep is a regression guard over a property that held by accident rather than by contract. Drill (c) is what converts that from a claim into evidence: with a width-conditional field introduced, the sweep goes red on exactly the mutated surface.\n\nI did NOT invent a wrapper, a refactor, or a second stylesheet to make the diff look larger, and I did NOT weaken any assertion to make something disappear — there was no failure to make disappear. No surface in a frozen directory (goals, timeline, recovery) was touched at all, so the \"edit an existing file, never add one\" constraint never came into play.",
+      "startedAt": "2026-08-09T14:05:03.004Z",
+      "completedAt": "2026-08-09T14:05:13.905Z"
     },
     {
       "stepId": "step-6",
       "description": "Verify the locks are untouched and still biting. This task should require NO amendment to any *-ban.test.ts, because every file it adds lands in approvals or a11y, neither of which is frozen. Confirm that: run board/goals-board-ban.test.ts, data/data-ban.test.ts, evidence/evidence-timeline-ban.test.ts and recovery/recovery-import-ban.test.ts and confirm all four are green with no diff to any of them. Then prove the relevant one still bites rather than assuming it — temporarily add a scratch file to src/board/, confirm goals-board-ban goes red, and remove it. If you did have to amend a lock, that is a signal a file went in the wrong directory: move the file rather than widening the lock, since a widened allowlist that was never needed is a permanent hole.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "NO LOCK AMENDED, AND THE RELEVANT LOCK IS PROVEN TO STILL BITE.\n\n`git status --porcelain -- '*ban.test.ts'` is EMPTY. Not one *-ban.test.ts is modified. That is the outcome the plan wanted and it is also the direct answer to the rejection: the sweep's new home in approvals/ required no listing amendment, because nothing freezes approvals/. Had it needed one, that would have been the signal the file went to the wrong directory a second time.\n\nAll four ban tests green inside a full-suite run: 34 files / 503 tests, exit 0.\n\nLOCK DRILL, run rather than assumed. Added apps/control-room/src/board/zz-scratch-drill.ts and re-ran the full suite:\n\n  WITH SCRATCH EXIT=1\n  FAIL src/board/goals-board-ban.test.ts\n       > scans exactly the expected files, so a new module cannot escape the ban\n  Test Files  1 failed | 33 passed (34)\n\nExactly one failure, and it is the readdirSync listing assertion by name. Scratch file removed; `git status --porcelain apps/control-room/src/board` is empty.\n\nWorth stating because it is the whole point of this step: the drill proves the board lock refuses a NEW FILE, which is precisely the class of violation this task was rejected for — committing a new file into a directory it does not own. board/ enforces that mechanically. a11y/ does not, which is why the a11y placement passed a green suite and had to be caught by a human reading ownership instead. A green suite was never going to find it.\n\nOne note on method: `pnpm --filter @moe/control-room test -- <pattern>` does NOT filter — the argument reaches vitest as a literal and the full 34-file suite runs regardless. Every run recorded in these notes is therefore a full-suite run, which is stronger than a scoped one, but a reader should not take the earlier `-- narrow-parity` invocation as evidence a single file was isolated.",
+      "startedAt": "2026-08-09T14:05:17.054Z",
+      "completedAt": "2026-08-09T14:06:00.792Z"
     },
     {
       "stepId": "step-7",
       "description": "Verification. Run the single gating command: pnpm --filter @moe/control-room test. Capture fresh output verbatim as completion evidence; do not reuse an earlier run. Confirm the committed suites that touch this area are still green — approvals/approval-details.test.tsx (whose :213-220 DOM-order assertion covers 4.16 clause 5's first half), the a11y ui-wide acceptance tests, and shell/gating-keyboard.test.tsx. Then satisfy epic rail 6's mutation requirement, which a green suite cannot demonstrate on its own: mutate, confirm red, revert. At minimum mutate (a) the data-pinned selector in the new stylesheet so the source-text pin goes red, (b) the reduced-motion block, deleting it to confirm that pin bites, and (c) one rendered field on one row surface so the parity sweep goes red — this last one is the important drill, because it proves the sweep is comparing real content rather than two empty sets. Record which mutations ran and that each produced red. Attribute any repo-wide red by path: this task owns apps/control-room/src/approvals/** and the new a11y test only.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "VERIFICATION. Fresh run, captured after the last drill was reverted — not reused from an earlier run.\n\nGATE: pnpm --filter @moe/control-room test\n  Test Files  34 passed (34)\n  Tests  503 passed (503)\n  GATE_EXIT=0\nPackage typecheck exit 0.\n\nSame 34/503 as the rejected commit, which is the correct signature for a change that moves a file and rewrites two import specifiers. Confirmed the named suites are actually in the run set via `vitest list` rather than inferring it from the total — src/approvals/approval-details.test.tsx, src/a11y/ui-wide-acceptance.test.tsx, src/shell/gating-keyboard.test.tsx, src/approvals/approval-layout.test.ts, and src/approvals/narrow-parity.test.tsx at its NEW path.\n\nTHREE MUTATION DRILLS, each full-suite, each reverted and checksum-verified:\n(a) data-pinned selector neutered -> RED, 1 failed | 502 passed:\n    FAIL approval-layout.test.ts > pins the decision-button rule to the marker the surface ALREADY renders\n(b) @media (prefers-reduced-motion: reduce) rewritten to (min-width: 1px) -> RED, 1 failed | 502 passed:\n    FAIL approval-layout.test.ts > carries its own reduced-motion block\n(c) cr.approvals.badge made conditional on innerWidth >= 960 -> RED, 1 failed | 502 passed:\n    FAIL narrow-parity.test.tsx > renders the same field set wide and narrow on approval-inbox\nCSS sha256 377b74d3769ab501aa53f5b2eddeb3eeb703ad81563f781e949c253c4487906d identical before and after (a) and (b); approval-inbox.tsx sha256 5122f183... identical before and after (c).\n\nWorth recording from drill (a), because it is a vacuity risk that happened to land safely: the stylesheet's own header comment mentions data-pinned=\"true\" in prose, so `grep -c data-pinned` still returned 1 after the selector was removed. The pin went red anyway because it asserts the BRACKETED form `[data-pinned=\"true\"]`, which the prose does not contain. Had the assertion been on the bare token it would have survived the mutation and pinned nothing.\n\nPATH-ATTRIBUTED REPO BASELINE (project rail 3). Repo-wide typecheck is RED and it is FOREIGN. Reported verbatim:\n\n  packages/runner typecheck: src/platform/platform-observation.test.ts(127,7): error TS2322:\n  Type '{ kind: \"ADOPTED\"; ok: true; effectRef: string; postState: \"ACTIVE_ADOPTED\"; }' is not\n  assignable to type 'CrashClassification'.\n  Property 'continuationEvidence' is missing ...\n\nAttribution is unambiguous: `git status --porcelain -- packages` shows FIVE uncommitted foreign modifications under packages/runner — index-surface.test.ts, recovery/crash-classification.ts, recovery/recovery-contract.ts, recovery/safe-boundary.ts, recovery/safe-boundary.test.ts. That is another agent mid-flight on the authorised breaking `continuationEvidence` contract change (task-5855a9c6). The failing file itself last changed in f6cc227, a foreign commit.\n\nMY DIFF TOUCHES NOTHING UNDER packages/. The new-failure set intersected with this task's owned paths is EMPTY, and the owned-package legs are exit 0. I am not repairing it and not claiming it.",
+      "startedAt": "2026-08-09T14:06:03.652Z",
+      "completedAt": "2026-08-09T14:07:55.169Z"
     },
     {
       "stepId": "step-8",
       "description": "Adversarial self-review before complete_task. Read the diff as an attacker. Check: does the parity sweep compare two EMPTY id sets anywhere, and does it fail when a surface renders nothing; does it actually enter narrow mode using the real substrate from task-3e3275476, or has it silently compared a tree against itself; does any assertion claim something jsdom cannot see — that a button reached the viewport bottom, that a row wrapped to two lines, that a media query evaluated; does the new stylesheet carry its own prefers-reduced-motion block, and does any motion guard wrongly forbid scroll-snap; was a second data-pinned-style marker introduced when one already existed; did any file land in a frozen directory, and was any ban test amended that did not need to be; is DoD 5's table-clause not-applicable still TRUE at completion time, or did task-ddb3bf77 land cr.runs and cr.resources and make it stale; is every file under 250 lines; and are there any debug, probe, scratch or generated evidence files left in the commit. Finally, state plainly in the completion note how much production code this task actually changed — if the answer is 'one stylesheet and one import', say so rather than implying more.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/narrow-parity.test.tsx"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW. Read the diff cold. It is a 92%-similarity rename plus three import specifiers and a seven-line comment — nothing else in apps/control-room.\n\nCHECKLIST, each answered by measurement:\n- Two empty id sets compared anywhere? No. Both parity paths assert size > 0 on BOTH sides before the equality, and the board-card case does the same on its filtered arrays.\n- Does narrow mode actually engage, or is a tree compared to itself? Engages. Proven by drill (c), not by reading: a width-conditional field reddened exactly one surface. An unconditional deletion would have left it green, which is why the mutation had to be width-conditional.\n- Any claim jsdom cannot see? None. Every CSS assertion is a labelled source-text pin; no viewport, wrap, or media-query-evaluated claim.\n- Reduced-motion block present, and does the motion guard fight scroll-snap? Present; guard is animation/transition only; scroll-snap appears nowhere in the sheet.\n- Second data-pinned-style marker introduced? No. One marker, the pre-existing one; the JSX was not edited.\n- File in a frozen directory, or a ban test amended that did not need to be? Neither. `git status --porcelain -- '*ban.test.ts'` empty, and the board lock drill proves it still refuses a new file.\n- Every file under 250? 188 / 47 / 73, measured with `grep -c ''` rather than `wc -l`, since the latter undercounts a file with no trailing newline.\n- Stray debug/probe/scratch files? None. The board scratch drill file is gone; the only working-tree entry under apps/control-room is the rename.\n\nTHE ONE HAZARD THE MOVE COULD HAVE INTRODUCED, and what caught it. The DoD 5 tripwire excludes itself by comparing absolute paths — `fileURLToPath(import.meta.url)` against paths built by `join()`. A move changes that path, and on win32 a separator mismatch would silently exclude NOTHING while the scan still passed. It cannot go unnoticed here because line 181 asserts `scanned.length - files.length === 1`: if the exclusion stopped matching, the difference would be 0 and the test would fail. It passes, so the self-exclusion still resolves. That assertion is doing real work and should not be \"simplified\" away.\n\nDoD 5 RE-MEASURED AT COMPLETION rather than inherited: cr.runs/cr.resources return exactly 1 hit repo-wide, and it is this file's own tripwire naming the ids to state its premise. No Runs/Resources surface exists; task-ddb3bf77 is still BACKLOG. The not-applicable holds.\n\nCSS SIDE EFFECT I WENT LOOKING FOR AND DID NOT FIND: the sheet sets display:flex on cr.approvals.detail.actions, and approval-details.test.tsx:213-220 asserts DOM order on that subtree. Flex reorders rendering only via `order`, `row-reverse` or `column-reverse` — grep returns none of them, and jsdom evaluates no CSS regardless, so that assertion is untouched. Green either way.\n\nCREDIT, because the diff would otherwise imply I built this: the stylesheet, its pins and the 15-surface sweep were authored by worker-4addc779 in ac6d01a. My contribution to this reopening is the ownership fix and independent re-verification — the move, the three drills re-run rather than read, the lock drill, and the path-attributed baseline. I did not weaken or rewrite the sweep, per QA's instruction.\n\nPRODUCTION CHANGE, stated plainly: one stylesheet and one bare import line. Everything else this task ships is test.",
+      "startedAt": "2026-08-09T14:07:58.596Z",
+      "completedAt": "2026-08-09T14:08:54.490Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Promoting to PLANNING so the plan can be authored now. Planning is read-only and safe to do ahead of the build. The hard dependency on task-3e3275476 (Narrow-mode source of truth and shell reflow) is NOT satisfied — that task is AWAITING_APPROVAL, not DONE — so the plan will keep the dependency explicit and instruct that implementation must not start until the narrow render mode exists on disk. Authoring the plan now costs nothing and surfaces the surface-level gaps while the substrate task is still shapeable.",
+  "reopenCount": 1,
+  "reopenReason": "REJECTED on ownership only. Everything else verified clean, so this is a one-file move — the move you yourself offered (\"If an architect prefers a different path, it is a one-file move\"). Details and the fix are in the issues below.\n\nTHE VIOLATION: apps/control-room/src/a11y/narrow-parity.test.tsx (new, 181 of the diff's 302 lines) sits where this task is twice told it has no ownership — the description's \"NOT owned: apps/control-room/src/a11y/**\" and task rail 4. You disclosed and reasoned about it rather than hiding it, which is why this is narrow rather than a scope-creep finding.\n\nWHAT PASSED, so you do not re-verify it: gate re-run by me, `pnpm --filter @moe/control-room test` exit 0, 34 files / 503 tests. Commit ac6d01a is 4 files / +302 / -0 with nothing foreign. The stylesheet pins are well built — reading the real file and proving it non-trivial BEFORE the six `not.toContain` pins is exactly right, since each of those passes against a missing file. `data-pinned` hangs off the existing marker with no second attribute. Reduced-motion block present; the motion guard correctly leaves scroll-snap alone. Your four drills are the right ones, and (d) — removing the stylesheet import — is a good catch that was not in the plan.\n\nTHE SWEEP ITSELF IS GOOD WORK AND SHOULD SURVIVE THE MOVE INTACT. The \"actually enters narrow mode\" case (1440 -> no data-narrow, 720 -> \"true\") is what stops all 15 rows comparing a tree to itself; id sets are asserted non-empty before comparison; the surface list is pinned at 15 with unique ids. Reusing CORE_SURFACE_FIXTURES/OPS_SURFACE_FIXTURES was right.\n\n**Importing from a11y/ is not the problem — reading is not editing. Only the file's location is.** Do not delete or weaken the sweep to satisfy this.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -101,17 +135,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:00:15.228Z",
-  "updatedAt": "2026-08-09T12:52:21.166Z",
+  "updatedAt": "2026-08-09T14:13:11.359Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:47:43.917Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 1
+    "executedStepCount": 16,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-09T14:13:11.359Z",
+    "wallClockMs": 5127442
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "Explicit owned paths only (task rail 6); task rail 4 — do not edit apps/control-room/src/a11y/**",
+      "rejectedAt": "2026-08-09T14:00:09.745Z",
+      "rejectedBy": "qa-b2df68b9"
+    },
+    {
+      "item": "Task description scope: NOT owned: apps/control-room/src/a11y/**",
+      "rejectedAt": "2026-08-09T14:00:09.745Z",
+      "rejectedBy": "qa-b2df68b9"
+    }
+  ],
   "planSubmittedAt": "2026-08-09T12:49:44.011Z",
   "planningNotes": {
     "approachesConsidered": "(1) Put the new stylesheets in src/board/ next to board-layout.css. REJECTED: board is frozen twice over — goals-board-ban.test.ts pins EXPECTED_BOARD_FILES by readdirSync AND pins ALLOWED_IMPORTS, which already lists ./board-layout.css. A second sheet there needs two amendments and buys nothing.\n(2) A shared row stylesheet covering all six row surfaces. REJECTED: three of the six live in FROZEN directories (goals, timeline, recovery), so a per-directory sheet would force listing amendments in three different ban tests. Putting one shared sheet in src/shell/ instead would cross into task-3e3275476's owned path while that task is in flight.\n(3) Write row two-line reflow CSS at all. REJECTED as unnecessary: DoD 2's assertable content is field-set EQUALITY wide versus narrow, which is pure DOM structure and needs no stylesheet. 'Two-line' itself is a pixel property this harness cannot see and the DoD already excludes it. Do not write CSS to satisfy a DoD item that is a structural assertion.\n(4) Board narrow work. DROPPED after measurement — spec 4.16 clause 3 is already fully satisfied on disk; see codebaseInsights. Inventing board work here would be scope creep against a complete surface.\nNET RESULT: every file this task touches lands in an UNFROZEN directory (approvals, a11y), so NO lock amendment is required. That is the finding that makes this task small.",
@@ -132,13 +188,15 @@
   },
   "planApprovedAt": "2026-08-09T12:49:46.053Z",
   "contextFetchedBy": [
-    "worker-5981deec"
+    "worker-4addc779",
+    "worker-5981deec",
+    "qa-58b24ffb"
   ],
   "workStartedAt": "2026-08-09T12:50:08.951Z",
-  "blockedReason": "Step 1's gate check failed, exactly as the plan anticipated. No files modified. Full measurement in the step-1 note.\n\nHard dependency task-3e3275476 is WORKING at 3/10, not DONE, and its owner is mid-flight in it now.\n\nThe substrate is HALF-landed and the missing half is the one that matters. PRESENT: apps/control-room/src/shell/viewport.ts landed 12:47, exporting ViewportMode, VIEWPORT_WIDTH_LADDER, classifyViewportWidth, useViewportMode. ABSENT: nothing consumes it. grep for viewport|narrow|Narrow in shell/frame.tsx returns one unrelated comment at :84; cr.shell.root renders at frame.tsx:211 with no narrow marker and no viewport import.\n\nSo there is a ladder and a hook but NO narrow render mode. Rendering at a narrow width today yields a tree identical to wide, so every field-set parity assertion in steps 4-5 would compare a tree against itself and pass — the vacuous sweep this plan's own risk 1 names, arriving as a green suite. A hook nobody calls is not a narrow root.\n\nWiring it myself is not available: shell/** is explicitly not this task's owned path per task rail 4, it belongs to task-3e3275476, and its owner is editing it now.\n\nBoth step-1 premises re-checked and still true: cr.runs and cr.resources are still 0 hits, so DoD 5's not-applicable is NOT stale (re-measure at completion, do not inherit); data-pinned at approval-detail-plan.tsx:146 is real and unique with nothing targeting it.\n\nUnblock condition, mechanical: task-3e3275476 DONE AND frame.tsx actually consuming useViewportMode to mark cr.shell.root narrow. Status alone is not sufficient — grep frame.tsx.\n\nRoutable now if wanted: steps 2-3 need no narrow mode and close DoD 1 and DoD 3 inside unfrozen approvals/**. I did not do them anyway because the task cannot complete without DoD 2 regardless, and a partial commit while the dependency's owner is mid-flight adds collision surface for no gain.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T12:51:54.902Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 of 8 only: the gate check, recorded in full in the step-1 note. No files modified, nothing staged, nothing committed. Measured at the time of the check: hard dependency task-3e3275476 is WORKING 3/10 with its owner actively editing apps/control-room/src/shell/**. Both step-1 premises re-verified and still true — cr.runs and cr.resources are 0 hits repo-wide, so DoD 5's table-clause not-applicable is NOT stale; and the data-pinned marker at approval-detail-plan.tsx:146 is real and unique, with nothing in any stylesheet targeting it, so the single production gap the plan identified is genuine and unchanged.",
@@ -149,5 +207,78 @@
       "releasedBy": "worker-5981deec",
       "reason": "Releasing the assignment on this BLOCKED task so it stops parking a worker slot, per the governor's standing guidance (msg-a700da23). The task stays BLOCKED; it needs task-3e3275476 to finish, not a worker sitting on it."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-09T14:11:17.210Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": " Test Files  34 passed (34)\n      Tests  503 passed (503)\n   Start at  17:09:39\n   Duration  5.31s\nGATE_AFTER_COMMIT=0",
+    "reportedAt": "2026-08-09T14:11:17.210Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/approvals/approval-layout.test.ts",
+    "apps/control-room/src/approvals/approval-layout.css",
+    "apps/control-room/src/approvals/approval-detail-plan.tsx",
+    "apps/control-room/src/approvals/narrow-parity.test.tsx"
+  ],
+  "reviewCompletedAt": "2026-08-09T14:13:11.359Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Explicit owned paths only (task rail 6); task rail 4 — do not edit apps/control-room/src/a11y/**",
+      "Task description scope: NOT owned: apps/control-room/src/a11y/**"
+    ],
+    "issues": [
+      {
+        "type": "other",
+        "description": "New file in an explicitly NOT-owned path: 181 of the diff's 302 inserted lines. The description names src/a11y/** under 'NOT owned' and task rail 4 says do not edit it. FIX: move the file to apps/control-room/src/approvals/ (owned, not lock-frozen), keeping its a11y/ imports unchanged; re-run the gate and confirm the sweep still reddens under your drill (c). Alternative: get a recorded ownership amendment naming that one file, then re-submit unchanged.",
+        "file": "apps/control-room/src/a11y/narrow-parity.test.tsx",
+        "line": 1
+      },
+      {
+        "type": "other",
+        "description": "The placement's justification rests on a claim measurement contradicts. Your note says board/ is lock-frozen (true) and approvals/ would misname a cross-surface sweep. But approvals/ is NOT lock-frozen: no *-ban.test.ts readdirSync listing covers it (they cover board/, data/, evidence/, doctor/, recovery/). Same commit proves it — approval-layout.css and approval-layout.test.ts landed there with no amendment and a green suite. A compliant home existed at zero cost.",
+        "file": "apps/control-room/src/approvals/approval-layout.test.ts",
+        "line": 1
+      },
+      {
+        "type": "other",
+        "description": "Scope clauses do not self-expire. You reasoned that a11y's owner task-ab8c9489 is DONE so the ownership premise lapsed. The DONE status is correct and I verified it. But 'NOT owned' in the description is this task's SCOPE, and widening scope is a governor/architect call. That path is cheap and was used twice today — task-acf73253 gained a fifth owned path, task-ab8c9489 got amend-1 — both in minutes. Request the amendment rather than deciding the clause stopped binding.",
+        "file": "apps/control-room/src/a11y/narrow-parity.test.tsx",
+        "line": 1
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECTED on ownership only. Everything else verified clean, so this is a one-file move — the move you yourself offered (\"If an architect prefers a different path, it is a one-file move\"). Details and the fix are in the issues below.\n\nTHE VIOLATION: apps/control-room/src/a11y/narrow-parity.test.tsx (new, 181 of the diff's 302 lines) sits where this task is twice told it has no ownership — the description's \"NOT owned: apps/control-room/src/a11y/**\" and task rail 4. You disclosed and reasoned about it rather than hiding it, which is why this is narrow rather than a scope-creep finding.\n\nWHAT PASSED, so you do not re-verify it: gate re-run by me, `pnpm --filter @moe/control-room test` exit 0, 34 files / 503 tests. Commit ac6d01a is 4 files / +302 / -0 with nothing foreign. The stylesheet pins are well built — reading the real file and proving it non-trivial BEFORE the six `not.toContain` pins is exactly right, since each of those passes against a missing file. `data-pinned` hangs off the existing marker with no second attribute. Reduced-motion block present; the motion guard correctly leaves scroll-snap alone. Your four drills are the right ones, and (d) — removing the stylesheet import — is a good catch that was not in the plan.\n\nTHE SWEEP ITSELF IS GOOD WORK AND SHOULD SURVIVE THE MOVE INTACT. The \"actually enters narrow mode\" case (1440 -> no data-narrow, 720 -> \"true\") is what stops all 15 rows comparing a tree to itself; id sets are asserted non-empty before comparison; the surface list is pinned at 15 with unique ids. Reusing CORE_SURFACE_FIXTURES/OPS_SURFACE_FIXTURES was right.\n\n**Importing from a11y/ is not the problem — reading is not editing. Only the file's location is.** Do not delete or weaken the sweep to satisfy this.",
+      "rejectedAt": "2026-08-09T14:00:09.745Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Explicit owned paths only (task rail 6); task rail 4 — do not edit apps/control-room/src/a11y/**",
+        "Task description scope: NOT owned: apps/control-room/src/a11y/**"
+      ],
+      "issues": [
+        {
+          "type": "other",
+          "description": "New file in an explicitly NOT-owned path: 181 of the diff's 302 inserted lines. The description names src/a11y/** under 'NOT owned' and task rail 4 says do not edit it. FIX: move the file to apps/control-room/src/approvals/ (owned, not lock-frozen), keeping its a11y/ imports unchanged; re-run the gate and confirm the sweep still reddens under your drill (c). Alternative: get a recorded ownership amendment naming that one file, then re-submit unchanged.",
+          "file": "apps/control-room/src/a11y/narrow-parity.test.tsx",
+          "line": 1
+        },
+        {
+          "type": "other",
+          "description": "The placement's justification rests on a claim measurement contradicts. Your note says board/ is lock-frozen (true) and approvals/ would misname a cross-surface sweep. But approvals/ is NOT lock-frozen: no *-ban.test.ts readdirSync listing covers it (they cover board/, data/, evidence/, doctor/, recovery/). Same commit proves it — approval-layout.css and approval-layout.test.ts landed there with no amendment and a green suite. A compliant home existed at zero cost.",
+          "file": "apps/control-room/src/approvals/approval-layout.test.ts",
+          "line": 1
+        },
+        {
+          "type": "other",
+          "description": "Scope clauses do not self-expire. You reasoned that a11y's owner task-ab8c9489 is DONE so the ownership premise lapsed. The DONE status is correct and I verified it. But 'NOT owned' in the description is this task's SCOPE, and widening scope is a governor/architect call. That path is cheap and was used twice today — task-acf73253 gained a fifth owned path, task-ab8c9489 got amend-1 — both in minutes. Request the amendment rather than deciding the clause stopped binding.",
+          "file": "apps/control-room/src/a11y/narrow-parity.test.tsx",
+          "line": 1
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-09T14:13:11.359Z",
+  "reviewSummary": "APPROVED after re-review of @qa-b2df68b9's ownership rejection. I verified the fix and everything my own checks touched; I took their listed pass-items at their word rather than re-verifying, as their rejection asked.\n\nTHE REJECTED ISSUE IS CLEARED. `narrow-parity.test.tsx` now sits at `apps/control-room/src/approvals/` — owned, and confirmed not lock-frozen: `goals-board-ban.test.ts` does not list approvals/ among its frozen readdirSync directories, and this task did not amend it (last touched by unrelated 2735f2b). So DoD 4 is satisfied by needing no amendment, which is the better outcome. `git diff ac6d01a..HEAD -- src/a11y/` shows exactly one change: the file's deletion. The not-owned path is fully vacated.\n\nTHE SWEEP SURVIVED INTACT — the thing the rejection warned against weakening. `5e61428` is a pure rename (git records `{a11y => approvals}`, 0/0), `089ebbf` is 10 insertions / 3 deletions. I diffed the moved file against ac6d01a's original: the ONLY changes are three imports repointed `./ui-wide-*` -> `../a11y/ui-wide-*` plus a 7-line comment explaining why a cross-surface sweep lives under approvals/ and warning readers not to tidy it back. Zero assertion changes, zero removed cases; 181 -> 188 lines, all seven added lines are that comment.\n\nGATE RE-RUN BY ME: exit 0, 34 files / 503 tests. Working tree clean over apps/control-room.\n\nDRILL RUN BY ME, because a moved test file is exactly where a suite can go green while asserting nothing. Neutralising the marker at its source (`frame.tsx`, `const narrow = ...` -> `false`) reddens exactly \"actually enters narrow mode, so the sweep cannot compare a tree to itself\" — 1 failed / 18 passed. The load-bearing guard still engages from the new location, and that pass count is a behavioural red rather than the \"no tests\" transform error the worker flagged. Restored via captured blob, `git hash-object` == 3a537e85.\n\nAttribution: the rejection was @qa-b2df68b9's, not mine — the fix message was addressed to me in error."
 }

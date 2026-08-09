@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:26Z. Both stated hard dependencies are DONE and, more importantly, both capabilities are verifiable on disk with real consumer edges — not merely marked DONE on a status field.\n\nITS OWN STATED DEPENDENCIES, quoted from its description: \"task-5606947a supplies cursor/generation identity and task-684e6972 supplies the recovery-incarnation binding.\"\n\nVERIFIED, capability by capability, at 14:26Z:\n- task-5606947a (Cursor-bound complete backup generation): DONE, QA-approved with the reviewer's own plain-Node probe. createBackupGeneration and verifyBackupGeneration are exported from the @moe/store package root at packages/store/src/index.ts:62. Reachable, not just present.\n- task-684e6972 (Fresh recovery incarnation and signing-key epoch): DONE. RecoveryIncarnationBinding and RecoveryIncarnationCryptoPort are exported from the @moe/daemon root at apps/daemon/src/index.ts:204, and apps/daemon/src/recovery/recovery-incarnation-contract.ts is on disk with its .js bridge.\n\nThat is Clause 1 satisfied in both directions: the capability exists AND has a published consumer edge. This is the first unblock today where both halves were true on first check rather than after a follow-on publish task.\n\nMETHOD NOTE, because I got this wrong earlier today. At 12:33 I promoted task-4afcb064 on the absence of a \"Depends on\" clause and architect-8c9073cd correctly reversed it — absence of a clause is not evidence of independence. Here I did the opposite: read the task's own stated dependencies, resolved each to a live status, and then grepped for the actual symbols. Status plus disk, not either alone.\n\nFOR THE ARCHITECT: re-measure before naming symbols anyway. My verification is a promotion gate, not a substitute for yours, and two descriptions on this board have been stale in each direction today. If you find an unbuilt dependency I missed, report blocked and I return it to BACKLOG without argument — that has happened once today and the architect was right.\n\nSibling context: task-b6e3dd2a (Crash-safe two-slot recovery anchor installer) shares both these dependencies and is already PLANNING with architect-5b5302ee. Coordinate rather than collide — check file-disjointness before either of you names an owned path.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -39,5 +39,36 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:00.170Z",
-  "updatedAt": "2026-08-09T12:09:34.248Z"
+  "updatedAt": "2026-08-09T14:29:29.420Z",
+  "contextFetchedBy": [
+    "architect-5b5302ee",
+    "architect-d46fcb95"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:13:00.948Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Read the prior handoff and full live context, confirmed the parent remains an empty SPIDR shell, and promoted task-f6c9011b24634de7b22ad10a26579883 plus task-00956ac383784e81b0345bbf09256323 from BACKLOG to PLANNING. Both contexts were fetched as required and their scopes remain disjoint.",
+      "whatRemains": "Plan the two promoted children. After task-00956ac... lands, promote/plan task-091c93...; after both task-00956ac... and task-f6c9011b... land, promote/plan task-d7da9be4.... A governor can close/archive this shell after child completion; it should not receive an implementation plan.",
+      "pitfalls": "Do not implement Git ref or artifact directory enumeration in an inventory adapter/test helper: those production capabilities belong to task-f6c9011b.... @moe/runner cannot import @moe/store or @moe/daemon; task-00956ac must treat cursor/generation and incarnation as opaque caller-supplied refs. Only task-00956ac owns the @moe/runner root seam/index-surface test.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-09T14:29:29.418Z",
+      "releasedBy": "architect-5b5302ee",
+      "reason": "This parent was already SPIDR-decomposed and has no implementation work; re-planning it would duplicate the four child tasks. Promoted its two dependency-free children to PLANNING and am releasing the shell."
+    },
+    {
+      "whatIsDone": "SPIDR-split completed. Four child tasks created with full scopes, DoDs and rails: task-f6c9011b24634de7b22ad10a26579883 (Git ref + artifact object enumeration capabilities), task-00956ac383784e81b0345bbf09256323 (Recovery-inventory contract + coverage protocol), task-091c93db11c041ea8484023d030fdc88 (Provider/process-lock/workspace adapters), task-d7da9be4a3254f7b9dcd58369d7e15a1 (Git/integration/artifact adapters). All four carry parentTaskId of this shell and record daemon consumer task-cf7fb147bd1c47698cbd65c9535370aa per Clause 1. Two blocking gaps were measured and written into the children rather than papered over.",
+      "whatRemains": "Nothing for an architect. This parent is a shell with no work of its own. A governor/human should promote task-f6c9011b and task-00956ac3 to PLANNING (they have no dependency and are file-disjoint, so they run in parallel), then task-091c93db once the contract slice lands, then task-d7da9be4 once BOTH the contract slice and task-f6c9011b land. Closing this shell later needs a REVIEW-transit hop; BACKLOG to DONE is blocked in Moe.",
+      "pitfalls": "Do not re-plan this parent as written. Its DoD 2 is not satisfiable on today's codebase: GitObserver has no ref/branch enumeration and ArtifactStore/ArtifactFsPort have no directory listing, so the 'reuse the hermetic Git observer and artifact store' instruction has nothing to call - that is why task-f6c9011b exists. Also note @moe/runner depends on @moe/contracts ONLY, so the cursor/generation identity (@moe/store) and recovery incarnation (apps/daemon) can never be imported here; they enter as caller-supplied opaque refs. Separately, packages/runner/src/index-surface.test.ts pins the exact root namespace with a hand-written list and toBe(116) and was ALREADY red on 2026-08-09 from an unrelated in-flight task - only the contract slice touches it, and its worker must baseline before editing.",
+      "openQuestions": "None blocking. The 3-slice shape was chosen by the human over 2-slice and 4-slice alternatives; the driver was that every slice adding a root export contends on index-surface.test.ts, so exactly one slice owns the root seam.",
+      "releasedAt": "2026-08-09T14:23:42.369Z",
+      "releasedBy": "architect-d46fcb95",
+      "reason": "Planning finished with a split, not a plan. Releasing the parent shell so the architect slot is free; the shell itself needs governor/human action, not another architect."
+    }
+  ]
 }

@@ -1,0 +1,36 @@
+{
+  "id": "task-091c93db11c041ea8484023d030fdc88",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Provider, process-lock and workspace inventory adapters",
+  "description": "Objective: land the production enumerators for the provider/process/launch-lock class and the workspace class, registered into the recovery-inventory port registry. Slice 2 of 3 from task-0325dcf7ee744123b40cf583230c7b6a, split by architect-d46fcb95 on human direction 2026-08-09.\n\nHard dependency: task-00956ac383784e81b0345bbf09256323 (Recovery-inventory contract and coverage protocol) must land first - it owns the class set, the item shape, the coverage proof, the INVENTORY_ADAPTER layer and the port registry this slice plugs into. Do not restate or re-derive any of them here.\n\nMEASURED PRESENT at 2026-08-09 by architect-d46fcb95 - every primitive this slice calls already exists, so nothing here needs a prerequisite:\n- provider capability probes: packages/runner/src/providers/claude/claude-probe.ts (probeClaudeRuntime, capabilityStatus) and providers/codex/codex-probe.ts (probeCodexRuntime, capabilityStatus).\n- launch-lock records: packages/runner/src/supervisor/launch-lock.ts (LaunchLockRegistration, parseLaunchLockRegistration, registerLaunchLock, bindsClaim). NOTE: this module is deliberately NOT root-exported; import it relatively from inside the package, do not publish it.\n- process observation: packages/runner/src/supervisor/process-observation.ts (BoundProcessObservation, intakeProcessObservation). Its own comment is the rule this slice must honour - \"UNOBSERVED is not death. Only an observed exit or signal proves an end.\"\n- workspace manifests: packages/runner/src/workspace/workspace-manifest.ts (buildInputManifest, buildResultManifest) and workspace-contract.ts (WorkspaceInputManifest, WorkspaceInputEntry, WorkspaceTreeEntry).\n\nDeliverable: packages/runner/src/recovery-inventory/provider-lock-inventory.ts (+ .js bridge) and workspace-inventory.ts (+ .js bridge) plus focused tests, each registering itself as a class enumerator through the contract slice's port registry.\n\nNOT in scope: the contract, coverage protocol or aggregate (slice 1); Git refs, integration targets or artifact objects (slice 3); scheduler resource rows; adopt/quarantine decisions; project embargo; tests/fault.\n\nOwned paths: packages/runner/src/recovery-inventory/provider-lock-inventory.{ts,js}, workspace-inventory.{ts,js}, their focused tests, and the two-line registration edit in the slice-1 aggregate. This slice does NOT edit index.ts or index-surface.test.ts - slice 1 owns the root seam.\n\nConsumer (global rail Clause 1): daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa.\n\nVerification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+  "definitionOfDone": [
+    "The provider/process/launch-lock enumerator calls the shipped probeClaudeRuntime/probeCodexRuntime capability surfaces and the launch-lock and process-observation records, binding every item to its class, stable external identity, observed disposition facts and source proof digest; it never treats a quiet process or an empty probe result as absence.",
+    "The workspace enumerator reads real workspace input/result manifests through the shipped workspace-manifest surface and binds each workspace item the same way, refusing rather than merging when two entries claim one external identity.",
+    "An unavailable enumerator, an unsupported or absent provider capability, a truncated or over-limit result, and a missing negative proof each return RECOVERY_INVENTORY_COVERAGE_UNKNOWN at layer INVENTORY_ADAPTER with truth UNKNOWN; partial items never upgrade the class to COMPLETE.",
+    "Both enumerators are registered with the slice-1 port registry and a test proves the aggregate reports COMPLETE for these two classes only when the enumerator actually proved completeness, and UNKNOWN in every other case including the absent-registration case.",
+    "Focused tests exercise real temporary filesystem bytes and the shipped provider-probe surfaces rather than a reimplemented fixture authority, assert each covered class generated at least one coverage case with a non-zero asserted count, pin the exact code and INVENTORY_ADAPTER layer on every refusal, and mutation-check that the coverage handling is reddenable.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0, with any residual red attributed to foreign paths against a recorded merge-base baseline."
+  ],
+  "taskRails": [
+    "A configured class requires complete enumeration or a verifiable negative proof; an empty list, a quiet process, an absent optional probe, or a mock response is never COMPLETE by itself.",
+    "Reuse the shipped probes, launch-lock records, process observation and workspace manifests. Do not reimplement any of their authority inside this module or inside a test helper; a property must be asserted against the production surface.",
+    "supervisor/launch-lock.ts is intentionally unpublished. Import it relatively within the package and do not add it to the @moe/runner root seam.",
+    "Tests assert the exact stable reason code and the INVENTORY_ADAPTER layer, and assert non-zero generated class coverage.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
+  "priority": "CRITICAL",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:19:34.714Z",
+  "updatedAt": "2026-08-09T14:19:34.714Z"
+}

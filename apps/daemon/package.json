@@ -19,6 +19,7 @@
     "@moe/store": "workspace:*"
   },
   "scripts": {
+    "start": "node ./src/daemon-main.ts",
     "typecheck": "tsc --project tsconfig.json",
     "test": "vitest run --root . --config package.json src"
   }

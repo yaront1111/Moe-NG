@@ -17,7 +17,7 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,7 +26,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 42,
+  "order": 50,
   "comments": [
     {
       "id": "comment-48fb50df99a946f698c86e59925b0f13",
@@ -43,8 +43,27 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-09T13:07:29.872Z",
+  "updatedAt": "2026-08-09T14:28:50.745Z",
   "contextFetchedBy": [
-    "architect-8c9073cd"
+    "architect-8c9073cd",
+    "architect-21f667ae"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:18:26.663Z"
+  },
+  "blockedReason": "Hard production dependency is not available, so a production-ready plan cannot name or compose its public launcher surface without guessing. Board re-measurement: Windows Claude launch wrapper task-acf73253a204435aba590894799814f2 is BLOCKED; its Job Object and runtime-pin prerequisites task-4d1f8ba54cb6476c930c46b413f882aa and task-078af6f181484dd99d1bf9008b4cf731 are PLANNING. Disk probe from D:/projexts/moe-next: Test-Path packages/runner/src/providers/claude/claude-launcher.ts => False; Test-Path packages/runner/src/providers/claude/claude-runtime-pin.ts => False; Test-Path packages/runner/src/platform/windows => False; production rg for launchClaude|ClaudeLauncher|createClaude.*Launch|FOUNDATION_ATTEMPT returned no matches. Existing prerequisite tasks already measure and own the missing production capability. Resume this task only after task-acf73253 is DONE and then re-probe its @moe/runner public root export before planning; do not deep-import or emulate the launcher in daemon tests.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:19:59.680Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the board and disk, proved the required Windows Claude launcher/public surface is absent, reported this task BLOCKED, and wrote Serena memory task-task-6cbff01023b14b26a78fc5e3eb1dd8a9-handoff with exact probes and resume instructions.",
+      "whatRemains": "Finish task-4d1f8ba54cb6476c930c46b413f882aa and task-078af6f181484dd99d1bf9008b4cf731, then task-acf73253a204435aba590894799814f2; once the launcher is DONE, re-probe its @moe/runner public root API and plan this task.",
+      "pitfalls": "Do not deep-import, emulate the launcher, invent daemon authority in tests, or unblock before the launcher task is DONE. Preserve the current effect/session binding reader required by comment-98e6fc6130304d7cb2af203f308107d6.",
+      "openQuestions": "The exact launcher result/grant/process registration contracts remain unknowable until task-acf73253 lands.",
+      "releasedAt": "2026-08-09T14:28:50.744Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Explicit handoff is complete; user requested more planning, so free architect capacity while this task remains blocked on production dependencies."
+    }
   ]
 }

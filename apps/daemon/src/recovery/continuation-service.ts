@@ -1,5 +1,6 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { RECOVERY_OUTCOME_KINDS, admitResume, admitSuccessorOverlap } from "@moe/runner";
+import type { RecoveryOutcomeKind } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
 import {
@@ -20,6 +21,7 @@ import type {
   ContinuationResult,
 } from "./continuation-contracts.js";
 import { readReconciliationRecords } from "./restart-reconciliation.js";
+import type { RestartRecordClassification } from "./restart-reconciliation.js";
 
 /**
  * Healthy continuation after a crash: ONE safe action, and a BINDING rather than
@@ -94,6 +96,20 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
+/**
+ * The stored vocabulary is one wider than the runner's: it also holds REFUSED,
+ * the arm where classification itself failed. Narrowing here is what lets the
+ * admissions receive a `RecoveryOutcomeKind` without a cast, so a REFUSED record
+ * cannot reach them as a plain string.
+ *
+ * Local because `@moe/runner`'s equivalent predicate is not on its public root,
+ * and a deep import would reach past the package boundary. It is checked against
+ * the root-exported vocabulary rather than a copied list, so the two cannot drift.
+ */
+function isRunnerClassification(value: RestartRecordClassification): value is RecoveryOutcomeKind {
+  return (RECOVERY_OUTCOME_KINDS as readonly string[]).includes(value);
+}
+
 /** The traceable successor bindings, in the order they were appended. */
 export function readContinuationBindings(
   store: SqliteEventStore,
@@ -138,19 +154,23 @@ export function evaluateContinuationCommandBytes(
   // whose classification the runner itself refused, has no truth to continue from.
   const record = readReconciliationRecords(store, request.projectId).get(request.attemptRef);
   if (record === undefined) return UNRECONCILED;
-  if (!(RECOVERY_OUTCOME_KINDS as readonly string[]).includes(record.classification)) return UNCLASSIFIED;
+  if (!isRecoveryOutcomeKind(record.classification)) return UNCLASSIFIED;
 
+  // EVERY boundary fact below comes off `record`, never off `request`. The request
+  // shape can no longer even express them, so this is the only source there is.
   const overlap = admitSuccessorOverlap({
+    classification: record.classification,
     predecessorRef: request.attemptRef,
-    predecessorRelease: request.predecessorRelease,
+    predecessorRelease: record.predecessorRelease,
     successorRef: request.successorRef,
   });
   if (overlap.kind === "BLOCKED") return boundaryRefusal(overlap.failure);
 
   const resume = admitResume({
-    predecessorRelease: request.predecessorRelease,
+    classification: record.classification,
+    predecessorRelease: record.predecessorRelease,
     resumeRef: request.successorRef,
-    safeHandoff: request.safeHandoff,
+    safeHandoff: record.safeHandoff,
   });
   if (resume.kind === "REFUSED") return boundaryRefusal(resume.failure);
 
@@ -161,6 +181,7 @@ export function evaluateContinuationCommandBytes(
       attemptRef: request.attemptRef,
       bindingRef: `${BINDING_PREFIX}${request.attemptRef}:${resume.resumeRef}`,
       classification: record.classification,
+      // The admitted handoff, which `admitResume` narrowed from the STORED value.
       safeHandoff: resume.safeHandoff,
       schemaVersion: CONTINUATION_BINDING_SCHEMA_VERSION,
       successorRef: resume.resumeRef,

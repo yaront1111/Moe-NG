@@ -1,0 +1,35 @@
+{
+  "id": "task-ea76e0cf9bdb4f1888aaa9e49323c782",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Win32 Job lifecycle core",
+  "description": "Objective: land the native Win32 lifecycle primitive required by the Windows Job broker and provider process boundary. Deliverable: a version-pinned Rust workspace/library under packages/runner/src/platform/windows/native/** using rustc 1.96.0 and windows-sys =0.61.2, with RAII handles and an injectable Win32 call table for unnamed Job creation, exact kill-on-close/no-breakaway configuration and query-back, CREATE_SUSPENDED process creation with PROC_THREAD_ATTRIBUTE_JOB_LIST plus an explicit AssignProcessToJobObject confirmation, restricted inherited-handle lists, identity/membership proof, ResumeThread, wait, terminate, active-process-zero query, and close. The atomic JOB_LIST membership removes the pre-assignment crash window while the explicit assignment call preserves the separately testable assign failure required by the parent DoD; supported floor is Windows 10 / Server 2016. Real consumer: Windows Job broker protocol task created beside this task, then task-4d1f8ba54cb6476c930c46b413f882aa. NOT in scope: Node/stdio framing, JavaScript hostile-input validation, Claude discovery/grants, daemon/store authority, receipts, or public @moe/runner exports. Verification: cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core.",
+  "definitionOfDone": [
+    "packages/runner/src/platform/windows/native pins rustc 1.96.0 and windows-sys exactly 0.61.2 in committed Cargo metadata/lock bytes; the locked test and release-build command exits 0 on supported Windows and creates no committed target, executable, debug, or probe artifact.",
+    "A production call-trace test proves the exact order: create unnamed Job, set LimitFlags to exactly JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE with neither breakaway flag, query the flags back, prepare JOB_LIST plus the three-handle allowlist, CreateProcessW suspended with explicit lpApplicationName/Unicode environment, explicitly AssignProcessToJobObject, prove membership and live-handle identity, then ResumeThread with prior suspend count exactly 1.",
+    "The lifecycle API retains original Job/process/thread handles rather than reopening by PID, returns PID plus creation-time and final-image identity, and never reports started, exited, or tree-dead before the matching membership/identity/exit/ActiveProcesses==0 facts are queried successfully.",
+    "An injected Win32 call-table sweep exercises every create/configure/verify/attribute/create/assign/membership/identity/resume/wait/exit-query/terminate/active-query/close arm, asserts its exact stable native operation and nonzero exact case set, and proves no resume before membership proof.",
+    "Every partial-construction fault unwinds in reverse acquisition order: pre-membership children are terminated and awaited directly; post-membership failures terminate the Job and wait/query ActiveProcesses==0; every acquired handle closes exactly once, and a cleanup uncertainty is retained rather than converted to success.",
+    "Focused real Windows tests prove a suspended marker cannot execute before the membership/assignment proof and that terminating the configured Job leaves zero active processes; tests use direct executable plus argv and never taskkill, a command shell, or PID-enumeration-only cleanup."
+  ],
+  "taskRails": [
+    "Use Microsoft Job Object semantics and the Windows 10+/Server 2016+ PROC_THREAD_ATTRIBUTE_JOB_LIST crash-atomic membership path, followed by the explicit AssignProcessToJobObject confirmation before resume.",
+    "Native failures carry a closed operation enum and numeric Win32 error only; never echo executable, argv, cwd, environment, or raw handle values.",
+    "Keep every Rust production source focused, target <=250 physical lines and split before 400; commit Cargo.lock but never Cargo target/output binaries.",
+    "This is a native primitive, not authority: no @moe/runner root export, Claude policy, activation grant, daemon/store call, or evidence claim."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4d1f8ba54cb6476c930c46b413f882aa",
+  "priority": "CRITICAL",
+  "order": 46.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:34:08.847Z",
+  "updatedAt": "2026-08-09T14:34:08.847Z"
+}

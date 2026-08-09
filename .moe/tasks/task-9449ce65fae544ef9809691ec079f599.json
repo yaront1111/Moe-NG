@@ -90,12 +90,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:34Z carrying an explicit HUMAN RULING that resolves both of this task's blockers. worker-5981deec's block was correct on the facts; the ruling changes what the task certifies, it does not wave the facts away.\n\nRULING 1 — WHAT IS RELEASED. This gate certifies the DISTRIBUTION CONTAINER produced by tools/packaging/distribution-build.ts. It does NOT certify an npm-registry publish. All 16 workspace packages remain private:true and that is now a DECISION, not a gap. worker-5981deec's measurement stands and was the right thing to block on: \"every workspace package is private:true and no publish configuration exists\", so a verifier authored against a registry publish would have had no subject.\n\nTHE SUBJECT IS REAL, verified by me on disk at 14:33Z rather than assumed:\n- packages/contracts/src/distribution/: distribution-contract.ts, distribution-parser.ts, distribution-verifier.ts, all with .js bridges, plus distribution-manifest.test.ts\n- tools/packaging/distribution-build.ts and distribution-startup.ts\n- tests/integration/distribution/distribution-packaging.test.ts\nAll landed by task-739879d0 (DONE, QA-approved by base-ref diff with three mutation drills independently re-run). So there IS an artifact to reproduce, sign, verify and gate — it is a signed distribution container, not a published package.\n\nRULING 2 — SUPPORTED-OS SCOPE. \"Supported OS conformance\" for this gate means WINDOWS ONLY for now. task-e87a7353 (Linux) and task-e94b2055 (macOS) were deferred to BACKLOG at 14:32Z by human direction because process.platform is win32 x64 and their DoD 4 requires live off-host observation that Clause 2 forbids substituting. They are not blockers of this task any more. Do NOT plan Linux or macOS evidence here; record those platforms as typed UNKNOWN with the deferred task ids named, per epic rail 4, rather than asserting or omitting them.\n\nCLAUSE 2 STILL BINDS. Certify only what exists. If a DoD item names a capability absent from the list above, it stays UNKNOWN with the missing symbol named — do not narrow the DoD and do not certify a fixture.\n\nONE MEASURED GAP THE ARCHITECT SHOULD CHECK FIRST: packages/contracts/src/index.ts does NOT export the distribution surface. tools/packaging consumes it by direct path today. If this gate needs to drive the verifier through the package root, that is a Clause 1 consumer-edge gap and it belongs in a narrow follow-on publish task — the same pattern as task-6054520bc and task-f5d1dae629 — not silently inside this one.\n\nSteps 1 of 7 are already complete from the prior attempt, and worker-5981deec recorded a full prerequisite/freeze audit in the step-1 note plus comment-81bfe196. Read the handoff before restarting; do not redo that audit.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -110,7 +110,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T12:01:28.858Z",
+  "updatedAt": "2026-08-09T14:33:29.188Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-f39f0c46",
@@ -144,10 +144,10 @@
   },
   "planApprovedAt": "2026-08-09T11:51:27.294Z",
   "workStartedAt": "2026-08-09T11:52:00.552Z",
-  "blockedReason": "Blocked at step 2, no code written. Step 1 audit complete; full symbol-by-symbol evidence in comment-81bfe196d1f2418588c44f66b705966c. HEAD 1ce0059de305e9e8f13f099daa1b9c5249b34071, both rail hashes recomputed and matching, no corpus touched, package.json and pnpm-lock.yaml deliberately unmodified so no race is open with the distribution architect.\n\nNot the planned \"build it and mark UNKNOWN\" case: the plan expected absent CALLS a generic driver could route around, but there is no artifact to reproduce, so all four DoD items lack a production subject.\n\nMeasured: (1) every workspace package is private:true and NO package.json declares files, publishConfig or bin — DoD 1/2 have no artifact, manifest or asset to compare across two builds. (2) No distribution verifier: packages/*/src/{distribution,packaging,release} absent; DISTRIBUTION_MISMATCH exists only as a runtime-error-registry row and as createCompatGate, an API-version pin comparison that constructs nothing. task-739879d0 is PLANNING in another epic and its seam is UNNAMED — architect-f39f0c46 asked architect-8c9073cd for it at 11:44:15Z, unanswered. (3) doctor-commands.ts has zero compatibility symbols; nodeVersion/pnpmVersion match zero files repo-wide. (4) packages/runner/src/platform/ absent for every OS; Linux task-e87a7353 and macOS task-e94b2055 both BLOCKED; host is win32. (5) No signing or SBOM tooling in source or config, so DoD 3's signature evidence has no producer.\n\nStep 3 requires invoking a seam neither landed nor named; defining it here makes this task the de-facto packaging authority, inverting ownership against task-739879d0 and violating Clause 2. Step 7 is unrunnable too: three OS labels plus a three-receipt aggregate, from one win32 host with no CI.\n\nNeeded: A distribution packaging behind a named seam (task-739879d0; the 11:44Z seam answer is the cheapest unblock). B doctor engine/runtime version reporting. C packaging metadata or a source-distribution decision.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T11:57:51.251Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 of 7 complete: the full prerequisite and freeze audit, recorded in the step-1 note and in task comment comment-81bfe196d1f2418588c44f66b705966c. Audit HEAD 1ce0059de305e9e8f13f099daa1b9c5249b34071. Both rail hashes recomputed with sha256sum and matching: design 1d9d1ec9...383191, benchmark a62b9043...a589c. Tool identities verified against pins: node v24.16.0 (.node-version 24.16.0), pnpm 11.0.8 (packageManager and engines). No confirmatory corpus generated, opened, scanned or packaged. NO CODE WRITTEN and no files modified — package.json and pnpm-lock.yaml were deliberately left untouched so no race was opened with architect-8c9073cd, who is planning packaging tooling that may edit the same file. Serena handoff memory: task-task-9449ce65fae544ef9809691ec079f599-handoff.",

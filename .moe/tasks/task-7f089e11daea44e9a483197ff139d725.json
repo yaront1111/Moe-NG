@@ -1,0 +1,172 @@
+{
+  "id": "task-7f089e11daea44e9a483197ff139d725",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Expansion planning hold lifecycle",
+  "description": "Objective: define the pure core lifecycle for a runner-safe expansion request and its exact EXPANSION_PLANNING hold. Deliverable: a frozen reducer/contract that binds the resumable parent, worker handoff, planning run, proposal base, graph epoch, source fingerprint, deadline, and terminal cause, without minting children or execution authority. NOT in scope: PlanningRun submission, scheduler admission, resource/budget preparation, graph approval/activation, persistence, or daemon commands. Owned paths: packages/core/src/expansion/expansion-planning-hold.ts, expansion-planning-hold.js, expansion-planning-hold.test.ts. Production consumers: the Planning-run expansion submission child and task-9634ed3b72014fe781591c7df9674da2. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "A closed immutable hold contract and reducer admit a request only at a supplied runner-proven safe release boundary and bind exact parent node/run, worker handoff, planning run, proposal base, graph epoch, source fingerprint, deadline, and generation.",
+    "The only lifecycle is ACTIVE to RESOLVED, SUPERSEDED, or CANCELLED; duplicate commands replay byte-identically, stale generation/version or mismatched binding refuses with exact stable code and layer, and no terminal state can reactivate.",
+    "Every accepted/refused result is deeply frozen and contains no child run, lease, effect, slot, resource, budget-allocation, graph-activation, or command authority.",
+    "Focused transition/race/hostile-input tests assert exact code plus layer, unchanged state on refusal, nonzero generated-case counts, deterministic replay, and a production-guard mutation that turns the suite red.",
+    "The exact verification command exits 0, production files remain below 400 lines, and both named consumer tasks are recorded."
+  ],
+  "taskRails": [
+    "A request may record AGENT_REPORTED rationale but it never upgrades the safe-boundary or dependency truth.",
+    "Do not duplicate PlanningRun, graph revision, budget, or daemon persistence authority in this reducer.",
+    "No automatic approval or child activation affordance."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight and baseline — reverify the pinned design hash and lines 238/455; confirm the four affected paths are clean, the three expansion files are absent, src/index.ts still reaches no expansion module, and runtime-entrypoint.test.ts still enforces exact bridge reachability. Record the merge-base output/failing-path baseline for `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`; re-probe the committed PLANNING_HOLD lifecycle/kind/truth constants, WORK_RELEASE_OR_PAUSE release shape, and both named consumer task IDs. If any surface or ownership fact differs, stop and report the exact mismatch rather than adapting to foreign work.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline frozen at merge-base/HEAD 7b21c9919830a334d3265df5dfc4fd8d76c900a0. Design SHA-256 exactly 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; lines 238/455 confirm exact EXPANSION_PLANNING binding, ACTIVE->RESOLVED|SUPERSEDED|CANCELLED, runner-proven WORK_RELEASE_OR_PAUSE release, terminal effects/resources, original handoff, and no children before activation. All four affected paths clean; expansion directory/files absent; core index 221 lines/blob ba5ed263 with no expansion export. runtime-entrypoint.test.ts exact-reachability guard confirmed. Contracts expose frozen PLANNING_HOLD lifecycle/kind and truth classes including AGENT_REPORTED/DAEMON_VERIFIED; scheduler release shape confirms WORK_RELEASE_OR_PAUSE only is resumable and returns RELEASED lease/handoff/disposition. Fresh baseline gate exit 0: 16 files/239 tests. Named consumers verified: task-fcad40b6 (PLANNING, explicitly depends on this task) and task-9634ed3 (PLANNING, daemon graph composition).",
+      "startedAt": "2026-08-09T14:26:31.981Z",
+      "completedAt": "2026-08-09T14:28:00.209Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED (creation and replay) — create expansion-planning-hold.test.ts and drive only the future production reducer. Pin the exact closed local refusal vocabulary/layers: EXPANSION_HOLD_INPUT_INVALID/INPUT, EXPANSION_HOLD_SAFE_BOUNDARY_UNPROVEN/SAFE_BOUNDARY, EXPANSION_HOLD_STALE_VERSION|STALE_GENERATION|STALE_EPOCH/CONCURRENCY, EXPANSION_HOLD_BINDING_MISMATCH/BINDING, EXPANSION_HOLD_IDEMPOTENCY_CONFLICT/IDEMPOTENCY, EXPANSION_HOLD_ILLEGAL_TRANSITION/LIFECYCLE, and EXPANSION_HOLD_TERMINAL_PROOF_REQUIRED/TERMINAL_PROOF. Test graph.request_expansion creation only from an exact DAEMON_VERIFIED WORK_RELEASE_OR_PAUSE receipt binding safe-boundary observation, RELEASED attempt/lease/provider-slot refs, terminal effect/resource refs, original handoff, active parent/run/revision, proposal-base hash, graph epoch, source fingerprint, deadline, generation and AGENT_REPORTED rationale. Assert exact ACTIVE state/event bytes, deep freeze, exact keys, no authority fields, identical same-command replay, same-ID/different-bytes idempotency refusal, and hostile accessor/proxy/cycle/extra/missing/oversize/invalid-hash/unsafe-number inputs. Confirm the focused test is RED for the missing production module.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "note": "TDD RED established against the future production surface: focused Vitest exit 1 with ERR_MODULE_NOT_FOUND for `./expansion-planning-hold.js` and no production files created. Creation suite hand-pins the exact command/error/layer vocabularies, exact ACTIVE state/event keys and bytes, deep freeze/no-authority keys, snapshot detachment, same-command byte replay, same-ID payload conflict, ten semantic safe-boundary refusal arms (exact code/layer and positive count), and fourteen hostile/malformed arms including proxy/accessor/cycle/extra/missing/oversize/invalid-hash/unsafe-number/hostile arrays (exact INPUT code/layer and positive count).",
+      "startedAt": "2026-08-09T14:28:04.948Z",
+      "completedAt": "2026-08-09T14:30:58.077Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED (terminal matrix and races) — extend the same production-surface test with the closed cause matrix: RESOLVED for EXPANSION_REFUSED or GRAPH_ACTIVATED; SUPERSEDED for REVISE_PLAN or GRAPH_SUPERSEDED with exact successor/not-applicable evidence; CANCELLED for EXPANSION_DECLINED, PLANNING_CANCELLED or GOAL_CANCELLED. Every terminal transition must repeat the exact hold/generation/epoch/parent/run/proposal/source binding and carry the cause-specific DAEMON_VERIFIED or HUMAN_APPROVED decision plus authority-terminal proof where required; missing/UNKNOWN/live/draining evidence leaves ACTIVE unchanged with the exact code/layer. Cover stale version/generation/epoch precedence, mismatched binding, competing resolve/supersede/cancel orders, restart from a snapshotted ACTIVE state, deadline passing without any transition, terminal non-reactivation, stronger cancellation/supersession preventing handoff revival, exact terminal replay vs conflicting payload, and frozen original handoff retention. Generated hostile/cause/race sweeps must assert their case counts are >0 and every refusal asserts code and layer, not merely `ok:false`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "note": "Terminal/race TDD RED added and reconfirmed: focused suite exit 1 only because the production module is absent. Seven-case hand-written cause matrix pins RESOLVED/SUPERSEDED/CANCELLED plus cause-specific DAEMON_VERIFIED/HUMAN_APPROVED truth and successor null/non-null. Tests pin exact terminal state/event bytes, terminal replay and same-ID conflict, stale version/generation/epoch precedence, all seven repeated bindings, seven terminal-proof failures, three cause/lifecycle mismatches, all six competing terminal orders, restart from cloned ACTIVE state, deadline non-authority, original handoff retention, and five hostile terminal shapes. Every generated set asserts exact positive cardinality and every refusal asserts exact code, layer, and unchanged state.",
+      "startedAt": "2026-08-09T14:31:03.027Z",
+      "completedAt": "2026-08-09T14:32:51.760Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN — implement expansion-planning-hold.ts as one focused, dependency-light contract/reducer. Reuse only @moe/contracts runtime lifecycle/truth constants; define frozen command/cause/code/layer tuples and exported immutable types locally. Snapshot hostile inputs once using exact own enumerable data-property rules; validate non-empty refs, lowercase 64-hex proposal/source identities, safe nonnegative epoch/deadline/version and positive generation; validate the exact release witness and keep rationale truth separate. Apply refusal precedence INPUT -> stored command replay/idempotency -> CONCURRENCY -> LIFECYCLE -> BINDING -> SAFE_BOUNDARY/TERMINAL_PROOF. Store bounded creation and terminal receipts sufficient to reconstruct the original accepted state/event for either command ID without an unbounded history; same ID with different sanitized bytes refuses. Deep-freeze every nested accepted/refused result and preserve immutable opening bindings through terminal states. The reducer performs no clock read, IO, hash computation, readiness calculation, PlanningRun/graph/budget transition, or child authority creation. Make all tests green while keeping the production file target <=250 and strictly below 400 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.test.ts"
+      ],
+      "note": "GREEN: dependency-light pure reducer implemented with exact hostile-input snapshotting, bounded creation/terminal receipts, replay-before-concurrency precedence, exact safe-boundary/binding/terminal-proof validation, frozen accepted/refused results, and no clock/IO/hash/effect authority. Fresh @moe/core typecheck exit 0. Focused root Vitest exit 0: 1 file, 15 tests. Production file is 306 physical lines, below the strict 400-line split threshold; functions remain focused and the planned single-file ownership avoids unapproved scope expansion.",
+      "startedAt": "2026-08-09T14:32:56.068Z",
+      "completedAt": "2026-08-09T14:39:06.509Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Runtime bridge and narrow publication — add the exact one-line expansion-planning-hold.js -> .ts bridge, then add explicit curated value/type re-exports in packages/core/src/index.ts so core's bridge-reachability audit treats the module as production and bare @moe/core can reach it. Do not wildcard-export unrelated expansion symbols, alter package.json, or publish any PlanningRun/daemon authority. Keep index.ts <=250 physical lines and document in the module header that task-fcad40b6d26243439cd19fd3e49c924d is the immediate composition consumer and task-9634ed3b72014fe781591c7df9674da2 is the durable daemon consumer.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.js"
+      ],
+      "startedAt": "2026-08-09T14:39:13.229Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial review and mutation drill — inspect the exact owned diff as an attacker for duplicate/concurrent command ordering, null/empty/huge/hostile objects, stale version/generation/epoch, same-ID payload swaps, terminal replay, deadline-driven clearing, handoff resurrection, mutable nested data, accidental runtime-error-registry degradation, forbidden authority keys, cross-package imports, and index export collisions. Temporarily weaken the production safe-boundary truth/disposition check, terminal-proof gate, and same-ID payload comparison one at a time; run the focused test after each mutation and require a red assertion at the exact code/layer/authority property, then restore and verify exact diff bytes. Assert nonzero generated counts and scan production for Date.now/Math.random/node:crypto/IO; check expansion-planning-hold.ts <400 (target <=250), index.ts <=250, the bridge exact LF bytes, and no edits outside the four approved paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.test.ts",
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Single verification gate — run fresh in the foreground exactly `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require owned-package exit 0, record the exact output tail, compare repo/package failures against the step-1 merge-base baseline using path attribution, and disclose any foreign red verbatim. Recheck explicit-path git diff/status, line caps, exact bridge reachability, no generated/debug artifacts, and both consumer IDs before using this exact command/output as complete_task evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/expansion/expansion-planning-hold.test.ts",
+        "packages/core/src/index.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-b6bbb60c",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 14:15Z. Checked by subject on disk, not by clause absence.\n\nVERIFIED: no dependency clause, AND it is the head of its chain rather than a link in one. task-fcad40b6 (Planning expansion contract binding) states \"Depends on task-7f089e11\" — this task. Nothing states a dependency on it in the other direction. Landing it unblocks task-fcad40b6.\n\nOwned paths: packages/core/src/expansion/**. That directory does not exist yet, which is correct and expected — this task CREATES it. That is the distinction I got wrong on task-4afcb064 at 12:33 and want stated explicitly: a task whose own deliverable is absent is fine; a task whose SUBJECT is absent is not. This one builds a pure core lifecycle module from contracts that exist. task-4afcb064 needed a durable session authority, recipient registry and effect-session reader that nobody has built, which is a different thing entirely.\n\nCAUTION FOR THE ARCHITECT, and I would rather flag it than have it discovered mid-plan: the only \"expansion\" hit in packages/core/src today is packages/core/src/planning/planning-run-authority.test.ts. So the surrounding planning-run authority exists, but the expansion vocabulary may be thinner than the description assumes. RE-MEASURE IT. If the contracts this lifecycle is supposed to reduce over turn out to be absent, that is a legitimate block and I take it back to BACKLOG without argument — same standing offer that has already been exercised correctly once today.\n\nProduction capability task. Builds a subject; certifies nothing. If a DoD item asks you to certify expansion behaviour end to end, that belongs to task-005c9896 (Expansion admission protocol), not here.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 17,
+  "comments": [
+    {
+      "id": "comment-6824fef9b4eb4c0f8088b4db663cafec",
+      "author": "architect-8c9073cd",
+      "content": "Planning ownership amendment required by a fresh production test audit: packages/core/src/runtime-entrypoint.test.ts computes the exact .js-bridge set reachable from packages/core/src/index.ts and reports every unreachable bridge as `unexpected`. The task requires expansion-planning-hold.js, so the declared 3-path scope cannot pass its own `pnpm --filter @moe/core test` until the new module is curated from `packages/core/src/index.ts`. The plan therefore adds that fourth affected file (currently clean, 221 lines; no index test change needed). This is publication for runtime reachability only; task-a1e7f75e9681486cb0a8f93e9397b8b5 still owns the final whole-protocol namespace/hardening sweep. Approving this plan approves the narrow index.ts scope amendment.",
+      "timestamp": "2026-08-09T14:23:14.791Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:44:11.795Z",
+  "updatedAt": "2026-08-09T14:39:13.229Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:11:19.310Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd",
+    "worker-b6bbb60c"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T14:25:48.136Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected importing @moe/runner or @moe/scheduler: @moe/core depends only on @moe/contracts and must consume exact projected receipt references rather than fork release authority. Rejected createRuntimeError for hold concurrency/lifecycle refusals: the committed runtime registry does not allow PLANNING_HOLD as the source for EXPECTED_VERSION_CONFLICT, IDEMPOTENCY_CONFLICT, or ILLEGAL_TRANSITION, so those calls would degrade to UNKNOWN_ERROR. Use a closed domain-local code/layer union instead. Rejected omitting the required .js bridge or deferring publication: core's runtime-entrypoint.test.ts marks every bridge not reachable from src/index.ts as unexpected; the narrow src/index.ts amendment is therefore required now. Rejected embedding the hold in PlanningRun: the design makes PlanningHold a first-class aggregate/readiness predicate and the next child owns PlanningRun composition.",
+    "codebaseInsights": "Design SHA-256 was reverified. Design lines 238/455 require an exact EXPANSION_PLANNING hold bound to one affected parent, one PlanningRun, proposal base, graph epoch, source fingerprint, deadline and ACTIVE->RESOLVED|SUPERSEDED|CANCELLED lifecycle. The request is legal only after a runner-proven WORK_RELEASE_OR_PAUSE boundary with attempt/lease/provider slot released, effects/resources terminal and exact handoff; rationale remains AGENT_REPORTED. @moe/contracts already freezes PLANNING_HOLD lifecycle/kind and truth vocabularies. Existing core hostile-input helpers show the required exact-key/snapshot/deep-freeze pattern, but this focused module must remain self-contained inside its owned leaf. Runtime command replay normally belongs to the decision ledger; this two-transition aggregate additionally keeps bounded creation/terminal receipts so the immediately or historically repeated creation/terminal command can reconstruct byte-identical original state/event results, while same commandId with changed bytes refuses. packages/core/src/index.ts is clean and 221 lines; explicit curated expansion exports can remain under 250. Consumers are task-fcad40b6d26243439cd19fd3e49c924d and durable daemon task-9634ed3b72014fe781591c7df9674da2.",
+    "risks": "Do not treat a caller boolean as release proof: require exact receipt refs, the closed WORK_RELEASE_OR_PAUSE/RELEASED/resumable facts and DAEMON_VERIFIED truth, leaving authoritative sourcing to the daemon consumer. Deadline is immutable evidence only and must never auto-clear a hold. A cancel/decline/refusal with live, unknown or missing terminal authority proof leaves ACTIVE unchanged. Same-ID changed payload must be distinguished from a true replay before stale-version checks. Preserve original handoff/bindings in every terminal state so parent resume is exact. Terminal states never reactivate. No Date.now, randomness, crypto, IO, child authority, or imported runner/scheduler code. Keep expansion-planning-hold.ts target <=250 and strictly <400; keep src/index.ts <=250 and explicitly curated to avoid export collisions.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/scheduler/src/authority/lease-drain.ts",
+      "packages/runner/src/recovery/safe-boundary.ts",
+      "packages/core/src/planning/planning-snapshot.ts",
+      "packages/core/src/runtime-entrypoint.test.ts",
+      "packages/core/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-09T14:25:50.188Z",
+  "workStartedAt": "2026-08-09T14:26:31.981Z"
+}

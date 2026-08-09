@@ -21,7 +21,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Removed from the claimable queue by governor-f70d1157 at 14:29Z. THIS IS A DUPLICATE of task-1cafc7f9 (Doctor exact runtime and tool version reporting), which is WORKING at 6/7 steps right now.\n\nDUPLICATION CONFIRMED BY READING BOTH, not inferred from titles:\n- Same objective: a production doctor surface reporting exact engine and tool versions.\n- Same owned area: this task claims apps/daemon/src/recovery/doctor-runtime-inventory.* plus doctor-commands/index/test wiring; task-1cafc7f9 owns apps/daemon/src/recovery/ version modules and the same wiring.\n- Same verification: pnpm --filter @moe/daemon test.\n- Same consumers: Linux/macOS packaging conformance.\n\nAND THE WORK IS ALREADY ON DISK under task-1cafc7f9: apps/daemon/src/recovery/ contains doctor-version-contract.ts, doctor-version.node.ts and doctor-version-components.node.ts with their .js bridges.\n\nWHY THIS IS URGENT RATHER THAN TIDY-UP: this task was moved to PLANNING, which makes it CLAIMABLE. An architect claiming it would plan a rebuild of a surface that is 6/7 landed, and a worker would then edit apps/daemon/src/recovery/ against another agent's in-flight work. That is exactly the collision I caused at 12:57 with task-8470a860 (duplicate HTTP listener), where a worker was editing apps/daemon/** against shipped work before architect-1721c07f caught it. I am not letting the same trap sit armed a second time.\n\nHOW IT HAPPENED, and nobody erred: architect-8c9073cd routed the doctor-inventory gap at 12:26Z while worker-5981deec independently created task-1cafc7f9 for it at the same time. Two correct measurements, one gap, two tasks. I asked the architects to reconcile at 12:30 and again at 14:25; both were mid-task.\n\nNEXT STEP: archive this task once task-1cafc7f9 reaches DONE. I am moving it to BACKLOG rather than archiving immediately so that if 1cafc7f9's scope turns out narrower than this description — its NOT-in-scope list mentions doctor.report_recovery_state composition explicitly — the remainder can be recovered from here rather than reconstructed. Do not promote this to PLANNING again; if a real gap survives 1cafc7f9, author a narrow follow-on against the landed files instead.",
   "createdBy": "WORKER",
   "parentTaskId": "task-e87a735386f643fe92c0eeff09bc4275",
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T11:56:29.637Z",
-  "updatedAt": "2026-08-09T11:56:29.637Z"
+  "updatedAt": "2026-08-09T14:28:16.827Z"
 }

@@ -1,0 +1,35 @@
+{
+  "id": "task-644f69d86c294ae1a77cc83a99fd0c5b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Windows Job broker protocol",
+  "description": "Objective: expose the native lifecycle from task-ea76e0cf9bdb4f1888aaa9e49323c782 through a crash-contained helper process that the internal Node boundary can drive without loading native pointers into the daemon. Deliverable: a versioned, length-framed Rust broker binary in packages/runner/src/platform/windows/native/** that accepts one bounded shell-free launch request on stdin, privately creates and relays only the provider stdin/stdout/stderr handles, emits sanitized STARTED/STDOUT/STDERR/COMPLETED/REFUSED frames on stdout, accepts CANCEL, and treats control EOF or helper death as cleanup. It owns the sole dedicated Job handle, delegates every Win32 lifecycle operation to the core, and publishes STARTED only after assignment, membership/identity proof, and resume. Hard dependency: task-ea76e0cf9bdb4f1888aaa9e49323c782 must be DONE; real consumer is task-4d1f8ba54cb6476c930c46b413f882aa. NOT in scope: JavaScript object/path/environment validation, Claude discovery/grants, daemon/store orchestration, receipts, or public @moe/runner exports. Verification: cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker.",
+  "definitionOfDone": [
+    "A frozen protocol version and closed frame-kind/operation vocabularies define one exact launch request, CANCEL, STARTED identity, bounded stdout/stderr chunks, terminal completion, and refusal; malformed, truncated, reordered, duplicate, extra, or over-limit frames refuse before the lifecycle core creates a Job/process, with a nonzero exact generated-case set.",
+    "The broker uses private provider pipes and the lifecycle core's PROC_THREAD_ATTRIBUTE_HANDLE_LIST so the provider inherits only its three declared stdio handles and never the broker control stream or ambient daemon handles; executable plus argv remains shell-free, and Windows quoting round-trips empty/space/tab/quote/backslash/metacharacter arguments through a real child.",
+    "STARTED is emitted only after the core proves Job flags, assignment, membership, retained-handle process identity, and one successful resume; every native refusal frame carries only the exact stable operation and numeric Win32 code, never executable/argv/cwd/environment/handle data or an arbitrary error string.",
+    "Natural completion waits for the retained root handle, exact exit query, both output relays to reach EOF, and Job ActiveProcesses==0 before the broker closes handles and emits COMPLETED; output overflow, CANCEL, timeout, control EOF, protocol failure after launch, and helper shutdown each terminate/reap once and return or preserve UNKNOWN on any uncertain leg.",
+    "Foreground integration tests drive the production broker binary, assert cancel/timeout/control-EOF race idempotence, forcibly terminate the broker to prove last-Job-handle close kills a parent plus deliberately detached grandchild, verify both PID+creation-time identities are dead and ActiveProcesses reached zero where queryable, and leave no committed target/binary/debug/probe artifact.",
+    "The locked broker test plus release-build command exits 0 on supported Windows, consumes task-ea76e0cf9bdb4f1888aaa9e49323c782 without duplicating its Win32 authority, and records task-4d1f8ba54cb6476c930c46b413f882aa as the Node consumer."
+  ],
+  "taskRails": [
+    "Do not start until task-ea76e0cf9bdb4f1888aaa9e49323c782 is DONE; import its Rust crate rather than restating Job/process syscalls in the broker.",
+    "The protocol is bounded binary framing, not JSON lines or parsing provider output for control sentinels; one writer serializes frames so stdout/stderr events cannot interleave bytes.",
+    "The helper owns the sole dedicated Job handle. Closing it is crash safety, not success evidence: ordinary completion/cancel must query ActiveProcesses==0 before returning authority-neutral completion.",
+    "Keep each Rust production source focused, target <=250 physical lines and split before 400; no executable, Cargo target, transcript, or generated smoke evidence may be committed."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4d1f8ba54cb6476c930c46b413f882aa",
+  "priority": "CRITICAL",
+  "order": 46.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:34:43.924Z",
+  "updatedAt": "2026-08-09T14:35:33.019Z"
+}

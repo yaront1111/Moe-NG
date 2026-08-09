@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   PREDECESSOR_RELEASES,
   RECOVERY_ERROR_CODES,
+  RECOVERY_OUTCOME_KINDS,
+  RESUMABLE_RECOVERY_CLASSIFICATIONS,
   type PredecessorRelease,
+  type RecoveryOutcomeKind,
 } from "./recovery-contract.js";
 import { admitResume, admitSuccessorOverlap, advanceRecoveryDrain } from "./safe-boundary.js";
+import { classifyCrash, type CrashClassification } from "./crash-classification.js";
+import { SETTLED, records, situation } from "./recovery-test-fixtures.js";
 import { RESOURCE_FACTS } from "../supervisor/drain-table.js";
 
 /**
@@ -19,15 +24,46 @@ import { RESOURCE_FACTS } from "../supervisor/drain-table.js";
 const RELEASES: readonly PredecessorRelease[] = ["PROVEN_RELEASED", "ACTIVE", "UNKNOWN"];
 const HANDOFF = "handoff-ref-1";
 
-function overlapRequest(predecessorRelease: unknown): Record<string, unknown> {
-  return { predecessorRef: "predecessor-1", successorRef: "successor-1", predecessorRelease };
+/**
+ * The five durable classifications, hand-transcribed for the same reason as
+ * RELEASES. DoD 2's sweep is only meaningful if this list is independent of the
+ * export it checks: a universe read from the subject agrees with the subject
+ * even after a member is dropped.
+ */
+const KINDS: readonly RecoveryOutcomeKind[] = [
+  "ADOPTED",
+  "ABSENT",
+  "SUSPECT",
+  "QUARANTINED",
+  "RECONCILIATION_COMMAND",
+];
+
+/** Every kind the closed resumable set excludes — the four that must refuse. */
+const NON_RESUMABLE: readonly RecoveryOutcomeKind[] = [
+  "ADOPTED",
+  "SUSPECT",
+  "QUARANTINED",
+  "RECONCILIATION_COMMAND",
+];
+
+function overlapRequest(
+  predecessorRelease: unknown,
+  classification: unknown = "ABSENT",
+): Record<string, unknown> {
+  return {
+    predecessorRef: "predecessor-1",
+    successorRef: "successor-1",
+    predecessorRelease,
+    classification,
+  };
 }
 
 function resumeRequest(
   predecessorRelease: unknown,
   safeHandoff: unknown = HANDOFF,
+  classification: unknown = "ABSENT",
 ): Record<string, unknown> {
-  return { resumeRef: "resume-1", predecessorRelease, safeHandoff };
+  return { resumeRef: "resume-1", predecessorRelease, safeHandoff, classification };
 }
 
 function disposition(
@@ -57,6 +93,34 @@ describe("recovery vocabulary", () => {
   it("declares both predecessor refusals as separate codes", () => {
     expect(RECOVERY_ERROR_CODES).toContain("RECOVERY_PREDECESSOR_ACTIVE");
     expect(RECOVERY_ERROR_CODES).toContain("RECOVERY_PREDECESSOR_RELEASE_UNKNOWN");
+  });
+
+  it("declares the five durable classifications against a hand-written universe", () => {
+    expect(KINDS).toHaveLength(5);
+    expect([...RECOVERY_OUTCOME_KINDS]).toEqual([...KINDS]);
+  });
+
+  /**
+   * DoD 1. The resumable set is closed and contains ABSENT alone. Asserting the
+   * exact array rather than membership is the point: a later member appended
+   * here would silently widen continuation authority, and `toContain("ABSENT")`
+   * would still pass.
+   */
+  it("closes the resumable classification set to ABSENT alone and freezes it", () => {
+    expect([...RESUMABLE_RECOVERY_CLASSIFICATIONS]).toEqual(["ABSENT"]);
+    expect(Object.isFrozen(RESUMABLE_RECOVERY_CLASSIFICATIONS)).toBe(true);
+  });
+
+  it("partitions the five kinds into the resumable one and four non-resumable", () => {
+    const resumable = KINDS.filter((kind) =>
+      (RESUMABLE_RECOVERY_CLASSIFICATIONS as readonly string[]).includes(kind),
+    );
+    expect(resumable).toEqual(["ABSENT"]);
+    expect(KINDS.filter((kind) => !resumable.includes(kind))).toEqual([...NON_RESUMABLE]);
+  });
+
+  it("declares the non-resumable refusal code", () => {
+    expect(RECOVERY_ERROR_CODES).toContain("RECOVERY_CLASSIFICATION_NOT_RESUMABLE");
   });
 });
 
@@ -152,6 +216,231 @@ describe("release and resume admission", () => {
     if (verdict.kind !== "REFUSED") return;
     expect(verdict.failure.code).toBe("RECOVERY_BOUNDARY_MALFORMED");
     expect(verdict.failure.layer).toBe("SAFE_BOUNDARY");
+  });
+});
+
+/**
+ * DoD 2. Continuation authority is decided by the DURABLE classification, and
+ * only ABSENT is resumable. Before this, a caller supplying PROVEN_RELEASED plus
+ * a handoff was admitted for all five kinds — including QUARANTINED with held
+ * resources — because the classification never reached the boundary at all.
+ */
+describe("durable classification admission", () => {
+  it("sweeps all five classifications through overlap and generates a case for each", () => {
+    const verdicts = KINDS.map((classification) =>
+      admitSuccessorOverlap(overlapRequest("PROVEN_RELEASED", classification)),
+    );
+    expect(verdicts).toHaveLength(5);
+    expect(verdicts.length).toBeGreaterThan(0);
+    expect(verdicts.map((verdict) => verdict.kind)).toEqual([
+      "BLOCKED",
+      "ADMITTED",
+      "BLOCKED",
+      "BLOCKED",
+      "BLOCKED",
+    ]);
+  });
+
+  it("sweeps all five classifications through resume and generates a case for each", () => {
+    const verdicts = KINDS.map((classification) =>
+      admitResume(resumeRequest("PROVEN_RELEASED", HANDOFF, classification)),
+    );
+    expect(verdicts).toHaveLength(5);
+    expect(verdicts.length).toBeGreaterThan(0);
+    expect(verdicts.map((verdict) => verdict.kind)).toEqual([
+      "REFUSED",
+      "ADMITTED",
+      "REFUSED",
+      "REFUSED",
+      "REFUSED",
+    ]);
+  });
+
+  it.each(NON_RESUMABLE)("blocks overlap for %s with the exact code and layer", (classification) => {
+    const verdict = admitSuccessorOverlap(overlapRequest("PROVEN_RELEASED", classification));
+    expect(verdict.kind).toBe("BLOCKED");
+    if (verdict.kind !== "BLOCKED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_CLASSIFICATION_NOT_RESUMABLE");
+    expect(verdict.failure.layer).toBe("SAFE_BOUNDARY");
+  });
+
+  it.each(NON_RESUMABLE)("refuses resume for %s with the exact code and layer", (classification) => {
+    const verdict = admitResume(resumeRequest("PROVEN_RELEASED", HANDOFF, classification));
+    expect(verdict.kind).toBe("REFUSED");
+    if (verdict.kind !== "REFUSED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_CLASSIFICATION_NOT_RESUMABLE");
+    expect(verdict.failure.layer).toBe("SAFE_BOUNDARY");
+  });
+
+  /**
+   * Guard ORDER, not merely guard presence. QUARANTINED carries held resources,
+   * so an implementation that consults the release lattice first answers ACTIVE
+   * and the classification test above stays green while the classification guard
+   * is gone entirely. Pinning the code here is what makes that mutant die.
+   */
+  it("answers the classification before the release lattice for QUARANTINED + ACTIVE", () => {
+    const verdict = admitSuccessorOverlap(overlapRequest("ACTIVE", "QUARANTINED"));
+    expect(verdict.kind).toBe("BLOCKED");
+    if (verdict.kind !== "BLOCKED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_CLASSIFICATION_NOT_RESUMABLE");
+    expect(verdict.failure.code).not.toBe("RECOVERY_PREDECESSOR_ACTIVE");
+  });
+
+  it("answers the classification before the handoff check for SUSPECT + no handoff", () => {
+    const verdict = admitResume(resumeRequest("PROVEN_RELEASED", null, "SUSPECT"));
+    expect(verdict.kind).toBe("REFUSED");
+    if (verdict.kind !== "REFUSED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_CLASSIFICATION_NOT_RESUMABLE");
+    expect(verdict.failure.code).not.toBe("RECOVERY_RESUME_BOUNDARY_UNPROVEN");
+  });
+
+  /**
+   * Fail closed. A request that omits the classification must be malformed, not
+   * defaulted to the resumable member — a default would reinstate exactly the
+   * permissive shape this migration removes.
+   */
+  it("refuses an overlap request omitting the classification entirely", () => {
+    const verdict = admitSuccessorOverlap({
+      predecessorRef: "predecessor-1",
+      successorRef: "successor-1",
+      predecessorRelease: "PROVEN_RELEASED",
+    });
+    expect(verdict.kind).toBe("BLOCKED");
+    if (verdict.kind !== "BLOCKED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_BOUNDARY_MALFORMED");
+    expect(verdict.failure.layer).toBe("SAFE_BOUNDARY");
+  });
+
+  it("refuses a resume request omitting the classification entirely", () => {
+    const verdict = admitResume({
+      resumeRef: "resume-1",
+      predecessorRelease: "PROVEN_RELEASED",
+      safeHandoff: HANDOFF,
+    });
+    expect(verdict.kind).toBe("REFUSED");
+    if (verdict.kind !== "REFUSED") return;
+    expect(verdict.failure.code).toBe("RECOVERY_BOUNDARY_MALFORMED");
+    expect(verdict.failure.layer).toBe("SAFE_BOUNDARY");
+  });
+
+  it.each([null, "RESUMED", "absent", 1, {}] as const)(
+    "refuses a classification outside the closed vocabulary: %s",
+    (classification) => {
+      const overlap = admitSuccessorOverlap(overlapRequest("PROVEN_RELEASED", classification));
+      const resume = admitResume(resumeRequest("PROVEN_RELEASED", HANDOFF, classification));
+      expect(overlap.kind === "BLOCKED" ? overlap.failure.code : null).toBe(
+        "RECOVERY_BOUNDARY_MALFORMED",
+      );
+      expect(resume.kind === "REFUSED" ? resume.failure.code : null).toBe(
+        "RECOVERY_BOUNDARY_MALFORMED",
+      );
+    },
+  );
+
+  it("still applies the release lattice once the classification is resumable", () => {
+    const active = admitSuccessorOverlap(overlapRequest("ACTIVE", "ABSENT"));
+    const unknown = admitSuccessorOverlap(overlapRequest("UNKNOWN", "ABSENT"));
+    const noHandoff = admitResume(resumeRequest("PROVEN_RELEASED", null, "ABSENT"));
+    expect([
+      active.kind === "BLOCKED" ? active.failure.code : null,
+      unknown.kind === "BLOCKED" ? unknown.failure.code : null,
+      noHandoff.kind === "REFUSED" ? noHandoff.failure.code : null,
+    ]).toEqual([
+      "RECOVERY_PREDECESSOR_ACTIVE",
+      "RECOVERY_PREDECESSOR_RELEASE_UNKNOWN",
+      "RECOVERY_RESUME_BOUNDARY_UNPROVEN",
+    ]);
+  });
+});
+
+/**
+ * DoD 1's other half: the evidence a continuation crosses on is DERIVED from the
+ * durable record set, never asserted by whoever is asking.
+ *
+ * These drive `classifyCrash` from this suite rather than the classification
+ * suite because `crash-classification.test.ts` is outside this task's owned
+ * paths; the behaviour under test is this migration's, so its assertions ship
+ * with it.
+ */
+describe("continuation evidence derivation", () => {
+  const evidenceOf = (classification: CrashClassification): unknown =>
+    classification.kind === "REFUSED" ? classification.failure.code : classification.continuationEvidence;
+
+  it("takes the release and handoff from the durable records verbatim", () => {
+    const classified = classifyCrash(
+      situation({
+        records: records({ ...SETTLED, safeHandoff: "handoff-from-disk" }),
+        observation: {
+          effectRef: "intent-1", processExit: { kind: "EXITED", code: 0 },
+          effectStatus: "PROVEN_ABSENT", observedEpoch: 7,
+          presenceLooksLive: false, journalDigest: null, reviewPackageDigest: null,
+        },
+      }),
+    );
+    expect(classified.kind).toBe("ABSENT");
+    expect(evidenceOf(classified)).toEqual({
+      predecessorRelease: "PROVEN_RELEASED",
+      safeHandoff: "handoff-from-disk",
+    });
+  });
+
+  /** Quarantine is the case that matters: resources are still held, so the
+   * derived release must read ACTIVE. This is precisely the classification the
+   * old contract admitted on a caller-supplied PROVEN_RELEASED. */
+  const HELD_RECORDS = { registration: null, lockState: "RELEASED" } as const;
+
+  it("reports a still-held predecessor as ACTIVE rather than optimistically released", () => {
+    const classified = classifyCrash(situation({ records: records(HELD_RECORDS) }));
+    expect(classified.kind).toBe("QUARANTINED");
+    expect(evidenceOf(classified)).toEqual({ predecessorRelease: "ACTIVE", safeHandoff: null });
+  });
+
+  it("carries evidence on every non-refusing arm and freezes it", () => {
+    const arms = [
+      classifyCrash(situation({ records: records(HELD_RECORDS) })),
+      classifyCrash(situation({ records: records({ ...SETTLED, safeHandoff: "handoff-1" }) })),
+    ];
+    expect(arms.length).toBeGreaterThan(0);
+    const nonRefusing = arms.filter((arm) => arm.kind !== "REFUSED");
+    expect(nonRefusing).toHaveLength(2);
+    for (const arm of nonRefusing) {
+      expect(Object.isFrozen(arm.continuationEvidence)).toBe(true);
+    }
+  });
+
+  /**
+   * The hostile case this migration exists for. A caller appending its own
+   * release/handoff assertions to the situation must be refused by the exact
+   * shape gate, not quietly ignored — being ignored would be safe today and
+   * become authority the moment somebody read the field.
+   */
+  it("refuses a situation carrying caller-asserted release and handoff", () => {
+    const hostile = classifyCrash({
+      records: records({ ...SETTLED, safeHandoff: "handoff-from-disk" }),
+      observation: {
+        effectRef: "intent-1", processExit: { kind: "EXITED", code: 0 },
+        effectStatus: "PROVEN_ABSENT", observedEpoch: 7,
+        presenceLooksLive: false, journalDigest: null, reviewPackageDigest: null,
+      },
+      claimedAuthority: null,
+      predecessorRelease: "PROVEN_RELEASED",
+      safeHandoff: "handoff-the-caller-wants",
+    });
+    expect(hostile.kind).toBe("REFUSED");
+    if (hostile.kind !== "REFUSED") return;
+    expect(hostile.failure.code).toBe("RECOVERY_OBSERVATION_MALFORMED");
+    expect(hostile.failure.layer).toBe("CLASSIFICATION");
+  });
+
+  it("never lets a caller-asserted release reach the derived evidence", () => {
+    const classified = classifyCrash(
+      situation({ records: records({ ...HELD_RECORDS, resourceFact: "ACTIVE", safeHandoff: null }) }),
+    );
+    expect(evidenceOf(classified)).not.toEqual({
+      predecessorRelease: "PROVEN_RELEASED",
+      safeHandoff: "handoff-the-caller-wants",
+    });
+    expect(evidenceOf(classified)).toEqual({ predecessorRelease: "ACTIVE", safeHandoff: null });
   });
 });
 

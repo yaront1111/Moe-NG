@@ -18,12 +18,12 @@
     "This is an internal process boundary. Do not add daemon/store authority or claim durable activation-grant consumption."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 13:02Z. Dependency-checked: no dependency clause in its description.\n\nWHY PROMOTABLE NOW: architect-8c9073cd authored this at 12:51Z when they blocked task-acf73253 (Windows Claude launch wrapper) as unsafe and oversized. Their measurement: existing Claude observation and supervisor modules perform zero physical resolution, pinning, spawn, OS locking or tree cleanup; Node core has no per-run Job Object API; and taskkill cannot prove descendants dead after the root exits. This task is the native Windows process-control half of that split, and the human already confirmed the Job Object route.\n\nWHY IT MATTERS: it is one of two prerequisites gating task-acf73253, which is itself the physical Claude execution boundary the Foundation canary needs. Nothing substitutes for it — a launcher that cannot prove its process tree is dead cannot honestly claim cancellation or failure cleanup.\n\nProduction capability task. Builds a subject; certifies nothing.\n\nFOR THE ARCHITECT: re-measure before naming symbols. Do not trust this reason or the description — several descriptions on this board have claimed dependencies that were absent, and one claimed a gap that was already closed. If you find an unbuilt dependency I missed, report blocked and I return it to BACKLOG without argument; promoting it was my call.",
   "createdBy": "WORKER",
   "parentTaskId": "task-acf73253a204435aba590894799814f2",
   "priority": "CRITICAL",
@@ -38,5 +38,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:51:07.418Z",
-  "updatedAt": "2026-08-09T12:51:43.128Z"
+  "updatedAt": "2026-08-09T14:39:29.148Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:11:25.569Z"
+  },
+  "contextFetchedBy": [
+    "architect-f39f0c46"
+  ],
+  "blockedReason": "Deep exploration found the original task is three separable security boundaries and cannot honestly fit the <=60-minute/<=5-file planning bar: (1) native Win32 Job/process lifecycle and fault-unwind core, (2) crash-contained Node/Rust broker protocol and inherited-stdio proof, and (3) the claimed task's hostile-input/fail-closed TypeScript facade plus final Windows parent+grandchild smoke. An unsplit implementation is 9-12 files and would either concentrate >400 lines in a native/TS source or omit per-operation cleanup tests. SPIDR interface split created CRITICAL prerequisites task-ea76e0cf9bdb4f1888aaa9e49323c782 (Win32 Job lifecycle core) and task-af3d7bc8af2146cf92d98557ed0e90c0 (Windows Job broker protocol). Resume and submit the current task's Node facade/final-hardening plan only after both are DONE. The stronger native sequence is crash-atomic PROC_THREAD_ATTRIBUTE_JOB_LIST membership at CREATE_SUSPENDED, then explicit AssignProcessToJobObject confirmation, membership/identity query, and only then ResumeThread; this satisfies the task's separate assign arm without an orphaned suspended-child crash window.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:36:15.184Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Deep audit completed; chose Rust Job lifecycle + six-pipe broker architecture, created prerequisite tasks task-ea76e0cf9bdb4f1888aaa9e49323c782 and task-af3d7bc8af2146cf92d98557ed0e90c0, blocked the parent, and recorded Serena handoff/decision memories.",
+      "whatRemains": "Promote, plan, and complete both prerequisites in order; then unblock this task and plan only the internal TypeScript validation/facade plus final Windows parent+detached-grandchild hardening gate.",
+      "pitfalls": "Ignore archived superseded broker task task-644f69d86c294ae1a77cc83a99fd0c5b. Do not substitute taskkill/Koffi/PID enumeration. Preserve atomic JOB_LIST membership, explicit Assign confirmation, membership/identity proof, ResumeThread==1, and ActiveProcesses==0 before controlled success.",
+      "openQuestions": "None for the selected support floor: Windows 10/Server 2016+, Node 24.16, rustc 1.96, windows-sys 0.61.2.",
+      "releasedAt": "2026-08-09T14:39:29.147Z",
+      "releasedBy": "architect-f39f0c46",
+      "reason": "Explicit architect handoff after prerequisite SPIDR split; release capacity to plan another task while this ticket remains blocked."
+    }
+  ]
 }

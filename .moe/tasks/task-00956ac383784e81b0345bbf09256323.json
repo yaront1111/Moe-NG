@@ -1,0 +1,42 @@
+{
+  "id": "task-00956ac383784e81b0345bbf09256323",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Recovery-inventory contract and coverage protocol",
+  "description": "Objective: land the cursor/incarnation-bound recovery-window inventory CONTRACT and COVERAGE PROTOCOL, plus the aggregate API that composes per-class enumerator ports. This is slice 1 of 3 from task-0325dcf7ee744123b40cf583230c7b6a, split by architect-d46fcb95 on human direction 2026-08-09 because the parent needed 12+ files before a single test against a 10-file hard cap.\n\nDeliverable: packages/runner/src/recovery-inventory/recovery-inventory-contract.ts (+ .js bridge) and recovery-inventory.ts (+ .js bridge), focused tests, and the @moe/runner root seam.\n\nMEASURED at 2026-08-09: `find packages apps -type d -name recovery-inventory` returns nothing and no RECOVERY_INVENTORY_* / INVENTORY_ADAPTER symbol exists in any package src. The gap is real.\n\n*** STRUCTURAL FACT THE PARENT DESCRIPTION DOES NOT STATE, measured from packages/runner/package.json: @moe/runner depends on @moe/contracts ONLY. The cursor/generation identity landed in @moe/store (task-5606947a9d7d4f228dc63e6ce4dea69a) and the recovery incarnation landed in apps/daemon (task-684e6972c8c1418f8996ea3edd61f00c). Neither is importable from this package and adding either dependency would invert the package graph. Both therefore enter as CALLER-SUPPLIED OPAQUE REFS that this contract validates for shape and binds by digest, never interprets. ***\n\nScope: the frozen configured class set; the INVENTORY_ADAPTER layer and the RECOVERY_INVENTORY_COVERAGE_UNKNOWN vocabulary; the canonical item shape (class, stable external identity, observed disposition facts, source proof digest); the COMPLETE-or-UNKNOWN coverage proof per class; deterministic ordering and digest across path separators and locale; duplicate-identity and out-of-project/out-of-window refusal; and the aggregate collector that takes a registry of per-class enumerator ports and returns one coverage proof per CONFIGURED class. With no adapter registered every configured class answers UNKNOWN, which is the correct fail-closed answer and is what this slice ships.\n\nNOT in scope: any adapter implementation (slices 2 and 3), scheduler resource rows, adopt/quarantine decisions, project embargo, or tests/fault.\n\nOwned paths: packages/runner/src/recovery-inventory/** and the minimal @moe/runner root export/surface-test wiring. This slice is the ONLY one of the three that touches index.ts and index-surface.test.ts; slices 2 and 3 register through the port registry instead.\n\nWARNING measured by the architect: packages/runner/src/index-surface.test.ts pins the EXACT root namespace against a hand-written EXPECTED_EXPORTS list and a hard-coded `expect(EXPECTED_EXPORTS.length).toBe(116)`. It was ALREADY red on 2026-08-09 from an unrelated in-flight task's exports. Capture the merge-base baseline before editing, transcribe only your own names, and attribute the residual red per the path-attributed-baseline rail.\n\nConsumers (global rail Clause 1): the two adapter slices of this split, and daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa.\n\nVerification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+  "definitionOfDone": [
+    "The aggregate API accepts an exact project tag, an opaque backup cursor/generation ref, an opaque recovery-incarnation ref, recovery-window bounds, and a frozen configured class set, validating each opaque ref for shape and binding it by digest without interpreting it; a malformed project tag or ref refuses with a stable code at layer INVENTORY_ADAPTER before any enumerator runs.",
+    "It returns canonical items plus exactly one explicit COMPLETE or UNKNOWN coverage proof per CONFIGURED class - never per returned class - so a class with no registered enumerator answers UNKNOWN rather than vanishing from the report.",
+    "An unavailable enumerator, an unsupported provider capability, a truncated or over-limit result, and a missing negative proof each return RECOVERY_INVENTORY_COVERAGE_UNKNOWN at layer INVENTORY_ADAPTER with truth UNKNOWN; partial items never upgrade coverage and no path raises an UNKNOWN back to COMPLETE.",
+    "Enumeration order and the inventory digest are deterministic across path separators and locale; duplicate external identities and entries outside the exact project or window refuse with their own stable codes rather than merging or being dropped.",
+    "Tests deep-equal the frozen class set and code vocabulary against hand-written literals, assert every configured class generated at least one coverage case with a non-zero asserted count, pin the exact code and refusing layer on every refusal, and include a mutation drill proving the coverage handling is reddenable.",
+    "The @moe/runner root exposes the contract and aggregate with its type closure, index-surface.test.ts's hand-written list and count literal are updated by hand, and fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0 with residual red attributed to foreign paths against a recorded baseline."
+  ],
+  "taskRails": [
+    "A configured class requires complete enumeration or a verifiable negative proof; an empty list, a quiet process, an absent optional probe, or a mock response is never COMPLETE by itself.",
+    "The backup cursor/generation ref and the recovery-incarnation ref are OPAQUE. @moe/runner cannot import @moe/store or @moe/daemon and must not gain either dependency; validate shape, bind by digest, never interpret or re-derive.",
+    "Ship no adapter in this slice. Every enumerator is an injected port; the production adapters land in the two sibling slices.",
+    "Tests assert the exact stable reason code and the INVENTORY_ADAPTER layer, and assert non-zero generated class coverage.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-5b5302ee",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoting the contract slice created by the completed SPIDR breakdown of parent task-0325dcf7ee744123b40cf583230c7b6a. It has no hard dependency, exclusively owns the recovery-inventory contract/root seam, is file-disjoint from task-f6c9011b24634de7b22ad10a26579883, and the prior architect handoff explicitly marks both ready to plan in parallel.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
+  "priority": "CRITICAL",
+  "order": 17,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:19:04.245Z",
+  "updatedAt": "2026-08-09T14:29:57.715Z",
+  "contextFetchedBy": [
+    "architect-5b5302ee"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:29:57.715Z"
+  }
+}

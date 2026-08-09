@@ -3,6 +3,11 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as daemon from "@moe/daemon";
 import type {
+  AuthenticatedPrincipal,
+  AuthenticationResult,
+  Authenticator,
+  AuthVerdict,
+  BoundaryCodesAreRuntimeCodes,
   BootstrapCommandKind,
   BootstrapDecodeRefusal,
   BootstrapDecodeResult,
@@ -14,9 +19,22 @@ import type {
   BootstrapRequestRefused,
   ClaimLeg,
   ClaimSuccessors,
+  CommandAdapterDeps,
+  CommandDecisionPort,
   CommandHandler,
+  CommandHandlerInput,
+  CommandRegistry,
+  CommandRegistryEntry,
+  ControlRoomListener,
+  DaemonDependencyProvider,
+  DaemonEntryRefusalCode,
+  DaemonEntryRefused,
+  DaemonStartOptions,
+  DaemonStartResult,
   DeltaClassification,
   DeltaNodeClassification,
+  DecisionKey,
+  DecisionPortResult,
   DoctorAuthorityStale,
   DoctorCommandKind,
   DoctorCommandResult,
@@ -27,6 +45,7 @@ import type {
   DoctorRequestInvalid,
   DoctorVersionReportAbsent,
   DoctorVersionsReported,
+  DurableDecision,
   DurableAggregate,
   DurableLedger,
   EventGapFrame,
@@ -45,6 +64,17 @@ import type {
   GraphPreviewRequestResult,
   HandlerContext,
   HandlerTable,
+  HttpAccepted,
+  HttpBoundaryErrorCode,
+  HttpCommandHandler,
+  HttpCommandRequest,
+  HttpCommandResult,
+  HttpPortRefused,
+  HttpRefusalStage,
+  HttpRefused,
+  ListenerRefusalCode,
+  ListenerRefused,
+  PortRefusal,
   PrerequisiteRefusalCode,
   RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,
@@ -79,6 +109,10 @@ import type {
   ServiceOutcome,
   ServiceRefused,
   ServiceRefusedBy,
+  ShutdownResult,
+  StartedDaemon,
+  StartListenerOptions,
+  StartListenerResult,
   StreamCursor,
   StreamEvent,
   StreamGap,
@@ -93,6 +127,7 @@ import type {
   SubscriptionPort,
   WireCursor,
   WireEvent,
+  WireProtocolVersion,
   WireSnapshot,
   WorkApplied,
   WorkAuthorityLabel,
@@ -129,7 +164,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EVENT_STREAM_LAYER", "string"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
   ["GOAL_HANDLERS", "object"],
+  ["HTTP_BOUNDARY_ERROR_CODES", "object"],
+  ["HTTP_INPUT_BOUNDS", "object"],
+  ["HTTP_REFUSAL_STAGES", "object"],
   ["LISTENER_REFUSAL_CODES", "object"],
+  ["MAX_COMMAND_PAYLOAD_FIELDS", "number"],
   ["MAX_EVENT_PAGE_SIZE", "number"],
   ["PLANNING_HANDLERS", "object"],
   ["PREREQUISITE_REFUSAL_CODES", "object"],
@@ -138,18 +177,21 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["REVIEW_HANDLERS", "object"],
   ["SERVICE_REFUSED_BY", "object"],
   ["SLOT_CEILING_LEG", "string"],
+  ["WIRE_PROTOCOL_VERSION", "string"],
   ["WORK_AUTHORITY_LABELS", "object"],
   ["WORK_COMMANDS", "object"],
   ["WORK_ERROR_CODES", "object"],
   ["WORK_LAYERS", "object"],
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
+  ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
   ["decodeBootstrapRequestBytes", "function"],
   ["evaluateDoctorCommandBytes", "function"],
   ["evaluateGraphPreviewRequestBytes", "function"],
+  ["handleCommandRequest", "function"],
   ["isDependencyProvider", "function"],
   ["parseWorkRequest", "function"],
   ["readEventPage", "function"],
@@ -182,7 +224,7 @@ const surface: Readonly<Record<string, unknown>> = daemon;
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(44);
+    expect(EXPECTED_EXPORTS.length).toBe(51);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -212,6 +254,53 @@ describe("daemon package root", () => {
 });
 
 describe("daemon package-root type closure", () => {
+  it("names the complete HTTP transport and entrypoint closure", () => {
+    expectTypeOf<BoundaryCodesAreRuntimeCodes>().toEqualTypeOf<true>();
+    expectTypeOf<(typeof daemon.HTTP_BOUNDARY_ERROR_CODES)[number]>()
+      .toEqualTypeOf<HttpBoundaryErrorCode>();
+    expectTypeOf<(typeof daemon.HTTP_REFUSAL_STAGES)[number]>()
+      .toEqualTypeOf<HttpRefusalStage>();
+    expectTypeOf<typeof daemon.WIRE_PROTOCOL_VERSION>().toEqualTypeOf<WireProtocolVersion>();
+    expectTypeOf<AuthenticationResult>().toEqualTypeOf<
+      | { readonly principal: AuthenticatedPrincipal; readonly verdict: "AUTHENTICATED" }
+      | { readonly verdict: "UNAUTHENTICATED" }
+    >();
+    expectTypeOf<AuthVerdict>().toEqualTypeOf<
+      "AUTHENTICATED" | "UNAUTHENTICATED" | "UNAUTHORIZED"
+    >();
+    expectTypeOf<CommandAdapterDeps["authenticator"]>().toEqualTypeOf<Authenticator>();
+    expectTypeOf<CommandAdapterDeps["decisions"]>().toEqualTypeOf<CommandDecisionPort>();
+    expectTypeOf<CommandAdapterDeps["registry"]>().toEqualTypeOf<CommandRegistry>();
+    expectTypeOf<CommandRegistryEntry["handler"]>().toEqualTypeOf<HttpCommandHandler>();
+    expectTypeOf<Parameters<HttpCommandHandler>>().toEqualTypeOf<[input: CommandHandlerInput]>();
+    expectTypeOf<ReturnType<HttpCommandHandler>>().toEqualTypeOf<DurableDecision>();
+    expectTypeOf<Parameters<CommandDecisionPort["decide"]>[0]>().toEqualTypeOf<DecisionKey>();
+    expectTypeOf<ReturnType<CommandDecisionPort["decide"]>>().toEqualTypeOf<DecisionPortResult>();
+    expectTypeOf<Extract<DecisionPortResult, { readonly outcome: "REFUSED" }>["refusal"]>()
+      .toEqualTypeOf<PortRefusal>();
+    expectTypeOf<HttpCommandResult>().toEqualTypeOf<HttpAccepted | HttpPortRefused | HttpRefused>();
+    expectTypeOf<Parameters<typeof daemon.handleCommandRequest>>()
+      .toEqualTypeOf<[deps: CommandAdapterDeps, request: HttpCommandRequest]>();
+    expectTypeOf<ReturnType<typeof daemon.handleCommandRequest>>().toEqualTypeOf<HttpCommandResult>();
+
+    expectTypeOf<(typeof daemon.LISTENER_REFUSAL_CODES)[number]>()
+      .toEqualTypeOf<ListenerRefusalCode>();
+    expectTypeOf<StartListenerResult>().toEqualTypeOf<ControlRoomListener | ListenerRefused>();
+    expectTypeOf<Parameters<typeof daemon.startControlRoomListener>>()
+      .toEqualTypeOf<[options: StartListenerOptions]>();
+    expectTypeOf<ReturnType<typeof daemon.startControlRoomListener>>()
+      .toEqualTypeOf<Promise<StartListenerResult>>();
+    expectTypeOf<(typeof daemon.DAEMON_ENTRY_REFUSAL_CODES)[number]>()
+      .toEqualTypeOf<DaemonEntryRefusalCode>();
+    expectTypeOf<DaemonStartResult>()
+      .toEqualTypeOf<DaemonEntryRefused | ListenerRefused | StartedDaemon>();
+    expectTypeOf<DaemonStartOptions["dependencies"]>()
+      .toEqualTypeOf<DaemonDependencyProvider | null | undefined>();
+    expectTypeOf<ReturnType<StartedDaemon["shutdown"]>>().toEqualTypeOf<Promise<ShutdownResult>>();
+    expectTypeOf<Parameters<typeof daemon.startDaemon>>()
+      .toEqualTypeOf<[options: DaemonStartOptions]>();
+  });
+
   it("names every bootstrap decoder and service branch", () => {
     expectTypeOf<(typeof daemon.BOOTSTRAP_COMMAND_KINDS)[number]>()
       .toEqualTypeOf<BootstrapCommandKind>();

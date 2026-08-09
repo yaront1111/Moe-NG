@@ -154,7 +154,7 @@ export async function startControlRoomListener(
       void serve(request, response, options, authorityOf(host, port), originOf(host, port)).catch(() => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket.
-        if (!response.headersSent) reply(response, 500, { layer: CONTROL_ROOM_LISTENER_LAYER });
+        if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
         else response.end();
       });
     });

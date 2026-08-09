@@ -17,7 +17,7 @@
     "Curate explicit named exports in the area module; package-root runtime set equality must prevent fixtures or incidental helpers from leaking."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,7 +26,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 45,
+  "order": 53,
   "comments": [
     {
       "id": "comment-877c871bf17446dc9a65753bd4301dd1",
@@ -37,5 +37,27 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-09T12:29:45.969Z"
+  "updatedAt": "2026-08-09T14:35:50.924Z",
+  "contextFetchedBy": [
+    "architect-f39f0c46",
+    "architect-cb476f76"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:24:55.279Z"
+  },
+  "blockedReason": "BLOCKED: zero of five hard dependencies are DONE; four of six surface families are absent on disk. Measured 2026-08-09. Full detail in #general.\n\nDEPENDENCIES: task-5855a9c6 recovery binding = WORKING (in flight); task-6cbff010 attempt dispatch = BLOCKED; task-44d4873e verification dispatch = BLOCKED; task-8f9305b9 goal closure = BLOCKED; task-4afcb064 coordination adapter = PLANNING. Three are themselves BLOCKED.\n\nGAP, SYMBOL BY SYMBOL (six families DoD 1 requires at the root):\n1. REVIEW = PRESENT. runReviewCommand at review/review-services.ts:177, readReviewLedger at review/review-read-model.ts:153; index.ts exports REVIEW_HANDLERS (:172) but not the executables. Only publishable family.\n2. RECOVERY continuation = PRESENT BUT IN FLIGHT. recovery/continuation-service.ts exists; task-5855a9c6 is editing those exact files now. Publishing over uncommitted foreign edits in the shared worktree (epic rail 2) collides.\n3. ATTEMPT dispatch = ABSENT. work/ holds only claim, ingress, kernel, lease, lifecycle, slot-ceiling.\n4. VERIFICATION receipts = ABSENT under apps/daemon/src.\n5. REVIEW-QUALIFIED CLOSURE = ABSENT. goals/ holds only goal-services.ts.\n6. COORDINATION ops = ABSENT, 3 links deep. `ls apps/daemon/src/coordination/` -> No such file or directory. Chain: task-4afcb064 -> task-04e43674 -> task-21713cf1 -> task-b4f12e63 (planned this session, unbuilt).\n\nNO NARROWED PLAN, per Clause 2: an absent capability requires prerequisites measured symbol by symbol, never a narrowed DoD. Review-only satisfies no DoD item -- item 2 demands exact root namespace SET EQUALITY, unwritable four families short. Not creating prerequisite tasks either: all five exist.\n\nDESCRIPTION DEFECT, FIX BEFORE RE-PROMOTING: it claims index.ts \"is already 249 lines\". `grep -c ''` measures 317 -- 67 past target, so \"extract rather than grow past target\" is a wrong premise; index.ts must itself be split. task-8470a860 is in flight adding seven more names to it.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:27:31.706Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Full dependency and gap measurement, recorded on the task's BLOCKED reason and in #general (msg-fe5e73d8f8f0466f8897e429c7103bce). Confirmed zero of five hard dependencies are DONE (task-5855a9c6 WORKING, task-6cbff010/task-44d4873e/task-8f9305b9 BLOCKED, task-4afcb064 PLANNING) and measured all six required surface families on disk: review PRESENT but unpublished, recovery continuation PRESENT but mid-flight, attempt dispatch / verification receipts / review-qualified closure / coordination ops ABSENT. Also measured the description defect: index.ts is 317 lines, not the 249 it claims.",
+      "whatRemains": "Everything. No plan was submitted and none should be until all five dependencies reach DONE. The task additionally needs re-scoping, not just re-promotion, because its stated premise (extract foundation-surface.ts so index.ts does not grow past the 250 target) is false: index.ts is already 67 lines past target, so splitting index.ts itself is part of the real job.",
+      "pitfalls": "Do not narrow the DoD to publish only the review family. DoD item 2 requires exact root namespace SET EQUALITY, which is unwritable while four of six families are absent, so a review-only plan satisfies none of the DoD rather than part of it; project rail Clause 2 forbids the narrowing independently. Do not create prerequisite tasks either -- all five already exist on the board. Sequencing hazard: task-8470a860 is in flight against apps/daemon/src/index.ts and index-surface.test.ts, two of this task's five owned paths, and task-5855a9c6 is in flight against recovery/continuation-service.ts; re-promoting before both land puts three agents in the same files in one shared working directory.",
+      "openQuestions": "Why are task-6cbff010 (attempt dispatch), task-44d4873e (verification receipts) and task-8f9305b9 (review-qualified closure) all sitting in BLOCKED? I measured that they are blocked but did not diagnose why. Three independent investigations are needed before this ingress task can move at all.",
+      "releasedAt": "2026-08-09T14:35:50.924Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Planning complete in the only sense available: the task is not plannable yet and is now BLOCKED with a full symbol-by-symbol measurement. Releasing so the architect pool is not held by a task that cannot move."
+    }
+  ]
 }

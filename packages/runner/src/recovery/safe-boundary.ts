@@ -11,9 +11,12 @@ import { exactRecord, isRef } from "../supervisor/effect-shape.js";
 import {
   carriedFailure,
   isPredecessorRelease,
+  isRecoveryOutcomeKind,
+  isResumableClassification,
   recoveryFailure,
   type PredecessorRelease,
   type RecoveryFailure,
+  type RecoveryOutcomeKind,
 } from "./recovery-contract.js";
 
 /**
@@ -51,23 +54,42 @@ export type DrainAdvance =
   | { readonly kind: "ADVANCED"; readonly ok: true; readonly disposition: DrainDisposition }
   | { readonly kind: "REFUSED"; readonly failure: RecoveryFailure };
 
-const OVERLAP_KEYS = ["predecessorRef", "successorRef", "predecessorRelease"] as const;
-const RESUME_KEYS = ["resumeRef", "predecessorRelease", "safeHandoff"] as const;
+const OVERLAP_KEYS = ["predecessorRef", "successorRef", "predecessorRelease", "classification"] as const;
+const RESUME_KEYS = ["resumeRef", "predecessorRelease", "safeHandoff", "classification"] as const;
 
 interface OverlapRequest {
   readonly predecessorRef: string;
   readonly successorRef: string;
   readonly predecessorRelease: PredecessorRelease;
+  readonly classification: RecoveryOutcomeKind;
 }
 
 interface ResumeRequest {
   readonly resumeRef: string;
   readonly predecessorRelease: PredecessorRelease;
   readonly safeHandoff: string | null;
+  readonly classification: RecoveryOutcomeKind;
 }
 
 function malformed(message: string): RecoveryFailure {
   return recoveryFailure("RECOVERY_BOUNDARY_MALFORMED", "SAFE_BOUNDARY", message);
+}
+
+/**
+ * The classification gate, consulted BEFORE the release lattice by both
+ * admissions. Order is security-significant: QUARANTINED is returned exactly
+ * when resources are still held, so its release reads ACTIVE and a lattice-first
+ * implementation refuses under `RECOVERY_PREDECESSOR_ACTIVE` — leaving a test
+ * that asserts only "refused" green with this gate deleted outright. Returns the
+ * refusal or null so neither caller can forget to check it.
+ */
+function classificationRefusal(kind: RecoveryOutcomeKind): RecoveryFailure | null {
+  if (isResumableClassification(kind)) return null;
+  return recoveryFailure(
+    "RECOVERY_CLASSIFICATION_NOT_RESUMABLE",
+    "SAFE_BOUNDARY",
+    `a ${kind} crash classification is outside the closed resumable set`,
+  );
 }
 
 function parseOverlap(value: unknown): OverlapRequest | null {
@@ -75,6 +97,7 @@ function parseOverlap(value: unknown): OverlapRequest | null {
   if (parsed === null) return null;
   if (!isRef(parsed["predecessorRef"]) || !isRef(parsed["successorRef"])) return null;
   if (!isPredecessorRelease(parsed["predecessorRelease"])) return null;
+  if (!isRecoveryOutcomeKind(parsed["classification"])) return null;
   return parsed as unknown as OverlapRequest;
 }
 
@@ -84,13 +107,17 @@ function parseResume(value: unknown): ResumeRequest | null {
   if (!isRef(parsed["resumeRef"])) return null;
   if (!isPredecessorRelease(parsed["predecessorRelease"])) return null;
   if (parsed["safeHandoff"] !== null && !isRef(parsed["safeHandoff"])) return null;
+  if (!isRecoveryOutcomeKind(parsed["classification"])) return null;
   return parsed as unknown as ResumeRequest;
 }
 
 /**
- * The rule DoD 1 names, stated once. `PROVEN_RELEASED` is the ONLY admitting
- * value; every other member of the lattice blocks, and a new member added later
- * would block by default rather than fall through to an admission.
+ * Two gates, in this order: the durable classification must be resumable, and
+ * only then is `PROVEN_RELEASED` the ONLY admitting release. Both vocabularies
+ * are closed, so a member added later blocks by default rather than falling
+ * through to an admission. The classification is required — there is no
+ * classification-free shape, because a caller able to omit it could otherwise
+ * cross a boundary using nothing but its own asserted release fact.
  */
 export function admitSuccessorOverlap(requestValue: unknown): OverlapVerdict {
   const request = parseOverlap(requestValue);
@@ -99,6 +126,10 @@ export function admitSuccessorOverlap(requestValue: unknown): OverlapVerdict {
       kind: "BLOCKED" as const,
       failure: malformed("the overlap request does not name a predecessor release the lattice declares"),
     });
+  }
+  const notResumable = classificationRefusal(request.classification);
+  if (notResumable !== null) {
+    return Object.freeze({ kind: "BLOCKED" as const, failure: notResumable });
   }
   if (request.predecessorRelease === "PROVEN_RELEASED") {
     return deepFreeze({
@@ -127,10 +158,10 @@ export function admitSuccessorOverlap(requestValue: unknown): OverlapVerdict {
 }
 
 /**
- * A resume is admissible only across a boundary that is BOTH proven released
- * and accompanied by the exact handoff a successor would pick up. A proven
- * release with no handoff is a boundary nobody can resume across, so it refuses
- * rather than resuming from whatever happens to be on disk.
+ * A resume is admissible only from a resumable classification, across a boundary
+ * that is BOTH proven released and carrying the exact handoff a successor picks
+ * up. A proven release with no handoff is a boundary nobody can resume across,
+ * so it refuses rather than resuming from whatever happens to be on disk.
  */
 export function admitResume(requestValue: unknown): ResumeVerdict {
   const request = parseResume(requestValue);
@@ -139,6 +170,10 @@ export function admitResume(requestValue: unknown): ResumeVerdict {
       kind: "REFUSED" as const,
       failure: malformed("the resume request does not parse"),
     });
+  }
+  const notResumable = classificationRefusal(request.classification);
+  if (notResumable !== null) {
+    return Object.freeze({ kind: "REFUSED" as const, failure: notResumable });
   }
   if (request.predecessorRelease !== "PROVEN_RELEASED" || request.safeHandoff === null) {
     return Object.freeze({

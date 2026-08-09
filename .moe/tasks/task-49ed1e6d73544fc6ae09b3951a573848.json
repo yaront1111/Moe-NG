@@ -17,7 +17,7 @@
     "Only official MCP stdio and Streamable HTTP are permitted; do not add a custom MCP-over-WebSocket protocol."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,7 +26,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 46,
+  "order": 59,
   "comments": [
     {
       "id": "comment-c02b88eb5ca04d3a8d3761228507a5ae",
@@ -37,5 +37,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-09T12:29:46.073Z"
+  "updatedAt": "2026-08-09T14:30:56.254Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:28:11.847Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3"
+  ],
+  "blockedReason": "Two measured production prerequisites prevent a non-speculative host plan. First, the stated hard dependency Foundation daemon ingress surface task-5e43a9e294ef48fdab23817c8c6cfc45 is still PLANNING, and `apps/daemon/src/foundation/foundation-surface.{ts,js}` is absent, so the host cannot name the bounded command/query/session/coordination surface it must compose. Second, @moe/mcp has official stdio and Streamable HTTP implementations on disk, but its only package export is `.` -> `src/index.ts`, and that root exports only stdio. `createHttpMcpAdapter`, `HttpAdapterOptions`, `HttpMcpAdapter`, `HttpDispatchPort`, and `HttpSessionPort` exist only under unexported `src/http/**`; the task rail forbids deep imports and current ownership excludes packages/mcp. A prerequisite/root-surface amendment is required before this host can compile. Stale-disk command also found all three owned host files absent/clean, while foreign WIP already modifies owned `apps/daemon/package.json` and `pnpm-lock.yaml`; preserve it. Resume only after task-5e43 is DONE and the HTTP MCP surface is published from @moe/mcp root (with its root/runtime test), then re-probe both public package namespaces. Do not inject fake dispatch/session authority or deep-import.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:29:55.631Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified official stdio/HTTP MCP implementations on disk, proved HTTP is not exported from @moe/mcp root, proved Foundation daemon ingress and owned host files are absent, reported the task BLOCKED, and wrote Serena handoff/gotcha memories.",
+      "whatRemains": "Land task-5e43a9e294ef48fdab23817c8c6cfc45 and publish the existing Streamable HTTP adapter/type closure from @moe/mcp root; then re-probe and plan this host.",
+      "pitfalls": "No deep imports, fake dispatch/session authority, custom WebSocket protocol, or overwriting foreign apps/daemon/package.json and pnpm-lock.yaml WIP.",
+      "openQuestions": "A governor/human must create or amend ownership for the @moe/mcp root-surface prerequisite; moe-epic-breakdown skill was unavailable, so this architect did not invoke create_task.",
+      "releasedAt": "2026-08-09T14:30:56.253Z",
+      "releasedBy": "architect-db2146e3",
+      "reason": "Explicit planning handoff after measuring two hard public-surface dependencies and reporting BLOCKED; release architect capacity."
+    }
+  ]
 }

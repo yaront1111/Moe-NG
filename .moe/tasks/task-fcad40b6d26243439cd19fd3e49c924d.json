@@ -1,0 +1,62 @@
+{
+  "id": "task-fcad40b6d26243439cd19fd3e49c924d",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Planning expansion contract binding",
+  "description": "Objective: extend the authoritative PlanningRun command/state/event schema with exact expansion-hold and proposal-base bindings before behavior is enabled. Depends on task-7f089e11daea44e9a483197ff139d725. Deliverable: immutable EXPANSION-specific fields are representable and validation remains exact/fail-closed, while INITIAL bytes and REVISION's unsupported status are preserved. NOT in scope: reducer transitions, scheduler admission, approval, resource/budget preparation, graph activation, or daemon persistence. Owned paths: packages/core/src/planning/planning-command-contract.ts, planning-event-contract.ts, planning-validation.ts, and packages/core/src/expansion/planning-expansion-contract.test.ts. Production consumer: the Planning-run expansion submission child. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "PlanningRun EXPANSION commands/state/events represent the exact active hold generation/ref, parent node/run and worker handoff, proposal-base hash, goal version, graph epoch, source fingerprint, and sealed proposal identity without making those fields legal on INITIAL or REVISION records.",
+    "Validation enforces exact keys, bounded identifiers, canonical hashes, safe versions, matching run kind, and strong evidence truth; missing, extra, malformed, stale-shaped, or cross-kind fields fail closed with no normalized positive default.",
+    "Existing INITIAL command/state/event fixtures remain byte-compatible and REVISION remains representable but unsupported; no schema field grants child, graph, budget, resource, lease, effect, slot, or dispatch authority.",
+    "Focused production-surface tests assert accepted shapes and every invalid/cross-kind case, nonzero generated-case counts, immutability, and a mutation of the production exact-key/kind guard that turns the suite red.",
+    "The exact verification command exits 0, modified production files remain below 400 lines, and the submission child is recorded as the real consumer."
+  ],
+  "taskRails": [
+    "Add fields to the existing PlanningRun contract; do not create a parallel authority schema.",
+    "An expansion hold binding is evidence of planning containment, never approval or activation.",
+    "Preserve the stable INITIAL wire/state surface."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [
+    {
+      "id": "comment-989b85ea60f8406a99a43935fa94d6b1",
+      "author": "architect-8c9073cd",
+      "content": "Dependency gate failed on fresh bytes: task-7f089e11daea44e9a483197ff139d725 is WORKING with 0/7 steps complete, packages/core/src/expansion does not yet exist, and rg finds zero reduceExpansionPlanningHold/ExpansionPlanningHold/EXPANSION_HOLD_* symbols. All four owned paths are clean. Global stale-dependency rail forbids planning this schema against an approved plan or guessed types; reclaim after task-7f089e11 is DONE, its committed paths are clean, and its exact exported binding/state/command types are probeable.",
+      "timestamp": "2026-08-09T14:27:46.901Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:45:24.731Z",
+  "updatedAt": "2026-08-09T14:28:11.350Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:27:05.232Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd",
+    "worker-b6bbb60c"
+  ],
+  "blockedReason": "The declared producer is currently WORKING at 0/7 and its production surface is absent: packages/core/src/expansion does not exist and no ExpansionPlanningHold/reduceExpansionPlanningHold/EXPANSION_HOLD_* symbol is on disk. This task must extend the exact landed hold command/state/event binding; planning now would guess types and risk a parallel authority schema, which its own rail forbids. Reclaim only after the producer is DONE, committed/clean, and its exact public and runtime-reachable surface is probeable.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:27:53.509Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured dependency status and disk; confirmed task-7f089e11 is WORKING 0/7 and its expansion hold surface is wholly absent; verified owned paths clean; commented, reported BLOCKED, and wrote Serena handoff.",
+      "whatRemains": "After task-7f089e11 is DONE and committed, probe its exact exported command/state/event/binding types and then submit this schema plan.",
+      "pitfalls": "Do not plan from the producer's approved plan text, guess type names/fields, or implement a parallel hold schema.",
+      "openQuestions": "None until the producer lands.",
+      "releasedAt": "2026-08-09T14:28:11.349Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit dependency-gate handoff; free architect for another PLANNING task."
+    }
+  ]
+}

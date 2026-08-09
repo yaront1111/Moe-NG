@@ -1,0 +1,33 @@
+{
+  "id": "task-51d05520e44e4b6d9f6b6ebb7cd60612",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Docs truth reconciliation: README status, benchmark-spec hash, sqlite driver decision record",
+  "description": "Objective: close three measured doc-truth gaps (docs audit 2026-08-09). (1) README status paragraph understates the landed foundation: it names only test infra, evidence primitives and the graph kernel, while the repo also has a durable SQLite event store (pnpm verify:store), bounded-JSON input contracts, the control-room truth kernel and the fairness reference; rewrite the status paragraph to match reality at HEAD without claiming design freeze. (2) Benchmark-spec hash divergence: the design doc pins the benchmark spec at SHA-256 F8B84716... (Fable Revision 3) while docs/plans/2026-08-07-fable-fairness-aging-reference.md pins A62B9043...; determine which revision is current and record the resolution in a short docs/plans/ decision note. Do NOT edit the design doc (read-only, outside this repo); if the design-doc side is the stale one, escalate to the human instead. (3) node:sqlite driver: design section 4.1 requires a blocking packaging/fault spike before committing to a driver, but the store was built directly on Node 24 node:sqlite DatabaseSync with no recorded decision; write a retroactive decision record in docs/plans/ capturing the de-facto choice, the evidence in hand (store suite green, 357 tests) and the residual risk (release-candidate API), explicitly awaiting human ratification. NOT in scope: editing the external design doc, code changes. Owned paths: README.md and new files under docs/plans/ only. Verification: content review; pnpm test unaffected.",
+  "definitionOfDone": [
+    "README status paragraph names the actually-landed foundation surfaces at HEAD",
+    "benchmark-spec hash divergence resolved in a decision note or explicitly escalated to the human",
+    "retroactive node:sqlite decision record exists in docs/plans/ marked as awaiting human ratification"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-db2146e3",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 71,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:24:26.891Z",
+  "updatedAt": "2026-08-09T14:39:32.840Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:39:28.895Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3"
+  ]
+}

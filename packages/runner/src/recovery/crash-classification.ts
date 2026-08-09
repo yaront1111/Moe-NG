@@ -16,6 +16,7 @@ import {
   isReviewPackageDigest,
   recoveryFailure,
   CRASH_OBSERVATION_KEYS,
+  type ContinuationEvidence,
   type CrashObservation,
   type RecoveryFailure,
 } from "./recovery-contract.js";
@@ -46,19 +47,27 @@ export type CrashClassification =
       readonly ok: true;
       readonly effectRef: string;
       readonly postState: RestartPostState;
+      readonly continuationEvidence: ContinuationEvidence;
     }
-  | { readonly kind: "ABSENT"; readonly ok: true; readonly effectRef: string }
+  | {
+      readonly kind: "ABSENT";
+      readonly ok: true;
+      readonly effectRef: string;
+      readonly continuationEvidence: ContinuationEvidence;
+    }
   | {
       readonly kind: "SUSPECT";
       readonly ok: true;
       readonly effectRef: string;
       readonly postState: RestartPostState;
+      readonly continuationEvidence: ContinuationEvidence;
     }
   | {
       readonly kind: "QUARANTINED";
       readonly ok: true;
       readonly effectRef: string;
       readonly held: readonly string[];
+      readonly continuationEvidence: ContinuationEvidence;
     }
   | {
       readonly kind: "RECONCILIATION_COMMAND";
@@ -66,6 +75,7 @@ export type CrashClassification =
       readonly effectRef: string;
       readonly command: RuntimeCommandKind;
       readonly detail: string;
+      readonly continuationEvidence: ContinuationEvidence;
     }
   | { readonly kind: "REFUSED"; readonly failure: RecoveryFailure };
 
@@ -138,13 +148,36 @@ function provenAbsent(postState: RestartPostState, exit: ClaudeProcessExit): boo
   return ABSENT_POST_STATES.includes(postState) && exit.kind !== "UNOBSERVED";
 }
 
-function command(effectRef: string, kind: RuntimeCommandKind, detail: string): CrashClassification {
+/**
+ * DoD 3's evidence, derived from the ALREADY PARSED durable record set.
+ *
+ * `parseRestartRecords` has already validated both fields, so this reads the one
+ * parsed set rather than re-reading the caller's raw object: a second parse would
+ * let the evidence come from bytes the reconstruction never accepted. Nothing a
+ * caller writes at the top level of the situation reaches this — the only inputs
+ * are `records.resourceFact` and `records.safeHandoff`, which is what makes the
+ * fact underivable from a continuation request.
+ */
+function continuationEvidenceOf(records: RestartRecords): ContinuationEvidence {
+  return Object.freeze({
+    predecessorRelease: records.resourceFact,
+    safeHandoff: records.safeHandoff,
+  });
+}
+
+function command(
+  effectRef: string,
+  kind: RuntimeCommandKind,
+  detail: string,
+  continuationEvidence: ContinuationEvidence,
+): CrashClassification {
   return deepFreeze({
     kind: "RECONCILIATION_COMMAND" as const,
     ok: true as const,
     effectRef,
     command: kind,
     detail,
+    continuationEvidence,
   });
 }
 
@@ -161,12 +194,17 @@ function fromPostState(
   claimedAuthority: unknown,
 ): CrashClassification {
   const effectRef = observation.effectRef;
+  const continuationEvidence = continuationEvidenceOf(records);
   if (postState === "SUSPECT" || observation.effectStatus === "UNESTABLISHED") {
-    return deepFreeze({ kind: "SUSPECT" as const, ok: true as const, effectRef, postState });
+    return deepFreeze({
+      kind: "SUSPECT" as const, ok: true as const, effectRef, postState, continuationEvidence,
+    });
   }
   if (postState === "ACTIVE_ADOPTED") {
     return ownershipProven(records.intent.leaseBinding, claimedAuthority)
-      ? deepFreeze({ kind: "ADOPTED" as const, ok: true as const, effectRef, postState })
+      ? deepFreeze({
+          kind: "ADOPTED" as const, ok: true as const, effectRef, postState, continuationEvidence,
+        })
       : refused(
           "RECOVERY_OWNERSHIP_TRANSFER_UNPROVEN",
           "adoption requires a proven lease fence advance, which quiescence never supplies",
@@ -174,15 +212,18 @@ function fromPostState(
   }
   const held = heldResources(records, observation);
   if (held.length > 0) {
-    return deepFreeze({ kind: "QUARANTINED" as const, ok: true as const, effectRef, held });
+    return deepFreeze({
+      kind: "QUARANTINED" as const, ok: true as const, effectRef, held, continuationEvidence,
+    });
   }
   if (observation.effectStatus === "PROVEN_ABSENT" && provenAbsent(postState, observation.processExit)) {
-    return deepFreeze({ kind: "ABSENT" as const, ok: true as const, effectRef });
+    return deepFreeze({ kind: "ABSENT" as const, ok: true as const, effectRef, continuationEvidence });
   }
   return command(
     effectRef,
     RECONCILE_EXTERNAL,
     `no local decision settles ${postState} with an unproven process exit`,
+    continuationEvidence,
   );
 }
 
@@ -207,7 +248,12 @@ export function classifyCrash(inputValue: unknown): CrashClassification {
   // record set the reconstruction did not accept.
   const reconstructed = reconstructAfterRestart(records);
   if (reconstructed.kind === "REFUSED") {
-    return command(observation.effectRef, INSPECT_EXTERNAL, reconstructed.failure.message);
+    return command(
+      observation.effectRef,
+      INSPECT_EXTERNAL,
+      reconstructed.failure.message,
+      continuationEvidenceOf(records),
+    );
   }
   return fromPostState(reconstructed.postState, records, observation, input["claimedAuthority"]);
 }

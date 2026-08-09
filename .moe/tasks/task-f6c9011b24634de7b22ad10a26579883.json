@@ -1,0 +1,39 @@
+{
+  "id": "task-f6c9011b24634de7b22ad10a26579883",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Git ref and artifact object enumeration capabilities",
+  "description": "Objective: add the two ABSENT enumeration capabilities that the recovery-window inventory adapters must call, to the shipped observers/stores that already own those boundaries. This is a prerequisite production task created because the capability is missing, NOT a narrowed DoD and NOT a test-owned reimplementation.\n\nMEASURED GAP at 2026-08-09 by architect-d46fcb95, symbol by symbol:\n- `GitObserver` (packages/runner/src/scope/scope-contract.ts) declares exactly headCommit(), statusPorcelainV2(), lsFilesTracked(), lsFilesIgnored(), submodulePaths(). There is NO branch or ref enumeration. `grep -rn \"for-each-ref|show-ref|--branches|refs/heads|listRefs\" packages/runner/src --include=*.ts` (non-test) returns ZERO.\n- `ArtifactStore` (packages/runner/src/artifacts/artifact-contract.ts) declares exactly stageArtifact(), verifyArtifact(), deleteArtifact(); `ArtifactFsPort` declares openWrite/write/fsync/close/exists/rename/persistAfterRename/readAll/unlink. There is NO directory listing. `grep -rn \"readdir|listObjects|listStaging|scandir\" packages/runner/src` returns ZERO outside runtime-entrypoint.test.ts.\n\nConsequently task-0325dcf7ee744123b40cf583230c7b6a's DoD 2 (\"Git branches/refs ... artifact objects/staging\") currently has nothing to call.\n\nDeliverable, additive only:\n1. Extend GitObserver with a bounded ref enumeration (refs with their target commit, covering refs/heads and refs/remotes) implemented in createNodeGitObserver via the existing hermetic runGit helper — same shell:false / bounded maxBuffer / timeout / windowsHide discipline, NUL-framed output, and the existing ScopeObserverError codes for overflow and malformed output. Do not loosen hermeticGitEnvironment.\n2. Extend ArtifactFsPort with a bounded directory listing and ArtifactStore with object/staging enumeration over the store's own `<root>/objects/<sha256>` layout, implemented in createNodeArtifactFs / createArtifactStore. An entry whose name is not a valid content address is reported as such, never skipped silently.\n\nBoth additions are ENUMERATION ONLY: no new mutation, no new authority, no change to any existing method's behaviour or refusal codes.\n\nNOT in scope: the recovery-inventory contract, coverage protocol, or any inventory adapter (those are task-0325dcf7's children); scheduler rows; deciding adopt/quarantine.\n\nOwned paths: packages/runner/src/scope/scope-contract.ts, packages/runner/src/scope/scope-git.ts, packages/runner/src/artifacts/artifact-contract.ts, packages/runner/src/artifacts/artifact-node-fs.ts, packages/runner/src/artifacts/artifact-store.ts, their focused tests, and the minimal @moe/runner root export wiring.\n\nWARNING measured by the architect: packages/runner/src/index-surface.test.ts pins the EXACT root namespace against a hand-written EXPECTED_EXPORTS list plus a hard-coded `expect(EXPECTED_EXPORTS.length).toBe(116)`. Any new root value export reddens it until transcribed and the count bumped. That file was ALREADY red at 2026-08-09 from an unrelated in-flight task's exports; capture the baseline before editing and attribute per the project's path-attributed-baseline rail.\n\nConsumer (global rail Clause 1): task-0325dcf7ee744123b40cf583230c7b6a's Git/integration and artifact/staging adapter child.\n\nVerification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+  "definitionOfDone": [
+    "GitObserver declares a bounded ref enumeration and createNodeGitObserver implements it through the existing hermetic runGit helper with shell:false, bounded maxBuffer, explicit timeout and windowsHide, returning each ref with its target commit; hermeticGitEnvironment is unchanged.",
+    "ArtifactFsPort declares a bounded directory listing and ArtifactStore exposes object/staging enumeration over its own <root>/objects/<sha256> layout; an entry whose name is not a valid content address is reported with a stable code, never silently skipped.",
+    "Overflow, a malformed or truncated git response, an absent directory, and an unreadable entry each refuse with an existing stable code and the layer that refused; a test pins the exact code and layer for every one, and no failure escapes as an uncoded throw.",
+    "Enumeration output is deterministic across path separators and locale on Windows, macOS and Linux; ordering is canonical and a generated sweep asserts a non-zero case count.",
+    "No existing method's behaviour, signature, or refusal code changes; the pre-existing scope and artifact suites still pass unmodified except where a new capability is added to a frozen list.",
+    "New root value exports are transcribed into index-surface.test.ts's hand-written EXPECTED_EXPORTS with the count literal bumped, and fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0 with any residual red attributed to foreign paths against a recorded merge-base baseline."
+  ],
+  "taskRails": [
+    "Additive enumeration only. Do not change, relax, or re-code any existing observer/store method or refusal code; a behaviour change here silently alters every scope observation and artifact receipt already in production.",
+    "These are external-effect boundaries: never invoke git through a shell, never accept a free-form command string, and keep every child bounded by maxBuffer, timeout and windowsHide.",
+    "A missing directory, an empty listing, and an unreadable entry are three different facts and must carry three different answers; an empty result is never proof of absence.",
+    "Tests assert the exact stable reason code and the refusing layer, and any generated sweep asserts it produced a non-zero number of cases.",
+    "Target <=250 physical lines per production file and split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoting the first prerequisite slice created by the completed SPIDR breakdown of parent task-0325dcf7ee744123b40cf583230c7b6a. It has no hard dependency, owns only the missing Git-ref/artifact-enumeration capabilities, and is file-disjoint from the contract slice; prior architect handoff explicitly identifies it as immediately plan-ready.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
+  "priority": "CRITICAL",
+  "order": 16,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:18:36.217Z",
+  "updatedAt": "2026-08-09T14:29:04.814Z",
+  "contextFetchedBy": [
+    "architect-5b5302ee"
+  ]
+}

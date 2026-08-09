@@ -1,0 +1,61 @@
+{
+  "id": "task-b863bae80fab426db7b6204f9d713c42",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Expansion manual approval binding",
+  "description": "Objective: bind one scheduler-admitted expansion and its stored prepared funding/resource/fence identity to one exact manual graph approval, with every changed byte requiring reapproval. Hard dependencies: task-2561a780fdd149439c9858c9c7b459e8 and Graph supersession engine task-dddfaf83f9c644099b5b263e485c58c7 must be DONE. Deliverable: focused core preparation and approval reducers that compose the landed policy/approval/graph/supersession decisions without minting child execution authority. NOT in scope: automatic approval, daemon persistence/transactions, scheduler validation, child activation, supersession execution, or UI. Owned paths: packages/core/src/expansion/expansion-preparation.ts, expansion-preparation.js, expansion-approval.ts, expansion-approval.js, expansion-approval.test.ts. Production consumer: task-9634ed3b72014fe781591c7df9674da2. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "Preparation validates and freezes the complete admitted proposal/revision, quality/dependency, scope/oracle/input, budget reservation, resource reservation, fairness opportunity/cap revision, supersession disposition/funding/fence, policy, goal version, graph epoch, source facts, and deadline into one canonical identity.",
+    "Manual approval composes the existing policy, ApprovalDecisionRecord, graph revision, and supersession decisions and succeeds only when every approval hash/ref/criteria/scope/budget/resource/quality/dependency/policy/preparation byte matches the current stored identity.",
+    "Any missing, UNKNOWN, expired, released, invalidated, consumed, stale, mismatched, or concurrently changed fact refuses with exact stable code and layer, preserves the prepared/graph/approval inputs unchanged, and returns no child run/lease/effect/slot/allocation activation/dispatch authority.",
+    "Focused tests perturb every bound field, race approve with release/invalidate/expiry/reprepare, assert duplicate byte-identical replay, manual-only eligibility, exact code plus layer and refusing component, nonzero generated cases, zero partial authority, and production mutations turning red.",
+    "The exact verification command exits 0, production files remain below 400 lines, automatic approval is absent, and task-9634ed3b72014fe781591c7df9674da2 is recorded as the durable consumer."
+  ],
+  "taskRails": [
+    "Policy ALLOW can make the proposal eligible for review but cannot approve it in this task.",
+    "Do not duplicate supersession/funding/fence authority; consume its exact landed production records.",
+    "Actual atomic durable activation and child authority remain owned by daemon composition."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 21,
+  "comments": [
+    {
+      "id": "comment-1d7c05d37c3d461db9f7ccccc553b723",
+      "author": "architect-8c9073cd",
+      "content": "Hard-dependency audit (2026-08-09): Scheduler expansion admission task-2561a780fdd149439c9858c9c7b459e8 is BLOCKED with zero plan steps, and Graph supersession engine task-dddfaf83f9c644099b5b263e485c58c7 is only PLANNING with zero plan steps; neither is DONE. Fresh disk probe confirms all five owned expansion preparation/approval files are absent and finds no SupersessionFundingReservation, PreparedPlanningFence, GraphSupersession, ExpansionPreparedAdmission, or EXPANSION_PREPAR* production symbols. Existing graph-revision production still gives `graph.supersede` an empty legal-transition set and always refuses it. Per task rails, this slice cannot invent funding/fence/disposition authority or plan against unsettled records. Reclaim only after both dependencies are DONE and committed exact APIs are re-probed.",
+      "timestamp": "2026-08-09T14:36:01.446Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:47:20.581Z",
+  "updatedAt": "2026-08-09T14:36:25.850Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:35:30.968Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ],
+  "blockedReason": "Both explicit dependencies are unfinished: scheduler admission is BLOCKED and graph supersession is only PLANNING. The admitted-expansion identity and supersession disposition/funding/fence production records are absent; current graph.supersede has no legal transition. Planning now would duplicate unsettled authority contrary to the task rail.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:36:07.047Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning guidance and expansion seam memory; verified both dependency statuses and measured absent admitted-expansion/supersession production records; documented comment comment-1d7c05d37c3d461db9f7ccccc553b723; reported BLOCKED; wrote Serena handoff.",
+      "whatRemains": "After task-2561a780 and task-dddfaf83 are DONE, re-probe exact committed identities/records and then draft the five-file preparation/manual-approval TDD plan.",
+      "pitfalls": "Do not turn policy ALLOW into automatic approval, duplicate supersession authority, or return child execution authority. Current graph.supersede is intentionally always illegal.",
+      "openQuestions": "Exact supersession disposition/funding/fence record names and failure vocabulary must be taken from the landed dependency, not decided here.",
+      "releasedAt": "2026-08-09T14:36:25.849Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit architect handoff after verified hard-dependency block."
+    }
+  ]
+}

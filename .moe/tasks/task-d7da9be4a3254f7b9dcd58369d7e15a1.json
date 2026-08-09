@@ -1,0 +1,36 @@
+{
+  "id": "task-d7da9be4a3254f7b9dcd58369d7e15a1",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Git, integration-on-disk and artifact inventory adapters",
+  "description": "Objective: land the production enumerators for the Git/integration-on-disk class and the artifact object/staging class, registered into the recovery-inventory port registry. Slice 3 of 3 from task-0325dcf7ee744123b40cf583230c7b6a, split by architect-d46fcb95 on human direction 2026-08-09.\n\nTWO hard dependencies, both real:\n1. task-00956ac383784e81b0345bbf09256323 (Recovery-inventory contract and coverage protocol) - owns the class set, item shape, coverage proof, INVENTORY_ADAPTER layer and the port registry.\n2. task-f6c9011b24634de7b22ad10a26579883 (Git ref and artifact object enumeration capabilities) - supplies the enumerators this slice calls, WHICH DO NOT EXIST TODAY.\n\n*** WHY DEPENDENCY 2 EXISTS. Measured symbol by symbol at 2026-08-09 by architect-d46fcb95: GitObserver (packages/runner/src/scope/scope-contract.ts) declares exactly headCommit(), statusPorcelainV2(), lsFilesTracked(), lsFilesIgnored(), submodulePaths() - there is NO branch or ref enumeration, and grep for for-each-ref/show-ref/--branches/refs/heads over packages/runner/src returns ZERO. ArtifactStore declares exactly stageArtifact(), verifyArtifact(), deleteArtifact() and ArtifactFsPort has no directory listing - grep for readdir/listObjects/listStaging returns ZERO outside runtime-entrypoint.test.ts. The parent task's instruction to \"reuse the hermetic Git observer and artifact store\" is therefore not satisfiable as written; the capability is genuinely absent. Do NOT close that gap by reimplementing enumeration inside this module or inside a test - wait for task-f6c9011b. ***\n\nMEASURED PRESENT: the hermetic Git boundary itself exists - packages/runner/src/scope/scope-git.ts (createNodeGitObserver, hermeticGitEnvironment, MAX_SCOPE_OBSERVATION_BYTES) with shell:false / bounded maxBuffer / timeout / windowsHide discipline - as does the artifact store (createArtifactStore, createNodeArtifactFs, verifyArtifact) over its <root>/objects/<sha256> layout. This slice composes those, extended by dependency 2.\n\nDeliverable: packages/runner/src/recovery-inventory/git-inventory.ts (+ .js bridge) and artifact-inventory.ts (+ .js bridge) plus focused tests, each registering itself as a class enumerator through the contract slice's port registry.\n\nNOT in scope: the contract, coverage protocol or aggregate (slice 1); provider/process/lock or workspace classes (slice 2); scheduler resource rows; adopt/quarantine decisions; project embargo; tests/fault.\n\nOwned paths: packages/runner/src/recovery-inventory/git-inventory.{ts,js}, artifact-inventory.{ts,js}, their focused tests, and the two-line registration edit in the slice-1 aggregate. This slice does NOT edit index.ts or index-surface.test.ts - slice 1 owns the root seam.\n\nConsumer (global rail Clause 1): daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa.\n\nVerification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+  "definitionOfDone": [
+    "The Git/integration enumerator observes a real repository through the hermetic observer extended by task-f6c9011b, enumerating refs and the integration targets represented on disk, and binds every item to class, stable external identity, observed disposition facts and source proof digest; it never invokes git through a shell and never accepts a free-form command string.",
+    "The artifact enumerator lists objects and staging entries through the extended artifact store over its own <root>/objects/<sha256> layout and binds each item the same way; an entry whose name is not a valid content address is reported with a stable code rather than silently skipped.",
+    "An unavailable enumerator, a truncated or over-limit result, an absent repository or store root, and a missing negative proof each return RECOVERY_INVENTORY_COVERAGE_UNKNOWN at layer INVENTORY_ADAPTER with truth UNKNOWN; an empty listing is never proof of absence and partial items never upgrade the class to COMPLETE.",
+    "Enumeration order and digest are deterministic across path separators and locale on Windows, macOS and Linux; duplicate external identities and entries outside the exact project or recovery window refuse rather than merge or drop.",
+    "Focused tests build real temporary Git repositories and real artifact-store bytes rather than a reimplemented fixture authority, assert each covered class generated at least one coverage case with a non-zero asserted count, pin the exact code and INVENTORY_ADAPTER layer on every refusal, and mutation-check that the coverage handling is reddenable.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0, with any residual red attributed to foreign paths against a recorded merge-base baseline."
+  ],
+  "taskRails": [
+    "Do not start until task-f6c9011b24634de7b22ad10a26579883 has landed the ref and object enumeration capabilities. Closing that gap inside this module, or inside a test helper, is exactly the reimplementation the project rails forbid.",
+    "A configured class requires complete enumeration or a verifiable negative proof; an empty listing, an absent directory, and an unreadable entry are three different facts and must carry three different answers.",
+    "These are external-effect boundaries: never invoke git through a shell, never accept a free-form command string, and keep every child bounded by maxBuffer, timeout and windowsHide.",
+    "Tests assert the exact stable reason code and the INVENTORY_ADAPTER layer, and assert non-zero generated class coverage.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
+  "priority": "CRITICAL",
+  "order": 19,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:19:57.152Z",
+  "updatedAt": "2026-08-09T14:19:57.152Z"
+}

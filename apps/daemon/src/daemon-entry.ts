@@ -36,6 +36,7 @@ export const DAEMON_ENTRY_LAYER = "DAEMON_ENTRY" as const;
 /** Every refusal this layer can emit. Closed, so a consumer can switch exhaustively. */
 export const DAEMON_ENTRY_REFUSAL_CODES = Object.freeze([
   "DAEMON_ENTRY_ALREADY_STOPPED",
+  "DAEMON_ENTRY_DEPENDENCIES_INVALID",
   "DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER",
   "DAEMON_ENTRY_PROVIDER_INVALID",
   "DAEMON_ENTRY_PROVIDER_LOAD_FAILED",
@@ -84,7 +85,6 @@ export interface StartedDaemon {
 export type DaemonStartResult = DaemonEntryRefused | ListenerRefused | StartedDaemon;
 
 export interface DaemonStartOptions {
-  readonly credential?: string;
   readonly csrfToken?: string;
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
@@ -98,11 +98,72 @@ export function refuseEntry(code: DaemonEntryRefusalCode): DaemonEntryRefused {
 
 /** Structural, because a provider loaded from a module path is untyped at the boundary. */
 export function isDependencyProvider(value: unknown): value is DaemonDependencyProvider {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { provide?: unknown }).provide === "function"
-  );
+  if (typeof value !== "object" || value === null) return false;
+  try {
+    const provide = Reflect.get(value, "provide") as unknown;
+    const subscriptions = Reflect.get(value, "subscriptions") as unknown;
+    return typeof provide === "function" &&
+      (subscriptions === undefined || typeof subscriptions === "function");
+  } catch {
+    return false;
+  }
+}
+
+function hasCallable(value: unknown, key: string): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  try {
+    return typeof Reflect.get(value, key) === "function";
+  } catch {
+    return false;
+  }
+}
+
+function isCommandAdapterDeps(value: unknown): value is CommandAdapterDeps {
+  if (typeof value !== "object" || value === null) return false;
+  try {
+    return hasCallable(Reflect.get(value, "authenticator"), "authenticate") &&
+      hasCallable(Reflect.get(value, "decisions"), "decide") &&
+      hasCallable(Reflect.get(value, "registry"), "get");
+  } catch {
+    return false;
+  }
+}
+
+function isSubscriptionPort(value: unknown): value is SubscriptionPort {
+  return hasCallable(value, "readPage") && hasCallable(value, "reseat");
+}
+
+type ResolvedDependencies = DaemonEntryRefused | {
+  readonly deps: CommandAdapterDeps;
+  readonly ok: true;
+  readonly subscriptions?: SubscriptionPort;
+};
+
+function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDependencies {
+  let provided: unknown;
+  try {
+    provided = provider.provide();
+  } catch {
+    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+  }
+  if (!isCommandAdapterDeps(provided)) {
+    return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+  }
+
+  try {
+    const factory = provider.subscriptions;
+    if (factory === undefined) return Object.freeze({ deps: provided, ok: true } as const);
+    if (typeof factory !== "function") {
+      return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    }
+    const subscriptions = factory.call(provider);
+    if (!isSubscriptionPort(subscriptions)) {
+      return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    }
+    return Object.freeze({ deps: provided, ok: true, subscriptions } as const);
+  } catch {
+    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+  }
 }
 
 const ALREADY_STOPPED = Object.freeze({
@@ -115,16 +176,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const dependencies = options.dependencies ?? null;
   if (dependencies === null) return refuseEntry("DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER");
 
-  let deps: CommandAdapterDeps;
-  let subscriptions: SubscriptionPort | undefined;
-  try {
-    deps = dependencies.provide();
-    subscriptions = dependencies.subscriptions?.();
-  } catch {
-    // Distinct from an absent provider: a provider that failed is a wiring
-    // fault, not a caller that supplied nothing.
-    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
-  }
+  const resolved = resolveDependencies(dependencies);
+  if (!resolved.ok) return resolved;
 
   // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps
   // credentials out of URLs and logs, so this value is never written to the log
@@ -132,12 +185,11 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const csrfToken = options.csrfToken ?? randomUUID();
   const started = await startControlRoomListener({
     csrfToken,
-    deps,
-    ...(options.credential === undefined ? {} : { credential: options.credential }),
+    deps: resolved.deps,
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
     ...(options.port === undefined ? {} : { port: options.port }),
-    ...(subscriptions === undefined ? {} : { subscriptions }),
+    ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;
 

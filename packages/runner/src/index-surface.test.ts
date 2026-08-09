@@ -543,6 +543,7 @@ it("discriminates both OverlapVerdict arms and separates the two blocking codes"
   const overlap = (predecessorRelease: PredecessorRelease): OverlapVerdict =>
     runner.admitSuccessorOverlap({
       predecessorRef: "pred-1", successorRef: "succ-1", predecessorRelease,
+      classification: "ABSENT",
     });
   const admitted = overlap("PROVEN_RELEASED");
   if (admitted.kind !== "ADMITTED") throw new Error(recoveryCode(recoveryRefusal(admitted)));
@@ -557,9 +558,41 @@ it("discriminates both OverlapVerdict arms and separates the two blocking codes"
   ]);
 });
 
+/**
+ * The public root requires the durable classification, and only ABSENT resumes.
+ * This replaces an assertion that admitted PROVEN_RELEASED with no classification
+ * at all: that shape let SUSPECT and QUARANTINED gain successor authority from a
+ * caller-supplied release fact. Omitting the classification now fails closed.
+ */
+it("requires a durable classification at the root and resumes only ABSENT", () => {
+  const overlap = (classification: unknown): OverlapVerdict =>
+    runner.admitSuccessorOverlap({
+      predecessorRef: "pred-1", successorRef: "succ-1",
+      predecessorRelease: "PROVEN_RELEASED", classification,
+    });
+  const suspect = recoveryRefusal(overlap("SUSPECT"));
+  const quarantined = recoveryRefusal(overlap("QUARANTINED"));
+  expect([recoveryCode(suspect), suspect.layer]).toEqual(
+    ["RECOVERY_CLASSIFICATION_NOT_RESUMABLE", "SAFE_BOUNDARY"],
+  );
+  expect([recoveryCode(quarantined), quarantined.layer]).toEqual(
+    ["RECOVERY_CLASSIFICATION_NOT_RESUMABLE", "SAFE_BOUNDARY"],
+  );
+  const missing = recoveryRefusal(
+    runner.admitSuccessorOverlap({
+      predecessorRef: "pred-1", successorRef: "succ-1",
+      predecessorRelease: "PROVEN_RELEASED",
+    }),
+  );
+  expect([recoveryCode(missing), missing.layer]).toEqual(
+    ["RECOVERY_BOUNDARY_MALFORMED", "SAFE_BOUNDARY"],
+  );
+});
+
 it("discriminates both ResumeVerdict arms and refuses a proven release with no handoff", () => {
   const admitted: ResumeVerdict = runner.admitResume({
     resumeRef: "resume-1", predecessorRelease: "PROVEN_RELEASED", safeHandoff: "handoff-1",
+    classification: "ABSENT",
   });
   if (admitted.kind !== "ADMITTED") throw new Error(recoveryCode(recoveryRefusal(admitted)));
   expect([admitted.ok, admitted.resumeRef, admitted.safeHandoff]).toEqual(
@@ -568,6 +601,7 @@ it("discriminates both ResumeVerdict arms and refuses a proven release with no h
   const unproven = recoveryRefusal(
     runner.admitResume({
       resumeRef: "resume-1", predecessorRelease: "PROVEN_RELEASED", safeHandoff: null,
+      classification: "ABSENT",
     }),
   );
   expect([recoveryCode(unproven), unproven.layer]).toEqual(
@@ -575,6 +609,26 @@ it("discriminates both ResumeVerdict arms and refuses a proven release with no h
   );
   expect(recoveryCode(recoveryRefusal(runner.admitResume(null))))
     .toBe("RECOVERY_BOUNDARY_MALFORMED");
+});
+
+it("refuses a resume for every non-resumable classification at the root", () => {
+  const resume = (classification: unknown): ResumeVerdict =>
+    runner.admitResume({
+      resumeRef: "resume-1", predecessorRelease: "PROVEN_RELEASED",
+      safeHandoff: "handoff-1", classification,
+    });
+  const kinds = ["ADOPTED", "SUSPECT", "QUARANTINED", "RECONCILIATION_COMMAND"] as const;
+  const refusals = kinds.map((kind) => recoveryRefusal(resume(kind)));
+  expect(refusals).toHaveLength(4);
+  expect(refusals.map((refusal) => [recoveryCode(refusal), refusal.layer])).toEqual(
+    kinds.map(() => ["RECOVERY_CLASSIFICATION_NOT_RESUMABLE", "SAFE_BOUNDARY"]),
+  );
+  const missing = recoveryRefusal(
+    runner.admitResume({
+      resumeRef: "resume-1", predecessorRelease: "PROVEN_RELEASED", safeHandoff: "handoff-1",
+    }),
+  );
+  expect(recoveryCode(missing)).toBe("RECOVERY_BOUNDARY_MALFORMED");
 });
 
 it("advances a drain, and names which of the two layers refused each way", () => {

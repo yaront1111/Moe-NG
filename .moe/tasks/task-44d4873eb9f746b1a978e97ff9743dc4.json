@@ -16,7 +16,7 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 43,
+  "order": 51,
   "comments": [
     {
       "id": "comment-5badc527dfb64bcba6146a6d83d2578a",
@@ -36,5 +36,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-09T12:29:45.654Z"
+  "updatedAt": "2026-08-09T14:28:08.513Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:23:08.863Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3"
+  ],
+  "blockedReason": "Hard production dependency is not available, so a production-ready plan cannot name the durable identity loader, verification activation transaction, replay key, or persisted read-model contract without guessing or reimplementing authority in this task. Board remeasurement: Verification process wrapper task-69f2b6f785ca4ba3a932a8256b0edfb8 is DONE, and disk grep confirms public @moe/runner `runVerifierProcess`, `buildEvidenceReceipt`, `VerificationRecipe`, and `EvidenceReceipt`. But Durable Claude attempt dispatch task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED on the Windows launcher chain. Disk measurement from D:/projexts/moe-next: every `apps/daemon/src/work/foundation-attempt-{contracts,service}.{ts,js}` path is absent; production search finds no FoundationAttempt/foundation-attempt/readCurrentEffectSessionBinding/inputManifestId/resultManifestId verification authority surface. All five owned verification-dispatch paths are also absent and clean. Resume only after task-6cbff010 is DONE, then re-probe its exact public daemon contracts and stored identity/read APIs before planning. Do not mock or rebuild attempt authority inside evidence tests.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:24:30.520Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified the runner verification wrapper is landed/public, proved the durable attempt-dispatch producer and all owned verification-dispatch files are absent, reported the task BLOCKED on task-6cbff01023b14b26a78fc5e3eb1dd8a9, and wrote the Serena handoff.",
+      "whatRemains": "After durable attempt dispatch is DONE, re-measure its exact public stored-identity/read/activation APIs and submit the verification-dispatch plan.",
+      "pitfalls": "Do not recreate attempt authority in verification tests, deep-import, accept caller-supplied manifest/runtime/recipe replacements, or narrow the DoD.",
+      "openQuestions": "Exact durable attempt record/read API names and transaction seam cannot be known until prerequisite task-6cbff010 lands.",
+      "releasedAt": "2026-08-09T14:28:08.511Z",
+      "releasedBy": "architect-db2146e3",
+      "reason": "Explicit planning handoff after measuring and reporting the hard dependency block; release architect capacity for the remaining PLANNING queue."
+    }
+  ]
 }

@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-5b5302ee",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,7 +102,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:15.290Z",
-  "updatedAt": "2026-08-09T13:32:47.526Z",
+  "updatedAt": "2026-08-09T14:12:10.123Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-5b5302ee"
@@ -113,5 +113,16 @@
   "blockedReason": "Restoring architect-5b5302ee's original block. I flipped this task to PLANNING at 11:46Z on a premise that is now void, and this reverses my own action, not theirs.\n\nWHAT I GOT WRONG. I read the 11:40Z BLOCKED->PLANNING transitions as a deliberate human re-queue, asked the human, and was told the action was theirs — so I told architect-5b5302ee the human wanted this planned and moved it back to PLANNING over their block. architect-8c9073cd then found the mechanism: moe.unblock_worker flips the TASK out of BLOCKED as a side effect of unblocking a WORKER. The human was freeing a stuck worker; the task transitions were unintended. Confirmed with the human at 11:58Z.\n\narchitect-5b5302ee was right twice — once when they blocked it, and once when they re-blocked it at 11:44 citing my hold. My correction of that second block was the error, not their block.\n\nTHE BLOCK STANDS ON ITS ORIGINAL EVIDENCE, unchanged and verified: adapters/ absent entirely; root package.json has neither test:fault nor test:security while tests/** is otherwise untypechecked; daemon authenticateCommand->HTTP/store authority, authenticated event ingress, MCP daemon ports/root HTTP surface, authenticated importer, live control-room/IDE/force paths, public consumed outbox relay and effect dispatcher all absent or uncomposed; Linux/macOS platform effect ports absent. The audit is in comment-23b012bd, comment-af7dd963 and comment-1191b807 — it does not need redoing.\n\nClause 2 requires prerequisite production tasks here, not a plan. architect-5b5302ee is extending this task's durable handoff with an implementation-ready re-slice (authority transports, integrity, durable store faults, runtime/provider faults, then final gate wiring) plus exact production symbols, and has defined G0 as owner of the package.json + tests/fault lane. That handoff is the deliverable while blocked; consume it rather than re-deriving the audit.\n\nUnblock when the prerequisite production capabilities land and are verifiable on disk by grep or probe — not on a status flip.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T11:58:19.575Z"
+  "blockedAt": "2026-08-09T11:58:19.575Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified and documented the Clause 2 block; recorded eight detailed planning passes, the prerequisite DAG, security/fault shard architecture, evidence/version ratchets, and promoted the two dependency-ready recovery prerequisites.",
+      "whatRemains": "Keep task-05ce BLOCKED until all named production/catalog/lane/delegated-evidence prerequisites are DONE and verified on disk, then re-plan the two-file final aggregate.",
+      "pitfalls": "Do not unblock via worker-status side effect, submit a conditional/mock-backed matrix, duplicate existing prerequisite tasks, or access confirmatory corpus bytes.",
+      "openQuestions": "The b5e lane/supply-chain/platform dependency cycle still requires a formal rail/dependency amendment.",
+      "releasedAt": "2026-08-09T14:12:10.121Z",
+      "releasedBy": "architect-5b5302ee",
+      "reason": "Explicit handoff after exhaustive blocked-task planning; human requested planning of newly promoted tasks."
+    }
+  ]
 }

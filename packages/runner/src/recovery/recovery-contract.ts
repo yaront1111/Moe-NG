@@ -50,8 +50,38 @@ export const RECOVERY_ERROR_CODES = Object.freeze([
   "RECOVERY_OBSERVATION_MALFORMED",
   "RECOVERY_STALE_OBSERVATION_REFUSED",
   "RECOVERY_OWNERSHIP_TRANSFER_UNPROVEN",
+  "RECOVERY_CLASSIFICATION_NOT_RESUMABLE",
 ] as const);
 export type RecoveryErrorCode = (typeof RECOVERY_ERROR_CODES)[number];
+
+/**
+ * The closed set of classifications a continuation may resume across, as frozen
+ * data rather than a predicate.
+ *
+ * ABSENT alone is resumable, and the set is the reason rather than a check
+ * somebody must remember to run: a classification is admitted only by being a
+ * MEMBER, so a sixth outcome kind added later is non-resumable by construction
+ * instead of falling through an `if` nobody updated. That default matters here
+ * more than usual, because the failure direction is granting successor authority
+ * over an effect that may still be running.
+ *
+ * ADOPTED, SUSPECT, QUARANTINED and RECONCILIATION_COMMAND are all excluded, and
+ * QUARANTINED is the one that shows why: it is returned precisely when resources
+ * are still held.
+ */
+export const RESUMABLE_RECOVERY_CLASSIFICATIONS = Object.freeze(["ABSENT"] as const);
+export type ResumableRecoveryClassification =
+  (typeof RESUMABLE_RECOVERY_CLASSIFICATIONS)[number];
+
+export function isRecoveryOutcomeKind(value: unknown): value is RecoveryOutcomeKind {
+  return oneOf(value, RECOVERY_OUTCOME_KINDS);
+}
+
+export function isResumableClassification(
+  value: unknown,
+): value is ResumableRecoveryClassification {
+  return oneOf(value, RESUMABLE_RECOVERY_CLASSIFICATIONS);
+}
 
 /**
  * The predecessor's safe release boundary, as a three-valued lattice. String
@@ -66,6 +96,21 @@ export const PREDECESSOR_RELEASES = Object.freeze([
   "UNKNOWN",
 ] as const);
 export type PredecessorRelease = (typeof PREDECESSOR_RELEASES)[number];
+
+/**
+ * The two facts a continuation needs, DERIVED from durable restart records and
+ * carried on every classification arm.
+ *
+ * These exist as a type so the daemon has somewhere to persist them from, rather
+ * than accepting them on a continuation request. That direction is the whole
+ * point: a caller who can assert its own predecessor release can manufacture the
+ * boundary it is asking permission to cross. Where records cannot be parsed the
+ * honest value is UNKNOWN/null, never an optimistic PROVEN_RELEASED.
+ */
+export interface ContinuationEvidence {
+  readonly predecessorRelease: PredecessorRelease;
+  readonly safeHandoff: string | null;
+}
 
 /**
  * A caller-supplied classification of the external effect. `UNESTABLISHED` is a

@@ -16,7 +16,7 @@
     "Coordination capabilities remain explicit transport scopes; never synthesize RuntimeCommandKinds or colon-containing core capability IDs."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,9 +25,37 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
   "priority": "CRITICAL",
-  "order": 50,
-  "comments": [],
+  "order": 60,
+  "comments": [
+    {
+      "id": "comment-68aea9ba1a4b44b8a19743a2762377d1",
+      "author": "architect-21f667ae",
+      "content": "HUMAN PRODUCT DECISION APPROVED in the REPL on 2026-08-09. Protocol v1: Ed25519; canonical DER SPKI public keys persisted as lowercase hex; 64-byte signatures lowercase hex; clientKeyId=SHA-256(SPKI). Signed bytes are domain `moe.session-proof.v1` followed by fixed-order u32be-length-prefixed byte frames for principal, project, session, credential id/generation, client key, transport/scope, request id/digest, issued-at epoch milliseconds, and a 128-bit nonce. Proof TTL 60s with 30s future skew. Session TTL 15m, renewable only with a fresh current-generation proof up to an absolute 8h lifetime; renewal changes expiry only. Rotation atomically increments generation, replaces credential and client key, revokes the prior generation, and requires old-key plus new-key signatures over the same rotation challenge. Durable replay identity is (sessionId,generation,clientKeyId,nonce); reuse is SESSION_REPLAYED, while the same request may retry with a fresh nonce. This resolves the task's explicit product-decision rail. Planning remains dependency-gated on task-b4f12e63baca4ecc9f2c159ed3c3ad78.",
+      "timestamp": "2026-08-09T14:35:49.839Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:03.226Z",
-  "updatedAt": "2026-08-09T13:07:03.226Z"
+  "updatedAt": "2026-08-09T14:36:51.470Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:28:54.104Z"
+  },
+  "contextFetchedBy": [
+    "architect-21f667ae"
+  ],
+  "blockedReason": "The human-approved proof protocol is now durably recorded in task comment comment-68aea9ba1a4b44b8a19743a2762377d1 and Serena memory decision-daemon-session-proof-protocol-v1, so the product-decision rail is resolved. The hard production dependency is not: task-b4f12e63baca4ecc9f2c159ed3c3ad78 is BLOCKED after step 1 because its approved plan says a generated refusal table is length 9 while enumerating 10 required cases. I posted the exact correction in dependency comment comment-0833f045bdcf4dae861e1faf810182dc; my direct amend attempt was rejected NOT_ALLOWED by runtime role metadata. Fresh disk probe: packages/core/src/identity/authenticate-session.ts=False, authenticate-session.js=False, apps/daemon/src/identity/session-authority.ts=False, and production rg for authenticateSession|SESSION_AUTH_LAYERS|createSessionAuthority|session-authority returned no matches. Resume only after the core seam task is DONE and its @moe/core public surface is freshly re-probed; do not reimplement core precedence inside daemon.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:36:24.501Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Obtained and recorded the human-approved Ed25519 session proof protocol; measured the absent core seam; diagnosed prerequisite task-b4f12e63's 9-vs-10 plan contradiction; posted exact correction; reported this task BLOCKED; wrote Serena handoff and decision memories.",
+      "whatRemains": "Authorized architect/governor amends dependency steps 2 and 6 to count 10, worker completes task-b4f12e63, then this task re-probes and receives a production plan.",
+      "pitfalls": "Do not invent core precedence, store plaintext credentials/private keys/presented proofs/signatures/nonces, or treat same-request retry with a fresh nonce as replay.",
+      "openQuestions": "Only the dependency's landed public types and exact stable layer vocabulary remain unknown; the human protocol choices are fully resolved.",
+      "releasedAt": "2026-08-09T14:36:51.470Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Human product decision and dependency diagnosis are durably handed off; free architect capacity to continue planning while this task remains blocked."
+    }
+  ]
 }

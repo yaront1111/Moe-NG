@@ -1,0 +1,33 @@
+{
+  "id": "task-36ac4b43b2254efeaf1aaaa1752652c2",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Split over-cap scheduler sources graph-internal.ts and frontier.ts",
+  "description": "Objective: bring packages/scheduler/src/graph-internal.ts (415 physical lines) and packages/scheduler/src/frontier.ts (412) under the per-file cap - target <=250, hard split bar 400 (AGENTS.md source rails; epic rails: the cap is per FILE). MEASURED at HEAD 7183c04 via wc -l on 2026-08-09. Scope: mechanical decomposition into focused modules preserving the existing public surface of @moe/scheduler exactly (root exports unchanged, behavior identical); update intra-package imports; keep .js runtime bridges consistent with the package existing pattern. NOT in scope: behavior changes, new exports, touching other packages. Note: generated packages/control-room-client/src/generated/generated-client.ts (896 lines) is deliberately excluded as generated code; if a cap exemption for generated files is wanted, that is a governor decision, not this task. Owned paths: packages/scheduler/src/** only. Verification: pnpm typecheck && pnpm test.",
+  "definitionOfDone": [
+    "graph-internal.ts and frontier.ts each decomposed so every resulting production file is <=250 physical lines by wc -l and none is >=400",
+    "@moe/scheduler public root surface unchanged: surface/root-export tests pass without modification",
+    "pnpm typecheck exit 0 and scheduler suites green with no test edits beyond import paths"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-21f667ae",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 69,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:24:26.356Z",
+  "updatedAt": "2026-08-09T14:37:04.937Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:36:59.881Z"
+  },
+  "contextFetchedBy": [
+    "architect-21f667ae"
+  ]
+}

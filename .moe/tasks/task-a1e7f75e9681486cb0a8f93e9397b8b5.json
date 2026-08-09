@@ -1,0 +1,33 @@
+{
+  "id": "task-a1e7f75e9681486cb0a8f93e9397b8b5",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Expansion protocol public hardening",
+  "description": "Objective: publish and independently compose the complete pure Expansion admission protocol after every sibling lands, then run the parent-level regression/adversarial gate. Hard dependencies: tasks task-7f089e11daea44e9a483197ff139d725, task-fcad40b6d26243439cd19fd3e49c924d, task-93b0314e09f248118e21f92699989468, task-2561a780fdd149439c9858c9c7b459e8, and task-b863bae80fab426db7b6204f9d713c42 must be DONE. Certified capabilities: runner-safe expansion hold/request, hold-bound PlanningRun submission, all-or-none scheduler admission/preparation, and exact manual approval binding shipped by those tasks. Deliverable: curated @moe/core/@moe/scheduler root surfaces and one production-surface integration/mutation suite; real durable consumer remains task-9634ed3b72014fe781591c7df9674da2. NOT in scope: daemon persistence, child activation, UI, or adding authority. Owned paths: packages/core/src/index.ts, packages/core/src/index-surface.test.ts, packages/scheduler/src/index.ts, packages/scheduler/src/index-surface.test.ts, tests/integration/expansion-protocol.test.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm exec vitest run tests/integration/expansion-protocol.test.ts.",
+  "definitionOfDone": [
+    "The curated core and scheduler root namespaces export the complete expansion value/type closure and all prerequisite admission symbols required by the protocol; exact namespace tests and plain-Node bare-package probes pass with no deep imports.",
+    "The integration test drives only production root surfaces through valid request/hold, EXPANSION submission, evidence/admission/preparation, and manual approval, byte-compares the exact bound identities, and asserts that no pure stage exposes child/run/lease/effect/slot/allocation activation/dispatch authority.",
+    "A generated refusal/race matrix covers every declared expansion code and refusing layer, asserts nonzero cases, exact delegated layer ownership, changed-delta reapproval, all-or-none outputs, UNKNOWN denial, and boundary 3/6/9 against production—not helper—surfaces.",
+    "An adversarial whole-sibling review mutates/bypasses hold, quality, scope, oracle, input, dependency, budget, resource, fairness capacity, preparation, and approval guards one at a time and proves the focused/integration suite turns red before restoring production bytes.",
+    "The exact foreground verification command exits 0 with every production file below 400 lines; foreign baseline failures are path-attributed, no docs/debug/generated evidence remain, and task-9634ed3b72014fe781591c7df9674da2 is recorded as the durable consumer."
+  ],
+  "taskRails": [
+    "This task certifies only the pure protocol shipped by the five named tasks; durable atomic child authority is certified later by daemon composition.",
+    "Do not reimplement authority or acceptance predicates inside the integration test.",
+    "Root publication must be curated and exact; no wildcard collision or deep-import workaround."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 22,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:47:45.147Z",
+  "updatedAt": "2026-08-09T13:47:57.803Z"
+}

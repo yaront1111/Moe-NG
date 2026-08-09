@@ -19,21 +19,47 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-f39f0c46",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:28Z. Both stated hard dependencies are DONE and both capabilities are verified on disk with published root exports — status plus disk, not either alone.\n\nITS OWN STATED DEPENDENCIES: task-5606947a (verified BackupGeneration) and task-684e6972 (fresh recovery identity binding).\n\nVERIFIED AT 14:28Z:\n- task-5606947a DONE. createBackupGeneration exported from the @moe/store root (packages/store/src/index.ts).\n- task-684e6972 DONE. RecoveryIncarnation* symbols exported from the @moe/daemon root (7 occurrences in apps/daemon/src/index.ts), with recovery-incarnation-contract.ts and its .js bridge on disk.\n\nClause 1 satisfied in both directions: the capabilities exist AND have published consumer edges, so this task can compose them without a deep import and without a follow-on publish task.\n\nCOORDINATION, NOT A COLLISION — READ BEFORE NAMING OWNED PATHS. task-0325dcf7 (Node-side recovery-window inventory adapters) shares BOTH of these dependencies and was unblocked by me two minutes earlier at 14:26Z. Two tasks planning against the same freshly-landed surfaces in one shared working directory is precisely how a sixth completion-hook sweep happens — five foreign sweeps have already occurred today. Confirm file-disjointness with whoever claims task-0325dcf7 before either plan declares an owned path.\n\nFOR THE ARCHITECT: re-measure before naming symbols. My verification is a promotion gate, not a substitute for yours. If you find an unbuilt dependency I missed, report blocked and I return it to BACKLOG without argument — that has happened once today (task-4afcb064) and the architect was right.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
   "order": 13.3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1a16d3a86ddb40e29b6a62d83e33897a",
+      "author": "architect-5b5302ee",
+      "content": "Planning audit at HEAD 089ebbf9714d0cf0625fb539c419150f2bdc678e found the task cannot meet its DoD within its owned paths; do not submit a narrowed store-only plan.\n\nMEASURED BLOCKERS\n1. task-684e's createRecoveryIncarnationService is process-idempotent only. It stores settled/inFlight in Maps; createNodeRecoveryCryptoPort keeps a nonextractable Ed25519 CryptoKey in a WeakMap behind a nonserializable handle. A restart mints a different key/incarnation for the same restore command, contradicting PREPARED-resume reuse.\n2. @moe/store schema v3 has no recovery-incarnation, key-epoch, credential, grant, or project-lifecycle rows. Exact schema validation rejects extra tables/metadata. @moe/core owns reduceProject(recovery.restore_quiesce), but @moe/store has no dependency on core and must not import upward from apps/daemon.\n3. No production daemon restore controller composes verifyBackupGeneration + recovery incarnation + core reducer + SqliteEventStore transaction. recovery.restore_quiesce has no production caller. Later task-8a01 is the authentication consumer that can make restored credentials/grants stale; this task cannot truthfully claim that ingress revocation alone.\n4. Node provides no portable Windows/macOS/Linux ACL/keystore primitive. POSIX mode bits and final-file fsync on win32 do not prove the required OS-protected durable key/anchor.\n\nREQUIRED PREREQUISITES / SCOPE AMENDMENT\n- a durable OS-protected recovery key provider that persists/reopens the same key epoch after process restart on every supported host;\n- a dependency-correct shared binding codec/verified token plus a store schema/migration and public atomic recovery-install transaction surface;\n- a daemon restore-controller composition that invokes the real core reducer, commits QUIESCED/RECOVERY_REQUIRED and the installed binding, and owns exact inspect/resume/discard behavior;\n- formal task re-slicing: the production-ready protocol needs about 10 files (contract, FS, DB transaction, orchestrator and required .js bridges, focused tests, export), over the preferred five-file planning cap.\n\nThe future protocol must follow descriptor write->fsync->close->same-directory rename->platform-specific persistence->readback; enumerate and hash the exact backup closure; checkpoint/close/reopen SQLite; retain old slot until the new quiesced slot is verified; preserve upstream BACKUP_PROOF_UNKNOWN/BACKUP_GENERATION; and fault every PREPARED/install/txn/fsync/persist/verify/switch/INSTALLED boundary with exact RECOVERY_ANCHOR code+layer. Immediate consumer remains task-8a01c025b65246aca09e69d82e009587.",
+      "timestamp": "2026-08-09T14:26:05.171Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:05:35.053Z",
-  "updatedAt": "2026-08-09T12:45:05.009Z",
+  "updatedAt": "2026-08-09T14:39:34.381Z",
   "contextFetchedBy": [
-    "architect-f39f0c46"
+    "architect-f39f0c46",
+    "architect-5b5302ee"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:12:14.266Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Reverified design hash, dependencies, public surfaces, store schema, recovery-incarnation implementation, filesystem durability patterns, ownership and current HEAD. Recorded exact blocker and future protocol in comment-1a16d3a86ddb40e29b6a62d83e33897a.",
+      "whatRemains": "Land/amend prerequisites for durable OS-protected recovery key reopen, dependency-correct binding/schema/atomic transaction, daemon reducer/store restore controller, and SPIDR file split; then re-plan.",
+      "pitfalls": "Do not treat the process-local WeakMap key handle as crash-durable, import apps/daemon from store, invent schema tables under recovery-anchor.*, claim Windows ACL from POSIX modes, or substitute a test callback for core authority.",
+      "openQuestions": "Whether recovery identity material will use platform keystores or another explicitly approved protected-store contract, and which task owns daemon recovery.install composition.",
+      "releasedAt": "2026-08-09T14:26:39.239Z",
+      "releasedBy": "architect-5b5302ee",
+      "reason": "Explicit blocked-task handoff after root-cause audit; continuing the human-requested planning queue."
+    }
   ]
 }

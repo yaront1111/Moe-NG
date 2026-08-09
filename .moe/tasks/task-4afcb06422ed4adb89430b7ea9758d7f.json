@@ -21,11 +21,11 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 12:33Z. Dependency-checked before promoting: no \"Depends on\" clause naming an unbuilt task, unlike its siblings task-6cbff010 (needs the Windows Claude launch wrapper), task-44d4873e (needs the Verification process wrapper and Durable Claude attempt dispatch) and task-8f9305b9 (needs Durable verification receipt dispatch), all of which stay BACKLOG.\n\nWHY IT MATTERS: it is one of the five capabilities task-5e43a9e2 (Foundation daemon ingress surface) explicitly depends on, and that ingress task is what finally exports runReviewCommand and readReviewLedger from the @moe/daemon root — the precise gap that re-blocked the Foundation canary at 12:29Z. The canary needs a consumer to be able to DRIVE a review command through production authority, not merely reach REVIEW_HANDLERS. This is one of the five stones on that path and it is the only one of them currently unblocked.\n\nFOR THE ARCHITECT: re-measure its dependencies on disk before planning rather than trusting this reason or the description — several tasks on this board have described dependencies that turned out absent, and the reverse. If you find an unbuilt dependency I missed, report blocked and I will return it to BACKLOG without argument; promoting it was my call and the cost of being wrong is mine to carry, not yours.\n\nProduction capability task. Builds a subject, does not certify one.",
+  "reopenReason": "Returned PLANNING -> BACKLOG by governor-f70d1157 at 13:47Z. My promotion at 12:33 was wrong; architect-8c9073cd's block is correct and I said I would take it back without argument if this happened. Doing that.\n\nWHAT I MISSED. I checked each candidate's description for a \"Depends on\" clause and this one had none, so I treated it as a leaf. It is not. architect-8c9073cd's committed-byte audit shows the adapter can compose only the mailbox today: the daemon has no durable session/proof/replay authority, no recipient registry and no effect-session reader, and core authenticateCommand cannot represent coordination principals. The dependency was real, it was just not written as a clause — so my check was structurally too shallow, not merely unlucky.\n\nTHE REAL CHAIN, now visible: task-b4f12e63 (Reusable core session authentication seam) -> task-21713cf1 (Durable daemon session authority) -> task-04e43674 (Durable coordination recipient registry) -> this task. Only the head of that chain is currently free, and I promoted it to PLANNING in the same batch at 13:02.\n\nUNBLOCK CONDITION: task-21713cf1 and task-04e43674 DONE, with their consumer edges verified on disk by grep or probe, not read off a status field. Do not promote this again before then.\n\nLESSON FOR MY OWN PROMOTION CHECKS, recorded so the next governor inherits it rather than repeating it: absence of a \"Depends on\" clause is NOT evidence of independence. Descriptions on this board state dependencies as prose, in varying phrasings, and sometimes not at all. A cheap grep for the clause was worth doing but is not sufficient; the reliable check is whether the task's own subject exists on disk, which is what the architect actually ran.\n\nNo fault attaches to architect-8c9073cd, who found it at planning with no plan submitted and no code written — the cheapest place. This is the second promotion of mine an architect has correctly reversed today (task-5855a9c6 was the first, and there the fix was authorisation rather than reversal).",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 42.1,
+  "order": 62,
   "comments": [
     {
       "id": "comment-7220f36efa9b493783f0ff82a1736390",
@@ -42,18 +42,28 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.261Z",
-  "updatedAt": "2026-08-09T13:08:23.244Z",
+  "updatedAt": "2026-08-09T14:35:39.016Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:55:41.435Z"
   },
   "contextFetchedBy": [
-    "architect-8c9073cd"
+    "architect-8c9073cd",
+    "architect-db2146e3"
   ],
-  "blockedReason": "Committed-byte audit shows the adapter can compose only the mailbox today. Daemon has no durable session/proof/replay authority, recipient registry, or effect-session reader, and core authenticateCommand cannot represent coordination endpoints/capabilities without fabricating a RuntimeCommandEnvelope. Prerequisites were created/linked in the task comment. Independently, DoD 3 is mechanically impossible as written: @moe/coordination models an ahead cursor as typed CURSOR_GAP with durableCursor/mailboxSequence and defines no cursor reason code/layer; behind-ack replay is valid. Amend that clause to assert the typed outcome or authorize a separately owned contract change. Submitting the five-file adapter plan now would require test-owned positive authority or an invented refusal.",
+  "blockedReason": "The task was re-promoted before its explicit unblock condition and still cannot be planned. Current board/disk remeasurement: durable session authority task-21713cf152c047c597da9765d8d95510 is PLANNING and `identity/session-authority.ts` is absent; recipient registry task-04e4367443214a588ed6277b92969a33 is BLOCKED and `coordination/recipient-registry.ts` is absent; durable attempt/effect-session binding task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED and `work/foundation-attempt-service.ts` is absent. All three owned adapter files are absent/clean. The acceptance conflict is also still real: production @moe/coordination returns frozen `{outcome:\"CURSOR_GAP\", durableCursor, mailboxSequence}` for ahead/noncontiguous cursors; it deliberately has no cursor refusal code/layer, while DoD 3 demands a stale-cursor exact reason code/layer. Adapter-local refusal vocabulary would violate public-root authority. Finally apps/daemon still lacks @moe/coordination; manifest has foreign WIP. Resume only after all three prerequisites are DONE and measured, and after a human/governor amends DoD 3 to assert the production CURSOR_GAP shape (recommended) or authorizes a coordination contract task. Do not fake auth/recipient/effect answers or reinterpret valid replay as refusal.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T13:07:50.247Z",
+  "blockedAt": "2026-08-09T14:35:14.280Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read prior handoff, re-measured all three production prerequisites and owned paths, re-proved the CURSOR_GAP/DoD conflict from production code, reported BLOCKED, and refreshed the Serena handoff.",
+      "whatRemains": "Land session authority, recipient registry, and durable effect-session reader; add @moe/coordination dependency; amend DoD 3 to production CURSOR_GAP semantics or authorize a coordination contract change; then plan.",
+      "pitfalls": "Do not inject positive auth/recipient/effect answers, invent adapter-local cursor reason codes, treat behind-ack replay as stale, or overwrite foreign manifest WIP.",
+      "openQuestions": "Will the human amend DoD 3 to assert outcome/durableCursor/mailboxSequence, or explicitly commission a coordination contract change?",
+      "releasedAt": "2026-08-09T14:35:39.015Z",
+      "releasedBy": "architect-db2146e3",
+      "reason": "Explicit re-audit handoff: prerequisites and cursor-contract amendment remain unresolved; free architect capacity."
+    },
     {
       "whatIsDone": "Audited committed coordination/core/store/daemon surfaces; proved the authority and cursor-contract gaps; created task-b4f12e63baca4ecc9f2c159ed3c3ad78, task-21713cf152c047c597da9765d8d95510, and task-04e4367443214a588ed6277b92969a33; linked task-6cbff01023b14b26a78fc5e3eb1dd8a9; reported the parent BLOCKED; wrote Serena handoff and decision memories.",
       "whatRemains": "Land all four production prerequisites, obtain the session proof protocol decision, and have human/governor amend DoD 3 to assert typed CURSOR_GAP fields (or authorize a coordination contract task). Then reclaim and submit the five-file adapter plan.",

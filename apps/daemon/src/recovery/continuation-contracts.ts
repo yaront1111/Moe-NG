@@ -1,6 +1,6 @@
 import type { BoundedJsonDecodeError, JsonObject, JsonValue, RuntimeCommandKind } from "@moe/contracts";
-import { PREDECESSOR_RELEASES } from "@moe/runner";
-import type { PredecessorRelease, RecoveryFailure } from "@moe/runner";
+import { RECOVERY_OUTCOME_KINDS } from "@moe/runner";
+import type { RecoveryFailure, RecoveryOutcomeKind } from "@moe/runner";
 
 /**
  * The continuation vocabulary and byte ingress, held apart from the service that
@@ -11,7 +11,14 @@ import type { PredecessorRelease, RecoveryFailure } from "@moe/runner";
  * successor-overlap and resume admissions are `@moe/runner`'s, and their codes
  * and layers are carried out verbatim by `boundaryRefusal` rather than restated.
  */
-export const CONTINUATION_SCHEMA_VERSION = "moe-recovery-continuation-request/1" as const;
+/**
+ * `/2` REMOVED `predecessorRelease` and `safeHandoff` from the request. A caller
+ * that can assert its own predecessor release can manufacture the boundary it is
+ * asking permission to cross, so those facts now come only from the durable
+ * reconciliation record. The version bump is what makes a `/1` envelope — the
+ * shape that carried them — a rejection rather than a silently-ignored extra.
+ */
+export const CONTINUATION_SCHEMA_VERSION = "moe-recovery-continuation-request/2" as const;
 export const CONTINUATION_BINDING_SCHEMA_VERSION = "moe-recovery-continuation-binding/1" as const;
 
 /**
@@ -43,20 +50,23 @@ export type ContinuationErrorCode = (typeof CONTINUATION_ERROR_CODES)[number];
 export interface ContinuationBinding {
   readonly attemptRef: string;
   readonly bindingRef: string;
-  readonly classification: string;
+  readonly classification: RecoveryOutcomeKind;
   readonly safeHandoff: string;
   readonly schemaVersion: typeof CONTINUATION_BINDING_SCHEMA_VERSION;
   readonly successorRef: string;
 }
 
+/**
+ * What a caller may say. Note what is ABSENT: no release, no handoff. Those are
+ * read from the predecessor's stored record, so this shape cannot express the
+ * assertion that would bypass the boundary.
+ */
 export interface ContinuationRequest {
   readonly attemptRef: string;
   readonly correlationId: string;
   readonly decidedAt: string;
-  readonly predecessorRelease: PredecessorRelease;
   readonly principalId: string;
   readonly projectId: string;
-  readonly safeHandoff: string | null;
   readonly successorRef: string;
 }
 
@@ -103,10 +113,8 @@ const REQUEST_KEYS = Object.freeze([
   "correlationId",
   "decidedAt",
   "kind",
-  "predecessorRelease",
   "principalId",
   "projectId",
-  "safeHandoff",
   "schemaVersion",
   "successorRef",
 ]);
@@ -188,9 +196,13 @@ function isPlainJsonObject(value: JsonValue): value is JsonObject {
 
 /**
  * Exact shape: a decoder-created null-prototype record carrying exactly the
- * declared keys, nothing more and nothing less. The release lattice is checked
- * against `@moe/runner`'s exported list rather than a local copy, so a member
- * added there cannot be silently accepted or silently dropped here.
+ * declared keys, nothing more and nothing less.
+ *
+ * The exactness is what enforces the migration. `predecessorRelease` and
+ * `safeHandoff` are not merely unread — they are UNDECLARED, so a request still
+ * carrying them has a key count this gate rejects. An implementation that only
+ * stopped reading them would leave a caller able to send them and be told the
+ * continuation succeeded, which is a different and worse answer than a refusal.
  */
 export function parseContinuationRequest(value: JsonValue): ContinuationRequest | null {
   if (!isPlainJsonObject(value)) return null;
@@ -199,18 +211,12 @@ export function parseContinuationRequest(value: JsonValue): ContinuationRequest 
   if (value["schemaVersion"] !== CONTINUATION_SCHEMA_VERSION) return null;
   if (!(CONTINUATION_COMMAND_KINDS as readonly unknown[]).includes(value["kind"])) return null;
   if (REF_KEYS.some((key) => !isRef(value[key]))) return null;
-  const release = value["predecessorRelease"];
-  if (!(PREDECESSOR_RELEASES as readonly unknown[]).includes(release)) return null;
-  const handoff = value["safeHandoff"];
-  if (handoff !== null && !isRef(handoff)) return null;
   return Object.freeze({
     attemptRef: value["attemptRef"] as string,
     correlationId: value["correlationId"] as string,
     decidedAt: value["decidedAt"] as string,
-    predecessorRelease: release as PredecessorRelease,
     principalId: value["principalId"] as string,
     projectId: value["projectId"] as string,
-    safeHandoff: handoff as string | null,
     successorRef: value["successorRef"] as string,
   });
 }
@@ -225,8 +231,12 @@ export function decodeContinuationBinding(bytes: Uint8Array): ContinuationBindin
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Readonly<Record<string, unknown>>;
   if (item["schemaVersion"] !== CONTINUATION_BINDING_SCHEMA_VERSION) return null;
-  for (const key of ["attemptRef", "bindingRef", "classification", "safeHandoff", "successorRef"] as const) {
+  for (const key of ["attemptRef", "bindingRef", "safeHandoff", "successorRef"] as const) {
     if (typeof item[key] !== "string") return null;
   }
+  // Narrowed to the runner's vocabulary rather than any string: a binding is a
+  // record that some classification admitted a resume, and REFUSED — which the
+  // reconciliation vocabulary does contain — never admitted anything.
+  if (!(RECOVERY_OUTCOME_KINDS as readonly unknown[]).includes(item["classification"])) return null;
   return Object.freeze({ ...item }) as unknown as ContinuationBinding;
 }

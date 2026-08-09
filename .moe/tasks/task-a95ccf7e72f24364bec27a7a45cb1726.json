@@ -19,12 +19,12 @@
     "Split before 400 lines, target 250. Explicit owned paths only; no git add -A."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 14:15Z. Checked by subject on disk, not by clause absence.\n\nVERIFIED ON DISK: its description states \"Hard dependencies: none blocking\", AND the subject it maps genuinely exists. semanticTone is declared at packages/control-room-model/src/index.ts:32 as TruthSemanticTone, carries real values (e.g. \"neutral slate\" at :74), and is already consumed in production at apps/control-room/src/kernel.tsx:109 as data-tone. So the semanticTone-to-token mapping this task owns has a real thing on both ends: a live source and a live consumer.\n\nThat distinguishes it from a surface-for-absent-data task, which is the failure mode that has blocked seven tasks on this board today.\n\nOwned paths: the token stylesheet, its test, and the semanticTone-to-token mapping.\n\nRELEVANT PRIOR ART, worth reading before planning: task-ab8c9489 landed CR-A11Y-001, a monochrome predicate asserting all five truth classes are distinguishable WITHOUT colour, and it deliberately EXCLUDES semanticTone from that comparison — distinguishability rests on glyph, shortLabel and borderStyle. This task must not undermine that. Adding a colour token layer is complementary to colour-independence, not a replacement for it, and a change that made any class depend on colour to be distinguishable would redden that predicate and should.\n\nMEDIUM priority, and I am promoting it anyway because the board is starving: 0 WORKING and 0 REVIEW at 13:46Z with 36 tasks in BACKLOG that agents cannot claim. Reachable work matters more than priority ordering when nothing is reachable.\n\nFOR THE ARCHITECT: re-measure before naming symbols; report blocked if you find an unbuilt dependency I missed and I return it without argument.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -32,5 +32,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:31:41.439Z",
-  "updatedAt": "2026-08-09T12:31:41.439Z"
+  "updatedAt": "2026-08-09T14:15:34.919Z"
 }

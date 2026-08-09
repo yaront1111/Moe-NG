@@ -17,13 +17,92 @@
     "TDD; exact stable reason code and layer for every failure, positive generated case counts, and production-surface mutation checks.",
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED: create `claude-runtime-pin.test.ts` around the new internal `prepareClaudeRuntimePin` seam using real Windows temp trees plus a thin wrapped production FS/observation port only for deterministic fault injection. Pin the success contract (all declared closure entries copied under one digest-addressed root; mixed-case declaration order produces byte-identical aggregate/result digests; result, nested observation, closure, and binding fields are frozen) and assert the large-file case is consumed in multiple bounded chunks rather than by a whole-file read. Add positive-count generated refusal tables that assert `{ ok:false, layer:\"RUNTIME\", truthClass:\"UNKNOWN\", code }` for UNKNOWN/UNSUPPORTED/empty or digest-invalid quotes, missing/non-file/case-fold duplicate entries, UNC/device/traversal/containment escape, and symlink/junction/reparse paths; the non-Windows case must also assert zero filesystem and observation-port calls.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "note": "TDD RED landed. claude-runtime-pin.test.ts pins prepareClaudeRuntimePin: success contract (one digest-addressed root, exact pinned tree + digests, frozen result/observation/closure, pinRootIdentity), bounded-chunk streaming (3 source passes + 1 destination pass over a 262161-byte fixture, every chunk <= RUNTIME_PIN_CHUNK_BYTES), shuffled-declaration byte-identical rebuild, adopt-existing-root, published-root drift => CLAUDE_RUNTIME_PIN_COLLISION with existing bytes preserved, non-win32 => CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED with zero fs I/O and zero facts calls. Generated tables with asserted positive counts and asserted code SETS: 10 quote cases, 12 path cases (INVALID/ESCAPE/MISSING/NOT_FILE/DUPLICATE/REPARSE incl. a real junction), 7 observation cases (CHANGED/INVALID). Plus source-digest mismatch, copy-time mutation, post-copy source drift, copy failure, cleanup failure. Final test asserts the exercised code set equals CLAUDE_RUNTIME_PIN_ERROR_CODES so the vocabulary cannot grow or shrink untested. Fault injection wraps the PRODUCTION createNodeClaudeRuntimeFs adapter; no second authority implementation in tests.\nRED verified fresh: `pnpm --filter @moe/runner exec vitest run --root ../.. packages/runner/src/providers/claude/claude-runtime-pin.test.ts` -> exit 1, \"Error: Cannot find module './claude-runtime-pin.js'\" (fails because the surface is missing, not from a typo).",
+      "startedAt": "2026-08-09T14:25:45.838Z",
+      "completedAt": "2026-08-09T14:30:23.111Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the fail-closed contract and source re-observation in `claude-runtime-pin.ts`. Define a frozen error vocabulary (separate stable codes for unsupported platform, invalid quote, invalid/missing/non-file/duplicate/reparse/escape path, source digest mismatch, pin collision/copy/destination-digest/source-drift/cleanup failure, and observation change/invalidity), with every failure fixed at layer `RUNTIME` and truth `UNKNOWN`. Validate the quote by recomputing its `canonicalDigest(observationDigestInput(...))`, require PROVEN + nonempty + `CONTENT_ADDRESSED_COPY`, then on win32 only canonicalize the declared local-drive paths beneath the canonical installed root with case-insensitive duplicate/containment checks and per-segment reparse rejection. Hash each regular source file through a fixed-size stream, sort by the repository's code-unit rule, and compare a launch-time source observation to the quote on every authority field except freshness and its derived observation digest; current platform/version/capability facts come from the injected production observation port, never copied from request authority.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "note": "Landed the fail-closed contract + source re-observation in claude-runtime-pin.ts. Frozen 16-code vocabulary CLAUDE_RUNTIME_PIN_ERROR_CODES; every refusal goes through one `refuse()` that fixes layer=\"RUNTIME\" and truthClass=\"UNKNOWN\". Quote gate recomputes canonicalDigest(observationDigestInput(quote)) and requires v1/claude + PROVEN + nonempty bounded closure + CONTENT_ADDRESSED_COPY + exactly one EXECUTABLE. win32 gate (fs.hostPlatform()) runs before any port call. Path canonicalization: LOCAL_ABSOLUTE regex rejects UNC/device/forward-slash/trailing-sep/reserved-char forms, explicit dot-segment rejection, case-folded duplicate + containment checks, per-segment ancestor walk (REPARSE/MISSING/NOT_FILE), then realpath fold-equality + containment so a junction cannot redirect a subtree. Sources hashed by streamDigest over fs.readChunks (65536-byte chunks, no whole-file buffer), per-entry compare to the quote yields CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH, entries sorted code-unit by source-relative path. Current platform/version/capability facts come from the injected facts port (never from request authority); the source observation is built with the production buildProviderRuntimeObservation and compared to the quote via authorityDigest() = observationDigestInput minus `freshness` only.\nFresh run: `pnpm --filter @moe/runner exec vitest run --root ../.. packages/runner/src/providers/claude/claude-runtime-pin.test.ts` -> 34 passed, 10 failed (44). All 10 remaining failures are the not-yet-implemented pin/publish/binding surface (steps 3-4): the 5 success/streaming/rebuild/adopt cases, collision, destination mismatch, source drift, cleanup failure, second-observation change, and the vocabulary-coverage guard. `pnpm --filter @moe/runner typecheck` -> exit 0.\nAlso fixed three test-side defects found by this run: `??` in makeQuote/run swallowed the intentional `null` reportedVersion and the intentional non-record quote (both cases were silently running the valid path), and `join(...,\"..\",...)` normalised the traversal segment away so that row was testing PATH_MISSING instead of PATH_INVALID.",
+      "startedAt": "2026-08-09T14:30:25.249Z",
+      "completedAt": "2026-08-09T14:34:19.201Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement private content-addressed staging and publication in the same focused module: derive the aggregate closure digest from the sorted `{kind, canonical source-relative path, sha256}` manifest; canonicalize/create the caller's Moe-private local pin root before using `<pinRoot>/<aggregateDigest>`; stage in a same-parent exclusive temporary directory; create directories/files with restrictive modes and exclusive writes; stream-copy while hashing, flush/close each destination, verify its digest, then rehash every source. Never replace an existing final root: verify an already-published/concurrently-won root byte-for-byte and adopt it only on exact match, otherwise return `CLAUDE_RUNTIME_PIN_COLLISION`. On partial copy, drift, publish, or cleanup failure, close handles, attempt removal, and return the exact copy/drift/cleanup code without a prepared binding; preserve a mismatching existing destination. Keep the production file below 400 physical lines (target <=250) and do not add another authority implementation in tests.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "startedAt": "2026-08-09T14:34:23.893Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Complete the post-copy re-observation and immutable binding. Deterministically project each proven source entry to its canonical pinned absolute path, call the existing production `buildProviderRuntimeObservation` with those exact paths/digests, freshly observed OS/arch/osVersion + reported version + adapter capability schema, pinning method `CONTENT_ADDRESSED_COPY`, and injected clock, and reject any quote/source/pinned path, digest, platform, version, capability, or builder-truth mismatch with `CLAUDE_RUNTIME_OBSERVATION_CHANGED` or `CLAUDE_RUNTIME_OBSERVATION_INVALID` at RUNTIME/UNKNOWN. Return a deeply frozen prepared result binding `quotedObservationDigest`, `freshObservationDigest`, aggregate closure digest, the unique EXECUTABLE pinned path, and a canonical pin-root identity digest. Add the exact runtime bridge `export * from \"./claude-runtime-pin.ts\";`; intentionally do not add a package-root export because consumer `task-acf73253a204435aba590894799814f2` imports this internal runner module immediately before grant/lock/spawn.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial review and mutation drill: inspect the owned diff for double invocation/concurrent publication, path case folding, UNC/device prefixes, reparse ancestors, large/empty closure handling, file-handle closure, Windows rename-replacement behavior, source mutation during copy, and cleanup failure. Temporarily mutate the production surface twice—remove/bypass the post-copy source rehash, then relax one quote authority-field comparison (version or capability)—and run the focused runtime-pin test each time to prove the exact RUNTIME code/layer tests go red; restore the exact production bytes afterward. Also confirm the generated refusal tables report a positive case count and `claude-runtime-pin.ts` remains under 400 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Final gate only: from `D:\\projexts\\moe-next`, run exactly `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` in the foreground and record its fresh exit-0 output. Confirm no temp/generated evidence remains, inspect `git status --porcelain`, unstage any foreign path without touching its bytes, then commit only by explicit pathspec: `git commit -- packages/runner/src/providers/claude/claude-runtime-pin.ts packages/runner/src/providers/claude/claude-runtime-pin.js packages/runner/src/providers/claude/claude-runtime-pin.test.ts`; verify `git show --stat` contains only those paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a0eaa020",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 13:02Z. Dependency-checked: no dependency clause in its description.\n\nWHY PROMOTABLE NOW: the second half of architect-8c9073cd's 12:51Z split of task-acf73253. Where task-4d1f8ba5 owns native Windows process control, this owns runtime closure pinning and re-observation — resolving and content-address-pinning the installed Claude runtime closure, then re-observing path/digest/version/capability/platform immediately before activation.\n\nWHY THE SPLIT WAS RIGHT: architect-8c9073cd measured that forcing closure pinning, native Windows process control and the launcher facade into one task made it oversized and unsafe. Separating them means each can be drilled properly, and the launcher becomes a thin facade over two proven boundaries rather than a monolith nobody can verify.\n\nFile-disjointness: this task and task-4d1f8ba5 should not contend for the same paths. Confirm that at planning time — several agents share this working directory and a completion hook has swept foreign files into four separate commits today. If they do overlap, say so and the two must serialize.\n\nProduction capability task. Builds a subject; certifies nothing.\n\nFOR THE ARCHITECT: re-measure before naming symbols; report blocked if you find an unbuilt dependency I missed.",
   "createdBy": "WORKER",
   "parentTaskId": "task-acf73253a204435aba590894799814f2",
   "priority": "CRITICAL",
@@ -38,5 +117,40 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:51:31.590Z",
-  "updatedAt": "2026-08-09T12:51:43.247Z"
+  "updatedAt": "2026-08-09T14:34:23.893Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:13:09.675Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3",
+    "worker-a0eaa020"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T14:22:14.856Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected whole-buffer reuse of `artifact-store.stageArtifact`: its `Uint8Array` API cannot prove bounded streaming for large runtimes. Rejected shell/PowerShell/icacls resolution because the task is explicitly shell-free and process execution is out of scope. Rejected trusting caller-supplied fresh facts or comparing only digests: current facts must arrive through a production observation dependency and every quote authority field must be compared. Rejected raw equality between installed and pinned absolute paths: the quote is checked against a freshly resolved source observation first (ignoring only freshness and its derived digest), then the proven source-relative manifest is deterministically projected into the content-addressed pin root and rebuilt through the existing observation builder. Rejected public `@moe/runner` export because the named consumer is an internal runner launch wrapper.",
+    "codebaseInsights": "Stale-disk measurement (PowerShell `Test-Path` over all owned paths plus `git status --porcelain -- <owned>`): all three owned files are absent and their owned status is clean, so this plan creates rather than duplicates them. `packages/runner/src/providers/claude/claude-observation.ts` already defines `ProviderRuntimeObservation`, `RuntimeClosureEntry`, `buildProviderRuntimeObservation`, `observationDigestInput`, `CONTENT_ADDRESSED_COPY`, PROVEN/UNKNOWN, and canonical code-unit closure sorting; reuse those production surfaces. `packages/runner/src/canonical.ts` provides `canonicalDigest` and `deepFreeze`; its `sha256Hex` is whole-buffer only and is not the streaming implementation. `runtime-entrypoint.test.ts` automatically requires an exact `.js` bridge for every runtime `.ts` module, so the owned bridge is mandatory and no allowlist edit is needed. Existing `scope-observation.ts` demonstrates win32 case folding/realpath containment but is worktree-specific and must not become runtime authority. The authoritative design was measured at provider-launch section 13: compare path/digest/version/capability/schema to the quote before activation and pin by private content-addressed copy. This pure preparation capability's real consumer is task-acf73253a204435aba590894799814f2.",
+    "risks": "Windows path identity is case-insensitive and device/UNC names can bypass naive `resolve`/prefix checks; normalize with win32 semantics, reject device/UNC forms before filesystem access, case-fold duplicate/containment checks, and inspect every ancestor for reparse behavior. Windows rename can replace some existing targets; stage a directory on the same volume, preflight final-root absence, never rename over an existing root, and on a concurrency race verify/adopt the winner rather than overwriting it. Always close streams/handles before cleanup. Source bytes may change during copying, so both destination verification and a second source hash are mandatory. The quote's installed paths and the final pinned paths are intentionally different: equality is enforced on the fresh source observation before deterministic path projection, not weakened by ignoring path fields. If the single production source approaches 400 lines, stop and request an owned-path split rather than cross the cap.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "packages/runner/src/providers/claude/claude-probe.ts",
+      "packages/runner/src/providers/claude/claude-capabilities.ts",
+      "packages/runner/src/canonical.ts",
+      "packages/runner/src/scope/scope-observation.ts",
+      "packages/runner/src/runtime-entrypoint.test.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T14:22:16.909Z",
+  "workStartedAt": "2026-08-09T14:25:45.838Z"
 }

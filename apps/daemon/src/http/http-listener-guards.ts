@@ -22,6 +22,7 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_HOST_INVALID",
   "LISTENER_NON_LOOPBACK_BIND",
   "LISTENER_ORIGIN_INVALID",
+  "LISTENER_REQUEST_FAILED",
   "LISTENER_ROUTE_UNKNOWN",
   "LISTENER_BIND_FAILED",
   "LISTENER_STREAM_REQUEST_INVALID",
@@ -68,6 +69,7 @@ export function refuse(code: ListenerRefusalCode): ListenerRefused {
 
 export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_BODY_TOO_LARGE") return 413;
+  if (code === "LISTENER_REQUEST_FAILED") return 500;
   if (code === "LISTENER_ROUTE_UNKNOWN") return 404;
   if (code === "LISTENER_STREAM_REQUEST_INVALID") return 400;
   if (code === "LISTENER_STREAM_UNAVAILABLE") return 503;

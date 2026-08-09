@@ -176,7 +176,7 @@
       "completedAt": "2026-08-09T13:32:44.543Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -189,7 +189,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:54:17.908Z",
-  "updatedAt": "2026-08-09T13:34:31.665Z",
+  "updatedAt": "2026-08-09T13:38:12.346Z",
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -211,7 +211,9 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
     "firstClaimAt": "2026-08-09T13:03:12.901Z",
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-09T13:38:12.346Z",
+    "wallClockMs": 2099445
   },
   "planningNotes": {
     "approachesConsidered": "(1) Write a fresh HTTP boundary with its own auth, validation and error mapping. REJECTED and it would be a serious defect: apps/daemon/src/http/http-adapter.ts:150 already exports handleCommandRequest, which performs authenticate, protocol-version, decode, registry lookup, capability and payload-shape checks in that exact order, each with committed stable codes and refusal stages, and it is already covered by http-adapter.test.ts. A second boundary would duplicate authority and drift.\n(2) Add an HTTP framework (express/fastify). REJECTED: the repo has zero HTTP dependencies and the adapter already owns everything above the socket. node:http is sufficient and adds no supply-chain surface, which matters because release policy forbids unwaived HIGH dependency findings.\n(3) Implement a new client interface for sending. PARTIALLY REJECTED — see the DoD-3 correction below. The send path is new, but it must consume the EXISTING generated builders rather than hand-rolling envelopes.\n(4) Build the resumable cursor stream here. UNNECESSARY: apps/daemon/src/http/event-stream.ts already implements it (StreamCursor, StreamPage, StreamGap, WireCursor, EventPageFrame, readEventPage, resumeFromSnapshot, EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_LAYER=\"SEAM\"), and index.ts:101 already exports readEventPage and resumeFromSnapshot. The listener routes to it; it does not reimplement it. My own task description wrongly listed this as out of scope and unowned — it is neither; it is DONE.",
@@ -233,7 +235,9 @@
   },
   "planApprovedAt": "2026-08-09T13:03:08.707Z",
   "contextFetchedBy": [
-    "worker-5981deec"
+    "worker-5981deec",
+    "qa-b2df68b9",
+    "architect-f39f0c46"
   ],
   "workStartedAt": "2026-08-09T13:03:33.207Z",
   "reviewStartedAt": "2026-08-09T13:34:31.665Z",
@@ -266,5 +270,8 @@
     "apps/daemon/src/http/http-listener-guards.ts",
     "apps/daemon/src/http/http-listener-guards.js",
     "tests/integration/control-room/control-room-transport.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T13:38:12.346Z",
+  "reviewCompletedAt": "2026-08-09T13:38:12.346Z",
+  "reviewSummary": "APPROVED — verified from disk, with a live network probe.\n\nGATES RE-RUN BY QA: daemon 30 files / 597 tests; control-room-client 5 / 39; test:integration 2 / 40. All exit 0, matching the recorded evidence. Trees clean.\n\nLOOPBACK PROPERTY PROVEN BY PROBE, NOT BY TEST. I started the real listener and connected to it:\n- default -> ephemeral port 64958, origin http://127.0.0.1:64958 (no hardcoded port)\n- connect 127.0.0.1 -> CONNECTED\n- connect this host's external IPv4 10.77.0.3, same port -> TIMEOUT: nothing listening off-loopback\n- after close() -> ECONNREFUSED: the handle released, no port leaked\nRefusal arm, live: host \"0.0.0.0\", \"::\" and \"localhost\" each return LISTENER_NON_LOOPBACK_BIND at layer CONTROL_ROOM_LISTENER, before any socket exists. Rejecting the HOSTNAME is the subtle one — it could resolve off-loopback.\n\nDRILL: `if (!isLoopbackHost(host))` -> `if (false)`. 3 suites / 4 tests red, incl. \"REFUSES a hostname, which could resolve off-loopback, as well as a public address\". Restore verified by `git hash-object` = aca7cf0d.\n\nDoD 4 IS NON-VACUOUS, the part worth checking: the integration test compares the transported payload against the real in-process `readEventPage` with toEqual, AND asserts that in-process result is a PAGE with events.length > 0. Without the second pair, two empty payloads would match trivially.\n\nROOT SURFACE: my probe reports 44 runtime exports, matching the catalogue's toBe(44), all 5 daemon-entry values present by name. `export *` is looser than the earlier publish task's curated style, but the guard is exact set equality, so a future export turns it red rather than slipping onto the root.\n\nSIZES: listener 194, guards 143, entry 161, main 93, transport 134 — under 250. apps/daemon/src/index.ts is 262, over target and under the 400 threshold; attributed rather than scored, since this task added exactly ONE line as instructed and the other +12 are epic-bf111658's recovery-incarnation block from swept commit ea31ab4."
 }

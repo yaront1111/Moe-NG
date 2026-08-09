@@ -16,20 +16,20 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. This one is the closest of the four to being genuinely free, and I want the measurement recorded so it is promoted the moment it is.\n\nMEASURED, dependency by dependency: \"Predecessor input materializer\" is DONE. \"Evidence receipt pipeline\" is DONE. \"Expansion admission protocol\" (task-005c9896) is BLOCKED. So TWO OF THREE are satisfied and exactly one is not.\n\nIts own owned path packages/integration/** does not exist yet, which is fine — that is its deliverable, not its subject.\n\nUNBLOCK CONDITION, and it is a single item: task-005c9896 DONE. Nothing else gates this. When that lands, promote this immediately — it is the nearest thing to free in the whole BACKLOG and it in turn unblocks task-cda6bddf (Same-bug circuit breaker), which unblocks task-dddfaf83 (Graph supersession engine). One task releases a chain of three.\n\nDemoted rather than left claimable because the board was at 0 WORKING / 0 REVIEW with architects actively claiming, and a two-thirds-satisfied dependency still blocks. An architect claiming it would spend a full context load establishing what this reason field now records in one line.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 7,
+  "order": 67,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.747Z",
-  "updatedAt": "2026-08-09T10:23:42.761Z",
+  "updatedAt": "2026-08-09T14:18:12.340Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

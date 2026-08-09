@@ -16,21 +16,22 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity, not hiding work.\n\nMEASURED: its hard dependency is \"every preceding Graph Beta kernel\". apps/daemon/src/graph/ DOES NOT EXIST on disk. Its own owned path is apps/daemon/src/graph/**, so both the subject and the surrounding kernel set are absent.\n\nWHY DEMOTE RATHER THAN LEAVE IT CLAIMABLE: the board was at 0 WORKING / 0 REVIEW at 13:46Z with architects actively looking for work. A task in PLANNING is claimable, and any architect claiming this one spends a full context load re-deriving that the Graph Beta kernels do not exist, then blocks. Seven tasks on this board have already paid exactly that cost today. Leaving it claimable is not offering work; it is offering a trap.\n\nThis is reversible and carries no judgement about the task's value. Promote it when the Graph Beta kernels exist and are verifiable on disk by grep or probe.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 10,
+  "order": 64,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.122Z",
-  "updatedAt": "2026-08-09T10:23:43.117Z",
+  "updatedAt": "2026-08-09T14:27:43.380Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "worker-b6bbb60c"
   ]
 }

@@ -153,13 +153,22 @@ describe("section 4.16 narrow parity", () => {
 });
 
 /**
- * DoD 5's table clause is NOT-APPLICABLE, and this is its premise rather than a
- * claim about it: section 4.16's table wording targets the Runs/leases (4.11)
- * and Resources (4.12) surfaces, and neither exists. Written as a tripwire
- * instead of a sentence in a note, because task-ddb3bf77 is building exactly
- * those surfaces — the day it lands, this goes RED and whoever lands it is told
- * the clause has become applicable. A not-applicable recorded only in prose
- * would have gone silently stale.
+ * DoD 5's table clause WAS not-applicable, on the premise that section 4.16's
+ * table wording targets the Runs/leases (4.11) and Resources (4.12) surfaces
+ * and neither existed. task-fdf3e6aa wrote that premise as a tripwire instead
+ * of a sentence in a note so it could not go silently stale, and it worked
+ * exactly as designed: commit 0fd712b landed both surfaces and this went RED.
+ *
+ * The premise has expired, so the assertion is INVERTED rather than deleted. It
+ * now holds the opposite fact — those surfaces exist — and so it still reddens
+ * if they are removed or renamed. Section 4.16 table coverage for Runs and
+ * Resources is real work that has never existed here; it is owned by
+ * task-bc0b8f5ba8ec4d749c281c3d01f3d773 and is deliberately NOT attempted in
+ * this file. The 15-surface parity sweep above is untouched.
+ *
+ * Each id is checked SEPARATELY. The absence form could collapse both into one
+ * OR because any single hit failed it; the presence form cannot, or one surface
+ * could vanish while the other alone kept this green.
  */
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SOURCE_ROOT = join(dirname(THIS_FILE), "..");
@@ -172,17 +181,18 @@ function sourceFiles(directory: string): readonly string[] {
   });
 }
 
-it("records the table clause not-applicable, and fails when its premise expires", () => {
-  // This file names both ids to describe the premise, so it would flag itself.
+it("records the table clause now applicable, and fails if its subject disappears", () => {
+  // This file names both ids to describe the clause, so it would satisfy itself.
   // Excluded by path, and the exclusion is asserted to have removed exactly one
   // entry so a future rename cannot silently widen it.
   const scanned = sourceFiles(SOURCE_ROOT);
   const files = scanned.filter((file) => file !== THIS_FILE);
   expect(scanned.length - files.length).toBe(1);
   expect(files.length).toBeGreaterThan(0);
-  const offenders = files.filter((file) => {
-    const source = readFileSync(file, "utf8");
-    return source.includes("cr.runs") || source.includes("cr.resources");
-  });
-  expect(offenders.map((file) => file.slice(SOURCE_ROOT.length + 1))).toEqual([]);
+  const bearers = (id: string): readonly string[] =>
+    files
+      .filter((file) => readFileSync(file, "utf8").includes(id))
+      .map((file) => file.slice(SOURCE_ROOT.length + 1));
+  const absent = ["cr.runs", "cr.resources"].filter((id) => bearers(id).length === 0);
+  expect(absent).toEqual([]);
 });

@@ -16,20 +16,20 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity.\n\nMEASURED, both halves of its hard dependency: \"Multi-node daemon composition\" is task-9634ed3b, which I have just demoted because apps/daemon/src/graph/ does not exist. \"Live control-room seam\" IS DONE, so half the dependency is genuinely satisfied — but the half that supplies the graph authority this task renders is not, and its own owned path apps/control-room/src/graph/** does not exist either.\n\nA control-room surface over a daemon composition that has not been built is the surface-for-absent-data shape that has blocked seven tasks on this board today. Same reason I held task-ddb3bf77 (circuit-breaker operator surfaces) in BACKLOG in the same sweep.\n\nPromote when task-9634ed3b is DONE and its graph authority is verifiable on disk.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 11,
+  "order": 65,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.248Z",
-  "updatedAt": "2026-08-09T10:23:43.237Z",
+  "updatedAt": "2026-08-09T14:17:54.257Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

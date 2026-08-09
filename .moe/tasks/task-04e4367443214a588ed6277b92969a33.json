@@ -16,7 +16,7 @@
     "No command, lifecycle, effect, or mailbox authority may be added."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,9 +25,30 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
   "priority": "CRITICAL",
-  "order": 51,
+  "order": 61,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:22.408Z",
-  "updatedAt": "2026-08-09T13:07:22.408Z"
+  "updatedAt": "2026-08-09T14:34:19.301Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:32:52.514Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3"
+  ],
+  "blockedReason": "The named authority dependency and required package edge are both absent, so planning now would invent positive session evidence or duplicate coordination vocabulary. Board remeasurement: Durable daemon session authority task-21713cf152c047c597da9765d8d95510 is still PLANNING (it is itself gated on an explicit proof-protocol decision). Disk measurement: every `apps/daemon/src/identity/session-authority*` prerequisite file and all three owned `coordination/recipient-registry*` files are absent/clean; production daemon search finds no SessionAuthority/ActiveSession surface. The closed recipient facts do exist publicly in @moe/coordination (`COORDINATION_ROLES`, `CoordinationRole`, `CoordinationAddress`), but apps/daemon/package.json and its lock importer do not depend on @moe/coordination, neither daemon nor root node_modules links it, and this task does not own the manifest/lock. Deep import or a local role/address copy would violate the rails and fail type/runtime reachability. Resume only after task-21713 is DONE and re-probed, and after ownership is amended to include apps/daemon/package.json + pnpm-lock.yaml for the exact @moe/coordination workspace dependency (or that dependency lands in a prerequisite). Preserve consumer task-4afcb064; do not seed raw session/recipient authority in tests.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:33:59.661Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Confirmed the @moe/coordination role/address surface exists publicly, proved the durable session authority and registry files are absent, proved apps/daemon lacks the direct coordination dependency, reported BLOCKED, and wrote the Serena handoff.",
+      "whatRemains": "Land task-21713cf152c047c597da9765d8d95510, add/amend ownership for the exact @moe/coordination workspace dependency, then re-probe and plan the registry.",
+      "pitfalls": "No caller-injected positive session facts, raw authority event seeding, deep imports, or local copies of the closed role/address vocabulary.",
+      "openQuestions": "Will the manifest/lock ownership be added to this task or will a prerequisite land @moe/coordination before registry work?",
+      "releasedAt": "2026-08-09T14:34:19.300Z",
+      "releasedBy": "architect-db2146e3",
+      "reason": "Explicit planning handoff after measuring the absent session authority and daemon coordination dependency edge."
+    }
+  ]
 }

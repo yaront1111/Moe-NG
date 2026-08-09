@@ -2,7 +2,7 @@
   "id": "task-b5e9bd6444514d02a1e554420c0245b8",
   "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
   "title": "Isolated hostile-test lane infrastructure",
-  "description": "Objective: provide one shell-neutral, typechecked root runner for fault and security suites without letting broad root Vitest discovery or zero-case sweeps create false evidence. Deliverable: root `test:fault` and `test:security` scripts, dedicated `tests/fault` and `tests/security` tsconfig/Vitest configs, and a non-authority security lane smoke case; existing Foundation fault tests prove the fault lane is non-empty. MEASURED GAP at HEAD 1ce0059: package.json has no test:fault/test:security scripts, only tests/fault/foundation has its own tsconfig and three `.test.ts` cases, tests/security is absent, and task-05ce9b8f comments describe but did not create G0. NOT in scope: adding security/fault schedules, editing tests/fault/foundation/**, disaster/Linux/macOS subtrees, reimplementing production authority, or claiming any platform/security scenario PASS. Hard dependencies/serialization: wait until package.json owners task-739879d0d1ce4a7ea4d1430688cdc4dc and task-9449ce65fae544ef9809691ec079f599 finish and reconcile their scripts. Consumers: task-05ce9b8f982f448a9cdaa4142a653f32, task-0c89476b78044024b07c86c0c8986bd0, task-e87a735386f643fe92c0eeff09bc4275, and task-e94b2055e281489ea9e97820919f6856. Owned paths: package.json, tests/fault/tsconfig.json, tests/fault/vitest.config.ts, tests/security/tsconfig.json, tests/security/vitest.config.ts, tests/security/lane-smoke.security.ts. Verification: pnpm test:fault && pnpm test:security.",
+  "description": "Objective: provide one shell-neutral, typechecked root runner for fault and security suites without letting broad root Vitest discovery or zero-case sweeps create false evidence. Deliverable: root `test:fault` and `test:security` scripts, dedicated `tests/fault` and `tests/security` tsconfig/Vitest configs, and a non-authority security lane smoke case; existing Foundation fault tests prove the fault lane is non-empty. MEASURED GAP at HEAD 1ce0059: package.json has no test:fault/test:security scripts, only tests/fault/foundation has its own tsconfig and three `.test.ts` cases, tests/security is absent, and task-05ce9b8f comments describe but did not create G0. NOT in scope: adding security/fault schedules, editing tests/fault/foundation/**, disaster/Linux/macOS subtrees, reimplementing production authority, or claiming any platform/security scenario PASS. Hard dependencies/serialization: wait until package.json owner task-739879d0d1ce4a7ea4d1430688cdc4dc finishes and reconcile with its scripts (DONE as of 2026-08-09). HUMAN AMENDMENT 2026-08-09 (Yaron, via Claude): the former serialization on task-9449ce65fae544ef9809691ec079f599 is removed to break the b5e9bd64<->9449ce65 deadlock, per architect-5b5302ee corrected sequencing: distribution (DONE) -> this hostile-test lane -> OS effect conformance -> release supply-chain gate. task-9449ce65 remains a downstream co-owner of package.json: if both are ever in flight, serialize on the shared file at claim time. Consumers: task-05ce9b8f982f448a9cdaa4142a653f32, task-0c89476b78044024b07c86c0c8986bd0, task-e87a735386f643fe92c0eeff09bc4275, and task-e94b2055e281489ea9e97820919f6856. Owned paths: package.json, tests/fault/tsconfig.json, tests/fault/vitest.config.ts, tests/security/tsconfig.json, tests/security/vitest.config.ts, tests/security/lane-smoke.security.ts. Verification: pnpm test:fault && pnpm test:security.",
   "definitionOfDone": [
     "`package.json` exposes shell-neutral `test:fault` and `test:security` commands that each run `tsc -p` for its own tree before Vitest with its own config, preserving all foreign scripts added by serialized predecessor tasks.",
     "The fault config discovers existing `tests/fault/foundation/**/*.test.ts` plus future `**/*.fault.ts`; the security config discovers `**/*.security.ts`; both set `passWithNoTests:false`, deterministic serial execution, and exclude the other lane.",
@@ -18,7 +18,7 @@
     "Every downstream generated sweep must separately assert its exact non-zero generated case set and production reason code/layer."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -38,5 +38,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:09:16.769Z",
-  "updatedAt": "2026-08-09T12:09:34.318Z"
+  "updatedAt": "2026-08-09T14:24:26.105Z"
 }

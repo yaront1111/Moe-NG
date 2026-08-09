@@ -1,0 +1,61 @@
+{
+  "id": "task-2561a780fdd149439c9858c9c7b459e8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Scheduler expansion admission",
+  "description": "Objective: validate one sealed expansion proposal through landed graph/dependency/quality, scope/oracle/materialization evidence, conserved-budget/resource, and real fairness-capacity surfaces and return one all-or-none prepared admission. Hard dependencies: task-93b0314e09f248118e21f92699989468 and Fair scheduler production task-10cab3e5cdad4296bd7632bcda7b20f3 must be DONE with committed symbols. Deliverable: a dependency-free evidence validator plus admission composer with a closed EXPANSION code/layer vocabulary and exact preparation identity. NOT in scope: policy evaluation, approval, child activation, persistence, daemon composition, or importing @moe/core/@moe/runner. Owned paths: packages/scheduler/src/expansion/expansion-evidence.ts, expansion-evidence.js, expansion-admission.ts, expansion-admission.js, expansion-admission.test.ts. Production consumers: the core approval-binding child and task-9634ed3b72014fe781591c7df9674da2. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "The evidence validator derives exact scope-disjointness, child oracle eligibility, input materializability, containment, completion closure, freshness, and source digests from closed immutable receipt shapes; missing, malformed, caller-positive, or UNKNOWN evidence never passes.",
+    "The admission entry point reuses admitGraph/checkExpansionLineage, conserved-budget reservation, all-resource reservation, and the landed real fairness capacity/opportunity verdict, enforcing exact limits 3/6/9 and returning one result for the complete proposal.",
+    "Any quality, scope, oracle, input, budget, resource, capacity, dependency, freshness, containment, or limit failure returns one frozen all-or-none refusal with exact expansion code and layer (or verbatim delegated code/layer) and no proposal/preparation/child authority.",
+    "Success returns one immutable identity binding proposal/revision, quality/dependency, scope/oracle/input, budget/resource reservations, fairness opportunity/cap revision, capacity snapshot, goal version, graph epoch, and source-fact digests; any byte change yields a different identity and re-admission.",
+    "Focused N/N+1, stale/race, hostile, precedence, replay, nonzero generated-case, zero-partial-child, and production mutation tests pass; the exact verification exits 0, production files stay below 400 lines, and no DEVELOPMENT_ONLY/cross-package import exists."
+  ],
+  "taskRails": [
+    "If Fair scheduler production or any named symbol is absent/uncommitted, report blocked; never substitute caller-declared capacity or testkit fairness.",
+    "UNKNOWN evidence never counts as scope, oracle, input, capacity, budget, resource, quality, or dependency proof.",
+    "This pure kernel creates no child run, lease, effect, slot, allocation activation, or graph mutation."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 20,
+  "comments": [
+    {
+      "id": "comment-cbe65c507edf4eea8c9c64967ece5e24",
+      "author": "architect-8c9073cd",
+      "content": "Hard-dependency audit (2026-08-09): no plan can be submitted yet. `moe.search_tasks` reports Planning-run expansion submission task-93b0314e09f248118e21f92699989468 BLOCKED (0 plan steps) and Fair scheduler production task-10cab3e5cdad4296bd7632bcda7b20f3 BLOCKED (0 plan steps). Fresh disk probe reports `fairness_dir_exists=False` and `expansion_dir_exists=False`; `rg` finds only the landed admission 3/6/9 lineage constants/codes, with no FairnessTicket, WDRR/selectNext, opportunity/cap-revision production surface. The task rail explicitly requires blocking rather than substituting caller-declared capacity/testkit fairness. Reclaim only when both named dependencies are DONE and their committed symbols are re-probed.",
+      "timestamp": "2026-08-09T14:32:45.203Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:46:33.669Z",
+  "updatedAt": "2026-08-09T14:33:11.474Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:31:58.244Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ],
+  "blockedReason": "Both explicit hard dependencies are BLOCKED and required production surfaces are absent. Planning-run EXPANSION submission has no landed sealed proposal contract, and packages/scheduler/src/fairness plus FairnessTicket/WDRR/opportunity/cap-revision symbols do not exist. Task rail requires fail-closed blocking, not caller-declared/testkit fairness.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:32:51.198Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded current planning guidance and prior expansion decomposition memory; freshly verified both hard-dependency statuses and absent scheduler fairness/expansion surfaces; documented comment comment-cbe65c507edf4eea8c9c64967ece5e24; reported BLOCKED; wrote Serena handoff.",
+      "whatRemains": "After task-93b0314 and task-10cab3 are DONE, re-probe their committed exact sealed-proposal and real fairness opportunity/capacity APIs, then draft the five-file TDD plan.",
+      "pitfalls": "Do not substitute caller booleans, active resource rows, reference-model/testkit fairness, or infer an uncommitted proposal schema. Preserve the 3/6/9 production lineage limits and assert delegated code plus refusing layer.",
+      "openQuestions": "None until both explicit dependencies land.",
+      "releasedAt": "2026-08-09T14:33:11.473Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit architect handoff after verified hard-dependency block."
+    }
+  ]
+}

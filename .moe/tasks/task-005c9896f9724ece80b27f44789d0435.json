@@ -16,8 +16,8 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-8c9073cd",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -26,15 +26,37 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 12,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-efabf4729a5046008a5853b6a6f6c979",
+      "author": "architect-8c9073cd",
+      "content": "SPIDR decomposition after committed-byte audit (authoritative design hash verified). This parent is a decomposition shell: its honest implementation requires >10 paths and crosses independent hold, PlanningRun schema/behavior, scheduler admission, approval/preparation, publication, and hardening authorities. Created and—per human instruction—moved all six children to PLANNING: (1) task-7f089e11daea44e9a483197ff139d725 Expansion planning hold lifecycle; (2) task-fcad40b6d26243439cd19fd3e49c924d Planning expansion contract binding; (3) task-93b0314e09f248118e21f92699989468 Planning-run expansion submission; (4) task-2561a780fdd149439c9858c9c7b459e8 Scheduler expansion admission; (5) task-b863bae80fab426db7b6204f9d713c42 Expansion manual approval binding; (6) task-a1e7f75e9681486cb0a8f93e9397b8b5 Expansion protocol public hardening. They are dependency-ordered and file-disjoint. Hard external blockers remain: Fair scheduler production task-10cab3e5cdad4296bd7632bcda7b20f3 is BLOCKED and packages/scheduler/src/fairness is absent; Graph supersession engine task-dddfaf83f9c644099b5b263e485c58c7 is BACKLOG. Do not plan child 4 against caller capacity/testkit fairness or child 5 against invented preparation/fence records. Durable atomic child activation remains task-9634ed3b72014fe781591c7df9674da2; the pure protocol proves only all-or-none decisions and zero authority before that consumer transaction.",
+      "timestamp": "2026-08-09T13:48:12.960Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.623Z",
-  "updatedAt": "2026-08-09T13:32:16.019Z",
+  "updatedAt": "2026-08-09T13:48:59.475Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8c9073cd"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T13:32:08.207Z"
-  }
+  },
+  "blockedReason": "Parent is an oversized decomposition shell, not a safe single implementation task. Its honest surface exceeds 10 files and crosses six independent authorities; children are created and moved to PLANNING per human request. Also the explicit Fair scheduler hard dependency is BLOCKED and absent on disk (no fairness/WorkItem/WDRR/opportunity/cap-revision/resource-queue production surface), while exact prepared supersession/funding/fence authority is still BACKLOG. Planning the parent now would require caller-declared capacity, testkit fairness, unreachable package internals, or duplicated PlanningRun/supersession authority. Close this shell only after the six children and named external dependencies land; durable child activation remains the daemon composition consumer.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T13:48:26.715Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified design/current bytes/dependency states; decomposed the oversized parent into six file-disjoint child tasks; moved all six children to PLANNING per human instruction; linked Fair scheduler, Graph supersession, and daemon consumer dependencies; reported the parent BLOCKED; wrote Serena handoff and decision memories.",
+      "whatRemains": "Plan/land the six children in dependency order. Child 4 waits for task-10cab3 Fair scheduler production; child 5 waits for task-dddfaf83 Graph supersession. After every child/external dependency is DONE, close this parent shell and let task-9634ed3 prove durable atomic activation.",
+      "pitfalls": "Do not plan parent as one task; do not use caller-declared capacity/testkit fairness; do not fork PlanningRun or supersession authority; do not claim pure protocol tests prove durable child activation.",
+      "openQuestions": "Fair scheduler remains blocked because its production primitive prerequisite has not been created/landed; Graph supersession also remains backlog. No child may guess those surfaces.",
+      "releasedAt": "2026-08-09T13:48:59.473Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit architect handoff after SPIDR decomposition; free the architect for the expanded PLANNING queue."
+    }
+  ]
 }

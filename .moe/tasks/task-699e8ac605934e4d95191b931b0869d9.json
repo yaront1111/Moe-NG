@@ -16,20 +16,20 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity.\n\nMEASURED: hard dependencies are \"all Graph Beta tasks and Foundation self-host canary\". task-97554aa4 (Foundation self-host canary) is BLOCKED and has NINE named production prerequisites of its own. The Graph Beta chain does not exist on disk at all — apps/daemon/src/graph/ and apps/control-room/src/graph/ are both absent, and I demoted its two nearest links (task-9634ed3b, task-779d6804) in this same sweep.\n\nThis is a CANARY, so Clause 2 binds hardest: it must name the production capability it certifies and the task that shipped it, verified on disk. Nothing it certifies exists. An architect claiming it would produce the same block seven architects have already produced today, at the same cost.\n\nIt is also transitively behind the canary it depends on, which is itself behind nine prerequisites — this is among the furthest tasks from claimable on the whole board, and it was sitting in the claimable column.\n\nPromote when the Graph Beta chain and task-97554aa4 are DONE, verified by probe rather than by status field.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 12,
+  "order": 66,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.373Z",
-  "updatedAt": "2026-08-09T10:23:43.356Z",
+  "updatedAt": "2026-08-09T14:18:04.945Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]
