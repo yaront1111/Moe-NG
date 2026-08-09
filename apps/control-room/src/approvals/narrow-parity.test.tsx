@@ -9,9 +9,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { CONTROL_ROOM_FIXTURES } from "../fixtures.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import { ActionBar, ShellFrame } from "../shell/frame.js";
-import { CORE_SURFACE_FIXTURES } from "./ui-wide-core-fixtures.js";
-import type { SurfaceFixture } from "./ui-wide-core-fixtures.js";
-import { OPS_SURFACE_FIXTURES } from "./ui-wide-ops-fixtures.js";
+import { CORE_SURFACE_FIXTURES } from "../a11y/ui-wide-core-fixtures.js";
+import type { SurfaceFixture } from "../a11y/ui-wide-core-fixtures.js";
+import { OPS_SURFACE_FIXTURES } from "../a11y/ui-wide-ops-fixtures.js";
 
 /**
  * Spec section 4.16, "no column removed, only reflowed", in the one form this
@@ -27,6 +27,13 @@ import { OPS_SURFACE_FIXTURES } from "./ui-wide-ops-fixtures.js";
  * tree against itself and pass. The second case below exists solely to prove it
  * engages, and every parity row asserts both id sets are NON-EMPTY before
  * comparing, because two empty sets are equal.
+ *
+ * WHY A CROSS-SURFACE SWEEP LIVES UNDER approvals/. It reads fixtures from
+ * a11y/ but is owned by the section 4.16 reflow task, whose owned paths are
+ * board/ and approvals/. board/ is listing-frozen by goals-board-ban.test.ts;
+ * approvals/ is frozen by nothing, so this is the compliant home. Reading from
+ * a11y/ is not editing it. Do not "tidy" this back into a11y/ — that directory
+ * belongs to task-ab8c9489 and the move is what this task was rejected for.
  */
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
