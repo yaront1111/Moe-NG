@@ -120,6 +120,26 @@ struct Case {
     code: u32,
 }
 
+/// The six job-side operations this sweep owns, written by hand and kept
+/// INDEPENDENT of `CASES`. Comparing the sweep against its own input would prove
+/// nothing; comparing it against a separately written list is what makes a dead
+/// arm fail here.
+///
+/// THIS IS EXACT EQUALITY, NEVER A SUBSET OR CONTAINMENT TEST. `NativeOp` also
+/// carries nine construction-side variants owned by tests/process_sweep.rs.
+/// Softening this to "produced is contained in `NativeOp::ALL`" would let the
+/// sweep pass with a job arm entirely unreached — which is precisely the
+/// weakening this repair exists to avoid. process_sweep owns the totality check
+/// that every variant is reached by exactly one of the two sweeps.
+const JOB_OPS: [NativeOp; 6] = [
+    NativeOp::CreateJobObject,
+    NativeOp::SetInformation,
+    NativeOp::QueryInformation,
+    NativeOp::TerminateJob,
+    NativeOp::QueryAccounting,
+    NativeOp::CloseHandle,
+];
+
 const CASES: [Case; 6] = [
     Case { op: NativeOp::CreateJobObject, code: 5 },      // ERROR_ACCESS_DENIED
     Case { op: NativeOp::SetInformation, code: 87 },      // ERROR_INVALID_PARAMETER
@@ -148,6 +168,22 @@ fn drive(case: &Case, calls: &ScriptedCalls) -> NativeError {
             let job = Job::create(calls).expect("construction must succeed");
             job.close().err().expect("close must refuse")
         }
+        // The construction-side ops belong to tests/process_sweep.rs and can
+        // never appear in CASES. Listed EXPLICITLY rather than caught by `_`:
+        // a wildcard would let a future job-side variant land in a silent
+        // fallthrough, whereas this arm keeps "add a variant, break this match"
+        // as a compile error — the same forcing function NativeOp exists for.
+        NativeOp::InitAttributeList
+        | NativeOp::SetJobListAttribute
+        | NativeOp::SetHandleListAttribute
+        | NativeOp::CreateProcess
+        | NativeOp::AssignProcessToJob
+        | NativeOp::IsProcessInJob
+        | NativeOp::QueryProcessId
+        | NativeOp::QueryCreationTime
+        | NativeOp::ResumeThread => {
+            panic!("{:?} is a construction op; tests/process_sweep.rs owns it", case.op)
+        }
     }
 }
 
@@ -166,11 +202,21 @@ fn sweep_pins_the_exact_op_and_code_for_every_arm() {
         produced.insert(error.op());
     }
 
-    // Cross-check the produced set against the production enum, not against
-    // CASES: comparing the sweep to its own input would prove nothing.
-    let all: BTreeSet<NativeOp> = NativeOp::ALL.iter().copied().collect();
-    assert_eq!(produced, all, "sweep did not reach every NativeOp");
+    // Cross-check the produced set against the hand-written JOB_OPS, not
+    // against CASES: comparing the sweep to its own input would prove nothing.
+    let owned: BTreeSet<NativeOp> = JOB_OPS.iter().copied().collect();
+    assert_eq!(produced, owned, "sweep did not reach every job-side NativeOp");
     assert_eq!(produced.len(), 6);
+
+    // ...and every op this sweep owns is still listed in the production enum's
+    // coverage array. Naming a deleted VARIANT would already fail to compile;
+    // this catches the case a compile error cannot see — a variant that still
+    // exists but was dropped from `NativeOp::ALL`, which would silently shrink
+    // what the totality check in process_sweep is able to demand.
+    let all: BTreeSet<NativeOp> = NativeOp::ALL.iter().copied().collect();
+    for op in JOB_OPS {
+        assert!(all.contains(&op), "{op:?} is no longer listed in NativeOp::ALL");
+    }
 }
 
 #[test]

@@ -2,6 +2,7 @@ export const MOE_MCP_PACKAGE_VERSION = "moe-mcp/0" as const;
 
 export {
   MOE_SESSION_CREDENTIAL_ENV,
+  connectStdioTransport,
   createStdioMcpServer,
   decodeAndDispatch,
   readBootstrapCredential,

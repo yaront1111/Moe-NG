@@ -36,6 +36,18 @@ impl<'c, C: Win32Calls> Job<'c, C> {
         Ok(Self { handle, calls })
     }
 
+    /// The Job handle, for the sibling module that must name it: both the
+    /// `PROC_THREAD_ATTRIBUTE_JOB_LIST` attribute and `AssignProcessToJobObject`
+    /// take it.
+    ///
+    /// `pub(crate)` for exactly the reason `OwnedHandle::raw` is — handing the
+    /// value out of the crate is what would let a second owner close it. A
+    /// caller outside the crate can still only pass the `Job` itself, so the
+    /// handle it carries is always one this crate verified.
+    pub(crate) fn handle(&self) -> RawHandle {
+        self.handle.raw()
+    }
+
     /// Terminates every process currently in the Job.
     pub fn terminate(&self) -> Result<(), NativeError> {
         self.calls.terminate_job(self.handle.raw())

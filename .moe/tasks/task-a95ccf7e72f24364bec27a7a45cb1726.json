@@ -103,7 +103,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": "architect-cb476f76",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,7 +122,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:31:41.439Z",
-  "updatedAt": "2026-08-09T15:44:30.930Z",
+  "updatedAt": "2026-08-09T18:35:34.899Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:07:41.016Z",
     "plannedStepCount": 8,
@@ -158,5 +158,16 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "1 of 8 steps COMPLETE. Effectively a fresh start — re-measure everything rather than trusting the description or the prior architect's framing, per the global staleness rail.",
+      "whatRemains": "Steps 2-8: the full plan for the colour token layer backing WCAG contrast certification. Before naming a single path in affectedFiles, resolve the ownership conflict described under pitfalls — it is the reason this task has already burned one architect and it will invalidate any plan written without it.",
+      "pitfalls": "*** apps/control-room/src/styles/ IS BEING WRITTEN RIGHT NOW BY ANOTHER TASK. DO NOT ADOPT IT WITHOUT RE-MEASURING. *** Measured by governor-42b952c9 at 18:34:45Z: control-room.css mtime 18:34:25Z — TWENTY SECONDS before I looked — and responsive.css 18:33:54Z. This is not a stalled directory. A prior governor declared it 'unowned' at 15:44:46Z; that ruling was already wrong 17 seconds later and is now nearly three hours stale. Two independent workers, worker-5981deec at 15:48Z and worker-2811ade9 at 15:54Z, both measured it live and both said do not adopt. I am the third independent confirmation. LIKELY OWNER: task-4b274fadc (Motion and colour-independence regression guards) — same epic-923660dca, same control-room styling surface, claimed by worker-a87e980a at 18:18Z and actively CODING. Its title alone tells you the overlap with a colour-token task is real, not incidental: colour-independence and colour tokens are the same surface. WHAT TO DO: re-measure mtimes yourself with `stat -c '%y %n' apps/control-room/src/styles/*` immediately before submitting your plan — note mtimes print in +0300 local on this host, so convert before comparing against UTC board timestamps or you will read a live file as three hours old. If the directory is still hot, either scope this task off it or coordinate explicitly with task-4b274fadc in #workers first. Two plans writing those files in one shared worktree collide, and the loser silently loses bytes.",
+      "openQuestions": "Does the colour token layer genuinely need to own apps/control-room/src/styles/, or can it land the token definitions in a separate owned path that the styles consume? That choice decides whether this task can proceed in parallel with task-4b274fadc or must wait for it. Answer it by measurement before planning, and if the answer is that it must wait, report blocked with the measurement rather than planning around it.",
+      "releasedAt": "2026-08-09T18:35:34.898Z",
+      "releasedBy": "governor-42b952c9",
+      "reason": "Released by governor-42b952c9 at 18:35Z with the human's explicit approval. NOT an idle release. architect-cb476f76 has been wedged in READING_CONTEXT for 7355s (2h02m) — a state that never runs a build and so cannot explain the silence — and did not answer a direct routed @mention sent 75 minutes earlier in #architects. No terminal_closed deregister was emitted, unlike every agent that cleanly died today, so the session is wedged rather than exited. Task stays PLANNING and only the assignee is cleared; the 1 completed step is preserved. Releasing also lets the next architect see the live directory contention recorded below, which the wedged session never acted on."
+    }
+  ]
 }

@@ -1,0 +1,43 @@
+{
+  "id": "task-aedcd01ad91245d9a036d9dac3b76a22",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Successor graph activation at predecessor epoch + 1",
+  "description": "Objective: close the one gap the graph supersession transition deliberately left open — a SUCCESSOR graph revision cannot currently activate at predecessor epoch + 1, so a superseded chain's second generation would re-activate at epoch 1 and the monotonic-epoch guarantee holds only for the emitted binding, never for the successor's own durable state.\n\nHard dependencies: Graph revision supersession transition (task-1df0622e87cf42beae2cd82280e9ff99). Nothing here is plannable until that task is DONE and `graphEpoch` exists on `GraphRevisionState` on disk.\n\n*** MEASURED ON DISK 2026-08-09 at HEAD 025dc4948127e7c7b753b71d3f5cf4b142637060 by architect-8ee37119. Re-measure before planning; these claims are stale by default. ***\n\nTHE EPOCH AUTHORITY IS REAL AND ALREADY LANDED — do not mint a second one. The goal aggregate owns it exactly as `graph-revision-reducer.ts:5-7` claims:\n- `goal-contract.ts:130,155` — `readonly graphEpoch: number` on goal state and on the activation event.\n- `goal-reducer.ts:94` — `goal.create` seeds `graphEpoch: 0` on DRAFT.\n- `goal-reducer.ts:110` — `goal.activate_initial_graph` sets `graphEpoch: state.graphEpoch + 1`.\n- `goal-reducer.ts:113` — emits `GoalExecutionEnabled` CARRYING `graphEpoch`, so the wire that hands the epoch to a revision already exists.\n- `goal-validation.ts:228-238` — validates it: safe integer, `>= 0`, DRAFT implies 0, COMPLETED implies > 0, active implies > 0.\n\nTHE ACTUAL GAP, both halves measured:\n1. GOAL SIDE — `goal-reducer.ts:40` admits `goal.activate_initial_graph` from `DRAFT` ONLY. There is no command that advances a goal's `graphEpoch` a second time, so in practice the epoch can only ever be 0 or 1. Supersession needs an epoch advance admitted from the live execution lifecycle that increments `graphEpoch` and rebinds `activeGraphRevisionRef` to the successor revision.\n2. GRAPH REVISION SIDE — the supersession transition task sets `graphEpoch: 1` literally when a revision activates (its DoD 1 says \"initial activation establishes epoch 1\"). A successor therefore cannot land at N+1. The activation path must instead bind the goal-issued epoch: it has to arrive on the command and be validated against the predecessor it replaces, not be hardcoded.\n\nWHY IT WAS DEFERRED, not an oversight: DoD 2 of task-1df0622e requires only that the accepted supersede result EMIT a binding to the successor at exactly epoch + 1, which it does via the kernel-produced `GraphRevisionSuperseded` event. Making the successor's own activation consume that binding reaches `GraphActivationBinding`, `bindingShape`, `sameBinding`, `BINDING_KEYS`, the approval/activation fixtures and both invariant driver suites — far past the 10-file cap for that task.\n\nSIZING WARNING, measured: `goal-reducer.ts` is 247 physical lines and `goal-validation.ts` is 245, both effectively at the 250 target with no headroom, so this work almost certainly requires splitting a file rather than growing one. Note also that `planning-source-size.test.ts` sweeps `src/planning` ONLY — `packages/core/src/goal/` is NOT guarded and `goal-reducer.test.ts` already sits at 300 lines. Do not read a green core suite as proof of the per-file cap in `goal/`; hand-measure with `grep -c ''`.\n\nCONTAINED: `packages/core/src/planning/planning-contract.ts` does NOT share `GraphActivationBinding` — the planning-run aggregate carries its own hash set — so the planning-run reducer and its fixtures are outside this blast radius.\n\nLikely owned paths (verify by fresh grep): packages/core/src/goal/goal-contract.ts, goal-reducer.ts, goal-validation.ts, goal-reducer.test.ts, goal-invariants.test.ts, packages/core/src/planning/graph-revision-contract.ts, graph-revision-validation.ts, graph-revision-reducer.ts, graph-revision-test-fixtures.ts, graph-revision-reducer.test.ts.\n\nVerification: pnpm --filter @moe/core typecheck &amp;&amp; pnpm --filter @moe/core test",
+  "definitionOfDone": [
+    "A goal-side epoch advance exists: a command admitted from the goal's live execution lifecycle (not only DRAFT) increments `graphEpoch` by exactly 1 and rebinds `activeGraphRevisionRef` to the named successor revision, composing the landed counter at goal-reducer.ts:110 rather than introducing a second epoch.",
+    "A graph revision activates at an epoch supplied by the goal aggregate instead of the literal 1: the activation path validates the incoming epoch against the predecessor it replaces, and an initial activation still lands at epoch 1 with every pre-active lifecycle at 0.",
+    "A successor revision produced by `graph.supersede` activates at exactly predecessor epoch + 1, proven end to end by a test that drives supersede then activates the successor and asserts the durable state epoch — not merely the emitted binding.",
+    "A stale, equal, skipped or non-integer epoch cannot activate a successor and cannot advance the goal; each refusal pins the exact stable @moe/contracts code and the refusing layer, and no parallel vocabulary is minted.",
+    "Every pre-existing assertion in goal-reducer.test.ts, goal-invariants.test.ts and graph-revision-reducer.test.ts passes unchanged except those the epoch binding genuinely invalidates, and a mutation drill proves each new epoch guard is reddenable.",
+    "Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exits 0, and every touched production file is at or below 250 physical lines measured by `grep -c ''` — goal-reducer.ts (247) and goal-validation.ts (245) start with no headroom and will need splitting, not growing."
+  ],
+  "taskRails": [
+    "Compose the landed goal epoch authority — goal-contract.ts:130/155, goal-reducer.ts:94/110/113, goal-validation.ts:228-238. Do not add a second epoch counter, and do not move epoch authority into the graph revision aggregate; that aggregate persists a BOUND REFERENCE to the epoch it was activated at, nothing more.",
+    "MEASURE BEFORE PLANNING: if the fresh grep shows this exceeds 10 distinct files or 12 plan steps, split at the goal/graph-revision seam rather than submitting an oversized plan — but a goal-side-only slice must name its consumer task, because a pure epoch advance with nothing binding it violates the composition clause.",
+    "packages/core/src/goal/ is NOT covered by planning-source-size.test.ts, so a green suite proves nothing about the per-file cap there. Hand-measure with `grep -c ''`; PowerShell Measure-Object -Line skips blank lines and reports headroom you do not have.",
+    "Refusal tests assert the exact stable reason code AND which layer refused, never merely that the operation failed. Note that @moe/contracts RuntimeError DROPS its validated `source`, so the layer must come from a production discriminant on the result — never from a test helper that reconstructs it.",
+    "An epoch that cannot be verified is UNKNOWN and refuses; it never defaults to 0, to 1, or to the predecessor's value."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 75.2,
+  "comments": [
+    {
+      "id": "comment-46f6b78c1e224f7d93d464876e2d7b3d",
+      "author": "architect-8ee37119",
+      "content": "Correction to the description's last line: the ampersands were HTML-escaped on write. The verification command is literally:\n\n`pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`\n\nRead `&amp;&amp;` in the description as `&&` everywhere it appears. Nothing else in the description is affected.",
+      "timestamp": "2026-08-09T18:36:41.013Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T18:36:26.728Z",
+  "updatedAt": "2026-08-09T18:39:32.159Z"
+}

@@ -29,10 +29,17 @@
   "parentTaskId": "task-ea76e0cf9bdb4f1888aaa9e49323c782",
   "priority": "CRITICAL",
   "order": 74,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-dacd2de1442a41dfa1708d04bdb639e4",
+      "author": "governor-42b952c9",
+      "content": "*** DO NOT PLAN THIS TASK. IT IS A SPIDR PARENT SHELL. ITS DoD IS SATISFIED IN ITS TWO CHILDREN. ***\n\nSplit by architect-5aba94da at 17:10 on 2026-08-09, endorsed by governor-42b952c9. If the daemon serves you this task from the PLANNING pool, that is the known shell re-serve defect, not an instruction — re-BLOCK it and move on. The sibling shell task-6b8d0e2e burned two full architect measure cycles before anyone wrote this kind of banner; this comment exists so you do not become the third.\n\nCHILDREN (both created, parentTaskId set to this task):\n- task-885a46e9fb274a94b12faa826ba580dc — child 2a, order 74.1. Suspended process, atomic JOB_LIST membership, assignment proof, resume. 8 files. This is the one to work.\n- task-af99cf146c9b4f4d99b49d8c00caed63 — child 2b, order 74.2, BLOCKED behind 2a. Lifecycle, reverse-order unwind, real-Windows acceptance. 6 files.\n\nWHY THE SPLIT WAS CORRECT, and worth stating precisely because the wrong reason is a rail violation. The single plan re-measured to 10 distinct affectedFiles and 12 steps — BOTH sitting exactly on the daemon's taskSizing hard ceiling with zero slack. That is a split on PLAN SHAPE, which epic rail 5 requires. It is emphatically NOT a split on lines: there is no per-task net-LOC budget on this board and never was, the 250/400 cap is PER PRODUCTION FILE, and a task made of many small focused files is fully compliant. Do not cite total diff size when splitting, and do not reject on it.\n\nDISPOSITION: stays BLOCKED to keep it out of the claim pool. Close it only after BOTH children are DONE, and route it through a REVIEW transit hop — a direct BACKLOG-to-DONE transition is rejected by the board and fakes a QA pass in the history.",
+      "timestamp": "2026-08-09T18:21:02.498Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:47:35.019Z",
-  "updatedAt": "2026-08-09T17:10:56.364Z",
+  "updatedAt": "2026-08-09T18:21:02.498Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:51:43.754Z"
   },

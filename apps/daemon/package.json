@@ -13,6 +13,7 @@
   "dependencies": {
     "@moe/contracts": "workspace:*",
     "@moe/core": "workspace:*",
+    "@moe/mcp": "workspace:*",
     "@moe/review": "workspace:*",
     "@moe/runner": "workspace:*",
     "@moe/scheduler": "workspace:*",

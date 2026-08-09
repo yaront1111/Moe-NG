@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
+    "skipLibCheck": true,
     "tsBuildInfoFile": "../../node_modules/.cache/daemon.tsbuildinfo",
     "types": ["node"]
   },

@@ -155,7 +155,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": "architect-d46fcb95",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,7 +167,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:18:36.217Z",
-  "updatedAt": "2026-08-09T16:14:00.890Z",
+  "updatedAt": "2026-08-09T18:35:18.198Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
     "worker-5981deec"
@@ -215,6 +215,15 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "6 of 8 steps COMPLETE and the work is real and committed — do NOT restart this task. Commit 76012b8 'feat(runner): git ref and artifact object enumeration, steps 1-5 and 7' landed 11 files / +1097 lines: packages/runner/src/artifacts/{artifact-contract.ts +85, artifact-enumeration.ts +165, artifact-enumeration.test.ts +294, artifact-enumeration.js bridge, artifact-node-fs.ts +47, artifact-store.ts +8} and packages/runner/src/scope/{scope-refs.ts +101, scope-refs.js bridge, scope-git.ts +78, scope-git.test.ts +281, scope-contract.ts +45}. Note the completed set is steps 1-5 and 7 — step 7 was done out of order, so the two remaining are step 6 and step 8, not steps 7-8. Verify each file at HEAD with git rev-parse --verify HEAD:<path> before assuming anything is missing.",
+      "whatRemains": "Step 6 and step 8 only. Read the plan text for both before writing bytes — on this board step 8 is typically the single final gate and step 6 the adversarial review / mutation drill, so the ordering matters and step 6 must not be skipped to reach the gate. Re-measure the disk state first: this task's description and any 'MEASURED' claim in it are stale by default under the global staleness rail, and HEAD has advanced well past 76012b8.",
+      "pitfalls": "1. SHARED WORKTREE WITH AN ACTIVE WHOLE-TREE SWEEP. Foreign completion hooks are committing other agents' bytes across this repo today (71af97c, a646660, 1e3057a all did it). Consequence: an EMPTY `git status --porcelain` over your owned paths is AMBIGUOUS — it means 'swept into a foreign commit' OR 'never committed at all', which demand opposite responses. Only `git rev-parse --verify HEAD:<path>` per file separates them. Run that, not git status, to decide what landed. 2. If a foreign commit carries your bytes: never amend it, never reset, never stash, never file an empty claiming commit. Hand QA a base-ref diff over your owned paths and name the commit that carries them. 3. artifact-enumeration.test.ts is 294 lines and scope-git.test.ts is 281 — the 250/400 cap is PER PRODUCTION FILE and there is no per-task LOC budget, so do not split or reject on total diff size, but do hand-measure any PRODUCTION file you grow, with `grep -c ''` rather than a tool that skips blank lines.",
+      "openQuestions": "Was step 6 deliberately deferred until after step 7, or simply not reached before the session wedged? architect-d46fcb95 left no note and is unreachable. Treat step 6 as not started and read its plan text as written.",
+      "releasedAt": "2026-08-09T18:35:18.197Z",
+      "releasedBy": "governor-42b952c9",
+      "reason": "Released by governor-42b952c9 at 18:35Z with the human's explicit approval. NOT an idle release. architect-d46fcb95 has been wedged in READING_CONTEXT for 7635s (2h07m) — a transient state that should last seconds, never runs a build, and therefore cannot explain the silence the way a long test run would. They did not answer a direct routed @mention sent 75 minutes earlier in #architects. Every other agent that died on this board today emitted a terminal_closed deregister within minutes; this session emitted none, so it is wedged rather than cleanly exited. Task stays PLANNING and only the assignee is cleared, so nothing is reset and no plan state is lost. This is the highest-value item frozen on the board: CRITICAL priority, 6 of 8 steps already COMPLETE."
+    },
     {
       "whatIsDone": "Steps 1-5 and 7 of 8, all green. Git ref enumeration: scope/scope-refs.ts (new, +LF .js bridge) holds parseRefListing; scope/scope-git.ts gained listRefs() through the EXISTING runGit boundary with fixed argv `for-each-ref --sort=refname --format=%(refname)%00%(objectname)%00%(objecttype)%00 refs/heads refs/remotes`, hermeticGitEnvironment untouched. Artifact enumeration: artifacts/artifact-enumeration.ts (new, +LF .js bridge) holds enumerateArtifactsAt; artifact-node-fs.ts gained listDirectory via opendirSync + incremental readSync (NOT readdirSync, which allocates before any ceiling applies); artifact-store.ts delegates in 3 lines. Contracts: optional GitObserver.listRefs?, optional ArtifactFsPort.listDirectory?, required ArtifactStore.enumerateArtifacts, two new codes, two closed layer vocabularies, MAX_ARTIFACT_ENUMERATION_ENTRIES. 37 new tests across 2 new test files. VERIFIED: pnpm --filter @moe/runner typecheck exit 0; pnpm --filter @moe/runner test 43 files / 1366 tests exit 0, against a recorded 41/1326 baseline. Three mutation drills each killed by their NAMED case (git non-commit guard, artifact address/bytes check, entry ceiling), bytes backed up outside the repo and restored with verified sha256 equality. No drill residue.",
       "whatRemains": "ONLY step 6, then step 8's gate. Step 6 publishes the new root exports through packages/runner/src/index.ts and transcribes them into index-surface.test.ts. Nothing else is outstanding. Do not re-measure step 1: base SHA 503d127a6e9b9dc19c3a26a877d0a8d759a0bb46, gap re-confirmed absent, design digest 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191 verified.",

@@ -18,15 +18,25 @@ publish = false
 # *const SECURITY_ATTRIBUTES. Without it the function does not exist. We pass
 # NULL for that parameter, but the feature still gates the declaration.
 #
-# Win32_System_Threading is deliberately ABSENT (task rail 5 — it belongs to
-# child 2). That is why this crate configures the Job through
-# JOBOBJECT_BASIC_LIMIT_INFORMATION rather than the EXTENDED struct: the
-# extended one is `#[cfg(feature = "Win32_System_Threading")]` because it embeds
-# Threading::IO_COUNTERS. KILL_ON_JOB_CLOSE is a documented basic LimitFlag, so
-# nothing is lost.
+# Win32_System_Threading was deliberately absent while this crate only
+# configured a Job. It is now REQUIRED: CreateProcessW, STARTUPINFOEXW,
+# CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
+# the whole PROC_THREAD_ATTRIBUTE_* family (JOB_LIST, HANDLE_LIST,
+# InitializeProcThreadAttributeList, UpdateProcThreadAttribute,
+# DeleteProcThreadAttributeList) and ResumeThread are ALL declared in
+# Win32/System/Threading. Without the feature none of them exist.
+#
+# The Job side still uses JOBOBJECT_BASIC_LIMIT_INFORMATION rather than the
+# EXTENDED struct, and that stays a deliberate choice rather than a consequence
+# of the feature set: KILL_ON_JOB_CLOSE is a documented basic LimitFlag, so the
+# extended struct buys nothing and would widen what a query-back must match.
+#
+# AssignProcessToJobObject and IsProcessInJob need NO manifest change — both are
+# declared in Win32/System/JobObjects and were already reachable.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
   "Win32_Security",
   "Win32_System_JobObjects",
+  "Win32_System_Threading",
 ] }

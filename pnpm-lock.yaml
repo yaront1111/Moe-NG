@@ -81,6 +81,9 @@ importers:
       '@moe/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@moe/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@moe/review':
         specifier: workspace:*
         version: link:../../packages/review

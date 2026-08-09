@@ -194,6 +194,16 @@ const LISTED_TOOLS = Object.freeze(
  * A client that disconnects mid-dispatch simply loses the result: the outcome is dropped
  * and nothing is fabricated, because idempotency belongs to the daemon ledger.
  */
+/**
+ * Connects a server to the process's stdio transport. Lives here so composition
+ * roots (the daemon's mcp bin) never import the SDK directly — its type surface
+ * drags DOM lib types that a node-only tsconfig rightly refuses.
+ */
+export async function connectStdioTransport(server: Server): Promise<void> {
+  const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+  await server.connect(new StdioServerTransport());
+}
+
 export function createStdioMcpServer(options: StdioServerOptions): Server {
   const server = new Server(
     { name: options.serverName ?? "moe-runtime", version: "0.0.0" },

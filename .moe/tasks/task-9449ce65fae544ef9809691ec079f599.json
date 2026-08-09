@@ -75,7 +75,7 @@
     {
       "stepId": "step-4",
       "description": "Wire the reproducible command without creating a registry publication surface. Add exact devDependency @cyclonedx/cdxgen@12.8.2 and regenerate pnpm-lock.yaml with pnpm 11.0.8; do not change private:true or add files/publishConfig/bin. Extend packaging typechecking (or add a focused typecheck:release) so both .mjs production modules are checked with allowJs/checkJs, and add verify:release as the single task gate: focused release typecheck/tests, pnpm test:integration, then the real twice-built supply-chain CLI against the current frozen HEAD. Tests must exercise the actual package script and assert it reports a positive container/report count, exact source SHA, RECORDED operation, UNKNOWN release verdict, and no publish action. Confirm cdxgen is invoked from the locked local package with Node rather than pnpm dlx or a Windows command shim.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json",
         "pnpm-lock.yaml",
@@ -83,7 +83,13 @@
         "scripts/release/supply-chain.mjs",
         "tests/integration/release-supply-chain.test.mjs"
       ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "MEASURED FIRST, per amend-1. HEAD abd2a94 (advanced past the governor's 025dc49). All 5 amendment items verified without rebuilding landed work:\n1. All five owned paths exist at HEAD; `git status --porcelain` over them was EMPTY (working tree == HEAD). Blobs: package.json f300bd6d, pnpm-lock.yaml a1494349, release-subject.mjs 83b23c98, supply-chain.mjs a2ba2aa9, test .mjs b763fb8a.\n2. `pnpm typecheck:release` exit 0.\n3. Focused suite green (below).\n4. cdxgen invoked from the locked local package via Node: supply-chain.mjs:78 resolves `node_modules/@cyclonedx/cdxgen/bin/cdxgen.js` and spawns `process.execPath`; pnpm goes through corepack `pnpm.js` validated under the Node root with a realpath containment + basename check (lines 10, 67-69). No `pnpm dlx`, no .cmd/.exe shim. package.json line 32 has @cyclonedx/cdxgen 12.8.2; pnpm-lock.yaml has 57 cdxgen entries with specifier/version 12.8.2 — coherent. vitest.config.ts untouched; the .mjs suite runs through the `node --test` leg of test:integration (package.json:20).\n5. private:true unchanged (package.json:4); no files/publishConfig/bin anywhere in it.\n\nREAL DEFECT FOUND AND FIXED (TDD-first) — this is why the step is not zero-diff. Running the suite showed the actual-script case now refuses with RELEASE_INPUT_INVALID, NOT the old FROZEN_INSTALL_FAILED. Root cause: supply-chain.mjs:208 passed `buildIndex` into `ports.buildSubject`, but release-subject.mjs:148 `inputParts` requires an EXACT key set of {components,privateKey,signingKeyId,source,sourceRoot} or {privateKey,signingKeyId,source,sourceRoot}. The extra key made the real composition refuse 100% of the time. It was invisible because every orchestrator test injects a spy buildSubject that accepts `{buildIndex}` — a test helper looser than the production surface it stands in for (epic rail 6). The only test crossing the real edge was the actual-script case, which was red for the unrelated lockfile reason and masked it.\nFix: dropped `buildIndex` from the call (buildReceipt already takes it from the loop variable, so evidence is unchanged).\nTDD order honoured: added \"admits the orchestrator argument through the real subject builder\" — real buildReleaseSubject as the port, fixture provisioned from the production RELEASE_COMPONENTS/RELEASE_TEMPLATES lists (not a hand list), asserting reason undefined, ok true, 5 components, 3 templates, 2 builds, identical containers. RED before the fix with actual 'RELEASE_INPUT_INVALID'; GREEN after.\nDRILL PROOF (not just red-then-green): re-applied the exact mutation to the fixed file, SHA-256 baseline a2c06fec…8ab7de held OUTSIDE the repo, test went RED with actual 'RELEASE_INPUT_INVALID'; restored and re-hashed — RESTORED == a2c06fec…8ab7de exactly, pristine copy deleted.\n\nEVIDENCE: `pnpm typecheck:release` exit 0. `node --test --test-skip-pattern \"actual package script\" tests/integration/release-supply-chain.test.mjs` -> 32 tests / 32 pass / 0 fail, EXIT=0.\nDISCLOSED NARROWING: that run deliberately excludes ONE case, \"records truthful evidence through the actual package script\". amend-1 moves that positive actual-CLI assertion to step 7 and says not to run the release CLI in this step; it is also the slow leg (two full frozen installs). It is not deleted or skipped in the file — step 7 runs it inside `pnpm verify:release`.\nLine counts (grep -c ''): supply-chain.mjs 250, release-subject.mjs 224 — both at/under the per-file cap. Test file 415 (test tier, not a production source). dist/ is git-ignored (.gitignore:4) and dist/release did not exist before this step. Uncommitted owned diff now: supply-chain.mjs (1 line) and the test file (new case + 2 import lines). package.json and pnpm-lock.yaml still byte-identical to HEAD.",
       "startedAt": "2026-08-09T15:47:29.312Z",
+      "completedAt": "2026-08-09T18:23:36.571Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -98,30 +104,44 @@
     {
       "stepId": "step-5",
       "description": "Freeze the implementation before generating release evidence. Inspect only the five owned paths, reject NUL/debug/secret/generated-evidence bytes, run git status --porcelain, unstage any foreign staged path, and commit exactly package.json, pnpm-lock.yaml, scripts/release/release-subject.mjs, scripts/release/supply-chain.mjs, and tests/integration/release-supply-chain.test.mjs via explicit pathspec—never git add -A, a directory pathspec, bare commit, push, merge, reset, stash, or a worktree. Record the implementation SHA and committed blob hashes. Generated dist/release and OS-temp artifacts remain ignored/uncommitted. If a foreign completion commit captured these bytes first, do not rewrite history; record the merge-base-to-HEAD diff and committed-byte hashes under the shared-tree rail.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json",
         "pnpm-lock.yaml",
         "scripts/release/release-subject.mjs",
         "scripts/release/supply-chain.mjs",
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "FROZEN IMPLEMENTATION SHA: 06abc8c58d418fe01197e1cfc339a8c0974ac673 (parent abd2a94).\n\nPre-commit inspection, five owned paths only:\n- `git status --porcelain` showed NOTHING staged — every entry was worktree-modified (` M`), so there was no foreign staged path to unstage.\n- Foreign in-flight work present and deliberately untouched: .moe/messages/*, .moe/tasks/*, packages/runner/src/platform/windows/native/{Cargo.toml,src/win32.rs} and untracked packages/runner/src/platform/windows/native/src/win32/.\n- NUL scan on both changed owned files: none. No debugger/TODO/FIXME/secret/private-key bytes. The single `console.log` (supply-chain.mjs:247) is the CLI's own stdout evidence contract, not debug output. `git diff --check` exit 0.\n\nCommit: `git commit -F - -- package.json pnpm-lock.yaml scripts/release/release-subject.mjs scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs`. Explicit five-path pathspec, no `git add`, no `-A`, no directory pathspec, no bare commit, no push/merge/reset/stash/worktree. Exactly 2 files changed, 28 insertions, 3 deletions — package.json, pnpm-lock.yaml and release-subject.mjs contributed nothing because they were already byte-identical to HEAD.\n\nCommitted blob hashes at 06abc8c, each verified against `git hash-object` of the working tree — ALL MATCH:\n- package.json f300bd6d5e43 (unchanged from parent; frozen earlier by foreign sweep 71af97c)\n- pnpm-lock.yaml a1494349e271 (same; foreign sweep)\n- scripts/release/release-subject.mjs 83b23c98fa9f (same; foreign sweep)\n- scripts/release/supply-chain.mjs a7ea064b80ef (was a2ba2aa973c7 — this commit's change)\n- tests/integration/release-supply-chain.test.mjs 6da988aa7dde (was b763fb8aabc6 — this commit's change)\n\nSHARED-TREE RAIL as the step provides for: three of the five owned paths were captured earlier by foreign whole-tree commit 71af97c (\"chore(workspace): release gate scripts, fault/security lanes, manifest hygiene\"), which belongs to another task. That history was not amended, reset or reclaimed. QA should review this task by base-ref diff over the five owned paths rather than by this commit alone, since 06abc8c carries only the step-4 fix.\n\n`git status --porcelain` over the five owned paths after the commit: EMPTY. Generated artifacts remain uncommitted: dist/ is ignored (.gitignore:4) and dist/release does not exist; the only thing under dist/ is foreign `windows-job-native`. No OS-temp artifact left behind — the step-4 drill's pristine copy was held outside the repo and deleted.",
+      "startedAt": "2026-08-09T18:23:39.567Z",
+      "completedAt": "2026-08-09T18:24:39.131Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarial review and mutation drill on the frozen candidate. Mutate the production surface one mechanism at a time to accept a wrong source SHA, zero components, a bad distribution signature, a failed/malformed audit as zero advisories, a broad SBOM normalization rule, omission of one deferred OS row, doctor UNKNOWN upgraded to PASS, private-key bytes included in evidence, and partial/concurrent output treated as published. Confirm the intended production bytes changed and the named test fails with its exact code/layer and positive generated-case count; syntax errors or helper-only mutations do not count. Restore by pre-drill SHA-256 and prove exact restoration. Review Windows path/PATHEXT behavior, argv injection, symlink/junction escape, archive extraction traversal, timeouts/maxBuffer, cleanup on signals, evidence atomicity/idempotence, credential leakage, source changing between observation and archive, and any accidental publish/GO/corpus access. Any fix requires a new explicit-path frozen commit and a complete repeat of this step.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/release-subject.mjs",
         "scripts/release/supply-chain.mjs",
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "DRILL MATRIX RUN TWICE. First pass on 06abc8c left FOUR mutants alive; I fixed the suite, re-froze at 1153ed3, and repeated the complete matrix as the step requires.\n\nHarness (held OUTSIDE the repo, nothing generated inside it): byte-exact Node mutator that ABORTS on a missing or ambiguous anchor — so a mutation can never be silently voided by a delimiter. Every drill asserts (a) owned file clean before mutating, (b) blob hash actually changed, (c) `node --check` still passes so a syntax error cannot masquerade as a kill, (d) production bytes mutated, never a test helper, (e) restore verified by hash AND empty `git status`.\n\nFIRST PASS (frozen 06abc8c) — 5 killed, 4 SURVIVED. All four survivors were TEST gaps; production behaviour was correct in every case:\n- D1 accept-wrong-source-sha SURVIVED. supply-chain.mjs:190 leg `observed.sourceSha !== source.sourceSha` was unreachable by any test: \"refuses malformed source SHA\" is caught earlier by validSource (line 186), and every fake resolveSource echoed the declared SHA. This is precisely the review item \"source changing between observation and archive\".\n- D4 malformed-audit-as-zero SURVIVED. The advisories legs of the DEPENDENCY_AUDIT_INVALID guard were redundant under test: every malformed-audit case has dependencies <= 0 and was caught by that leg instead.\n- D5 broad-sbom-normalization SURVIVED. Adding `delete value.components` to normalizedSbom changed nothing, because the reproducibility test drifts container bytes, not the SBOM. Nothing pinned the BREADTH of the normalization rule — the exact risk task rail 2 names.\n- D9 conflict-treated-as-published SURVIVED. \"publishes idempotently and refuses conflicting concurrent content\" injected a fake publishEvidence returning the very refusal it then asserted. The real conflict branch never executed. Epic rail 6, verbatim: a property asserted against a helper that reimplements it.\n\nFIX (tests only; no production byte changed): four cases driving the real surfaces — observed head differing from the declared SHA refused SOURCE_PROVENANCE_INVALID with archiveSource AND frozenInstall call counts asserted 0; an audit with dependencies 95 and no advisories field refused DEPENDENCY_AUDIT_INVALID; SBOM component drift across the two builds refused REPRODUCIBILITY_MISMATCH while both reviewed volatile pointers still vary; a genuine conflicting durable file refused EVIDENCE_PUBLICATION_CONFLICT through the production publisher, with the destination bytes asserted unchanged.\nRe-frozen: 1153ed3, explicit five-path pathspec, 1 file changed / 52 insertions.\n\nSECOND PASS (frozen 1153ed3) — 9 of 9 KILLED, 9 of 9 RESTORE_EXACT, each 1+/1- so no drill degenerated into a rewrite:\nD1 accept-wrong-source-sha KILLED | D2 accept-zero-components KILLED (actual 'DISTRIBUTION_MISMATCH' — delegated layer, as designed) | D3 bad-distribution-signature KILLED | D4 malformed-audit-as-zero KILLED (actual 'EVIDENCE_WRITE_INTERRUPTED') | D5 broad-sbom-normalization KILLED | D6 drop-darwin-os-row KILLED | D7 doctor-UNKNOWN-to-PASS KILLED | D8 leak-private-key KILLED | D9 conflict-treated-as-published KILLED.\nOwned-path `git status --porcelain` after the matrix: EMPTY.\n\nFocused suite after the fix: `node --test --test-skip-pattern \"actual package script\"` -> 36 tests / 36 pass / 0 fail, EXIT=0 (was 32). The excluded case is the actual-CLI leg amend-1 moved to step 7.\n\nADVERSARIAL REVIEW:\n- argv injection / PATHEXT: ONE exec site (line 48), execFile with an argv array, no `shell` option anywhere, windowsHide true. pnpm runs only through corepack pnpm.js validated by realpath containment under the Node root plus a basename check; cdxgen through an explicit node_modules path; both spawned via process.execPath. No .cmd/.exe shim, no dlx.\n- Symlink/junction escape: readOwned does realpath containment on both root and file; publishEvidence walks every existing ancestor for symlinks and rejects a target escaping the evidence root. Both have tests.\n- Archive traversal: `git archive` emits repo-relative paths only, extracted into a fresh mkdtemp — no attacker-controlled member names.\n- Timeouts/maxBuffer: 180s and 16MB on every child. FLAGGED FOR STEP 7: that 180s also bounds each of the two `pnpm install --frozen-lockfile` runs; if a cold store makes an install exceed it, the honest result is FROZEN_INSTALL_FAILED, not a hang.\n- Signals: SIGINT/SIGTERM handlers clean every temp root then exit 130; the finally block removes the handlers and cleans again.\n- Credential leakage: the Ed25519 private key is generated in memory, passed only to the builder, never written or logged; only publicKeyHex and EPHEMERAL_VERIFICATION_ONLY reach evidence. D8 pins its absence.\n- Publish/GO/corpus: zero hits for npm publish, registry, publishConfig, GO_QUIESCE, GO_ACTIVATE, corpus or benchmark in either module. releaseVerdict UNKNOWN and publicationAuthorized false are structural, and D7 pins the doctor row.\n- Line counts (grep -c ''): release-subject.mjs 224, supply-chain.m",
+      "startedAt": "2026-08-09T18:24:42.650Z",
+      "completedAt": "2026-08-09T18:30:05.094Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the concentrated final gate at the frozen implementation SHA; the exact task verification command is `pnpm verify:release`, foreground and unpiped. Require exit 0 for the focused typecheck, integration suite, both fresh frozen-lockfile Windows builds, distribution signature/asset/compatibility admission, SBOM, audit, license, reproducibility comparison, and atomic evidence write. Mechanically inspect the emitted record for the exact frozen SHA; positive five-component/two-build/three-OS counts; matching raw container hashes; reviewed-only SBOM normalization; zero current production advisories (or an honest coded non-green result if the live registry changed); Windows evidence; Linux/macOS UNKNOWN rows with task ids; doctor UNKNOWN with the missing public symbol; releaseVerdict UNKNOWN; and publicationAuthorized false. In this same final step run the required repo-wide typecheck/test and daemon-test HEAD legs, compare them with the pre-diff baseline by failing path, report foreign red verbatim, and require an empty new-failure intersection with the five owned paths. Call complete_task only with the fresh `pnpm verify:release` output/evidence path and explicit committed-path attribution; do not claim a GA release, OS coverage beyond Windows, npm publication, doctor PASS, GO decision, or benchmark result.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T18:30:09.153Z"
     }
   ],
   "status": "WORKING",
@@ -174,7 +194,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T18:18:07.459Z",
+  "updatedAt": "2026-08-09T18:30:09.153Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-f39f0c46",
@@ -189,12 +209,15 @@
     "firstClaimAt": "2026-08-09T11:40:28.540Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 7
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:08:17.773Z",

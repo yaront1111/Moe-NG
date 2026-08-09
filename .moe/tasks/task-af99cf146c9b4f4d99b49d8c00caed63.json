@@ -21,12 +21,12 @@
     "Real-Windows tests must actually run on this win32 host. Marking them #[ignore], gating them off, or stubbing the kernel interaction fails this task outright."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Depends on task-885a46e9fb274a94b12faa826ba580dc (SPIDR sibling child 2a), which is in PLANNING and not implemented. 2a lands the Win32_System_Threading feature, the win32.rs split, the construction-side NativeOp variants, the process-side call-table trait, src/system_process.rs, src/process.rs and tests/process_sweep.rs. This task ADDS lifecycle arms to those exact modules, so starting before 2a lands means writing against symbols that do not exist and colliding with 2a's owner in the shared working directory.\n\nThe brief PLANNING status just before this was a transit hop only -- BACKLOG -> BLOCKED is not a legal transition. No planning happened.\n\nUNBLOCK CONDITION: promote to PLANNING when 2a is DONE. Verify by compiling, not by reading a status field: run `cargo check --offline --all-targets` in packages/runner/src/platform/windows/native, and confirm src/process.rs and src/system_process.rs are tracked at HEAD via `git ls-tree -r --name-only HEAD -- packages/runner/src/platform/windows`.\n\nNOTE ON THE create_task TITLE WARNING (\"and\" -- often two tasks wearing one title): checked and rejected as a further split. The halves genuinely cannot land independently. The reverse-order unwind protocol is the only consumer of the lifecycle arms (terminate-process, wait, ActiveProcesses==0), and tests/real_windows.rs is the single acceptance proof for both. Splitting again would land lifecycle arms with no consumer, which the epic's pure-package rail explicitly forbids.",
+  "reopenReason": "Unblocked by architect-5aba94da at human request, AHEAD of the unblock condition I wrote, and that is recorded here deliberately rather than glossed.\n\nMY STATED CONDITION WAS \"promote when 2a is DONE\". 2a IS NOT DONE. Measured now: task-885a46e9 is mid-implementation and UNCOMMITTED. `git status --porcelain` over the crate shows 5 modified and 3 untracked paths; `git ls-tree HEAD` still lists only child 1's 9 files. 2a has completed roughly steps 1-6 of 10 -- src/process.rs, src/win32/process_calls.rs, src/win32/system_job.rs and tests/process_sweep.rs exist and `cargo check --offline --all-targets` is clean (warnings only) -- but src/win32/system_process.rs, the real windows-sys impl and the exact file this task must extend, DOES NOT YET EXIST.\n\nCONSEQUENCE, binding on this task's worker: the plan is written against 2a's in-flight working tree, not against a committed seam. Plan step 1 is a hard re-measurement gate that stops and reports blocked if the seam moved. Do not skip it.\n\nThe human made this sequencing call with the above stated. If 2a's remaining steps 7-10 change the ProcessCalls trait, the ContainedProcess fields, or NativeOp::ALL, this plan needs amending rather than forcing.",
   "createdBy": "WORKER",
   "parentTaskId": "task-a02496064e9e4e87a888cc112830d7a4",
   "priority": "CRITICAL",
@@ -34,8 +34,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:40.833Z",
-  "updatedAt": "2026-08-09T17:10:24.821Z",
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T17:10:24.821Z",
-  "blockedReason": "Depends on task-885a46e9fb274a94b12faa826ba580dc (SPIDR sibling child 2a), which is in PLANNING and not implemented. 2a lands the Win32_System_Threading feature, the win32.rs split, the construction-side NativeOp variants, the process-side call-table trait, src/system_process.rs, src/process.rs and tests/process_sweep.rs. This task ADDS lifecycle arms to those exact modules, so starting before 2a lands means writing against symbols that do not exist and colliding with 2a's owner in the shared working directory.\n\nThe brief PLANNING status just before this was a transit hop only -- BACKLOG -> BLOCKED is not a legal transition. No planning happened.\n\nUNBLOCK CONDITION: promote to PLANNING when 2a is DONE. Verify by compiling, not by reading a status field: run `cargo check --offline --all-targets` in packages/runner/src/platform/windows/native, and confirm src/process.rs and src/system_process.rs are tracked at HEAD via `git ls-tree -r --name-only HEAD -- packages/runner/src/platform/windows`.\n\nNOTE ON THE create_task TITLE WARNING (\"and\" -- often two tasks wearing one title): checked and rejected as a further split. The halves genuinely cannot land independently. The reverse-order unwind protocol is the only consumer of the lifecycle arms (terminate-process, wait, ActiveProcesses==0), and tests/real_windows.rs is the single acceptance proof for both. Splitting again would land lifecycle arms with no consumer, which the epic's pure-package rail explicitly forbids."
+  "updatedAt": "2026-08-09T18:37:59.375Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "contextFetchedBy": [
+    "architect-5aba94da"
+  ]
 }

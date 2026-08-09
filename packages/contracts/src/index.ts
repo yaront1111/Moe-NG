@@ -112,3 +112,21 @@ export type {
   RuntimeQueryEnvelope,
   RuntimeQueryEnvelopeResult,
 } from "./runtime/runtime-envelope.js";
+export {
+  DOCUMENT_WORK_PROPOSAL_ERROR_CODES,
+  DOCUMENT_WORK_PROPOSAL_LAYERS,
+  DOCUMENT_WORK_PROPOSAL_LIMITS,
+  DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
+} from "./document-work/document-work-proposal-contract.js";
+export type {
+  DocumentWorkCandidate,
+  DocumentWorkProposal,
+  DocumentWorkProposalAccepted,
+  DocumentWorkProposalContractRefused,
+  DocumentWorkProposalErrorCode,
+  DocumentWorkProposalInputRejected,
+  DocumentWorkProposalLayer,
+  DocumentWorkProposalResult,
+  DocumentWorkSourceBinding,
+} from "./document-work/document-work-proposal-contract.js";
+export { decodeDocumentWorkProposalBytes } from "./document-work/document-work-proposal-codec.js";

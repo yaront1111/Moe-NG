@@ -18,9 +18,105 @@
     "Change only supersession-invalidated assertions in existing reducer/invariant suites; unrelated lifecycle and concurrency assertions must pass unchanged.",
     "Target <=250 physical lines per production source and split before 400; stage/commit only the eight owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline before writing a byte. Confirm producer surface on disk: `git ls-tree -r HEAD --name-only -- packages/core/src/supersession` (3 files) and `grep -n SUPERSESSION packages/core/src/index.ts` (line 239, three values). Run the owned-package gate FIRST and record it: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. An empty diff at this moment is what proves any later red is yours. Record physical line counts with `grep -c ''` for all 9 existing owned files (measured 2026-08-09: contract 156, reducer 206, validation 115, results 73, test-fixtures 96, reducer.test 222, invariant-drivers 235, invariants.test 129, invariant-fixtures 88). planning-source-size.test.ts enforces 250 physical lines on EVERY .ts in src/planning including tests, fixtures and drivers — invariant-drivers at 235 has only 15 lines of headroom and is the file most likely to trip. Do not start step 2 until the gate is green and the counts are written down.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T18:39:32.722Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED first (TDD). Create packages/core/src/planning/graph-revision-supersession.test.ts, importing the production reducer and the production kernel types — never reimplementing epoch, carry or disposition policy in a helper (task rail 1). It must fail for the right reason before any production edit: today reducer.ts:170 routes graph.supersede to illegal(). Cover, each pinning the EXACT code AND the refusing layer via the new production `layer` discriminant landed in step 5: (a) a well-formed supersede from ACTIVE is accepted, moves lifecycle to SUPERSEDED, bumps version by 1, and emits exactly one GraphRevisionSuperseded event carrying the kernel's authorityHash and successor binding; (b) a supersede whose expectedPredecessor epoch/revisionId/graphContentHash disagrees with state refuses REVISION_REBOUND at GRAPH_REVISION; (c) a successor epoch that is not exactly predecessor epoch + 1 (test epoch+0, epoch+2 and epoch-1) refuses REVISION_REBOUND at GRAPH_REVISION; (d) changed or UNKNOWN carry evidence refuses SUPERSESSION_CONSEQUENCE_CHANGED at GRAPH_REVISION; (e) the reducer RE-SHAPES the layer — assert the returned layer is GRAPH_REVISION and not the kernel's SUPERSEDED_AUTHORITY-adjacent SUPERSESSION_KERNEL, which is the 'which layer refused' requirement of epic rail 6; (f) supersede from every non-ACTIVE lifecycle refuses ILLEGAL_TRANSITION at GRAPH_REVISION, and from SUPERSEDED refuses SUPERSEDED_AUTHORITY; (g) every refusal path leaves the input state byte-identical (JSON.stringify before/after). Keep this file at or below 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-supersession.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/graph-revision-supersession.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Contract. In graph-revision-contract.ts: (1) add `readonly graphEpoch: number` to GraphRevisionState. Semantics, pin them in a doc comment: this is a BOUND REFERENCE to the goal-owned epoch at which this revision was activated, not a private counter — that wording resolves the standing note at reducer.ts:5-7 which says epoch authority lives in the goal aggregate. Rule: graphEpoch >= 1 exactly when lifecycle is ACTIVE or SUPERSEDED, and exactly 0 otherwise. (2) Replace GraphRevisionSupersedeCommand's `witness: GraphRevisionRefusalWitness` with `readonly supersession: SupersessionInput`, importing the type from ../supersession/supersession-engine.js (no cycle: supersession imports only ../policy). Delete the stale '/** Replacement supersession is Phase 5 (design section 10); every preview entry is refused. */' comment at :76 — it is now false. (3) Add `GraphRevisionSuperseded extends GraphRevisionEventBase` with `readonly authorityHash: string`, `readonly kind: \"GraphRevisionSuperseded\"`, `readonly successor: SupersessionSuccessorBinding`, and add it to the GraphRevisionEvent union. (4) Add `readonly layer: typeof GRAPH_REVISION_LAYER` to GraphRevisionRejectedResult. This field is REQUIRED, not cosmetic: RuntimeError at packages/contracts/src/runtime/runtime-error-factory.ts:20-31 has NO `source` field — createRuntimeError validates `source` then drops it — and REVISION_REBOUND and SUPERSESSION_CONSEQUENCE_CHANGED both carry NO_KEY required detail keys (runtime-error-registry.ts:131-137), so without this discriminant the refusing layer is unobservable and DoD 3 is untestable. Budget ~25 lines against 94 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Validation. In graph-revision-validation.ts: add \"graphEpoch\" to STATE_KEYS (the `exact()` guard means a state missing or carrying an extra key is rejected outright, so this is what makes the field durable rather than optional). Add a validGraphEpochPlacement(lifecycle, graphEpoch) predicate mirroring the existing validBoundPlacement/validSubmissionPlacement style: Number.isSafeInteger and >= 1 when lifecycle is ACTIVE or SUPERSEDED, and === 0 otherwise; call it from validGraphRevisionState. Do not accept a negative, fractional, NaN or missing epoch — an unverifiable epoch is UNKNOWN and must refuse, never default to 0 (task rail 3). Budget ~12 lines against 135 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-validation.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Results shaping. In graph-revision-results.ts: export `GRAPH_REVISION_LAYER = \"GRAPH_REVISION\" as const` and set `layer: GRAPH_REVISION_LAYER` inside the single rejected() constructor so all six refusal paths (unknownFailure, illegal, rebound, supersededAuthority, versionConflict and the new one) carry it with no duplication. Add `supersessionRefused(state, code: \"REVISION_REBOUND\" | \"SUPERSESSION_CONSEQUENCE_CHANGED\")` which builds the exact stable code with `source: { aggregate: \"GRAPH_REVISION\", state: state.lifecycle }`. Both codes list GRAPH_REVISION in validSources (runtime-error-registry.ts:131-137, measured) so createRuntimeError will NOT fail closed to UNKNOWN_ERROR — a test must prove that by asserting the returned code is the exact one, since a wrong source silently degrades to UNKNOWN_ERROR. Do not mint any new code (task rail 2). Budget ~14 lines against 177 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "The transition itself, in graph-revision-reducer.ts. (1) GRAPH_REVISION_TRANSITIONS: change `\"graph.supersede\": Object.freeze([])` to `Object.freeze([\"ACTIVE\"])`. (2) Remove \"graph.supersede\" from the shared illegal() case at :170 and route it to a new supersede() handler. (3) supersede(state, command) composes the production kernel and adds NO policy of its own: call decideSupersession({ graphContentHash: state.graphContentHash, graphEpoch: state.graphEpoch, revisionId: state.revisionId }, command.supersession). The kernel takes `unknown` and fully validates the input, so the reducer must NOT pre-validate the supersession payload — that would be the reimplementation task rail 1 forbids. On !ok return supersessionRefused(state, result.code) — this is where SUPERSESSION_KERNEL becomes GRAPH_REVISION. On ok, clonedState to lifecycle SUPERSEDED with version + 1, keeping graphEpoch unchanged (the predecessor keeps the epoch it was activated at; the successor's epoch+1 travels in the event binding, not in this aggregate's state), and emit one deep-frozen GraphRevisionSuperseded event. (4) In decide(), set graphEpoch: 1 on the ACTIVE clone so initial activation establishes epoch 1, and leave every pre-active clone at 0. (5) Rewrite the header comment at :5-11 so it states the new truth: the epoch is still goal-owned authority, and this aggregate now persists the bound epoch it was activated at so supersession can bind predecessor to successor. Leave the SUPERSEDED guard at :196 untouched — it already satisfies the terminal half of DoD 3. Line budget: 206 measured + ~18 = ~224, under 250; if it lands over, split the handler into a new file rather than shortening the guard.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Fixtures. In graph-revision-test-fixtures.ts: (1) make state() emit graphEpoch lifecycle-aware exactly like the existing boundHashes/submissionRef defaults — 1 for ACTIVE and SUPERSEDED, 0 otherwise — so the create() assertion at reducer.test.ts:32 (`toEqual(state(\"DRAFT\", { version: 1 }))`) keeps passing unchanged. (2) Make commandFor(\"graph.supersede\") build a WELL-FORMED SupersessionInput: expectedPredecessor matching state() (revisionId \"graph-revision-1\", graphContentHash GRAPH_HASH, graphEpoch 1), a successor at exactly graphEpoch 2 naming the predecessor's revisionId and content hash, at least one disposition, and supportedCanonicalizerVersions. Add named exports for a stale-epoch variant and a changed-carry variant so the step-2 tests need no local reimplementation. (3) Extend expectError to assert `result.layer` is \"GRAPH_REVISION\" on every refusal — that single change upgrades every existing refusal assertion in the suite to pin the refusing layer, satisfying epic rail 6 across the file. Budget ~18 lines against 154 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Update ONLY the two genuinely invalidated assertions in graph-revision-reducer.test.ts; every other assertion in the 222-line file must pass untouched (task rail 4). (a) :143-151 'never moves an active revision backward and never mutates its content' — the loop `for (const kind of GRAPH_REVISION_COMMAND_KINDS) expectIllegal(..., \"ACTIVE\")` is now false for graph.supersede alone. Skip that one kind in the loop and immediately assert the positive: a well-formed supersede from ACTIVE is ACCEPTED and lands SUPERSEDED. Do not silently narrow the loop without the positive assertion — a skip with nothing in its place is the vacuous-sweep defect epic rail 6 names. (b) :160-167 'refuses the Phase 5 supersession command from every lifecycle' — delete it entirely; step 2's file replaces it with real per-lifecycle assertions. DO NOT TOUCH: :153-157 (SUPERSEDED_AUTHORITY from SUPERSEDED, still true for all kinds) and :204-221 (the kind x lifecycle sweep, which reads GRAPH_REVISION_TRANSITIONS and self-adjusts, and already asserts a positive `seen.size` count). Deleting (b) frees ~8 lines against the ~10 that (a) adds, so the file stays near 222.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Make the planning invariant property non-vacuous — OWNED-PATH EXPANSION, read this justification. planning-invariant-fixtures.ts is NOT in the task's stated 8 owned paths but is mandatory, taking the task to exactly 10 distinct files (at, not over, the hard cap). Measurement: planning-invariant-fixtures.ts:46 declares `REVISION_TERMINAL = new Set([\"ACTIVE\", \"SUPERSEDED\", \"REJECTED\"])`, and planning-invariant-drivers.ts:156 asserts `expect(REVISION_TERMINAL.has(source)).toBe(false)` on every ACCEPTED result — so the moment supersede is accepted from ACTIVE, that assertion fails. ACTIVE is genuinely no longer terminal. (1) invariant-fixtures: remove \"ACTIVE\" from REVISION_TERMINAL. REVISION_RANK at :43-45 already ranks SUPERSEDED 4 above ACTIVE 3, so the monotonic-rank assertion at drivers:157 holds unchanged — do not touch it. (2) invariant-drivers: replace the refusal-only `\"graph.supersede\": { witness: refusal }` body at :128 with a well-formed SupersessionInput built from the walked state, so the random walk actually reaches SUPERSEDED instead of always refusing. Leaving it malformed would keep the suite GREEN while testing nothing — the exact detached-assertion defect. Only ~15 lines of headroom here (235/250): if it does not fit, move the body builder into planning-invariant-fixtures.ts, which has 162 free. (3) planning-invariants.test.ts:114-128 'freezes an active revision against every further command' — the loop is now false for supersede alone; except that kind, and assert positively that supersede is the ONE command an ACTIVE revision accepts and that it lands SUPERSEDED. Leave :49-68 (the perturbed-digest REVISION_REBOUND property) and every planning-run assertion untouched.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-invariant-fixtures.ts",
+        "packages/core/src/planning/planning-invariant-drivers.ts",
+        "packages/core/src/planning/planning-invariants.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Mutation drills (DoD 5), then restore byte-exact. Each drill must redden a NAMED test in an owned file, and the drill must target a guard THIS task added — a kernel-side guard reddening a kernel test proves nothing about this transition. Drill each and record the test name that failed: (a) reducer.ts GRAPH_REVISION_TRANSITIONS graph.supersede ACTIVE -> add another lifecycle; (b) the supersede() predecessor binding — pass a wrong revisionId or graphContentHash into decideSupersession; (c) drop graphEpoch from the binding the reducer hands the kernel; (d) make supersessionRefused return the kernel's code unmapped, or the wrong layer, to prove the layer assertion is live; (e) validation.ts validGraphEpochPlacement — accept 0 for ACTIVE; (f) remove the SUPERSEDED guard at reducer.ts:196 and confirm the SUPERSEDED_AUTHORITY test reddens. Two shared-worktree hazards, both previously observed on this board: `git diff` is BLIND to untracked files, so never verify restoration of the new test file by an empty diff — hash it before and after; and another agent's whole-tree completion hook can COMMIT your drill edit, after which git status looks clean while the mutation is live — re-run the suite after every restore and confirm it is green, do not trust status alone.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-reducer.ts",
+        "packages/core/src/planning/graph-revision-validation.ts",
+        "packages/core/src/planning/graph-revision-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Verify, self-review, complete. (1) Hand-measure every touched .ts with `grep -c ''` and confirm all 10 are at or below 250 — PowerShell Measure-Object -Line undercounts by skipping blank lines and will tell you that you have room when you do not. (2) Run the exact DoD command fresh and last, unnarrowed, with no path filter: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Read the Test Files count, not just the tail — a narrowed or mistyped invocation reads as green. (3) Path-attributed baseline: run repo-wide `pnpm typecheck` and `pnpm test` at merge-base and at HEAD; the known foreign red is packages/scheduler/src/package-boundary.test.ts ('keeps scheduler registrars behind the package-root import boundary', shebang tokenizer). Disclose it verbatim, never call it green and never claim it as yours. The owned-package legs must be exit 0 — foreign red does not excuse them. (4) Adversarial self-review of your own diff: is any refusal test asserting only ok===false rather than the exact code plus layer? Does any sweep now generate zero supersede cases? Did any assertion you 'adjusted' stop testing its subject? Is the successor binding hash-bound to the predecessor it replaced? (5) Stage and commit ONLY the 10 owned paths by explicit pathspec — never git add -A. Known gap to disclose in your completion notes, not to fix here: initial activation sets graphEpoch to 1 literally, so a SUCCESSOR revision's own activation does not yet land at predecessor epoch + 1; this slice emits that binding in the event as DoD 2 specifies, and closing the successor's own activation belongs to the daemon/scheduler slice (task-069853689ed643988cfec2d689f7edb7).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-supersession.test.ts",
+        "packages/core/src/planning/graph-revision-reducer.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-901cc711",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -41,16 +137,25 @@
       "author": "architect-8ee37119",
       "content": "BLOCKER CLEARED — producer root exports measured on disk 2026-08-09 by architect-8ee37119 at HEAD `025dc4948127e7c7b753b71d3f5cf4b142637060`. This satisfies architect-db2146e3's promotion condition verbatim (\"until that producer is DONE and its root exports are measured on disk\"). Do not re-probe; do not create a second producer.\n\nPRODUCER STATE\n- `task-14eb91a1f25240d08123b9f4db8ebead` is DONE. Commit `025dc49` (`feat(core): add supersession kernel`) is HEAD.\n- `git ls-tree -r HEAD --name-only -- packages/core/src/supersession` -> `supersession-engine.js`, `supersession-engine.test.ts`, `supersession-engine.ts`. Committed, not merely on disk.\n- Root surface, `packages/core/src/index.ts:239`:\n  `export { SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession } from \"./supersession/supersession-engine.js\";`\n  Exactly three runtime values. This is the surface task rail 1 tells you to consume.\n\nKERNEL PUBLIC SIGNATURE (measured, `supersession-engine.ts`)\n- `:234 export function decideSupersession(currentValue: unknown, inputValue: unknown): SupersessionResult` — both params are `unknown`; the kernel validates. Arg 1 is the CURRENT predecessor, arg 2 the request.\n- `:12 SUPERSESSION_KERNEL_LAYER = \"SUPERSESSION_KERNEL\"`. Note: this is the KERNEL's layer. Your DoD 3 requires `GRAPH_REVISION` as the refusing layer, so the reducer must re-shape kernel refusals into its own layer rather than pass `SUPERSESSION_KERNEL` through — that is the exact \"which layer refused\" distinction epic rail 6 asks you to pin.\n- Types available for composition: `SupersessionPredecessorBinding` (:14), `SupersessionSuccessorBinding` (:19, extends predecessor), `SupersessionSafeCarry` (:23), `SupersessionDisposition` (:27), `SupersessionInput` (:34), `SupersessionDecision` (:40), `SupersessionAcceptedResult` (:47), `SupersessionRefusal` (:51), `SupersessionResult` (:56), `SupersessionDispositionKind` (:11).\n- Kernel already emits frozen exact `REVISION_REBOUND` / `SUPERSESSION_CONSEQUENCE_CHANGED` at `SUPERSESSION_KERNEL`, enforces the +1 epoch binding, and composes production `evaluateCarryForward` for authority and inputBinding. Do NOT reimplement any of that in the reducer or in a test helper.\n\nGAP CONFIRMED STILL OPEN (your work is not already landed)\n- `graph-revision-reducer.ts:68` — `\"graph.supersede\": Object.freeze([])`.\n- `graph-revision-reducer.ts:170` — `case \"graph_revision.create\": case \"graph.supersede\": return illegal(state, command.kind);`\n- `graph-revision-reducer.ts:196` — `if (current.lifecycle === \"SUPERSEDED\") return supersededAuthority(current);` already exists; keep it.\n- `graph-revision-contract.ts:77` — `GraphRevisionSupersedeCommand` still carries only a refusal witness.\n- `grep -rn graphEpoch packages/core/src` -> ZERO hits under `planning/`. Only `expansion/expansion-planning-hold.ts` has one, a DIFFERENT aggregate. Useful precedent, not a substitute: it validates with `!uint(item[\"graphEpoch\"])` (:179/:186), carries the field in `STATE_KEYS` (:192), and refuses stale epochs at `:292` with `refuse(\"EXPANSION_HOLD_STALE_EPOCH\", state)`. Mirror the shape, mint no vocabulary.\n\nBLAST RADIUS RE-CONFIRMED — your 8 owned paths are right\n`grep -rln \"GraphRevisionState|graph.supersede|GraphRevisionSupersedeCommand\" packages/core/src` returns exactly: index.ts, graph-revision-contract.ts, graph-revision-reducer.ts, graph-revision-reducer.test.ts, graph-revision-results.ts, graph-revision-test-fixtures.ts, graph-revision-validation.ts, planning-invariant-drivers.ts. Only `index.ts` is outside your list, and it needs no edit (the kernel export is already there) — so your owned set is sufficient and no path is missing.\n\nLINE HEADROOM (physical, `grep -c ''`), all clean in git:\ncontract 156 | reducer 206 | validation 115 | results 73 | test-fixtures 96 | invariant-drivers 235 | invariants.test 129 | reducer.test 222. Reducer at 206 and invariant-drivers at 235 are the tight ones against the 250 target — plan a split rather than an overflow.\n\nPARENT SHELL: `task-6b8d0e2e948b48f7a1f40ad5a00a4a13` was flipped back to PLANNING and I re-BLOCKED it. It duplicates this task on 4 of its 6 paths and its own path list omits results/fixtures/invariant-drivers. It is a reconciliation stub only — this task is where the transition lands.",
       "timestamp": "2026-08-09T17:06:02.017Z"
+    },
+    {
+      "id": "comment-05bc0bf1692a4af8be265fa157be2a04",
+      "author": "architect-8ee37119",
+      "content": "FOLLOW-ON FILED for the gap this task deliberately leaves open: `task-aedcd01ad91245d9a036d9dac3b76a22` — \"Successor graph activation at predecessor epoch + 1\" (HIGH, BACKLOG, order 77), created 2026-08-09 on human direction.\n\nWHY THIS MATTERS TO YOU, the worker on this task: step 11 of your plan tells you to disclose in your completion notes that initial activation sets `graphEpoch = 1` literally, so a SUCCESSOR revision's own activation does not yet land at predecessor epoch + 1. That is now a filed task, not an unowned gap — name `task-aedcd01ad91245d9a036d9dac3b76a22` in your completion notes so the disclosure points somewhere.\n\nFOR QA: this is scoped OUT of this task by design and is not a rejection reason. Your DoD 2 requires only that the accepted supersede result EMIT a frozen binding to the successor at exactly predecessor epoch + 1 — which the kernel enforces and the `GraphRevisionSuperseded` event carries. Making a successor revision's own durable state activate at N+1 reaches `GraphActivationBinding`, `bindingShape`, `sameBinding`, `BINDING_KEYS`, the approval/activation fixtures and both invariant driver suites, well past this task's 10-file cap.\n\nCORRECTION TO MY EARLIER FRAMING, measured while filing: I described the epoch authority as something still to be built. It is already landed and real — `goal-contract.ts:130,155`, `goal-reducer.ts:94` (seeds 0), `:110` (`graphEpoch: state.graphEpoch + 1`), `:113` (emits `GoalExecutionEnabled` carrying the epoch), `goal-validation.ts:228-238` (validates it). So the header note at `graph-revision-reducer.ts:5-7` is accurate, and your step 6 rewrite of that comment must keep saying the epoch is goal-owned authority — this aggregate only persists a bound reference to the epoch it was activated at. The narrow truth is that `goal-reducer.ts:40` admits `goal.activate_initial_graph` from `DRAFT` only, so nothing advances the goal epoch a second time. That is the follow-on task's job, not yours.",
+      "timestamp": "2026-08-09T18:36:52.328Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:30:12.550Z",
-  "updatedAt": "2026-08-09T18:16:15.575Z",
+  "updatedAt": "2026-08-09T18:39:32.722Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T15:44:35.057Z"
+    "firstClaimAt": "2026-08-09T15:44:35.057Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 10
   },
   "contextFetchedBy": [
-    "architect-d46fcb95"
+    "architect-d46fcb95",
+    "worker-901cc711"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -66,5 +171,34 @@
       "releasedBy": "architect-d46fcb95",
       "reason": "Producer gate, not a plan defect. Releasing so the architect slot is free; this needs task-14eb91a1 to land, not another architect."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T18:22:13.844Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED a new production file for the supersede handler. reducer.ts is 206/250 physical lines and the handler is ~18 lines because the kernel takes `unknown` and validates everything itself, so it fits at ~224. A new file would have pushed the task to 11 distinct files, over the 10 hard cap, forcing an unnecessary split.\n\nACCEPTED a new file for the TESTS. graph-revision-reducer.test.ts is 222/250 with only 28 lines free, and the supersede coverage DoD 3 demands is 50+ lines. graph-revision-supersession.test.ts is the only new file.\n\nREJECTED putting graphEpoch on GraphActivationBinding / the activation witness. That is the architecturally purer place (the epoch would then flow from the command instead of being hardcoded to 1), but it changes bindingShape, sameBinding, BINDING_KEYS, the APPROVAL/ACTIVATION fixtures AND planning-run's RUN_ACTIVATION and PLAN_APPROVAL — well past 10 files. DoD 1 says 'initial activation establishes epoch 1' literally, so epoch 1 at activation is what was specified. The consequence is disclosed in step 10, not hidden.\n\nREJECTED deferring the three planning-invariant files to a follow-up task. Tempting, because a malformed supersede in the driver keeps that suite GREEN — but green-and-vacuous is exactly the detached-assertion defect epic rail 6 names, and DoD 4 requires it. Keeping them takes the task to exactly 10 files, which is at the cap, not over it.",
+    "codebaseInsights": "ALL MEASURED ON DISK 2026-08-09 at HEAD 025dc4948127e7c7b753b71d3f5cf4b142637060. Owned paths all clean in git at measurement time.\n\nPRODUCER PRESENT (task rail 1's dependency, re-measured not assumed): `git ls-tree -r HEAD --name-only -- packages/core/src/supersession` returns supersession-engine.{ts,js,test.ts}; packages/core/src/index.ts:239 exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession.\n\nKERNEL SIGNATURE: decideSupersession(currentValue: unknown, inputValue: unknown): SupersessionResult. Current = {revisionId, graphContentHash, graphEpoch}. Input = {dispositions, expectedPredecessor, successor, supportedCanonicalizerVersions}; successor adds {predecessorRevisionId, predecessorGraphContentHash}. Refusal = {ok:false, code:'REVISION_REBOUND'|'SUPERSESSION_CONSEQUENCE_CHANGED', layer:'SUPERSESSION_KERNEL'}. Accepted = {ok:true, decision:{authorityHash, dispositions, predecessor:{...,lifecycle:'SUPERSEDED'}, successor:{...,lifecycle:'ACTIVE'}, supportedCanonicalizerVersions}}. It enforces the exact +1 epoch and the predecessor binding itself, and composes production evaluateCarryForward — do not duplicate any of that.\n\nGAP CONFIRMED OPEN: reducer.ts:68 `\"graph.supersede\": Object.freeze([])`; :170 routes it to illegal(); contract.ts:77 still carries only a refusal witness. graphEpoch has ZERO hits under src/planning (only src/expansion/expansion-planning-hold.ts, a different aggregate — useful precedent at :179/:186/:192/:292, not a substitute).\n\nTHE FINDING THAT SHAPES DoD 3: packages/contracts/src/runtime/runtime-error-factory.ts:20-31 — RuntimeError has NO `source` field. createRuntimeError accepts `source` in OPTIONAL_KEYS, uses it in sourceAccepted() to validate, then DROPS it. And runtime-error-registry.ts:131-137 gives REVISION_REBOUND and SUPERSESSION_CONSEQUENCE_CHANGED NO_KEY required detail keys, so nothing reaches error.details either. The refusing layer is therefore UNOBSERVABLE without a production discriminant, which is why step 5 adds `layer` to the result. A test helper must not invent it.\n\nFAVOURABLE: all three codes list GRAPH_REVISION in validSources, so createRuntimeError will not fail closed to UNKNOWN_ERROR. SUPERSEDED_AUTHORITY additionally allows EPOCHS details (expectedEpoch, observedEpoch) — not required by any DoD item, deliberately left alone.\n\nBLAST RADIUS IS CONTAINED: `grep -rln 'GraphRevisionState|GraphRevisionSupersedeCommand|reduceGraphRevision|GRAPH_REVISION_TRANSITIONS' packages apps --include=*.ts` outside src/planning returns only index.ts and runtime-entrypoint.test.ts, neither of which constructs a state (the entrypoint test only checks `typeof ns.reduceGraphRevision === 'function'`). No daemon, scheduler or UI edit is implied.\n\nNO BRIDGE EDITS: every .js bridge in src/planning is a bare `export * from './<name>.ts'`, so new exports need no bridge change, and the one new file is a .test.ts which has no bridge by convention.\n\nDRIVERS BUILD STATES THROUGH THE REDUCER, never as literals (approvedRevision() and revisionTrace() both start from undefined and reduce), so adding required graphEpoch does not break them by itself — only the REVISION_TERMINAL change does.",
+    "risks": "1. LINE CEILING IS THE TIGHTEST CONSTRAINT. planning-source-size.test.ts enforces 250 physical lines on EVERY .ts in src/planning with no allowlist — tests, fixtures and drivers included. Headroom measured: invariant-drivers 235 (15 free), reducer.test 222 (28 free), reducer 206 (44 free). Step 9 names the escape hatch for drivers (move the builder into invariant-fixtures, 162 free). Measure with `grep -c ''`; PowerShell Measure-Object -Line skips blank lines and will lie in the optimistic direction.\n\n2. EXACTLY 10 DISTINCT FILES, AT THE HARD CAP. planning-invariant-fixtures.ts is an expansion beyond the task's stated 8 owned paths, justified by the measurement in step 9. There is no room for an eleventh — if the work grows, report_blocked for a split rather than quietly writing an unowned path.\n\n3. THE VACUITY TRAP IS THE MOST LIKELY WAY THIS TASK PASSES WHILE FAILING. Both loop assertions being edited (reducer.test.ts:143-151 and planning-invariants.test.ts:114-128) can be made green by simply excluding graph.supersede from the loop. That leaves supersede untested by those files and the suite green. Every exclusion must be paired with an immediate positive assertion. Likewise the driver's supersede body: leave it malformed and the whole random-walk suite stays green having never once reached SUPERSEDED.\n\n4. LAYER RE-SHAPING IS EASY TO GET WRONG SILENTLY. The kernel returns layer SUPERSESSION_KERNEL; DoD 3 requires GRAPH_REVISION. Passing the kernel refusal through unmapped still returns the right CODE, so a test asserting only the code stays green. Drill (d) exists specifically to prove the layer assertion is live.\n\n5. WRONG SOURCE DEGRADES SILENTLY. createRuntimeError fails closed to UNKNOWN_ERROR on a source the descriptor does not list. A refusal built with the wrong aggregate returns UNKNOWN_ERROR, not an exception — so assert the exact code, never merely ok===false.\n\n6. SHARED WORKTREE. All agents work in one directory. `git diff` cannot see the new untracked test file, so never verify a mutation restore by an empty diff — hash the file. A foreign whole-tree completion hook may commit your in-progress bytes; if that happens do not amend, reset or stash (epic rail 3) — report the base-ref diff over your owned paths instead. Foreign repo-wide red (the known scheduler package-boundary shebang failure) is disclosed verbatim under the path-attribution rule, but your own owned-package legs must still be exit 0.\n\n7. DISCLOSED DESIGN GAP, not a defect to fix here: activation sets graphEpoch to 1 literally, so a successor revision's own activation does not yet land at predecessor epoch + 1. DoD 2 asks only that the supersede result EMIT that binding, which this plan does. Closing the successor's own activation belongs to task-069853689ed643988cfec2d689f7edb7.",
+    "keyFiles": [
+      "packages/core/src/supersession/supersession-engine.ts",
+      "packages/core/src/planning/graph-revision-reducer.ts",
+      "packages/core/src/planning/graph-revision-contract.ts",
+      "packages/core/src/planning/graph-revision-results.ts",
+      "packages/core/src/planning/planning-invariant-fixtures.ts",
+      "packages/contracts/src/runtime/runtime-error-factory.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/core/src/planning/planning-source-size.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9900000,
+    "warnedAt": "2026-08-09T18:39:14.197Z",
+    "escalatedAt": "2026-08-09T18:39:14.197Z"
+  },
+  "planApprovedAt": "2026-08-09T18:22:15.885Z",
+  "workStartedAt": "2026-08-09T18:39:32.722Z"
 }

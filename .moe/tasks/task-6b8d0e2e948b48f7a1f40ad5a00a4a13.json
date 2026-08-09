@@ -35,11 +35,17 @@
       "author": "architect-db2146e3",
       "content": "Fresh scope audit found the stated 8-file slice is not implementable within its owned paths. A required durable graphEpoch makes graph-revision-test-fixtures.ts a compile-time consumer; planning-invariant-drivers.ts constructs malformed graph.supersede commands and planning-invariants.test.ts asserts ACTIVE refuses every command; graph-revision-results.ts must expose the refusing layer because RuntimeError discards its input source. Those four unowned but behavior-coupled files make the complete plan 12 distinct files, above the 10-file hard cap. Re-sliced by existing interfaces into task-14eb91a1f25240d08123b9f4db8ebead (4-file kernel producer, order 57) and task-1df0622e87cf42beae2cd82280e9ff99 (8-file graph reducer consumer, order 58).",
       "timestamp": "2026-08-09T15:31:24.292Z"
+    },
+    {
+      "id": "comment-a8f698469bce4f04a68c4bfb912ece68",
+      "author": "governor-42b952c9",
+      "content": "*** DO NOT PLAN THIS TASK. IT IS A SPIDR SHELL, 100% COVERED BY ITS CHILDREN. READ THIS BEFORE MEASURING ANYTHING. ***\n\nIf the daemon served you this task from the PLANNING pool, that is the known re-serve defect, not an instruction. Re-BLOCK it and move on. You should be able to refuse in under a minute using this comment; you do not need to re-measure. Two architects already paid a full measure cycle to reach this same refusal — architect-db2146e3 (15:34) and architect-8ee37119 (17:01).\n\nTHE DESCRIPTION IS STALE AND WILL MISLEAD YOU. It asserts \"MEASURED ABSENT: packages/core/src/supersession/ does not exist\". That is FALSE and has been since commit 025dc49. The global staleness rail cuts both ways: a gap claimed present but actually CLOSED is a silent duplicate that collides with its owner in the shared worktree, and it wastes exactly the same context as the opposite error. Do not plan work to build something the description calls missing.\n\nCOVERAGE, measured at HEAD 025dc49 by architect-8ee37119 and independently by governor-42b952c9:\n- KERNEL HALF — LANDED. `git ls-tree -r HEAD -- packages/core/src/supersession` returns 3 committed files. Root exports live at packages/core/src/index.ts:239: SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession, plus 10 types. Owner: task-14eb91a1f25240d08123b9f4db8ebead, DONE.\n- TRANSITION HALF — genuinely still open (graph-revision-reducer.ts:68 empty transition list, :170 routes graph.supersede to illegal) but OWNED by task-1df0622e87cf42beae2cd82280e9ff99, which is WORKING with an approved 8-step plan as of 18:18. That task overlaps this shell on 4 of its 6 paths. Two plans on those files collide in the shared worktree — this is the concrete harm, not a theoretical one.\n\nIT IS ALSO UNPLANNABLE AS SCOPED, which is the stronger reason. `graphEpoch` has ZERO hits under packages/core/src/planning. Making it required reaches graph-revision-results.ts, graph-revision-test-fixtures.ts and planning-invariant-drivers.ts — none owned by this shell. Planning it forces you to either write unowned paths or ship a non-compiling package. There is no valid plan available to you here, so \"write a better plan\" is not the answer.\n\nDISPOSITION: reconciliation stub. Stays BLOCKED until task-1df0622e is DONE, then closes. Per the board's transition rules a finished SPIDR parent needs a REVIEW transit hop to reach DONE — do not attempt BACKLOG to DONE directly.",
+      "timestamp": "2026-08-09T18:20:47.601Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:17:30.942Z",
-  "updatedAt": "2026-08-09T17:05:31.470Z",
+  "updatedAt": "2026-08-09T18:20:47.601Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:18:49.680Z"
   },

@@ -39,8 +39,14 @@
 // surface.
 mod handle;
 mod job;
+mod process;
 mod win32;
 
 pub use handle::OwnedHandle;
 pub use job::Job;
-pub use win32::{NativeError, NativeOp, RawHandle, SystemWin32, Win32Calls, REQUIRED_LIMIT_FLAGS};
+pub use process::{ContainedProcess, CreatedProcess, ProcessSpec};
+pub use win32::{
+    NativeError, NativeOp, ProcessCalls, RawHandle, SystemWin32, Win32Calls, ATTRIBUTE_HANDLE_LIST,
+    ATTRIBUTE_JOB_LIST, EXPECTED_PRIOR_SUSPEND_COUNT, INHERITED_HANDLE_COUNT,
+    REQUIRED_LIMIT_FLAGS,
+};
