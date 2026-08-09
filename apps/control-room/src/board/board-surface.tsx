@@ -209,7 +209,12 @@ export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
         data-testid="cr.board.columnjump"
         id="cr-board-columnjump"
         onChange={(event) => {
-          moveTo(visible.findIndex((column) => column === event.target.value), 0, false);
+          // The cursor moves even when the chosen lane holds no card, so choosing an
+          // empty column reads as "this lane is empty" rather than as a dead control.
+          const column = visible.findIndex((name) => name === event.target.value);
+          if (column < 0) return;
+          setCursor({ column, row: 0 });
+          moveTo(column, 0, false);
         }}
         value={visible[cursor.column] ?? ""}
       >
