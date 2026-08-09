@@ -15,9 +15,107 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-da724bb7",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and pin the boundary before editing. Recompute the SHA-256 values of the read-only rebuild design and control-room spec and require the pinned hashes; inspect the verified FactRow/useGating/NextAllowedCommand/buildNextAllowedCommands surfaces and the crash-reconciliation/doctor proposal contracts. Confirm apps/control-room/src/doctor/doctor-j1.tsx remains the J1 compatibility slice, apps/control-room/src/recovery is absent, and both owned directories are clean. Run the package test command once as a baseline and record exact failing files/tests, explicitly attributing the current goals/timeline RED to foreign in-flight TDD rather than modifying or claiming it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: create all four focused suites before production modules. In doctor-console.test.tsx hand-write and assert a nonzero exact corpus for HEALTHY, DEGRADED, and UNKNOWN_TRUTH plus the supplied health areas (engine, schema, integrity, projection, artifact, outbox, adapter, calibration, export, reconciliation, backup): preserve stable check ID, severity, evidence, every affected record/effect ID, exact order, degraded freshness, and three-state text/glyph/data attributes without roll-up. Assert missing/blank facts become UNKNOWN, every cr.fact.* has exactly one kernel cr.chip.* descendant, provenance receives a unique check-qualified fact ID, j/k and Enter focus/open exact rows, loading/degraded remain honest, and the verbatim offline-doctor banner/as-of proof renders with suggestions as text and zero enabled cr.action.*. In recovery-actions.test.tsx build real affordances through production buildNextAllowedCommands and pin exact commandId/kind/target matching, one uniquely identified cr.action.<dashed-kind>[.<qualifier>] per supplied presentation, original affordance identity on confirmation request, foreign/absent/ambiguous matches omitted unless a daemon-supplied unavailable reason exists, stable reason code plus refusing layer on disabled/refused paths, offline/historical/unknown and actionsEnabled=false disabled, and LAGGING/stale with actionsEnabled=true still enabled. Pin pending/confirmed role=status, the >2s copy, and refused role=alert with exact code/layer and only current supplied recovery actions. In reconciliation-inventory.test.tsx pin cr.health.reconciliation.row.{recordId}, quarantined/unschedulable/NEEDS_RECONCILIATION UNKNOWN facts, evidence/affected IDs, canonical narrative plus only supplied labeled choices, empty/limited inventory, and keyboard navigation. In recovery-status.test.tsx pin cr.health.outbox, cr.health.versions, backup/export, committed cursor/RPO, manifest/digest/byte-proof facts, all seven external-inventory coverage classes and blind spots, zero-items-with-UNKNOWN not clean, post-cursor RPO limitation, and recovery.complete only from a current supplied affordance; assert no browser restore/file control. Add a non-vacuous exact production-file/import scan (legacy doctor-j1 explicitly excluded from the new-module ban) forbidding fixtures, data adapters, daemon/runner/store internals, createRuntimeError, fetch, fs, and process in the four canonical modules. Run each new suite and capture the expected missing-module RED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN the doctor surface in doctor-console.tsx. Define closed presentation props—not daemon response DTOs—for the supplied overall health fact, ordered checks, view freshness/loading/degraded state, optional offline report timestamp/lock-proof facts, and non-authoritative suggested operations. Render cr.health.status, cr.health.check.{checkId}, and cr.health.doctor using Panel/FactRow so every claim retains its exact supplied truth/provenance and missing fields stay UNKNOWN. Preserve HEALTHY, DEGRADED, and UNKNOWN_TRUTH as distinct health outcomes without ranking or aggregating checks; never calculate SQLite compatibility or startup eligibility. Implement deterministic row focus for j/k and Enter callbacks without mutating order. Render the exact offline copy only for the supplied OFFLINE_READ_ONLY report, keep suggestions plain text, and expose no command, transport, parser, OS lock, filesystem, or repair behavior. Leave doctor-j1.tsx untouched and make the doctor suite green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN the authority boundary in recovery-actions.tsx. Export a presentation union that either references a current commandId with supplied label/qualifier/target or carries a fully supplied unavailable reason (phrase, stable reason code, refusing layer); an unreferenced expectation with no reason is absent. Read useGating() directly, join each presentation to exactly one current NextAllowedCommand by commandId and exact target, and pass that original command plus the original presentation to onRequestConfirmation—never clone it, build an envelope, classify commands as safe, dedupe, or infer a control from health/lifecycle text. Use actionsEnabled verbatim; additionally fail closed for supplied OFFLINE_READ_ONLY, HISTORICAL, or UNKNOWN authority modes, but deliberately do not disable solely because useGating().stale is true. Render exact command metadata/test-ID grammar, keyboard-native buttons, supplied disabled copy, and inline supplied PENDING/CONFIRMED/REFUSED feedback with status/alert semantics; missing error code/layer remains UNKNOWN rather than receiving an invented RuntimeError. Make the action suite green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/recovery/recovery-actions.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/recovery/recovery-actions.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN reconciliation-inventory.tsx as a general recovery/reconciliation presentation, not an import-only workflow. Model ordered supplied rows with canonical record/case identity, finding, disposition, quarantine/unschedulable state, affected record/effect IDs, evidence, coverage limitation, and action presentations. Render every claim through FactRow with entity-qualified provenance IDs; NEEDS_RECONCILIATION-derived claims remain visibly UNKNOWN. Compose the canonical reconciliation sentence from the supplied record/finding, render 'Choose:' followed only by presentations backed by a current affordance or an explicit daemon reason, and never hard-code three legal mutations. Preserve empty/partial inventory limitations, supplied order, and j/k/Enter row behavior; delegate every button to RecoveryActions so advisory prose cannot mutate, resume history, or grant authority. Make the inventory suite green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN recovery-status.tsx with focused supplied-only sections for outbox, versions, backup/export/RPO, and disaster-recovery inventory. Render applied and emitted cursors plus lag/poison/aggregate state independently; render engine/SQLite version, required minimum, and daemon-evaluated compatibility independently; render one BackupGeneration's generation, committed cursor/RPO, manifest digest, object digest/size coverage, byte verification and key chain without mixing generations. Always state that acknowledged events after the backup cursor are outside that RPO, keep missing proof UNKNOWN, and distinguish a non-authoritative export at one committed sequence from a restorable backup. Render the exact seven inventory classes—workspaces, effect locks/wrappers, provider runs, resources, branches/refs, integration targets, artifact staging—with supplied coverage window, negative-proof completeness, items, dispositions and blind spots; an empty item list never proves completeness. Delegate project actions to RecoveryActions, so recovery.complete/inspect/reconcile/export/resume appear only when supplied and no restore, filesystem, subprocess, remote-shell, or optimistic repair path exists. Make the status suite and a focused package typecheck green; measure physical lines with a cross-platform newline counter and split before any production file reaches 400 (target <=250).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/recovery/recovery-status.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/recovery/recovery-status.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarially review the complete eight-file slice, then perform hash-restored one-at-a-time mutation drills from an OS temp location (leave no repo evidence). Required mutants must each turn a named focused test red: coerce UNKNOWN_TRUTH to HEALTHY; drop a supplied check's evidence/affected ID; turn an offline suggestion into a button; remove commandId uniqueness or target matching; ignore actionsEnabled or the non-live authority-mode guard; incorrectly use stale/lag as a blanket command block; synthesize reconciliation choices from prose; treat an empty orphan list as complete; compute SQLite compatibility/outbox lag/backup completeness client-side; remove the post-cursor RPO warning; or suppress the supplied refusal layer while retaining its code. Assert every mutant anchor and generated corpus is nonzero/exact, restore identical hashes after each, and rerun focused green tests. Review hostile empty/duplicate/large arrays, duplicate React/test IDs, immutable input order, provenance identity, keyboard focus at list edges, fact/chip equality excluding no non-truth badge, and verify the structural scan truly reads all four canonical production files from process.cwd().",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx",
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Run the single final verification command fresh in the foreground: pnpm --filter @moe/control-room test. Record exact test-file/test counts and exit 0, including the untouched shell J1 compatibility suite; if a foreign in-flight suite is still red, attribute it and wait/report it rather than changing unowned paths or claiming success. Then run git status --porcelain, unstage any foreign staged entry, stage only the eight explicit owned paths, commit with those exact pathspecs (never a bare commit), and use git show --stat --name-only to prove the commit contains only this task's files and no generated/debug evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx",
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,11 +127,38 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T09:29:04.600Z",
+  "updatedAt": "2026-08-09T09:44:50.331Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T09:29:04.600Z"
-  }
+    "firstClaimAt": "2026-08-09T09:29:04.600Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T09:44:48.304Z",
+  "planningNotes": {
+    "approachesConsidered": "Use presentation-only props plus the existing shell affordance context. Rejected decoding/fetching doctor.get JSON because the generated client intentionally leaves query payloads opaque and the live adapter drops rich doctor fields. Rejected importing daemon or runner recovery modules because @moe/control-room has no dependency on them and that would invert the boundary. Rejected deriving overall health, SQLite compatibility, outbox lag, backup completeness, orphan coverage, or recovery eligibility in React: all are daemon-supplied facts. Rejected rewriting doctor-j1.tsx because shell/j1-flow.test.tsx imports that compatibility slice. Rejected Shell ActionButton and approval DecisionControl because the former lacks target-aware activation and the latter is approval-record/revision specific.",
+    "codebaseInsights": "doctor-j1.tsx is the only existing owned production file and must remain byte-untouched. Canonical facts should reuse FactRow/FactList/Panel, SuppliedFact, and ProvenanceHandler from nodes/node-authority.tsx, which fail blank/missing values to UNKNOWN and emit the kernel truth chip. RecoveryActions should consume useGating(): commands and actionsEnabled are daemon-supplied; stale is presentation state and must not itself disable a current safe affordance. NextAllowedCommand contains commandId, kind, target, version and authority pins but no label/payload schema, so a local presentation object must pair a supplied label/qualifier with a commandId and return the original current affordance to the host. Runtime doctor queries have no rich response DTO. Runner crash outcomes are closed and contain no RESUMED arm; daemon doctor.propose_* operations only propose with appliesChange:false and are not runtime command kinds.",
+    "risks": "reconciliation.decide may represent more than one UI choice while NextAllowedCommand has neither label nor payload schema; never synthesize the spec's three choices from lifecycle text, and pass the selected presentation plus the exact current affordance back to the host. UNKNOWN health must not erase a separately supplied safe live command, while OFFLINE_READ_ONLY, HISTORICAL/requires-refresh, disconnected actionsEnabled=false, and ambiguous/missing command identity remain non-actionable. Offline OS-lock proof is displayed only; the browser cannot establish it. recovery.complete must never be inferred from an empty inventory. The current package baseline is foreign-red (goals-home.test.tsx is deliberately missing goals-home.js and timeline-page.test.ts has three in-flight failures); do not touch those paths, and require the final package gate after sibling work is green. In TSX source scans resolve from process.cwd(), positively anchor every scanned file/case count, and do not use import.meta.url. Keep each of the four new production modules <=250 physical lines and split before 400.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md",
+      "apps/control-room/src/doctor/doctor-j1.tsx",
+      "apps/control-room/src/nodes/node-authority.tsx",
+      "apps/control-room/src/shell/frame.tsx",
+      "packages/contracts/src/runtime/runtime-affordance.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/control-room-client/src/generated/generated-client.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-09T09:44:50.331Z"
 }

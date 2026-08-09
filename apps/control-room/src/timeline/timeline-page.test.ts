@@ -277,6 +277,18 @@ describe("refusals name their code and the layer that produced them", () => {
     expect(result.layer).toBe("PAGING");
   });
 
+  it("refuses when the page source throws, rather than letting it blank the surface", () => {
+    const broken: TimelinePageSource = () => {
+      throw new Error("transport closed mid-read");
+    };
+    const result = walkTimeline({ filter: null, maxRows: 100, source: broken, startCursor: null });
+    expect(result.outcome).toBe("REFUSED");
+    if (result.outcome !== "REFUSED") return;
+    expect(result.code).toBe("TIMELINE_SOURCE_FAILED");
+    expect(result.layer).toBe("PAGING");
+    expect(result.detail).toContain("transport closed mid-read");
+  });
+
   it("refuses a bound that cannot admit a row, before reading any page", () => {
     for (const maxRows of [0, -1, 1.5, Number.NaN]) {
       const result = walkTimeline({

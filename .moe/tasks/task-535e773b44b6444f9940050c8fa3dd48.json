@@ -26,36 +26,51 @@
     {
       "stepId": "step-1",
       "description": "Pin the mechanism and the precedent before writing the gate. Read `packages/scheduler/src/scheduler-runtime-entrypoint.test.ts` — it already spawns a real Node process to prove one package loads, and this task generalizes exactly that to the whole workspace; match its spawn and assertion shape rather than inventing a second idiom. Read `pnpm-workspace.yaml` (globs are `apps/*`, `adapters/*`, `packages/*` — note `adapters/` does not exist on disk, so glob expansion must tolerate matching nothing rather than throwing). Confirm that every package.json uses `\"exports\": {\".\": \"./src/index.ts\"}` and decide to read the entry FROM that map rather than assuming the path, so a package that moves its entry stays covered. Then re-run the measurement for yourself rather than trusting this task's numbers: probe each package's entry with `node --experimental-strip-types` and record which pass and which fail. Expected at time of writing: PASS scheduler/store/runner/contracts/coordination/testkit/daemon, FAIL core/context/review/skills/mcp/control-room-client. If that set has changed because a sweep landed, the allowlist in step 4 shrinks accordingly. Produce no code.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T09:32:13.232Z"
+      "note": "Exploration complete with architect ruling applied. Precedent uses real Node Worker with `--experimental-strip-types`; root Vitest includes `tests/**/*.test.ts`; pnpm workspace globs are apps/*, adapters/*, packages/* and adapters may match nothing. Discovered 15 manifests: 14 declare exports[\".\"] as ./src/index.ts and apps/control-room has no Node entry (browser-only Vite app), so the suite will discover all 15 and partition them into HAS_NODE_ENTRY vs explicit justified NO_RUNTIME_ENTRY rather than narrowing discovery. Fresh valid path-entry probe: PASS contracts(46), control-room-model(1), coordination(14), runner(66), scheduler(36), store(26), testkit(11), all exports defined; FAIL ERR_MODULE_NOT_FOUND daemon/context/control-room-client/core/mcp/review/skills; NO_RUNTIME_ENTRY control-room. Daemon failure is foreign uncommitted index WIP owned by task-f6440f26 and will be remeasured before the allowlist is finalized. No files changed.",
+      "startedAt": "2026-08-09T09:32:13.232Z",
+      "completedAt": "2026-08-09T09:37:41.947Z"
     },
     {
       "stepId": "step-2",
       "description": "Build the discovery half and prove it cannot miss a package. Create the suite under tests/runtime/ (the root vitest config already includes `tests/**/*.test.ts`, so this needs no config change). Discovery reads pnpm-workspace.yaml, expands each glob, and for every matched directory containing a package.json resolves the declared entry from its `exports` map. It must NEVER use a hand-maintained package list: @moe/context and @moe/review shipped with zero bridges days after being created, and a static list would have silently omitted both — which is the exact failure mode this gate exists to prevent. Assert that property directly: the discovered package set equals the set of workspace directories on disk that contain a package.json, so adding a package automatically enrols it. Assert the discovered count is non-zero (a discovery that silently finds nothing would make the whole suite pass vacuously), and assert a glob matching no directories is tolerated rather than throwing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
       ],
       "newFiles": [
         "tests/runtime/package-loadability.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts"
+      ],
+      "note": "TDD RED: new focused suite ran 3/3 failed against explicit not-implemented discovery seams. GREEN: 1 file / 3 tests pass. Discovery parses pnpm-workspace.yaml, expands globs from disk with Node fs.glob, tolerates the absent adapters base, reads each matched package.json and its exports[\".\"], verifies declared runtime entries exist, and compares discovered directories to an independent manifest-glob set. The suite asserts non-empty discovery and exact classification: all 15 manifests partition into 14 runtime entries plus the explicit justified browser-only @moe/control-room no-entry bucket; if that app gains an entry or any new package lacks one unexpectedly, the classification test fails. No static probed-package list exists.",
+      "startedAt": "2026-08-09T09:39:39.977Z",
+      "completedAt": "2026-08-09T09:42:05.232Z"
     },
     {
       "stepId": "step-3",
       "description": "Build the probe half — real child processes, with the controls that make its output trustworthy. For each discovered package, spawn `process.execPath` (never a bare `node`) with `--experimental-strip-types`, import the resolved entry, and report a structured result. An in-process `import()` is forbidden here: vitest rewrites a `./foo.js` specifier back to `foo.ts`, which is precisely the blindness this gate exists to defeat, so an in-process probe would reproduce it and the gate would be worthless. Assert the child actually ran by capturing a stdout marker rather than trusting an exit code alone. THE TWO CONTROLS ARE MANDATORY and belong inside the suite: a POSITIVE control (a known-good bridged package must load with more than zero exports) and a NEGATIVE control (a deliberately unresolvable specifier must fail with the literal `ERR_MODULE_NOT_FOUND`, asserted on the error CODE and not on message text, which varies by platform and Node version). Without them a harness bug reports a repo-wide catastrophe that is not real — which is exactly what happened while this task's evidence was being gathered, when a bare-package-name probe reported all ten packages failing including correctly-bridged @moe/scheduler. Spawning ~13 children is slow: run them through a bounded concurrent pool with an explicit per-child timeout, and report a timeout as its own distinct outcome, never as a pass.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts"
+      ],
+      "note": "TDD RED: control test failed at the unimplemented bounded pool (1 failed / 3 passed), proving the new harness requirement was active. GREEN: focused suite 1 file / 5 tests. probeRuntimeEntry spawns process.execPath with --experimental-strip-types in a real child, emits and requires MOE_RUNTIME_PROBE_V1 stdout, captures export names and undefined bindings, distinguishes IMPORT_FAILED/PROCESS_FAILED/TIMED_OUT, and enforces a 10s per-child timeout. mapWithConcurrency preserves result order with a bounded worker count. In-suite positive control imports discovered @moe/scheduler and asserts >0 exports plus none undefined; negative control imports a deliberately absent source entry and pins literal code ERR_MODULE_NOT_FOUND plus the missing specifier; a separate delayed-child test pins the distinct TIMED_OUT outcome.",
+      "startedAt": "2026-08-09T09:42:34.185Z",
+      "completedAt": "2026-08-09T09:44:44.282Z"
     },
     {
       "stepId": "step-4",
       "description": "Add the self-retiring allowlist — the scope decision, made explicitly. Six packages fail today, so a bare gate would land permanently red; in a fleet where `pnpm test` is the final gate on several tasks, a standing red would block all of them and be routed around within the hour. Land it GREEN and HONEST instead: an allowlist of exactly the six known-failing packages, each entry carrying its owning sweep task id and the date it was added — @moe/core (task-386fcb4c), @moe/context and @moe/review (task-b7049554), @moe/skills, @moe/mcp and @moe/control-room-client (task-17b03331). The structural anti-rot rule is the important half and must be implemented, not just documented: THE SUITE FAILS WHEN AN ALLOWLISTED PACKAGE STARTS LOADING, so a landed sweep forces its entry to be removed rather than leaving it to decay. That is the same ratchet discipline this repo already runs for absence probes. Assert that every allowlist entry names a non-empty task id, and that the allowlist contains no package that currently passes. Do NOT weaken the underlying assertion for allowlisted packages — they are still probed and still reported; they simply do not fail the suite yet.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T09:45:30.230Z"
     },
     {
       "stepId": "step-5",
@@ -98,14 +113,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:11:33.693Z",
-  "updatedAt": "2026-08-09T09:35:36.138Z",
-  "stepsCompleted": [],
+  "updatedAt": "2026-08-09T09:45:30.230Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:31:19.372Z",
   "metrics": {
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
-    "firstClaimAt": "2026-08-09T09:31:37.646Z"
+    "firstClaimAt": "2026-08-09T09:31:37.646Z",
+    "executedStepCount": 3
   },
   "planningNotes": {
     "approachesConsidered": "(1) SCOPE DECISION — the task description left this to the architect and I am making it: LAND THE GATE WITH A DATED, PER-ENTRY-JUSTIFIED ALLOWLIST, not red. A permanently-red gate in the repo-wide lane teaches everyone to ignore a red lane, and this fleet runs `pnpm test` as the final gate on multiple tasks — a standing red would block every one of them and would be routed around within the hour. The allowlist keeps the lane green and honest simultaneously: each of the six entries names its owning sweep task, and the suite FAILS if an allowlisted package starts passing (so a sweep landing forces the entry's removal, exactly like the absence ratchet that this repo already runs). That inverts the usual allowlist rot — the list cannot outlive its cause.\n(2) SPAWN REAL NODE, NEVER IN-PROCESS. An in-process `import()` inside vitest reproduces vitest's own `.js`->`.ts` rewriting, which is the precise blindness this gate exists to defeat. It must be a child process with --experimental-strip-types.\n(3) DISCOVER, NEVER LIST. @moe/context and @moe/review shipped with zero bridges days after being created; a hand-maintained package list would have missed both. Read pnpm-workspace.yaml globs, expand them, and assert the discovered set equals the directories on disk so a new package is covered the day it appears.\n(4) CONTROLS ARE NOT OPTIONAL HERE, and I have direct evidence why: my first probe while gathering this task's data used bare package names, reported ALL TEN packages failing including correctly-bridged @moe/scheduler, and was pure harness artifact. Only a passing control exposed it. A gate that can cry repo-wide catastrophe without a self-check will be disabled rather than believed.",

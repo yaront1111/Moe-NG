@@ -75,7 +75,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-064d1267",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,7 +94,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T08:46:23.406Z",
-  "updatedAt": "2026-08-09T09:36:13.163Z",
+  "updatedAt": "2026-08-09T09:39:59.169Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:01:44.105Z",
     "plannedStepCount": 4,
@@ -139,5 +139,15 @@
   "blockedReason": "Named final gate cannot reach exit 0 under the approved rails. `pnpm --filter @moe/daemon typecheck` passes, then daemon tests report 363 passed / 2 failed. Existing `src/graph-preview-request.test.ts:241` requires Object.keys(@moe/daemon) to contain only evaluateGraphPreviewRequestBytes, directly contradicting this task's 31-value publication and lying outside the two owned paths. More importantly, its real plain-Node root-import case exits 1: direct Node 24 reproduction from apps/daemon returns ERR_MODULE_NOT_FOUND for `src/bootstrap/bootstrap-contracts.js`, because the curated `.js` re-exports eagerly load local modules for which daemon has no `.js` bridges. Vitest hides this by resolving `.js` to `.ts`; the focused root test is 46/46 green and isolated strict tsc is green. Task rails explicitly forbid service-module edits, package changes, and any `.js` bridge, while the objective requires an external consumer to drive the root. Updating only the stale key assertion cannot fix the real runtime failure. Safe completion therefore requires an architect-approved scope/design amendment; weakening the existing Node gate or deep-importing would violate fail-closed truth.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T09:20:52.323Z"
+  "blockedAt": "2026-08-09T09:20:52.323Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Implemented the curated 31-value daemon root re-export surface and full type closure in apps/daemon/src/index.ts plus new apps/daemon/src/index-surface.test.ts. Focused surface 46/46 green; isolated strict tsc green; three mutation drills killed loss, addition, and advisory-field mutants with byte-exact restore. Serena handoff: task-task-6054520bc52942889d32cd7481e61d4c-handoff.",
+      "whatRemains": "Architect/governor must resolve the rail/design conflict before work can safely land: add scope for the stale graph-preview-request.test.ts key assertion AND authorize a real daemon .js bridge/build strategy, or explicitly narrow the external-consumer objective and replace the existing plain-Node root gate. Then rerun the named chain, commit only the two owned paths (or amended paths), and complete step 4/task.",
+      "pitfalls": "Do not merely update the Object.keys assertion: plain Node still fails ERR_MODULE_NOT_FOUND on bootstrap/bootstrap-contracts.js because Vitest hides missing local .js bridges. Do not deep-import, weaken the Node gate, or sweep foreign shared-tree work. Current owned changes are uncommitted in the shared worktree.",
+      "releasedAt": "2026-08-09T09:39:59.166Z",
+      "releasedBy": "worker-064d1267",
+      "reason": "Human explicitly requested the next task; releasing this blocked assignment with a complete handoff so another worker can resume after governance amends the rails."
+    }
+  ]
 }

@@ -158,35 +158,49 @@
     {
       "stepId": "step-9",
       "description": "Structural ban test — DoD 2 is a NEGATIVE property and behaviour cannot prove it. A test can only show these surfaces did not become authority for the inputs it happened to try; the ban must be structural, exactly as apps/control-room/src/data/data-ban.test.ts proves the adapter ban. Write evidence-timeline-ban.test.ts with three load-bearing assertions: (1) the file list under both owned directories equals an exact hand-written set, so a NEW file cannot escape the ban; (2) every production file's import specifiers equal an exact allow-list — permitting the gated client, the presentation model, the local contract and shell modules, and BANNING @moe/store, @moe/coordination, @moe/core and @moe/contracts' lifecycle ordering, so there is structurally no path to a reducer, a transition table, or the store's CURSOR_GAP contract; (3) no forbidden computation identifier appears in any production source here — extend the data-ban list with the ones this surface could plausibly grow (deriveCausality, inferCause, rankEvidence, sortByTruth, upgradeTruth, resyncCursor). Scan production files only, never the test files, since this file holds the forbidden vocabulary itself. JSDOM TRAP, already documented in data-ban.test.ts and repeated here because it silently breaks the scan: resolve the directory with fileURLToPath(import.meta.url) and dirname DIRECTLY — never via new URL(\".\", base), because jsdom's global URL resolves a relative specifier against the document base and returns http://localhost:3000/..., which then fails fileURLToPath with 'The URL must be of scheme file'.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/evidence/evidence-timeline-ban.test.ts"
       ],
       "newFiles": [
         "apps/control-room/src/evidence/evidence-timeline-ban.test.ts"
       ],
-      "startedAt": "2026-08-09T09:35:51.863Z"
+      "modifiedFiles": [
+        "apps/control-room/src/evidence/evidence-timeline-ban.test.ts"
+      ],
+      "note": "Structural ban test landed. `pnpm --filter @moe/control-room typecheck` exit 0; `pnpm --filter @moe/control-room test` exit 0, \"Test Files 17 passed (17) / Tests 227 passed\". Suites 16 -> 17, tests 221 -> 227 (+6).\n\njsdom trap avoided: EVIDENCE_DIRECTORY = dirname(fileURLToPath(import.meta.url)) with no relative-URL step, and TIMELINE_DIRECTORY = join(EVIDENCE_DIRECTORY, \"..\", \"timeline\") — path join, not URL resolution. Both directories are scanned for .ts AND .tsx.\n\nSix assertions:\n1. Exact file list per directory (5 evidence files, 6 timeline files), so a new file cannot escape the ban.\n2. Exact production file list (7 files) — the vacuity guard, and it also pins that no production file was renamed into a .test name to dodge the sweep.\n3. Import UNION EQUALITY, not the subset check data-ban.test.ts uses. Every production specifier must be in the allow-list AND the allow-list must contain nothing that is not actually imported, so a stale over-broad entry cannot sit there granting future access.\n4. Banned packages (@moe/store, @moe/coordination, @moe/core, @moe/contracts) reachable from no production file, AND not addable to the allow-list — that second half is what stops assertion 3 from being defeated by simply widening it.\n5. Detector-liveness test for assertion 4.\n6. Forbidden identifier sweep: data-ban's 14 plus deriveCausality, inferCause, rankEvidence, sortByTruth, upgradeTruth, resyncCursor, compareDigests, digestsMatch.\n\nTHE BAN TEST BIT ME BEFORE IT PASSED, which is the useful part. First run: \"timeline-contract.ts:@moe/coordination\" and \":@moe/store\". A raw-text scan for the package name matched the comment in timeline-contract.ts that documents WHY those two packages are unreachable — mem:gotcha-boundary-test-greps-prose-not-imports, exactly. I did not delete the comment: the fix is that the ban is about IMPORTS, not prose. specifiersOf() now collects static `from \"x\"` specifiers plus dynamic `import(\"x\")`/`require(\"x\")`, and reaches() matches a bare package or a subpath. This is strictly stronger than the text scan it replaced — a text scan cannot see `import(\"@moe/store\")` written with a computed name, and more importantly would have punished the documentation that makes the ban comprehensible.\n\nBecause a detector that reports nothing is indistinguishable from a broken detector, assertion 5 plants `import { CURSOR_GAP } from \"@moe/store/subscriptions\"` and `await import(\"@moe/coordination\")` into a string and asserts both are caught, subpath included.\n\nThe allow-list is exactly ten specifiers: ../data/data-contract.js, ../fixtures.js, ../nodes/node-authority.js, ../shell/provenance-panel.js, ../timeline/timeline-contract.js, ./evidence-contract.js, ./timeline-contract.js, ./timeline-page.js, ./timeline-row.js, react. Truth presentation reaches @moe/control-room-model only transitively through ../nodes/node-authority.js -> ../kernel.js, and daemon facts arrive as props, so there is no import path to a reducer, a transition table, or the store's CURSOR_GAP contract.",
+      "startedAt": "2026-08-09T09:35:51.863Z",
+      "completedAt": "2026-08-09T09:38:42.588Z"
     },
     {
       "stepId": "step-10",
       "description": "Verification and mutation drill. Run pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test and record before/after test AND suite counts — count suites too, because a file that fails to parse reports zero tests and can read as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax). Then mutation-verify, since the epic rail requires demonstration not assertion: one at a time, (a) change the continuation to use the incoming page's nextCursor instead of the kept rows — this is the DoD-3 bug and at least one test MUST go red; (b) drop the kept.length === items.length condition from the completion check; (c) suppress the RESTART_GAP row; (d) elide a digest to a prefix; (e) relabel a non-zero exit; (f) delete one entry from the ban test's expected file list. Confirm red for each, restore with git checkout -- before the next, and record the per-mutation red counts. A green mutation means that assertion has detached from its subject. Verify restoration with git diff on the specific file, not git status — in this shared worktree another agent's whole-tree hook can commit your drill edit, after which status looks clean while the edit is still live (mem:mutation-drills-in-shared-worktree).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/timeline/timeline-page.test.ts",
         "apps/control-room/src/timeline/timeline-list.test.tsx",
         "apps/control-room/src/evidence/evidence-inspect.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/timeline/timeline-page.test.ts",
+        "apps/control-room/src/timeline/timeline-list.test.tsx",
+        "apps/control-room/src/evidence/evidence-inspect.test.tsx"
+      ],
+      "note": "Verification and mutation drill complete. 7 of 7 mutants killed. All files restored byte-identically (sha256sum -c exit 0 over all 11).\n\nCOUNTS, suites as well as tests. Pre-task: 13 files / 175 tests. Post-task: 18 files / 247 tests, typecheck exit 0.\nCAVEAT ON THE HEADLINE NUMBER, do not read 247 as mine. A concurrent worker added apps/control-room/src/goals/goals-home.test.tsx DURING this drill — it did not exist at the first drill run (17 files) and was present and failing at the second (18 files, red) before going green. My own contribution is 13 -> 18 files is wrong to state as 5: 5 of the new suites are mine (timeline-page, timeline-list, evidence-inspect, evidence-timeline-ban = 4) plus goals-home which is FOREIGN. Precisely: mine are 4 new suites, 175 -> 227 tests (+52) measured before goals-home appeared; the remaining +20 to 247 is foreign.\n\nMUTATION RESULTS, one at a time, restored and re-verified between each:\n(a) continuation from page.nextCursor instead of the last examined row -> 1 RED: \"keeps every row when the source's nextCursor would step over one\". This is the DoD-3 bug; the lying-envelope fixture is what makes it detectable.\n(b) truncated walk reports complete: true -> 3 RED: the resume-equality test, the MAX_VIEW_RECORDS test, and the caller-bound test.\n(c) RESTART_GAP rows filtered out before render -> 6 RED across the row-id list, gap visibility, kind-as-text, the omitted-summary test, the node-filter test, and the tab-stop/chip count.\n(d) output digest elided to a 20-char prefix -> 1 RED: \"prints every digest and SHA in full, never elided\".\n(e) non-zero exit relabelled \"partial success\" -> 1 RED: \"renders a non-zero exit as itself and softens nothing\".\n(f) \"evidence-j1.tsx\" removed from the ban test's expected file list -> 1 RED: \"scans exactly the expected file set in both owned directories\".\n(g) EXTRA, not in the plan: removed the RESTART_GAP exemption from survivesFilter -> 2 RED. I added that guard in step 4, so it needed its own drill; an unmutated guard is an unproved one.\n\nRESTORATION METHOD, and why not git checkout. All ten of my files are already TRACKED: another agent's completion hook swept the whole tree into commits c699422 / 5d77dde, both labelled task-e17da1c9 \"Predecessor input materializer\". mem:gotcha-completion-hook-commits-whole-tree and mem:mutation-drills-in-shared-worktree, live. That makes `git checkout -- <file>` actively dangerous here: evidence-timeline-ban.test.ts's working copy is AHEAD of HEAD (my prose-vs-imports fix from step 9 is uncommitted), so a checkout restore would have silently reverted a real fix while looking like a clean drill restore. I used reverse-edits instead and verified with sha256sum -c against a pre-drill manifest — a digest compare is the only check that is immune to both the shared index and a moving HEAD.\n\nStep 11 must account for the sweep: most of this work is already committed under a foreign task's message, so my commit will carry the remaining delta plus the attribution.",
+      "startedAt": "2026-08-09T09:38:47.621Z",
+      "completedAt": "2026-08-09T09:43:06.736Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an operator who will be misled. Is there ANY path where a filtered or truncated page advances the cursor past a row that was never displayed — trace the continuation through the filter, the MAX_VIEW_RECORDS bound, and the gap branch separately, since each can drop rows independently. Can a rejected command or a restart gap be scrolled past without ever rendering? Does any surface sort, rank, or re-order by truth class, which would be deriving evidence strength? Is any digest, SHA, or exit code transformed on the way to the DOM? Does any state read as colour-only, and is every row keyboard reachable? Confirm each production file is under the 400-line rail with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe, scratch, or generated evidence file remains, and that apps/control-room/dist was not touched. Then commit by explicit pathspec only — git status --porcelain first, confirm every staged entry is under apps/control-room/src/evidence or apps/control-room/src/timeline, unstage anything foreign with git restore --staged, then git commit -- apps/control-room/src/evidence apps/control-room/src/timeline and verify with git show --stat. Never a bare git commit; the index is shared with concurrent tasks.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/timeline/timeline-contract.ts",
         "apps/control-room/src/timeline/timeline-page.ts",
         "apps/control-room/src/timeline/timeline-list.tsx",
         "apps/control-room/src/evidence/evidence-inspect.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-09T09:43:16.386Z"
     }
   ],
   "status": "WORKING",
@@ -202,7 +216,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.787Z",
-  "updatedAt": "2026-08-09T09:35:51.863Z",
+  "updatedAt": "2026-08-09T09:43:16.386Z",
   "contextFetchedBy": [
     "architect-8a4a1764",
     "architect-da724bb7",
@@ -212,7 +226,7 @@
     "firstClaimAt": "2026-08-09T09:10:26.623Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 10
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -226,7 +240,9 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:12:08.964Z",

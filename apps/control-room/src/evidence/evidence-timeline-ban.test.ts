@@ -114,6 +114,9 @@ const FORBIDDEN_IDENTIFIERS = Object.freeze([
 
 const IMPORT_SPECIFIER = /^\s*(?:import|export)[\s\S]*?from\s+"([^"]+)"/gmu;
 
+/** `import("x")` / `require("x")`, which the static specifier regex above cannot see. */
+const DYNAMIC_SPECIFIER = /\b(?:import|require)\s*\(\s*"([^"]+)"/gu;
+
 interface SourceFile {
   readonly name: string;
   readonly path: string;
@@ -143,6 +146,27 @@ function importsOf(text: string): readonly string[] {
     if (specifier !== undefined) found.add(specifier);
   }
   return [...found];
+}
+
+/**
+ * Every specifier the file resolves at runtime, static or dynamic.
+ *
+ * This is deliberately NOT a raw-text search for the package name: these modules document
+ * in prose exactly which packages they may not reach and why, and a text scan would fail
+ * on its own explanation while a dynamic `import()` slipped past it
+ * (`mem:gotcha-boundary-test-greps-prose-not-imports`).
+ */
+function specifiersOf(text: string): readonly string[] {
+  const found = new Set<string>(importsOf(text));
+  for (const match of text.matchAll(DYNAMIC_SPECIFIER)) {
+    const specifier = match[1];
+    if (specifier !== undefined) found.add(specifier);
+  }
+  return [...found];
+}
+
+function reaches(specifier: string, packageName: string): boolean {
+  return specifier === packageName || specifier.startsWith(`${packageName}/`);
 }
 
 it("scans exactly the expected file set in both owned directories", () => {
@@ -182,12 +206,23 @@ it("cannot reach a package that owns authority, and cannot be widened to allow o
   }
   const offenders: string[] = [];
   for (const file of productionFiles()) {
-    const text = readFileSync(file.path, "utf8");
-    for (const banned of BANNED_PACKAGES) {
-      if (text.includes(banned)) offenders.push(`${file.name}:${banned}`);
+    for (const specifier of specifiersOf(readFileSync(file.path, "utf8"))) {
+      for (const banned of BANNED_PACKAGES) {
+        if (reaches(specifier, banned)) offenders.push(`${file.name}:${specifier}`);
+      }
     }
   }
   expect(offenders).toEqual([]);
+});
+
+it("detects a banned specifier when one is present, so the sweep is not vacuous", () => {
+  // The sweep above reports nothing; this proves that is a fact about the sources and
+  // not a broken detector. A subpath import must be caught as well as a bare one.
+  const planted = `import { CURSOR_GAP } from "@moe/store/subscriptions";\n`
+    + `const late = await import("@moe/coordination");\n`;
+  const caught = specifiersOf(planted)
+    .filter((specifier) => BANNED_PACKAGES.some((banned) => reaches(specifier, banned)));
+  expect(caught.sort()).toEqual(["@moe/coordination", "@moe/store/subscriptions"]);
 });
 
 it("computes no causality, no ranking, and no truth upgrade in any production source", () => {

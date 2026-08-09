@@ -45,6 +45,7 @@ export const TIMELINE_REFUSAL_CODES = Object.freeze([
   "TIMELINE_LIMIT_INVALID",
   "TIMELINE_ROW_KIND_UNSUPPORTED",
   "TIMELINE_SEQUENCE_OUT_OF_ORDER",
+  "TIMELINE_SOURCE_FAILED",
 ] as const);
 
 export type TimelineRefusalCode = (typeof TIMELINE_REFUSAL_CODES)[number];
@@ -174,10 +175,22 @@ export function refuseTimeline(
 }
 
 /**
+ * A supplied value, or null when the payload supplied nothing usable.
+ *
+ * Whitespace counts as absent. A blank string rendered beside a DAEMON_STATED marker is
+ * a confident label attached to nothing — the same "never blank" failure
+ * `node-authority.readValue` already guards against on the fact path.
+ */
+export function statedValue(value: string | null): string | null {
+  return value === null || value.trim() === "" ? null : value;
+}
+
+/**
  * The one distinction this layer adds, reusing `data-contract`'s two-armed vocabulary
  * rather than declaring a second one. There is no third arm, because a third arm would
  * be an inference.
  */
 export function statedProvenance(value: unknown): FieldProvenance {
+  if (typeof value === "string") return statedValue(value) === null ? "ABSENT" : "DAEMON_STATED";
   return value === null || value === undefined ? "ABSENT" : "DAEMON_STATED";
 }

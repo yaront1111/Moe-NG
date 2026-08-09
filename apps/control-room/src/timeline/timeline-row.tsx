@@ -5,7 +5,12 @@ import { UNSTATED } from "../data/data-contract.js";
 import { FactRow } from "../nodes/node-authority.js";
 import type { ProvenanceHandler } from "../nodes/node-authority.js";
 import { PROVENANCE_SHORTCUT_KEY } from "../shell/provenance-panel.js";
-import { TIMELINE_ROW_KINDS, refuseTimeline, statedProvenance } from "./timeline-contract.js";
+import {
+  TIMELINE_ROW_KINDS,
+  refuseTimeline,
+  statedProvenance,
+  statedValue,
+} from "./timeline-contract.js";
 import type {
   TimelineProvenance,
   TimelineRejectedRow,
@@ -78,7 +83,7 @@ function ProvenanceDrill(props: {
               data-provenance={statedProvenance(value)}
               data-testid={`cr.timeline.provenance.${String(sequence)}.${field}`}
             >
-              {value ?? UNSTATED}
+              {statedValue(value) ?? UNSTATED}
             </dd>
           </div>
         ))}
@@ -111,11 +116,16 @@ function GapDetail({ row }: { readonly row: TimelineRestartGapRow }): JSX.Elemen
   );
 }
 
-/** A row is linkable only when the daemon named the event the link would resolve to. */
+/**
+ * A row is linkable only when the daemon named the event the link would resolve to.
+ * A blank id is not a name: it would produce `#timeline/`, presenting unreachable
+ * evidence as reachable, which is what `node-evidence.EvidenceLink` also refuses.
+ */
 function JumpLink({ eventId }: { readonly eventId: string | null }): JSX.Element | null {
-  if (eventId === null) return null;
+  const target = statedValue(eventId);
+  if (target === null) return null;
   return (
-    <a data-testid="cr.timeline.jump" href={`#timeline/${eventId}`}>
+    <a data-testid="cr.timeline.jump" href={`#timeline/${target}`}>
       Open in timeline
     </a>
   );

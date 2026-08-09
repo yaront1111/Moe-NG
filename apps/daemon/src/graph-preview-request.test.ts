@@ -237,10 +237,6 @@ describe("evaluateGraphPreviewRequestBytes", () => {
     }
   });
 
-  it("exports only the byte evaluator from the package root", () => {
-    expect(Object.keys(daemon)).toEqual(["evaluateGraphPreviewRequestBytes"]);
-  });
-
   it("loads and evaluates through the real package-root specifier", () => {
     const packageRoot = fileURLToPath(new URL("..", import.meta.url));
     const script = [

@@ -34,19 +34,24 @@
     {
       "stepId": "step-2",
       "description": "RED — write packages/core/src/runtime-entrypoint.test.ts BEFORE any bridge, and watch it fail for the right reason. Follow the scheduler-runtime-entrypoint.test.ts precedent: spawn a real Node child or worker with --experimental-strip-types that imports the package entry point. The test must assert (a) the import SUCCEEDED and (b) a NAMED EXPORT IS DEFINED — never merely that the process exited 0, because a process can exit 0 having imported nothing, and a TDZ-undefined binding imports fine and only fails at first use. Run it now and confirm it fails with ERR_MODULE_NOT_FOUND naming a specific missing bridge — at plan time that was packages/core/src/project/project-reducer.js. A test that fails for a different reason, or that passes before any bridge exists, is not testing what it claims. Record the RED output.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/runtime-entrypoint.test.ts"
       ],
       "newFiles": [
         "packages/core/src/runtime-entrypoint.test.ts"
       ],
-      "startedAt": "2026-08-09T09:36:32.701Z"
+      "modifiedFiles": [
+        "packages/core/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "RED confirmed, and for the exact predicted reason. Baseline recorded first: `pnpm --filter @moe/core test` = **15 files / 235 tests passed**.\n\nWrote packages/core/src/runtime-entrypoint.test.ts (200 lines, 4 tests) BEFORE any bridge. Follows the runner precedent (packages/runner/src/runtime-entrypoint.test.ts) rather than the scheduler one, because the scheduler form needs a sibling `*-smoke-worker.mjs` file that is outside this task's owned paths. Uses `execFile(process.execPath, [\"--experimental-strip-types\",\"--input-type=module\",\"-e\",src], {cwd: PACKAGE_ROOT})` and imports the BARE specifier `@moe/core`, so resolution goes through the package's own exports map via Node's self-reference rule — the exact resolution apps/daemon gets, not the weaker relative-path form.\n\nRED OUTPUT, both failures verbatim:\n1. `loads @moe/core in Node's strip-types runtime with its named exports defined` -> received `{ outcome: \"FAILED\", code: \"ERR_MODULE_NOT_FOUND\" }`. Direct probe names the module: `Cannot find module 'D:\\projexts\\moe-next\\packages\\core\\src\\project\\project-reducer.js' imported from D:\\projexts\\moe-next\\packages\\core\\src\\index.ts` — exactly the module the plan predicted.\n2. `bridges exactly the modules reachable from the package entry point` -> `missing: [26 named modules]`, `unexpected: []`, `wrongContent: []`. The audit independently re-derived **26**, matching step 1's count without being told it.\n\nThe other two tests pass at RED and that is correct: the negative control (`./src/planning/planning-run-test-fixtures.js` still raises the literal `ERR_MODULE_NOT_FOUND`) and the test-only guard are both already-true properties this task must PRESERVE, not create.\n\nAssertion design, per epic rail 6:\n- Positive test asserts BINDINGS, never the exit code — `undefinedBindingCount: 0` plus `typeof` on six value exports and `Object.isFrozen(POLICY_OUTCOMES)`. `authenticateCommand` is deliberate: it arrives through the `export * from \"./identity/index.js\"` chain, the most cycle-sensitive path on the surface, where a TDZ-undefined binding would import cleanly and only fail at first use.\n- Negative control asserts the literal string `ERR_MODULE_NOT_FOUND`, not merely that it threw.\n- The audit keys on REACHABILITY from index.ts, not on filename and not on the runner's import-direction closure — both of those would bridge planning-invariant-drivers/-fixtures. It asserts non-empty case generation in both directions (`runtime.length > 0` AND excluded count `> 0`) so a sweep that produces zero cases cannot pass, and asserts every reachable target is a real module so the closure cannot silently stop at a hole.\n- `wrongContent` compares the full utf8 string against `export * from \"./<name>.ts\";\\n`, so a CRLF bridge reads as `...\";\\r\\n` and fails there — the check `git diff --stat` cannot show.\n- Fourth test pins the four test-only modules by name AND asserts the subjects still exist on disk, so a rename cannot silently empty the guard.",
+      "startedAt": "2026-08-09T09:36:32.701Z",
+      "completedAt": "2026-08-09T09:38:19.616Z"
     },
     {
       "stepId": "step-3",
       "description": "Bridges for the package root, goal/ and project/. Write packages/core/src/index.js, the three goal/ bridges (goal-contract, goal-reducer, goal-validation) and the three project/ bridges (project-contract, project-reducer, project-validation). Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — the store/scheduler/runner form. Copy the shape from an existing correct bridge in this same package (packages/core/src/identity/identity-session.js) rather than typing it fresh, so the byte form matches what already passes review here. Do not touch identity/, which already has all four of its bridges.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/*.js",
         "packages/core/src/goal/*.js",
@@ -56,69 +61,151 @@
         "packages/core/src/*.js",
         "packages/core/src/goal/*.js",
         "packages/core/src/project/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/index.js",
+        "packages/core/src/goal/goal-contract.js",
+        "packages/core/src/goal/goal-reducer.js",
+        "packages/core/src/goal/goal-validation.js",
+        "packages/core/src/project/project-contract.js",
+        "packages/core/src/project/project-reducer.js",
+        "packages/core/src/project/project-validation.js"
+      ],
+      "note": "7 bridges written: index.js at the package root, goal/{goal-contract,goal-reducer,goal-validation}.js, project/{project-contract,project-reducer,project-validation}.js. identity/ untouched — its four bridges already exist and are correct.\n\nByte form matches packages/core/src/identity/identity-session.js exactly. Generated with `printf 'export * from \"./%s.ts\";\\n' \"$name\"` under Git Bash, which emits raw LF with no translation. Verified per file with `od`, not with `git diff`:\n  index.js cr=0 last=0a (28 bytes)\n  goal/goal-contract.js cr=0 last=0a (36)\n  goal/goal-reducer.js cr=0 last=0a (35)\n  goal/goal-validation.js cr=0 last=0a (38)\n  project/project-contract.js cr=0 last=0a (39)\n  project/project-reducer.js cr=0 last=0a (38)\n  project/project-validation.js cr=0 last=0a (41)\nEvery byte length equals `len('export * from \"./<name>.ts\";') + 1`, so the content is confirmed by arithmetic as well as by inspection, and each names its OWN sibling.\n\nTOOLING GOTCHA worth carrying to steps 4-6: `grep -c $'\\r' <file>` through the Bash tool does NOT work — the `$'\\r'` quoting is mangled before bash sees it and the pattern degrades to empty, so it reports `1` (i.e. \"CR present\") on files that are provably LF-only. Byte counts and `od -An -tx1 | grep -c '^0d$'` disagreed with it and are right. Use od for every CR check in this task; a false CRLF alarm would be as misleading as a missed one.\n\nNo .ts file touched.",
+      "startedAt": "2026-08-09T09:38:22.728Z",
+      "completedAt": "2026-08-09T09:38:52.399Z"
     },
     {
       "stepId": "step-4",
       "description": "Bridges for policy/. Write the seven policy/ bridges: approval-contract, approval-invalidation, approval-validation, policy-composition, policy-contract, policy-evaluation, policy-validation. Same exact one-line form. No .ts file is touched.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/policy/*.js"
       ],
       "newFiles": [
         "packages/core/src/policy/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/policy/approval-contract.js",
+        "packages/core/src/policy/approval-invalidation.js",
+        "packages/core/src/policy/approval-validation.js",
+        "packages/core/src/policy/policy-composition.js",
+        "packages/core/src/policy/policy-contract.js",
+        "packages/core/src/policy/policy-evaluation.js",
+        "packages/core/src/policy/policy-validation.js"
+      ],
+      "note": "All seven policy/ bridges written, same one-line LF form. Byte-verified individually against an INDEPENDENTLY COMPUTED expected length (`printf ... | wc -c`) rather than a hand-typed number, so the size check cannot agree with a typo in the content:\n  approval-contract.js      cr=0 last=0a bytes=40/40\n  approval-invalidation.js  cr=0 last=0a bytes=44/44\n  approval-validation.js    cr=0 last=0a bytes=42/42\n  policy-composition.js     cr=0 last=0a bytes=41/41\n  policy-contract.js        cr=0 last=0a bytes=38/38\n  policy-evaluation.js      cr=0 last=0a bytes=40/40\n  policy-validation.js      cr=0 last=0a bytes=40/40\nContent printed per file and each names its OWN sibling — the mis-targeted-bridge failure mode (`export * from \"./other-module.ts\";` resolves fine and re-exports the wrong surface) is checked here by content, and again mechanically by the audit test's `wrongContent` set in step 8.\n\nRunning total 14 of 26. No .ts file touched.",
+      "startedAt": "2026-08-09T09:38:57.214Z",
+      "completedAt": "2026-08-09T09:39:12.442Z"
     },
     {
       "stepId": "step-5",
       "description": "Bridges for planning/ — the directory carrying every exclusion. Write bridges ONLY for the runtime-path modules: graph-revision-contract, graph-revision-reducer, graph-revision-results, graph-revision-validation, planning-command-contract, planning-contract, planning-event-contract, planning-results, planning-run-reducer, planning-run-submission, planning-snapshot, planning-validation. That is twelve. DELIBERATELY OMIT all four test-only modules identified in step 1: graph-revision-test-fixtures, planning-run-test-fixtures, planning-invariant-drivers, planning-invariant-fixtures. Re-confirm each omission with the import grep before finishing the step rather than trusting the plan — if any of them has since gained a production importer it needs a bridge after all, and the reachability rule, not this list, is what governs.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/*.js"
       ],
       "newFiles": [
         "packages/core/src/planning/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-contract.js",
+        "packages/core/src/planning/graph-revision-reducer.js",
+        "packages/core/src/planning/graph-revision-results.js",
+        "packages/core/src/planning/graph-revision-validation.js",
+        "packages/core/src/planning/planning-command-contract.js",
+        "packages/core/src/planning/planning-contract.js",
+        "packages/core/src/planning/planning-event-contract.js",
+        "packages/core/src/planning/planning-results.js",
+        "packages/core/src/planning/planning-run-reducer.js",
+        "packages/core/src/planning/planning-run-submission.js",
+        "packages/core/src/planning/planning-snapshot.js",
+        "packages/core/src/planning/planning-validation.js"
+      ],
+      "note": "Twelve planning/ bridges written, all cr=0 last=0a with byte length matching an independently computed expected length (46/46, 45/45, 45/45, 48/48, 48/48, 40/40, 46/46, 39/39, 43/43, 46/46, 40/40, 42/42). `ls planning/*.js | wc -l` = 12 — so the directory holds exactly the runtime set and nothing else. Running total 26 of 26.\n\nRE-CONFIRMED THE FOUR OMISSIONS BY GREP, not by trusting the plan's list. Importers today:\n  graph-revision-test-fixtures -> graph-revision-reducer.test.ts\n  planning-run-test-fixtures   -> planning-run-authority.test.ts, planning-run-reducer.test.ts, runtime-entrypoint.test.ts\n  planning-invariant-drivers   -> planning-invariants.test.ts\n  planning-invariant-fixtures  -> planning-invariant-drivers.ts, planning-invariants.test.ts\nEvery importer is a `*.test.ts` except planning-invariant-fixtures' driver, which is itself imported only by a test — test-only transitively. None gained a production importer since step 1, so all four correctly stay unbridged, and `[ -f <name>.js ]` confirms none exists on disk.\n\nOne new importer appeared and it is mine, not a reclassification: runtime-entrypoint.test.ts now names planning-run-test-fixtures.js as the negative control's subject. It is a `.test.ts`, so the module stays test-only. Worth stating explicitly because the grep output changed between step 1 and step 5 and a reviewer re-running it will see the difference.\n\nNo .ts file touched.",
+      "startedAt": "2026-08-09T09:39:15.205Z",
+      "completedAt": "2026-08-09T09:39:44.923Z"
     },
     {
       "stepId": "step-6",
       "description": "Verify the written BYTES, not the apparent text. Windows editors and in-place scripts silently flip LF to CRLF and `git diff --stat` will not show it (mem:gotcha-python-inplace-edit-flips-line-endings). For every new bridge assert: file size equals the expected byte length for its name, the final byte is 0x0A, and no 0x0D appears anywhere. A hexdump or `file` check on a couple of samples is not enough — sweep all of them, since one CRLF bridge still resolves under Node and would leave a latent inconsistency in a tracked source file. Also assert each bridge's content matches the exact single-line form with the correct sibling name — a copy-paste bridge pointing at the wrong module resolves fine and re-exports the wrong surface, which no probe would catch.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/*.js",
         "packages/core/src/goal/*.js",
         "packages/core/src/planning/*.js",
         "packages/core/src/policy/*.js",
         "packages/core/src/project/*.js"
-      ]
+      ],
+      "note": "Byte sweep over ALL 30 bridges in the package (26 new + the 4 pre-existing identity ones, so the sweep is validated against files that already passed review here). Raw result:\n\n  SWEPT=30 BAD=0\n\nEvery row `len=<got>/<exp> cr=0 last=0a OK`, where `<exp>` is computed per file as `printf 'export * from \"./%s.ts\";\\n' \"$name\" | wc -c` — never a hand-typed constant, so the length check cannot silently agree with a typo in the content. Four independent per-file assertions: exact byte length, zero 0x0D anywhere, final byte 0x0A, and full string equality against the expected single-line form with its OWN sibling name (the mis-targeted-bridge case, which resolves cleanly and no probe can catch). Lengths span 28..48 bytes and each matches its own name's arithmetic, so a copy-paste bridge pointing at a different module would fail on length alone before the content check even ran.\n\nDETECTION POWER PROVEN, not assumed. Built a deliberately corrupt control outside the repo (`export * from \"./wrong-module.ts\";\\r\\n` saved as goal-reducer.js) and ran the identical checks on it: `len=36/35 cr=1 last=0a verdict=BAD_CONTENT`. All three corruption signals fired. A sweep reporting BAD=0 without ever having produced a BAD is the failure mode this rules out. Control deleted; it never existed inside the repo.\n\nGIT LINE-ENDING RISK CLOSED. `core.autocrlf=true` is set globally, which alone would rewrite these to CRLF on checkout — but `.gitattributes` line 1 is `* text=auto eol=lf`, and gitattributes beats the config. Proven on the artifact rather than from the rule: `git show HEAD:packages/core/src/identity/identity-session.js | od -c` ends `n . t s \" ; \\n` at offset 0047 = 39 bytes, LF, identical to the working-tree file. So a committed bridge in this repo demonstrably round-trips as LF.\n\nTOOLING NOTE (see step 3): `grep -c $'\\r'` through the Bash tool falsely reports CR on LF-only files. Every CR figure here comes from `od -An -tx1 | grep -c '^0d$'`.",
+      "startedAt": "2026-08-09T09:39:47.455Z",
+      "completedAt": "2026-08-09T09:40:36.332Z"
     },
     {
       "stepId": "step-7",
       "description": "Plain-Node probe from the repo ROOT with all three controls — this, not vitest, is the evidence for this task. (a) POSITIVE: import('./packages/core/src/index.ts') resolves and its namespace has more than zero non-default exports. (b) REGRESSION CONTROL: a known-good bridged package still loads — packages/scheduler/src/index.ts returned 36 exports at plan time — proving the probe itself works and did not start passing vacuously. (c) NEGATIVE CONTROL: importing a test-only path still raises the literal ERR_MODULE_NOT_FOUND — packages/core/src/planning/planning-run-test-fixtures.js is the right subject, since it proves BOTH that the probe can still detect a failure AND that the test-only exclusions from step 5 were correctly left unbridged. Assert the literal code string, never merely that it threw. THEN the undefined-binding check: iterate every export of the entry namespace and assert none is undefined. Resolution is not enough — a bridge can resolve while re-exporting nothing, and an import cycle produces a TDZ-undefined binding that imports cleanly and fails at first use. Record all three control outputs verbatim.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Plain-Node probe, Node v24.16.0, from the repo ROOT. THIS is the evidence for this task; the vitest gate is not. All outputs verbatim.\n\n(a) POSITIVE — `import('./packages/core/src/index.ts')`:\n    OUTCOME=IMPORTED exports=39 undefinedBindings=0\n    undefinedNames=[]\n    spotcheck reduceProject=function reduceGoal=function reducePlanningRun=function reduceGraphRevision=function evaluatePolicy=function authenticateCommand=function\n  Was `FAIL ERR_MODULE_NOT_FOUND :: project/project-reducer.js` before this task.\n\n(b) REGRESSION CONTROL — the known-good bridged packages still load, so the probe did not start passing vacuously:\n    OK ./packages/scheduler/src/index.ts exports=36\n    OK ./packages/store/src/index.ts     exports=26\n    OK ./packages/runner/src/index.ts    exports=66\n  36 / 26 / 66 reproduce the plan-time and task-description numbers exactly.\n\n(c) NEGATIVE CONTROL — all four test-only paths, asserting the LITERAL code string:\n    PASS ./packages/core/src/planning/planning-run-test-fixtures.js    code=ERR_MODULE_NOT_FOUND\n    PASS ./packages/core/src/planning/graph-revision-test-fixtures.js  code=ERR_MODULE_NOT_FOUND\n    PASS ./packages/core/src/planning/planning-invariant-drivers.js    code=ERR_MODULE_NOT_FOUND\n    PASS ./packages/core/src/planning/planning-invariant-fixtures.js   code=ERR_MODULE_NOT_FOUND\n  Probe can still detect failure AND the exclusions stayed off the runtime surface.\n\n(d) THE ACTUAL URGENCY CASE — bare specifier through the exports map, cwd apps/daemon (the consumer that task-6054520b is about to make load @moe/core):\n    OK @moe/core exports=39 undefined=0\n\n(e) EVERY bridged module as its OWN entry, in a SEPARATE Node process, because ESM cycle resolution depends on the entry point and vitest never exercised it:\n    PROBED=30 FAILED=0 ZERO_EXPORT=6 UNDEFINED_BINDINGS=0\n  30 = the 26 new bridges + the 4 pre-existing identity ones. Nonzero PROBED is asserted, not assumed — the first attempt of this loop ran from the wrong cwd and printed `PROBED=0 FAILED=0`, which is exactly the vacuous sweep that reads as a pass. Re-run from the repo root.\n\nZERO_EXPORT=6 IS CORRECT, verified against a control rather than waved through (task rail 4). The six are goal-contract, graph-revision-contract, planning-command-contract, planning-contract, planning-event-contract, project-contract. Every one is types-only: `exportLines == typeOrInterface` on all six (34/34, 23/23, 30/30, 2/2, 21/21, 22/22), so `valueExports=0` and zero runtime bindings is the only possible correct result. Committed precedent in already-reviewed packages: scheduler/graph-preview-model.js, scheduler/hard-edge-counterfactual-model.js, store/outbox-relay/outbox-relay-contracts.js, store/projections/projection-rebuild-contracts.js are all bridged and all export zero. So zero here means types-only, never an empty bridge.",
+      "startedAt": "2026-08-09T09:40:39.710Z",
+      "completedAt": "2026-08-09T09:42:06.503Z"
     },
     {
       "stepId": "step-8",
       "description": "Two-directional audit and the focused gate. Audit MISSING: every runtime-path .ts under packages/core/src has its sibling .js. Audit UNEXPECTED: no .js exists for any module whose importers are all *.test.ts — run the classification from step 1 again and assert the four test-only modules still have no bridge. Report zero in BOTH directions and record the raw loop output; a one-directional audit passes while test-only code sits on the runtime surface. Then run pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test and state the before/after test AND suite counts as explicit numbers — count suites too, because a file that fails to parse reports zero tests and reads as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax). The runtime-entrypoint test written RED in step 2 must now be GREEN, and that transition is the task's core evidence: state it as red-then-green, not merely as a passing suite.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/runtime-entrypoint.test.ts"
-      ]
+      ],
+      "note": "TWO-DIRECTIONAL AUDIT — zero in both directions. Raw output:\n    runtimeModules   = 30\n    bridgesOnDisk    = 30\n    nonTestModules   = 34\n    excludedNonTest  = 4 ['planning/graph-revision-test-fixtures.ts','planning/planning-invariant-drivers.ts','planning/planning-invariant-fixtures.ts','planning/planning-run-test-fixtures.ts']\n    MISSING          = 0 []\n    UNEXPECTED       = 0 []\nMISSING is computed from the runtime set (reachability from index.ts) toward disk; UNEXPECTED is computed from disk back toward the runtime set, so neither direction can mask the other. 30 bridges on disk == 30 runtime modules == 34 non-test minus the 4 test-only, and the excluded list is byte-for-byte the four modules classified in step 1.\n\nRe-ran step 1's independent classifier as a cross-check: `in REACHABLE not BRIDGE = []`, and `in BRIDGE not REACHABLE` = exactly planning-invariant-drivers + planning-invariant-fixtures — i.e. the name+import-closure rule STILL wants to bridge those two and is still wrong. That disagreement is the point: the reachability rule is what governs, and it is now pinned by a committed test rather than by this note.\n\nGATE — `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit **0**.\n  tsc: clean.\n  vitest: **16 files / 239 tests passed**.\n  BEFORE (measured at step 2, pre-change): **15 files / 235 tests passed**.\n  Delta exactly +1 suite / +4 tests = the new runtime-entrypoint.test.ts and nothing else. Suites counted as well as tests, because a file that fails to parse reports zero tests and reads as a pass (`mem:gotcha-mutation-drill-blind-to-broken-syntax`); the suite count moving 15->16 proves the new file actually parsed and ran.\n\nRED-THEN-GREEN, the task's core evidence — same file, same four tests, unchanged assertions:\n  RED  (step 2, before any bridge): 2 failed | 2 passed (4). `loads @moe/core ...` received `{outcome:\"FAILED\", code:\"ERR_MODULE_NOT_FOUND\"}`; `bridges exactly the modules reachable ...` received `missing: [26 modules]`.\n  GREEN (now): `Test Files 1 passed (1) / Tests 4 passed (4)`.\nThe two tests that were already green at RED — the ERR_MODULE_NOT_FOUND negative control and the test-only guard — are still green, so the fix did not achieve GREEN by dragging test-only code onto the runtime surface.\n\nREPO-WIDE REGRESSION — `pnpm test`: **165 files / 3028 passed | 1 skipped**, zero failures. Note for anyone comparing against the runner handoff: `tests/fault/foundation/j4-replan-stale.test.ts` no longer fails; it was retired by commit 3944a9d, not by this task.",
+      "startedAt": "2026-08-09T09:42:08.902Z",
+      "completedAt": "2026-08-09T09:43:00.268Z"
     },
     {
       "stepId": "step-9",
       "description": "Adversarial self-review, then commit. Read the diff as someone who will be misled: is any bridge pointing at a sibling other than its own name? Did any .ts file change — `git diff --stat -- '*.ts'` must show only the new runtime-entrypoint test, and index.ts in particular must be untouched (task rail 1). Is any test-only module now bridged? Would the entrypoint test still fail if a bridge were deleted — delete one, confirm RED, restore, and verify restoration with `git diff` on that specific file rather than `git status`, because in this shared working directory another agent's whole-tree hook can commit your edit and leave status looking clean (mem:mutation-drills-in-shared-worktree). Confirm no debug, probe, or scratch file remains. Then commit by explicit pathspec only — `git status --porcelain` first, confirm every staged entry is a new packages/core/src bridge or the new test, unstage anything foreign with `git restore --staged --`, then `git commit -- packages/core/src` and verify with `git show --stat` that the commit contains exactly the 26 bridges plus one test file and no .ts modifications. Never a bare git commit; several agents share this index (epic rail 3).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/runtime-entrypoint.test.ts",
         "packages/core/src/planning/*.js",
         "packages/core/src/policy/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/index.js",
+        "packages/core/src/goal/goal-contract.js",
+        "packages/core/src/goal/goal-reducer.js",
+        "packages/core/src/goal/goal-validation.js",
+        "packages/core/src/project/project-contract.js",
+        "packages/core/src/project/project-reducer.js",
+        "packages/core/src/project/project-validation.js",
+        "packages/core/src/policy/approval-contract.js",
+        "packages/core/src/policy/approval-invalidation.js",
+        "packages/core/src/policy/approval-validation.js",
+        "packages/core/src/policy/policy-composition.js",
+        "packages/core/src/policy/policy-contract.js",
+        "packages/core/src/policy/policy-evaluation.js",
+        "packages/core/src/policy/policy-validation.js",
+        "packages/core/src/planning/graph-revision-contract.js",
+        "packages/core/src/planning/graph-revision-reducer.js",
+        "packages/core/src/planning/graph-revision-results.js",
+        "packages/core/src/planning/graph-revision-validation.js",
+        "packages/core/src/planning/planning-command-contract.js",
+        "packages/core/src/planning/planning-contract.js",
+        "packages/core/src/planning/planning-event-contract.js",
+        "packages/core/src/planning/planning-results.js",
+        "packages/core/src/planning/planning-run-reducer.js",
+        "packages/core/src/planning/planning-run-submission.js",
+        "packages/core/src/planning/planning-snapshot.js",
+        "packages/core/src/planning/planning-validation.js",
+        "packages/core/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW then commit **3e7081d**.\n\nMIS-TARGETED BRIDGE: swept all 30 with `grep -q '^export \\* from \"\\./<basename>\\.ts\";$'` — 30 MATCH, 0 MISMATCH. Every bridge names its OWN sibling.\n\nNO .ts BEHAVIOUR CHANGE: `git show --stat HEAD -- '*.ts'` lists exactly one file, packages/core/src/runtime-entrypoint.test.ts. `git show --stat HEAD -- packages/core/src/index.ts` is empty — index.ts untouched (task rail 1). Repo-wide `git status --porcelain -- '*.ts'` shows other agents' .ts edits; none is in my commit.\n\nTEST-ONLY STILL EXCLUDED: all four planning fixtures/drivers absent from disk after the drills.\n\nFOUR MUTATION DRILLS, ALL KILLED — each named the exact failing assertion line, and each killed MORE than one test, so no single assertion is load-bearing alone:\n  1. delete project/project-reducer.js -> 2 failed (runtime probe :75, audit missing :187)\n  2. bridge planning-run-test-fixtures -> 3 failed (negative control :94, audit unexpected :187, test-only guard :209)\n  3. bridge planning-invariant-drivers (the NON name-matching one) -> 2 failed (:187, :209) — this is the drill that proves the reachability rule is enforced and not just described\n  4. flip policy-evaluation.js to CRLF -> 1 failed (:187 wrongContent) — proves the byte form is guarded by the committed test, not only by my one-off sweep\nRESTORATION VERIFIED BY BYTES, NOT `git status` (mem:mutation-drills-in-shared-worktree): post-drill sweep SWEPT=30 BAD=0, all four test-only modules absent, plain-Node re-probe 39 exports / 0 undefined, gate back to 16/239.\n\nNO SCRATCH FILES: the audit script lived in /tmp/moe-core-audit, outside the repo, and the CRLF detection-power control was built and deleted under /tmp. `git status --porcelain -- packages/core` is empty after commit.\n\nCOMMIT — explicit pathspec, never a bare `git commit` (epic rail 3). Index was empty before staging; staged 27 named paths; `git diff --cached --name-only | grep -v '^packages/core/src/'` returned nothing, so no foreign path was ever staged. `git show --name-status` = **26 A + 1 M**, 27 files, +35/-9.\nThe single M needs explaining and is NOT a .ts behaviour change: foreign commit c699422 (task-e17da1c9) swept my in-progress runtime-entrypoint.test.ts into its tree via a whole-tree commit while the bridges were still untracked. So the test file was already tracked at an earlier revision and my commit lands the remaining 9-line reorder rather than showing as an add. Side effect worth knowing: HEAD was RED between c699422 and 3e7081d, since c699422 committed the test without the bridges. 3e7081d fixes it. Announced in #general (msg-e092c90e).\n\nCOMMITTED-BLOB BYTE SWEEP (not the working tree — `core.autocrlf=true` is set globally and only `.gitattributes` `* text=auto eol=lf` keeps it LF, so the blob is what matters): all 26, `N=26 BAD=0`, each ends 0a with zero 0d and a length matching its own name.\n\nFRESH GATE AFTER COMMIT: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0, 16 files / 239 tests.\n\nChecklist items with nothing to fix, recorded so QA sees they were considered: no concurrency surface (26 static one-line re-export files, no state, no IO at runtime); no inputs to validate; the only environment assumption is Node's `.js` specifier resolution, which is the defect being fixed and is now pinned by a child-process test; no error paths or resources to clean up. The real risk in this task was misclassification, and that is covered by drill 3.",
+      "startedAt": "2026-08-09T09:43:03.955Z",
+      "completedAt": "2026-08-09T09:46:12.715Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29cc6667",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,12 +217,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:09:43.201Z",
-  "updatedAt": "2026-08-09T09:36:32.701Z",
+  "updatedAt": "2026-08-09T09:47:37.024Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:29:09.881Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 1
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
@@ -146,7 +233,15 @@
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:31:36.587Z",
@@ -165,5 +260,46 @@
     "wallClockMs": 8100000
   },
   "planApprovedAt": "2026-08-09T09:31:38.626Z",
-  "workStartedAt": "2026-08-09T09:34:21.996Z"
+  "workStartedAt": "2026-08-09T09:34:21.996Z",
+  "reviewStartedAt": "2026-08-09T09:47:37.024Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  16 passed (16)\n      Tests  239 passed (239)\n   Start at  12:45:28\n   Duration  590ms (transform 2.32s, setup 0ms, import 3.14s, tests 608ms, environment 1ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-09T09:47:37.024Z"
+  },
+  "filesModified": [
+    "packages/core/src/runtime-entrypoint.test.ts",
+    "packages/core/src/index.js",
+    "packages/core/src/goal/goal-contract.js",
+    "packages/core/src/goal/goal-reducer.js",
+    "packages/core/src/goal/goal-validation.js",
+    "packages/core/src/project/project-contract.js",
+    "packages/core/src/project/project-reducer.js",
+    "packages/core/src/project/project-validation.js",
+    "packages/core/src/policy/approval-contract.js",
+    "packages/core/src/policy/approval-invalidation.js",
+    "packages/core/src/policy/approval-validation.js",
+    "packages/core/src/policy/policy-composition.js",
+    "packages/core/src/policy/policy-contract.js",
+    "packages/core/src/policy/policy-evaluation.js",
+    "packages/core/src/policy/policy-validation.js",
+    "packages/core/src/planning/graph-revision-contract.js",
+    "packages/core/src/planning/graph-revision-reducer.js",
+    "packages/core/src/planning/graph-revision-results.js",
+    "packages/core/src/planning/graph-revision-validation.js",
+    "packages/core/src/planning/planning-command-contract.js",
+    "packages/core/src/planning/planning-contract.js",
+    "packages/core/src/planning/planning-event-contract.js",
+    "packages/core/src/planning/planning-results.js",
+    "packages/core/src/planning/planning-run-reducer.js",
+    "packages/core/src/planning/planning-run-submission.js",
+    "packages/core/src/planning/planning-snapshot.js",
+    "packages/core/src/planning/planning-validation.js",
+    "packages/core/src/*.js",
+    "packages/core/src/goal/*.js",
+    "packages/core/src/planning/*.js",
+    "packages/core/src/policy/*.js",
+    "packages/core/src/project/*.js"
+  ]
 }

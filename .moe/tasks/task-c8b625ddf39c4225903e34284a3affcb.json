@@ -28,18 +28,24 @@
     {
       "stepId": "step-2",
       "description": "TDD RED for the Goals home in goals-home.test.tsx. Hand-write nonempty, fixed-cardinality active/completed/CLOSING/quarantined projections (never generate expectations from production) and assert server order, `cr.goals.row.{goalId}`, exact supplied goal state and phase distribution, provider capacity, ready width/frontier status, budget spent/reserved/quarantined/unknown plus basis, approvals/held/SUSPECT/reconciliation, last-event age, and completion. Pin one FactRow truth chip per fact, UNKNOWN for blank/missing facts, entity-qualified provenance callback IDs, default links to `/goal/{encodedId}/board`, controlled filter/search and j/k/Enter row keyboard callbacks, exactly three loading skeletons, the exact empty copy, and degraded/as-of labeling. Add goal-create cases using a real supplied `goal.create` affordance: supplied policy defaults/risk options are preserved, activation returns the identical command plus draft, foreign-target/absent commands render no mutation control, and actionsEnabled=false cannot call back. Confirm the focused new test fails because the production modules do not exist.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/goals/goals-home.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/goals/goals-home.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/goals/goals-home.test.tsx"
+      ],
+      "note": "RED written: goals-home.test.tsx, 21 cases in 4 describes, 288 lines. Hand-written fixed-cardinality corpus of 4 rows (ACTIVE, COMPLETED, CLOSING with an id needing URL escaping, quarantined with null/undefined/whitespace facts); the test asserts CORPUS.length === 4 so the sweep cannot pass vacuously. Expectations are literal, never generated from production. Pins: server order plus a reversed-payload no-sort case, cr.goals.row.{goalId}, the exact 16 fact-kind ids per row with exactly one cr.chip.* per cr.fact.*, supplied state/phase distribution/provider capacity/ready width/frontier, all four budget components plus basis, approvals/held/SUSPECT/reconciliation/last-event age/completion, UNKNOWN + data-origin=\"ABSENT\" for missing and whitespace-blank facts (never a confident zero), entity-qualified provenance callback ids in click order, /goal/g%2Fclosing%20goal/board encoding, controlled filter options/value plus no self-filtering, per-keystroke search callback with no self-narrowing, j/k focus movement with exact activeElement and Enter open, exactly 3 cr.goals.skeleton with zero rows, the pinned §11.3 empty copy verbatim, and the degraded as-of note with role=\"status\". Creation cases use a real frozen goal.create NextAllowedCommand: supplied budget \"125\"/risk \"elevated\"/riskOptions/policy note preserved, activation asserts toBe identity on the original command object plus the local draft, foreign targetAggregateId renders an empty cr.goals.create container, absent command renders no control, and mutationsEnabled=false leaves the button disabled with zero callbacks. Confirmed RED for the right reason: `Error: Failed to resolve import \"./goals-home.js\" from \"src/goals/goals-home.test.tsx\". Does the file exist?` (exit 1, no tests run) — the production modules do not exist yet.",
+      "startedAt": "2026-08-09T09:38:43.834Z",
+      "completedAt": "2026-08-09T09:40:15.041Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN the Goals slice with supplied-actions.tsx and goals-home.tsx. SuppliedActions must read useGating() once, use daemon-supplied actionsEnabled verbatim, retain only exact targetAggregateId plus an optional caller-requested command kind, render one `cr.action.<dot-to-dash-kind>` control with command id/kind/target attributes, and pass the original frozen affordance to onActivate; it constructs no envelope and invents no disabled reason. GoalsHome accepts readonly preclassified projection props, preserves input order, renders all named facts through FactRow, exposes controlled filter/search/open callbacks, and uses only supplied creation defaults/options and the matching project-scoped command—no $50/normal default, phase count, budget math, state sorting, authority, fetch, or fixture import. Keep each production file <=250 physical lines and make the RED suite green without modifying either J1 slice.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/goals/supplied-actions.tsx",
         "apps/control-room/src/goals/goals-home.tsx",
@@ -48,18 +54,26 @@
       "newFiles": [
         "apps/control-room/src/goals/supplied-actions.tsx",
         "apps/control-room/src/goals/goals-home.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/goals/supplied-actions.tsx",
+        "apps/control-room/src/goals/goals-home.tsx"
+      ],
+      "note": "GREEN: 20/20 in src/goals/goals-home.test.tsx, `pnpm --filter @moe/control-room typecheck` exit 0. supplied-actions.tsx (64 lines) reads useGating() exactly once, filters on strict targetAggregateId equality plus an optional caller-requested commandKind (narrowing only, never widening), reuses the shell's actionTestId so the cr.action.<dot-to-dash-kind> grammar has one source of truth, stamps data-command-id/kind/target, sets disabled={!actionsEnabled} from the supplied snapshot verbatim, and passes the original frozen NextAllowedCommand object to onActivate. It builds no envelope, renders no invented disabled reason (the contract has no reason field, so absence is the honest answer), and reaches no transport. goals-home.tsx (248 lines) takes readonly preclassified projection props, renders rows in supplied order with no sort/filter/dedupe, routes all 16 declared fact kinds through FactRow with entity-qualified fact ids, exposes controlled filter/search/onFocusRow/onOpenGoal/onProvenance callbacks, keeps j/k/Enter focus movement local to the list, links to /goal/{encodeURIComponent(goalId)}/board, and seeds the creation draft only from supplied policy defaults and riskOptions with the project-scoped goal.create command. No $50/normal literal, no phase counting, no budget arithmetic, no truth ranking, no authority derivation, no fetch, no fixtures/data-adapter import. Both J1 slices untouched (goals-j1.tsx hash still 37590E48A9B389E1399E758B03948DF652482F8C6D44FBD709D0A822C6F34580).",
+      "startedAt": "2026-08-09T09:40:55.010Z",
+      "completedAt": "2026-08-09T09:42:34.736Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD RED for the canonical board in board-surface.test.tsx. Build an independent exact-length corpus carrying sourceAggregate, exact phase fact, and separately supplied placement; include same-spelled aggregate states and deliberately contradictory phase/placement so a phase-folding implementation fails. Assert all five declared columns, exact phase/source preservation, Ready visible while loading but collapsed only after an authoritative loaded-empty lane, terminated hidden by default then shown only by the controlled filter, unknown placement retained in `cr.board.unmapped`, first ShellFrame render showing Board with zero `cr.graph.*`, and caller order without sorting/dedupe. For cards pin owner/lease state/epoch/expiry, renewal and activity silence as distinct facts, progress, latest claim, typed blocker and intentional wait owner/reason/recheck, per-card budget/basis, critical-path/slack, SUSPECT/held/disposition/qualification overlays exactly as supplied, one chip per fact, provenance callback IDs, duplicate/blank identities not dropping records, and hostile extra secret fields absent from DOM. Pin supplied frontier lanes READY_NOW/UNBLOCK_NEXT/INTENTIONAL_WAIT/UNSAFE_OR_UNKNOWN with cursor/graph epoch/idle capacity/readiness explanation, and the polite live join strip. Assert rendered action `(commandId, kind, target)` tuples exactly equal matching supplied context commands; empty/foreign-target contexts render none and disabled actions never activate.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/board/board-surface.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/board/board-surface.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-09T09:44:17.955Z"
     },
     {
       "stepId": "step-5",
@@ -136,12 +150,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T09:36:05.091Z",
+  "updatedAt": "2026-08-09T09:44:17.955Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:08:15.396Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -151,7 +165,9 @@
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:26:51.791Z",

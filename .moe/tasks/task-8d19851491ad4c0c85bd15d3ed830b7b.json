@@ -73,8 +73,8 @@
       "completedAt": "2026-08-09T09:30:40.202Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -111,14 +111,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T08:10:02.010Z",
-  "updatedAt": "2026-08-09T09:31:27.068Z",
+  "updatedAt": "2026-08-09T09:37:40.764Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T08:43:28.868Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
     "executedStepCount": 8,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-09T09:37:40.764Z",
+    "wallClockMs": 3251896
   },
   "contextFetchedBy": [
     "worker-533a53ab",
@@ -165,7 +167,7 @@
   "filesModified": [
     "packages/scheduler/src/package-boundary.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-09T09:16:47.792Z",
+  "reviewCompletedAt": "2026-08-09T09:37:40.764Z",
   "rejectionDetails": {
     "failedDodItems": [
       "`pnpm --filter @moe/scheduler test` exits 0 and the package-boundary check still fails on a genuine deep import — add that positive case and show it red before your fix makes the prose case green."
@@ -268,5 +270,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-09T09:37:40.764Z",
+  "reviewSummary": "APPROVED at HEAD de1298a. Both reopen-1 defects fixed, proven by mutation drill.\n\nGATES, exact DoD chain in one invocation: exit 0. 15/15 typecheck Done; root pnpm test 163 files/3021 passed/1 skipped; scheduler 32/593; focused package-boundary 40/40. A brief mid-review typecheck red was only UNTRACKED foreign files (control-room evidence-inspect.test.tsx, timeline-list.tsx), in neither of this task's commits.\n\nDoD1 PASS: scheduler/src/index.ts byte-identical to my prior drill (a0ab48fbdd5ccf85838dbb024c9efe74ce79c050) and foundation-fault-schedule.ts untouched since 3944a9d, so the proven fenceAuthority-removal drill holds over unchanged bytes.\n\nDoD2 PASS, drilled twice, both restored to 559dd736edb35bb434d8ae5fe2d0c87bad5343b7. Drill A, delete the template.literal surfacing line: exactly 3 red (backtick dynamic import/require/import-from) — fail-open bypass closed. Drill B, delete the regex branch: 2 red (regex-quote case AND the whole repo sweep) — they shipped both options I offered, regex tracking plus a loud throw naming the offending path. template-literal prose is now a variable assignment, not a specifier position.\n\nDoD3 PASS, counts close exactly: 14 to 34 to 40 tests; +6 = 3 backtick forbidden + 2 interpolated allowed + 1 regex. Scheduler 587 to 593, same +6.\n\nDoD4 PASS: de1298a = 1 owned file, d03c42f = 2 owned files. The 9e0f123 whole-tree sweep was the harness auto-commit, already reported under rail 4. 349 lines, a test file, under the 400 bar.\n\nDocumented not rejected, both outside my stated bar: interpolated specifiers stay undetected by design, and sourceFiles scans dist build output (pre-existing), which with the new throw can loudly redden the gate on a future bundle. Excluding dist deserves its own task.\n\nTree left as found, no drill residue."
 }

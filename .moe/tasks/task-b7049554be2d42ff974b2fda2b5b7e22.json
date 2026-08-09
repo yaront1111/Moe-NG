@@ -26,13 +26,16 @@
     {
       "stepId": "step-1",
       "description": "Re-derive both module sets and reproduce the failure before writing anything. Run `find packages/context/src packages/review/src -name '*.ts' -not -name '*.test.ts'` and record the exact counts, comparing them against the 8 and 6 measured when this task was written — both packages are days old and still growing, and a sweep against a stale set is silently incomplete. Confirm neither contains a `*-test-fixtures.ts` or `*-test-helpers.ts` module today (none did), while still writing the exclusion rule correctly in step 2 rather than treating it as vacuous — the sibling sweep task-17b03331 does have one. Reproduce the defect with a valid probe: `node --experimental-strip-types -e \"import('./packages/context/src/index.ts')...\"` and the same for review, expecting ERR_MODULE_NOT_FOUND naming `context-contract.js` and `review-findings.js`. Run a KNOWN-GOOD control in the same breath (@moe/scheduler or @moe/store source entry) — without it a cwd mistake looks exactly like the defect, which is how a bare-package-name probe once reported all ten packages failing including correctly-bridged ones. Read `packages/core/src/identity/identity-session.js` with `cat -A` to confirm the exact bridge bytes. Produce no code.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "No code produced. Re-derived exact flat production sets: context=8 (canonical-digest, context-contract, context-render, context-selection, context-wire, dead-end-journal, index, release-handoff); review=6 (canonical, index, review-contract, review-findings, review-package, reviewer-eligibility). Both match task measurements; each has 0 *-test-fixtures.ts/*-test-helpers.ts. Plain Node v24.16.0 reproduced literal ERR_MODULE_NOT_FOUND for context-contract.js and review-findings.js from repo root, while scheduler control loaded 36 exports with 0 undefined. Reference identity-session.js bytes end 0A with no CR (exact one-line bridge). Baselines: context 4 files/23 tests; review 2 files/90 tests.",
+      "startedAt": "2026-08-09T09:41:55.426Z",
+      "completedAt": "2026-08-09T09:43:29.591Z"
     },
     {
       "stepId": "step-2",
       "description": "Write the bridges for both packages. For every non-test module found in step 1, create the sibling `.js` file whose ENTIRE content is the single line `export * from \"./<name>.ts\";` with an LF line ending and a trailing newline — the exact form @moe/store, @moe/scheduler and @moe/core/identity already use. Both packages are flat, so this is one glob each and no subdirectory handling. Exclude, with no bridge: every `*.test.ts`, `*-test-fixtures.ts` and `*-test-helpers.ts`; write that rule explicitly even though neither package matches it today, because these packages are young and a helpers module added next week must not silently acquire a bridge. Bridges are committed source, not build output — they are not gitignored, and tsc never typechecks them because tsconfig sets noEmit with `include: [\"src/**/*.ts\"]`. If you generate them with a script, VERIFY THE BYTES afterwards rather than the apparent text: editors and in-place scripts on Windows silently flip LF to CRLF and `git diff --stat` will not show it. Do not edit any `.ts` file, including either index.ts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/context/src/*.js",
         "packages/review/src/*.js"
@@ -40,24 +43,49 @@
       "newFiles": [
         "packages/context/src/*.js",
         "packages/review/src/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/context/src/canonical-digest.js",
+        "packages/context/src/context-contract.js",
+        "packages/context/src/context-render.js",
+        "packages/context/src/context-selection.js",
+        "packages/context/src/context-wire.js",
+        "packages/context/src/dead-end-journal.js",
+        "packages/context/src/index.js",
+        "packages/context/src/release-handoff.js",
+        "packages/review/src/canonical.js",
+        "packages/review/src/index.js",
+        "packages/review/src/review-contract.js",
+        "packages/review/src/review-findings.js",
+        "packages/review/src/review-package.js",
+        "packages/review/src/reviewer-eligibility.js"
+      ],
+      "note": "Created exactly 14 new flat runtime bridges (context 8, review 6) from the re-derived production-module list. Generator explicitly excludes tests by using the enumerated non-test set and refused overwrites. Every file was written as UTF-8 bytes with exact `export * from \"./<same-basename>.ts\";\\n`; immediate verification reported final byte 10 and CR=0 for each. No existing .ts file was edited.",
+      "startedAt": "2026-08-09T09:43:42.578Z",
+      "completedAt": "2026-08-09T09:44:23.573Z"
     },
     {
       "stepId": "step-3",
       "description": "Audit both sweeps for completeness in BOTH directions. Run a loop over each package reporting, for every non-test .ts module, whether its sibling .js exists (zero MISSING), and separately whether any .js exists with no corresponding non-test .ts (zero UNEXPECTED — this catches a bridge written for a test file or for a module since renamed). Assert the bridge CONTENT is exact for every file, not merely that it exists: one line, the correct sibling name, LF, trailing newline. A bridge pointing at the wrong sibling resolves to the wrong module and sails through an existence-only check. Record the loop's RAW OUTPUT in the completion evidence — a summarised 'all good' is exactly the kind of claim this defect class has repeatedly defeated. State both module counts and confirm they match step 1.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh bidirectional byte audit exit 0. Counts still match step 1: context=8, review=6. Raw output:\nAUDIT package=context production_ts=8 bridges=8\nOK canonical-digest.js -> ./canonical-digest.ts BYTES=39 LF=10\nOK context-contract.js -> ./context-contract.ts BYTES=39 LF=10\nOK context-render.js -> ./context-render.ts BYTES=37 LF=10\nOK context-selection.js -> ./context-selection.ts BYTES=40 LF=10\nOK context-wire.js -> ./context-wire.ts BYTES=35 LF=10\nOK dead-end-journal.js -> ./dead-end-journal.ts BYTES=39 LF=10\nOK index.js -> ./index.ts BYTES=28 LF=10\nOK release-handoff.js -> ./release-handoff.ts BYTES=38 LF=10\nSUMMARY package=context MISSING=0 UNEXPECTED=0 BADCONTENT=0 CRLF=0\nAUDIT package=review production_ts=6 bridges=6\nOK canonical.js -> ./canonical.ts BYTES=32 LF=10\nOK index.js -> ./index.ts BYTES=28 LF=10\nOK review-contract.js -> ./review-contract.ts BYTES=38 LF=10\nOK review-findings.js -> ./review-findings.ts BYTES=38 LF=10\nOK review-package.js -> ./review-package.ts BYTES=37 LF=10\nOK reviewer-eligibility.js -> ./reviewer-eligibility.ts BYTES=43 LF=10\nSUMMARY package=review MISSING=0 UNEXPECTED=0 BADCONTENT=0 CRLF=0\nTOTAL MISSING=0 UNEXPECTED=0 BADCONTENT=0 CRLF=0",
+      "startedAt": "2026-08-09T09:44:30.030Z",
+      "completedAt": "2026-08-09T09:45:04.206Z"
     },
     {
       "stepId": "step-4",
       "description": "The plain-Node probe with all three controls — the only thing that counts as evidence here. Run from the repo ROOT (a wrong cwd fails with a doubled path and would read as a defect). (a) POSITIVE: both `./packages/context/src/index.ts` and `./packages/review/src/index.ts` resolve, each with more than zero exports. Covering one package and not the other is incomplete evidence — assert both. (b) REGRESSION CONTROL: a known-good bridged package in another workspace package still loads, proving the probe harness itself works, so a broken probe cannot masquerade as a passing sweep. (c) NEGATIVE CONTROL: a deliberately unresolvable specifier still raises the LITERAL `ERR_MODULE_NOT_FOUND` — assert that exact code, never merely that an import failed, because 'it threw' stays green even when the probe stops working. Neither package has a test-only module to aim the negative control at, so use a non-existent specifier and say so explicitly in the evidence. Then the subtler half: assert every export of both entry points is DEFINED, not merely that the import resolved — ESM cycles resolve differently per entry point, vitest never exercised these paths, and a TDZ-undefined binding imports fine before failing at first use.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh plain-Node v24.16.0 probe from repository root exited 0. Raw output: `POSITIVE context exports=19 undefined=0`; `POSITIVE review exports=23 undefined=0`; `POSITIVE regression:scheduler exports=36 undefined=0`; `NEGATIVE deliberately-missing code=ERR_MODULE_NOT_FOUND`. The negative control deliberately targeted packages/context/src/deliberately-missing-runtime-entrypoint.js because neither package contains a test-only module. Probe asserted each positive namespace was non-empty, enumerated every binding, failed on any undefined binding, and compared the negative error code literally.",
+      "startedAt": "2026-08-09T09:45:09.842Z",
+      "completedAt": "2026-08-09T09:45:27.469Z"
     },
     {
       "stepId": "step-5",
       "description": "Add the regression guards so this cannot silently return. Create one runtime-entrypoint test per package, following the existing `packages/scheduler/src/scheduler-runtime-entrypoint.test.ts` precedent: spawn a REAL Node child or worker with `--experimental-strip-types` that imports the package entry. Each test must assert BOTH that the import succeeded AND that a specific named export is defined — never merely that the process exited 0, because a process can exit 0 having imported nothing useful, and 'exit code 0' is precisely the weak assertion that let this defect class survive across six packages. These two tests are what make the fix durable: without them, the next module added to either package without a bridge reintroduces the defect while every vitest suite stays green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/context/src/runtime-entrypoint.test.ts",
         "packages/review/src/runtime-entrypoint.test.ts"
@@ -65,17 +93,25 @@
       "newFiles": [
         "packages/context/src/runtime-entrypoint.test.ts",
         "packages/review/src/runtime-entrypoint.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/context/src/runtime-entrypoint.test.ts",
+        "packages/review/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "Added one real-child-Node regression test per package. Each uses process.execPath with `--experimental-strip-types --input-type=module`, cwd at its package root, imports the bare self-reference through package exports, and asserts structured `outcome: IMPORTED` plus a specific defined named function (`renderContext` / `buildReviewPackage`). RED check: temporarily removed context-contract.js; context suite failed exactly this new assertion with `{outcome: FAILED, code: ERR_MODULE_NOT_FOUND}` (1 failed/23 passed), then exact bytes restored. GREEN gate exit 0: context typecheck + 5 files/24 tests; review typecheck + 3 files/91 tests.",
+      "startedAt": "2026-08-09T09:46:05.242Z",
+      "completedAt": "2026-08-09T09:47:25.710Z"
     },
     {
       "stepId": "step-6",
       "description": "Prove zero behaviour change, run both gates, then commit by explicit pathspec. Confirm with `git status --porcelain` and `git diff --stat` that the diff contains ONLY added `.js` files plus the two new tests — no `.ts` file modified anywhere, including either index.ts. Record each suite's test count BEFORE and AFTER as explicit numbers; both after-counts must be greater than or equal to their before-counts since this task only adds suites. Run the gates fresh: `pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test` and `pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test`, all exiting 0 — while remembering that this green run is NOT the evidence for this task; the step-4 probe is, and both must be reported. Adversarial pass before committing: does every bridge point at its OWN sibling rather than a neighbour's name; did any file get CRLF; does the negative control assert the literal ERR_MODULE_NOT_FOUND; would the audit loop actually catch a missing bridge, verified by temporarily deleting one and confirming it reports MISSING before restoring; did a module get added by a concurrent task after step 1, leaving the sweep incomplete — re-run the audit immediately before committing to catch exactly that. Then commit by EXPLICIT PATHSPEC covering the new .js files and the two tests; never a bare git commit, never git add -A, and never a directory pathspec under packages/, since other tasks have uncommitted work there. Verify with `git show --stat` that no .ts file appears.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T09:47:35.740Z"
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-064d1267",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -87,13 +123,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:16.556Z",
-  "updatedAt": "2026-08-09T09:32:40.824Z",
-  "stepsCompleted": [],
+  "updatedAt": "2026-08-09T09:47:35.740Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:32:38.806Z",
   "metrics": {
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "firstClaimAt": "2026-08-09T09:40:04.077Z",
+    "executedStepCount": 5
   },
   "planningNotes": {
     "approachesConsidered": "(1) ONE TASK FOR TWO PACKAGES is right here and the daemon's 'split on and' warning does not apply: both packages are flat, tiny, greenfield from this epic, have zero existing bridges, and share one mechanical concern with one probe harness. Splitting would duplicate the harness and the controls for 6 and 8 files respectively.\n(2) THE PROBE IS THE DELIVERABLE, NOT THE BRIDGES. Writing 14 one-line files is trivial; a script does it in seconds. What makes the task correct is the plain-Node probe WITH ITS THREE CONTROLS, because this entire defect class exists precisely because a green vitest suite was repeatedly mistaken for evidence. Two of the six steps write bridges; the rest is proof.\n(3) BOTH PACKAGES OR NEITHER — a sweep that bridges one and leaves the other is the exact silent incompleteness this defect is known for, and it is invisible to every vitest gate.\n(4) NO SUBDIRECTORIES in either package, which keeps this the simplest of the three sweep tasks; the glob set is one per package.",
@@ -109,5 +153,9 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-09T09:32:40.824Z"
+  "planApprovedAt": "2026-08-09T09:32:40.824Z",
+  "contextFetchedBy": [
+    "worker-064d1267"
+  ],
+  "workStartedAt": "2026-08-09T09:41:55.426Z"
 }

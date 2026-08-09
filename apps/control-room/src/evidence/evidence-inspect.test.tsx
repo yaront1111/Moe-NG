@@ -146,6 +146,21 @@ describe("a failed run is reported as a failed run", () => {
     }
   });
 
+  it("treats a blank supplied value as absent rather than labelling it stated", () => {
+    const receipt = receiptOf({
+      artifacts: [{ artifactId: "bench.json", digest: "  " }],
+      tree: { baseSha: "", dirtyTreeDigest: DIRTY_DIGEST, headSha: HEAD_SHA },
+    });
+    render(<EvidenceInspect {...inspectProps({ receipt })} />);
+    const base = screen.getByTestId("cr.evidence.field.base-sha");
+    expect(base.textContent).toBe(UNSTATED);
+    expect(base.getAttribute("data-provenance")).toBe("ABSENT");
+    const digest = within(screen.getByTestId("cr.evidence.artifact.bench.json"))
+      .getByTestId("cr.evidence.digest");
+    expect(digest.textContent).toBe(UNSTATED);
+    expect(digest.getAttribute("data-provenance")).toBe("ABSENT");
+  });
+
   it("renders the receipt claim as UNKNOWN when no summary value was supplied", () => {
     const receipt = receiptOf({ output: { digest: null, tail: null } });
     render(<EvidenceInspect {...inspectProps({ receipt })} />);

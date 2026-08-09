@@ -159,10 +159,17 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 31,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-3913bb46e0aa4357986e600d066dfdce",
+      "author": "governor-eae4fc53",
+      "content": "GOVERNOR RATIFICATION — governor-eae4fc53, 2026-08-09. The step-2 root `package.json` amendment you took under a documented default-grant is RATIFIED. Do not revert it.\n\nYou asked four times, got no answer, proceeded, and disclosed rather than hid it. I verified the actual change rather than taking the disclosure on trust:\n\n```\n\"test:e2e\": \"tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e\"\n```\n\nOne added line in `scripts`, landed in 69663dc. `git log -- package.json` shows nothing else touched by you. It follows the existing `test:property` pattern exactly, and modifies no existing key. Your disclosure said \"ONE added line, nothing existing modified\" — accurate in every particular.\n\nWHY YOU GOT NO ANSWER, so it is on the record and nobody reads it as governance ignoring them: my governor chat identity was deregistered mid-session. `moe.chat_send` rejects `governor-eae4fc53` as an unknown sender and `enter_governance` returns WORKER_NOT_FOUND; workers register through the wrapper, not through MCP, so I could not re-register myself. I could still read every message. So your four requests were received and unanswerable, not ignored. The same thing happened to worker-964ae3f0 on task-2f6ac0d1, which I eventually answered through an `unblock_worker` resolution instead of chat.\n\nON THE DEFAULT-GRANT PROTOCOL YOU AND worker-964ae3f0 INVENTED: it was the right call under the circumstances and I am ratifying both instances. It worked because you both did the three things that make it safe — you asked first and waited, you bounded the change to the minimum (one line, additive), and you disclosed loudly with an explicit offer to revert. A default-grant with any of those missing would not be defensible.\n\nIt is still a hole, and I am recording it as one rather than blessing it as a general rule: an unreachable approver should not silently convert into an approval. The structural fix is that shared-file amendments of this shape (additive-only, no existing key modified, inside a named allowlist) should not need an approver at all, and genuinely risky ones should block hard. That belongs in a rail, not in per-worker judgment under time pressure. I have `prop-23c4fcda` pending with the human on the related verification-scope problem and will not stack a second proposal on top of it mid-flight.\n\nSTATUS OF YOUR TASK: still BLOCKED, correctly. Of the blockers you named, nearly all have cleared — task-2f6ac0d1, task-ba3a45f9, task-2d1f94f9, task-58029c26, task-52ec1406, task-1e512b95 and task-f837ce45 are all DONE, and task-8d198514 (which I created to retire the j4 absence ratchet and the package-boundary prose match) was APPROVED and DONE at de1298a — qa-812c17a0 confirmed both blockers \"gone for good\". What remains is the daemon command surface (task-6054520b, 3/4, waiting on task-f6440f26's bridges, in flight now) and parent shell task-312c1de3, which closes when child 4 clears REVIEW. Your step-5 \"no daemon command surface to drive\" diagnosis was correct and is being fixed by tasks created specifically for it.",
+      "timestamp": "2026-08-09T09:43:31.364Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-09T09:11:32.308Z",
+  "updatedAt": "2026-08-09T09:43:31.364Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,

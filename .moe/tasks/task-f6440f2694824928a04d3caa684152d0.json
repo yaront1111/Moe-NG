@@ -15,9 +15,166 @@
     "Prove loadability the way a real consumer loads it: a separate Node process importing the package root. vitest and tsc both hide a missing .js bridge by resolving it to the .ts sibling, which is precisely the defect this task exists to remove.",
     "Commit by explicit per-file pathspec only. The working directory is shared and untracked foreign work is present right now; verify with git show --stat after committing and report any foreign path rather than reverting it."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-8a4a1764",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the RED baseline before touching anything, because this suite is ALREADY FAILING and a completion summary that implies it was green would be false. Run pnpm --filter @moe/daemon test and confirm the measured plan-time baseline: Test Files 1 failed | 14 passed (15), Tests 2 failed | 363 passed (365). BOTH failures are in apps/daemon/src/graph-preview-request.test.ts, and both are this task's work: line ~241 is the stale Object.keys equality, and line ~262 is 'loads and evaluates through the real package-root specifier', which spawns a real Node child importing @moe/daemon and gets status 1 because of the missing bridges. THAT SECOND TEST IS ALREADY THE RUNTIME-ENTRYPOINT PROOF AND IT IS ALREADY RED FOR THE RIGHT REASON — do not write a duplicate of it, and do not 'fix' it by weakening it. Also note the test immediately below it, 'keeps internal source subpaths sealed', asserts ERR_PACKAGE_PATH_NOT_EXPORTED and must keep passing untouched. Record the exact numbers; they are the before half of DoD 4.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RED baseline recorded, matches plan exactly. `pnpm --filter @moe/daemon test` -> exit 1: \"Test Files 1 failed | 14 passed (15)\" / \"Tests 2 failed | 363 passed (365)\". Both failures in apps/daemon/src/graph-preview-request.test.ts: (1) :241 `expect(Object.keys(daemon)).toEqual([\"evaluateGraphPreviewRequestBytes\"])` -> AssertionError on the published surface; (2) :262 \"loads and evaluates through the real package-root specifier\" -> `expected 1 to be +0` i.e. the spawned Node child exits status 1 (the missing-bridge defect). That second case IS the runtime-entrypoint proof and is already red for the right reason - will not duplicate or weaken it. Tracked file counts: apps/daemon/src = 42 tracked files, 0 tracked .js, 0 untracked .js, 27 non-test .ts. NOTE: task-6054520b's previously-foreign work is no longer uncommitted - `git status --porcelain apps/daemon` is now EMPTY (index.ts and index-surface.test.ts are both committed), so the plan's live commit hazard has partly cleared; per-file pathspec still used regardless.",
+      "startedAt": "2026-08-09T09:38:29.856Z",
+      "completedAt": "2026-08-09T09:39:07.782Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Derive the bridge set by REACHABILITY, not by filename — this is the only judgement in the task and a name-based sweep gets it wrong. apps/daemon/src has 27 non-test .ts modules (root 1, bootstrap 6, goals 1, http 6, planning 1, recovery 1, work 11). A module is TEST-ONLY, and gets NO bridge, when every importer of it is a *.test.ts or another test-only module — compute that transitively with `grep -rln '<name>\\.js' --include=*.ts apps/daemon/src`. Measured at plan time, EIGHT modules are test-only and only two of them match a `*-test-fixtures.ts` naming rule: bootstrap/bootstrap-test-fixtures.ts, http/http-test-fixtures.ts, http/event-stream-fixtures.ts, and the ENTIRE work/work-race-* family — work-race-fixtures.ts, work-race-drift-table.ts, work-race-world.ts, work-race-schedule.ts and work-race-tampers.ts — which is test scaffolding whose only roots are work-races.test.ts and work-race-orderings.test.ts. Confirm work-race-tampers.ts the same way; the other four are verified. index.ts pulls only work-kernel, work-ingress and work-claim from work/, so no work-race module is reachable from the package root. Expected result: 27 minus 8 = 19 bridges. Re-verify rather than trusting these numbers and record the reconciliation.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Reachability re-verified from the import graph; plan's count CONFIRMED at 27 non-test .ts - 8 test-only = 19 bridges, and the 8 are exactly the plan's list. Per-directory non-test counts confirmed: root 1, bootstrap 6, goals 1, http 6, planning 1, recovery 1, work 11.\n\nRECONCILIATION / correction to the plan's literal rule, which matters for step 9's audit: the stated rule \"test-only iff every importer is a *.test.ts or another test-only module\" OVER-EXCLUDES two production modules if applied mechanically.\n- http/http-adapter.ts has ZERO non-test importers - its only importer is http-adapter.test.ts - yet it is production code (imports @moe/contracts, decodeRuntimeCommandEnvelopeBytes, RUNTIME_ERROR_REGISTRY_VERSION). The plan expects it bridged (step 4 omits only http-test-fixtures and event-stream-fixtures).\n- work/work-lifecycle.ts reduces to test-only transitively (its one non-test importer is work-race-world.ts, itself test-only) yet the plan names it in the step-4 bridge list, and it is production (\"work.renew | release | resume | cancel | get_context\", imports @moe/runner).\nThe governing distinction is SUBJECT-UNDER-TEST vs SCAFFOLDING: a module a test imports as its subject is production and gets a bridge; a module that only supplies fixtures/harness to other tests does not. Verified by reading each boundary module's header - all five work-race-* are scaffolding (\"Nothing here asserts; the expectations live in work-race-orderings.test.ts\", \"seeded schedule engine\", \"hand-written case table\", \"shared lease table\"), event-stream-fixtures.ts is \"a ledger-backed stand-in\", and the two *-test-fixtures.ts are scaffolding by name and content. Their only roots are work-races.test.ts, work-race-orderings.test.ts, event-stream.test.ts, http-adapter.test.ts, bootstrap-durability.test.ts, goal-services.test.ts, planning-services.test.ts.\n\nBRIDGE SET (19): index; bootstrap/{bootstrap-contracts,bootstrap-ledger,bootstrap-policy-services,bootstrap-sequence,bootstrap-services}; goals/goal-services; http/{event-stream-contract,event-stream,http-adapter,http-contract}; planning/planning-services; recovery/doctor-commands; work/{work-claim,work-ingress,work-kernel,work-lease,work-lifecycle,work-slot-ceiling}. = 1+5+1+4+1+1+6.\nNO BRIDGE (8): bootstrap/bootstrap-test-fixtures, http/http-test-fixtures, http/event-stream-fixtures, work/{work-race-fixtures,work-race-drift-table,work-race-world,work-race-schedule,work-race-tampers}.\n\nByte form pinned from packages/runner/src/supervisor/effect-kernel.js via `od -c` on both the worktree file and the HEAD blob: `export * from \"./effect-kernel.ts\";\\n` - LF only, trailing newline, no CRLF. Root form from packages/runner/src/index.js: `export * from \"./index.ts\";\\n`. Also noted apps/daemon/package.json pins exports \".\" -> \"./src/index.ts\" (exclusive), so the root entry Node loads is index.ts and the bridges it needs are its transitive local imports.",
+      "startedAt": "2026-08-09T09:39:08.294Z",
+      "completedAt": "2026-08-09T09:40:25.053Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Bridges for the package root, bootstrap/, goals/, planning/ and recovery/. Write apps/daemon/src/index.js plus a sibling .js for every non-test module in those directories, EXCLUDING bootstrap/bootstrap-test-fixtures.ts. Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — the form task-eb9ff081 used for @moe/runner. Copy the shape from an existing correct bridge under packages/runner/src rather than typing it fresh, so the byte form matches what already passed review. Touch no .ts file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/*.js",
+        "apps/daemon/src/bootstrap/*.js",
+        "apps/daemon/src/goals/*.js",
+        "apps/daemon/src/planning/*.js",
+        "apps/daemon/src/recovery/*.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/*.js",
+        "apps/daemon/src/bootstrap/*.js",
+        "apps/daemon/src/goals/*.js",
+        "apps/daemon/src/planning/*.js",
+        "apps/daemon/src/recovery/*.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.js",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.js",
+        "apps/daemon/src/bootstrap/bootstrap-ledger.js",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.js",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.js",
+        "apps/daemon/src/bootstrap/bootstrap-services.js",
+        "apps/daemon/src/goals/goal-services.js",
+        "apps/daemon/src/planning/planning-services.js",
+        "apps/daemon/src/recovery/doctor-commands.js"
+      ],
+      "note": "9 bridges written: root index.js, bootstrap/{bootstrap-contracts,bootstrap-ledger,bootstrap-policy-services,bootstrap-sequence,bootstrap-services}.js, goals/goal-services.js, planning/planning-services.js, recovery/doctor-commands.js. bootstrap/bootstrap-test-fixtures.js correctly NOT written. Each generated by `printf 'export * from \"./%s.ts\";\\n' \"$(basename \"$p\" .js)\"` so the sibling name is derived from the file's OWN basename and cannot be mis-targeted by a typo; byte form matches packages/runner/src/supervisor/effect-kernel.js exactly. printf writes raw LF - no editor touched these, so no CRLF path exists; bytes asserted in step 5. No .ts file touched.",
+      "startedAt": "2026-08-09T09:40:25.352Z",
+      "completedAt": "2026-08-09T09:40:41.651Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Bridges for http/ and work/ — the two directories carrying every exclusion. In http/, bridge the runtime modules and OMIT http-test-fixtures.ts and event-stream-fixtures.ts. In work/, bridge work-claim, work-ingress, work-kernel, work-lease, work-lifecycle and work-slot-ceiling, and OMIT all five work-race-* modules. Re-confirm each omission with the import grep before finishing the step rather than trusting the plan: if any of them has since gained a non-test importer it needs a bridge after all, and the reachability rule, not this list, is what governs.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http/*.js",
+        "apps/daemon/src/work/*.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/*.js",
+        "apps/daemon/src/work/*.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/event-stream-contract.js",
+        "apps/daemon/src/http/event-stream.js",
+        "apps/daemon/src/http/http-adapter.js",
+        "apps/daemon/src/http/http-contract.js",
+        "apps/daemon/src/work/work-claim.js",
+        "apps/daemon/src/work/work-ingress.js",
+        "apps/daemon/src/work/work-kernel.js",
+        "apps/daemon/src/work/work-lease.js",
+        "apps/daemon/src/work/work-lifecycle.js",
+        "apps/daemon/src/work/work-slot-ceiling.js"
+      ],
+      "note": "10 more bridges written (http 4, work 6), total now 19. http/: event-stream-contract, event-stream, http-adapter, http-contract. work/: work-claim, work-ingress, work-kernel, work-lease, work-lifecycle, work-slot-ceiling.\n\nAll 7 omissions in these two directories re-confirmed with the import grep AT THIS COMMIT, not trusted from the plan:\n  http-test-fixtures    NONTEST_IMPORTERS=[]\n  event-stream-fixtures NONTEST_IMPORTERS=[]\n  work-race-drift-table NONTEST_IMPORTERS=[]\n  work-race-schedule    NONTEST_IMPORTERS=[]\n  work-race-fixtures    NONTEST_IMPORTERS=[work-race-drift-table.ts work-race-world.ts]\n  work-race-world       NONTEST_IMPORTERS=[work-race-schedule.ts]\n  work-race-tampers     NONTEST_IMPORTERS=[work-race-schedule.ts work-race-world.ts]\nThe only non-test importers any work-race-* module has are OTHER work-race-* modules, so the family is closed and test-only; none has gained a runtime importer. No omission needs a bridge.",
+      "startedAt": "2026-08-09T09:40:41.985Z",
+      "completedAt": "2026-08-09T09:40:59.112Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verify the written BYTES, not the apparent text. These are tracked source files, and a Windows editor or in-place script silently flips LF to CRLF while git diff --stat shows nothing (mem:gotcha-python-inplace-edit-flips-line-endings); the file still resolves, so no probe catches it either. For every new bridge assert: the final byte is 0x0A, no 0x0D appears anywhere, and the content is the exact single-line form naming its OWN sibling. That last check is the one no probe can do for you — `export * from \"./other-module.ts\";` resolves cleanly and re-exports the wrong surface, so a green import proves the bridges EXIST, never that they are CORRECT.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/*.js",
+        "apps/daemon/src/http/*.js",
+        "apps/daemon/src/work/*.js"
+      ],
+      "note": "All 19 bridges byte-verified, fail=0. Per file: byte-identical (`cmp -s`) to a freshly generated `export * from \"./<OWN basename>.ts\";\\n`, zero 0x0D bytes anywhere, final byte 0x0A, sibling .ts present. Lengths 28-48 bytes, each = strlen(expected)+1.\n\nThe comparison target is generated FROM each file's own basename, so a mis-targeted bridge cannot pass - and I proved the detector is not vacuous rather than assuming it: `cmp -s` of `./work-kernel.ts` vs `./work-claim.ts` -> \"GOOD: cmp detects mis-targeted bridge\", and the CR detector run against a deliberately CRLF file -> \"GOOD: CR detector counts 1\".\n\nDetector correction worth recording: my first pass used `od -An -c | grep -c '\\\\r'` and reported cr=2..3 on every file, i.e. a FALSE POSITIVE on files that contain no CR at all (it was counting od output lines). Replaced with `od -An -tx1 -v | tr ' ' '\\n' | grep -cx '0d'`, which is byte-exact and self-tested in both directions. .gitattributes is `* text=auto eol=lf`, so the committed blobs stay LF.",
+      "startedAt": "2026-08-09T09:40:59.916Z",
+      "completedAt": "2026-08-09T09:41:48.881Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Retire exactly ONE assertion, and prove its neighbour is still load-bearing. In apps/daemon/src/graph-preview-request.test.ts, remove the `it(\"exports only the byte evaluator from the package root\")` case whose body is `expect(Object.keys(daemon)).toEqual([\"evaluateGraphPreviewRequestBytes\"])`. It encoded the daemon root being advisory-only, which task-6054520b has now superseded by publishing the command surface. Change NOTHING else in this file. The forbidden-key loop immediately ABOVE it — asserting keys.has(\"authority\") is true and that nextAllowedCommands, mutation, approval, activation, provider and execution are all absent — stays exactly as written, and so does the sealed-subpath test below. Then prove the forbidden-key test is still load-bearing rather than assuming it: add one forbidden key to the evaluated result, confirm that test goes RED, and restore. Verify the restore with `git diff` on this specific file, not `git status` — in this shared working directory another agent's whole-tree hook can commit your edit and leave status looking clean (mem:mutation-drills-in-shared-worktree).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/graph-preview-request.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/graph-preview-request.test.ts"
+      ],
+      "note": "Exactly ONE it() retired. `git diff` on the file is a clean -4/+0: only the `it(\"exports only the byte evaluator from the package root\")` block and its trailing blank line are gone. Nothing else changed; zero 0x0D in the file. The `import * as daemon from \"./index.js\"` stays needed (still used at line 22 by the evaluate() helper), so no unused-import fallout. The forbidden-key loop above and the sealed-subpath ERR_PACKAGE_PATH_NOT_EXPORTED test below are untouched.\n\nMUTATION DRILL - the forbidden-key test is still load-bearing, proven not assumed:\n- Backup taken OUTSIDE the repo (/tmp/moe-drill-f6440f26/index.ts.bak) per mem:mutation-drills-in-shared-worktree; pre-drill blob 2bf258ffff0466f0205fdaa307566a2046c22fb5, working tree clean for that path.\n- Mutation made ADDITIVE on purpose. First attempt replaced line 219 outright, which also DELETED `outcome: \"REQUEST_EVALUATED\"` and would have reddened by shape rather than by the forbidden key; restored and redone as an insertion so `execution: true` is the only delta.\n- Applied line echoed before the run (`execution: true,` inserted after outcome) so \"survived\" cannot be confused with \"never applied\".\n- Result: FAIL \"exposes no mutation or execution affordance\" - `AssertionError: expected true to be false` at src/graph-preview-request.test.ts:236:35, the `expect(keys.has(forbidden)).toBe(false)` line, naming the exact assertion. 8 failed | 19 passed (27) - the extra key on the frozen result also reddens the shape/equality cases, which is expected collateral; the named forbidden-key case is the one that matters.\n- Restored and VERIFIED byte-exact: `cmp -s` against the external backup passes, `git hash-object` back to 2bf258ff..., and both `git diff` and `git diff HEAD` on apps/daemon/src/index.ts are EMPTY (checked with git diff on the specific file, not git status). Backup directory removed. index.ts ends this step untouched and will not be staged.",
+      "startedAt": "2026-08-09T09:41:49.041Z",
+      "completedAt": "2026-08-09T09:43:13.850Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Add apps/daemon/src/runtime-entrypoint.test.ts covering what the existing package-root test does NOT. The test at graph-preview-request.test.ts:244 imports ONE named export through the root and asserts its behaviour; that proves the entry resolves, but says nothing about the rest of the now-large command surface. This new test spawns a Node child with --experimental-strip-types that imports the package root as a NAMESPACE and asserts (a) the import succeeded, (b) the namespace has more than zero non-default exports, and (c) NO exported binding is undefined. That last one is the point: an import cycle produces a TDZ-undefined binding that imports cleanly and only fails at first use, cycles resolve differently per entry point, and vitest never exercised Node's semantics here. Assert the named exports are defined — never merely that the child exited 0, since a process can exit 0 having imported nothing.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "Added apps/daemon/src/runtime-entrypoint.test.ts (169 lines, 3 tests, all green). Covers what graph-preview-request.test.ts:244 does NOT.\n\nTEST 1 - namespace probe. Spawns a real Node child (`--experimental-strip-types`, cwd = package root so the bare `@moe/daemon` specifier resolves through this package's own exports map by self-reference, exactly as an external dependent resolves it) and asserts the whole shape at once: outcome IMPORTED, hasNamedExports true, undefinedBindings [] reported BY NAME, plus claimWork/evaluateGraphPreviewRequestBytes/readEventPage typeof \"function\" and GOAL_HANDLERS frozen. The undefinedBindings check is the point - an import cycle yields a TDZ-undefined binding that imports cleanly and dies at first use, and cycles resolve differently per entry point. Never asserts the exit code alone.\nTEST 2 - negative control pinning the literal `ERR_MODULE_NOT_FOUND` for the unbridged test-tier module work/work-race-fixtures.js.\nTEST 3 - two-directional bridge audit (missing / unexpected / wrongContent), each reported by NAME.\n\nDERIVATION FINDING worth flagging for QA: I could NOT reuse @moe/runner's audit rule. Runner seeds its test tier from the filenames /\\.test\\.ts$|-test-fixtures\\.ts$|-test-helpers\\.ts$/. Applied to this package that rule is WRONG in both directions - event-stream-fixtures.ts and all five work-race-* modules match no such name (they would be demanded as missing bridges), while http-adapter.ts is production code whose only importer is its own test. So this file derives the RUNTIME tier as a forward closure instead: seed = index.ts plus every module carrying its own <name>.test.ts sibling (a module under direct test is a published unit), closed over relative `./x.js` imports; test tier is the remainder. That reproduces exactly the 19/8 split from step 2. Non-vacuity is asserted (runtime.size > 0, testTier.length > 0) and the two judgement calls are pinned by name (http-adapter in runtime, work-race-fixtures NOT) so a future filename-based rewrite cannot silently flip them.\n\nFOUR MUTATION DRILLS, each applied-then-echoed and byte-restored via external backups in /tmp (git checkout cannot restore untracked bridges - mem:mutation-drills-in-shared-worktree):\nA. Deleted work/work-kernel.js -> 2 failed | 1 passed; namespace probe reported `\"code\": \"ERR_MODULE_NOT_FOUND\"` and the audit named `\"missing\": [\"work\\\\work-kernel.ts\"]`.\nB. Mis-targeted http/http-contract.js at ./http-adapter.ts (the failure mode no probe can catch - it resolves fine) -> 1 failed | 2 passed, `wrongContent` non-empty. Namespace probe stayed GREEN, which is exactly why the content assertion has to exist.\nC. Added an unexpected bridge for test-tier work/work-race-fixtures.js -> 2 failed | 1 passed; the negative control flipped to `\"code\": \"NONE\"` and the audit named it under `unexpected`.\nD. (implicit) clean re-run after every restore -> 3 passed (3).\nAll restores verified with `cmp -s` against the external backup or by re-checking file absence; /tmp backup dir removed.",
+      "startedAt": "2026-08-09T09:43:13.946Z",
+      "completedAt": "2026-08-09T09:46:00.436Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Plain-Node probe from the repo ROOT with all three controls — this, not vitest, is the evidence for DoD 1. (a) POSITIVE: a child process imports the @moe/daemon package root and exits 0; capture the actual command and its real output. At plan time this failed with ERR_MODULE_NOT_FOUND for apps/daemon/src/bootstrap/bootstrap-contracts.js, so the transition from that error to a clean load IS the deliverable. (b) REGRESSION CONTROL: a known-good bridged package still loads — packages/runner or packages/scheduler — proving the probe itself works and did not start passing vacuously. (c) NEGATIVE CONTROL: importing a test-only path still raises the literal ERR_MODULE_NOT_FOUND — apps/daemon/src/work/work-race-fixtures.js is the right subject, since it proves both that the probe can still detect failure AND that the step-4 exclusions were correctly left unbridged. Assert the literal code string, never merely that it threw. Record all three outputs verbatim.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "DoD 1 evidence - plain-Node probes, no vitest anywhere, all run from the repo ROOT (/d/projexts/moe-next). All inline `node -e`; no scratch file created or left behind.\n\n(a) POSITIVE, the exact plan-time probe that used to fail with ERR_MODULE_NOT_FOUND on apps/daemon/src/bootstrap/bootstrap-contracts.js:\n  node --experimental-strip-types --input-type=module -e 'const ns = await import(\"./apps/daemon/src/index.ts\"); ...'\n  -> `LOADED exports=31 undefinedBindings=[]`   exit=0\n  It asserts the bindings, not just the exit: 31 named exports, zero undefined. Script exits 3 if keys.length===0 or any binding is undefined, so a vacuous \"imported nothing\" cannot read as a pass.\n\n(a2) POSITIVE through the real package specifier (cwd=apps/daemon, self-reference through the exports map - what an external consumer gets):\n  -> `LOADED @moe/daemon exports=31 typeof claimWork=function typeof evaluateGraphPreviewRequestBytes=function`   exit=0\n\n(b) REGRESSION CONTROL - the probe still works and did not start passing vacuously:\n  ./packages/runner/src/index.ts   -> LOADED exports=66\n  ./packages/scheduler/src/index.ts -> LOADED exports=36    exit=0\n\n(c) NEGATIVE CONTROL - literal reason code asserted, not merely \"it threw\" (script exits 3 on any other code):\n  ./apps/daemon/src/work/work-race-fixtures.js -> `code=ERR_MODULE_NOT_FOUND`   exit=0\n\n(c2) NEGATIVE CONTROL extended to ALL EIGHT deliberately-unbridged test-tier modules, each returning the literal ERR_MODULE_NOT_FOUND: work-race-drift-table, work-race-world, work-race-schedule, work-race-tampers, event-stream-fixtures, http-test-fixtures, bootstrap-test-fixtures (plus work-race-fixtures above). exit=0. This is the UNEXPECTED-direction proof done at runtime rather than only by file listing: no test scaffolding sits on the daemon's runtime surface.\n\nThe transition from ERR_MODULE_NOT_FOUND to a clean 31-export load IS the deliverable.",
+      "startedAt": "2026-08-09T09:46:00.556Z",
+      "completedAt": "2026-08-09T09:46:42.246Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "Two-directional audit and the focused gate. Audit MISSING: every runtime-path .ts under apps/daemon/src has its sibling .js. Audit UNEXPECTED: no .js exists for any module classified test-only in step 2 — re-run that classification and assert all eight still have no bridge. Report zero in BOTH directions with the raw loop output; a one-directional audit passes while test-only code sits on the runtime surface. Then run pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test and state the after numbers against the step-1 baseline explicitly: the two failures must be gone — one retired, one fixed by the bridges — the file count returns to 15 passed with the new test file making 16, and the remaining 363 tests still pass. Count SUITES as well as tests, because a file that fails to parse reports zero tests and reads as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax). Report before-and-after as concrete numbers, not prose.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/graph-preview-request.test.ts",
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "TWO-DIRECTIONAL AUDIT - zero in both directions, raw loop output captured.\n  AUDIT 1 MISSING: all 19 runtime modules PRESENT. MISSING_COUNT=0.\n  AUDIT 2 UNEXPECTED: all 8 test-tier modules absent(ok). UNEXPECTED_COUNT=0.\n  AUDIT 3 (added beyond the plan): set-equality between the on-disk .js set and the 19 classified runtime modules -> `diff` empty, \"SET_EQUAL\". A one-directional or list-driven audit can miss a bridge written for a module never classified at all; this closes that hole.\n.js file counts before/after: 0 tracked at HEAD -> 19 on disk. Non-test .ts unchanged at 27. 27 - 8 test-tier = 19.\n\nGATE (the plan's named command, run fresh as a chain):\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test  -> CHAIN_EXIT=0\n  typecheck: `tsc --project tsconfig.json`, exit 0, no output.\n  test: \"Test Files 16 passed (16)\" / \"Tests 367 passed (367)\".\n\nBEFORE -> AFTER, suites AND tests, fully attributed (suites counted separately because a file that fails to parse reports zero tests and reads as a pass, mem:gotcha-mutation-drill-blind-to-broken-syntax):\n  Suites: 1 failed | 14 passed (15)  ->  16 passed (16).  15 + 1 new file (runtime-entrypoint.test.ts) = 16. Zero failing suites.\n  Tests:  2 failed | 363 passed (365) -> 367 passed (367).\n  Arithmetic: 365 - 1 retired assertion = 364; 364 + 3 new tests = 367. Exact, no unexplained drift.\n  The two baseline failures are both gone for the intended reasons: :241 Object.keys equality RETIRED; :262 package-root spawn now GREEN because the bridges exist. The 363 previously-passing tests all still pass (367 - 3 new = 364 = 363 + the one that was failing and is now fixed).\n  No foreign uncommitted file is inflating the count - `git status --porcelain apps/daemon` was empty before my first edit.",
+      "startedAt": "2026-08-09T09:46:42.673Z",
+      "completedAt": "2026-08-09T09:47:27.560Z"
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review, then commit — and THE COMMIT IS THE DANGEROUS PART OF THIS TASK. Measured at plan time, the shared working directory holds task-6054520b's live uncommitted work in the very package you are editing: `apps/daemon/src/index.ts` is MODIFIED and `apps/daemon/src/index-surface.test.ts` is UNTRACKED, both foreign. A pathspec of `git commit -- apps/daemon/src` would capture both and publish another task's mid-flight work under your commit. Commit by EXPLICIT PER-FILE pathspec only: each new .js bridge by name, plus apps/daemon/src/graph-preview-request.test.ts and apps/daemon/src/runtime-entrypoint.test.ts. Run `git status --porcelain apps/daemon` first, confirm every staged entry is one of yours, unstage anything foreign with `git restore --staged --`, and per task rail 4 REPORT the foreign paths in your completion note rather than reverting them. Verify with `git show --stat` that the commit contains exactly your bridges plus those two test files and NO .ts service module and NO index.ts. Review questions before committing: is any bridge pointing at a sibling other than its own name? Did `git diff --stat -- '*.ts'` show anything beyond the two test files? Is any work-race module now bridged? Does the sealed-subpath ERR_PACKAGE_PATH_NOT_EXPORTED test still pass? Confirm no debug, probe or scratch file remains.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/graph-preview-request.test.ts",
+        "apps/daemon/src/runtime-entrypoint.test.ts",
+        "apps/daemon/src/bootstrap/*.js",
+        "apps/daemon/src/work/*.js"
+      ],
+      "startedAt": "2026-08-09T09:47:31.519Z"
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-0b27a5cc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,11 +193,48 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:31:00.270Z",
-  "updatedAt": "2026-08-09T09:36:30.238Z",
+  "updatedAt": "2026-08-09T09:47:31.519Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T09:33:45.886Z"
+    "firstClaimAt": "2026-08-09T09:33:45.886Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
-    "architect-8a4a1764"
-  ]
+    "architect-8a4a1764",
+    "worker-0b27a5cc"
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T09:37:44.966Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — bridging only the transitive closure of index.ts. It is the minimal correct set today and the probe computes it for free. Rejected because task-6054520b is mid-flight at 3/4 adding re-exports to that exact file: a closure-sized sweep is correct at the instant it is measured and silently incomplete the moment they land another export, and the failure resurfaces as ERR_MODULE_NOT_FOUND in the Foundation canary rather than here.\n\nCHOSEN — package-wide minus provably test-only. Every non-test module gets a bridge whether or not index.ts reaches it today, so the sweep is INVARIANT to 6054520b's edits: whatever they re-export next is already bridged. That is also what the task title means by package-wide and what task-eb9ff081 did for @moe/runner.\n\nREJECTED — skipping test-only modules by filename. Only two of the eight test-only modules here match a `*-test-fixtures.ts` rule. A name-based sweep bridges event-stream-fixtures.ts and the whole five-module work-race-* family, putting test scaffolding on the runtime surface for no benefit. Classification is by import graph.\n\nREJECTED — writing a fresh RED runtime test. Unnecessary: graph-preview-request.test.ts:262 already spawns a real Node child importing @moe/daemon and is already failing with status 1 for exactly this defect. The new runtime-entrypoint.test.ts therefore earns its place only by covering what that one does not — the whole namespace and the undefined-binding check.",
+    "codebaseInsights": "THE BASELINE IS RED, and this is the single most important fact for the completion summary. Measured at plan time: Test Files 1 failed | 14 passed (15), Tests 2 failed | 363 passed (365). Both failures sit in apps/daemon/src/graph-preview-request.test.ts and both are this task's work — the stale Object.keys equality, and the package-root spawn test failing with status 1. Any summary implying the suite was green before is false.\n\nTHE RUNTIME PROOF ALREADY EXISTS — graph-preview-request.test.ts:244 spawns process.execPath with --experimental-strip-types and imports @moe/daemon. Right below it, 'keeps internal source subpaths sealed' asserts ERR_PACKAGE_PATH_NOT_EXPORTED against @moe/daemon/src/index.ts, which confirms the exports map is exclusive and must keep passing untouched.\n\nMEASURED PROBE — import('./apps/daemon/src/index.ts') FAILS ERR_MODULE_NOT_FOUND on apps/daemon/src/bootstrap/bootstrap-contracts.js, exactly as the task states. 41 tracked .ts, 0 tracked .js; 27 of those .ts are non-test.\n\nCLASSIFICATION, verified by import graph rather than by name — test-only: bootstrap/bootstrap-test-fixtures.ts, http/http-test-fixtures.ts, http/event-stream-fixtures.ts, and the work-race family (work-race-fixtures, work-race-drift-table, work-race-world, work-race-schedule, work-race-tampers), whose only roots are work-races.test.ts and work-race-orderings.test.ts. index.ts pulls only work-kernel, work-ingress and work-claim from work/. Expected bridge count 27 - 8 = 19.\n\nPER-DIRECTORY non-test counts: root 1, bootstrap 6, goals 1, http 6, planning 1, recovery 1, work 11.\n\nWHY IT IS INVISIBLE — every internal import is written ./foo.js under NodeNext with allowImportingTsExtensions:false. Vite rewrites it back to foo.ts, Node does not, and --experimental-strip-types strips types without adding TypeScript's .js->.ts resolution. tsc never sees the bridges either.",
+    "risks": "THE COMMIT IS THE REAL HAZARD, and it is live right now. `git status --porcelain apps/daemon` shows ` M apps/daemon/src/index.ts` and `?? apps/daemon/src/index-surface.test.ts` — task-6054520b's uncommitted mid-flight work in the same package. `git commit -- apps/daemon/src` would sweep both into this task's commit and publish another task's unfinished work. Per-file pathspec is not a style preference here; it is the only safe form. Task rail 4 says report the foreign paths, do not revert them.\n\nDO NOT TOUCH index.ts. It is the file 6054520b is actively editing and it is the one file whose modification would collide destructively. Every bridge this task writes is a NEW .js file, so there is no reason to open it.\n\nA MIS-TARGETED BRIDGE IS UNDETECTABLE BY PROBE — `export * from \"./other-module.ts\";` resolves and re-exports the wrong surface. Only the per-file content assertion catches it. A green probe proves the bridges exist, never that they are right.\n\nCRLF — tracked source, silently flipped by Windows editors, invisible to git diff --stat, still resolves. Check bytes.\n\nTHE AUDIT MUST RUN BOTH WAYS — a MISSING-only audit reports zero while an UNEXPECTED bridge sits there; an UNEXPECTED-only audit reports zero on an incomplete sweep.\n\nSCOPE CREEP INTO THE STALE ASSERTION — exactly one `it(...)` case is retired. The forbidden-key loop above it and the sealed-subpath test below it both stay and must keep passing; the plan makes you prove the first is still load-bearing by mutating it red. Do not weaken any other check to reach green.\n\nVITEST IS NOT EVIDENCE for DoD 1 at any point, including in the completion summary (mem:gotcha-vitest-hides-missing-js-bridge).",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/graph-preview-request.test.ts",
+      "packages/runner/src/supervisor/effect-kernel.js",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-09T09:37:47.002Z",
+  "workStartedAt": "2026-08-09T09:38:29.856Z"
 }

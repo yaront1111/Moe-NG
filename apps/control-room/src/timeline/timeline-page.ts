@@ -43,6 +43,13 @@ export interface TimelineWalkRequest {
   readonly filter: TimelineRowFilter | null;
   readonly maxRows: number;
   readonly source: TimelinePageSource;
+  /**
+   * CALLER OBLIGATION: a continuation cursor is only valid for the FILTER that produced
+   * it. Rows this walk examined and filtered out sit behind the returned cursor, so
+   * resuming from it under a widened filter would skip them. `TimelineList` satisfies
+   * this by re-walking from its own `startCursor` whenever the selection changes; any
+   * caller persisting a cursor must persist the filter beside it.
+   */
   readonly startCursor: number | null;
 }
 
@@ -84,6 +91,30 @@ function orderRefusal(
     previous = row.sequence;
   }
   return null;
+}
+
+/**
+ * Reads one page, converting a thrown source into a stated refusal.
+ *
+ * The source is supplied by whatever wires the daemon client to this surface, so a
+ * transport or decode failure surfaces here as an exception. Letting it propagate would
+ * blank the whole control room — failing OPEN — while the operator is looking at the one
+ * screen that is supposed to explain what went wrong.
+ */
+function readPage(
+  source: TimelinePageSource,
+  cursor: number | null,
+): TimelineSourcePage | TimelineRefused {
+  try {
+    return source(cursor);
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return refuseTimeline(
+      "TIMELINE_SOURCE_FAILED",
+      "PAGING",
+      `the page source failed after #${String(cursor)}: ${detail}`,
+    );
+  }
 }
 
 /** Fills the view up to the bound and returns the first row that did not fit. */
@@ -142,7 +173,9 @@ export function walkTimeline(request: TimelineWalkRequest): TimelineWalkResult {
   let cursor = startCursor;
 
   for (;;) {
-    const page = source(cursor);
+    const page = readPage(source, cursor);
+    // `TimelineSourcePage` carries no outcome, so its presence IS the refusal.
+    if ("outcome" in page) return page;
     const refusal = orderRefusal(page.rows, cursor);
     if (refusal !== null) return refusal;
     if (page.rows.length === 0) {

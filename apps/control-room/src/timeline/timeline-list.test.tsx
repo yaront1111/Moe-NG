@@ -193,6 +193,17 @@ describe("absent provenance stays UNKNOWN and borrows nothing", () => {
       .toBe("DAEMON_STATED");
   });
 
+  it("treats a blank supplied string as absent instead of labelling it stated", () => {
+    // A blank cell beside a DAEMON_STATED marker is a confident label attached to
+    // nothing — the same failure node-authority.readValue already refuses.
+    render(<TimelineList {...listProps([eventRow(1, { actor: "   ", eventId: "" })])} />);
+    const actor = screen.getByTestId("cr.timeline.provenance.1.actor");
+    expect(actor.textContent).toBe(UNSTATED);
+    expect(actor.getAttribute("data-provenance")).toBe("ABSENT");
+    // A blank event id is not a name, so it buys no link to `#timeline/`.
+    expect(screen.queryAllByTestId("cr.timeline.jump").length).toBe(0);
+  });
+
   it("renders a row whose summary the daemon omitted as UNKNOWN rather than blank", () => {
     render(<TimelineList {...listProps([gapRow(9)])} />);
     const value = within(screen.getByTestId("cr.fact.timeline.9.summary")).getByTestId("cr.value");

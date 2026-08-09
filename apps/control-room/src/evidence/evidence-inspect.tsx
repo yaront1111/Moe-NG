@@ -3,7 +3,7 @@ import type { JSX } from "react";
 import { UNSTATED } from "../data/data-contract.js";
 import { FactRow } from "../nodes/node-authority.js";
 import type { ProvenanceHandler } from "../nodes/node-authority.js";
-import { describeCursor, statedProvenance } from "../timeline/timeline-contract.js";
+import { describeCursor, statedProvenance, statedValue } from "../timeline/timeline-contract.js";
 import type { TimelineCursorState, TimelineProvenance } from "../timeline/timeline-contract.js";
 import type {
   EvidenceArtifactDigest,
@@ -45,7 +45,7 @@ function StatedCell({ cell, prefix }: { readonly cell: Cell; readonly prefix: st
     <div>
       <dt>{label}</dt>
       <dd data-provenance={statedProvenance(value)} data-testid={`${prefix}.${id}`}>
-        {value ?? UNSTATED}
+        {statedValue(value) ?? UNSTATED}
       </dd>
     </div>
   );
@@ -115,7 +115,7 @@ function Artifacts({ artifacts }: { readonly artifacts: readonly EvidenceArtifac
         <article data-testid={`cr.evidence.artifact.${artifact.artifactId}`} key={artifact.artifactId}>
           <span>{artifact.artifactId}</span>
           <span data-provenance={statedProvenance(artifact.digest)} data-testid="cr.evidence.digest">
-            {artifact.digest ?? UNSTATED}
+            {statedValue(artifact.digest) ?? UNSTATED}
           </span>
         </article>
       ))}

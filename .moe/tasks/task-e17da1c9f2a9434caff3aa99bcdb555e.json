@@ -226,7 +226,7 @@
       "completedAt": "2026-08-09T09:35:48.455Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -239,16 +239,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.904Z",
-  "updatedAt": "2026-08-09T09:37:27.891Z",
+  "updatedAt": "2026-08-09T09:46:37.018Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:01:54.894Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T09:46:37.018Z",
+    "wallClockMs": 2682124
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
-    "worker-0b27a5cc"
+    "worker-0b27a5cc",
+    "qa-017ee6b6"
   ],
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -315,5 +318,8 @@
     "packages/runner/src/materialization/manifest-staleness.ts",
     "packages/runner/src/materialization/manifest-staleness.js",
     "packages/runner/src/materialization/materialization-vocabulary.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T09:46:37.018Z",
+  "reviewCompletedAt": "2026-08-09T09:46:37.018Z",
+  "reviewSummary": "APPROVED. Re-ran gates: typecheck exit 0; `pnpm --filter @moe/runner test` exit 0, 30 files / 980 tests (matches claim; 26/855 baseline). Commit 5d77dde: 20 files, all under owned materialization/, tree clean vs HEAD.\n\nDoD1: digest.ts:72-125 binds every design-256 item across 3 records, item-by-item map; 18-case table, ONE mutated field per assertion. DoD2: recheck precedes any binding (seal.ts:134); refused seal returns only {ok,code,layer,message,detail}, asserted by KEY SET not a boolean; revalidateSealedManifest recomputes all 3 digests, refuses on any witness/predecessor/epoch movement. DoD3: dedupe vs ambiguity are separate codes with separate tests; parseSelectedInputs re-enforces once-only so a forged selection cannot seal. DoD4 green.\n\nDid not trust the claimed drill - ran my own: 7 operands, 7 KILLED / 0 survived, backups outside the repo, ended CLEAN_RESTORED_OK. Killed: MONOTONIC-without-proof downgrade -> contract.stability (4 red); once-only rule (1); ambiguity -> silent continue (5); producerAdoptionRef dropped from tree digest (2); witness-VERSION staleness compare dropped (3); environmentRequirements dropped from binding digest (2); duplicate witness by contract order (2).\n\nMirror vs authority check-for-check: dependency-contract.ts :248 downgrade, :245 operation mismatch, :189 registry dedupe all preserved; DEPENDENCY_GATES compared at runtime via both .js bridges - identical, 11 in order. No @moe/scheduler import (comments only), no spawn/Date.now/Math.random/process.env.\n\nRails: largest production file 239 lines, all 8 under 250 (wc -l). Bridges 8/8 parity; plain-Node probe positive, 0 undefined bindings, negative control still ERR_MODULE_NOT_FOUND. Vocabulary sweep asserts set equality BOTH directions, 25 codes / 4 layers, zero-case guarded; 33 code + 34 layer assertions. No scratch files. Full evidence: mem:task-task-e17da1c9f2a9434caff3aa99bcdb555e-qa-verdict."
 }
