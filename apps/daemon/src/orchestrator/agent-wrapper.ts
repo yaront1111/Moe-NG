@@ -47,6 +47,12 @@ export interface AgentWrapperConfig {
   readonly maxAgents: number;
   readonly mintSecret: () => string;
   readonly operatorCredential: string;
+  /**
+   * Optional development payload suggestion embedded in the mission, so a real
+   * model does not have to guess witness hashes. Advisory text only — the
+   * daemon's decoder remains the sole payload authority.
+   */
+  readonly payloadHint?: ((kind: string, target: string | null) => JsonObject | null) | undefined;
   /** Spawns the agent process; resolves when it exits. Injectable for tests. */
   readonly spawnAgent: (request: SpawnRequest) => Promise<void>;
 }
@@ -70,16 +76,25 @@ function digestOf(payload: JsonObject): string {
   return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
 }
 
-function mission(workItemId: string, kind: string, expiresAt: string): string {
-  return [
+function mission(
+  workItemId: string, kind: string, expiresAt: string, hint: JsonObject | null,
+): string {
+  const lines = [
     `You are a moe-next agent. You hold the durable claim on work item "${workItemId}"`,
     `(command kind ${kind}) until ${expiresAt}.`,
-    "Use the moe-next MCP tools: call work_get_context to see the board,",
-    `dispatch ${kind.replaceAll(".", "_")} using the daemon's offered identity for your step,`,
-    "renew your claim with work_renew if you need longer, and finish by calling",
-    `work_release for "${workItemId}". Every refusal carries a stable reason code —`,
-    "read it, correct the request, and never work around a refusal.",
-  ].join(" ");
+    "Use the moe-next MCP tools: first call work_get_context to see the board and find",
+    `the daemon's offered command for your step (commandKind ${kind}); then call the`,
+    `${kind.replaceAll(".", "_")} tool passing EXACTLY the offer's commandId,`,
+    "expectedVersion and targetAggregateId plus a correlationId and the payload.",
+    "Renew your claim with work_renew if you need longer, and finish by calling",
+    `work_release with payload {"workItemId": "${workItemId}"}. Every refusal carries`,
+    "a stable reason code — read it, correct the request, never work around a refusal,",
+    "and report what the daemon actually answered.",
+  ];
+  if (hint !== null) {
+    lines.push(`Suggested development payload for ${kind}: ${JSON.stringify(hint)}`);
+  }
+  return lines.join(" ");
 }
 
 export function createAgentWrapper(config: AgentWrapperConfig) {
@@ -140,9 +155,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
     }
 
+    const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
     const exit = config.spawnAgent({
       credential: secret, expiresAt, kind: step.kind,
-      mission: mission(workItemId, step.kind, expiresAt), sessionId, workItemId,
+      mission: mission(workItemId, step.kind, expiresAt, hint), sessionId, workItemId,
     }).catch(() => undefined).then(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };

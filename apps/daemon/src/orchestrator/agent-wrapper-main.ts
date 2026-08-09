@@ -25,28 +25,41 @@ import type { SpawnRequest } from "./agent-wrapper.js";
  * only — never argv, never a file the mission names.
  */
 const DAEMON_DIR = new URL("../..", import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/u, "");
+const MCP_MAIN = new URL("../mcp-main.ts", import.meta.url).pathname
+  .replace(/^\/(?=[A-Za-z]:)/u, "");
 
 function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   const command = process.env["MOE_AGENT_COMMAND"] ?? "claude";
   return (request: SpawnRequest): Promise<void> => {
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
+    // Absolute entry path: MCP server configs carry no working directory, and
+    // node resolves the module's own relative imports from its file URL anyway.
     writeFileSync(mcpConfigPath, JSON.stringify({
       mcpServers: {
         "moe-next": {
-          args: ["src/mcp-main.ts"],
+          args: [MCP_MAIN],
           command: "node",
-          cwd: DAEMON_DIR,
           env: { ...storeEnv, MOE_SESSION_CREDENTIAL: request.credential },
         },
       },
     }), "utf8");
     return new Promise((resolve) => {
+      // The mission travels over STDIN: on Windows the CLI is a .cmd requiring
+      // shell resolution, and shell spawns concatenate argv unescaped — a
+      // space-bearing prompt argument arrives shredded. Every remaining argv
+      // element is space-free by construction.
       const child = spawn(command, [
-        "-p", request.mission,
+        "-p",
         "--mcp-config", mcpConfigPath,
-        "--allowedTools", "mcp__moe-next__*",
-      ], { cwd: DAEMON_DIR, shell: process.platform === "win32", stdio: "inherit" });
+        "--allowedTools", "mcp__moe-next,mcp__moe-next__*",
+      ], {
+        cwd: DAEMON_DIR,
+        shell: process.platform === "win32",
+        stdio: ["pipe", "inherit", "inherit"],
+      });
+      child.stdin?.write(request.mission);
+      child.stdin?.end();
       child.on("exit", (code) => {
         process.stdout.write(`[wrapper] ${request.workItemId} agent exited ${String(code)}\n`);
         resolve();
@@ -62,7 +75,16 @@ async function main(): Promise<void> {
   const affordances = provider.affordances?.();
   if (affordances === undefined) throw new Error("provider serves no affordance surface");
 
+  // DEVELOPMENT payload suggestions from the control room's dev table, loaded
+  // leniently: a missing module just means missions carry no hint.
+  const hintModule = await import(
+    new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url).href
+  ).catch(() => null) as
+    { payloadFor?: (kind: string, target: string | null) => object | null } | null;
+
   const wrapper = createAgentWrapper({
+    payloadHint: (kind, target) =>
+      (hintModule?.payloadFor?.(kind, target) ?? null) as never,
     affordances,
     claimTtlMs: 30 * 60 * 1000,
     clock: () => Date.now(),
