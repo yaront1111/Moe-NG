@@ -1157,7 +1157,13 @@ it("parses a ref listing at the root and names the layer refusing a truncated on
 
   let refused: unknown;
   try {
-    runner.parseRefListing(new TextEncoder().encode("refs/heads/x\0"), "for-each-ref");
+    // A COMPLETE record whose LF terminator was replaced by another byte, so the
+    // LF guard is the only thing that can reject it: drop that guard and the
+    // stray byte is chopped instead, four valid fields survive, and this returns.
+    // A record simply cut short would be answered by the field-count guard with
+    // the same code and the same layer, leaving the claim below untested.
+    const unterminated = `refs/heads/main\0${HEAD_OID}\0commit\0X`;
+    runner.parseRefListing(new TextEncoder().encode(unterminated), "for-each-ref");
   } catch (error) {
     refused = error;
   }

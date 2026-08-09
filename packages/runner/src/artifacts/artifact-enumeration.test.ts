@@ -197,13 +197,27 @@ const REFUSAL_CASES: readonly EnumerationRefusal[] = Object.freeze([
     },
   },
   {
+    // The address grammar must be the ONLY thing that can reject this, or the
+    // case measures a different guard than the one it names. The bytes are
+    // deliberately unreadable: the grammar refuses BEFORE anything is read, so
+    // widening it to admit uppercase makes the entry an object candidate and the
+    // read answers instead — a different code AND a different layer. Written
+    // against a readable file the case survives that mutation, because the
+    // bytes-vs-address check then answers with the identical code and layer.
+    // The listing is synthetic for the same reason: a name written to disk is
+    // returned by the OS, and case folding there would decide the case instead.
     id: "uppercase-address",
     code: "RUNNER_ARTIFACT_ADDRESS_CORRUPT",
     layer: "ARTIFACT_STORE",
     arrange: (root: string) => {
       mkdirSync(join(root, "objects"), { recursive: true });
-      writeFileSync(join(root, "objects", "A".repeat(64)), "x");
-      return undefined;
+      return Object.freeze({
+        ...createNodeArtifactFs(),
+        listDirectory: () => [{ name: "A".repeat(64), kind: "FILE" as const }],
+        readAll: () => {
+          throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+        },
+      });
     },
   },
   {

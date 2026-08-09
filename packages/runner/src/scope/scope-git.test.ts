@@ -131,20 +131,52 @@ interface RefusalCase {
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
+/** Splices one raw byte into a record: no string literal can carry invalid UTF-8. */
+function withRawByte(prefix: string, byte: number, suffix: string): Uint8Array {
+  const head = encode(prefix);
+  const tail = encode(suffix);
+  const bytes = new Uint8Array(head.length + 1 + tail.length);
+  bytes.set(head, 0);
+  bytes[head.length] = byte;
+  bytes.set(tail, head.length + 1);
+  return bytes;
+}
+
+/**
+ * Each fixture below is chosen so that the guard it names is the ONLY thing that
+ * can reject it: neuter that one guard and the listing is ACCEPTED, which is what
+ * makes the case go red under a mutation drill. Fixtures that merely "look"
+ * malformed are worse than no fixture — an earlier guard answers with the same
+ * code and the same layer, the case passes, and the guard it claims to cover is
+ * never exercised. Three cases here were exactly that and were replaced.
+ */
 const MALFORMED_CASES: readonly RefusalCase[] = Object.freeze([
   {
-    id: "invalid-utf8",
-    bytes: Uint8Array.from([0xff, 0xfe, 0x00, 0x0a]),
+    // Fatal UTF-8 decoding is the only rejector: the bad byte sits INSIDE an
+    // otherwise well-formed record, so lenient decoding turns it into U+FFFD,
+    // the name still starts with refs/heads/, the target is still lowercase hex
+    // and the type is still `commit` — the listing is accepted and reports a ref
+    // name git never emitted. (Four loose bytes would be caught by field count.)
+    id: "invalid-utf8-inside-a-well-formed-record",
+    bytes: withRawByte("refs/heads/ma", 0xff, `in\0${COMMIT}\0commit\0\n`),
     code: "RUNNER_SCOPE_STATUS_MALFORMED",
   },
   {
-    id: "record-not-lf-terminated",
-    bytes: encode(`refs/heads/main\0${COMMIT}\0commit\0`),
+    // The LF-terminator guard is the only rejector: this is a COMPLETE four-field
+    // record whose LF was replaced by another byte, so dropping the guard makes
+    // slice(0, -1) chop the stray byte instead and four valid fields survive.
+    // (Ending at the record's own NUL would be caught by field count instead.)
+    id: "record-terminated-by-a-byte-other-than-lf",
+    bytes: encode(`refs/heads/main\0${COMMIT}\0commit\0X`),
     code: "RUNNER_SCOPE_STATUS_MALFORMED",
   },
   {
-    id: "truncated-field-count",
-    bytes: encode(`refs/heads/main\0${COMMIT}\0\n`),
+    // The field-count guard is the only rejector: the record lost its trailing
+    // NUL, so it carries three fields that are each individually valid — scope,
+    // commit type and hex target all pass once the count is no longer checked.
+    // (Dropping the TYPE field instead would be caught by the objecttype guard.)
+    id: "record-missing-its-trailing-nul",
+    bytes: encode(`refs/heads/main\0${COMMIT}\0commit\n`),
     code: "RUNNER_SCOPE_STATUS_MALFORMED",
   },
   {
