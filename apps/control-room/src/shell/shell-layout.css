@@ -1,0 +1,113 @@
+/* Shell layout is presentation only. Width never changes truth, commands, or identity. */
+
+[data-testid="cr.shell.root"] {
+  display: grid;
+  gap: 1rem;
+  grid-template-areas:
+    "skip skip skip"
+    "nav context inspector"
+    "nav main inspector"
+    "status status status";
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr) minmax(16rem, 24rem);
+}
+
+[data-testid="cr.shell.skiplink"] {
+  grid-area: skip;
+  justify-self: start;
+}
+
+[data-testid="cr.shell.navrail"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  grid-area: nav;
+  transition: inline-size 160ms ease;
+}
+
+[data-testid="cr.shell.navrail"] button {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  min-block-size: 2.75rem;
+  text-align: start;
+}
+
+.cr-shell-nav-icon {
+  flex: 0 0 1.5rem;
+  text-align: center;
+}
+
+[data-testid="cr.shell.contextbar"] {
+  grid-area: context;
+}
+
+[data-testid="cr.shell.main"] {
+  grid-area: main;
+  min-inline-size: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+[data-testid="cr.shell.inspector"] {
+  grid-area: inspector;
+  overflow-y: auto;
+  transition: transform 160ms ease;
+}
+
+[data-testid="cr.shell.statusstrip"] {
+  grid-area: status;
+}
+
+[data-testid="cr.shell.help"] {
+  background: canvas;
+  border: 2px solid currentColor;
+  inset: 10% auto auto 50%;
+  max-inline-size: min(32rem, 90vw);
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+@media (max-width: 959px) {
+  [data-testid="cr.shell.root"] {
+    grid-template-areas:
+      "skip skip"
+      "nav context"
+      "nav main"
+      "status status";
+    grid-template-columns: 3.25rem minmax(0, 1fr);
+  }
+
+  [data-testid="cr.shell.navrail"] {
+    inline-size: 3.25rem;
+  }
+
+  .cr-shell-nav-label {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  [data-testid="cr.shell.inspector"][data-narrow="true"] {
+    background: canvas;
+    block-size: 100vh;
+    inline-size: min(30rem, 90vw);
+    inset: 0 0 0 auto;
+    max-inline-size: 100%;
+    position: fixed;
+    z-index: 10;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="cr.shell.root"],
+  [data-testid="cr.shell.navrail"],
+  [data-testid="cr.shell.inspector"],
+  [data-testid="cr.shell.help"] {
+    animation: none;
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

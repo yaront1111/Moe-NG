@@ -3,9 +3,15 @@ import type { NextAllowedCommand, RuntimeCommandKind } from "@moe/contracts";
 import { createContext, useContext, useMemo, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
+import "./shell-layout.css";
 import { useShellKeyboardController } from "../a11y/keyboard-map.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
+import { InspectorSheet } from "./inspector-sheet.js";
+import { CONTROL_ROOM_NAV_ITEMS, NavRail } from "./nav-rail.js";
 import { ProvenanceProvider } from "./provenance-panel.js";
+import { useViewportMode } from "./viewport.js";
+
+export { CONTROL_ROOM_NAV_ITEMS } from "./nav-rail.js";
 
 /** Shell layout and the fail-closed boundary for daemon-supplied affordances. */
 export interface GatingValue {
@@ -96,27 +102,9 @@ export function ActionBar({ kind }: ActionBarProps): JSX.Element {
   );
 }
 
-/** Nav rail, top to bottom (spec line 58). Timeline and graph are not rail items. */
-export const CONTROL_ROOM_NAV_ITEMS = [
-  "Goals", "Approvals", "Runs & leases", "Resources", "Health", "Policy",
-] as const;
-
 /** Projection tabs on the context bar (spec line 51). */
 export const CONTROL_ROOM_TABS = ["board", "graph", "timeline"] as const;
 export type ControlRoomTab = (typeof CONTROL_ROOM_TABS)[number];
-
-function NavRail(): JSX.Element {
-  return (
-    <nav aria-label="Primary" data-testid="cr.shell.navrail">
-      {CONTROL_ROOM_NAV_ITEMS.map((item) => (
-        <button data-testid={`cr.nav.${item.split(" ")[0]?.toLowerCase() ?? item}`} key={item}
-          type="button">
-          {item}
-        </button>
-      ))}
-    </nav>
-  );
-}
 
 function Banners({ affordance }: { readonly affordance: FixtureAffordanceSnapshot }): JSX.Element {
   const disconnected = affordance.connection === "DISCONNECTED";
@@ -165,6 +153,9 @@ function HelpOverlay({ onClose, open }: {
   return (
     <section aria-label="Keyboard shortcuts" data-testid="cr.shell.help" role="dialog">
       <p>Global keyboard shortcuts are available throughout the control room.</p>
+      <ul>
+        {CONTROL_ROOM_NAV_ITEMS.map((label) => <li key={label}>{label}</li>)}
+      </ul>
       <button onClick={onClose} type="button">Close keyboard help</button>
     </section>
   );
@@ -196,6 +187,8 @@ export interface ShellFrameProps {
 export function ShellFrame({ affordance, children, inspector }: ShellFrameProps): JSX.Element {
   const [tab, setTab] = useState<ControlRoomTab>("board");
   const keyboard = useShellKeyboardController(setTab);
+  const viewport = useViewportMode();
+  const narrow = viewport.ok && viewport.mode === "NARROW";
   const gating = useMemo<GatingValue>(
     () => ({
       actionsEnabled: affordance.mutationsEnabled,
@@ -208,7 +201,8 @@ export function ShellFrame({ affordance, children, inspector }: ShellFrameProps)
   return (
     <GatingContext.Provider value={gating}>
       <ProvenanceProvider>
-        <div data-testid="cr.shell.root" ref={keyboard.rootRef}>
+        <div data-narrow={narrow ? "true" : undefined} data-testid="cr.shell.root"
+          ref={keyboard.rootRef}>
           <a
             data-testid="cr.shell.skiplink"
             href="#cr-shell-main"
@@ -217,19 +211,15 @@ export function ShellFrame({ affordance, children, inspector }: ShellFrameProps)
           >
             Skip to main content
           </a>
-          <NavRail />
+          <NavRail narrow={narrow} />
           <ContextBar affordance={affordance} onTab={setTab} tab={tab} />
           <HelpOverlay onClose={keyboard.closeHelp} open={keyboard.helpOpen} />
           <main data-testid="cr.shell.main" id="cr-shell-main" ref={keyboard.mainRef} tabIndex={-1}>
             {tab === "graph" ? <GraphPlaceholder /> : children}
           </main>
-          <aside
-            aria-label="Inspector"
-            data-testid="cr.shell.inspector"
-            hidden={!keyboard.inspectorExpanded}
-          >
+          <InspectorSheet expanded={keyboard.inspectorExpanded} narrow={narrow}>
             {inspector}
-          </aside>
+          </InspectorSheet>
           <footer
             data-connection={affordance.connection}
             data-stale={String(gating.stale)}
