@@ -304,11 +304,13 @@ function renewRequest(
   key: ClientKey,
   commandId: string,
   nonce: string,
+  issuedAt = NOW,
 ) {
   return Object.freeze({
     commandId,
     correlationId: `correlation-${commandId}`,
     authentication: authenticationRequest(authority, key, {
+      issuedAt,
       nonce,
       requestDigest: mutationDigest("RENEW_SESSION", authority),
       requestId: commandId,
@@ -976,7 +978,7 @@ describe("renew, rotate, close, and active reads", () => {
       const before = current;
       const nonce = index.toString(16).padStart(32, "0");
       const renewed = authority.renewSession(
-        renewRequest(current, opened.key, `command-renew-${index}`, nonce),
+        renewRequest(current, opened.key, `command-renew-${index}`, nonce, now),
       );
       expect(renewed, `renewal ${index}`).toMatchObject({ ok: true });
       if (!renewed.ok) throw new Error(`expected renewal ${index} to succeed`);
