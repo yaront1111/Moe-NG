@@ -606,8 +606,14 @@ fn resume_never_runs_before_the_membership_proof_succeeds() {
         // trailing closes are the two acquired handles and the Job's own, so
         // this is the COMPLETE log rather than a prefix a later arm could hide
         // behind.
+        //
+        // The two entries before them are the PRE-MEMBERSHIP unwind: a failed
+        // proof means the Job is not known to contain this child, so the child
+        // is terminated and awaited through its own handle. Note what is NOT
+        // here -- no "terminate" and no "accounting", i.e. the Job-side regime
+        // did not run.
         let mut expected = HEALTHY_SEQUENCE[..9].to_vec();
-        expected.extend(["close", "close", "close"]);
+        expected.extend(["terminate-process", "wait", "close", "close", "close"]);
         assert_eq!(calls.calls(), expected);
     }
 }

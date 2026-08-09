@@ -65,21 +65,29 @@
     {
       "stepId": "step-4",
       "description": "EXTEND THE VOCABULARY AND DECLARE THE SEAM, AND REPAIR JOB_SWEEP WITHOUT WEAKENING IT. In win32.rs add exactly nine NativeOp variants — InitAttributeList, SetJobListAttribute, SetHandleListAttribute, CreateProcess, AssignProcessToJob, IsProcessInJob, QueryProcessId, QueryCreationTime, ResumeThread — extend NativeOp::ALL to `[NativeOp; 15]` listing all fifteen in declaration order, and add compile-time `const _: () = assert!(...)` pins for PROC_THREAD_ATTRIBUTE_JOB_LIST == 131085 and PROC_THREAD_ATTRIBUTE_HANDLE_LIST == 131074 against the windows-sys constants, mirroring the existing pin at win32.rs:115-119. There is deliberately NO variant for DeleteProcThreadAttributeList: windows-sys declares it with no return type, so it cannot fail. Declare `pub trait ProcessCalls` with an associated type for the attribute list (so the test double can use `()` while the real impl owns a heap buffer) and one method per arm above, plus an infallible `delete_attribute_list`. Then repair tests/job_sweep.rs: replace the `NativeOp::ALL` comparison with exact equality against a hand-written JOB_OPS list of the six job ops this sweep owns, PLUS an assertion that every JOB_OPS member is present in NativeOp::ALL. Do NOT convert it to a subset or containment test — process_sweep will own the totality check in step 8. PROVE THE REPAIR STILL BITES: temporarily delete one entry from the CASES array, confirm the test goes RED, then restore it and confirm 7/7 green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/src/win32.rs",
         "packages/runner/src/platform/windows/native/tests/job_sweep.rs"
       ],
-      "startedAt": "2026-08-09T19:08:00.380Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/win32.rs",
+        "packages/runner/src/platform/windows/native/src/win32/process_calls.rs",
+        "packages/runner/src/platform/windows/native/tests/job_sweep.rs"
+      ],
+      "note": "ALREADY LANDED last session; re-verified on disk, not re-done.\n\nNine construction variants (InitAttributeList, SetJobListAttribute, SetHandleListAttribute, CreateProcess, AssignProcessToJob, IsProcessInJob, QueryProcessId, QueryCreationTime, ResumeThread) are in NativeOp. No variant for DeleteProcThreadAttributeList — windows-sys declares it with no return type, so it cannot fail; the double counts its calls instead.\n\nDEVIATION carried from last session, unchanged: the ATTRIBUTE_* consts, their `const _: () = assert!` pins and the `ProcessCalls` trait live in src/win32/process_calls.rs, not inline in win32.rs, which measured 262 with them inline. `pub use process_calls::{...}` keeps every item on its documented path `win32::ProcessCalls`.\n\njob_sweep.rs repair verified NOT weakened: tests/job_sweep.rs:134 declares a hand-written `const JOB_OPS: [NativeOp; 6]`; :214 compares the produced set to JOB_OPS by exact equality; :223-225 additionally asserts each JOB_OPS member is still listed in NativeOp::ALL; :200 pins `CASES.len() == 6`. It is not a subset or containment test. The comment at :130 records why softening it is forbidden. QA re-ran this drill last round: neutralising the CASES.len() guard first, then dropping a case, reddened job_sweep.rs:207 — the cross-check, not the length guard.\n\nFOREIGN DRIFT, disclosed not adopted: NativeOp::ALL is no longer [NativeOp; 15]. Sibling 2b's uncommitted diff adds WaitForProcess, QueryExitCode, TerminateProcess, QueryImageName and grows it to [NativeOp; 19]. That is 2b's change in 2b's scope; I did not write it and have not staged win32.rs.",
+      "startedAt": "2026-08-09T19:08:00.380Z",
+      "completedAt": "2026-08-09T19:08:21.635Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD RED. Create tests/process_sweep.rs with the scripted test double and the ordering test only — no production code yet, so this step ends with the crate NOT compiling, which is the intended red state. Model the double on child 1's ScriptedCalls in job_sweep.rs: an ordered call log of &'static str, a per-handle close-count map, a programmable single-arm failure, and handed-out handle values distinguishable by identity. It must implement BOTH Win32Calls and ProcessCalls, count delete_attribute_list calls, and let the test program IsProcessInJob to report false and ResumeThread to report a chosen prior suspend count. Write the ordering test to assert the COMPLETE recorded sequence with one `assert_eq!` over the whole vector — init attribute list, set JOB_LIST, set HANDLE_LIST, create suspended, assign, membership, pid, creation time, resume — exactly as child 1's successful_creation_calls_create_set_query_in_order does. A test that only asserts resume comes after membership will pass with a whole step missing. Do not reimplement any refusal logic inside the double; it records and fails on command, nothing more.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [],
       "newFiles": [
         "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
-      ]
+      ],
+      "startedAt": "2026-08-09T19:08:27.138Z"
     },
     {
       "stepId": "step-6",
@@ -142,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:00.580Z",
-  "updatedAt": "2026-08-09T19:08:00.380Z",
+  "updatedAt": "2026-08-09T19:08:27.139Z",
   "contextFetchedBy": [
     "worker-4091b158",
     "qa-5be1a8d6"
@@ -154,7 +162,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [
     {
@@ -168,7 +177,7 @@
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
     "firstClaimAt": "2026-08-09T18:21:01.308Z",
-    "executedStepCount": 13,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },

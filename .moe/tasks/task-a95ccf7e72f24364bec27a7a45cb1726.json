@@ -137,8 +137,8 @@
       "completedAt": "2026-08-09T19:06:54.648Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-1a528e3e",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,7 +157,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:31:41.439Z",
-  "updatedAt": "2026-08-09T19:06:54.648Z",
+  "updatedAt": "2026-08-09T19:08:24.697Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:07:41.016Z",
     "plannedStepCount": 8,
@@ -219,5 +219,21 @@
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "reviewStartedAt": "2026-08-09T19:08:24.697Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  46 passed (46)\n      Tests  641 passed (641)\n   Start at  22:07:05\n   Duration  5.82s (transform 8.74s, setup 0ms, import 17.78s, tests 29.64s, environment 41.45s)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-09T19:08:24.697Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/styles/tokens.css",
+    "apps/control-room/src/styles/surfaces.css",
+    "apps/control-room/src/a11y/surface-audit.ts",
+    "apps/control-room/src/styles/design-system.test.ts",
+    "packages/control-room-model/src/index.ts",
+    "apps/control-room/src/styles/truth-tone-tokens.ts",
+    "apps/control-room/src/styles/truth-tone-contrast.test.ts"
   ]
 }
