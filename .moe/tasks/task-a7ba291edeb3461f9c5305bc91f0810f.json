@@ -19,13 +19,16 @@
     {
       "stepId": "step-1",
       "description": "Explore and pin the boundary before editing. Recompute the SHA-256 values of the read-only rebuild design and control-room spec and require the pinned hashes; inspect the verified FactRow/useGating/NextAllowedCommand/buildNextAllowedCommands surfaces and the crash-reconciliation/doctor proposal contracts. Confirm apps/control-room/src/doctor/doctor-j1.tsx remains the J1 compatibility slice, apps/control-room/src/recovery is absent, and both owned directories are clean. Run the package test command once as a baseline and record exact failing files/tests, explicitly attributing the current goals/timeline RED to foreign in-flight TDD rather than modifying or claiming it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Boundary pinned. Both read-only docs recompute to their pinned SHA-256 exactly (rebuild design 1D9D1EC9...383191, control-room spec C55AF8A9...0BEF1F); neither edited. apps/control-room/src/doctor/ holds only doctor-j1.tsx (28 lines, byte-clean, imported by shell/j1-flow.test.tsx); apps/control-room/src/recovery/ does not exist. Verified surfaces: FactRow/FactList/Panel/SuppliedFact/ProvenanceHandler/UNKNOWN_FACT_VALUE in nodes/node-authority.tsx; Fact/TruthChip in kernel.tsx (cr.fact.* wrapper, cr.chip.* from kernel descriptors, inner cr.label/cr.value/cr.glyph/cr.shortlabel); useGating()/actionTestId/GatingValue{actionsEnabled,commands,stale} in shell/frame.tsx (GatingContext is NOT exported — tests must wrap in ShellFrame with a FixtureAffordanceSnapshot); NextAllowedCommand{commandEnvelopeVersion,commandId,commandKind,expectedVersion,inputSchemaVersion,targetAggregateId,+optional hashes/lease} and buildNextAllowedCommands(source,entries) in packages/contracts/src/runtime/runtime-affordance.ts — no label, no payload schema, no reason field, returns EMPTY on any duplicate/malformed entry. Confirmed recovery.complete/recovery.inspect_external/recovery.reconcile_external/reconciliation.decide/export.run are RUNTIME_COMMAND_KINDS; doctor.get/reconciliation.get/quarantine.get are QUERY kinds and can never be affordances. Canonical source text located: design 957 (HEALTHY/DEGRADED/UNKNOWN_TRUTH + per-check stable ID/severity/truth class/affected IDs/evidence/allowed commands), design 1080 (engine/schema/integrity, projection, artifact, outbox, adapter, calibration, export, reconciliation health), design 972 (BackupGeneration cursor/RPO, manifest object/digest/size, byte verification, key chain, post-cursor events outside RPO, missing proof = UNKNOWN_TRUTH), design 978 (the seven external inventory classes verbatim: workspaces, effect locks/wrapper registrations, provider runs, resources, branches/refs, integration targets, artifact staging + negative-proof completeness), spec 8.7 (verbatim reconciliation and doctor-offline copy), spec 12 line 711 (pending role=status, >2s copy, failure role=alert with stable code), spec 2.10/4.14 component ids. Reused patterns: goals/supplied-actions.tsx (target+kind join, actionsEnabled verbatim, hands back the original frozen command) and data/data-ban.test.ts (exact-file-set + import-specifier structural scan). tsconfig.base.json has exactOptionalPropertyTypes and noUncheckedIndexedAccess on. Baseline run fresh in foreground: `pnpm --filter @moe/control-room test` -> 1 failed | 18 passed (19 files), 4 failed | 265 passed (269 tests), exit 1. The RED is entirely foreign in-flight TDD in src/board/board-surface.test.tsx (\"collapses Ready only on an authoritative loaded-empty lane\", \"moves within a lane with j/k...\", \"moves across visible columns with h/l...\", \"jumps to a visible column's first card...\") — git status shows board-surface.test.tsx and board-surface.tsx as another agent's uncommitted working-tree edits. Not mine, not touched, not claimed. (Note: the planning memory recorded goals-home/timeline as the red pair; those are now green and board moved red — the foreign RED simply migrated.)",
+      "startedAt": "2026-08-09T09:53:25.011Z",
+      "completedAt": "2026-08-09T09:57:15.746Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED: create all four focused suites before production modules. In doctor-console.test.tsx hand-write and assert a nonzero exact corpus for HEALTHY, DEGRADED, and UNKNOWN_TRUTH plus the supplied health areas (engine, schema, integrity, projection, artifact, outbox, adapter, calibration, export, reconciliation, backup): preserve stable check ID, severity, evidence, every affected record/effect ID, exact order, degraded freshness, and three-state text/glyph/data attributes without roll-up. Assert missing/blank facts become UNKNOWN, every cr.fact.* has exactly one kernel cr.chip.* descendant, provenance receives a unique check-qualified fact ID, j/k and Enter focus/open exact rows, loading/degraded remain honest, and the verbatim offline-doctor banner/as-of proof renders with suggestions as text and zero enabled cr.action.*. In recovery-actions.test.tsx build real affordances through production buildNextAllowedCommands and pin exact commandId/kind/target matching, one uniquely identified cr.action.<dashed-kind>[.<qualifier>] per supplied presentation, original affordance identity on confirmation request, foreign/absent/ambiguous matches omitted unless a daemon-supplied unavailable reason exists, stable reason code plus refusing layer on disabled/refused paths, offline/historical/unknown and actionsEnabled=false disabled, and LAGGING/stale with actionsEnabled=true still enabled. Pin pending/confirmed role=status, the >2s copy, and refused role=alert with exact code/layer and only current supplied recovery actions. In reconciliation-inventory.test.tsx pin cr.health.reconciliation.row.{recordId}, quarantined/unschedulable/NEEDS_RECONCILIATION UNKNOWN facts, evidence/affected IDs, canonical narrative plus only supplied labeled choices, empty/limited inventory, and keyboard navigation. In recovery-status.test.tsx pin cr.health.outbox, cr.health.versions, backup/export, committed cursor/RPO, manifest/digest/byte-proof facts, all seven external-inventory coverage classes and blind spots, zero-items-with-UNKNOWN not clean, post-cursor RPO limitation, and recovery.complete only from a current supplied affordance; assert no browser restore/file control. Add a non-vacuous exact production-file/import scan (legacy doctor-j1 explicitly excluded from the new-module ban) forbidding fixtures, data adapters, daemon/runner/store internals, createRuntimeError, fetch, fs, and process in the four canonical modules. Run each new suite and capture the expected missing-module RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/doctor/doctor-console.test.tsx",
         "apps/control-room/src/recovery/recovery-actions.test.tsx",
@@ -37,40 +40,62 @@
         "apps/control-room/src/recovery/recovery-actions.test.tsx",
         "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
         "apps/control-room/src/recovery/recovery-status.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx"
+      ],
+      "note": "TDD RED landed: four focused suites written before any production module. doctor-console.test.tsx hand-writes an 11-entry corpus (one check per design-1080 area plus backup) with all three outcomes present and asserts the corpus itself is nonzero and exactly the named areas before asserting anything about rendering; it pins supplied order, distinct HEALTHY/DEGRADED/UNKNOWN_TRUTH text+glyph+data triples, no roll-up in either direction (worse checks under a HEALTHY overall, and a DEGRADED overall over all-HEALTHY checks), an unsupplied/foreign outcome collapsing to UNKNOWN rather than UNKNOWN_TRUTH, blank-string values becoming UNKNOWN with the UNK chip, an empty affected list rendering UNKNOWN not \"none\", fact==chip equality, unique check-qualified provenance IDs, j/k/Enter with edge clamping, loading skeletons, degraded as-of, the §8.7 offline banner verbatim (and with UNKNOWN substituted), suggestions as LI with no button, zero cr.action.*, and no banner for a report whose mode is not OFFLINE_READ_ONLY. recovery-actions.test.tsx builds its corpus through production buildNextAllowedCommands (asserted to yield exactly 4 frozen affordances) and pins exact commandId+target joining, the cr.action.<dashed-kind>[.<qualifier>] grammar with a uniqueness assertion, original-object identity (toBe) handed to onRequestConfirmation, absence for unmatched/foreign/ambiguous joins, absence of all authority outside a ShellFrame, unavailable presentations carrying phrase+stable code+refusing layer (UNKNOWN when blank), actionsEnabled=false and each of the three non-live authority modes disabling, stale/LAGGING and requiresAffordanceRefresh NOT disabling, and PENDING/CONFIRMED role=status, the >2s copy verbatim, REFUSED role=alert with code+layer, plus feedback dropped for a withdrawn command. reconciliation-inventory.test.tsx pins cr.health.reconciliation.row.{recordId}, the canonical §8.7 sentence composed from supplied record+finding (and its UNKNOWN form), separate quarantine/schedulability/disposition/derived facts with UNK chips, entity-qualified evidence/affected fact IDs, only-backed choices (the unreturned repair choice is absent, not a hard-coded third button), a daemon-explained held choice, original-command identity, an empty-inventory limitation copy that refuses to read empty as clean, coverage limitation always rendered, no loose controls, and j/k/Enter. recovery-status.test.tsx pins independent outbox cursors/lag/poison/aggregate, independent engine/schema/minimum/daemon-evaluated compatibility, one backup generation's cursor/RPO/manifest/coverage/bytes/key-chain, the post-cursor RPO sentence rendered even when every proof is missing, the export-is-not-a-backup note, all seven design-978 classes in design order with design labels, empty-items-with-UNKNOWN-completeness explicitly not clean, recovery.complete absent when unreturned even with a fully empty inventory, no input/form/download control, and a structural scan resolved from process.cwd() that asserts the exact owned file listing of both directories, scans exactly the 5 new production modules with doctor-j1.tsx excluded by name, requires a positive per-file anchor and >400 chars so the absence assertions cannot pass vacuously, restricts imports to an allow-list, and bans 16 authority/transport/filesystem tokens with the count asserted. Fresh RED captured in the foreground: `npx vitest run src/doctor/doctor-console.test.tsx src/recovery` -> \"Test Files 4 failed (4) / Tests no tests\", each failing with 'Failed to resolve import \"./recovery-actions.js\"/\"./recovery-external.js\"/\"./recovery-status.js\"/\"./doctor-console.js\" ... Does the file exist?' — i.e. red for the missing-module reason, not a typo. No production file written yet.",
+      "startedAt": "2026-08-09T09:57:18.584Z",
+      "completedAt": "2026-08-09T10:05:12.305Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN the doctor surface in doctor-console.tsx. Define closed presentation props—not daemon response DTOs—for the supplied overall health fact, ordered checks, view freshness/loading/degraded state, optional offline report timestamp/lock-proof facts, and non-authoritative suggested operations. Render cr.health.status, cr.health.check.{checkId}, and cr.health.doctor using Panel/FactRow so every claim retains its exact supplied truth/provenance and missing fields stay UNKNOWN. Preserve HEALTHY, DEGRADED, and UNKNOWN_TRUTH as distinct health outcomes without ranking or aggregating checks; never calculate SQLite compatibility or startup eligibility. Implement deterministic row focus for j/k and Enter callbacks without mutating order. Render the exact offline copy only for the supplied OFFLINE_READ_ONLY report, keep suggestions plain text, and expose no command, transport, parser, OS lock, filesystem, or repair behavior. Leave doctor-j1.tsx untouched and make the doctor suite green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/doctor/doctor-console.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/doctor/doctor-console.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx"
+      ],
+      "note": "doctor-console.tsx GREEN: `npx vitest run src/doctor/doctor-console.test.tsx` -> Test Files 1 passed (1), Tests 25 passed (25), exit 0. 249 physical lines (wc -l), under the 250 target. Closed presentation props only (DoctorCheckPresentation, DoctorOfflineReport, DoctorConsoleProps) — no daemon response DTO, no parse, no transport. DOCTOR_HEALTH_OUTCOMES is the closed three-token set and statedOutcome() collapses anything else to a distinct OUTCOME_UNSUPPLIED=\"UNKNOWN\" rather than to UNKNOWN_TRUTH, so \"the daemon said nothing usable\" never impersonates \"the daemon reached an unknown-truth verdict\". The overall outcome and each check's outcome are rendered from their own supplied token through the same HealthOutcome component (text + glyph + data-health, three channels); nothing reads `checks` to compute the overall, so a HEALTHY overall survives a failing check and a DEGRADED overall survives all-HEALTHY checks — both directions are pinned. Every claim routes through FactRow, so blank/whitespace values fail to UNKNOWN with the UNK chip and one chip travels with every fact. Fact IDs are check-qualified (health.check.{checkId}.{area|severity|evidence|affected.{index}}) so provenance IDs are unique across the surface. An empty affected list renders a null-fact UNKNOWN row rather than \"none\" — a check that named no record may equally have failed to enumerate, and only the daemon can distinguish those. Keyboard j/k/Enter clamps at both ends and never reorders `checks`. The §8.7 offline banner is assembled from two literal halves around the supplied time and renders ONLY when report.mode === \"OFFLINE_READ_ONLY\"; suggested operations render as LI text. No SQLite comparison, no startup-eligibility verdict, no command, no OS-lock or filesystem behavior anywhere in the module. doctor-j1.tsx is byte-untouched (absent from git status; shell/j1-flow.test.tsx still imports it unchanged).",
+      "startedAt": "2026-08-09T10:05:14.761Z",
+      "completedAt": "2026-08-09T10:06:29.417Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN the authority boundary in recovery-actions.tsx. Export a presentation union that either references a current commandId with supplied label/qualifier/target or carries a fully supplied unavailable reason (phrase, stable reason code, refusing layer); an unreferenced expectation with no reason is absent. Read useGating() directly, join each presentation to exactly one current NextAllowedCommand by commandId and exact target, and pass that original command plus the original presentation to onRequestConfirmation—never clone it, build an envelope, classify commands as safe, dedupe, or infer a control from health/lifecycle text. Use actionsEnabled verbatim; additionally fail closed for supplied OFFLINE_READ_ONLY, HISTORICAL, or UNKNOWN authority modes, but deliberately do not disable solely because useGating().stale is true. Render exact command metadata/test-ID grammar, keyboard-native buttons, supplied disabled copy, and inline supplied PENDING/CONFIRMED/REFUSED feedback with status/alert semantics; missing error code/layer remains UNKNOWN rather than receiving an invented RuntimeError. Make the action suite green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/recovery/recovery-actions.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/recovery/recovery-actions.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/recovery/recovery-actions.tsx"
+      ],
+      "note": "recovery-actions.tsx GREEN: `npx vitest run src/recovery/recovery-actions.test.tsx` -> Test Files 1 passed (1), Tests 22 passed (22), exit 0. 248 physical lines (wc -l), under the 250 target. RecoveryActionPresentation is a two-arm union discriminated by the optional `commandId`: RecoveryCommandPresentation names a commandId + exact targetAggregateId + supplied label/qualifier, RecoveryUnavailablePresentation carries a fully supplied RecoveryUnavailableReason (phrase, reasonCode, layer) plus the kind needed for a stable test ID. A presentation that matches nothing and explains nothing renders nothing (§8.1 absence over invented copy). resolve() filters useGating().commands on commandId AND targetAggregateId and returns a command only when exactly one matched — two matches is ambiguity, not a menu, and yields null. onRequestConfirmation receives the original frozen NextAllowedCommand and the original presentation object by reference (tests assert with toBe); nothing clones, wraps, envelopes, dedupes, classifies as safe, or infers a control from health or lifecycle text. enabled = actionsEnabled && authorityMode === \"LIVE\": actionsEnabled is used verbatim and OFFLINE_READ_ONLY/HISTORICAL/UNKNOWN each additionally fail closed, while useGating().stale is deliberately never read — a comment in the module says why (§8.6: a lagging view still shows commands the daemon returned and those revalidate on the daemon), and two tests pin that LAGGING and requiresAffordanceRefresh leave a live command enabled. Test ID grammar is cr.action.<dashed-kind>[.<qualifier>] from the RESOLVED command's kind (not the caller's claim), buttons are native and keyboard-reachable, and disabled controls stay visible per §6.3. Supplied disabled copy renders when the group is blocked and falls to UNKNOWN when unsupplied. Feedback renders only for currently-resolved command IDs, so a withdrawn command's stale outcome cannot linger; PENDING/CONFIRMED use role=status, the >2s line is the §12 verbatim constant, REFUSED uses role=alert and exposes the code and refusing layer, both falling to UNKNOWN when absent rather than minting a RuntimeError. The group carries data-recovery-actions so sibling surfaces can prove no control renders outside it.",
+      "startedAt": "2026-08-09T10:06:32.168Z",
+      "completedAt": "2026-08-09T10:08:32.466Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN reconciliation-inventory.tsx as a general recovery/reconciliation presentation, not an import-only workflow. Model ordered supplied rows with canonical record/case identity, finding, disposition, quarantine/unschedulable state, affected record/effect IDs, evidence, coverage limitation, and action presentations. Render every claim through FactRow with entity-qualified provenance IDs; NEEDS_RECONCILIATION-derived claims remain visibly UNKNOWN. Compose the canonical reconciliation sentence from the supplied record/finding, render 'Choose:' followed only by presentations backed by a current affordance or an explicit daemon reason, and never hard-code three legal mutations. Preserve empty/partial inventory limitations, supplied order, and j/k/Enter row behavior; delegate every button to RecoveryActions so advisory prose cannot mutate, resume history, or grant authority. Make the inventory suite green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/recovery/reconciliation-inventory.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/recovery/reconciliation-inventory.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:08:34.911Z"
     },
     {
       "stepId": "step-6",
@@ -115,7 +140,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0b27a5cc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,19 +152,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T09:44:50.331Z",
+  "updatedAt": "2026-08-09T10:08:34.911Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "worker-0b27a5cc"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T09:29:04.600Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 4
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:44:48.304Z",
   "planningNotes": {
@@ -160,5 +192,6 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-09T09:44:50.331Z"
+  "planApprovedAt": "2026-08-09T09:44:50.331Z",
+  "workStartedAt": "2026-08-09T09:53:25.011Z"
 }

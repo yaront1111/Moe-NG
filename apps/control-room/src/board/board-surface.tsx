@@ -1,9 +1,12 @@
-import type { JSX } from "react";
+/// <reference types="vite/client" />
+import { useRef, useState } from "react";
+import type { JSX, KeyboardEvent } from "react";
 
 import { FactRow } from "../nodes/node-authority.js";
 import type { ProvenanceHandler, SuppliedFact } from "../nodes/node-authority.js";
 import { BoardCard } from "./board-card.js";
 import { BOARD_COLUMNS } from "./board-contract.js";
+import "./board-layout.css";
 import type {
   BoardCardProjection, BoardColumn, BoardCommandHandler, BoardFrontierLane, BoardJoinSummary,
   BoardSurfaceProps,
@@ -49,15 +52,24 @@ function CardList(props: CardRenderProps & {
   return (
     <>
       {cards.map((card, index) => (
-        <BoardCard
-          card={card}
-          key={`${String(index)}:${card.nodeId}`}
-          onActivateCommand={onActivateCommand}
-          onProvenance={onProvenance}
-        />
+        <BoardCard card={card} key={`${String(index)}:${card.nodeId}`}
+          onActivateCommand={onActivateCommand} onProvenance={onProvenance} />
       ))}
     </>
   );
+}
+
+/** §11.2: `j/k` within a lane, `h/l` or the arrows across lanes preserving the row. */
+const KEY_MOVES: Record<string, readonly [columns: number, rows: number, open: boolean]> = {
+  ArrowLeft: [-1, 0, false], ArrowRight: [1, 0, false], Enter: [0, 0, true],
+  h: [-1, 0, false], j: [0, 1, false], k: [0, -1, false], l: [1, 0, false],
+};
+
+const clamp = (value: number, max: number): number => Math.min(Math.max(value, 0), max);
+
+function focusCardAt(root: HTMLElement | null, column: BoardColumn, row: number): void {
+  const lane = root?.querySelector<HTMLElement>(`[data-board-column="${column}"]`);
+  lane?.querySelectorAll<HTMLElement>("[data-board-card]")[row]?.focus();
 }
 
 /**
@@ -67,12 +79,12 @@ function CardList(props: CardRenderProps & {
  */
 function Column(props: CardRenderProps & {
   readonly cards: readonly BoardCardProjection[];
+  readonly collapsed: boolean;
   readonly column: BoardColumn;
-  readonly loadedEmpty: boolean;
   readonly loading: boolean;
 }): JSX.Element {
-  const { cards, column, loadedEmpty, loading, onActivateCommand, onProvenance } = props;
-  if (!loading && loadedEmpty && cards.length === 0) {
+  const { cards, collapsed, column, loading, onActivateCommand, onProvenance } = props;
+  if (collapsed) {
     return (
       <div data-testid={`cr.board.column.${column}.collapsed`}>
         {`${COLUMN_TITLES[column]} — the daemon reported this lane empty`}
@@ -130,14 +142,10 @@ function JoinStrip(props: {
     <div aria-live="polite" data-testid="cr.board.joinstrip">
       {joins.map((join) => (
         <div data-testid={`cr.board.join.${join.joinId}`} key={join.joinId}>
-          <FactRow
-            fact={join.summary} factId={`join.${join.joinId}.summary`} label="Join"
-            onProvenance={onProvenance}
-          />
-          <FactRow
-            fact={join.inputs} factId={`join.${join.joinId}.inputs`} label="Inputs"
-            onProvenance={onProvenance}
-          />
+          <FactRow fact={join.summary} factId={`join.${join.joinId}.summary`} label="Join"
+            onProvenance={onProvenance} />
+          <FactRow fact={join.inputs} factId={`join.${join.joinId}.inputs`} label="Inputs"
+            onProvenance={onProvenance} />
         </div>
       ))}
     </div>
@@ -147,10 +155,39 @@ function JoinStrip(props: {
 export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
   const {
     appliedCursorLabel, cards, degraded, frontier, joins, loadedEmptyColumns, loading,
-    onActivateCommand, onProvenance, onShowTerminatedChange, showTerminated,
+    onActivateCommand, onOpenCard, onProvenance, onShowTerminatedChange, showTerminated,
   } = props;
+  const columnsRef = useRef<HTMLDivElement | null>(null);
+  const [cursor, setCursor] = useState({ column: 0, row: -1 });
   const placed = (placement: BoardCardProjection["placement"]): readonly BoardCardProjection[] =>
     cards.filter((card) => card.placement === placement);
+  const isCollapsed = (column: BoardColumn): boolean =>
+    loading !== true && loadedEmptyColumns.includes(column) && placed(column).length === 0;
+  const visible = BOARD_COLUMNS.filter((column) => !isCollapsed(column));
+  const lanes = visible.map((column) => placed(column));
+
+  const moveTo = (column: number, row: number, open: boolean): void => {
+    const name = visible[column];
+    const lane = lanes[column];
+    if (name === undefined || lane === undefined) return;
+    const card = lane[row];
+    if (card === undefined) return;
+    setCursor({ column, row });
+    focusCardAt(columnsRef.current, name, row);
+    if (open) onOpenCard?.(card.nodeId);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const move = KEY_MOVES[event.key];
+    if (move === undefined) return;
+    event.preventDefault();
+    const [columnDelta, rowDelta, open] = move;
+    const column = clamp(cursor.column + columnDelta, visible.length - 1);
+    const lane = lanes[column] ?? [];
+    moveTo(column, clamp(rowDelta === 0 ? cursor.row : cursor.row + rowDelta, lane.length - 1),
+      open);
+  };
+
   const render: CardRenderProps = { onActivateCommand, onProvenance };
   return (
     <section aria-label="Board" data-testid="cr.surface.board">
@@ -167,14 +204,27 @@ export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
         onChange={(event) => { onShowTerminatedChange?.(event.target.checked); }}
         type="checkbox"
       />
-      <div data-testid="cr.board.columns">
+      <label htmlFor="cr-board-columnjump">Jump to column</label>
+      <select
+        data-testid="cr.board.columnjump"
+        id="cr-board-columnjump"
+        onChange={(event) => {
+          moveTo(visible.findIndex((column) => column === event.target.value), 0, false);
+        }}
+        value={visible[cursor.column] ?? ""}
+      >
+        {visible.map((column) => (
+          <option key={column} value={column}>{COLUMN_TITLES[column]}</option>
+        ))}
+      </select>
+      <div data-testid="cr.board.columns" onKeyDown={onKeyDown} ref={columnsRef} tabIndex={0}>
         {BOARD_COLUMNS.map((column) => (
           <Column
             {...render}
             cards={placed(column)}
+            collapsed={isCollapsed(column)}
             column={column}
             key={column}
-            loadedEmpty={loadedEmptyColumns.includes(column)}
             loading={loading === true}
           />
         ))}

@@ -1,0 +1,77 @@
+/*
+ * Board layout (spec 4.16 narrow-window behaviour, 11.1 accessibility).
+ *
+ * Selectors hang off the stable test-id grammar rather than presentational class
+ * names, so the layout contract and the assertion surface cannot drift apart.
+ *
+ * Narrow does not mean less: columns reflow and scroll horizontally, headings stay
+ * sticky so a scrolled lane is still identifiable, and the column-jump control gives
+ * the same reach without a pointer. Nothing on a card or an action is ever clipped or
+ * hidden - a truncated blocker reason or a hidden disabled action is exactly the
+ * dishonest view this file exists to prevent.
+ */
+
+[data-testid="cr.board.columns"] {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+}
+
+[data-testid^="cr.board.column."] {
+  flex: 0 0 18rem;
+  min-width: 18rem;
+}
+
+[data-testid^="cr.board.heading."] {
+  background: canvas;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* Focus is never thinner than 2px and never colour-only (11.1). */
+[data-testid^="cr.board.card."]:focus-visible,
+[data-testid^="cr.action."]:focus-visible,
+[data-testid="cr.board.columnjump"]:focus-visible,
+[data-testid="cr.board.columns"]:focus-visible {
+  outline: 2px solid highlight;
+  outline-offset: 2px;
+}
+
+/* Card and action content reflows; it is never clipped, ellipsised, or suppressed. */
+[data-testid^="cr.board.card."],
+[data-testid^="cr.board.actions."] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+@media (max-width: 959px) {
+  [data-testid="cr.board.columnjump"] {
+    left: 0;
+    position: sticky;
+  }
+
+  [data-testid="cr.board.columns"] {
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  [data-testid^="cr.board.column."] {
+    flex: 0 0 85vw;
+    min-width: 85vw;
+    scroll-snap-align: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="cr.board.columns"] {
+    scroll-behavior: auto;
+  }
+
+  [data-testid^="cr.board.card."] {
+    animation: none;
+    transition: none;
+  }
+}

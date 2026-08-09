@@ -108,7 +108,7 @@
     {
       "stepId": "step-6",
       "description": "TDD RED→GREEN for keyboard/narrow behavior and the authority boundary. Extend board-surface.test.tsx to assert exact focused node after j/k within a column, h/l and Left/Right across visible columns preserving/clamping row index, Enter opening that exact node, column-jump focusing its first card, and column-major DOM order with unequal/empty lanes. Add board-layout.css with horizontal overflow, sticky column headings, 2px-or-greater focus-visible rings, a column-jump control enabled below 960px, no hidden card/action content, and reduced-motion handling. Because jsdom does not apply viewport media queries, read the CSS from `process.cwd()` with a positive file anchor and pin `max-width: 959px`, overflow, and sticky declarations. Add goals-board-ban.test.ts with a nonzero exact canonical-production file set/import allow-list and bans on fixtures/data-adapter plus @moe/core/store/scheduler, lifecycle tables, and transition/authority derivation imports; assert the guard case count itself. Keep all tests/modules <400 lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/board/board-layout.css",
         "apps/control-room/src/board/board-surface.test.tsx",
@@ -117,7 +117,8 @@
       "newFiles": [
         "apps/control-room/src/board/board-layout.css",
         "apps/control-room/src/board/goals-board-ban.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T09:52:47.840Z"
     },
     {
       "stepId": "step-7",
@@ -164,7 +165,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T09:51:42.620Z",
+  "updatedAt": "2026-08-09T09:52:47.840Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:08:15.396Z",
     "plannedStepCount": 8,

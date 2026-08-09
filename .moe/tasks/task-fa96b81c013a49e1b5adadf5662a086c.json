@@ -15,13 +15,132 @@
     "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and pin before naming a symbol. Read design 8.2, which defines all three predicates verbatim and is the specification for this task: logical ready (every hard DependencyContract currently satisfied and no semantic/policy/evidence/unknown predicate holds), admission ready (phase/ownership, exact plan, NodeInputManifest, context, downstream-proof budget, capability and risk policy permit a claim), dispatchable (logical + admission + all required resources confirmed ACTIVE or atomically local, one provider slot atomically reservable, and no active lease, pause, supersession or reconciliation hold). It also fixes the explanation vocabulary: only a dispatchable node is READY_NOW; UNBLOCK_NEXT means EXACTLY ONE current typed predicate/artifact/resource confirmation remains AND its producer/recovery command is known; more than one remains fully enumerated but sorts AFTER one-step items; INTENTIONAL_WAIT requires a CURRENT wait record; anything missing, stale, incompatible or unresolvable is UNSAFE_OR_UNKNOWN, and UI optimism cannot place it nearer to ready. Then read in-repo: packages/scheduler/src/frontier.ts and the FrontierPartition / NodeAvailabilityFact / BlockedReason / BlockedNode / BlockedReasonCode block in packages/scheduler/src/graph-model.ts (lines ~244-305), and packages/scheduler/src/admission/admission-model.ts for the issue/refusal style this package already uses. Confirm none of READY_NOW, UNBLOCK_NEXT, INTENTIONAL_WAIT or UNSAFE_OR_UNKNOWN exists yet — measured at plan time they do not, so this task introduces that vocabulary. Produce no files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "readiness-model.ts — vocabulary only, no derivation. Declare: READINESS_CLASSES as a frozen array (READY_NOW, UNBLOCK_NEXT, INTENTIONAL_WAIT, UNSAFE_OR_UNKNOWN) with its derived union; READINESS_REASON_CODES, the closed typed-reason vocabulary covering each admission and dispatch input named in design 8.2 (phase/ownership, plan exactness, input manifest binding, context, downstream-proof budget, capability, risk policy, resource confirmation, provider slot, lease, pause, supersession, reconciliation hold); a FactConfidence union of exactly CONFIRMED_TRUE | CONFIRMED_FALSE | UNKNOWN — three arms, never a boolean, because graph-model.ts:247 states that `false` must never encode UNKNOWN and a two-arm type makes that error unrepresentable-by-accident impossible to avoid; a ReadinessReason record carrying code, layer, the offending nodeKey/edgeKey, and PROVENANCE (which supplied fact, its version and digest) since DoD 2 requires provenance and not just a code; and the LEGAL_CHOICES vocabulary from design 8.2 (retry predecessor, substitute a compatible approved result, propose a superseding rewire, cancel). REUSE BlockedReason, BlockedNode and BlockedReasonCode from ../graph-model.js rather than redeclaring them — graph-model.ts is NOT an owned path here, so extend around it, never edit it. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-model.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-model.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED — fact-parsing tests before readiness-facts.ts exists. @moe/scheduler declares NO dependencies at all (verified: its package.json has no dependencies field), so it cannot import @moe/runner's materialization or anything else. Every input — dependency truth, NodeInputManifest binding, policy, budget, lease, hold, resource confirmation, wait record — arrives as caller-supplied DATA and is structurally validated here. Tests: each fact parser returns CONFIRMED_TRUE, CONFIRMED_FALSE or UNKNOWN and NEVER coerces a malformed or absent fact to false — assert UNKNOWN explicitly for absent, malformed, wrong-typed, stale-versioned and null cases, with the specific reason code and the layer that refused; a hostile shape battery (null prototype violation, extra key, getter-bearing object, oversized list) refuses on the bound before any element read, following the budget-contract.ts:137 precedent; and a wait record that is not CURRENT does not yield INTENTIONAL_WAIT, because design 8.2 requires a current record and an expired one is UNKNOWN, not an intention.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN — readiness-facts.ts. Parse and classify every caller-supplied fact bundle into FactConfidence, one parser per input class named in design 8.2. Parse-then-validate with parsers returning null on hostile shapes so the caller picks code and layer, the convention this repo already uses. Absent, malformed, stale or unresolvable is UNKNOWN — never CONFIRMED_FALSE, which is a positive claim the caller did not make. Carry each fact's provenance (source ref, version, digest) through unchanged so the explanation layer can cite it. No derivation of readiness here; this module only says what is known. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.ts",
+        "packages/scheduler/src/readiness/readiness-facts.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "RED — three-layer projection tests, and THE CENTRAL TENSION OF THIS TASK is here. partitionFrontier already computes logicalReady / admissionReady / dispatchable, but it deliberately REFUSES to derive the two booleans it needs: NodeAvailabilityFact.admissionEligible and .dispatchAvailable are documented as 'supplied by the caller (never derived here)'. THIS ENGINE IS THAT CALLER — compose partitionFrontier, never reimplement it. Now the tension: graph-model.ts:255 instructs that if either availability value is unknown for ANY node the caller must withhold the ENTIRE partition so widths stay null, yet DoD 3 forbids unknown facts from hiding structurally ready work. Resolution to encode in tests: logicalReady derives from hard-edge satisfaction facts ALONE and does not depend on either availability boolean, so withholding the partition withholds only the admission and dispatch layers. THE DECIDING TEST: one node whose budget fact is UNKNOWN must NOT suppress the reported logical readiness of unrelated nodes — assert the unrelated nodes are still reported logically ready AND that the unknown node is absent from admissionReady and dispatchable AND that no availability boolean was fabricated. Also assert: a non-execution-bearing node is never dispatchable (frontier.ts already gates on executionBearing — reuse the flag, do not invent a second one); a resource wait changes dispatchable only and never logicalReady; and the three layers are proper subsets, dispatchable ⊆ admissionReady ⊆ logicalReady, asserted as set containment on a fixture where all three genuinely differ, since a fixture where they coincide proves nothing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN — readiness-projection.ts. Derive admissionEligible and dispatchAvailable per node from the classified facts, then call partitionFrontier with a cursor built ONLY from confirmed values. If any required fact is UNKNOWN for a node, do not fabricate a boolean for it: withhold the partition per the graph-model contract and report the admission and dispatch layers as UNKNOWN for that node, while still reporting the structural logical layer, which does not depend on availability. Return a frozen projection carrying all three layers plus the per-node confidence, so a consumer can tell 'not ready' from 'not known'. Compose the existing partitionFrontier and the existing BlockedNode output rather than recomputing hard-edge satisfaction. Keep under 250 lines; split the cursor builder into a sibling module before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "RED — explanation and classification tests before readiness-explanation.ts exists. This is DoD 2. Assert per class: READY_NOW is reachable ONLY by a dispatchable node — sweep every non-dispatchable state and assert none classifies READY_NOW; UNBLOCK_NEXT requires BOTH that exactly one typed confirmation remains AND that its producer or recovery command is known — write the two negative cases separately (one remaining but producer unknown, and two remaining with both producers known) so the conjunction cannot pass on one arm; INTENTIONAL_WAIT requires a CURRENT wait record; UNSAFE_OR_UNKNOWN absorbs missing, stale, incompatible and unresolvable truth. Ordering: a multi-predicate node is fully enumerated but sorts AFTER every one-step item — assert on a fixture containing both, and assert an UNSAFE_OR_UNKNOWN node is never ordered nearer to ready than a genuinely one-step node, which is design 8.2's 'UI optimism cannot place it nearer to ready'. Every blocked or idle node exposes typed reasons AND provenance — assert the provenance names the source ref, version and digest, not merely that a reason array is non-empty. A failed predecessor names the exact failed contract, the affected descendants, and the legal choices, while unrelated work stays eligible — assert the unrelated set explicitly.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GREEN — readiness-explanation.ts. Classify each node into exactly one READINESS_CLASSES member and attach its typed reasons with provenance. Enumerate remaining predicates in full even when there is more than one; order one-step items ahead of multi-step, and never order an UNSAFE_OR_UNKNOWN node ahead of either. For a failed predecessor emit the exact failed contract, the affected descendant set, and the LEGAL_CHOICES list. Return frozen results. This module explains; it does not decide readiness — the projection already did that, and recomputing here would create a second source of truth that could disagree with the first. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Runtime bridges. Every non-test module in packages/scheduler/src has a tracked sibling .js bridge and the package has no build step, so each new readiness module needs one: readiness-model.js, readiness-facts.js, readiness-projection.js, readiness-explanation.js, plus one for any module split out along the way. Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — copy an existing scheduler bridge rather than typing it fresh. Test files get NO bridge. Then verify: the audit loop over packages/scheduler/src/readiness reports zero MISSING and zero UNEXPECTED, and a plain-Node probe from the repo root imports @moe/scheduler and still resolves — vitest resolves ./foo.js back to foo.ts and is structurally blind to a missing bridge, so the package gate is not evidence here (mem:gotcha-scheduler-js-shims, mem:gotcha-vitest-hides-missing-js-bridge). Check the written bytes too: final byte 0x0A, no 0x0D anywhere.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/*.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/readiness/*.js"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verification and mutation drill. Run pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test and state before/after test AND suite counts as explicit numbers — count suites too, because a file that fails to parse reports zero tests and reads as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax). Then mutation-verify the load-bearing assertions one at a time, restoring between each: (a) coerce an UNKNOWN fact to CONFIRMED_FALSE — the deciding DoD-3 test must go red; (b) drop the withhold branch so an unknown availability fabricates a boolean into the cursor; (c) let a non-execution-bearing node reach dispatchable; (d) drop the 'producer known' arm of UNBLOCK_NEXT; (e) drop the CURRENT check on the wait record; (f) sort a multi-predicate node ahead of a one-step node; (g) collapse admissionReady into logicalReady. Every one must go red. A green mutation means that assertion has detached from its subject — fix the test, not the count. Verify each restore with git diff on the specific file rather than git status, since in this shared working directory another agent's whole-tree hook can commit a drill edit and leave status looking clean (mem:mutation-drills-in-shared-worktree). Finally assert the closed-vocabulary sweep: every READINESS_REASON_CODES member is reachable from a real production surface and the observed set EQUALS the declared set, so an unreachable code fails the suite.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts",
+        "packages/scheduler/src/readiness/readiness-facts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an operator who will be misled by it. Can any path collapse two readiness layers — trace every return that sets dispatchable and confirm it also required admission and logical. Can an UNKNOWN fact ever produce a STRONGER readiness than the same fact confirmed false? Can a node reach READY_NOW without being dispatchable? Is any availability boolean written from a value that was not CONFIRMED? Does the explanation layer recompute any readiness decision the projection already made, creating a second source of truth? Is every returned object frozen, including nested reason arrays? Does anything here edit graph-model.ts or frontier.ts — `git diff --stat` must show changes ONLY under packages/scheduler/src/readiness/. Confirm each production file is under 250 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe or scratch file remains. Then commit by explicit pathspec only — `git status --porcelain` first, confirm every staged entry is under packages/scheduler/src/readiness/, unstage anything foreign with `git restore --staged --`, then `git commit -- packages/scheduler/src/readiness` and verify with `git show --stat`. Never a bare git commit; several agents share this index.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-model.ts",
+        "packages/scheduler/src/readiness/readiness-facts.ts",
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. CLEAN dependency pass, not pipelined: both named hard dependencies verified DONE — Anti-blocking admission (task-84e875f9) and Predecessor input materializer (task-e17da1c9, QA-approved and DONE at 09:37 today). Epic-e0c54bdd. This is the next link in that epic's chain and promoting it matters beyond itself: Fair scheduler production (task-10cab3e5) names it as its sole task-shaped dependency, and behind that sit Expansion admission protocol, Fan-in integration pipeline, Same-bug circuit breaker and Graph supersession engine. That epic has been fully stalled behind Predecessor input materializer until today. ARCHITECT: task-e17da1c9 landed hours ago, so verify its materializer surface on disk before naming symbols rather than planning against its task description.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +148,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.026Z",
-  "updatedAt": "2026-08-07T11:53:10.026Z"
+  "updatedAt": "2026-08-09T10:07:45.348Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T10:04:33.189Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-8a4a1764"
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T10:07:43.282Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — writing a fresh three-layer partitioner. It is what the task title suggests, and it is a duplicate: packages/scheduler/src/frontier.ts already computes logicalReady / admissionReady / dispatchable / blocked with the exact non-collapse discipline DoD 1 demands, and graph-model.ts:283-296 documents it. A second implementation would be a competing source of truth for the same predicate.\n\nCHOSEN — be the caller partitionFrontier is waiting for. NodeAvailabilityFact.admissionEligible and .dispatchAvailable are documented 'supplied by the caller (never derived here)'. Deriving those two booleans from dependency truth, input manifest, policy, budget, leases and holds — and explaining the result — is exactly the hole in the existing surface and exactly this task's objective.\n\nREJECTED — importing the materializer to read input state. @moe/scheduler declares NO dependencies at all (its package.json has no dependencies field), so it cannot import @moe/runner. The NodeInputManifest binding arrives as caller-supplied data and is structurally validated here — the same discipline the materializer itself used for the dependency contract.\n\nREJECTED — a boolean for fact state. FactConfidence has three arms (CONFIRMED_TRUE | CONFIRMED_FALSE | UNKNOWN) because graph-model.ts:247 states `false` must never encode UNKNOWN. With a boolean that rule is a convention someone must remember; with three arms it is a type error.",
+    "codebaseInsights": "DESIGN 8.2 IS THE SPEC, verbatim, and should not be re-derived: three predicates (logical ready / admission ready / dispatchable) with their exact input lists, 'only a dispatchable node is in READY_NOW', UNBLOCK_NEXT = exactly one confirmation remaining AND its producer/recovery command known, more-than-one enumerated but sorted after one-step items, INTENTIONAL_WAIT requires a CURRENT wait record, everything missing/stale/incompatible/unresolvable is UNSAFE_OR_UNKNOWN, and 'UI optimism cannot place it nearer to ready'. It also gives the legal-choice list for a failed predecessor: retry predecessor, substitute a compatible approved result, propose a superseding rewire, cancel.\n\nWHAT ALREADY EXISTS — partitionFrontier (frontier.ts:71) and, in graph-model.ts, FrontierCursor, NodeAvailabilityFact, FrontierPartition, BlockedNode, BlockedReason and BlockedReasonCode (currently just HARD_DEPENDENCY_UNSATISFIED | HARD_DEPENDENCY_UNKNOWN). frontier.ts:361 already gates on node.executionBearing, which is DoD 1's 'non-execution nodes receive no execution authority' — reuse that flag rather than inventing a second one.\n\nWHAT DOES NOT EXIST — verified by grep: READY_NOW, UNBLOCK_NEXT, INTENTIONAL_WAIT and UNSAFE_OR_UNKNOWN appear nowhere in packages/scheduler/src. This task introduces that vocabulary.\n\nOWNERSHIP EDGE — graph-model.ts and frontier.ts are NOT owned here (owned path is packages/scheduler/src/readiness/** only). Reuse their exports; never edit them. If BlockedReasonCode genuinely needs a new member, that is a separate task, not a quiet edit.\n\nSTYLE PRECEDENT — packages/scheduler/src/admission/admission-model.ts for the issue/refusal/deepFreeze/sortIssues shape and MAX_ADMISSION_ITEMS-style bounds; budget-contract.ts:137 for applying a length ceiling before any element read.\n\nBRIDGES — every non-test module in packages/scheduler/src has a tracked .js sibling and the package has no build step, so new readiness modules need them in the same commit.",
+    "risks": "THE CENTRAL TENSION, and the thing to get right. graph-model.ts:255 says that if either availability value is unknown for ANY node the caller must withhold the ENTIRE frontier partition rather than fabricate a narrower ready set. DoD 3 says unknown facts must not hide structurally ready work. These pull against each other and the resolution is the point of the three-layer design: logicalReady derives from hard-edge satisfaction ALONE and never touches an availability boolean, so withholding the partition withholds only admission and dispatch. Encode it as the deciding test — one node with an UNKNOWN budget fact must not suppress reported logical readiness of unrelated nodes — and mutation (a) is written to fail loudly if it regresses.\n\nTHE FABRICATION RISK — the easy bug is writing `admissionEligible: someFact === true`, which silently turns UNKNOWN into false. That is a positive claim the caller never made, it makes a node look definitively not-ready rather than not-known, and it is invisible to any test that only checks the ready set. FactConfidence's three arms exist to make it a type error; do not unwrap it early.\n\nCONJUNCTION TESTS PASS ON ONE ARM — UNBLOCK_NEXT requires exactly-one-remaining AND producer-known. A single negative case can pass while only one arm is implemented, so the plan writes both negatives separately.\n\nA SUBSET FIXTURE THAT PROVES NOTHING — dispatchable ⊆ admissionReady ⊆ logicalReady is trivially true when all three sets coincide. The fixture must make all three genuinely differ.\n\nSECOND SOURCE OF TRUTH — the explanation layer must not recompute readiness; if it does, it can disagree with the projection and both will look correct in isolation. It explains a decision already made.\n\nDO NOT EDIT graph-model.ts OR frontier.ts. They are outside the owned path and are load-bearing for existing suites; `git diff --stat` must show changes only under readiness/."
+  },
+  "budget": {
+    "wallClockMs": 9900000
+  },
+  "planApprovedAt": "2026-08-09T10:07:45.348Z"
 }

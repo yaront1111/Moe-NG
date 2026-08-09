@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor: genuinely not ready — returning to BACKLOG so it stops occupying the board. Verified: packages/runner/src/providers does not exist in git at all, so there is no Claude provider contract to match. Its own DoD requires effect identity, cancellation and crash reconciliation to MATCH that contract. Claude runtime adapter is PLANNING with no code; External effect supervisor is BACKLOG. This was my error — I moved it labelled dependency-clean because my audit filter matched only the plural \"Hard dependencies:\" while this task uses the singular \"Hard dependency:\". Re-queue when packages/runner/src/providers/claude is committed.",
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. NOW A CLEAN DEPENDENCY PASS — this task has been hard-blocked since the board began and its clause finally resolves. Its stated hard dependency is \"proven Claude adapter contract and Foundation effect supervisor\". Claude runtime adapter (task-5ff2b39d) has been DONE for some time. \"Foundation effect supervisor\" resolves to task-312c1de3, which I closed minutes ago on the strength of its four QA-approved SPIDR children (task-2580a578, task-4a3b5ec0, task-ba3a45f9, task-49acb856 — all DONE). ARCHITECT, TWO THINGS BEFORE YOU PLAN. (1) The supervisor is real code, not a promise: read packages/runner/src/supervisor/ on disk — effect-kernel, effect-shape, effect-parse, effect-lifecycle, effect-grant, effect-activation, lease-mirror, launch-lock, drain-reconciliation, drain-table, restart-reconstruction and their tests. Verify the symbols you intend to name; do not plan against the parent shell's description, which never described code. (2) Mirror the Claude adapter rather than inventing a shape: packages/runner/src/providers/claude/ is the proven contract this task's own description points at (claude-probe, claude-observation, claude-cancel-reconcile, claude-render, claude-stream). Owned paths are packages/runner/src/providers/codex/** and packages/testkit/src/providers/codex/**, both greenfield, so no collision with anything in flight. NOTE the runner package convention: it now HAS .js bridges (45+, added by task-eb9ff081), so unlike the original claude modules your new files DO need sibling bridges — and task-535e773b is landing a repo-wide runtime-loadability gate that will enforce it. DOWNSTREAM: this task gates task-e87a7353 (Linux effect conformance) and task-e94b2055 (macOS effect conformance), the last two hard-blocked tasks in epic-f02c6977.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-07T20:25:39.769Z",
+  "updatedAt": "2026-08-09T10:06:27.514Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:02:08.922Z"
   },

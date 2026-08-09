@@ -15,8 +15,120 @@
     "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Read design section 21 and transcribe the specification by hand before writing anything. Lines 1273-1290 of the pinned design are the authority for this task (read-only — epic rail 1 forbids editing it). Transcribe, into the step note, exactly what items 2, 3, 4, 5, 6 and 7 require: hash every source file and emit a manifest BEFORE import, never changing source content or mtime; preserve raw source digests/blobs and import provenance; never activate a legacy assignment or resource claim, importing it as historical/suspended; import legacy containment and dependsOn-style links ONLY as historical CONTAINS|RELATED evidence that never becomes a hard edge, blocker or hold; report exact counts plus unknown fields, dangling refs, cycles, split ownership, corrupt/invalid bytes and case/path conflicts, with ambiguity becoming NEEDS_RECONCILIATION and never a guess; and derive imported IDs, ordering, provenance times and canonical payloads from source digests and the manifest rather than wall-clock import time, so identical bytes produce identical canonical hashes and an interrupted import commits wholly or not at all. Confirm items 9-13 (cutover preview, quiesce, activate) are NOT in scope. Also confirm on disk that packages/import/ and tests/migration/ do not exist and that `pnpm test:migration` is absent from root scripts. Produce no code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "OWNERSHIP AMENDMENT plus package scaffold. The task's stated verification is `pnpm test:migration`, which does not exist in root package.json — and root package.json is outside this task's owned paths (packages/import/**, tests/migration/import/**). Request the amendment naming the exact one-line script addition, following the existing `test:property` precedent (`vitest run tests/property`), and WAIT for confirmation; do not self-approve. Verify before and after that the existing `pnpm test` covers the same suite set, since silently widening or narrowing the repo-wide gate would affect every other task's evidence. Then scaffold packages/import from the @moe/scheduler template: private ESM package @moe/import, `exports: {\".\": \"./src/index.ts\"}`, typecheck and test scripts, and a tsconfig extending ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"] and its own tsBuildInfoFile. pnpm-workspace.yaml globs packages/* so it needs no edit; confirm `git diff --stat pnpm-lock.yaml` shows only the single new importer entry, since that file is shared with every in-flight task. Confirm the empty package typechecks before writing logic.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/package.json",
+        "pnpm-lock.yaml",
+        "package.json"
+      ],
+      "newFiles": [
+        "packages/import/package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Define the closed vocabulary as exported frozen data. Create packages/import/src/import-contract.ts holding: pinned version literals for the source manifest and the canonical import record; the SEVEN ambiguity classes from design 21.6 as a frozen list — UNKNOWN_FIELD, DANGLING_REF, CYCLE, SPLIT_OWNERSHIP, CORRUPT_BYTES, CASE_PATH_CONFLICT and the counts reconciliation — each mapping to the single outcome NEEDS_RECONCILIATION; the closed refusal-code list; the provenance record shape (source digest, source path, source-declared time or the manifest's deterministic sentinel, and the manifest digest that binds them); and the imported-status vocabulary where legacy claims land as HISTORICAL or SUSPENDED with NO active arm expressible, so design 21.4's 'never activate' is enforced by the type rather than by a check. Also define the legacy-link kinds as exactly CONTAINS and RELATED, both marked historical evidence, with no arm that could express a hard edge, blocker or hold. Data and types only.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-contract.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/import-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red, then implement the read-only source manifest — design 21.2. Create packages/import/src/source-manifest.ts which walks a frozen source tree, hashes every file, and emits a manifest binding each path to its digest and size. TWO PROPERTIES DECIDE THIS MODULE. First, DETERMINISTIC ORDER: `readdir` order varies by filesystem, platform and inode reuse, so sort every listing by an explicit total order over a stable key before hashing — this is the single most likely cause of a DoD-1 failure and it will not reproduce on the machine that wrote the code. Second, READ-ONLY PROVEN BY MEASUREMENT: snapshot every source file's digest AND mtime before and after, and assert both unchanged, because a tool that rewrites a file with identical bytes still bumps mtime and violates design 21.2. Assert the manifest is byte-identical across two runs over the same tree, and that a manifest over a tree differing by one byte differs. No clock and no randomness anywhere.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/source-manifest.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/source-manifest.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement canonical derivation — design 21.7, the heart of DoD 1. Create packages/import/src/import-canonical.ts deriving imported IDs, record ordering, provenance times and canonical event payloads FROM THE SOURCE DIGESTS AND MANIFEST, never from wall-clock import time. Imported IDs are a pure function of source identity plus the manifest digest, so the same source always yields the same id and two different sources cannot collide. Provenance time is the source record's own declared time, or the manifest-defined deterministic sentinel when the source has none — never `Date.now()`. Ordering is an explicit total order over a stable key, never insertion or filesystem order. Counters are safe-integer numbers and bytes are base64 or content-addressed refs, because the canonical digest helpers throw on bigint and non-safe integers and mishandle Uint8Array. Give this module and every other production module in this package its one-line `.js` bridge as you go — five packages shipped this epic without them and were unloadable under plain Node; a repo-wide loadability gate now probes every package, and this one should not be the sixth instance.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-canonical.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/import-canonical.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement ambiguity classification — design 21.6 and DoD 2. Create packages/import/src/import-reconcile.ts classifying every record it cannot import unambiguously, returning a typed outcome rather than throwing: the import still completes and reports. Each of the seven classes gets its own detection and its own fixture, because a single 'bad input' case would let six regress unseen: unknown fields, dangling references, cycles, split ownership, corrupt or invalid bytes, case/path conflicts, and exact-count reconciliation. CASE/PATH CONFLICT DESERVES PARTICULAR CARE and is not theoretical on this platform: `Foo.json` and `foo.json` cannot coexist on NTFS but can in a legacy tree copied from another OS, and letting one silently overwrite the other is a data-loss bug that still produces a stable hash — detect and classify it. Every ambiguous record is preserved with its typed provenance and lands as NEEDS_RECONCILIATION; nothing is guessed and nothing is dropped. Assert the classification sweep covers all seven declared classes and that its case count is non-zero.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/import-reconcile.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Implement atomic application — design 21.7's all-or-nothing half and DoD 3. Create packages/import/src/import-apply.ts writing the canonical import into the store through @moe/store's existing transactional seam; COMPOSE that seam rather than inventing a second transaction discipline, since the store already commits all-or-nothing under BEGIN IMMEDIATE with crash behaviour that was drilled directly by the projection crash and rebuild work. Nothing imported may be active: claims land HISTORICAL or SUSPENDED per design 21.4, and legacy links land as CONTAINS or RELATED historical evidence per 21.5, never as a hard edge, blocker or hold. Assert that against the PRODUCTION surface — an imported record must not be able to yield an active lease or a dependency edge, checked through the real API rather than a test helper that restates the rule. Then create packages/import/src/index.ts publishing the curated surface a caller needs to run an import and read its reconciliation report.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "The determinism and atomicity suite — DoD 1 and DoD 3, proven by behaviour rather than by inspection. Create tests/migration/import/import-determinism.test.ts over a real fixture tree. DoD 1: import the SAME fixture twice and assert byte-identical results — identical imported IDs, identical event ordering, identical database and export hashes, and identical counts. Do not assert this by grepping the source for `Date.now`; assert it by comparing two full runs, which is the only form that catches a nondeterministic `readdir` order or a Set iteration leaking into output. Strengthen it with a second import into a FRESH database to prove the hash does not depend on prior state. DoD 3: interrupt an import mid-flight and assert BOTH halves — no partial rows survive in the database, AND every source file's digest and mtime are unchanged, since a rollback that corrupts the source is still a failure. Add the negative determinism control: a fixture differing by ONE byte must produce a DIFFERENT canonical hash, otherwise the hash is not actually covering the content.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/migration/import/import-determinism.test.ts"
+      ],
+      "newFiles": [
+        "tests/migration/import/import-determinism.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Prove the guarantees are load-bearing, and sweep for the things that silently destroy determinism. MUTATION DRILL at each mechanism's single source: the directory sort comparator, the id-derivation input, the provenance-time selection, the case/path conflict detector, the never-activate constraint, and the transaction boundary. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line expression is a syntax error that reddens the suite for the wrong reason and proves nothing. The comparator mutation matters most: replacing the total order with a constant must redden the two-run determinism test, and if it does not, DoD 1 is untested no matter how green the suite looks. Because this worktree is shared and another agent's completion hook can commit your mutation, capture `git rev-parse HEAD:<path>` before each drill and verify the restore against that sha rather than `git status`. Then the determinism sweep: grep the package for Date.now, new Date(, Math.random, uuid, and any sort without an explicit comparator, and confirm zero hits — a single one makes DoD 1 unprovable and will surface as a flaky hash days later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-canonical.ts",
+        "packages/import/src/source-manifest.ts",
+        "packages/import/src/import-reconcile.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Run the gates and verify the package loads outside vitest. Run fresh, capturing real output: `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test`, then the task's named gate `pnpm test:migration`, then root `pnpm typecheck`. Because packages/import and tests/migration did not exist before this task, a filter or path miss looks exactly like a passing run with zero tests — so assert the runs actually executed your suites by checking the reported file and test counts are non-zero, and treat 'No test files found' as a FAILURE of this step, not a pass. Then the loadability check this epic has been bitten by five times: run a plain-Node probe from the repo root importing `./packages/import/src/index.ts` with `--experimental-strip-types`, alongside a known-good control (@moe/scheduler or @moe/store source entry) so a cwd mistake cannot read as a defect, and confirm every export is defined rather than merely that the import resolved. If it fails, the missing `.js` bridges are yours to add here — unlike the retrofit sweeps, a package created in this task ships correct rather than joining the backlog.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/package.json"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can ANY output depend on wall-clock time, filesystem order, Set or Map iteration order, or object key order — the four silent determinism killers; would two machines importing identical bytes agree, and is that proven by two real runs rather than by reading the code; is any source file's content or mtime modified on ANY path including the failure and interrupt paths; can an imported claim or link become active, a hard edge, a blocker or a hold by any route; are all seven ambiguity classes detected, or does one quietly fall through to a guess; does an interrupted import leave partial rows; does the one-byte-difference control actually produce a different hash. Then stage and commit by EXPLICIT PER-FILE pathspec — never a bare git commit, never git commit -a, never git add -A, never a directory — since many agents share this working directory. Root package.json and pnpm-lock.yaml are committed only if step 2's amendment was granted, and the lock must show only the single expected hunk. Run `git status --porcelain` first, unstage foreign paths with `git restore --staged`, and verify with `git show --stat` that only owned paths landed, with no probe, scratch, fixture-scratch or debug files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -36,5 +148,34 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-09T09:03:39.560Z"
+  "updatedAt": "2026-08-09T10:07:41.176Z",
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T10:07:39.151Z",
+  "metrics": {
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 10
+  },
+  "planningNotes": {
+    "approachesConsidered": "(1) DETERMINISM COMES FROM DIGESTS, NOT FROM CARE. Design 21.7 is explicit: imported IDs, ordering, provenance times and canonical event payloads derive from source digests and the manifest, NEVER from wall-clock import time. So the design is a pure function from (frozen source bytes) to (canonical import), with the clock and the filesystem pushed to the edges. That is what makes DoD 1 provable rather than merely likely: the same bytes imported twice on two machines must produce byte-identical output, and the test asserts it by importing the SAME fixture twice and comparing canonical hashes, not by inspecting the code for `Date.now`.\n(2) READ-ONLY IS A PROPERTY OF THE SOURCE, AND MUST BE PROVEN, NOT PROMISED. Design 21.2 says never change source content or mtime. The proof is a before/after digest AND mtime snapshot of every source file, asserted unchanged after a full import, an interrupted import, and a failed import. A code review saying 'we only call readFile' is not that proof.\n(3) AMBIGUITY IS A FIRST-CLASS OUTCOME, NOT AN ERROR. Design 21.6 enumerates SEVEN classes (unknown fields, dangling refs, cycles, split ownership, corrupt bytes, case/path conflicts, plus exact counts) and says ambiguity becomes NEEDS_RECONCILIATION, never a guess. So the reconciler returns a typed classification per record and the import still completes; it does not throw. Each of the seven gets its own fixture, because a single 'bad input' case would let six of them regress unseen.\n(4) ATOMICITY REUSES THE STORE, IT DOES NOT REIMPLEMENT IT. @moe/store already commits all-or-nothing under BEGIN IMMEDIATE with proven crash behaviour (the projection crash/rebuild work drilled exactly this). The importer composes that seam rather than inventing a second transaction discipline.\n(5) WHY A NEW PACKAGE RATHER THAN A DAEMON SERVICE: owned paths say packages/import/**, the importer must be drivable offline with no daemon running, and M4 rail 1 says portability consumes frozen contracts rather than forking them.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-09:\n- **`packages/import/` DOES NOT EXIST and `tests/migration/` DOES NOT EXIST.** Both are created by this task, so it collides with nothing.\n- **`pnpm test:migration` IS ABSENT.** Root scripts today: typecheck, test, test:meta, test:property, test:e2e, test:store, verify:foundation, verify:store. This task's stated verification names test:migration, so adding it edits root package.json — outside the owned paths (`packages/import/**`, `tests/migration/import/**`) and therefore an ownership amendment. `test:property` (`vitest run tests/property`) is the precedent to copy for a lane rooted outside packages.\n- **Both stated hard dependencies exist**: `packages/store/src/sqlite-schema-migration.ts` (SCHEMA_VERSION, STORE_MIGRATION_REQUIRED, `PRAGMA user_version`) and the artifact CAS at `packages/runner/src/artifacts/artifact-store.ts` (createArtifactStore, ArtifactRef, refMatches, refRejection, ARTIFACT_ADDRESS_PATTERN, sha256Hex, ArtifactFsPort).\n- **Scaffold template**: `packages/scheduler/package.json` — private ESM, `exports: {\".\": \"./src/index.ts\"}`, scripts `typecheck: tsc --project tsconfig.json` and a vitest script rooted at the repo; tsconfig extends `../../tsconfig.base.json` with rootDir src, types [\"node\"], include [\"src/**/*.ts\"], own tsBuildInfoFile. `pnpm-workspace.yaml` globs `packages/*`, so a new package needs NO workspace-file edit — only a single pnpm-lock.yaml importer entry.\n- **THE BRIDGE RULE, and this package will be judged on it**: five packages shipped this epic with zero `.js` bridges and were unloadable under plain Node; there is now a repo-wide loadability gate task (task-535e773b) that will probe every workspace package. Give this package its `.js` bridges AS YOU GO — one line, `export * from \"./<name>.ts\";`, LF, trailing newline — rather than shipping a sixth instance of that defect. Test files and `*-test-fixtures.ts` / `*-test-helpers.ts` get none.\n- **Design 21 is the specification**, lines 1273-1290 of the pinned design (read-only; epic rail 1). Items 2, 3, 4, 5, 6 and 7 are the ones this task implements; items 9-13 (cutover preview/quiesce/activate) are explicitly NOT in scope.\n- **Determinism helpers per package**: `packages/runner/src/canonical.ts` shows the local pattern (canonicalJson, canonicalDigest, deepFreeze). canonicalDigest THROWS on bigint and non-safe-integer numbers, and canonicalJson mishandles Uint8Array — so counters are safe-integer numbers and bytes are base64 or content-addressed refs.",
+    "risks": "1. **A CLOCK OR A RANDOM SOURCE ANYWHERE DESTROYS THE ENTIRE DELIVERABLE.** No Date.now, no Math.random, no `new Date()`, no uuid. Provenance times come from the source record's own time or a manifest-defined deterministic sentinel (design 21.7). Grep for all of them before the gate; a single one makes DoD 1 unprovable and the defect will surface as a flaky hash days later.\n2. **Filesystem ORDER IS NOT DETERMINISTIC.** `readdir` order varies by filesystem, platform and even inode reuse. Sort every directory listing by an explicit total order over a stable key before hashing or importing, or two machines will produce different canonical output from identical bytes. This is the single most likely source of a DoD-1 failure.\n3. **WINDOWS CASE-INSENSITIVITY IS A REAL AMBIGUITY CLASS, not a theoretical one.** `Foo.json` and `foo.json` cannot coexist on NTFS but can in a legacy source copied from another OS. Design 21.6 names case/path conflicts explicitly — detect and classify them as NEEDS_RECONCILIATION rather than letting one silently overwrite the other, which would be a silent data-loss bug that still produces a stable hash.\n4. **Proving read-only requires mtime, not just content.** Design 21.2 says never change content OR mtime intentionally. Snapshot both before and after; a tool that rewrites a file with identical bytes still bumps mtime and violates the promise.\n5. **The seven ambiguity classes each need their own fixture.** One 'malformed input' case would let six regress unseen. Assert the classification count is non-zero and that every declared class is exercised (epic rail 6).\n6. **Atomicity must be proven by interruption, not by inspection.** Assert that an import interrupted mid-flight leaves NO partial rows AND leaves source bytes untouched — both halves, since a rollback that corrupts the source is still a failure.\n7. **Never activate anything** (design 21.4/21.5). Imported claims are historical/suspended; legacy links import as CONTAINS|RELATED historical evidence and never become a hard edge, blocker or hold. Assert that an imported record cannot yield an active lease or a dependency edge — against the production surface, not a helper.\n8. Root package.json and pnpm-lock.yaml are shared with every in-flight task; single-hunk changes, verified with `git diff --stat`, committed by explicit pathspec.",
+    "keyFiles": [
+      "packages/scheduler/package.json",
+      "packages/scheduler/tsconfig.json",
+      "package.json",
+      "packages/store/src/sqlite-schema-migration.ts",
+      "packages/runner/src/artifacts/artifact-contract.ts",
+      "packages/runner/src/canonical.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 28800000
+  },
+  "planApprovedAt": "2026-08-09T10:07:41.176Z"
 }

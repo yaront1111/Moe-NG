@@ -16,13 +16,7 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
-function at<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  if (item === undefined) throw new Error(`corpus entry ${index} is missing`);
-  return item;
-}
-
-const obs = (value: string): PresentedFact => ({ truthClass: "OBSERVED", value });
+const obs =(value: string): PresentedFact => ({ truthClass: "OBSERVED", value });
 const ver = (value: string): PresentedFact => ({ truthClass: "DAEMON_VERIFIED", value });
 
 /** Declared card fact kinds, hand-written so production cannot define its own oracle. */
@@ -172,21 +166,18 @@ describe("board columns are the daemon's supplied placement, not a client phase 
     expect(screen.getByTestId("cr.board.card.UNKNOWN")).toBeTruthy();
   });
 
-  it("keeps the exact phase and source aggregate of same-spelled states apart", () => {
+  it("keeps phase, source aggregate, and supplied placement independent of each other", () => {
     renderBoard();
-    const planned = screen.getByTestId("cr.board.card.same-spelled-a");
-    const ready = screen.getByTestId("cr.board.card.same-spelled-b");
     expect(valueOf("node.same-spelled-a.phase")).toBe("READY");
     expect(valueOf("node.same-spelled-b.phase")).toBe("READY");
-    expect(planned.getAttribute("data-source-aggregate")).toBe("PlanningRun");
-    expect(ready.getAttribute("data-source-aggregate")).toBe("WorkItem");
-    expect(cardIdsIn(screen.getByTestId("cr.board.column.plan"))).toContain("same-spelled-a");
+    expect(screen.getByTestId("cr.board.card.same-spelled-a")
+      .getAttribute("data-source-aggregate")).toBe("PlanningRun");
+    expect(screen.getByTestId("cr.board.card.same-spelled-b")
+      .getAttribute("data-source-aggregate")).toBe("WorkItem");
+    const plan = cardIdsIn(screen.getByTestId("cr.board.column.plan"));
+    expect(plan).toContain("same-spelled-a");
     expect(cardIdsIn(screen.getByTestId("cr.board.column.ready"))).toContain("same-spelled-b");
-  });
-
-  it("honours a placement that contradicts the phase, and still shows the phase", () => {
-    renderBoard();
-    expect(cardIdsIn(screen.getByTestId("cr.board.column.plan"))).toContain("contradiction");
+    expect(plan).toContain("contradiction");
     expect(cardIdsIn(screen.getByTestId("cr.board.column.executing"))).not.toContain(
       "contradiction",
     );
@@ -196,8 +187,8 @@ describe("board columns are the daemon's supplied placement, not a client phase 
   it("retains an unplaced record in the unmapped region instead of guessing a lane", () => {
     renderBoard();
     expect(cardIdsIn(screen.getByTestId("cr.board.unmapped"))).toEqual(["ghost"]);
-    for (const column of COLUMNS) {
-      expect(cardIdsIn(screen.getByTestId(`cr.board.column.${column}`))).not.toContain("ghost");
+    for (const col of COLUMNS) {
+      expect(cardIdsIn(screen.getByTestId(`cr.board.column.${col}`))).not.toContain("ghost");
     }
   });
 
@@ -232,16 +223,12 @@ describe("board lanes stay honest while loading, empty, and degraded", () => {
     expect(screen.getByTestId("cr.board.empty.executing").textContent).toBe("Nothing executing");
   });
 
-  it("labels last-known cards with the applied cursor rather than looking current", () => {
+  it("labels last-known cards as of the applied cursor, and mounts no graph canvas", () => {
     renderBoard({ appliedCursorLabel: "#4821", degraded: true });
     const note = screen.getByTestId("cr.board.asof");
     expect(note.textContent).toBe("Showing last-known cards as of #4821");
     expect(note.getAttribute("role")).toBe("status");
     expect(cardIdsIn()).toEqual([...VISIBLE_ORDER]);
-  });
-
-  it("is the first surface the shell shows, and mounts no graph canvas", () => {
-    renderBoard();
     expect(screen.getByTestId("cr.shell.tab.board").getAttribute("aria-pressed")).toBe("true");
     expect(within(screen.getByTestId("cr.shell.main")).getByTestId("cr.surface.board")).toBeTruthy();
     expect(document.querySelectorAll("[data-testid^='cr.graph.']")).toHaveLength(0);
@@ -317,8 +304,7 @@ describe("board summaries and actions repeat the daemon verbatim", () => {
   it("renders every supplied frontier lane with its cursor, epoch, capacity, and reason", () => {
     renderBoard();
     expect(FRONTIER.length).toBe(4);
-    for (const lane of FRONTIER) expect(screen.getByTestId(`cr.board.frontier.${lane.lane}`))
-      .toBeTruthy();
+    for (const l of FRONTIER) expect(screen.getByTestId(`cr.board.frontier.${l.lane}`)).toBeTruthy();
     expect(valueOf("frontier.READY_NOW.summary")).toBe("2 nodes ready now");
     expect(valueOf("frontier.READY_NOW.cursor")).toBe("#4821");
     expect(valueOf("frontier.READY_NOW.graphepoch")).toBe("epoch 12");
@@ -346,7 +332,7 @@ describe("board summaries and actions repeat the daemon verbatim", () => {
     ]);
     await userEvent.click(screen.getByTestId("cr.action.blocker-open"));
     expect(activated).toHaveLength(1);
-    expect(at(activated, 0)).toBe(BLOCKER_OPEN);
+    expect(activated[0]).toBe(BLOCKER_OPEN);
     cleanup();
     renderBoard({}, affordance([FOREIGN]));
     expect(document.querySelectorAll("[data-testid^='cr.action.']")).toHaveLength(0);
@@ -366,5 +352,48 @@ describe("board summaries and actions repeat the daemon verbatim", () => {
     await userEvent.click(button);
     await userEvent.click(button);
     expect(activated).toEqual([]);
+  });
+});
+
+describe("board keyboard walks the supplied lanes in column-major order", () => {
+  const focusColumns = (): void => { screen.getByTestId("cr.board.columns").focus(); };
+  const focused = (): string | null =>
+    document.activeElement?.getAttribute("data-board-card") ?? null;
+
+  it("moves within a lane with j/k, clamps at its end, and opens the focused node", async () => {
+    const opened: string[] = [];
+    renderBoard({ onOpenCard: (nodeId) => opened.push(nodeId) });
+    focusColumns();
+    await userEvent.keyboard("j");
+    expect(focused()).toBe("plan-doc");
+    await userEvent.keyboard("jjj");
+    expect(focused()).toBe("contradiction");
+    await userEvent.keyboard("k{Enter}");
+    expect(opened).toEqual(["same-spelled-a"]);
+  });
+
+  it("moves across visible columns with h/l and arrows, clamping the row", async () => {
+    renderBoard();
+    focusColumns();
+    await userEvent.keyboard("jjj");
+    expect(focused()).toBe("contradiction");
+    await userEvent.keyboard("l");
+    expect(focused()).toBe("same-spelled-b");
+    await userEvent.keyboard("{ArrowRight}");
+    expect(focused()).toBe("dup");
+    await userEvent.keyboard("h{ArrowLeft}h");
+    expect(focused()).toBe("same-spelled-a");
+  });
+
+  it("jumps to a visible column's first card and keeps unequal lanes column-major", async () => {
+    renderBoard({ cards: CARDS.filter((card) => card.placement !== "ready"),
+      loadedEmptyColumns: ["ready"] });
+    const jump = screen.getByTestId<HTMLSelectElement>("cr.board.columnjump");
+    expect([...jump.options].map((o) => o.value)).toEqual(["plan", "executing", "review",
+      "accepted"]);
+    await userEvent.selectOptions(jump, "executing");
+    expect(focused()).toBe("api-endpnt");
+    expect(cardIdsIn()).toEqual(["plan-doc", "same-spelled-a", "contradiction", "api-endpnt",
+      "dup", "dup", "UNKNOWN", "ui-panel", "schema", "ghost"]);
   });
 });

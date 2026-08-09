@@ -193,18 +193,29 @@
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an operator who will be misled. Is there ANY path where a filtered or truncated page advances the cursor past a row that was never displayed — trace the continuation through the filter, the MAX_VIEW_RECORDS bound, and the gap branch separately, since each can drop rows independently. Can a rejected command or a restart gap be scrolled past without ever rendering? Does any surface sort, rank, or re-order by truth class, which would be deriving evidence strength? Is any digest, SHA, or exit code transformed on the way to the DOM? Does any state read as colour-only, and is every row keyboard reachable? Confirm each production file is under the 400-line rail with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe, scratch, or generated evidence file remains, and that apps/control-room/dist was not touched. Then commit by explicit pathspec only — git status --porcelain first, confirm every staged entry is under apps/control-room/src/evidence or apps/control-room/src/timeline, unstage anything foreign with git restore --staged, then git commit -- apps/control-room/src/evidence apps/control-room/src/timeline and verify with git show --stat. Never a bare git commit; the index is shared with concurrent tasks.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/timeline/timeline-contract.ts",
         "apps/control-room/src/timeline/timeline-page.ts",
         "apps/control-room/src/timeline/timeline-list.tsx",
         "apps/control-room/src/evidence/evidence-inspect.tsx"
       ],
-      "startedAt": "2026-08-09T09:43:16.386Z"
+      "modifiedFiles": [
+        "apps/control-room/src/timeline/timeline-contract.ts",
+        "apps/control-room/src/timeline/timeline-page.ts",
+        "apps/control-room/src/timeline/timeline-row.tsx",
+        "apps/control-room/src/evidence/evidence-inspect.tsx",
+        "apps/control-room/src/timeline/timeline-page.test.ts",
+        "apps/control-room/src/timeline/timeline-list.test.tsx",
+        "apps/control-room/src/evidence/evidence-inspect.test.tsx"
+      ],
+      "note": "Adversarial self-review done; THREE REAL DEFECTS FOUND AND FIXED, then both gates green.\n\nFINAL: `pnpm --filter @moe/control-room typecheck` exit 0. `pnpm --filter @moe/control-room test` exit 0, \"Test Files 19 passed (19) / Tests 268 passed\".\n\nTHE DRILL DID NOT CATCH THESE. A mutation drill perturbs code that exists; it cannot surface a case the author never wrote. All 7 mutants died and these three were still live.\n\nD1 — BLANK STRING RENDERED AS A CONFIDENT EMPTY CELL. `{value ?? UNSTATED}` only catches null, so a daemon payload carrying \"\" or \"   \" rendered an EMPTY cell tagged data-provenance=\"DAEMON_STATED\" — a confident provenance marker attached to nothing, which is worse than UNKNOWN because it asserts the daemon stated emptiness. node-authority.readValue already guards this on the fact path (\"a blank-looking value beside a confident chip is exactly the 'never blank' case the spec forbids\"); my two new cell renderers bypassed it. Fixed with statedValue() in timeline-contract.ts, used for BOTH the text and the provenance attribute so they cannot disagree. statedProvenance now agrees for strings. Two tests added.\n\nD2 — A THROWING PAGE SOURCE FAILED OPEN. source(cursor) was called unguarded, so a transport or decode failure in the caller-supplied adapter propagated out of render and would blank the entire control room — while the operator is looking at the one surface meant to explain what went wrong. That is fail-open, against epic rail 4. Now readPage() converts a throw into TIMELINE_SOURCE_FAILED / PAGING, a fifth stable code with its own test asserting code, layer, and that the underlying message survives into the detail.\n\nD3 — A BLANK eventId PRODUCED A LINK TO `#timeline/`. `eventId === null` let \"\" through. A blank id is not a name, and a link to an unresolvable target presents unreachable evidence as reachable — the exact thing node-evidence.EvidenceLink refuses. Now routed through statedValue.\n\nCHECKLIST TRACED, item by item:\n- CURSOR PAST AN UNDISPLAYED ROW, all three droppers traced separately. Filter: cursor = last EXAMINED; filtered rows were seen and deliberately not shown, and resuming re-applies the same filter. Bound: cursor = last ADMITTED; the overflow row and everything after are never walked past (admitted cannot be empty at overflow because limit >= 1, so the `?? cursor` fallback is unreachable). Gap: no special cursor path at all. Combined filter+bound traced on a worked example (rows 1..10, filter keeps 1/5/9, limit 2) — nothing lost. ONE RESIDUAL, now documented as a caller obligation on TimelineWalkRequest.startCursor: a continuation cursor is only valid for the FILTER that produced it, since filtered-out rows sit behind it. TimelineList satisfies this structurally — its useMemo is keyed on the selection, so changing a filter re-walks from startCursor rather than from a mid-walk cursor.\n- SCROLLED PAST WITHOUT RENDERING: gap rows are filter-exempt; if the BOUND cuts one off, truncation is reported and complete is false, so it is never silent.\n- SORT/RANK/REORDER: grepped .sort(/.reverse(/localeCompare/rank/upgrade across all six production files — zero hits in code, only in prose forbidding it.\n- TRANSFORMED ON THE WAY TO THE DOM: digests, SHAs and tails pass through untouched; only String() on numbers. Every absence check is an explicit `=== null`, never truthiness, so exit code 0 renders \"0\" and lease epoch 0 renders \"#0\" rather than UNKNOWN.\n- COLOUR-ONLY / KEYBOARD: kinds render as text, rows carry tabIndex 0, details summaries and chips are natively focusable, selects are label-wrapped.\n- CONCURRENCY: everything is pure or React-local; no shared mutable state. Noted that an inlined `source` prop re-walks each render (performance, not correctness).\n\nLINE RAIL, via wc -l not Measure-Object (mem:powershell-measure-object-line-undercounts): timeline-contract 196, timeline-page 206, timeline-list 151, timeline-row 193, evidence-contract 81, evidence-inspect 197. All under the 250 target. No non-.ts/.tsx file exists under either owned directory; apps/control-room/dist untouched.\n\nCOMMIT — NOTHING LEFT TO COMMIT, AND THAT IS THE FINDING. `git status --porcelain` over both owned paths is EMPTY and `git diff HEAD` is empty: concurrent agents' completion hooks swept the whole tree twice mid-task, so all 10 of my files are already committed inside two FOREIGN commits — c699422 (task-e17da1c9 \"Predecessor input materializer\") and a6e46f6 (task-386fcb4c \".js runtime bridges to @moe/core\"). A `git commit -- <owned paths>` would have been an empty commit, and amending a foreign commit would violate epic rail 3. I made no commit and rewrote no history. Verified the work is intact and exclusively mine: `git diff 9e0f123 HEAD -- apps/control-room/src/timeline apps/control-room/src/evidence` = 10 files, +2148, 0 deletions, and no foreign author edited inside them.\nQA: review with that diff command, NOT by looking for a commit named for this task.\n\nGATE CAVEAT, already resolved. The package ",
+      "startedAt": "2026-08-09T09:43:16.386Z",
+      "completedAt": "2026-08-09T09:52:33.804Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f2e587cb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -213,20 +224,30 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1d44840f28074532b3d37bbb9c557962",
+      "author": "worker-f2e587cb",
+      "content": "POST-REVIEW REGRESSION IN AN OWNED FILE — found and fixed after complete_task. QA read this before diffing.\n\nAfter I handed off, an external edit changed ONE line in apps/control-room/src/timeline/timeline-page.ts:\n\n  const lastExamined = page.rows.at(-1);   ->   const lastExamined = shown.at(-1);\n\n`shown` is the FILTERED array; `page.rows` is the EXAMINED array. This is exactly the conflation the module header warns against, and it is not cosmetic — it HANGS.\n\nFailure mechanism: when a filter removes a page's trailing rows the cursor under-advances; when a filter empties a page entirely `shown.at(-1)` is undefined, so the cursor does not move at all, the source re-serves the same page, and the walk spins forever.\n\nMeasured, not reasoned: `npx vitest run src/timeline/timeline-page.test.ts` ran 119.34s with \"tests 0ms\" and died with \"Worker exited unexpectedly\" — the fork was killed before a single test executed. Note this is why suite counts matter (mem:gotcha-mutation-drill-blind-to-broken-syntax): a hung worker reports zero tests, so watching only the test number shows nothing failing.\n\nFIXED by restoring `page.rows.at(-1)` and adding a comment at the line naming the symptom, so the next person to try the same substitution sees why it is wrong before running it.\n\nRe-verified after the fix:\n- my four suites alone: 4 files / 55 tests, exit 0\n- tsc errors inside apps/control-room/src/timeline and src/evidence: zero\n- full package: 275 tests pass; the one red FILE is FOREIGN — src/doctor/doctor-console.test.tsx, another agent's red-first TDD whose ./doctor-console.js does not exist yet. Not my path, not my defect. Same shared-tree pattern as the board-surface red I waited out before handing off.\n\nThe verification evidence in my complete_task (19 files / 268 tests, exit 0) was accurate when recorded at 12:51. It is no longer reproducible at this instant, solely because of the foreign doctor-console file. Re-run the package gate once that worker lands their GREEN, or verify my work in isolation with the two commands above.\n\nWorking tree now differs from HEAD by this one restored line in timeline-page.ts. Everything else is as described in the completion summary.",
+      "timestamp": "2026-08-09T10:01:10.561Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.787Z",
-  "updatedAt": "2026-08-09T09:43:16.386Z",
+  "updatedAt": "2026-08-09T10:04:50.911Z",
   "contextFetchedBy": [
     "architect-8a4a1764",
     "architect-da724bb7",
-    "worker-f2e587cb"
+    "worker-f2e587cb",
+    "qa-812c17a0"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T09:10:26.623Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T10:04:50.911Z",
+    "wallClockMs": 3264288
   },
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -242,7 +263,8 @@
     "step-7",
     "step-8",
     "step-9",
-    "step-10"
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:12:08.964Z",
@@ -263,5 +285,27 @@
     "wallClockMs": 9900000
   },
   "planApprovedAt": "2026-08-09T09:12:11.015Z",
-  "workStartedAt": "2026-08-09T09:12:57.668Z"
+  "workStartedAt": "2026-08-09T09:12:57.668Z",
+  "reviewStartedAt": "2026-08-09T09:53:20.955Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n\n Test Files  19 passed (19)\n      Tests  268 passed (268)\n   Start at  12:51:41\n   Duration  4.78s (transform 2.52s, setup 0ms, import 6.26s, tests 11.00s, environment 21.06s)\n\nVERIFY_EXIT=0",
+    "reportedAt": "2026-08-09T09:53:20.955Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/timeline/timeline-contract.ts",
+    "apps/control-room/src/timeline/timeline-page.test.ts",
+    "apps/control-room/src/timeline/timeline-page.ts",
+    "apps/control-room/src/timeline/timeline-list.test.tsx",
+    "apps/control-room/src/timeline/timeline-list.tsx",
+    "apps/control-room/src/timeline/timeline-row.tsx",
+    "apps/control-room/src/evidence/evidence-inspect.test.tsx",
+    "apps/control-room/src/evidence/evidence-inspect.tsx",
+    "apps/control-room/src/evidence/evidence-contract.ts",
+    "apps/control-room/src/evidence/evidence-timeline-ban.test.ts"
+  ],
+  "completedAt": "2026-08-09T10:04:50.911Z",
+  "reviewCompletedAt": "2026-08-09T10:04:50.911Z",
+  "reviewSummary": "APPROVED. Three DoD invariants drilled load-bearing against production, all restored byte-clean.\n\nGATE, attributed by path. Owned surface green: src/timeline + src/evidence = 4 files / 55 passed. The named command exits 1 but on ZERO assertion failures — 275 passed, 0 failed. The 3 red files are COLLECTION errors in UNTRACKED foreign work under src/doctor and src/recovery (doctor-console, reconciliation-inventory, recovery-actions), each failing to resolve its own ./x.js sibling: another agent's red-first TDD, mid-flight. Neither directory is owned here and this diff cannot influence them. I re-ran to check for self-heal; still foreign-red, so I record it rather than score it.\n\nDoD1 PASS, drilled: removed the session field from timeline-row.tsx and a provenance test reddens. Restored e898c6e3. Fields render per-testid with absent values representable rather than missing.\n\nDoD2 PASS, drilled: removed the RESTART_GAP filter exemption and 2 tests redden across 2 files — the gap stays visible when the filter excludes everything else, and cannot be hidden behind a node filter. Restored 77155546. The no-authority half is structural: the ban test pins an exact file set and an exact allowed-specifier set, asserts it cannot be widened to reach an authority-owning package, carries its own positive control, and scans production for causality, ranking or truth-upgrade.\n\nDoD3 PASS, drilled on the real trap: made a truncated page resume from the whole page's end instead of the last ADMITTED row — the silent-gap bug — and 3 tests redden, including \"yields the identical total row sequence, not merely the same count\". Restored 77155546. page.nextCursor is never read anywhere, the continuation is recomputed, and the examined-versus-admitted distinction is correct.\n\nRails: every owned file under 400 lines, max 318.\n\nCommit: no commit names this task; its files landed in c699422 under task-e17da1c9's message via the harness sweep. Verified by content, same ruling as task-f6440f26."
 }

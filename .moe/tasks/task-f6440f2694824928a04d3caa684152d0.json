@@ -198,8 +198,8 @@
       "completedAt": "2026-08-09T09:51:22.941Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -218,12 +218,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:31:00.270Z",
-  "updatedAt": "2026-08-09T09:52:24.803Z",
+  "updatedAt": "2026-08-09T09:56:01.241Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:33:45.886Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-09T09:56:01.241Z",
+    "wallClockMs": 1335355
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
@@ -296,5 +298,8 @@
     "apps/daemon/src/work/*.js",
     "apps/daemon/src/graph-preview-request.test.ts",
     "apps/daemon/src/runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T09:56:01.241Z",
+  "reviewCompletedAt": "2026-08-09T09:56:01.241Z",
+  "reviewSummary": "APPROVED. Every DoD item re-verified by me, both drills included.\n\nDoD1 PASS, with my own before/after: earlier this session the plain-Node probe from apps/daemon failed ERR_MODULE_NOT_FOUND on bootstrap-contracts.js; the same command now exits 0 reporting keys=31. Real child process, not vitest.\n\nDoD2 PASS: 0 tracked .js under apps/daemon/src before, 19 now, each exactly the one-line export-star-from-.ts form. Coverage is self-enforcing — runtime-entrypoint.test.ts computes the runtime tier as a forward closure from published units and asserts missing/unexpected/wrongContent all empty, with non-vacuity guards and the two judgement calls (http-adapter in, work-race-fixtures out) pinned by name.\nDRILL A: deleted bootstrap-ledger.js. Reddens BOTH the Node namespace probe and the completeness test, naming the missing module. Restored, hash 862ea4cc.\n\nDoD3 PASS: exactly one it-block retired, the Object.keys equality, 4 lines, nothing else. The forbidden-key test survives and is load-bearing. DRILL B: added a mutation key to the production result in index.ts and \"exposes no mutation or execution affordance\" reddens. Restored, hash 2bf258ff.\n\nDoD4 PASS on substance: daemon typecheck 0, test 16 files/367. Counts close exactly — 15 files/365 with 2 failing, retire 1 = 364, plus 3 new = 367, plus 1 file = 16.\n\nCOMMIT CLAUSE judged by base-ref diff, not git show --stat, and not a worker failure. The harness whole-tree hook swept this task's deliverables into a6e46f6 under task-386fcb4c's message, then stamped 5a63049 with this task's title carrying 14 FOREIGN paths and zero owned ones. Re-attributing would rewrite another task's history, which the rails forbid. Content verified instead: git diff --stat 3e7081d..HEAD over owned paths is exactly 21 files (19 bridges + 2 test files), 194 insertions. No .ts service module, no package.json, no pnpm-lock touched.\n\nReported: 5a63049 swept foreign control-room board and tests/runtime work. Not reverted."
 }

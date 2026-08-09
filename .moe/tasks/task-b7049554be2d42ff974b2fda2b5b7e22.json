@@ -130,8 +130,8 @@
       "completedAt": "2026-08-09T09:50:59.164Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-064d1267",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -143,7 +143,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:16.556Z",
-  "updatedAt": "2026-08-09T09:50:59.164Z",
+  "updatedAt": "2026-08-09T09:58:37.444Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
@@ -158,7 +158,9 @@
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
     "firstClaimAt": "2026-08-09T09:40:04.077Z",
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-09T09:58:37.444Z",
+    "wallClockMs": 1113367
   },
   "planningNotes": {
     "approachesConsidered": "(1) ONE TASK FOR TWO PACKAGES is right here and the daemon's 'split on and' warning does not apply: both packages are flat, tiny, greenfield from this epic, have zero existing bridges, and share one mechanical concern with one probe harness. Splitting would duplicate the harness and the controls for 6 and 8 files respectively.\n(2) THE PROBE IS THE DELIVERABLE, NOT THE BRIDGES. Writing 14 one-line files is trivial; a script does it in seconds. What makes the task correct is the plain-Node probe WITH ITS THREE CONTROLS, because this entire defect class exists precisely because a green vitest suite was repeatedly mistaken for evidence. Two of the six steps write bridges; the rest is proof.\n(3) BOTH PACKAGES OR NEITHER — a sweep that bridges one and leaves the other is the exact silent incompleteness this defect is known for, and it is invisible to every vitest gate.\n(4) NO SUBDIRECTORIES in either package, which keeps this the simplest of the three sweep tasks; the glob set is one per package.",
@@ -176,7 +178,36 @@
   },
   "planApprovedAt": "2026-08-09T09:32:40.824Z",
   "contextFetchedBy": [
-    "worker-064d1267"
+    "worker-064d1267",
+    "qa-017ee6b6"
   ],
-  "workStartedAt": "2026-08-09T09:41:55.426Z"
+  "workStartedAt": "2026-08-09T09:41:55.426Z",
+  "reviewStartedAt": "2026-08-09T09:52:48.986Z",
+  "verification": {
+    "command": "pnpm --filter @moe/context typecheck && pnpm --filter @moe/context test && pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test",
+    "exitCode": 0,
+    "outputTail": "@moe/context: tsc exit 0; Test Files 5 passed (5), Tests 24 passed (24). @moe/review: tsc exit 0; Test Files 3 passed (3), Tests 91 passed (91). Full foreground command exit 0. Broader pnpm test: 167 passed files; 3033 passed, 1 skipped; exit 0.",
+    "reportedAt": "2026-08-09T09:52:48.986Z"
+  },
+  "filesModified": [
+    "packages/context/src/canonical-digest.js",
+    "packages/context/src/context-contract.js",
+    "packages/context/src/context-render.js",
+    "packages/context/src/context-selection.js",
+    "packages/context/src/context-wire.js",
+    "packages/context/src/dead-end-journal.js",
+    "packages/context/src/index.js",
+    "packages/context/src/release-handoff.js",
+    "packages/review/src/canonical.js",
+    "packages/review/src/index.js",
+    "packages/review/src/review-contract.js",
+    "packages/review/src/review-findings.js",
+    "packages/review/src/review-package.js",
+    "packages/review/src/reviewer-eligibility.js",
+    "packages/context/src/runtime-entrypoint.test.ts",
+    "packages/review/src/runtime-entrypoint.test.ts"
+  ],
+  "completedAt": "2026-08-09T09:58:37.444Z",
+  "reviewCompletedAt": "2026-08-09T09:58:37.444Z",
+  "reviewSummary": "APPROVED. Verified against TRACKED BYTES (git show HEAD:<path>), not worktree. Full evidence: mem:task-task-b7049554be2d42ff974b2fda2b5b7e22-qa-verdict.\n\nDoD2 re-derived by me: context 8 production .ts, review 6 — matches measured 8/6. No fixtures/helpers modules.\n\nDoD1 all 14 blobs hex-dumped (xxd -p): each exactly `export * from \"./<own-basename>.ts\";`+0a, 1 line, has0d=no, blob+worktree EXACT, own sibling. MISSING=0 (8/8, 6/6), UNEXPECTED=0.\n\nDoD3+4 plain-Node v24.16.0, repo root:\n context exports=19 undefined=0\n review exports=23 undefined=0\n REGRESSION scheduler exports=36 undefined=0\n NEGATIVE code=ERR_MODULE_NOT_FOUND literal_match=true\nMy first run read FAILED — my artifact: probe file in OS temp resolved node_modules from script dir. Re-ran with -e --input-type=module at package root: both IMPORTED.\n\nDoD5 both tests spawn a real Node child (--experimental-strip-types) asserting toEqual({outcome:\"IMPORTED\", <namedExport>:\"function\"}) — never exit 0. Proved non-vacuous WITHOUT mutating repo (deleting a bridge is unsafe: foreign whole-tree hooks commit deletions): node:module registerHooks via --import made context-contract.js/review-findings.js unresolvable. Control {\"outcome\":\"IMPORTED\",\"probe\":\"function\"} vs drill {\"outcome\":\"FAILED\",\"code\":\"ERR_MODULE_NOT_FOUND\"}, both packages. Corroborated: siblings imported as ./x.js; Node has no .js->.ts fallback.\n\nDoD6 name-status a6e46f6^..a6e46f6 over owned paths: 16 entries, ALL A, zero M, no .ts modified. Tree delta context 4->5 tests / 0->8 bridges; review 2->3 / 0->6.\n\nDoD7 context typecheck 0 + 5 files/24 tests; review typecheck 0 + 3 files/91 tests; new tests confirmed running (70/116ms spawns). Green vitest is NOT the evidence — probe and drill are. Bridges 1 line, tests 38 lines, no scratch files.\n\nATTRIBUTION not violation: owned files landed in foreign whole-tree hook commit a6e46f6 (65 files, titled task-386fcb4c); git log --all --grep=b7049554 empty — hook preempted the pathspec commit. Do not revert."
 }

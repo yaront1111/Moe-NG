@@ -37,7 +37,7 @@
     {
       "stepId": "step-2",
       "description": "Sweep @moe/skills and @moe/mcp, honouring the exclusion. For every non-test module create the sibling `.js` whose ENTIRE content is `export * from \"./<name>.ts\";` — one line, LF, trailing newline. skills is flat (5 bridges). mcp spans three directories and needs all of them: `src/` (dispatch-conformance, index), `src/http/` (http-resume, http-server, http-session, http-tool-bridge) and `src/stdio/` (stdio-dispatch-port, stdio-server, stdio-tool-schemas) — nine bridges, NOT ten. **`src/http/http-server-test-helpers.ts` gets NO bridge**; bridging it would drag test-only code onto the runtime surface, and a naive `for each .ts` loop is exactly how that happens. Do not edit any `.ts` file, including either index.ts. If you script this, verify the written BYTES afterwards — editors and in-place scripts on Windows flip LF to CRLF and `git diff --stat` will not reveal it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/skills/src/*.js",
         "packages/mcp/src/*.js",
@@ -49,12 +49,30 @@
         "packages/mcp/src/*.js",
         "packages/mcp/src/http/*.js",
         "packages/mcp/src/stdio/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/skills/src/index.js",
+        "packages/skills/src/skill-contract.js",
+        "packages/skills/src/skill-loader.js",
+        "packages/skills/src/skill-manifest.js",
+        "packages/skills/src/skill-snapshot.js",
+        "packages/mcp/src/index.js",
+        "packages/mcp/src/http/http-resume.js",
+        "packages/mcp/src/http/http-server.js",
+        "packages/mcp/src/http/http-session.js",
+        "packages/mcp/src/http/http-tool-bridge.js",
+        "packages/mcp/src/stdio/stdio-dispatch-port.js",
+        "packages/mcp/src/stdio/stdio-server.js",
+        "packages/mcp/src/stdio/stdio-tool-schemas.js"
+      ],
+      "note": "13 bridges written (skills 5 + mcp 8), zero .ts files touched. Written with `printf 'export * from \"./%s.ts\";\\n'` so LF is produced by construction, never by an editor.\n\nskills/src (flat, 5): index.js, skill-contract.js, skill-loader.js, skill-manifest.js, skill-snapshot.js\nmcp/src (8 across three directories): index.js; http/http-resume.js, http/http-server.js, http/http-session.js, http/http-tool-bridge.js; stdio/stdio-dispatch-port.js, stdio/stdio-server.js, stdio/stdio-tool-schemas.js\n\nTWO mcp modules deliberately unbridged, not one:\n  - http/http-server-test-helpers.ts — matches the *-test-helpers.ts convention (the plan's exclusion).\n  - dispatch-conformance.ts — test-tier with no test suffix: imports { describe, expect, it } from \"vitest\" at module scope, referenced only by five *.test.ts files. Bridging it would publish a vitest import on the runtime surface, which task rail \"Never bridge a test-only module\" forbids. This is why mcp gets 8, not the plan's 9. Announced in channel (msg-de43731845c44a0ca5171b97203d473a) before proceeding.\n\nBYTE VERIFICATION, od-based (NOT `grep -c $'\\r'`, which is a false-positive trap per mem:gotcha-bash-tool-mangles-dollar-quoted-cr-pattern). Each bridge checked on five axes: exact byte length computed arithmetically from the expected content, zero 0d bytes, last byte 0a, exactly one 0a, and exact string equality against the expected sibling name. Result: SWEPT=13 BAD=0.\n\nTHE BYTE CHECKER WAS PROVEN ABLE TO FAIL before its BAD=0 was trusted — four corrupt files fed to it OUTSIDE the repo, each correctly rejected with the specific reason: CRLF -> \"LEN(29!=28) CR(1)\"; no trailing LF -> \"LEN(27!=28) NO_TRAILING_LF(3b) LINECOUNT(0)\"; wrong sibling name -> \"LEN(32!=28) CONTENT\"; extra line -> \"LEN(39!=28) LINECOUNT(2) CONTENT\". A correct control file was then accepted. A sweep that has never produced a failure is not evidence.\n\nINTERIM PROBE, plain Node from repo root, both previously ERR_MODULE_NOT_FOUND:\n  ./packages/skills/src/index.ts -> IMPORTED exports=15 undefined=[]\n  ./packages/mcp/src/index.ts    -> IMPORTED exports=12 undefined=[]\nNote this also settles DoD item 4 for mcp: the entry transitively loads stdio-server.ts, which imports @modelcontextprotocol/sdk, and it resolved. No node_modules failure to report.\n\ngit status shows 13 untracked .js and zero modified files under either package.",
+      "startedAt": "2026-08-09T09:52:29.100Z",
+      "completedAt": "2026-08-09T09:53:18.978Z"
     },
     {
       "stepId": "step-3",
       "description": "Sweep @moe/control-room-client, including its generated module, without disturbing generation. Create bridges for `src/client-compat.ts`, `src/index.ts` and `src/generated/generated-client.ts` — three bridges across two directories. The generated module DOES need a bridge, but that bridge is HAND-WRITTEN SOURCE sitting beside generated output: do NOT hand-edit `generated-client.ts` itself, and do NOT modify the generator to emit bridges — a generator that emits its own bridge would make the bridge regenerable output rather than tracked source, and would drift the moment the generator changes. Immediately afterwards run the package's existing `generator-determinism.test.ts` and `generated-coverage.test.ts` and confirm both still pass; they exist precisely to catch a disturbance to generated output, and they are the cheapest possible proof that this step was surgical.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/control-room-client/src/*.js",
         "packages/control-room-client/src/generated/*.js"
@@ -62,24 +80,38 @@
       "newFiles": [
         "packages/control-room-client/src/*.js",
         "packages/control-room-client/src/generated/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/index.js",
+        "packages/control-room-client/src/client-compat.js",
+        "packages/control-room-client/src/generated/generated-client.js"
+      ],
+      "note": "3 bridges written across two directories: src/index.js, src/client-compat.js, src/generated/generated-client.js. Same printf construction, so LF by construction.\n\nGENERATION UNDISTURBED, proven three ways:\n1. `git status --porcelain packages/control-room-client/` lists exactly three `??` entries and ZERO `M` entries. `src/generated/generated-client.ts` was not hand-edited; `generator/generate.ts` was not modified.\n2. Both guard tests pass fresh: `vitest run packages/control-room-client/src/generator-determinism.test.ts packages/control-room-client/src/generated-coverage.test.ts` -> 2 files / 16 tests passed, exit 0.\n3. I checked BEFORE writing whether the bridge could even disturb them: `generator-determinism.test.ts` iterates `emitted.files` — the list the generator itself returns — and reads each name out of `COMMITTED_DIR`. It never readdirs `src/generated/`, so an extra hand-written file beside the generated one cannot enter its comparison set. That is why placing a bridge in a generated directory is safe here; it is a property of this test, not a general licence.\n\nThe generator was NOT taught to emit bridges. `generated-client.js` is hand-written tracked source that happens to sit in `src/generated/`; if it were generator output it would be regenerable and would drift the moment the generator changed.\n\nBYTE VERIFICATION (od-based, same five-axis checker already proven able to fail in step 2): SWEPT=3 BAD=0. `od -c` on the generated-dir bridge: `export * from \"./generated-client.ts\";\\n`, 39 bytes, no 0d.\n\nPROBE, previously ERR_MODULE_NOT_FOUND on client-compat.js:\n  ./packages/control-room-client/src/index.ts -> IMPORTED exports=1 undefined=[]\nexports=1 is correct and not a defect: `createCompatGate` is the package's only value export; index.ts lines 2-21 are `export type` blocks, which type-stripping erases. Zero-value-export precedent is documented in mem:gotcha-core-bridge-set-needs-reachability-not-name-or-closure; here it is one, not zero, and it is the exact symbol DoD/step 6 names as the public entry point.\n\nOut of scope and deliberately left alone: `packages/control-room-client/generator/generate.ts` has no sibling `.js`. It is outside `src/`, outside this task's owned paths, and needs none — `package.json`'s `generate` script invokes it directly as `node --experimental-strip-types generator/generate.ts`, with no `.js` specifier anywhere on that path. Its only `.js`-specifier consumer is `generator-determinism.test.ts`, which runs under vitest.",
+      "startedAt": "2026-08-09T09:53:24.028Z",
+      "completedAt": "2026-08-09T09:54:07.883Z"
     },
     {
       "stepId": "step-4",
       "description": "Audit all three sweeps in BOTH directions. Loop over every directory of all three packages reporting, for each non-test .ts module, whether its sibling .js exists (zero MISSING), and whether any .js exists without a corresponding non-test .ts (zero UNEXPECTED). The UNEXPECTED direction matters more here than in the sibling sweeps: it is what catches `http-server-test-helpers.js` if the exclusion was missed, so assert explicitly that NO bridge exists for that module. Assert bridge CONTENT is exact for every file — one line, the correct sibling name, LF, trailing newline — since a bridge naming a neighbour resolves to the wrong module and passes an existence-only check. Record the loop's RAW OUTPUT and all three module counts in the evidence, confirming they match step 1.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Two-directional audit clean. RAW OUTPUT on the real tree:\n  EXPECTED=16 SWEPT=16 MISSING=0 UNEXPECTED=0 BAD=0\n\nDIRECTORIES WALKED (all six; a top-level-only sweep would have missed 11 of 16 bridges):\n  packages/skills/src\n  packages/mcp/src, packages/mcp/src/http, packages/mcp/src/stdio\n  packages/control-room-client/src, packages/control-room-client/src/generated\n\nCOUNTS RECONCILE AGAINST STEP 1 AND AGAINST EACH OTHER:\n  all_ts=29, nontest_ts=18, expected_bridges=16, excluded=13, and expected+excluded = 29 = all_ts exactly.\n  Per package non-test .ts: skills 5, mcp 10, control-room-client 3 — matches the 5/10/3 measured when the task was written.\n  16 = 18 non-test minus the 2 test-tier modules.\n\nTHE EXPECTED SET IS RULE-DERIVED, NOT HARD-CODED. The audit classifies every .ts by rule and prints its verdict: *.test.ts / *-test-fixtures.ts / *-test-helpers.ts by suffix, then `from \"vitest\"` by content. Exclusion verdicts printed: 11 test-file, 1 helpers-suffix (http/http-server-test-helpers.ts), 1 imports-vitest (dispatch-conformance.ts). A hard-coded list would have passed this audit while encoding the same mistake it is meant to catch.\n\nEXPLICIT ABSENCE ASSERTED for both test-tier modules, as the step demands:\n  OK  packages/mcp/src/http/http-server-test-helpers.js absent\n  OK  packages/mcp/src/dispatch-conformance.js absent\n\nCONTENT IS ASSERTED, NOT JUST EXISTENCE. Every one of the 16 is checked on five axes — arithmetic byte length, zero 0d, last byte 0a, exactly one 0a, and exact string equality against `export * from \"./<own-basename>.ts\";`. A bridge naming a neighbour cannot pass.\n\nFIVE MUTATION DRILLS, ALL KILLED — the audit was proven able to fail before its zeros were believed:\n  A delete mcp/stdio/stdio-server.js        -> MISSING=1  (SWEPT drops 16->15)\n  B create http-server-test-helpers.js      -> UNEXPECTED=1\n  C create dispatch-conformance.js          -> UNEXPECTED=1\n  D flip skills/index.js to CRLF            -> BAD=1 \"LEN CR\"\n  E point skill-contract.js at skill-loader -> BAD=1 \"LEN CONTENT\"\nDrills B and C are the ones that matter: they prove the two test-tier exclusions are ENFORCED by the audit, not merely described in prose.\n\nDRILLS RAN ON AN OUT-OF-REPO COPY under the OS temp dir, never on the working tree. mem:mutation-drills-in-shared-worktree records that a foreign whole-tree commit can capture a drill edit here and that `git status` then lies about the restore. Mutating a copy removes that hazard entirely. Proof the working tree was untouched: the identical audit re-run on the real tree after all five drills again reports EXPECTED=16 SWEPT=16 MISSING=0 UNEXPECTED=0 BAD=0, and `git status --porcelain` over all three packages lists exactly 16 `??` entries and zero `M`.",
+      "startedAt": "2026-08-09T09:54:12.574Z",
+      "completedAt": "2026-08-09T09:55:58.889Z"
     },
     {
       "stepId": "step-5",
       "description": "The plain-Node probe with all three controls, across all three packages. Run from the repo ROOT. (a) POSITIVE: all three entries resolve, each with more than zero exports — covering two of three is incomplete evidence. (b) REGRESSION CONTROL: a known-good bridged package elsewhere still loads, proving the harness works so a broken probe cannot masquerade as a passing sweep. (c) NEGATIVE CONTROL: importing `packages/mcp/src/http/http-server-test-helpers.js` must STILL raise the LITERAL `ERR_MODULE_NOT_FOUND` — assert that exact code, never merely that an import failed. This control is unusually strong here because it is a real file that was deliberately left unbridged, so one assertion proves both that the probe can detect failure and that the exclusion was honoured. THEN THE DISCRIMINATION THAT MATTERS: if any probe fails naming a path inside `node_modules`, that is NOT this task's defect — @moe/mcp depends on @modelcontextprotocol/sdk, an external resolution failure has a different owner and a different fix, and it must be reported as a separate finding rather than papered over with a bridge. Finally assert every export of each entry point is DEFINED, not merely that the import resolved, since ESM cycles resolve differently per entry point and vitest never exercised them.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Plain-Node probe complete, Node v24.16.0, from the repo ROOT /d/projexts/moe-next, one process per entry.\n\n(a) POSITIVE — all three, none skipped. Each was ERR_MODULE_NOT_FOUND in step 1:\n  ./packages/skills/src/index.ts              IMPORTED exports=15 undefined=[]\n  ./packages/mcp/src/index.ts                 IMPORTED exports=12 undefined=[]\n  ./packages/control-room-client/src/index.ts IMPORTED exports=1  undefined=[]\n\n(b) REGRESSION CONTROL — nine known-good bridged packages still load, all reproducing their plan-time numbers: scheduler 36, store 26, runner 66, core 39, contracts 46, coordination 14, testkit 11, context 19, review 23. All undefined=[]. A broken probe cannot masquerade as a passing sweep.\n\n(c) NEGATIVE CONTROL — TWO of them, both asserting the LITERAL code, not merely \"an import failed\":\n  ./packages/mcp/src/http/http-server-test-helpers.js -> code == \"ERR_MODULE_NOT_FOUND\" (string-compared, PASS)\n  ./packages/mcp/src/dispatch-conformance.js          -> code == \"ERR_MODULE_NOT_FOUND\" (string-compared, PASS)\nBoth are real files deliberately left unbridged, so each assertion proves two things at once: the probe can still detect failure, and the exclusion was honoured.\n\nEVERY BRIDGE PROBED AS ITS OWN ENTRY in a SEPARATE process, because ESM cycles resolve differently per entry and vitest never exercised them:\n  PROBED=16 FAILED=0 UNDEFINED_BINDINGS=0 ZERO_EXPORT=1 NODE_MODULES_FAILURES=0\nThe single zero-export is packages/mcp/src/stdio/stdio-dispatch-port.js, and it is correct, not a defect: the module has exactly 2 export lines and both are `export type StdioAuthOutcome` / `export interface StdioDispatchPort`, so it has zero runtime bindings by construction. Verified against committed precedent in already-reviewed packages, probed in the same sweep: scheduler/graph-preview-model.js -> 0 exports, store/projections/projection-rebuild-contracts.js -> 0 exports.\n\nBARE-SPECIFIER PROBE through each package's real exports map, from a consumer cwd — resolution is not re-export, and this exercises the published surface rather than a file path:\n  cwd=apps/control-room             @moe/control-room-client IMPORTED 1  undefined=[]\n  cwd=packages/skills               @moe/skills              IMPORTED 15 undefined=[]\n  cwd=packages/mcp                  @moe/mcp                 IMPORTED 12 undefined=[]\n  cwd=packages/control-room-client  @moe/control-room-client IMPORTED 1  undefined=[]\n\nEXPORTS ARE DEFINED, NOT MERELY RESOLVABLE — full name lists enumerated and each binding checked non-undefined:\n  skills 15: MAX_SKILL_FILES, MAX_SKILL_FILE_BYTES, MAX_SKILL_ID_CHARS, MAX_SKILL_PATH_CHARS, MAX_SKILL_REQUESTS, MAX_SKILL_TOTAL_BYTES, SKILL_ERROR_CODES, SKILL_MANIFEST_VERSION, SKILL_ORIGINS, SKILL_RENDERER_INPUT_VERSION, SKILL_SNAPSHOT_VERSION, loadSkillBundle, resolveSkillSnapshot, toSkillRendererInput, validateSkillManifestBytes\n  mcp 12: ADAPTER_SUPPLIED_COMMAND_FIELDS, ADAPTER_SUPPLIED_QUERY_FIELDS, MOE_MCP_PACKAGE_VERSION, MOE_SESSION_CREDENTIAL_ENV, STDIO_TOOL_ENTRIES, STDIO_TOOL_INDEX, STDIO_TOOL_LABEL_PATTERN, createStdioMcpServer, decodeAndDispatch, generateStdioToolEntries, readBootstrapCredential, toolLabelForKind\n  control-room-client 1: createCompatGate\n  undefined=[] for all three. exports=1 for control-room-client is not a shortfall: index.ts lines 2-21 are `export type` blocks that type-stripping erases, and createCompatGate is the package's only value export — the exact symbol step 6 names.\n\nDoD ITEM 4, THE node_modules DISCRIMINATION — NOTHING TO REPORT, and I checked rather than assumed. @modelcontextprotocol/sdk resolves cleanly from packages/mcp: server/index.js IMPORTED 1, types.js IMPORTED 171, server/webStandardStreamableHttp.js IMPORTED 1. NODE_MODULES_FAILURES=0 across all 16 bridge probes. No probe failure named a node_modules path, so no bridge was used to paper over an external resolution failure. To show the discrimination is real and not vacuous, I asked for a specifier that genuinely does not exist: '@modelcontextprotocol/sdk/does-not-exist.js' -> ERR_MODULE_NOT_FOUND naming file:///D:/projexts/moe-next/packages/mcp/node_modules/@modelcontextprotocol/sdk/dist/esm/does-not-exist.js. That is what an external failure looks like here; no real specifier produced one.\n\nONE HARNESS ARTIFACT, CORRECTED AND REPORTED RATHER THAN BURIED. My first bare-specifier run returned \"Cannot find package '@moe/skills' imported from C:\\\\Users\\\\...\\\\Temp\\\\...\\\\probe.mjs\" for all four. That is NOT a defect and NOT a node_modules finding: bare specifiers resolve relative to the IMPORTING MODULE, and probe.mjs deliberately lives outside the repo, so it can never see workspace packages regardless of cwd. Re-run with `node --input-type=module -e`, whose referrer is cwd, all four IMPORTED. Recording it because a failure that is really a harness bug is exactly the thing this step must not let through in either direction.",
+      "startedAt": "2026-08-09T09:56:03.046Z",
+      "completedAt": "2026-08-09T09:57:50.431Z"
     },
     {
       "stepId": "step-6",
       "description": "Add the three regression guards. Create one runtime-entrypoint test per package following the `packages/scheduler/src/scheduler-runtime-entrypoint.test.ts` precedent: spawn a REAL Node child or worker with `--experimental-strip-types` importing the package entry. Each must assert BOTH that the import succeeded AND that a specific named export is defined — never merely that the process exited 0, which is the weak assertion that let this defect class survive across six packages. For control-room-client, prefer asserting `createCompatGate` is defined, since it is the package's actual public entry point rather than an incidental symbol. These three tests are what make the fix durable: without them the next module added to any of these packages without a bridge silently reintroduces the defect.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/skills/src/runtime-entrypoint.test.ts",
         "packages/mcp/src/runtime-entrypoint.test.ts",
@@ -89,17 +121,49 @@
         "packages/skills/src/runtime-entrypoint.test.ts",
         "packages/mcp/src/runtime-entrypoint.test.ts",
         "packages/control-room-client/src/runtime-entrypoint.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/skills/src/skills-runtime-entrypoint.test.ts",
+        "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "note": "Three regression guards added, following the packages/scheduler and packages/core precedent. 197 / 226 / 219 lines, all under the 250 target.\n\nEACH SPAWNS A REAL NODE CHILD via execFile with --experimental-strip-types --input-type=module -e, cwd = package root so the BARE specifier resolves through the package's own exports map by Node's self-reference rule. A relative path would sidestep the export map and test something weaker.\n\nNEVER \"the process exited 0\" — the child serialises a report and each test asserts the whole object:\n  skills: outcome IMPORTED, hasNamedExports, undefinedBindingCount 0, and typeof loadSkillBundle / validateSkillManifestBytes / resolveSkillSnapshot / toSkillRendererInput === \"function\", SKILL_MANIFEST_VERSION string, Object.isFrozen(SKILL_ERROR_CODES).\n  mcp: same plus createStdioMcpServer / decodeAndDispatch / readBootstrapCredential / generateStdioToolEntries / toolLabelForKind, MOE_SESSION_CREDENTIAL_ENV string, STDIO_TOOL_ENTRIES a non-empty array.\n  control-room-client: createCompatGate === \"function\" as the step directs — the package's actual public entry point, not an incidental symbol — plus a second probe that loads src/generated/generated-client.js through its hand-written bridge.\nundefinedBindingCount catches the ESM-cycle case a plain resolution check misses: a TDZ-undefined binding imports cleanly and only fails at first use. Every shape was verified against the real runtime before being written into an expectation.\n\nNEGATIVE CONTROLS — four across the three files, every one pinning the LITERAL \"ERR_MODULE_NOT_FOUND\", never merely that an import failed:\n  skills   ./src/skill-manifest.test.js\n  mcp      ./src/http/http-server-test-helpers.js   (suffix-named exclusion)\n  mcp      ./src/dispatch-conformance.js            (vitest-importing exclusion — the one a suffix rule misses)\n  crc      ./src/client-compat.test.js\nAll four subjects are REAL files deliberately left unbridged, so each assertion proves two things: the probe can still detect failure, and the exclusion was honoured.\n\nAUDITS INSIDE THE TESTS, so the next module added without a bridge reddens rather than rotting silently. Each file derives the expected set by RULE (`classify()` returns one of test-file / fixtures-suffix / helpers-suffix / imports-vitest / bridge) and asserts missing / unexpected / wrongContent BY NAME. wrongContent compares bytes-through-utf8, so a CRLF bridge is \"...\\\";\\r\\n\" and lands there.\n\nREASON CODES ASSERTED, NOT JUST OUTCOMES (epic rail 6). A separate test in each file pins the full exclusion map name -> reason. In mcp that map records \"dispatch-conformance.ts\": \"imports-vitest\" — a suffix-only rule would classify it \"bridge\" and the expectation goes red. Non-vacuity is asserted directly: expected.length > 0 AND excluded.length > 0, so a sweep that silently produces zero cases fails instead of passing. mcp additionally asserts the bridged set spans all three directories [\"\", \"http\", \"stdio\"]; crc asserts the generated module is in the expected set, so a top-level-only sweep cannot look identical to a complete one.\n\nREACHABILITY ASSERTED IN THE DIRECTION THAT MATTERS: every module transitively reachable from index.ts must be bridged. For mcp this is deliberately a SUBSET relation, not equality — http/ is production code index.ts does not export yet, and bridging an unreachable production module is inert while skipping a reachable one breaks the entry point. Commented in place so a future reader does not \"fix\" it into equality.\n\nFIVE MUTATION DRILLS AGAINST THE NEW GUARDS, ALL KILLED — a failure-path test is not evidence until it has been made to fail:\n  1 delete skills/skill-contract.js                  -> 3 failed / 2 passed\n  2 create mcp/dispatch-conformance.js               -> 2 failed / 4 passed\n  3 create mcp/http/http-server-test-helpers.js      -> 2 failed / 4 passed\n  4 flip crc generated-client.js to CRLF             -> 1 failed / 5 passed\n  5 point skills/index.js at skill-loader            -> 1 failed / 4 passed\nDrills 2 and 3 are the important pair: they prove both exclusions are ENFORCED, and each reddens the negative control AND the audit's unexpected set. Every restore was verified by BYTES (exact content + zero 0d), not by git status, because mem:mutation-drills-in-shared-worktree records that a foreign whole-tree commit here makes git status lie about a restore.\n\nGATES, ALL EXIT 0, before/after counts:\n  @moe/skills              typecheck 0; test 3 files / 80 passed + 1 skipped  (was 2 / 75 + 1 skipped)\n  @moe/mcp                 typecheck 0; test 7 files / 131 passed            (was 6 / 125)\n  @moe/control-room-client typecheck 0; test 4 files / 32 passed             (was 3 / 26)\nRe-run clean AFTER all five drills, confirming full restoration. git status over the three packages shows 19 `??` and zero `M` — 16 bridges plus 3 tests, no .ts modified.",
+      "startedAt": "2026-08-09T09:57:58.342Z",
+      "completedAt": "2026-08-09T10:02:53.241Z"
     },
     {
       "stepId": "step-7",
       "description": "Prove zero behaviour change, run all three gates, adversarially review, then commit. Confirm with `git status --porcelain` and `git diff --stat` that the diff contains ONLY added `.js` files plus the three new tests — no `.ts` file modified anywhere, and in particular nothing under `src/generated/`. Record each suite's test count BEFORE and AFTER as explicit numbers, all after-counts greater than or equal to their before-counts. Run all three focused gates (typecheck and test for skills, mcp and control-room-client) fresh, exiting 0 — while remembering this green run is NOT the evidence for this task; the step-5 probe is, and both must be reported. Adversarial pass: does `http-server-test-helpers.js` exist anywhere (it must NOT); does every bridge point at its own sibling; did any file get CRLF; does the negative control assert the literal ERR_MODULE_NOT_FOUND; do generator-determinism and generated-coverage still pass; was any probe failure naming node_modules quietly bridged instead of reported; did a concurrent task add a module after step 1 — re-run the audit immediately before committing. Then commit by EXPLICIT PATHSPEC covering the new .js files and the three tests: never a bare git commit, never git add -A, never a directory pathspec under packages/. Verify with `git show --stat` that no .ts file appears.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/skills/src/index.js",
+        "packages/skills/src/skill-contract.js",
+        "packages/skills/src/skill-loader.js",
+        "packages/skills/src/skill-manifest.js",
+        "packages/skills/src/skill-snapshot.js",
+        "packages/skills/src/skills-runtime-entrypoint.test.ts",
+        "packages/mcp/src/index.js",
+        "packages/mcp/src/http/http-resume.js",
+        "packages/mcp/src/http/http-server.js",
+        "packages/mcp/src/http/http-session.js",
+        "packages/mcp/src/http/http-tool-bridge.js",
+        "packages/mcp/src/stdio/stdio-dispatch-port.js",
+        "packages/mcp/src/stdio/stdio-server.js",
+        "packages/mcp/src/stdio/stdio-tool-schemas.js",
+        "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
+        "packages/control-room-client/src/index.js",
+        "packages/control-room-client/src/client-compat.js",
+        "packages/control-room-client/src/generated/generated-client.js",
+        "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+      ],
+      "note": "Committed 22898bc on moe/work-2026-08-08. 19 files, +667, ALL `create mode` — zero M entries, so no .ts file was modified anywhere and nothing under src/generated/ was touched. The only .ts in the commit are the three new tests, all A.\n\nZERO BEHAVIOUR CHANGE, BEFORE/AFTER, all gates exit 0:\n  @moe/skills               2 files / 75 passed + 1 skipped  ->  3 files / 80 passed + 1 skipped\n  @moe/mcp                  6 files / 125 passed             ->  7 files / 131 passed\n  @moe/control-room-client  3 files / 26 passed              ->  4 files / 32 passed\nEvery after-count exceeds its before-count; nothing was removed or skipped.\n\nBOTH KINDS OF EVIDENCE REPORTED, as the step demands, because the green vitest run is NOT the evidence for this task — vitest rewrites ./foo.js to foo.ts and is structurally blind to a missing bridge. Fresh composite run at HEAD 22898bc, Node v24.16.0 from repo root, VERIFICATION_RESULT=PASS:\n  POSITIVE skills 15 exports / 0 undefined; mcp 12 / 0; control-room-client 1 / 0\n  NEGATIVE http/http-server-test-helpers.js and dispatch-conformance.js both ERR_MODULE_NOT_FOUND, matched as the literal string\n  CONTROL  scheduler 36, core 39 — unchanged\n\nCOMMITTED BLOBS VERIFIED, NOT JUST THE WORKING TREE. core.autocrlf=true is set globally here; only .gitattributes `* text=auto eol=lf` keeps a bridge LF through the index. All 16 blobs read back with `git show HEAD:<path> | od`: N=16 BAD=0, zero 0d bytes, last byte 0a, byte length equal to the arithmetically computed expected length.\n\nCOMMIT HYGIENE. Index was empty before I staged; `git add --` then `git commit -F - --` over 19 EXPLICIT paths, never a bare commit, never -A, never a directory pathspec. Staged set verified as exactly 19 A-entries with zero foreign paths before committing, and `git show --stat` verified after. This mattered: the shared tree currently holds substantial foreign uncommitted work (apps/control-room board/doctor/recovery changes, nine .moe task files, tests/runtime) that a bare commit would have swallowed.\n\nADVERSARIAL PASS, every item from the step, all clean:\n  - http-server-test-helpers.js / dispatch-conformance.js exist NOWHERE in the repo — searched the whole tree, not just their own directories.\n  - Every bridge points at its own sibling: asserted by exact string equality per file, and drill 5 in step 6 proved a neighbour-pointing bridge reddens.\n  - CRLF: od-based scan over all 16 bridges AND the 3 new tests, zero 0d. Never `grep -c $'\\r'`, which false-positives through this tool (mem:gotcha-bash-tool-mangles-dollar-quoted-cr-pattern).\n  - Negative controls assert the literal ERR_MODULE_NOT_FOUND, in the probe and in all three test files.\n  - generator-determinism + generated-coverage re-run at the end: 2 files / 16 passed, exit 0.\n  - No probe failure named node_modules; @modelcontextprotocol/sdk resolves, nothing was papered over.\n  - CONCURRENT DRIFT: the full audit was re-derived and re-run immediately before committing — EXPECTED=16 SWEPT=16 MISSING=0 UNEXPECTED=0 BAD=0, counts still 5/10/3. No module appeared since step 1.\n\nDEVIATION 2 FROM STEP 1 IS RETRACTED — a concurrent worker already owns it. tests/runtime/package-loadability.test.ts and package-loadability-support.ts are MODIFIED in the shared working tree by someone else, and their edit already reduces allowedPackageFailures to Object.freeze({}), retiring the three allowances stamped with my task id. I therefore touched neither file: the scope addition I declared is unnecessary and taking it would have collided with live foreign work. I verified the outcome rather than assuming it — `vitest run tests/runtime/package-loadability.test.ts` is GREEN (1 file / 6 tests) with my bridges in place. Ordering note for whoever owns that file: their commit depends on this one, since an empty allowlist plus missing bridges would fail the same test from the other direction. Flagged in channel.\n\nTWO JUDGEMENT CALLS AN ATTACKER WOULD PROBE, recorded rather than hidden:\n1. Child processes in the three new tests now pass `timeout: 20_000` to execFile. Without it a hung child fails the vitest assertion but is never reaped, leaking a process into the run. Added during this pass, gates re-run green afterwards.\n2. The three test files duplicate ~90 lines of helper each. Deliberate: it matches the scheduler and core precedent of a self-contained per-package guard, and sharing would need a cross-package import that all three exclusive `exports` maps forbid. Each file is 199/228/221 lines, inside the 250 target.\nAlso noted: if a production module ever contained the literal text `from \"vitest\"`, classify() would demote it to test tier. That fails LOUDLY rather than silently — the bridge on disk becomes UNEXPECTED and, if the module is reachable from index.ts, the reachability test reddens too. Two independent rules cross-check each other by design.",
+      "startedAt": "2026-08-09T10:02:56.527Z",
+      "completedAt": "2026-08-09T10:06:19.376Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29cc6667",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-812c17a0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -111,12 +175,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:10:48.516Z",
-  "updatedAt": "2026-08-09T09:52:14.551Z",
+  "updatedAt": "2026-08-09T10:08:43.268Z",
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:33:40.061Z",
@@ -124,7 +194,7 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
     "firstClaimAt": "2026-08-09T09:48:15.764Z",
-    "executedStepCount": 1
+    "executedStepCount": 7
   },
   "planningNotes": {
     "approachesConsidered": "(1) THREE PACKAGES, ONE TASK — justified because it is one mechanical concern with one probe harness, and the three are individually tiny (5, 10 and 3 modules). But this is the LEAST uniform of the three sweep tasks and the plan says so explicitly: @moe/mcp has two subdirectories and a third-party dependency, and @moe/control-room-client contains generated output. Those two wrinkles get their own steps rather than being buried in a bulk sweep.\n(2) THE EXCLUSION RULE HAS A REAL TARGET HERE, unlike its sibling task. `packages/mcp/src/http/http-server-test-helpers.ts` matches the `*-test-helpers.ts` convention and must get NO bridge. That is also the natural aim for the probe's negative control: after the sweep, importing `http-server-test-helpers.js` must STILL fail with ERR_MODULE_NOT_FOUND, which simultaneously proves the probe can detect failure and that test-only files were correctly skipped. The sibling task had to invent a non-existent specifier for this; here the real thing exists.\n(3) GENERATED OUTPUT GETS A HAND-WRITTEN BRIDGE. `src/generated/generated-client.ts` still needs `generated-client.js` beside it, but the bridge is hand-written source — do NOT teach the generator to emit bridges and do NOT hand-edit generated files. The package already ships generator-determinism and generated-coverage tests that will catch either mistake.\n(4) EXTERNAL DEPENDENCY FAILURES ARE NOT THIS TASK'S DEFECT. @moe/mcp depends on @modelcontextprotocol/sdk; a probe failure naming node_modules is a different defect with a different owner and must be reported, never papered over with a bridge.",
@@ -145,7 +215,36 @@
   },
   "planApprovedAt": "2026-08-09T09:33:42.084Z",
   "contextFetchedBy": [
-    "worker-29cc6667"
+    "worker-29cc6667",
+    "qa-812c17a0"
   ],
-  "workStartedAt": "2026-08-09T09:48:50.584Z"
+  "workStartedAt": "2026-08-09T09:48:50.584Z",
+  "reviewStartedAt": "2026-08-09T10:08:37.378Z",
+  "verification": {
+    "command": "for p in skills mcp control-room-client; do pnpm --filter @moe/$p typecheck && pnpm --filter @moe/$p test; done; then the plain-Node probe from the repo root: POSITIVE all three entries, NEGATIVE http-server-test-helpers.js + dispatch-conformance.js must raise the literal ERR_MODULE_NOT_FOUND, CONTROL scheduler; plus pnpm exec vitest run tests/runtime/package-loadability.test.ts",
+    "exitCode": 0,
+    "outputTail": "=== RE-VERIFY FRESH at HEAD daadf47 ===\n@moe/skills                typecheck=0  Test Files 3 passed (3)  Tests 80 passed | 1 skipped (81)\n@moe/mcp                   typecheck=0  Test Files 7 passed (7)  Tests 131 passed (131)\n@moe/control-room-client   typecheck=0  Test Files 4 passed (4)  Tests 32 passed (32)\nPOSITIVE packages/skills/src/index.ts                 {\"o\":\"IMPORTED\",\"e\":15,\"u\":[]}\nPOSITIVE packages/mcp/src/index.ts                    {\"o\":\"IMPORTED\",\"e\":12,\"u\":[]}\nPOSITIVE packages/control-room-client/src/index.ts    {\"o\":\"IMPORTED\",\"e\":1,\"u\":[]}\nNEGATIVE packages/mcp/src/http/http-server-test-helpers.js {\"o\":\"IMPORT_FAILED\",\"code\":\"ERR_MODULE_NOT_FOUND\",\"url\":\"file:///D:/projexts/moe-next/packages/mcp/src/http/http-server-test-helpers.js\"}\nNEGATIVE packages/mcp/src/dispatch-conformance.js     {\"o\":\"IMPORT_FAILED\",\"code\":\"ERR_MODULE_NOT_FOUND\",\"url\":\"file:///D:/projexts/moe-next/packages/mcp/src/dispatch-conformance.js\"}\nCONTROL  scheduler                                    {\"o\":\"IMPORTED\",\"e\":36,\"u\":[]}\n--- root loadability test at new HEAD ---\n Test Files 1 passed (1)\n Tests 6 passed (6)\nVERIFICATION_RESULT=PASS",
+    "reportedAt": "2026-08-09T10:08:37.378Z"
+  },
+  "filesModified": [
+    "packages/skills/src/index.js",
+    "packages/skills/src/skill-contract.js",
+    "packages/skills/src/skill-loader.js",
+    "packages/skills/src/skill-manifest.js",
+    "packages/skills/src/skill-snapshot.js",
+    "packages/mcp/src/index.js",
+    "packages/mcp/src/http/http-resume.js",
+    "packages/mcp/src/http/http-server.js",
+    "packages/mcp/src/http/http-session.js",
+    "packages/mcp/src/http/http-tool-bridge.js",
+    "packages/mcp/src/stdio/stdio-dispatch-port.js",
+    "packages/mcp/src/stdio/stdio-server.js",
+    "packages/mcp/src/stdio/stdio-tool-schemas.js",
+    "packages/control-room-client/src/index.js",
+    "packages/control-room-client/src/client-compat.js",
+    "packages/control-room-client/src/generated/generated-client.js",
+    "packages/skills/src/skills-runtime-entrypoint.test.ts",
+    "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
+    "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts"
+  ]
 }

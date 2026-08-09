@@ -94,17 +94,24 @@
     {
       "stepId": "step-6",
       "description": "Decide the lane, request the amendment if needed, and run the gates. The suite lives under tests/ and the root vitest config already includes `tests/**/*.test.ts`, so it runs under `pnpm test` with NO config change — confirm that is true rather than assuming it. If a dedicated script (e.g. `test:runtime`, following the existing `test:property` precedent) is genuinely wanted, that edits root package.json which is outside this task's owned paths: request the ownership amendment and WAIT for confirmation; do not self-approve, and note the suite is fully functional without it. Then run, capturing fresh output: `pnpm typecheck` and `pnpm test`, both of which must exit 0 — the gate must land green thanks to the allowlist, not red. Record the probe's full per-package report in the completion evidence, including the six allowlisted failures with their owning task ids, so the next reader sees exactly what is outstanding and who owns it. Attribute any unrelated red by path rather than by a remembered count.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json"
       ],
-      "startedAt": "2026-08-09T09:51:59.550Z"
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts",
+        "tests/runtime/package-loadability-support.ts"
+      ],
+      "note": "No dedicated root script is needed and no package.json amendment was requested: root vitest.config.ts already includes tests/**/*.test.ts, confirmed by fresh `pnpm typecheck && pnpm test` exit 0 with the new suite discovered (167 files / 3033 passed / 1 skipped). Fresh plain-Node report: PASS daemon(31), context(19), contracts(46), control-room-model(1), coordination(14), core(39), review(23), runner(66), scheduler(36), store(26), testkit(11), all with no undefined exports. ALLOWLISTED ERR_MODULE_NOT_FOUND: control-room-client -> file:///.../packages/control-room-client/src/client-compat.js; mcp -> file:///.../packages/mcp/src/stdio/stdio-server.js; skills -> file:///.../packages/skills/src/skill-contract.js. All three are dated and owned by task-17b03331e4ee488a994635144cae4a53. apps/control-room remains explicitly classified browser-only NO_RUNTIME_ENTRY. No unrelated red.",
+      "startedAt": "2026-08-09T09:51:59.550Z",
+      "completedAt": "2026-08-09T09:52:36.710Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the suite as an attacker: could it pass without spawning a real Node process anywhere — the single failure that would make it worthless; is the package list discovered or quietly hard-coded; would a package added tomorrow be enrolled automatically; do BOTH controls exist and would the suite notice if the harness itself broke; does the negative control assert the literal ERR_MODULE_NOT_FOUND code rather than message text; does an allowlisted package that starts passing actually FAIL the suite, verified by the step-5 drill rather than by reading the code; does a failure name both the package and the unresolvable specifier; is a child-process timeout reported distinctly instead of silently passing; did any package's bridges get 'helpfully' fixed here, stealing another task's deliverable. Then stage and commit by EXPLICIT PATHSPEC — never a bare git commit, never git commit -a, never git add -A — since several agents share this working directory and other tasks have uncommitted work in packages/. Run `git status --porcelain` first, unstage any foreign path with `git restore --staged`, and verify with `git show --stat` that only tests/runtime/ (plus root package.json if the amendment was granted) landed, with no probe, scratch or debug files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T09:52:48.421Z"
     }
   ],
   "status": "WORKING",
@@ -127,13 +134,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:11:33.693Z",
-  "updatedAt": "2026-08-09T09:51:59.550Z",
+  "updatedAt": "2026-08-09T09:52:48.421Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:31:19.372Z",
@@ -141,7 +149,7 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
     "firstClaimAt": "2026-08-09T09:31:37.646Z",
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planningNotes": {
     "approachesConsidered": "(1) SCOPE DECISION — the task description left this to the architect and I am making it: LAND THE GATE WITH A DATED, PER-ENTRY-JUSTIFIED ALLOWLIST, not red. A permanently-red gate in the repo-wide lane teaches everyone to ignore a red lane, and this fleet runs `pnpm test` as the final gate on multiple tasks — a standing red would block every one of them and would be routed around within the hour. The allowlist keeps the lane green and honest simultaneously: each of the six entries names its owning sweep task, and the suite FAILS if an allowlisted package starts passing (so a sweep landing forces the entry's removal, exactly like the absence ratchet that this repo already runs). That inverts the usual allowlist rot — the list cannot outlive its cause.\n(2) SPAWN REAL NODE, NEVER IN-PROCESS. An in-process `import()` inside vitest reproduces vitest's own `.js`->`.ts` rewriting, which is the precise blindness this gate exists to defeat. It must be a child process with --experimental-strip-types.\n(3) DISCOVER, NEVER LIST. @moe/context and @moe/review shipped with zero bridges days after being created; a hand-maintained package list would have missed both. Read pnpm-workspace.yaml globs, expand them, and assert the discovered set equals the directories on disk so a new package is covered the day it appears.\n(4) CONTROLS ARE NOT OPTIONAL HERE, and I have direct evidence why: my first probe while gathering this task's data used bare package names, reported ALL TEN packages failing including correctly-bridged @moe/scheduler, and was pure harness artifact. Only a passing control exposed it. A gate that can cry repo-wide catastrophe without a self-check will be disabled rather than believed.",

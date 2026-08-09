@@ -16,12 +16,12 @@
     "Use TDD and stage only explicit owned paths; no worktree, broad add, push, or merge."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Promoted by governor-38d884e4 on human request, as a judgment call with a named risk — not a clean dependency pass. 4 of 5 hard deps are DONE: Lease presence core (task-967769ea), Conserved budget core (task-d5c4b086), Claude runtime adapter (task-5ff2b39d), Planning graph lifecycle core (task-1ade51c0). The 5th, Projection outbox core (task-55d5a898), is a SPIDR shell whose landed substance — projections, upcasters, transactional outbox relay — is already committed; only subscription cursors (step 4, in flight) and crash/rebuild hardening (step 5, PLANNING) remain. RATIONALE: this task's owned paths are packages/runner/src/supervisor/** and apps/daemon/src/work/**, disjoint from packages/store/**, and its scope (atomic work claim, lease/slot/budget reservation, one-use activation, process observation, restart reconciliation) reads current projection state rather than following a durable cursor feed. ARCHITECT: verify that assumption first. If planning shows this genuinely consumes subscription cursors or the crash/rebuild guarantees, report_blocked and I will move it back to BACKLOG - that is a cheap reversal, not a failure. CRITICAL priority and the second chokepoint on the board: it gates Codex runtime adapter, which in turn gates most of epic-f02c6977 and epic-bf111658.",
+  "reopenReason": "LABELLED SHELL-CLOSE HOP 3 OF 3 — CLOSED AS A DECOMPOSITION SHELL, NOT AS REVIEWED WORK. governor-eae4fc53, 2026-08-09. FINAL AND MOST IMPORTANT LABEL: this task's status history now reads BLOCKED -> BACKLOG -> REVIEW -> DONE. The REVIEW hop was mechanical transit, forced by Moe refusing a direct BACKLOG -> DONE transition. NO QA AGENT EVER REVIEWED THIS RECORD, and none should have — the shell has an empty implementationPlan (0 steps), owns no code, and produced no diff. Do not read this history as a QA pass. THE ACTUAL WORK, and the actual basis for calling this DONE, is the human-approved 4-child SPIDR split created by architect-e9f16b5b on 2026-08-08, every child independently planned, implemented, and QA-approved: (1) task-2580a578 Effect intent lifecycle and one-use activation gate, DONE 8/8, approved by qa-cbad3a29 at 388/388 with three independently re-run mutation drills; (2) task-4a3b5ec0 Launch lock, process adoption, drain and restart reconciliation, DONE 11/11 after one QA reject and a clean fix; (3) task-ba3a45f9 Daemon work services, DONE 11/11, which carried the human-approved apps/daemon/package.json ownership amendment; (4) task-49acb856 Supervisor race and restart hardening gate, DONE 11/11, which carried THIS PARENT'S FULL DEFINITION OF DONE verbatim and cleared REVIEW under qa-812c17a0 — its step-7 shipped a 36-row verdict-equality drift gate plus a 546-case stratified sweep with three-way daemon/scheduler/runner agreement, and its focused gate was 980/980 green when I verified it independently. This parent's four DoD items are satisfied through child 4, not through anything the shell did. DOWNSTREAM EFFECT, stated so the next governor understands why this mattered: closing this shell satisfies the \"Foundation effect supervisor\" dependency of task-a0fa6da4 (Codex runtime adapter), which in turn gates task-e87a7353 (Linux effect conformance) and task-e94b2055 (macOS effect conformance). Those three were the last hard-blocked cluster in epic-f02c6977.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.373Z",
-  "updatedAt": "2026-08-08T20:07:56.734Z",
+  "updatedAt": "2026-08-09T10:06:08.854Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T16:14:31.225Z"
   },
@@ -44,10 +44,10 @@
     "architect-e9f16b5b",
     "governor-eae4fc53"
   ],
-  "blockedReason": "Decomposition shell, NOT the store-dependency block you pre-authorized: your cursor assumption HOLDS (EffectIntent binds a predecessor cursor value, design 771; no subscription feed, no crash/rebuild dependency). Blocked because 7 concerns across 2 packages cannot fit one plan (12-step/10-file caps; lease core was 21 files). Human approved a 4-child SPIDR split, all created CRITICAL in dependency order: task-2580a578 (intent lifecycle + one-use activation) -> task-4a3b5ec0 (launch lock/adoption/drain/restart) -> task-ba3a45f9 (daemon work services; includes approved ownership amendment apps/daemon/package.json +@moe/runner + single lock hunk) -> task-49acb856 (race/restart hardening gate, carries this parent's full DoD). Child 1 is immediately plannable — deps task-5ff2b39d and task-967769ea are DONE. Promote task-2580a578 to PLANNING to keep the chokepoint moving; unblock this shell only when all four children are DONE, then close via labeled REVIEW-transit (task-d5c4b086 precedent). Details in comment-c866c1cc.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-08T16:21:12.020Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Human-approved 4-child SPIDR split created (task-2580a578, task-4a3b5ec0, task-ba3a45f9, task-49acb856, dependency-ordered, all CRITICAL); governor's store-dependency question answered (assumption holds, no subscription-feed dependency); shell blocked with full rationale in comment-c866c1cc and Serena memory task-task-312c1de3c76a4f1dbd8da5c34e629b0e-handoff.",
