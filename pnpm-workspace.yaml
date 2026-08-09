@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  # Reserved, not yet populated: external integrations; task-9fd52b41 owns adapters/jetbrains/**.
   - adapters/*
   - packages/*
 autoInstallPeers: false

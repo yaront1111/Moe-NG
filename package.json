@@ -17,13 +17,16 @@
     "test:property": "vitest run tests/property",
     "test:e2e": "tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e",
     "test:e2e:browser": "tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts",
-    "test:integration": "pnpm typecheck:packaging && vitest run tests/integration",
+    "test:integration": "pnpm typecheck:packaging && vitest run tests/integration && node --test tests/integration/release-supply-chain.test.mjs",
     "test:store": "vitest run packages/store/src",
     "test:fault": "tsc -p tests/fault/tsconfig.json && vitest run --config tests/fault/vitest.config.ts",
     "test:security": "tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts",
+    "release:evidence": "node scripts/release/supply-chain.mjs --head",
+    "typecheck:release": "tsc --noEmit --strict --allowJs --checkJs --allowImportingTsExtensions --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames scripts/release/release-subject.mjs scripts/release/supply-chain.mjs",
     "typecheck:packaging": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts",
     "verify:foundation": "pnpm typecheck && pnpm test:meta",
-    "verify:store": "pnpm typecheck && pnpm test:store"
+    "verify:store": "pnpm typecheck && pnpm test:store",
+    "verify:release": "pnpm typecheck:release && pnpm test:integration && pnpm release:evidence"
   },
   "devDependencies": {
     "@cyclonedx/cdxgen": "12.8.2",
