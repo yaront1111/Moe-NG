@@ -205,7 +205,7 @@ function cleanRoots(/** @type {string[]} */ roots) {
       if (installed.exitCode !== 0) return releaseRefusal("FROZEN_INSTALL_FAILED");
       const after = { lock: sha256(ports.readSourceFile(root, "pnpm-lock.yaml")), package: sha256(ports.readSourceFile(root, "package.json")) };
       if (canonical(before) !== canonical(after)) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
-      const subject = await ports.buildSubject({ buildIndex, privateKey, signingKeyId: "ephemeral-release-verification", source, sourceRoot: root });
+      const subject = await ports.buildSubject({ privateKey, signingKeyId: "ephemeral-release-verification", source, sourceRoot: root });
       if (!subject.ok) return subject;
       if (subject.componentCount !== 5 || subject.templateCount !== 3) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
       const sbomRun = await ports.generateSbom({ sourceRoot: root });

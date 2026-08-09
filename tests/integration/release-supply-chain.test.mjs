@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
@@ -211,6 +211,31 @@ describe("release supply-chain evidence", () => {
     assert.equal(Object.hasOwn(result.evidence.builds[0], "privateKey"), false);
     assert.equal(result.evidence.builds[0].sourceDigests.lockBefore,
       result.evidence.builds[0].sourceDigests.lockAfter);
+  });
+
+  test("admits the orchestrator argument through the real subject builder", async () => {
+    const { RELEASE_COMPONENTS, RELEASE_TEMPLATES, buildReleaseSubject } = await loadSubject();
+    const owned = [...RELEASE_COMPONENTS.flatMap((entry) => entry.assets), ...RELEASE_TEMPLATES];
+    assert.ok(owned.length > 0);
+    const result = await runSupply({}, {
+      archiveSource: spy(async ({ destination }) => {
+        for (const logicalPath of owned) {
+          const target = join(destination, ...logicalPath.split("/"));
+          mkdirSync(dirname(target), { recursive: true });
+          copyFileSync(join(REPO_ROOT, ...logicalPath.split("/")), target);
+        }
+        return { destination, ok: true };
+      }),
+      buildSubject: buildReleaseSubject,
+    });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(result.evidence.componentCount, 5);
+    assert.equal(result.evidence.templateCount, 3);
+    assert.equal(result.evidence.builds.length, 2);
+    assert.equal(result.evidence.builds[0].containers.length, 5);
+    assert.equal(result.evidence.builds[0].verificationKeyUse, "EPHEMERAL_VERIFICATION_ONLY");
+    assert.deepEqual(result.evidence.builds[0].containers, result.evidence.builds[1].containers);
   });
 
   for (const [operation, reason] of [
