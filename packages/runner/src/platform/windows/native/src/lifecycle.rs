@@ -15,7 +15,7 @@
 
 use crate::job::Job;
 use crate::process::ContainedProcess;
-use crate::win32::{NativeError, NativeOp, ProcessCalls, WaitOutcome, Win32Calls};
+use crate::win32::{NativeError, NativeOp, ProcessCalls, RawHandle, WaitOutcome, Win32Calls};
 
 /// How long to sleep between `ActiveProcesses` samples while waiting for a Job
 /// to empty, and how many samples to take before giving up.
@@ -35,9 +35,15 @@ const EMPTY_POLL_ATTEMPTS: u32 = 500;
 /// without the wait: not a runtime check a caller can skip, but a value they
 /// cannot fabricate.
 ///
+/// IT CARRIES THE HANDLE IT IS ABOUT. A bare token would say only "some process
+/// was seen to exit", so a caller holding one for process A could use it to read
+/// an exit code for process B — the proof would be real and would authorise the
+/// wrong question. The handle is what binds it to one process, and
+/// [`query_exit_status`] refuses a proof that does not match.
+///
 /// DELIBERATELY NOT `Clone`. A clonable proof could be kept past the wait it
 /// came from and reused for a different question.
-pub struct SignalledProof(());
+pub struct SignalledProof(RawHandle);
 
 /// What a wait observed, with the [`SignalledProof`] attached to the one
 /// outcome that carries authority.
@@ -77,6 +83,10 @@ pub enum UnknownExit {
     StillRunning,
     /// A wait returned `WAIT_ABANDONED`: neither exited nor known to be running.
     WaitAbandoned,
+    /// The proof offered was produced by a wait on a DIFFERENT process. It is a
+    /// real observation of some process exiting, and it says nothing at all
+    /// about this one.
+    ProofFromAnotherProcess,
 }
 
 /// What is known about how a process ended.
@@ -120,8 +130,9 @@ pub fn wait_for_process<C: Win32Calls + ProcessCalls>(
     contained: &ContainedProcess<'_, C>,
     timeout_ms: u32,
 ) -> Result<Waited, NativeError> {
-    Ok(match calls.wait_for_process(contained.process_handle(), timeout_ms)? {
-        WaitOutcome::Signalled => Waited::Signalled(SignalledProof(())),
+    let process = contained.process_handle();
+    Ok(match calls.wait_for_process(process, timeout_ms)? {
+        WaitOutcome::Signalled => Waited::Signalled(SignalledProof(process)),
         WaitOutcome::TimedOut => Waited::TimedOut,
         WaitOutcome::Abandoned => Waited::Abandoned,
     })
@@ -140,9 +151,13 @@ pub fn query_exit_status<C: Win32Calls + ProcessCalls>(
     observed: Option<&Waited>,
 ) -> Result<ExitStatus, NativeError> {
     match observed {
-        Some(Waited::Signalled(_)) => {
+        Some(Waited::Signalled(proof)) if proof.0 == contained.process_handle() => {
             let code = calls.exit_code(contained.process_handle())?;
             Ok(ExitStatus::Exited(ExitCode(code)))
+        }
+        // A genuine proof, about somebody else. It authorises nothing here.
+        Some(Waited::Signalled(_)) => {
+            Ok(ExitStatus::Unknown(UnknownExit::ProofFromAnotherProcess))
         }
         Some(Waited::TimedOut) => Ok(ExitStatus::Unknown(UnknownExit::StillRunning)),
         Some(Waited::Abandoned) => Ok(ExitStatus::Unknown(UnknownExit::WaitAbandoned)),

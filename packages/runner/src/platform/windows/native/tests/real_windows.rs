@@ -139,6 +139,12 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain([0]).collect()
 }
 
+/// Case-folds a UTF-16 path for comparison. Windows paths are case-insensitive,
+/// and the kernel may report a different case than was requested.
+fn upper(text: &[u16]) -> Vec<u16> {
+    text.iter().map(|unit| char::from_u32(u32::from(*unit)).map_or(*unit, |c| c.to_ascii_uppercase() as u16)).collect()
+}
+
 fn environment_block(entries: &[String]) -> Vec<u16> {
     let mut block: Vec<u16> =
         entries.iter().flat_map(|entry| entry.encode_utf16().chain([0])).collect();
@@ -324,9 +330,13 @@ fn a_suspended_child_is_inside_the_job_and_has_not_run_before_the_proofs() {
     let identity = query_identity(&calls, &contained).expect("a real identity query must succeed");
     assert!(identity.pid != 0, "a real PID must be nonzero");
     assert!(identity.creation_time != 0, "a real creation time must be nonzero");
-    assert_eq!(
-        String::from_utf16_lossy(&identity.image).to_ascii_uppercase(),
-        String::from_utf16_lossy(&command.application).trim_end_matches('\0').to_ascii_uppercase(),
+    // `assert!` rather than `assert_eq!`, and the message names NEITHER path.
+    // A failing assert_eq! is a panic message, and a panic message carrying an
+    // executable path is exactly the echo the rail forbids -- the same reason
+    // `RawHandle` has no `Debug`.
+    let requested: Vec<u16> = command.application.iter().copied().take_while(|u| *u != 0).collect();
+    assert!(
+        upper(&identity.image) == upper(&requested),
         "the kernel loaded a different image than the one requested"
     );
 

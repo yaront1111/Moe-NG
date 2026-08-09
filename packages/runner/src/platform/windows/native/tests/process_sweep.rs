@@ -855,6 +855,40 @@ fn an_exit_code_of_259_is_reported_as_exited_not_as_still_active() {
 }
 
 #[test]
+fn a_signalled_proof_about_one_process_does_not_authorise_another() {
+    // A proof that some process exited is a REAL observation, and it says
+    // nothing about a different process. Without the handle inside it, a caller
+    // holding a proof for A could read an exit code for B and be told a number
+    // -- unverifiable evidence gaining authority by borrowing someone else's.
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_exit_code(7);
+    let job = Job::create(&calls).expect("healthy Job construction must succeed");
+    let storage = SpecStorage::new();
+    let first = ContainedProcess::create(&calls, &job, &storage.spec())
+        .expect("healthy construction must succeed");
+    let second = ContainedProcess::create(&calls, &job, &storage.spec())
+        .expect("healthy construction must succeed");
+
+    let waited = wait_for_process(&calls, &first, u32::MAX).expect("a healthy wait must succeed");
+    let borrowed = query_exit_status(&calls, &second, Some(&waited))
+        .expect("a mismatched proof is not a call failure");
+
+    assert_eq!(borrowed, ExitStatus::Unknown(UnknownExit::ProofFromAnotherProcess));
+    assert!(!calls.calls().contains(&"exit-code"), "read an exit code on another's proof");
+
+    // The same proof still works for the process it is actually about.
+    match query_exit_status(&calls, &first, Some(&waited)).expect("its own proof must be accepted")
+    {
+        ExitStatus::Exited(code) => assert_eq!(code.value(), 7),
+        other => panic!("a matching proof must yield an exit code, got {other:?}"),
+    }
+
+    first.close().expect("healthy close must succeed");
+    second.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
 fn three_of_the_four_wait_results_are_ok_values() {
     // WaitForSingleObject returns a WAIT_EVENT, not a BOOL. A production
     // surface shaped as `!= WAIT_OBJECT_0 -> Err` passes an is_err() test and
