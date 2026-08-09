@@ -122,6 +122,7 @@ export type {
   DocumentWorkCandidate,
   DocumentWorkProposal,
   DocumentWorkProposalAccepted,
+  DocumentWorkProposalAdvisoryEnvelope,
   DocumentWorkProposalContractRefused,
   DocumentWorkProposalErrorCode,
   DocumentWorkProposalInputRejected,

@@ -113,7 +113,11 @@ export function createSessionAuthenticator(
     const expiresAtMs = Date.parse(match.expiresAt);
     // Exclusive expiry, matching @moe/core's `isSessionUsableAt`: unusable at exactly expiresAt.
     if (!Number.isFinite(expiresAtMs) || config.clock() >= expiresAtMs) return UNAUTHENTICATED;
-    return authenticated(match.capabilities, match.principalId, config.projectId);
+    // The WORKING principal is the session itself, not the principal that opened it: two
+    // agents whose sessions share an opener must remain distinct identities, or per-agent
+    // fences (work claims, decision keys) collapse into one. The opener stays durably
+    // recorded on the session record for audit.
+    return authenticated(match.capabilities, match.sessionId, config.projectId);
   };
   return Object.freeze({ authenticate });
 }

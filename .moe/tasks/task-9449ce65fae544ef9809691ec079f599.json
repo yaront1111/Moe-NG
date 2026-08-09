@@ -139,13 +139,19 @@
     {
       "stepId": "step-7",
       "description": "Run the concentrated final gate at the frozen implementation SHA; the exact task verification command is `pnpm verify:release`, foreground and unpiped. Require exit 0 for the focused typecheck, integration suite, both fresh frozen-lockfile Windows builds, distribution signature/asset/compatibility admission, SBOM, audit, license, reproducibility comparison, and atomic evidence write. Mechanically inspect the emitted record for the exact frozen SHA; positive five-component/two-build/three-OS counts; matching raw container hashes; reviewed-only SBOM normalization; zero current production advisories (or an honest coded non-green result if the live registry changed); Windows evidence; Linux/macOS UNKNOWN rows with task ids; doctor UNKNOWN with the missing public symbol; releaseVerdict UNKNOWN; and publicationAuthorized false. In this same final step run the required repo-wide typecheck/test and daemon-test HEAD legs, compare them with the pre-diff baseline by failing path, report foreign red verbatim, and require an empty new-failure intersection with the five owned paths. Call complete_task only with the fresh `pnpm verify:release` output/evidence path and explicit committed-path attribution; do not claim a GA release, OS coverage beyond Windows, npm publication, doctor PASS, GO decision, or benchmark result.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T18:30:09.153Z"
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "GATE GREEN. `pnpm verify:release` foreground, unpiped, EXIT=0 at frozen SHA 6daa942d2e547231d69b5eac0d00fa8bfb8b789c. Legs: typecheck:release 0; typecheck:packaging 0; vitest tests/integration 2 files / 40 tests; node --test release suite 41 tests / 41 pass / 0 fail INCLUDING \"records truthful evidence through the actual package script\" (17.6s) — the case amend-1 deferred here; then the real twice-built CLI.\n\nTHE FIRST RUN OF THIS GATE FAILED AND EXPOSED THREE REAL DEFECTS. None was reachable from the injected-port tests; all three needed the actual CLI.\n1. SBOM_REPORT_INVALID, deterministic. `cdxgen -o -` is NOT a stdout selector — cdxgen printed a SECURE MODE table to stdout and wrote the document to bom.json, so JSON.parse(stdout) could never succeed. The SBOM leg had never once worked. Fixed by passing an explicit -o path under the throwaway source root and reading it back; a missing file is now a coded failure, not an empty parse. Port contract unchanged, so every existing fake-port case still applies.\n2. REPRODUCIBILITY_MISMATCH. The BOM embeds the absolute path of the tree it scanned, and the two builds necessarily scan different temp roots, so normalized digests could never match. Fixed by rewriting THAT BUILD'S OWN source root — and only it — to <SOURCE_ROOT>, in both separator forms.\n3. REPRODUCIBILITY_MISMATCH again. Measured two SBOMs from one unchanged tree: identical except /annotations/timestamp, a SECOND generation time cdxgen stamps beside the tool identity. Added that exact pointer to the reviewed volatile set; the cdxgen identity beside it still compares.\nBoth rewrites are DISCLOSED IN THE RECORD (normalizedPointers + normalizedSourceRootToken), never silent. Narrowness pinned in both directions: a path outside the build root, and annotation text drift other than the timestamp, still refuse REPRODUCIBILITY_MISMATCH.\n\nSTEP 6 REPEATED IN FULL after each fix, as its text requires. Final matrix at the frozen candidate: 12 of 12 mutants KILLED, 12 of 12 RESTORE_EXACT, every drill 1+/1- so none degenerated into a rewrite. D10 (revert SBOM collection to stdout) survived the first repeat — generateSbom is a real-process port every fast test replaces — so I added the same source-boundary guard the suite already uses for the pnpm entrypoint; D10 and D10b both KILLED after.\n\nMECHANICAL INSPECTION of dist/release/6daa942.../eb6b8258.../evidence.json: sourceSha 6daa942 exact, objectFormat sha1 | componentCount 5, templateCount 3, buildCount 2, containers 5+5 | raw container hashes IDENTICAL across both builds | sbomRawDigest DIFFERS across builds (honest, raw hashes preserved) while sbomNormalizedDigest matches | normalizedPointers exactly /annotations/timestamp /metadata/timestamp /serialNumber, rootToken <SOURCE_ROOT> | sbom 383 components | audit 95 dependencies, 0 advisories | licenses 4 groups, 94 packages | os win32=PASS, linux=UNKNOWN(task-e87a7353), darwin=UNKNOWN(task-e94b2055) | doctor UNKNOWN / DOCTOR_COMPATIBILITY_UNAVAILABLE / @moe/daemon.collectDoctorVersionReport | releaseVerdict UNKNOWN | publicationAuthorized false | operation RECORDED | verificationKeyUse EPHEMERAL_VERIFICATION_ONLY | no private-key bytes anywhere in the record | tools node 24.16.0, pnpm 11.0.8, cdxgen 12.8.2, git 2.54.0, bsdtar 3.8.4.\n\nREPO-WIDE PATH-ATTRIBUTED BASELINE, all at HEAD 6daa942: `pnpm typecheck` EXIT 0 (Scope: 16 of 17 workspace projects); `pnpm test` EXIT 0 (205 files / 3894 passed, 1 skipped); `pnpm --filter @moe/daemon test` EXIT 0 (42 files / 772 passed). The failing-path set at HEAD is EMPTY, so the HEAD-minus-baseline delta intersected with my owned paths is EMPTY by construction. NO foreign red to report: the three foreign failures the step-1 baseline recorded at ffa39d61 (scheduler package-boundary scan of daemon-main.ts, a foundation timeout, and the daemon recovery-succession-contract.js bridge) have since been fixed by their owners.\n\nSHARED-TREE NOTES. HEAD moved under me twice mid-step (foreign commits 070a9b1 and 6daa942); all four of my commits — 06abc8c, 1153ed3, 8946b02, d227f7b — remain ancestors of HEAD, verified by merge-base. pnpm-lock.yaml went foreign-dirty mid-step with an unrelated @moe/mcp workspace link, so I NARROWED my last two commits to an explicit two-path pathspec and neither committed nor reverted that foreign change; it is still uncommitted and belongs to another task. Owned files are clean at HEAD. Generated dist/release evidence stays ignored (.gitignore:4) and uncommitted. supply-chain.mjs is 253 physical lines — 3 over the <=250 TARGET, far under the 400 split threshold; I chose that over splitting a cohesive 6-line SBOM collector out of the orchestrator, and flag it for QA judgement.\n\nCLAIM BOUNDARIES, unchanged: this certifies a Windows-only, twice-built, signed distribution container at ONE source commit with UNKNOWN release authority. It is NOT a GA release, NOT OS coverage beyond Windows, NOT an npm publication, NOT doctor PASS, NOT a GO decision, and NOT a ben",
+      "startedAt": "2026-08-09T18:30:09.153Z",
+      "completedAt": "2026-08-09T18:42:53.162Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-97d6df26",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -194,7 +200,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T18:30:09.153Z",
+  "updatedAt": "2026-08-09T18:44:58.526Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-f39f0c46",
@@ -209,7 +215,7 @@
     "firstClaimAt": "2026-08-09T11:40:28.540Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "stepsCompleted": [
     "step-1",
@@ -217,7 +223,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:08:17.773Z",
@@ -277,5 +284,17 @@
       "releasedBy": "worker-5981deec",
       "reason": "Releasing my assignment on this BLOCKED task so I can take CRITICAL task-f5d1dae629 (Publish REVIEW_HANDLERS), which the governor routed and which unblocks task-97554aa4 Foundation self-host canary. This task needs an architect amendment or prerequisite tasks A-C, not a worker; holding it assigned only parks my slot."
     }
+  ],
+  "reviewStartedAt": "2026-08-09T18:44:58.526Z",
+  "verification": {
+    "command": "pnpm verify:release",
+    "exitCode": 0,
+    "outputTail": "  ✔ records truthful evidence through the actual package script (17605.8968ms)\n✔ release package command (17606.8287ms)\nℹ tests 41\nℹ suites 4\nℹ pass 41\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 17926.7501\n$ node scripts/release/supply-chain.mjs --head\n{\"componentCount\":5,\"evidencePath\":\"D:\\\\projexts\\\\moe-next\\\\dist\\\\release\\\\6daa942d2e547231d69b5eac0d00fa8bfb8b789c\\\\eb6b8258cef832e849d683125190de8793ff5384b809ad592271ecc0e338de9f\\\\evidence.json\",\"operation\":\"RECORDED\",\"publicationAuthorized\":false,\"releaseVerdict\":\"UNKNOWN\",\"reportCount\":3,\"sourceSha\":\"6daa942d2e547231d69b5eac0d00fa8bfb8b789c\"}\nEXIT=0",
+    "reportedAt": "2026-08-09T18:44:58.526Z"
+  },
+  "filesModified": [
+    "tests/integration/release-supply-chain.test.mjs",
+    "scripts/release/release-subject.mjs",
+    "scripts/release/supply-chain.mjs"
   ]
 }

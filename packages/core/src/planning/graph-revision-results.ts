@@ -4,6 +4,7 @@
  */
 import { createRuntimeError } from "@moe/contracts";
 
+import { GRAPH_REVISION_LAYER } from "./graph-revision-contract.js";
 import type {
   GraphRevisionCommandKind,
   GraphRevisionEvent,
@@ -12,8 +13,9 @@ import type {
 } from "./graph-revision-contract.js";
 import { deepFreeze } from "./planning-snapshot.js";
 
+/** Every refusal names its layer here once, because `RuntimeError` cannot carry the source. */
 export function rejected(error: ReturnType<typeof createRuntimeError>): GraphRevisionReducerResult {
-  return Object.freeze({ error, ok: false });
+  return Object.freeze({ error, layer: GRAPH_REVISION_LAYER, ok: false });
 }
 
 export function unknownFailure(): GraphRevisionReducerResult {
@@ -35,6 +37,17 @@ export function illegal(
 export function rebound(state: GraphRevisionState): GraphRevisionReducerResult {
   return rejected(createRuntimeError({
     code: "REVISION_REBOUND",
+    source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
+  }));
+}
+
+/** Re-shapes a kernel refusal: the code is the kernel's, the refusing layer is this aggregate. */
+export function supersessionRefused(
+  state: GraphRevisionState,
+  code: "REVISION_REBOUND" | "SUPERSESSION_CONSEQUENCE_CHANGED",
+): GraphRevisionReducerResult {
+  return rejected(createRuntimeError({
+    code,
     source: { aggregate: "GRAPH_REVISION", state: state.lifecycle },
   }));
 }

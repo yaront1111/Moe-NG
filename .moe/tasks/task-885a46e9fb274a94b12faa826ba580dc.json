@@ -134,29 +134,48 @@
     {
       "stepId": "step-8",
       "description": "COMPLETE THE SWEEP. Extend tests/process_sweep.rs to a full failure sweep over every construction arm. One frozen Case per failable arm, each with a DISTINCT Win32 error code so a right-arm result cannot be confused with a right-code coincidence, and `assert_eq!(CASES.len(), 9)` so a sweep that generates zero or fewer cases cannot pass. For each case assert both the exact NativeOp and the exact code. Add the TOTALITY cross-check that job_sweep deliberately no longer owns: the produced process-op set equals a hand-written PROCESS_OPS list exactly, every member is in NativeOp::ALL, and `PROCESS_OPS.len() + 6 == NativeOp::ALL.len()` — so any future variant added without a sweep case fails here. Add the four separated refusal tests: membership call fails; membership succeeds reporting false (code 0); resume call fails; resume succeeds reporting a prior count other than 1 (code 0). Add the no-resume-before-membership test asserting the resume arm NEVER appears in the recorded call log when membership refuses — absence from the log, not merely an Err return. Add the per-handle close-count table across every case proving each acquired handle closes exactly once and none leaks, plus an assertion that delete_attribute_list ran exactly once on every path including failures. Add a first-error-survives-cleanup test in the shape of child 1's first_failure_survives_the_cleanup_close.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
       ],
-      "startedAt": "2026-08-09T18:37:21.842Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
+      ],
+      "note": "SWEEP COMPLETE. 18 tests green, exit 0: 7 in job_sweep.rs (unchanged from baseline) + 11 in process_sweep.rs. Zero warnings remain.\n\nFULL FAILURE SWEEP: `const CASES: [Case; 9]`, one per failable construction arm, each with a DISTINCT Win32 code so a right-arm result cannot be a right-code coincidence — InitAttributeList/122, SetJobListAttribute/8, SetHandleListAttribute/87, CreateProcess/2, AssignProcessToJob/5, IsProcessInJob/6, QueryProcessId/1008, QueryCreationTime/998, ResumeThread/1314. `assert_eq!(CASES.len(), 9)` guards against a sweep that generates zero cases. Each case asserts the exact NativeOp AND the exact code.\n\nTOTALITY, the check job_sweep deliberately handed over: produced set == hand-written PROCESS_OPS exactly (written independently of CASES); every PROCESS_OPS member is in NativeOp::ALL; `PROCESS_OPS.len() + JOB_OP_COUNT == NativeOp::ALL.len()`; plus `all.len() == NativeOp::ALL.len()` so a variant listed twice in ALL cannot mask a missing one. A tenth variant added without a sweep case fails here. JOB_OP_COUNT is hand-written because an integration test is its own crate and cannot share a const — and that duplication is what lets each file fail independently.\n\nFOUR REFUSALS, SEPARATELY ASSERTED, none collapsed:\n- a_failed_membership_call_carries_the_operating_systems_error => IsProcessInJob, code 6\n- membership_answered_false_is_our_refusal_not_a_win32_failure => IsProcessInJob, code 0\n- a_failed_resume_call_carries_the_operating_systems_error => ResumeThread, code 1314\n- a_prior_suspend_count_other_than_one_is_our_refusal => ResumeThread, code 0, swept over prior counts 0, 2 and 7\n\nNO RESUME BEFORE PROOF, asserted as ABSENCE FROM THE CALL LOG for both membership refusal shapes: `!calls.contains(\"resume\")` plus exact equality against the complete log — the nine arms through \"membership\" followed by exactly three closes (process, thread, Job). Not merely an Err return: a surface that resumed and only then noticed the refusal would still return Err and would pass an `is_err()` test while the child had already run.\n\nCLEANUP TABLE across all nine cases: every acquired handle closes exactly once, none of the three caller-lent inheritable handles is ever closed by us, and delete_attribute_list ran exactly once — except on the InitAttributeList case, where the expected count is 0 because no list exists to delete. Asserting 1 there would be asserting the deletion of nothing.\n\nFIRST ERROR SURVIVES CLEANUP, and this one needed a real cleanup failure to be meaningful. The double gained a SECOND programmable failure (`fail_closes_with`) because with a single fail_at the cleanup always succeeds and the test proves nothing. With assign failing (5) AND every close failing (1006), the caller still sees AssignProcessToJob/5 and both handles still closed exactly once. Companion test: on the success path a failing close surfaces as CloseHandle/998 rather than becoming an implicit success, and BOTH handles are still attempted — stopping at the first failure would leak the second.\n\nONE ASSERTION I WROTE WRONG AND CORRECTED: the no-resume-before-membership test first compared the log to `HEALTHY_SEQUENCE[..9]` and went red with left carrying three trailing \"close\" entries. The production code was correct; my expectation had forgotten that cleanup closes are logged too. Fixed by asserting the COMPLETE log including the three closes, which is strictly stronger than the prefix I originally wrote — it now also pins that exactly three closes happen.",
+      "startedAt": "2026-08-09T18:37:21.842Z",
+      "completedAt": "2026-08-09T18:40:08.548Z"
     },
     {
       "stepId": "step-9",
       "description": "WIRE UP AND AUDIT SIZE. In src/lib.rs add the `mod process;` declaration and re-export the new public surface (the process construction type and ProcessCalls) alongside the existing exports, keeping every item on exactly one public path as child 1's comment at lib.rs:37-39 requires. Update the lib.rs module doc: the note at lines 26-35 addresses 'child 2' as a single future task and says process creation is deliberately absent — rewrite it to name this task and sibling 2b, and delete the now-false claim that win32.rs 'sits at 246 of its 250-line target'. Then audit every Rust production source with `grep -c '' <file>` and record the count for each in the step notes — lib.rs, win32.rs, win32/system_job.rs, win32/system_process.rs (and system_process_attrs.rs if step 7 split it), handle.rs, job.rs, process.rs. Every one must be <=250. If any exceeds it, split it now by responsibility rather than by reformatting; do not proceed to step 10 with a file over the bar.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/src/lib.rs"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/lib.rs"
+      ],
+      "note": "WIRED UP AND AUDITED. Suite still green (7 + 11 = 18, exit 0), zero warnings.\n\nlib.rs: `mod process;` declared alongside handle/job/win32, and the new surface re-exported — `ContainedProcess`, `CreatedProcess`, `ProcessSpec` from process, and `ProcessCalls`, `ATTRIBUTE_JOB_LIST`, `ATTRIBUTE_HANDLE_LIST`, `EXPECTED_PRIOR_SUSPEND_COUNT`, `INHERITED_HANDLE_COUNT` from win32. Every item still sits on exactly one public path: the modules stay private, and the two files split out under win32/ are reached only through win32's own `pub use`, so nothing is exported twice.\n\nMODULE DOC REWRITTEN. Deleted the now-false \"win32.rs sits at 246 of its 250-line target\" (it was 252 at HEAD, which is what forced this task's split) and replaced the single-future-task note about \"child 2\" with what actually landed: this task's id for construction, sibling task-af99cf146c9b4f4d99b49d8c00caed63 for teardown and real-Windows acceptance, and an explicit list of what is NOT here (wait, exit query, terminate, ActiveProcesses==0, the unwind protocol). Added a paragraph stating plainly that a green suite proves the windows-sys implementations COMPILE and never that they work, because everything runs through the scripted tables — the reader should not mistake this crate's green for behavioural evidence. Also recorded that NativeOp::ALL's LENGTH is part of its type, so a new variant breaks compilation and then both sweeps until it has a case.\n\nPER-FILE AUDIT, `grep -c ''`, every production source in the crate, ZERO over the bar:\n  src/handle.rs                       77   OK\n  src/job.rs                          93   OK\n  src/lib.rs                          62   OK\n  src/process.rs                     196   OK\n  src/win32.rs                       174   OK   (arrived at 252, DoD item 1 satisfied)\n  src/win32/process_calls.rs         110   OK\n  src/win32/system_job.rs            116   OK\n  src/win32/system_process.rs        189   OK\n  src/win32/system_process_attrs.rs  144   OK\nTest files, to which the production cap does not apply: tests/job_sweep.rs=305, tests/process_sweep.rs=570.\n\nNo file needed splitting at this step; the two responsibility splits were taken earlier (step 4's process_calls.rs, step 7's system_process_attrs.rs) precisely so nothing arrived here over the bar.",
+      "startedAt": "2026-08-09T18:40:08.689Z",
+      "completedAt": "2026-08-09T18:40:53.836Z"
     },
     {
       "stepId": "step-10",
       "description": "VERIFY, ATTACK, COMMIT. (a) Run the task's exact verification command — the locked test run AND the locked release build — and paste the real output; both must exit 0. (b) Compare against the step-1 baseline: any repo-wide red must be shown to exist at the merge-base too, or it is yours. (c) MUTATION DRILL, required by epic rail 6 because a green suite cannot show these defects: swap the order of the membership proof and the resume call in process.rs and confirm process_sweep goes RED; change one refusal from code 0 to a nonzero code and confirm RED; delete one entry from PROCESS_OPS and confirm the totality assertion goes RED. Restore each and re-confirm green, and verify with `git diff` that no mutation survived — a foreign whole-tree commit can capture a drill edit, so check the file contents rather than trusting a clean status. (d) Adversarial pass: confirm NativeError still exposes only op and code, that RawHandle still has no Debug, and that no executable path, argv, cwd, environment or handle value can reach an error or a log. (e) Confirm no target/, no executable, and no probe or scratch file is staged; the crate's own .gitignore covers target/ but the release build writes to dist/, which the repo-root .gitignore covers. (f) Run `git status --porcelain`, confirm every staged entry is one of this task's owned paths, unstage anything foreign with `git restore --staged`, then commit by explicit pathspec over the owned paths only and verify with `git show --stat` that nothing foreign landed.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/process.rs",
+        "packages/runner/src/platform/windows/native/tests/process_sweep.rs",
+        "packages/runner/src/platform/windows/native/src/lib.rs"
+      ],
+      "note": "VERIFIED, ATTACKED, COMMITTED.\n\n(a) EXACT VERIFICATION COMMAND, both legs, run fresh: `cargo test --locked ... && cargo build --locked --release ...` => COMPOSITE_EXIT=0. 19 tests: 7 job_sweep, 12 process_sweep, 0 lib, 0 doc. Release leg: \"Finished `release` profile [optimized]\".\n\n(b) BASELINE COMPARISON. Step-1 baseline was 7 passed / 0 failed at 1e3057ab; now 19 passed / 0 failed. No red anywhere in the owned package, so no path attribution was needed.\n\n(c) MUTATION DRILLS — FOUR, all confirmed RED, all restored and byte-verified:\n  1. Moved `resume` before `prove_membership` in process.rs => TWO tests red: successful_construction_calls_every_arm_in_the_pinned_order (left had \"assign\",\"resume\",\"membership\"; right \"assign\",\"membership\",...,\"resume\") AND resume_never_runs_before_the_membership_proof_succeeds.\n  2. Changed the membership refusal from code 0 to 5 => membership_answered_false_is_our_refusal_not_a_win32_failure red, \"left: 5, right: 0\".\n  3. Shrank PROCESS_OPS from 9 to 8 => the_two_sweeps_together_account_for_every_native_op red, \"a NativeOp variant exists that neither sweep owns a case for, left: 14, right: 15\".\n  4. Deleted the `validate(spec)?;` call => an_unterminated_spec_is_refused_before_any_boundary_call red, \"malformed spec 0 was accepted\".\n  RESTORATION VERIFIED BY BYTE COMPARISON, NOT BY `git diff`. process.rs and process_sweep.rs were UNTRACKED at drill time, so `git diff` is structurally blind to them and a clean status would have been meaningless. Each was restored from a pre-drill copy and confirmed with `cmp` => IDENTICAL, plus a content grep for the specific residue strings => none.\n\n(d) ADVERSARIAL PASS. `grep -rn derive src/ | grep -i Debug` finds exactly two derives: NativeOp (a fieldless enum, needed for Display) and NativeError. RawHandle's derive line is `#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]` — still NO Debug, so a future struct holding one still fails to compile rather than printing it. NativeError's fields are exactly `op: NativeOp, code: u32`, and its hand-written Display emits only those two. No println!/eprintln!/dbg!/log:: anywhere in src/. No executable path, argv, cwd, environment or handle value is reachable from an error or a log.\n\n  THE PASS FOUND A REAL DEFECT AND IT IS FIXED. ProcessSpec's fields are `pub` slices handed straight to unsafe FFI as PCWSTR, and a Win32 string function reads until it finds a NUL — so an empty or unterminated slice makes the OS read past the caller's allocation. Undefined behaviour that NO scripted test could ever observe, because the double dereferences nothing. Added `validate(spec)` in ContainedProcess::create, before any boundary call: application/command_line/current_directory must end in NUL, and the environment must end in the block's two NULs. Refused as NativeOp::CreateProcess with code 0 (the arm being refused; 0 is child 1's \"ours, not the OS's\" convention). Placed in the GENERIC layer, not the real impl, precisely so the scripted sweep can test it — six malformed cases, each asserting the exact op, the exact code 0, that only the three Job arms were logged (the boundary was never reached), and that no attribute list was allocated. Drill 4 above proves it bites. This is soundness for unsafe code this task shipped, not new scope.\n\n(e) NO ARTIFACTS. `git ls-files` over the crate matches nothing under target/, no .exe/.pdb/.rlib/.rmeta. The crate's own .gitignore covers target/; the repo-root .gitignore:4 covers dist/, which is where --target-dir points. Cargo.lock was byte-unchanged by the feature addition and was NOT committed.\n\n(f) COMMIT — AND A DISCLOSURE THAT CHANGES NOTHING ABOUT THE BYTES. A FOREIGN WHOLE-TREE COMMIT CAPTURED MOST OF THIS TASK'S FILES WHILE IT WAS IN FLIGHT. HEAD moved from 1e3057ab to 6daa942 across six foreign commits (task-4b274fad and task-9449ce65), and 8 of my 11 owned paths were already in HEAD before I committed anything. Per the standing rail I did NOT amend, reset, or create an empty commit to claim them. I verified the committed bytes are correct rather than trusting them: `git show HEAD:<path>` over the captured files shows PROCESS_OPS at 9 entries, `IsProcessInJob, 0`, and prove_membership before resume — no drill residue landed.\n  My own commit is 3c27205, by explicit pathspec over the 11 owned paths, with the index confirmed EMPTY beforehand. `git show --stat` shows exactly three files — lib.rs, process.rs, process_sweep.rs — the only ones still uncommitted. Nothing foreign landed.\n  `git diff HEAD -- <crate>` is now EMPTY: the committed bytes are byte-identical to the gated bytes.\n\n  QA SHOULD REVIEW BY BASE-REF DIFF, not by a single commit, because this task's bytes are split across foreign commits and 3c27205:\n    git diff 1e3057ab..HEAD -- packages/runner/src/platform/windows/native\n  => 11 files, 1541 insertions, 143 deletions.\n\n  ONE MORE TRAP THE MOVED HEAD SET, worth recording: the DoD's verbatim-move check is written as `git show HEAD:...win32.rs`. Ru",
+      "startedAt": "2026-08-09T18:40:54.225Z",
+      "completedAt": "2026-08-09T18:45:30.800Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-1a528e3e",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-5be1a8d6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,10 +187,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:00.580Z",
-  "updatedAt": "2026-08-09T18:37:21.842Z",
+  "updatedAt": "2026-08-09T18:47:19.535Z",
   "contextFetchedBy": [
     "architect-5aba94da",
-    "worker-1a528e3e"
+    "worker-1a528e3e",
+    "qa-5be1a8d6"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -184,7 +204,10 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T18:20:39.272Z",
@@ -192,7 +215,7 @@
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
     "firstClaimAt": "2026-08-09T18:21:01.308Z",
-    "executedStepCount": 7
+    "executedStepCount": 10
   },
   "planningNotes": {
     "approachesConsidered": "WIN32.RS SPLIT AXIS. Chose extracting the `#[cfg(windows)] mod system` impl block; rejected extracting the vocabulary (NativeOp/NativeError/RawHandle) into a new native_error.rs. Same file count and same resulting sizes, but the vocabulary extraction rewrites the import lines of every module in the crate, while the impl extraction is provably zero-edit (verified above). Prefer the split whose correctness is mechanically checkable by diff.\n\nWHERE THE PROCESS-SIDE REAL IMPL LIVES. Rust permits `impl ProcessCalls for SystemWin32` in any module of the defining crate, so system_process.rs holds the impl while SystemWin32 stays declared in win32.rs. This is what lets the ProcessCalls TRAIT sit in win32.rs (as the task description asks) without pushing win32.rs past 250.\n\nERROR VOCABULARY. Rejected a separate ProcessOp/ProcessError pair that would have avoided touching NativeOp and job_sweep.rs entirely. Rejected because sibling 2b's unwind must report job ops (TerminateJob, QueryAccounting) and process ops through one Result, which forces a union type anyway -- two vocabularies for one crate, and a second refusal layer, which is exactly the vacuous-assertion hazard the global rail names.\n\nJOB_SWEEP REPAIR SHAPE. Rejected softening `assert_eq!(produced, all)` to a subset/containment check -- that is the weakening DoD item 2 forbids, and it would pass while a job arm is dead. Chose: job_sweep asserts exact equality against a hand-written JOB_OPS list it owns (catches a dead job arm) plus membership of each in NativeOp::ALL (catches production removal); process_sweep owns the TOTALITY assertion PROCESS_OPS.len() + 6 == NativeOp::ALL.len(). Together every variant is provably reached by exactly one sweep, and any future variant added without a sweep case fails the totality assertion. Integration test files are separate crates and cannot share a const, so the 6 job ops are hand-written in both -- accepted, because the duplication is what makes each file independently able to fail.\n\nIDENTITY SPLIT. 2a proves LIVE-HANDLE identity (GetProcessId + GetProcessTimes creation time) because that is what gates resume. QueryFullProcessImageNameW / final-image identity is deliberately left to 2b, whose DoD item 2 owns the reporting surface. Do not add a QueryImageName arm here.",
@@ -210,5 +233,25 @@
     "wallClockMs": 14400000
   },
   "planApprovedAt": "2026-08-09T18:20:41.319Z",
-  "workStartedAt": "2026-08-09T18:21:18.487Z"
+  "workStartedAt": "2026-08-09T18:21:18.487Z",
+  "reviewStartedAt": "2026-08-09T18:46:36.151Z",
+  "verification": {
+    "command": "cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core",
+    "exitCode": 0,
+    "outputTail": "running 7 tests (job_sweep) ... test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out.\n\nrunning 12 tests (process_sweep)\ntest a_failed_close_is_never_laundered_into_success ... ok\ntest an_unterminated_spec_is_refused_before_any_boundary_call ... ok\ntest a_failed_resume_call_carries_the_operating_systems_error ... ok\ntest the_first_failure_survives_a_failing_cleanup_close ... ok\ntest a_failed_membership_call_carries_the_operating_systems_error ... ok\ntest membership_answered_false_is_our_refusal_not_a_win32_failure ... ok\ntest every_acquired_handle_closes_once_and_the_attribute_list_is_deleted_once ... ok\ntest resume_never_runs_before_the_membership_proof_succeeds ... ok\ntest successful_construction_calls_every_arm_in_the_pinned_order ... ok\ntest a_prior_suspend_count_other_than_one_is_our_refusal ... ok\ntest sweep_pins_the_exact_op_and_code_for_every_construction_arm ... ok\ntest the_two_sweeps_together_account_for_every_native_op ... ok\n\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n   Doc-tests moe_windows_job_core\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed.\n\n    Finished `release` profile [optimized] target(s) in 0.01s\nCOMPOSITE_EXIT=0",
+    "reportedAt": "2026-08-09T18:46:36.151Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/native/Cargo.toml",
+    "packages/runner/src/platform/windows/native/src/win32.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_job.rs",
+    "packages/runner/src/platform/windows/native/src/win32/process_calls.rs",
+    "packages/runner/src/platform/windows/native/src/process.rs",
+    "packages/runner/src/platform/windows/native/src/lib.rs",
+    "packages/runner/src/platform/windows/native/tests/job_sweep.rs",
+    "packages/runner/src/platform/windows/native/tests/process_sweep.rs",
+    "packages/runner/src/platform/windows/native/src/job.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_process.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_process_attrs.rs"
+  ]
 }

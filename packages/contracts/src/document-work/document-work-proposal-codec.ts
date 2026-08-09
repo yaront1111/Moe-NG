@@ -33,7 +33,7 @@ function canonicalText(value: unknown): value is string {
 
 function boundedText(value: unknown, maximum: number, singleLine: boolean): Check {
   if (!canonicalText(value)) return "INVALID";
-  if (singleLine && /[\r\n\t]/u.test(value)) return "INVALID";
+  if (singleLine && /[\u0000-\u001f\u007f]/u.test(value)) return "INVALID";
   return value.length <= maximum ? "OK" : "LIMIT";
 }
 
@@ -44,8 +44,10 @@ function objective(value: unknown): Check {
 }
 
 function refuse(code: RefusalCode, layer: RefusalLayer): DocumentWorkProposalContractRefused {
-  return Object.freeze({ code, layer, ok: false as const, outcome: "REFUSED" as const }) as
-    DocumentWorkProposalContractRefused;
+  return Object.freeze({
+    advisoryOnly: true, authority: "NONE", code, layer,
+    ok: false as const, outcome: "REFUSED" as const,
+  }) as DocumentWorkProposalContractRefused;
 }
 
 function resultFor(check: Check): DocumentWorkProposalContractRefused | null {
@@ -67,6 +69,7 @@ function parseSources(value: unknown): Parsed<readonly DocumentWorkSourceBinding
   }
   const sources: DocumentWorkSourceBinding[] = [];
   const seen = new Set<string>();
+  const identitiesByPath = new Map<string, { readonly byteLength: number; readonly hash: string }>();
   for (const entry of value) {
     if (!isPlainRecord(entry) || !hasExactKeys(entry, SOURCE_KEYS, [])) {
       return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_SHAPE_INVALID", "SHAPE") };
@@ -87,9 +90,18 @@ function parseSources(value: unknown): Parsed<readonly DocumentWorkSourceBinding
       return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF", "IDENTITY") };
     }
     seen.add(ref);
+    const displayPathValue = entry["displayPath"] as string;
+    const pathIdentity = identitiesByPath.get(displayPathValue);
+    if (pathIdentity !== undefined && (pathIdentity.hash !== entry["contentSha256"]
+      || pathIdentity.byteLength !== entry["byteLength"])) {
+      return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_SOURCE_CONFLICT", "PROVENANCE") };
+    }
+    identitiesByPath.set(displayPathValue, {
+      byteLength: entry["byteLength"], hash: entry["contentSha256"],
+    });
     sources.push(Object.freeze({
       byteLength: entry["byteLength"], contentSha256: entry["contentSha256"],
-      displayPath: entry["displayPath"] as string, sourceRef: ref,
+      displayPath: displayPathValue, sourceRef: ref,
     }));
   }
   return { value: Object.freeze(sources.sort(compare("sourceRef"))) };
@@ -140,9 +152,6 @@ function parseCandidates(
       if (seenRefs.has(sourceRef)) {
         return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF", "IDENTITY") };
       }
-      if (!sourceRefs.has(sourceRef)) {
-        return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_SOURCE_UNBOUND", "PROVENANCE") };
-      }
       seenRefs.add(sourceRef);
       copiedRefs.push(sourceRef);
     }
@@ -155,6 +164,11 @@ function parseCandidates(
       candidateRef, objective: entry["objective"] as string,
       sourceRefs: Object.freeze(copiedRefs.sort()), title: entry["title"] as string,
     }));
+  }
+  for (const entry of candidates) {
+    if (entry.sourceRefs.some((sourceRef) => !sourceRefs.has(sourceRef))) {
+      return { refusal: refuse("DOCUMENT_WORK_PROPOSAL_SOURCE_UNBOUND", "PROVENANCE") };
+    }
   }
   return { value: Object.freeze(candidates.sort(compare("candidateRef"))) };
 }
@@ -192,7 +206,9 @@ function parseProposal(value: unknown): DocumentWorkProposalResult {
     schemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION, sources: sources.value,
     submissionState: "NOT_SUBMITTED", truthClass: "AGENT_REPORTED",
   });
-  return Object.freeze({ ok: true, outcome: "PROPOSED", proposal });
+  return Object.freeze({
+    advisoryOnly: true, authority: "NONE", ok: true, outcome: "PROPOSED", proposal,
+  });
 }
 
 /** Bounded byte ingress for an agent-reported proposal. It grants no submission authority. */
@@ -200,6 +216,7 @@ export function decodeDocumentWorkProposalBytes(input: unknown): DocumentWorkPro
   const decoded = decodeBoundedJsonBytes(input);
   if (!decoded.ok) {
     return Object.freeze({
+      advisoryOnly: true, authority: "NONE",
       code: "DOCUMENT_WORK_PROPOSAL_INPUT_REJECTED", decodeError: decoded,
       layer: "BOUNDED_JSON", ok: false, outcome: "REFUSED",
     });

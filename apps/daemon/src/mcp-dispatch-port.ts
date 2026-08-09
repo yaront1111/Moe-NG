@@ -5,6 +5,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import type { StdioDispatchPort } from "@moe/mcp";
 
+import type { AffordancePort } from "./http/affordance-contract.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
@@ -22,6 +23,8 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
  */
 
 export interface McpDispatchPortConfig {
+  /** The daemon's affordance surface, served to agents as work.get_context. */
+  readonly affordances?: AffordancePort | undefined;
   /** The transport credential this port presents to the adapter, held in closure. */
   readonly credential: string;
   readonly database: DatabaseSync;
@@ -74,6 +77,12 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
         return queryRefusal();
       }
       const envelope = parsed as Record<string, unknown>;
+      // The agent's "what should I do": the affordance surface — chain standing,
+      // daemon-minted offers, and active claims — exactly what the board renders.
+      if (envelope["queryKind"] === "work.get_context") {
+        if (config.affordances === undefined) return queryRefusal();
+        return bytesOf(config.affordances.readSurface());
+      }
       if (envelope["queryKind"] !== "events.read") return queryRefusal();
       const payload = envelope["payload"];
       if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {

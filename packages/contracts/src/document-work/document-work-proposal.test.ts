@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import * as contracts from "@moe/contracts";
+import type { DocumentWorkProposalAdvisoryEnvelope } from "@moe/contracts";
 
-interface ProposalResult {
+interface ProposalResult extends DocumentWorkProposalAdvisoryEnvelope {
   readonly ok: boolean;
   readonly outcome: string;
   readonly code?: string;
@@ -23,6 +24,14 @@ const api = contracts as unknown as DocumentWorkApi;
 const encoder = new TextEncoder();
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
+const ADVISORY_ENVELOPE = Object.freeze({
+  advisoryOnly: true,
+  authority: "NONE",
+} as const) satisfies DocumentWorkProposalAdvisoryEnvelope;
+const CONTROL_CODE_POINTS = Object.freeze([
+  ...Array.from({ length: 0x20 }, (_, codePoint) => codePoint),
+  0x7f,
+]);
 
 function bytes(value: unknown): Uint8Array {
   return encoder.encode(JSON.stringify(value));
@@ -76,7 +85,9 @@ function expectRefusal(
   code: string,
   layer: string,
 ): void {
-  expect(result).toStrictEqual({ code, layer, ok: false, outcome: "REFUSED" });
+  expect(result).toStrictEqual({
+    ...ADVISORY_ENVELOPE, code, layer, ok: false, outcome: "REFUSED",
+  });
   expect(Object.isFrozen(result)).toBe(true);
 }
 
@@ -85,6 +96,8 @@ function expectAccepted(value: unknown): Readonly<Record<string, unknown>> {
   expect(result.ok).toBe(true);
   if (!result.ok || result.proposal === undefined) throw new Error("proposal was refused");
   expect(result.outcome).toBe("PROPOSED");
+  expect({ advisoryOnly: result.advisoryOnly, authority: result.authority })
+    .toStrictEqual(ADVISORY_ENVELOPE);
   return result.proposal;
 }
 
@@ -98,6 +111,7 @@ describe("document-work proposal public contract", () => {
       "DOCUMENT_WORK_PROPOSAL_LIMIT_EXCEEDED",
       "DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF",
       "DOCUMENT_WORK_PROPOSAL_SOURCE_UNBOUND",
+      "DOCUMENT_WORK_PROPOSAL_SOURCE_CONFLICT",
     ]);
     expect(api.DOCUMENT_WORK_PROPOSAL_LAYERS).toStrictEqual([
       "BOUNDED_JSON", "SCHEMA", "SHAPE", "LIMIT", "IDENTITY", "PROVENANCE",
@@ -168,6 +182,7 @@ describe("document-work proposal public contract", () => {
   it("wraps malformed and hostile byte inputs at the bounded JSON layer", () => {
     const syntax = api.decodeDocumentWorkProposalBytes(encoder.encode("{"));
     expect(syntax).toStrictEqual({
+      ...ADVISORY_ENVELOPE,
       code: "DOCUMENT_WORK_PROPOSAL_INPUT_REJECTED",
       decodeError: {
         code: "JSON_SYNTAX_INVALID",
@@ -183,6 +198,8 @@ describe("document-work proposal public contract", () => {
     const hostile = api.decodeDocumentWorkProposalBytes(revoked.proxy);
     expect(hostile.code).toBe("DOCUMENT_WORK_PROPOSAL_INPUT_REJECTED");
     expect(hostile.layer).toBe("BOUNDED_JSON");
+    expect({ advisoryOnly: hostile.advisoryOnly, authority: hostile.authority })
+      .toStrictEqual(ADVISORY_ENVELOPE);
     expect(hostile.decodeError?.code).toBe("JSON_INPUT_TYPE_INVALID");
     expect(Object.isFrozen(hostile)).toBe(true);
   });
@@ -225,6 +242,27 @@ describe("document-work proposal public contract", () => {
   it.each([
     ["project ref", () => proposal({ projectId: "p".repeat(256) }),
       () => proposal({ projectId: "p".repeat(257) })],
+    ["source ref", () => {
+      const ref = "s".repeat(256);
+      return proposal({
+        candidates: [candidate(0, { sourceRefs: [ref] })],
+        sources: [source(0, { sourceRef: ref })],
+      });
+    }, () => proposal({ sources: [source(0, { sourceRef: "s".repeat(257) })] })],
+    ["candidate ref", () => proposal({
+      candidates: [candidate(0, { candidateRef: "c".repeat(256) })],
+    }), () => proposal({
+      candidates: [candidate(0, { candidateRef: "c".repeat(257) })],
+    })],
+    ["citation ref", () => {
+      const ref = "r".repeat(256);
+      return proposal({
+        candidates: [candidate(0, { sourceRefs: [ref] })],
+        sources: [source(0, { sourceRef: ref })],
+      });
+    }, () => proposal({
+      candidates: [candidate(0, { sourceRefs: ["r".repeat(257)] })],
+    })],
     ["display path", () => proposal({ sources: [source(0, { displayPath: "p".repeat(256) })] }),
       () => proposal({ sources: [source(0, { displayPath: "p".repeat(257) })] })],
     ["title", () => proposal({ candidates: [candidate(0, { title: "t".repeat(256) })] }),
@@ -263,6 +301,73 @@ describe("document-work proposal public contract", () => {
         "IDENTITY",
       );
     }
+  });
+
+  it("reports duplicate identity before unbound provenance regardless of candidate order", () => {
+    const multiset = [
+      candidate(2, { sourceRefs: ["source-missing"] }),
+      candidate(1, { sourceRefs: ["source-0"] }),
+      candidate(1, { sourceRefs: ["source-0"] }),
+    ];
+    for (const candidates of [multiset, [...multiset].reverse()]) {
+      expectRefusal(
+        decoded(proposal({ candidates })),
+        "DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF",
+        "IDENTITY",
+      );
+    }
+  });
+
+  it("rejects conflicting source identities for one display path but permits identical aliases", () => {
+    const shared = { byteLength: 128, contentSha256: HASH_A, displayPath: "docs/shared.md" };
+    const identicalAliases = [source(0, shared), source(1, shared)];
+    expect(expectAccepted(proposal({ sources: identicalAliases })).sources).toHaveLength(2);
+
+    for (const conflicting of [
+      source(1, { ...shared, contentSha256: HASH_B }),
+      source(1, { ...shared, byteLength: 129 }),
+    ]) {
+      expectRefusal(
+        decoded(proposal({ sources: [source(0, shared), conflicting] })),
+        "DOCUMENT_WORK_PROPOSAL_SOURCE_CONFLICT",
+        "PROVENANCE",
+      );
+    }
+  });
+
+  it.each(CONTROL_CODE_POINTS)(
+    "rejects U+%s from every bounded single-line field",
+    (codePoint) => {
+      const contaminated = `safe${String.fromCodePoint(codePoint)}value`;
+      for (const value of [
+        proposal({ projectId: contaminated }),
+        proposal({ sources: [source(0, { sourceRef: contaminated })] }),
+        proposal({ sources: [source(0, { displayPath: contaminated })] }),
+        proposal({ candidates: [candidate(0, { candidateRef: contaminated })] }),
+        proposal({ candidates: [candidate(0, { title: contaminated })] }),
+        proposal({ candidates: [candidate(0, { sourceRefs: [contaminated] })] }),
+      ]) {
+        expectRefusal(
+          decoded(value),
+          "DOCUMENT_WORK_PROPOSAL_SHAPE_INVALID",
+          "SHAPE",
+        );
+      }
+    },
+  );
+
+  it("allows normal multiline objectives while continuing to refuse NUL", () => {
+    const multiline = "Read the docs.\r\n\tThen propose bounded work.";
+    const accepted = expectAccepted(proposal({
+      candidates: [candidate(0, { objective: multiline })],
+    }));
+    const acceptedCandidates = accepted["candidates"] as readonly Record<string, unknown>[];
+    expect(acceptedCandidates[0]?.objective).toBe(multiline);
+    expectRefusal(
+      decoded(proposal({ candidates: [candidate(0, { objective: "before\u0000after" })] })),
+      "DOCUMENT_WORK_PROPOSAL_SHAPE_INVALID",
+      "SHAPE",
+    );
   });
 
   it("refuses every candidate citation not bound by the source set", () => {

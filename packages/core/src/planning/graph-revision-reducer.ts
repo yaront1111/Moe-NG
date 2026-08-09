@@ -3,18 +3,26 @@
  * and `planHash` — is fixed at creation and no accepted command ever changes it.
  *
  * Composition contract: this reducer is pure and touches only its own aggregate. `graphEpoch`
- * authority lives in the goal aggregate, where `goal.activate_initial_graph` increments it, so
- * activation here emits reference data (`goalRef`, `expectedGoalVersion`) rather than a private
- * counter. Initial activation is therefore THREE reducer results the daemon must commit in one
- * atomic transaction: the planning run's `graph.approve`, this revision's activation, and the
- * goal's `goal.activate_initial_graph`. Any of the three rejecting aborts all of them; a
- * concurrent activation loses on goal version, and a crash yields all or none.
+ * authority still lives in the goal aggregate, where `goal.activate_initial_graph` increments it;
+ * activation here emits reference data (`goalRef`, `expectedGoalVersion`) and PERSISTS the bound
+ * epoch it was activated at, which is what lets `graph.supersede` bind this predecessor to its
+ * successor. The bound value is a reference, never a private counter this aggregate advances.
+ * Initial activation is therefore THREE reducer results the daemon must commit in one atomic
+ * transaction: the planning run's `graph.approve`, this revision's activation, and the goal's
+ * `goal.activate_initial_graph`. Any of the three rejecting aborts all of them; a concurrent
+ * activation loses on goal version, and a crash yields all or none.
+ *
+ * Supersession decides nothing here: `decideSupersession` owns the predecessor binding, the exact
+ * successor epoch + 1, and carry evidence, and this module only admits the command from `ACTIVE`,
+ * hands the kernel the live binding, and re-shapes a kernel refusal onto this layer.
  *
  * Registry note: `GRAPH_REVISION` is a valid source for `ILLEGAL_TRANSITION`,
  * `EXPECTED_VERSION_CONFLICT`, `REVISION_REBOUND`, and `SUPERSEDED_AUTHORITY` — but NOT for
  * `IDEMPOTENCY_CONFLICT`, so a missing command identity rejects `ILLEGAL_TRANSITION` here
  * instead of cloning the goal reducer verbatim into a silent `UNKNOWN_ERROR` degrade.
  */
+import { decideSupersession } from "../supersession/supersession-engine.js";
+
 import type {
   GraphActivationBinding,
   GraphRevisionApproveCommand,
@@ -27,6 +35,7 @@ import type {
   GraphRevisionRejectCommand,
   GraphRevisionState,
   GraphRevisionSubmitCommand,
+  GraphRevisionSupersedeCommand,
 } from "./graph-revision-contract.js";
 import {
   accepted,
@@ -34,6 +43,7 @@ import {
   illegal,
   rebound,
   supersededAuthority,
+  supersessionRefused,
   unknownFailure,
   versionConflict,
 } from "./graph-revision-results.js";
@@ -59,13 +69,13 @@ export const GRAPH_REVISION_COMMAND_KINDS = Object.freeze([
   "graph.supersede",
 ] as const satisfies readonly GraphRevisionCommandKind[]);
 
-/** `DRAFT -> PENDING_APPROVAL -> APPROVED -> ACTIVE`, plus pre-activation refusal. */
+/** `DRAFT -> PENDING_APPROVAL -> APPROVED -> ACTIVE -> SUPERSEDED`, plus pre-activation refusal. */
 export const GRAPH_REVISION_TRANSITIONS = Object.freeze({
   "graph_revision.create": Object.freeze([]),
   "graph_revision.submit": Object.freeze(["DRAFT"]),
   "graph.approve": Object.freeze(["PENDING_APPROVAL", "APPROVED"]),
   "graph_revision.reject": Object.freeze(["DRAFT", "PENDING_APPROVAL", "APPROVED"]),
-  "graph.supersede": Object.freeze([]),
+  "graph.supersede": Object.freeze(["ACTIVE"]),
 } as const satisfies Readonly<Record<GraphRevisionCommandKind, readonly GraphRevisionLifecycle[]>>);
 
 function create(command: GraphRevisionCreateCommand): GraphRevisionReducerResult {
@@ -76,8 +86,8 @@ function create(command: GraphRevisionCreateCommand): GraphRevisionReducerResult
   }
   const state = deepFreeze({
     boundHashes: null, goalRef: command.goalRef, graphContentHash: command.graphContentHash,
-    lifecycle: "DRAFT" as const, planHash: command.planHash, revisionId: command.revisionId,
-    submissionRef: null, version: 1,
+    graphEpoch: 0, lifecycle: "DRAFT" as const, planHash: command.planHash,
+    revisionId: command.revisionId, submissionRef: null, version: 1,
   });
   return accepted(state, [deepFreeze({
     commandId: command.commandId, goalRef: state.goalRef,
@@ -152,11 +162,31 @@ function decide(
   }
   const witness = deepFreeze({ ...activation });
   version += 1;
-  const next = clonedState(state, { boundHashes: binding, lifecycle: "ACTIVE" as const, version });
+  const next = clonedState(state, { boundHashes: binding, graphEpoch: 1,
+    lifecycle: "ACTIVE" as const, version });
   events.push(deepFreeze({ commandId: command.commandId,
     expectedGoalVersion: witness.expectedGoalVersion, goalRef: state.goalRef,
     kind: "GraphRevisionActivated" as const, version, witness }));
   return accepted(next, events);
+}
+
+/**
+ * The only authority-moving transition out of `ACTIVE`. The kernel takes `unknown` and validates
+ * the whole payload itself, so nothing here pre-validates it; the predecessor keeps the epoch it
+ * was activated at, and the successor's epoch + 1 travels in the event binding.
+ */
+function supersede(
+  state: GraphRevisionState,
+  command: GraphRevisionSupersedeCommand,
+): GraphRevisionReducerResult {
+  const decided = decideSupersession({ graphContentHash: state.graphContentHash,
+    graphEpoch: state.graphEpoch, revisionId: state.revisionId }, command.supersession);
+  if (!decided.ok) return supersessionRefused(state, decided.code);
+  const next = clonedState(state, { lifecycle: "SUPERSEDED" as const,
+    version: state.version + 1 });
+  return accepted(next, [deepFreeze({ authorityHash: decided.decision.authorityHash,
+    commandId: command.commandId, kind: "GraphRevisionSuperseded" as const,
+    successor: decided.decision.successor, version: next.version })]);
 }
 
 function apply(
@@ -167,7 +197,8 @@ function apply(
     case "graph_revision.submit": return submit(state, command);
     case "graph.approve": return decide(state, command);
     case "graph_revision.reject": return refuse(state, command);
-    case "graph_revision.create": case "graph.supersede": return illegal(state, command.kind);
+    case "graph.supersede": return supersede(state, command);
+    case "graph_revision.create": return illegal(state, command.kind);
   }
 }
 

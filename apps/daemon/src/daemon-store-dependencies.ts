@@ -24,6 +24,10 @@ import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
+import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
+import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
+import { runWorkClaimCommand } from "./work/work-claim-services.js";
+import type { WorkClaimOutcome } from "./work/work-claim-services.js";
 import { buildCommandRegistry } from "./http/http-contract.js";
 import type {
   CommandAdapterDeps,
@@ -62,6 +66,7 @@ const CAPABILITIES = {
   GOAL: "goal.write",
   PLANNING: "planning.write",
   REVIEW: "review.write",
+  WORK: "work.write",
 } as const;
 
 const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
@@ -91,7 +96,15 @@ const SESSION_FAMILY: Readonly<Record<SessionCommandKind, string>> = Object.free
   "session.renew": CAPABILITIES.ADMIN,
 });
 
-type WiredCommandKind = BootstrapCommandKind | ReviewCommandKind | SessionCommandKind;
+/** Claiming work is every agent's right; the fence is per-item, not per-role. */
+const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freeze({
+  "work.claim": CAPABILITIES.WORK,
+  "work.release": CAPABILITIES.WORK,
+  "work.renew": CAPABILITIES.WORK,
+});
+
+type WiredCommandKind =
+  | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind;
 
 /** Exact top-level payload keys each command admits; an unlisted key is refused upstream. */
 const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
@@ -117,10 +130,14 @@ const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
     "session.close": ["sessionId"],
     "session.open": ["capabilities", "credentialSha256", "expiresAt", "sessionId"],
     "session.renew": ["expiresAt", "sessionId"],
+    "work.claim": ["expiresAt", "workItemId"],
+    "work.release": ["workItemId"],
+    "work.renew": ["expiresAt", "workItemId"],
   });
 
 const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
-  CAPABILITIES.ADMIN, CAPABILITIES.GOAL, CAPABILITIES.PLANNING, CAPABILITIES.REVIEW,
+  CAPABILITIES.ADMIN, CAPABILITIES.GOAL, CAPABILITIES.PLANNING,
+  CAPABILITIES.REVIEW, CAPABILITIES.WORK,
 ]);
 
 export interface StoreDependencyConfig {
@@ -166,7 +183,9 @@ class DomainRefusal extends Error {
   }
 }
 
-function decisionOf(outcome: ReviewOutcome | ServiceOutcome | SessionOutcome): DurableDecision {
+function decisionOf(
+  outcome: ReviewOutcome | ServiceOutcome | SessionOutcome | WorkClaimOutcome,
+): DurableDecision {
   if (!outcome.ok) {
     throw new DomainRefusal(
       outcome.code,
@@ -224,20 +243,26 @@ export function createStoreDependencies(
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
+    const work = kind in WORK_FAMILY;
     const schemaVersion = review
       ? REVIEW_SCHEMA_VERSION
-      : session ? SESSION_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
+      : session
+        ? SESSION_SCHEMA_VERSION
+        : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (review) return decisionOf(runReviewCommand(store, bytes));
       if (session) return decisionOf(runSessionCommand(store, bytes));
+      if (work) return decisionOf(runWorkClaimCommand(store, bytes));
       return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
     };
     const requiredCapability = review
       ? REVIEW_FAMILY[kind as ReviewCommandKind]
       : session
         ? SESSION_FAMILY[kind as SessionCommandKind]
-        : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
+        : work
+          ? WORK_FAMILY[kind as WorkClaimCommandKind]
+          : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
     return Object.freeze({
       handler, kind, payloadKeys: PAYLOAD_KEYS[kind], requiredCapability,
     });

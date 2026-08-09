@@ -41,6 +41,7 @@ async function main(): Promise<void> {
   const server = createStdioMcpServer({
     credential,
     port: createMcpDispatchPort({
+      affordances: provider.affordances?.(),
       credential,
       database,
       deps: provider.provide(),

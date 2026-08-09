@@ -10,6 +10,7 @@ export const DOCUMENT_WORK_PROPOSAL_ERROR_CODES = Object.freeze([
   "DOCUMENT_WORK_PROPOSAL_LIMIT_EXCEEDED",
   "DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF",
   "DOCUMENT_WORK_PROPOSAL_SOURCE_UNBOUND",
+  "DOCUMENT_WORK_PROPOSAL_SOURCE_CONFLICT",
 ] as const);
 
 export const DOCUMENT_WORK_PROPOSAL_LAYERS = Object.freeze([
@@ -47,10 +48,14 @@ export interface DocumentWorkCandidate {
   readonly title: string;
 }
 
-/** Agent synthesis only: this shape cannot express task, graph, or execution authority. */
-export interface DocumentWorkProposal {
+/** Fields that make the proposal result's lack of mutation authority explicit. */
+export interface DocumentWorkProposalAdvisoryEnvelope {
   readonly advisoryOnly: true;
   readonly authority: "NONE";
+}
+
+/** Agent synthesis only: this shape cannot express task, graph, or execution authority. */
+export interface DocumentWorkProposal extends DocumentWorkProposalAdvisoryEnvelope {
   readonly candidates: readonly DocumentWorkCandidate[];
   readonly contextManifestDigest: string;
   readonly projectId: string;
@@ -61,13 +66,13 @@ export interface DocumentWorkProposal {
   readonly truthClass: "AGENT_REPORTED";
 }
 
-export interface DocumentWorkProposalAccepted {
+export interface DocumentWorkProposalAccepted extends DocumentWorkProposalAdvisoryEnvelope {
   readonly ok: true;
   readonly outcome: "PROPOSED";
   readonly proposal: DocumentWorkProposal;
 }
 
-export interface DocumentWorkProposalInputRejected {
+export interface DocumentWorkProposalInputRejected extends DocumentWorkProposalAdvisoryEnvelope {
   readonly code: "DOCUMENT_WORK_PROPOSAL_INPUT_REJECTED";
   readonly decodeError: BoundedJsonDecodeError;
   readonly layer: "BOUNDED_JSON";
@@ -75,7 +80,7 @@ export interface DocumentWorkProposalInputRejected {
   readonly outcome: "REFUSED";
 }
 
-export type DocumentWorkProposalContractRefused =
+export type DocumentWorkProposalContractRefused = DocumentWorkProposalAdvisoryEnvelope & (
   | { readonly code: "DOCUMENT_WORK_PROPOSAL_SCHEMA_UNSUPPORTED";
     readonly layer: "SCHEMA"; readonly ok: false; readonly outcome: "REFUSED" }
   | { readonly code: "DOCUMENT_WORK_PROPOSAL_SHAPE_INVALID";
@@ -85,7 +90,10 @@ export type DocumentWorkProposalContractRefused =
   | { readonly code: "DOCUMENT_WORK_PROPOSAL_DUPLICATE_REF";
     readonly layer: "IDENTITY"; readonly ok: false; readonly outcome: "REFUSED" }
   | { readonly code: "DOCUMENT_WORK_PROPOSAL_SOURCE_UNBOUND";
-    readonly layer: "PROVENANCE"; readonly ok: false; readonly outcome: "REFUSED" };
+    readonly layer: "PROVENANCE"; readonly ok: false; readonly outcome: "REFUSED" }
+  | { readonly code: "DOCUMENT_WORK_PROPOSAL_SOURCE_CONFLICT";
+    readonly layer: "PROVENANCE"; readonly ok: false; readonly outcome: "REFUSED" }
+);
 
 export type DocumentWorkProposalResult =
   | DocumentWorkProposalAccepted

@@ -5,6 +5,12 @@
  */
 import { expect } from "vitest";
 
+import type { CarryForwardInput } from "../policy/approval-contract.js";
+import type {
+  SupersessionDisposition,
+  SupersessionInput,
+  SupersessionPredecessorBinding,
+} from "../supersession/supersession-engine.js";
 import type {
   GraphRevisionCommand,
   GraphRevisionCommandKind,
@@ -33,7 +39,14 @@ export const ACTIVATION = { ...BINDING, activationRef: "activation-1",
   truthClass: "HUMAN_APPROVED" } as const;
 export const REJECTION = { findingsRef: "findings-1", truthClass: "DAEMON_VERIFIED" } as const;
 
+export const SUCCESSOR_HASH = hash("88");
+export const CARRY_HASH = hash("44");
+export const BINDING_HASH = hash("66");
+export const CANONICALIZER = "canon-v1";
+
 export const BOUND: readonly GraphRevisionLifecycle[] = ["APPROVED", "ACTIVE", "SUPERSEDED"];
+/** An epoch is bound only once activation has happened; `APPROVED` is deliberately absent. */
+export const EPOCH_BOUND: readonly GraphRevisionLifecycle[] = ["ACTIVE", "SUPERSEDED"];
 
 export function state(
   lifecycle: GraphRevisionLifecycle,
@@ -43,12 +56,78 @@ export function state(
     boundHashes: BOUND.includes(lifecycle) ? { ...BINDING } : null,
     goalRef: "goal-1",
     graphContentHash: GRAPH_HASH,
+    graphEpoch: EPOCH_BOUND.includes(lifecycle) ? 1 : 0,
     lifecycle,
     planHash: PLAN_HASH,
     revisionId: "graph-revision-1",
     submissionRef: lifecycle === "DRAFT" ? null : "submission-1",
     version: 7,
     ...overrides,
+  };
+}
+
+export function carryFact(digest: string): CarryForwardInput {
+  return {
+    canonicalizerVersion: CANONICALIZER, dependenciesPresent: true,
+    environmentClosureUnchanged: true, policySliceUnchanged: true,
+    predecessorResultUnchanged: true, sourceHash: digest, targetHash: digest,
+  };
+}
+
+export const CARRY: SupersessionDisposition = {
+  kind: "CARRY", nodeKey: "node-carry", predecessorAuthorityHash: CARRY_HASH,
+  safeCarry: { authority: carryFact(CARRY_HASH), inputBinding: carryFact(BINDING_HASH) },
+  successorAuthorityHash: CARRY_HASH,
+};
+
+export function predecessorOf(current: GraphRevisionState): SupersessionPredecessorBinding {
+  return {
+    graphContentHash: current.graphContentHash, graphEpoch: current.graphEpoch,
+    revisionId: current.revisionId,
+  };
+}
+
+/** Well-formed by construction; every refusal fixture below is one deliberate drift from it. */
+export function supersessionInput(
+  current: GraphRevisionState,
+  overrides: Partial<SupersessionInput> = {},
+): SupersessionInput {
+  const predecessor = predecessorOf(current);
+  return {
+    dispositions: [CARRY],
+    expectedPredecessor: predecessor,
+    successor: {
+      graphContentHash: SUCCESSOR_HASH, graphEpoch: predecessor.graphEpoch + 1,
+      predecessorGraphContentHash: predecessor.graphContentHash,
+      predecessorRevisionId: predecessor.revisionId, revisionId: "graph-revision-2",
+    },
+    supportedCanonicalizerVersions: [CANONICALIZER],
+    ...overrides,
+  };
+}
+
+/** The predecessor epoch the command expects has already moved on. */
+export function staleEpochInput(current: GraphRevisionState): SupersessionInput {
+  return supersessionInput(current, {
+    expectedPredecessor: { ...predecessorOf(current), graphEpoch: current.graphEpoch + 1 },
+  });
+}
+
+/** Carry authority no longer hashes to the disposition it claims to carry forward. */
+export function changedCarryInput(current: GraphRevisionState): SupersessionInput {
+  return supersessionInput(current, {
+    dispositions: [{ ...CARRY, safeCarry: {
+      authority: carryFact(STALE_HASH), inputBinding: carryFact(BINDING_HASH) } }],
+  });
+}
+
+export function supersedeCommand(
+  current: GraphRevisionState,
+  supersession: SupersessionInput = supersessionInput(current),
+): GraphRevisionCommand {
+  return {
+    commandId: "cmd-supersede", expectedVersion: current.version,
+    kind: "graph.supersede", supersession,
   };
 }
 
@@ -64,7 +143,8 @@ export function commandFor(
     case "graph_revision.submit": return { ...base, kind, witness: SUBMISSION };
     case "graph.approve": return { ...base, approval: APPROVAL, kind };
     case "graph_revision.reject": return { ...base, kind, witness: REJECTION };
-    case "graph.supersede": return { ...base, kind, witness: REJECTION };
+    case "graph.supersede":
+      return { ...base, kind, supersession: supersessionInput(state("ACTIVE")) };
   }
 }
 

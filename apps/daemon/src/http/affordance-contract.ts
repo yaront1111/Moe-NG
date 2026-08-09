@@ -18,8 +18,19 @@ export const AFFORDANCE_SURFACE_LAYER = "AFFORDANCE_SURFACE" as const;
 export const CHAIN_STEP_STATUSES = Object.freeze(["BLOCKED", "COMMITTED", "READY"] as const);
 export type ChainStepStatus = (typeof CHAIN_STEP_STATUSES)[number];
 
+/**
+ * An active durable claim on a step. The work-item id convention is
+ * `${kind}@${aggregateId ?? "-"}` — the same key the live board renders — so
+ * agents and humans fence the same register.
+ */
+export interface ChainStepClaim {
+  readonly claimedBy: string;
+  readonly expiresAt: string;
+}
+
 export interface ChainStep {
   readonly aggregateId: string | null;
+  readonly claim: ChainStepClaim | null;
   readonly kind: string;
   readonly missing: readonly string[];
   readonly status: ChainStepStatus;

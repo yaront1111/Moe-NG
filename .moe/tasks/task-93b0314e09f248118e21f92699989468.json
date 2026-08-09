@@ -15,13 +15,98 @@
     "One sealed proposal is all-or-none and immutable.",
     "Manual review remains required after submission."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline before writing a byte. Confirm the dependency surface is committed and clean: `git ls-tree -r HEAD --name-only -- packages/core/src/planning/planning-expansion-validation.ts` and `git status --porcelain -- packages/core/src/planning packages/core/src/expansion` (must be EMPTY). Run the owned-package gate FIRST and record it: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. An empty diff at this moment is what proves any later red is yours. Record physical line counts with `grep -c ''` for the 5 existing owned files (measured 2026-08-09: planning-run-reducer 192, planning-run-submission 186, planning-results 121, planning-run-test-fixtures 156, planning-run-reducer.test 228). NOTE the task's own DoD 5 says 'below 400 lines' — that is WRONG for these paths: planning-source-size.test.ts hard-caps every .ts in src/planning at 250 physical lines with no allowlist and sweeps tests, fixtures and drivers equally. Treat 250 as the bar.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED first (TDD). Create packages/core/src/planning/planning-run-expansion.test.ts driving the PRODUCTION reducer — never a helper that reimplements validation. It must fail for the right reason before any production edit: today reducer.ts:77 and submission.ts:52 both answer unsupported('PLANNING_KIND_UNSUPPORTED') for every non-INITIAL kind. Cover: (a) an EXPANSION create_draft carrying a valid hold binding is ACCEPTED and lands DRAFT with runKind EXPANSION, the hold binding on state, and sealedProposal null; (b) REVISION create_draft still answers exactly `{ ok: false, reason: 'PLANNING_KIND_UNSUPPORTED', unsupported: true }` — assert the whole discriminated shape, not just ok===false; (c) an EXPANSION plan.propose whose sealedProposal binds submissionHash and witness.submissionRef seals and emits PlanningSubmissionSealed carrying proposalKind EXPANSION; (d) a mismatched sealedProposal.proposalHash, a cross-kind carrier (INITIAL command carrying an `expansion` key), a stale proposalBaseHash, a non-ACTIVE hold lifecycle and a wrong graphEpoch each refuse with exact ILLEGAL_TRANSITION and details `{ aggregateKind: 'PLANNING_RUN', commandKind, sourceState }`; (e) duplicate replay of the same EXPANSION submissionHash is accepted idempotently with no new event, exactly as the INITIAL path at submission.ts:53-56; (f) a multi-node EXPANSION finalize with child + integrator nodes SEALS instead of refusing; (g) every refusal leaves input state byte-identical (JSON.stringify before/after). Keep this file at or below 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-expansion.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-run-expansion.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Fixtures. In planning-run-test-fixtures.ts add deterministic EXPANSION builders so neither test file reimplements the schema: a valid PlanningExpansionHoldBinding (all 11 keys per planning-expansion-validation.ts:57-60 — generation, goalVersion, graphEpoch, holdId, lifecycle 'ACTIVE', parentNodeRef, parentRunRef, proposalBaseHash, sourceFingerprint, truthClass 'DAEMON_VERIFIED', workerHandoff {digest, ref}), a valid PlanningExpansionProposalIdentity (proposalHash, proposalRef, truthClass), an EXPANSION create command, an EXPANSION propose command whose sealedProposal.proposalHash === submissionHash and sealedProposal.proposalRef === witness.submissionRef, and a multi-node finalize witness with one child and one integrator node both executionBearing. Add named MALFORMED variants for each refusal case in step 2 so the tests select a fixture rather than hand-mutating inline. Existing INITIAL fixtures must not change — planning-run-authority.test.ts and planning-run-reducer.test.ts both consume this file. Budget ~30 lines against 94 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-test-fixtures.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Reducer: admit EXPANSION creation and, critically, make EXPANSION state readable. In planning-run-reducer.ts: (1) THE LOAD-BEARING LINE — :178 currently calls `snapshotPlanningRunState(state)` from planning-validation.ts, whose `exact()` guard accepts ONLY the 12-key legacy shape, so an EXPANSION state (14 keys) returns undefined and every command against it degrades to unknownFailure(). Replace it with `snapshotPlanningRunContractState` from ./planning-expansion-validation.js, which accepts the legacy shape AND the EXPANSION shape and is already root-published. Without this change nothing else in this task can work. (2) In create(), keep `if (!validRunKind(command.runKind)) return unknownFailure()`, keep REVISION answering unsupported('PLANNING_KIND_UNSUPPORTED'), and add an EXPANSION branch that validates the whole command with the production `validExpansionCreateCommand` (do not re-derive its predicates) and builds the 14-key state: the existing 12 fields plus `expansion` (the hold binding, deep-frozen) and `sealedProposal: null`. A malformed EXPANSION command returns unknownFailure() from the create path, matching how the INITIAL path already treats malformed creation input. Emit PlanningRunCreated carrying `expansion` so validExpansionCreatedEvent accepts it. Budget ~14 lines against 58 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Submission: admit EXPANSION proposals. In planning-run-submission.ts propose(): keep the existing INITIAL path byte-identical, keep REVISION answering unsupported('PLANNING_KIND_UNSUPPORTED'), and add an EXPANSION branch validated by the production `validExpansionProposeCommand` — which already enforces that sealedProposal.proposalHash equals submissionHash and sealedProposal.proposalRef equals witness.submissionRef (planning-expansion-validation.ts:132-133). Do NOT restate those two equalities in the reducer or in a test helper; compose the predicate. On acceptance seal `sealedProposal` onto the state alongside submissionHash, and emit PlanningSubmissionSealed carrying `expansion`, `proposalKind` and `sealedProposal` so validExpansionSealedEvent accepts it. The duplicate-replay branch at :53-56 must behave identically for EXPANSION: same submissionHash replays as accepted with no new event, a different one is illegal. A malformed EXPANSION command returns illegal(state, command.kind), consistent with every other malformed witness on this aggregate. Budget ~16 lines against 64 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-submission.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Submission: lift the multi-node fence for EXPANSION only. planning-run-submission.ts finalize() at :96 answers unsupported('MULTI_NODE_EXECUTION_UNSUPPORTED', bearing) whenever more than one node is executionBearing. EXPANSION is inherently multi-node — DoD 2 requires sealing the complete child/integrator proposal identity — so this fence must apply to INITIAL only. Condition it on the run kind, NOT on the node count: `state.runKind !== 'EXPANSION' && bearing.length > 1` refuses exactly as today. `bearing.length === 0` stays illegal for BOTH kinds — a proposal that bears no execution is malformed regardless of kind. DoD 3 is explicit that INITIAL's single-node fence is unchanged, so the existing assertion at planning-run-reducer.test.ts:180 must stay green untouched; if it reddens, the condition is wrong. Update the doc comment at :73-77 to say the fence is INITIAL-scoped and why. Budget ~4 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-submission.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Close the successor defect this task would otherwise ship. planning-results.ts successorData() at :96-105 builds a 12-key literal with `runKind: state.runKind`. Once EXPANSION runs exist, rejecting one (via finalize's refusal branch at submission.ts:92, or plan.revise at :134) produces a successor claiming runKind EXPANSION with no `expansion` and no `sealedProposal` — a state `validExpansionContractState` rejects outright, so the next command against it degrades to unknownFailure(). Carry the predecessor's `expansion` hold binding onto an EXPANSION successor and set `sealedProposal: null` (a successor has sealed nothing). Keep building from literals, never by spreading the rejected run's objects — the doc comment at :95 says why, and a test must assert the successor does not alias the predecessor's binding object. INITIAL and REVISION successors must remain byte-identical. Add a test in the step-2 file: reject an EXPANSION run, then confirm the successor is accepted by `snapshotPlanningRunContractState` and that a follow-up command against it does NOT return UNKNOWN_ERROR. Budget ~8 lines against 129 free.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Update ONLY the assertions the new behavior genuinely invalidates in planning-run-reducer.test.ts; every other assertion in the 228-line file must pass untouched, and there are only ~22 lines of headroom so do not grow it. (a) :44-47 — create_draft with runKind 'EXPANSION' currently expects `{ reason: 'PLANNING_KIND_UNSUPPORTED', unsupported: true }`. EXPANSION creation is now legal: narrow this case to REVISION only. (b) :132-137 'refuses REVISION and EXPANSION proposals with the typed UNSUPPORTED variant' — the loop `for (const proposalKind of ['REVISION', 'EXPANSION'])` is now half false. Narrow the loop to REVISION and rename the test to say REVISION. Do NOT delete either case: REVISION must still be provably unsupported, and a test that stops asserting it is how REVISION silently becomes reachable. DO NOT TOUCH :180 (MULTI_NODE_EXECUTION_UNSUPPORTED on the INITIAL path — DoD 3 requires it green unchanged) or anything in planning-run-authority.test.ts, which has no EXPANSION or KIND_UNSUPPORTED assertions and must not be edited at all.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Mutation drills, then restore byte-exact. Each must redden a NAMED test in an owned file, and must target a guard THIS task added — reddening a dependency-owned predicate proves nothing about this transition. Drill and record the failing test name for each: (a) reducer.ts — revert the snapshot call to `snapshotPlanningRunState` and confirm EXPANSION commands degrade to UNKNOWN_ERROR (this proves the load-bearing line is actually load-bearing); (b) drop `validExpansionCreateCommand` from the create branch and confirm a malformed hold binding is accepted; (c) drop `validExpansionProposeCommand` from propose and confirm a mismatched sealedProposal.proposalHash is accepted; (d) change the finalize fence to `bearing.length > 1` unconditionally and confirm the multi-node EXPANSION seal test reddens; (e) change it to skip the fence entirely and confirm the INITIAL assertion at reducer.test.ts:180 reddens — both directions, because a fence that never fires and a fence that always fires are different bugs; (f) revert successorData to drop `expansion` and confirm the successor test reddens. Two shared-worktree hazards: `git diff` is BLIND to the new untracked test file, so never verify its restoration by an empty diff — hash it before and after; and a foreign whole-tree completion hook can COMMIT your drill edit, after which git status looks clean while the mutation is live — re-run the suite after every restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-reducer.ts",
+        "packages/core/src/planning/planning-run-submission.ts",
+        "packages/core/src/planning/planning-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verify, self-review, complete. (1) Hand-measure every touched .ts with `grep -c ''` and confirm all 6 are at or below 250 — not the 400 the task's DoD 5 wrongly states; PowerShell Measure-Object -Line skips blank lines and will report headroom you do not have. planning-run-reducer.test.ts started at 228 and must not have grown past 250. (2) Run the exact DoD command fresh and last, unnarrowed, with no path filter: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Read the Test Files count, not just the tail — a narrowed or mistyped invocation reads as green. (3) Path-attributed baseline: run repo-wide `pnpm typecheck` and `pnpm test` at merge-base and at HEAD; the known foreign red is packages/scheduler/src/package-boundary.test.ts ('unterminated regular expression source token' on apps/daemon/src/daemon-main.ts, a pre-existing shebang tokenizer defect). Disclose it verbatim, never call it green and never claim it as yours; the owned-package legs must still be exit 0. (4) Adversarial self-review of your own diff: does any EXPANSION accepted or refused result carry child-run, lease, effect, slot, resource, budget-allocation, graph-activation, dispatch or partial-proposal authority (DoD 3 forbids all of them)? Is REVISION still provably unsupported on BOTH the create and propose paths? Did narrowing the two loops in step 8 leave anything untested? Does any test assert only ok===false rather than the exact discriminated shape? (5) Record the named downstream consumers per DoD 5 — task-9634ed3b72014fe781591c7df9674da2 and the scheduler/core expansion children — in your completion notes. (6) Stage and commit ONLY the 6 owned paths by explicit pathspec; never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-run-expansion.test.ts",
+        "packages/core/src/planning/planning-run-reducer.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-97d6df26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "reopenReason": "Unblocked by governor-42b952c9. All three clauses of the block were re-measured at HEAD 025dc49 and all three are now false. The block was correct when written; it went stale silently because a producer landing never notifies its consumers. CLAUSE 1: \"task-fcad40 is BLOCKED\" — task-fcad40b6d26243439cd19fd3e49c924d is DONE, QA-approved 17:18Z. CLAUSE 2: \"transitive producer task-7f089e11 is WORKING 1/7 with foreign untracked expansion WIP\" — task-7f089e11daea44e9a483197ff139d725 is DONE and its deliverable is committed, not untracked: git ls-tree HEAD -- packages/core/src/expansion returns expansion-planning-hold.ts, its .js bridge, expansion-planning-hold.test.ts and planning-expansion-contract.test.ts. CLAUSE 3: \"current committed PlanningRun still fail-closes all non-INITIAL submissions as PLANNING_KIND_UNSUPPORTED. Planning now would guess unstable command/state/event fields and refusal precedence.\" The fail-close is indeed still present at planning-run-reducer.ts:77 and planning-run-submission.ts:52 — but that is this task's OBJECTIVE to change, not a blocker on it. The real concern was GUESSING unstable fields, and that instability is gone: the contract is published on the core root at packages/core/src/index.ts:229-231 as PLANNING_EXPANSION_ERROR_CODES, PLANNING_EXPANSION_LAYERS, PLANNING_EXPANSION_TARGETS, inspectPlanningExpansionContract, snapshotPlanningRunContractState, validExpansionCreateCommand, validExpansionCreatedEvent, validExpansionHoldBinding, validExpansionProposalIdentity. Those are precisely the command/state/event and refusal-precedence surfaces the block said were unstable. ARCHITECT: re-measure that export list on disk before naming symbols; do not trust this reason string. Consume the published contract, do not reimplement it.",
   "createdBy": "WORKER",
   "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
   "priority": "HIGH",
@@ -32,21 +117,30 @@
       "author": "architect-8c9073cd",
       "content": "Planning gate audit (2026-08-09): this task's exact dependency task-fcad40b6d26243439cd19fd3e49c924d is BLOCKED with no approved plan or committed contract surface. Its producer task-7f089e11daea44e9a483197ff139d725 is still WORKING (1/7); packages/core/src/expansion currently contains foreign untracked WIP, while the owned PlanningRun production still rejects every non-INITIAL run/proposal with PLANNING_KIND_UNSUPPORTED. I will not infer the hold/binding schema from an in-flight diff or plan against unstable bytes. Reclaim only after task-fcad40 is DONE and its committed, clean EXPANSION command/state/event validation surface is visible; then remeasure INITIAL compatibility and exact refusal vocabulary before planning.",
       "timestamp": "2026-08-09T14:30:58.560Z"
+    },
+    {
+      "id": "comment-928e867ac6994b4692e29f1a50a0e736",
+      "author": "architect-8ee37119",
+      "content": "READY TO PLAN — architect-8c9073cd's reclaim condition is met. Measured on disk 2026-08-09 at HEAD `025dc4948127e7c7b753b71d3f5cf4b142637060`, not read from any task field. Every item in that audit comment is now stale in the \"gap claimed present, actually closed\" direction:\n\n1. Dependency `task-fcad40b6d26243439cd19fd3e49c924d` is **DONE and QA-approved**, not BLOCKED. Its bytes are in commit `a646660` (\"feat(core): bind planning expansion contract\", 6 files, +1042/-17). `git ls-tree -r HEAD` confirms `planning-expansion-validation.ts` and its `.js` bridge are committed, and the surface is root-published at `packages/core/src/index.ts:230-235`: `inspectPlanningExpansionContract`, `snapshotPlanningRunContractState`, `validExpansionCreateCommand`, plus `PlanningExpansionLayer` / `PlanningExpansionTarget`. That is the committed, clean EXPANSION command/state/event validation surface the audit required.\n2. Its producer `task-7f089e11daea44e9a483197ff139d725` (\"Expansion planning hold lifecycle\") is **DONE**, not WORKING 1/7.\n3. The \"foreign untracked WIP\" in `packages/core/src/expansion` is gone: `git status --porcelain` over both `packages/core/src/planning` and `packages/core/src/expansion` is EMPTY. Nothing to plan against unstable bytes.\n\nGAP CONFIRMED STILL OPEN — this task is not already landed:\n- `planning-run-reducer.ts:77` — `if (command.runKind !== \"INITIAL\") return unsupported(\"PLANNING_KIND_UNSUPPORTED\");`\n- `planning-run-submission.ts:52` — `if (command.proposalKind !== \"INITIAL\") return unsupported(\"PLANNING_KIND_UNSUPPORTED\");`\nNote from the dependency's handoff: `reducePlanningRun` answers exact `PLANNING_KIND_UNSUPPORTED` for REVISION **and** EXPANSION. Representability is not transition — the contract task made the shapes expressible, it deliberately did not enable behavior. That behavior is this task's whole job.\n\nDEFECT IN THIS TASK'S OWN DoD, fix at planning time. DoD 5 says \"production files remain below 400 lines\". Both owned production files live in `packages/core/src/planning`, which `planning-source-size.test.ts` hard-caps at **250 physical lines** — no allowlist, no basename exception, and it sweeps tests, fixtures and drivers equally. 400 is not achievable there; treat 250 as the real bar.\n\nLINE HEADROOM measured with `grep -c ''`: planning-run-reducer.ts 192 (58 free), planning-run-submission.ts 186 (64 free), planning-run-reducer.test.ts 228 (**22 free**). DoD 4 demands INITIAL compatibility, EXPANSION success, duplicate replay, refusal precedence, changed base/epoch/hold, competing finalize/cancel schedules, nonzero generated permutations AND mutation drills with exact code plus layer. That does not fit in 22 lines — expect the plan to add a focused new test file, taking owned paths from 3 to 4. Measure before assuming, and do not shrink existing assertions to make room.\n\nFOR THE PLANNING ARCHITECT: @moe/contracts `RuntimeError` DROPS its validated `source` (`runtime-error-factory.ts:20-31` has no `source` field), so DoD 2 and DoD 4's \"exact code AND layer\" cannot be satisfied by reading the error alone. Check whether the planning-run result type already carries a layer discriminant; if it does not, one has to be added in production — never reconstructed in a test helper. See `graph-revision-results.ts` for the same problem being solved on the sibling aggregate.",
+      "timestamp": "2026-08-09T18:42:36.336Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:37.588Z",
-  "updatedAt": "2026-08-09T14:31:27.286Z",
+  "updatedAt": "2026-08-09T18:47:43.833Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:29:22.558Z"
+    "firstClaimAt": "2026-08-09T14:29:22.558Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 6
   },
   "contextFetchedBy": [
-    "architect-8c9073cd"
+    "architect-8c9073cd",
+    "worker-97d6df26"
   ],
-  "blockedReason": "Cannot plan PlanningRun EXPANSION behavior before its exact Planning expansion contract binding dependency lands. task-fcad40 is BLOCKED; transitive producer task-7f089e11 is WORKING 1/7 with foreign untracked expansion WIP, and current committed PlanningRun still fail-closes all non-INITIAL submissions as PLANNING_KIND_UNSUPPORTED. Planning now would guess unstable command/state/event fields and refusal precedence.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:31:05.708Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Verified dependency/task status and current disk surface; documented block in comment comment-0b05bacaccad466dabae296175b8c9df; reported BLOCKED; wrote Serena handoff task-task-93b0314e09f248118e21f92699989468-handoff.",
@@ -57,5 +151,32 @@
       "releasedBy": "architect-8c9073cd",
       "reason": "Explicit architect handoff after recording a verified dependency block."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T18:47:22.306Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED changing PlanningRunState into a discriminated union. That is the obvious way to model EXPANSION's two extra keys, and it is already recorded as WRONG in production: planning-event-contract.ts:47-57 says a union there 'produces a cross-product whose mixed members are unassignable, which breaks planning-results.ts and planning-run-test-fixtures.ts — measured, not assumed'. `PlanningRunContractState` is deliberately `PlanningRunState & {...}` so it WIDENS to PlanningRunState and `clonedState`'s `Partial<PlanningRunState>` spread keeps working. Consequence for this plan: no type change is needed anywhere. planning-contract.ts and planning-event-contract.ts stay untouched, and the entire EXPANSION admission is a runtime-validation swap plus two branches.\n\nREJECTED adding a layer discriminant to the planning-run result, which is what I did on the sibling graph-revision aggregate for the same DoD wording. Measurement shows it is unnecessary here and would be a second vocabulary: (a) `illegal()` already puts `aggregateKind: 'PLANNING_RUN'` in `details`, which survives sanitizeDetails because ILLEGAL_TRANSITION declares those detail keys — unlike REVISION_REBOUND, which is NO_KEY and forced the discriminant on the other aggregate; (b) `unsupported()` results carry `unsupported: true` plus a typed `reason`, which is itself the discriminant; (c) the dependency already ships exact code AND layer via `inspectPlanningExpansionContract` returning `{ code: PLANNING_EXPANSION_*_INVALID, layer: BINDING|IDENTITY|COMMAND|EVENT|STATE|TARGET }`. Compose those three; mint nothing.\n\nREJECTED gating the multi-node fence on node count or on a new flag. Gating on `state.runKind !== 'EXPANSION'` keeps INITIAL's fence provably byte-equivalent, which is what DoD 3 demands, and keeps the zero-bearing case illegal for both kinds.\n\nREJECTED squeezing the new coverage into planning-run-reducer.test.ts. It is 228 lines against a hard 250 cap enforced by planning-source-size.test.ts, so 22 lines cannot hold DoD 4's eight required scenarios. A focused new file is the only option that does not force shrinking existing assertions.",
+    "codebaseInsights": "ALL MEASURED ON DISK 2026-08-09 at HEAD 025dc4948127e7c7b753b71d3f5cf4b142637060. src/planning and src/expansion both clean.\n\nDEPENDENCY IS DONE AND ITS SURFACE IS COMMITTED (re-measured, not assumed): task-fcad40b6d26243439cd19fd3e49c924d landed commit a646660; `planning-expansion-validation.ts` (243 lines) and its .js bridge are in HEAD; root-published at index.ts:230-235. Its producer task-7f089e11 ('Expansion planning hold lifecycle') is also DONE. The audit comment from architect-8c9073cd that said otherwise is stale in every particular.\n\nTHE GAP IS REAL AND NARROW: planning-run-reducer.ts:77 `if (command.runKind !== 'INITIAL') return unsupported('PLANNING_KIND_UNSUPPORTED')` and planning-run-submission.ts:52 the same for proposalKind. Representability is not transition — the contract task made EXPANSION expressible and deliberately enabled no behavior.\n\nTHE LOAD-BEARING LINE, easy to miss: planning-run-reducer.ts:178 calls `snapshotPlanningRunState`, whose `exact()` guard admits ONLY the 12-key legacy shape. An EXPANSION state has 14 keys, so without swapping to `snapshotPlanningRunContractState` every command against an EXPANSION run silently returns unknownFailure() and every other change in this task is dead code. Verify by drill (a) in step 9.\n\nCOMPOSE, DO NOT RESTATE: `validExpansionCreateCommand` and `validExpansionProposeCommand` already enforce the full shapes, including the two equalities that matter most — sealedProposal.proposalHash === submissionHash and sealedProposal.proposalRef === witness.submissionRef (planning-expansion-validation.ts:132-133). The hold binding's 11 keys, the ACTIVE lifecycle requirement and the DAEMON_VERIFIED truth class are all already pinned at :95-102.\n\nTWO REFUSAL FAMILIES, never conflate them. `rejected()` results carry a RuntimeError and, per the comment at planning-results.ts:14-19, only ILLEGAL_TRANSITION, EXPECTED_VERSION_CONFLICT, IDEMPOTENCY_CONFLICT and PLANNING_SUBMISSION_FINALIZING may be paired with PLANNING_RUN — anything else silently degrades to UNKNOWN_ERROR. `unsupported()` results carry NO RuntimeError at all; planning-event-contract.ts:171-183 explains that RUNTIME_ERROR_CODES has no UNSUPPORTED family and RUNTIME_SAFE_DETAIL_KEYS has no key-list slot for the refused node identities, so the typed third union member exists on purpose.\n\nEXISTING ASSERTIONS THE CHANGE INVALIDATES, exactly two, both in planning-run-reducer.test.ts: :44-47 (EXPANSION create_draft expects PLANNING_KIND_UNSUPPORTED) and :132-137 (loop over ['REVISION','EXPANSION'] expecting the same). :180 (MULTI_NODE on the INITIAL path) must stay green. planning-run-authority.test.ts has zero EXPANSION or KIND_UNSUPPORTED hits and must not be touched.\n\nLINE HEADROOM against the hard 250 cap: reducer 192 (58 free), submission 186 (64), results 121 (129), test-fixtures 156 (94), reducer.test 228 (22). planning-validation.ts is at 250 exactly and planning-command-contract.ts at 249 — neither needs editing, and neither could absorb a line if it did.",
+    "risks": "1. THE TASK'S OWN DoD 5 IS WRONG. It says 'production files remain below 400 lines'. Both owned production files live in packages/core/src/planning, which planning-source-size.test.ts hard-caps at 250 physical lines — no allowlist, no basename exception, tests and fixtures swept equally. Building to 400 there fails the suite. 250 is the bar; the DoD text is the defect.\n\n2. THE SILENT-DEGRADE FAILURE MODE. If the snapshot swap at reducer.ts:178 is missed, EXPANSION states fail the 12-key `exact()` guard and every command returns unknownFailure() — no exception, no obviously wrong code, just UNKNOWN_ERROR. A test asserting only ok===false would pass while nothing works. Assert the full discriminated shape on every refusal, and run drill (a).\n\n3. SUCCESSOR DEFECT, easy to ship unnoticed. successorData() builds a 12-key literal with `runKind: state.runKind`. Rejecting an EXPANSION run yields a state claiming EXPANSION with no hold binding — invalid, and only observable on the NEXT command. Step 7 closes it; without that step the task is completable and wrong.\n\n4. NARROWING A LOOP IS NOT UPDATING A TEST. Both invalidated assertions are loops over run kinds. Deleting the EXPANSION member is correct; deleting the whole case is not, because REVISION must stay provably unsupported on both the create and propose paths. A REVISION path that quietly becomes reachable is exactly the regression DoD 1 forbids.\n\n5. THE FENCE HAS TWO FAILURE DIRECTIONS. A fence that never fires breaks INITIAL's single-node guarantee (DoD 3); a fence that always fires blocks EXPANSION's whole purpose (DoD 2). Drills (d) and (e) test both directions deliberately.\n\n6. AUTHORITY LEAKAGE. DoD 3 forbids any EXPANSION result carrying child run, lease, effect, slot, resource, budget allocation, graph activation, dispatch or partial proposal authority. The accepted EXPANSION state adds exactly two fields — `expansion` and `sealedProposal` — and nothing else. Re-read the diff for this specifically in step 10; it is the one DoD item no test naturally catches.\n\n7. SHARED WORKTREE. All agents work in one directory. `git diff` cannot see the new untracked test file, so never verify a mutation restore by an empty diff. A foreign whole-tree completion hook may commit your in-progress bytes; do not amend, reset or stash (epic rail 3) — report the base-ref diff over owned paths instead. Note task-1df0622e is actively editing graph-revision-*.ts in this same package right now, so a red in src/planning that you did not cause is plausible — attribute it by path before treating it as yours.",
+    "keyFiles": [
+      "packages/core/src/planning/planning-expansion-validation.ts",
+      "packages/core/src/planning/planning-run-reducer.ts",
+      "packages/core/src/planning/planning-run-submission.ts",
+      "packages/core/src/planning/planning-results.ts",
+      "packages/core/src/planning/planning-event-contract.ts",
+      "packages/core/src/planning/planning-run-reducer.test.ts",
+      "packages/core/src/planning/planning-source-size.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000,
+    "warnedAt": "2026-08-09T18:47:43.753Z",
+    "escalatedAt": "2026-08-09T18:47:43.753Z"
+  },
+  "planApprovedAt": "2026-08-09T18:47:24.345Z"
 }

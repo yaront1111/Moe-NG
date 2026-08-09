@@ -20,9 +20,93 @@
     "Reuse child 1's crate, call-table trait, RAII handle and Job operations, and 2a's process construction, unchanged. Do not recreate, fork, or reimplement them, and do not reimplement any production authority inside tests/real_windows.rs.",
     "Real-Windows tests must actually run on this win32 host. Marking them #[ignore], gating them off, or stubbing the kernel interaction fails this task outright."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "HARD GATE: RE-MEASURE 2a's SEAM BEFORE WRITING ANYTHING. This plan was written while 2a was in flight and uncommitted, so every symbol below is provisional. Write nothing in this step. Confirm ALL of the following, and if any one differs, STOP and call moe.report_blocked with the difference rather than adapting silently: (a) 2a is committed -- `git ls-tree -r --name-only HEAD -- packages/runner/src/platform/windows` lists src/process.rs, src/win32/process_calls.rs, src/win32/system_job.rs, src/win32/system_process.rs and tests/process_sweep.rs, and `git status --porcelain` over the crate is clean. If 2a is still uncommitted, stop here regardless of anything else -- four of this task's eight owned files are ones 2a is actively editing. (b) `NativeOp::ALL` is declared `[NativeOp; 15]`. (c) `ProcessCalls` still has `type AttributeList` and the ten methods named in planningNotes, with `is_process_in_job -> Result<bool, _>` and `resume_thread -> Result<u32, _>`. (d) `ContainedProcess` still takes `job: &Job<'c, C>` in `create` and does not retain it. (e) `Job::handle()` is still pub(crate). Then record `grep -c ''` for every Rust source, run the task's exact verification command as the PRE-DIFF baseline required by the path-attributed-baseline rail, and record `git rev-parse HEAD` and the merge-base.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T18:41:02.539Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "EXTEND THE VOCABULARY AND THE SEAM. In src/win32.rs add exactly four NativeOp variants -- WaitForProcess, QueryExitCode, TerminateProcess, QueryImageName -- and extend NativeOp::ALL to `[NativeOp; 19]` in declaration order. Do NOT add variants for job termination or accounting: child 1's TerminateJob and QueryAccounting already exist and the post-membership unwind regime reuses them. In src/win32/process_calls.rs add the matching arms to the EXISTING `ProcessCalls` trait rather than declaring a new trait -- `ContainedProcess` is already bounded on `Win32Calls + ProcessCalls`, so a third trait would force a signature change across 2a's type and every double. The arms are: `wait_for_process(process, timeout_ms) -> Result<WaitOutcome, NativeError>`, `exit_code(process) -> Result<u32, NativeError>`, `terminate_process(process) -> Result<(), NativeError>`, `image_name(process) -> Result<Vec<u16>, NativeError>`. Define `WaitOutcome` as a closed enum with Signalled / TimedOut / Abandoned -- WAIT_TIMEOUT and WAIT_ABANDONED are legitimate Ok values, NOT errors, and only WAIT_FAILED becomes Err. Document at the seam that WaitForSingleObject returns WAIT_EVENT and not a BOOL, so `!= WAIT_OBJECT_0 -> Err` is wrong. Keep both files <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/src/win32.rs",
+        "packages/runner/src/platform/windows/native/src/win32/process_calls.rs"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, AND PIN THE STILL_ACTIVE TRAP FIRST. Extend the scripted double in tests/process_sweep.rs with the four new arms, a programmable WaitOutcome, and a programmable exit code, WITHOUT weakening any assertion 2a landed. Then write the failing tests for the exit-query discipline before any production code exists: (a) an exit query made with no prior successful wait yields the UNKNOWN case, asserted by its reason code, NEVER a numeric exit code; (b) an exit query after a wait that returned TimedOut likewise yields UNKNOWN; (c) only after a wait returning Signalled does the query yield Exited(code); (d) a process whose real exit code IS 259 is reported as Exited(259) after a confirmed Signalled wait -- proving the design distinguishes it from STILL_ACTIVE rather than blacklisting the value. Case (d) is the one that catches a lazy `if code == 259 { unknown }` implementation, so it is not optional. Also write the four-outcome wait tests: Signalled, TimedOut and Abandoned are Ok values; only WAIT_FAILED is Err carrying NativeOp::WaitForProcess and the real code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN, PART 1: THE QUERY SURFACE. Create src/lifecycle.rs with the wait, exit-query, terminate and ActiveProcesses==0 operations, generic over `C: Win32Calls + ProcessCalls`, taking the retained handles and `&Job` rather than ever reopening by PID. Model the exit result as a closed enum whose Exited(code) variant is UNCONSTRUCTIBLE without a wait that returned Signalled -- make that a type-level property, not a runtime check a caller can skip, because GetExitCodeProcess returns STILL_ACTIVE (259) both for a running process and for one that genuinely exited with 259, and those are indistinguishable from the call alone. Anything else stays UNKNOWN, per epic rail 4. Add the final-image identity query (QueryFullProcessImageNameW with PROCESS_NAME_WIN32) and expose PID and creation time by delegating to 2a's ContainedProcess accessors rather than re-querying. Nothing here reports started, exited or tree-dead before the corresponding fact has been queried successfully. This step makes step 3's tests pass.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/src/lifecycle.rs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN, PART 2: THE TWO-REGIME UNWIND, wired into construction. Add the unwind protocol to src/lifecycle.rs and invoke it from `ContainedProcess::create` in src/process.rs, which is the only place a partial-construction fault can be observed. THE BOUNDARY IS THE MEMBERSHIP PROOF, NOT CreateProcessW. Before membership is proven, a child exists that the Job may not contain, so unwind must terminate THAT PROCESS by its handle and wait for it directly. After membership is proven the Job owns the child, so unwind terminates the JOB (child 1's terminate_job) and waits for ActiveProcesses==0 (child 1's query_active_processes) -- and it must WAIT for the count to reach zero rather than sampling once, because TerminateJobObject returns before the processes are gone. These are two paths and must remain two; a single shared path that happens to satisfy both fails DoD item 3. Cleanup outcomes are retained as uncertain and never laundered: a terminate, wait or close that fails during unwind surfaces as an error carrying its own NativeOp, while the FIRST error -- the one that caused the unwind -- is what the caller receives. Follow the ordering child 1 established in handle.rs: attempt every cleanup even after one fails, so nothing leaks, and let the first error win. If lifecycle.rs would exceed 250 lines, split the unwind into src/unwind.rs; that contingency is pre-authorised and stays inside the file ceiling.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/src/lifecycle.rs",
+        "packages/runner/src/platform/windows/native/src/process.rs"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "REAL WIN32 IMPL. Add the four lifecycle arms to src/win32/system_process.rs, the file 2a created, keeping every unsafe block behind a SAFETY comment in the established style. Check first whether 2a already implemented creation_time via GetProcessTimes and whether image_name is present -- add only what is missing rather than duplicating. Specifics: WaitForSingleObject returns WAIT_EVENT, so map WAIT_OBJECT_0 to Signalled, WAIT_TIMEOUT to TimedOut, WAIT_ABANDONED to Abandoned, and ONLY WAIT_FAILED to Err with GetLastError -- a BOOL-style check here is a bug. GetExitCodeProcess and TerminateProcess are ordinary BOOL checks. QueryFullProcessImageNameW takes PROCESS_NAME_WIN32 and an in/out size in WCHARs, not bytes, and updates that size on success, so the returned buffer must be truncated to the reported length rather than to its capacity. Reuse the existing last_error and check helpers instead of writing new ones. If the file would exceed 250 lines, split the lifecycle arms into src/win32/system_lifecycle.rs -- pre-authorised, still inside the ceiling.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/src/win32/system_process.rs"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "COMPLETE THE SWEEP, INCLUDING BOTH UNWIND REGIMES. Extend tests/process_sweep.rs to cover every lifecycle arm: one frozen Case per failable arm with a DISTINCT Win32 error code, an `assert_eq!` on the case count so a sweep that generates zero cases cannot pass, and the exact NativeOp plus exact code asserted per case. Update the totality cross-check to the new vocabulary -- the produced process-op set equals a hand-written PROCESS_OPS list exactly, every member is in NativeOp::ALL, and PROCESS_OPS.len() + 6 == NativeOp::ALL.len() == 19. That count assertion is also what proves DoD item 1's absence of an open-by-PID arm: adding one would require a variant and would break the count. Add the TWO REGIME TESTS as separate call-log assertions: a fault injected BEFORE the membership proof must produce a log containing terminate-process then wait-for-process and NOT terminate-job; a fault injected AFTER the membership proof must produce terminate-job then a repeated active-process query reaching zero, and NOT terminate-process. Assert the whole recorded vector in each, not a containment. Add the uncertain-cleanup test: a terminate that fails during unwind surfaces its own NativeOp while the caller still receives the original first error. Confirm every assertion 2a landed still passes unweakened.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "REAL WINDOWS ACCEPTANCE. Create tests/real_windows.rs. These run for real on this win32 host -- no #[ignore], no cfg gate, no stub; that is task rail 6 and marking them skipped fails the task outright. Resolve the executable from %SystemRoot%\\\\System32\\\\PING.EXE rather than hardcoding C:\\\\Windows, pass argv directly, and never invoke a command shell, taskkill, or PID enumeration. Build the three required inherited handles by opening the NUL device three times as inheritable via CreateFileW; that is test fixture setup, not production authority. TEST A, a suspended process cannot execute before the proofs: create `ping -n 1 127.0.0.1` suspended inside a configured Job; BEFORE resume assert IsProcessInJob is already true and ActiveProcesses==1, and assert a bounded wait (roughly 500ms) returns TimedOut even though this command would exit in well under a second unresumed -- that timeout IS the observation that the thread never ran; then resume and assert the wait returns Signalled and the exit code becomes readable only after it. TEST B, terminating the Job leaves nothing: create `ping -n 60 127.0.0.1` in the Job, assert ActiveProcesses==1, terminate the Job, wait on the retained process handle until Signalled, then assert ActiveProcesses==0 -- wait for it, never sleep-and-sample. Close every handle on every path including panic, and treat KILL_ON_JOB_CLOSE as a backstop rather than the primary cleanup.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/tests/real_windows.rs"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "WIRE UP AND AUDIT SIZE. In src/lib.rs add `mod lifecycle;` (and `mod unwind;` if step 5 split it) and re-export the new public surface -- the lifecycle operations, the wait-outcome enum and the exit-result enum -- keeping every item on exactly one public path as the existing comment requires. Update the crate and module docs that still describe lifecycle and unwind as belonging to a future sibling task: src/process.rs and src/job.rs both carry scope comments naming task-af99cf14 as out-of-scope future work, and those are now false. Correct them rather than leaving a comment that contradicts the code. Then audit every Rust production source with `grep -c '' <file>` and record each count: lib.rs, win32.rs, win32/process_calls.rs, win32/system_job.rs, win32/system_process.rs, lifecycle.rs, process.rs, job.rs, handle.rs, plus any file created by a pre-authorised split. Every one must be <=250. Split by responsibility, never by reformatting, and do not proceed with a file over the bar.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/src/lib.rs",
+        "packages/runner/src/platform/windows/native/src/process.rs",
+        "packages/runner/src/platform/windows/native/src/job.rs"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "VERIFY, ATTACK, COMMIT. (a) Run the task's exact verification command -- the locked test run AND the locked release build -- and paste the real output; both must exit 0, and real_windows.rs must appear in the results as RUN, not filtered or ignored. State the test counts. (b) Compare against the step-1 baseline: any repo-wide red must be shown to exist at the merge-base too, or it is yours. (c) MUTATION DRILL, required by epic rail 6 because none of these defects are visible in a green suite: make the exit query return the raw code without requiring a prior Signalled wait and confirm the STILL_ACTIVE tests go RED; swap the two unwind regimes so a pre-membership fault terminates the Job and confirm the regime tests go RED; make WAIT_TIMEOUT return Err and confirm both the four-outcome test and real_windows TEST A go RED; delete one entry from PROCESS_OPS and confirm the totality assertion goes RED. Restore each and re-confirm green, then verify by reading the file contents -- not by trusting a clean git status -- that no mutation survived, because a foreign whole-tree commit can capture a drill edit. (d) Adversarial pass: NativeError still exposes only op and code; RawHandle still has no Debug; no executable path, argv, cwd, environment or handle value reaches an error, a log, or a panic message. (e) Confirm no target output, executable, marker or probe artifact is staged. (f) `git status --porcelain`, unstage anything foreign with `git restore --staged`, commit by explicit pathspec over this task's owned paths only, and verify with `git show --stat`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-a87e980a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -34,12 +118,42 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:40.833Z",
-  "updatedAt": "2026-08-09T18:37:59.375Z",
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "updatedAt": "2026-08-09T18:45:30.051Z",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-09T18:45:30.051Z",
+  "blockedReason": "Step-1 hard gate tripped on condition (a). SEQUENCING ONLY — seam did NOT move, steps 2-10 need NO amendment. Full evidence: chan-ced99359 msg-ebd709fc.\n\nPASSES, measured at HEAD 6daa942: (b) `pub const ALL: [NativeOp; 15]` win32.rs:56, 15 variants ending ResumeThread. (c) `ProcessCalls` has `type AttributeList` (process_calls.rs:66) + the ten named methods, `is_process_in_job -> Result<bool,_>` (:93), `resume_thread -> Result<u32,_>` (:104). (d) `create(calls, job: &Job<'c,C>, spec)` process.rs:83, fields process/thread/pid/creation_time, Job not retained. (e) `pub(crate) fn handle()` job.rs:47.\n\nFAILS (a). ls-tree lists all five files plus a sixth, win32/system_process_attrs.rs (2a's pre-authorised split) — but those bytes sit in commit 6daa942, the motion-guard task's whole-tree sweep, not a 2a commit. `git status --porcelain` over the crate is NOT clean: ` M src/lib.rs`, doc header only.\n\nDECISIVE: worker-1a528e3e is ALIVE, CODING, holding task-885a46e9, which is `step-10 IN_PROGRESS`, steps 1-9 COMPLETED. Step 10 is 2a's verify / MUTATION-DRILL / commit step. Two live hazards:\n1. The drill restores production files by rewriting contents — win32.rs, process.rs, process_sweep.rs. Bytes I add mid-drill are clobbered by that restore, git status clean after, loss invisible.\n2. Step 10 ends `git commit -- <2a's owned paths>`: lib.rs, win32.rs, process.rs, process_sweep.rs — four of my eight owned files.\n\nI did NOT take the pre-diff baseline: a run mid-drill records foreign red, or green over mutated bytes, as MY baseline — worse than none. Only ran `cargo check --offline --all-targets` to a throwaway target dir (exit 0); dir deleted, nothing staged. Zero bytes written to any owned file.\n\nUNBLOCK WHEN: task-885a46e9 DONE/REVIEW AND `git status --porcelain -- packages/runner/src/platform/windows` clean. On resume: re-run gate, take real baseline, execute 2-10 unchanged.\n\nSize: win32.rs already 174 lines, system_process.rs 189 — splits in steps 2 and 6 look required.",
   "blockedResourceId": null,
   "contextFetchedBy": [
-    "architect-5aba94da"
-  ]
+    "architect-5aba94da",
+    "worker-a87e980a"
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T18:40:22.502Z",
+  "metrics": {
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 9,
+    "firstClaimAt": "2026-08-09T18:40:31.376Z"
+  },
+  "planningNotes": {
+    "approachesConsidered": "WHERE THE LIFECYCLE ARMS GO. Chose extending the existing `ProcessCalls` trait in src/win32/process_calls.rs (110 -> ~160 lines, under the bar). Rejected a separate `LifecycleCalls` trait: `ContainedProcess<'c, C: Win32Calls + ProcessCalls>` already carries that exact bound, so a third trait would force a signature change on 2a's type and every impl and test double -- churn in a sibling's file for no isolation benefit.\n\nHOW THE UNWIND REACHES THE JOB. `ContainedProcess` does not retain the Job and this plan does NOT add it. Inside `ContainedProcess::create` the Job is already a parameter and in scope, which is the only place partial-construction unwind can run. For post-construction lifecycle calls the caller passes `&Job` explicitly. DoD item 1 is satisfied either way -- the point is that the ORIGINAL handle is used rather than reopening by PID, and a `&Job` the caller already holds is the original handle.\n\nREAL-WINDOWS PROOF WITHOUT A MARKER FILE OR A HELPER BINARY. Rejected `src/bin/marker.rs` even though Cargo autobins would discover it without a manifest edit: epic rail 5 forbids probe files in commits and a marker helper reads as exactly that, and it would push the file count to 10. Rejected a filesystem marker copied by robocopy/xcopy: a temp path plus cleanup-on-every-path obligation, for a weaker signal. CHOSE a wait-based proof using PING.EXE resolved from %SystemRoot%: before resume, a bounded wait on the process handle returns WAIT_TIMEOUT even though `ping -n 1` would exit in well under a second, which IS the observation that the thread never ran; after resume the same wait returns WAIT_OBJECT_0. No filesystem, no race, no cleanup obligation, no shell, and it exercises the very arms this task adds. `ping -n 60` gives the long-lived process for the terminate test.\n\nINHERITED HANDLES IN THE ACCEPTANCE TEST. ProcessSpec demands exactly three. Open the NUL device three times as inheritable via CreateFileW in test setup. That is test FIXTURE code, not production authority, so it does not violate the rail against reimplementing authority in real_windows.rs -- and it keeps the child's output off the test console.\n\nPROVING ABSENCE OF AN OPEN-BY-PID ARM (DoD item 1). There is no way to assert a method does not exist, so the proof is the closed vocabulary: `NativeOp::ALL` is a fixed-size array whose length is part of its type, and the sweeps assert the exact total. Adding an OpenProcess arm would have to add a variant, which breaks the length assertion and the totality cross-check. Absence is enforced by the count, not by a comment.",
+    "codebaseInsights": "READ THIS FIRST: 2a WAS STILL IN FLIGHT WHEN THIS PLAN WAS WRITTEN. Measured 2026-08-09: task-885a46e9 is UNCOMMITTED. `git ls-tree -r HEAD -- <crate>` lists only child 1's 9 files; `git status --porcelain` shows 5 modified + 3 untracked. 2a has done roughly steps 1-6 of 10. src/win32/system_process.rs -- the real windows-sys impl this task extends -- DOES NOT EXIST YET. Step 1 is a hard gate that stops if the seam moved. This is a known, human-authorised sequencing decision, not an oversight.\n\nWHAT 2A HAS ACTUALLY LANDED (working tree, `cargo check --offline --all-targets` clean, warnings only):\n  src/lib.rs 52   src/win32.rs 168   src/win32/process_calls.rs 110\n  src/win32/system_job.rs 116   src/process.rs 196   src/job.rs 93   src/handle.rs 77\n  tests/job_sweep.rs 305   tests/process_sweep.rs 312\nNote 2a's file naming DIVERGED from its own plan: the construction seam went to src/win32/process_calls.rs, not into win32.rs. Plan accordingly.\n\nSEAM AS IT ACTUALLY EXISTS:\n  `pub trait ProcessCalls` in src/win32/process_calls.rs, with `type AttributeList;` and: init_attribute_list, set_job_list_attribute, set_handle_list_attribute, create_process_suspended, assign_process_to_job, is_process_in_job -> Result<bool,_>, process_id, creation_time, resume_thread -> Result<u32,_>, delete_attribute_list (infallible).\n  `pub struct ContainedProcess<'c, C: Win32Calls + ProcessCalls>` in src/process.rs with PRIVATE fields process/thread/pid/creation_time, `create(calls, job: &Job<'c,C>, spec: &ProcessSpec)`, pid(), creation_time(), close(). It does NOT retain the Job.\n  `Job::handle() -> RawHandle` is pub(crate) (2a added it to job.rs).\n  NativeOp has 15 variants, `pub const ALL: [NativeOp; 15]`.\n  Child 1's TerminateJob and QueryAccounting ALREADY EXIST -- the post-membership regime reuses them. Do NOT add duplicates.\n\nEXACT windows-sys 0.61.2 DECLARATIONS, read from the registry source:\n  WaitForSingleObject(hhandle, dwmilliseconds: u32) -> WAIT_EVENT   <-- NOT a BOOL\n  GetExitCodeProcess(hprocess, lpexitcode: *mut u32) -> BOOL\n  TerminateProcess(hprocess, uexitcode: u32) -> BOOL\n  QueryFullProcessImageNameW(hprocess, dwflags: PROCESS_NAME_FORMAT, lpexename: PWSTR, lpdwsize: *mut u32) -> BOOL\nCONSTANTS: WAIT_OBJECT_0=0, WAIT_ABANDONED=128, WAIT_TIMEOUT=258, WAIT_FAILED=4294967295, INFINITE=4294967295, PROCESS_NAME_WIN32=0, STILL_ACTIVE=0x103=259.\n\nTHE TRAP THAT SHAPES THE WHOLE DESIGN. GetExitCodeProcess returns STILL_ACTIVE (259) for a process that is STILL RUNNING, and also returns 259 for a process that genuinely exited with code 259. The two are indistinguishable from the call alone. So an exit code is authoritative ONLY after a wait that returned WAIT_OBJECT_0. Reporting 259 as an exit code without that prior wait is exactly the defect epic rail 4 forbids: unverifiable evidence gaining authority. Model the result as an enum where the exited-with-code case is unconstructible without a confirmed wait.\n\nSECOND NON-COLLAPSE. WaitForSingleObject has FOUR outcomes and only one is an error: WAIT_OBJECT_0 = signalled; WAIT_TIMEOUT = still running, a legitimate Ok value and NOT a failure; WAIT_ABANDONED = 128; WAIT_FAILED = call failed, read GetLastError. A `!= WAIT_OBJECT_0 -> Err` shape is wrong and would make the suspended-process acceptance test unwritable.\n\nCHILD 1 / 2A CONVENTIONS TO FOLLOW: NativeError code 0 means \"our refusal, not the OS's\" (job.rs:78, and 2a's prove_membership/resume). RawHandle has no Debug so a future derive fails to compile. ProcessSpec and CreatedProcess are deliberately not Debug for the same reason.",
+    "risks": "1. THE BIGGEST RISK IS NOT TECHNICAL. 2a is uncommitted and unfinished. If its steps 7-10 rename ProcessCalls methods, change `type AttributeList`, alter ContainedProcess's fields, or renumber NativeOp, this plan is stale. Step 1 exists to catch that; if it trips, report blocked and let the plan be amended rather than forcing a merge against a moving sibling.\n\n2. SHARED WORKING DIRECTORY, ACTIVE SIBLING. 2a's worker is editing src/win32.rs, src/process.rs, src/lib.rs and tests/process_sweep.rs -- four of this task's eight owned files -- RIGHT NOW. Do not start before 2a commits. When committing, pathspec discipline is not optional: `git status --porcelain` first, unstage anything foreign, commit by explicit path, verify with `git show --stat`.\n\n3. GetExitCodeProcess/STILL_ACTIVE is the defect most likely to ship green. A test that asserts \"exit code is 259 while running\" documents the bug instead of catching it. The exited-with-code case must be unconstructible without a confirmed WAIT_OBJECT_0, and the sweep must assert that a query without a prior successful wait yields the UNKNOWN case, by reason code.\n\n4. Terminating a Job is asynchronous. `TerminateJobObject` returns before the processes are gone, so an immediate ActiveProcesses read can still be nonzero. The post-membership unwind must WAIT for ActiveProcesses==0 rather than sampling once. In real_windows.rs, wait on the process handle before reading the count; a bare sleep is a flake, not a fix.\n\n5. WAIT_TIMEOUT is an Ok value. If it is modelled as Err, the suspended-process acceptance test cannot be written at all, which is the signal that the model is wrong.\n\n6. The two unwind regimes will be tempting to merge because both end in \"handles closed\". They must stay two paths with two distinct call-log assertions -- task rail 1, and DoD item 3 explicitly fails a shared path that happens to satisfy both.\n\n7. real_windows.rs actually spawns processes. If a test panics mid-way the Job handle must still close, and KILL_ON_JOB_CLOSE is the backstop that prevents a stranded ping. Do not rely on it as the primary cleanup; close explicitly.\n\n8. As with 2a, do not describe the release build as behavioural evidence. Only real_windows.rs proves the kernel path, and it proves it only for the arms it actually exercises.",
+    "keyFiles": [
+      "packages/runner/src/platform/windows/native/src/win32/process_calls.rs",
+      "packages/runner/src/platform/windows/native/src/process.rs",
+      "packages/runner/src/platform/windows/native/src/win32.rs",
+      "packages/runner/src/platform/windows/native/src/job.rs",
+      "packages/runner/src/platform/windows/native/tests/process_sweep.rs"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-09T18:40:24.560Z",
+  "workStartedAt": "2026-08-09T18:41:02.539Z"
 }

@@ -9,11 +9,14 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
+import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
+import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER } from "./affordance-contract.js";
 import type {
   AffordancePort,
   AffordanceSurfaceResult,
   ChainStep,
+  ChainStepClaim,
 } from "./affordance-contract.js";
 
 /**
@@ -40,9 +43,25 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
 
 export interface AffordancePortConfig {
+  /** Canonical UTC instant used only to judge claim expiry; defaults to now. */
+  readonly clock?: () => string;
   readonly mintId: () => string;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+}
+
+/** The shared work-item key: the same one the live board renders per card. */
+export function workItemIdFor(kind: string, aggregateId: string | null): string {
+  return `${kind}@${aggregateId ?? "-"}`;
+}
+
+function claimOf(
+  claims: WorkClaimLedger, kind: string, aggregateId: string | null, now: string,
+): ChainStepClaim | null {
+  const active = activeClaim(claims.claims.get(workItemIdFor(kind, aggregateId)), now);
+  return active === null
+    ? null
+    : Object.freeze({ claimedBy: active.claimedBy, expiresAt: active.expiresAt });
 }
 
 function bootstrapAggregateId(
@@ -68,31 +87,37 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
 
   const bootstrapSteps = (
     ledger: DurableLedger, offers: NextAllowedCommand[],
+    claims: WorkClaimLedger, now: string,
   ): ChainStep[] => BOOTSTRAP_COMMAND_KINDS.map((kind) => {
     const aggregateId = bootstrapAggregateId(kind, config.projectId);
     if (ledger.kinds.has(kind)) {
       return Object.freeze({
-        aggregateId, kind, missing: [], status: "COMMITTED" as const,
+        aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+        missing: [], status: "COMMITTED" as const,
         version: versionOf(ledger, aggregateId),
       });
     }
     const missing = missingPrerequisites(ledger, kind);
     if (missing.length > 0) {
       return Object.freeze({
-        aggregateId: null, kind, missing, status: "BLOCKED" as const, version: null,
+        aggregateId: null, claim: claimOf(claims, kind, null, now), kind,
+        missing, status: "BLOCKED" as const, version: null,
       });
     }
     const version = versionOf(ledger, aggregateId);
     offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
     return Object.freeze({
-      aggregateId, kind, missing: [], status: "READY" as const, version,
+      aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+      missing: [], status: "READY" as const, version,
     });
   });
 
   const readSurface = (): AffordanceSurfaceResult => {
     const offers: NextAllowedCommand[] = [];
+    const now = (config.clock ?? ((): string => new Date().toISOString()))();
     const ledger = readDurableLedger(config.store, config.projectId);
-    const steps: ChainStep[] = bootstrapSteps(ledger, offers);
+    const claims = readWorkClaimLedger(config.store, config.projectId);
+    const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now);
 
     const sessions = readSessionLedger(config.store, config.projectId);
     if (sessions.unreadable) {
@@ -111,12 +136,15 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     if (openExisting === undefined) {
       offers.push(offer("session.open", openAggregate, 0, SESSION_SCHEMA_VERSION));
       steps.push(Object.freeze({
-        aggregateId: openAggregate, kind: "session.open", missing: [],
-        status: "READY" as const, version: 0,
+        aggregateId: openAggregate,
+        claim: claimOf(claims, "session.open", openAggregate, now),
+        kind: "session.open", missing: [], status: "READY" as const, version: 0,
       }));
     } else {
       steps.push(Object.freeze({
-        aggregateId: openAggregate, kind: "session.open", missing: [],
+        aggregateId: openAggregate,
+        claim: claimOf(claims, "session.open", openAggregate, now),
+        kind: "session.open", missing: [],
         status: "COMMITTED" as const, version: openExisting.version,
       }));
     }
@@ -126,7 +154,8 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       for (const kind of ["session.close", "session.renew"] as const) {
         offers.push(offer(kind, aggregateId, record.version, SESSION_SCHEMA_VERSION));
         steps.push(Object.freeze({
-          aggregateId, kind, missing: [], status: "READY" as const, version: record.version,
+          aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+          missing: [], status: "READY" as const, version: record.version,
         }));
       }
     }

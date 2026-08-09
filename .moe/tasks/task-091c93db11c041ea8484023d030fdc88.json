@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-42b952c9 under the human's standing direction to keep the board moving. Checked by subject on disk, not by absence of a dependency clause. This is slice 2 of 3 split from task-0325dcf7 by architect-d46fcb95. Its SOLE hard dependency, task-00956ac383784e81b0345bbf09256323 (Recovery-inventory contract and coverage protocol), is DONE — it owns the class set, item shape, coverage proof, INVENTORY_ADAPTER layer and port registry this slice plugs into, and the description is explicit that those must not be restated or re-derived here. The description further records, measured symbol by symbol by architect-d46fcb95, that every primitive this slice calls already exists (provider capability probes at packages/runner/src/providers/claude/claude-probe.ts and providers/codex/codex-probe.ts among them), so nothing here needs a prerequisite. WHY THIS MATTERS FOR THE BOARD: task-0325dcf7 (Node-side recovery-window inventory adapters, CRITICAL) is BLOCKED on three things and two of them were sitting in BACKLOG, outside the claim pool entirely — this task and task-d7da9be4. NOTE ON THE THIRD SLICE: task-d7da9be4 is deliberately NOT promoted alongside this one. It has TWO hard dependencies and the second, task-f6c9011b (Git ref and artifact object enumeration capabilities), is still PLANNING and supplies enumerators its description states do not exist today. Promoting it now would invite planning against an absent surface. ARCHITECT: re-measure the named primitives on disk before naming symbols; treat every claim in the description as stale by default, in both directions.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
   "priority": "CRITICAL",
@@ -39,5 +39,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T14:46:11.206Z"
+  "updatedAt": "2026-08-09T18:43:59.732Z"
 }

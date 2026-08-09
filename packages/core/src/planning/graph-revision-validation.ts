@@ -25,10 +25,11 @@ const APPROVAL_KEYS = [...BINDING_KEYS, "approvalRef", "truthClass"] as const;
 const ACTIVATION_KEYS = [...BINDING_KEYS, "activationRef", "truthClass"] as const;
 const REFUSAL_KEYS = ["findingsRef", "truthClass"] as const;
 const STATE_KEYS = [
-  "boundHashes", "goalRef", "graphContentHash", "lifecycle", "planHash", "revisionId",
-  "submissionRef", "version",
+  "boundHashes", "goalRef", "graphContentHash", "graphEpoch", "lifecycle", "planHash",
+  "revisionId", "submissionRef", "version",
 ] as const;
 const BOUND_STATES: readonly GraphRevisionLifecycle[] = ["APPROVED", "ACTIVE", "SUPERSEDED"];
+const EPOCH_BOUND_STATES: readonly GraphRevisionLifecycle[] = ["ACTIVE", "SUPERSEDED"];
 
 function bindingShape(value: Readonly<Record<string, unknown>>): boolean {
   return validHex64(value["budgetHash"]) && validHex64(value["graphHash"])
@@ -89,6 +90,16 @@ function validBoundPlacement(
     && validBinding(bound) && bound.graphHash === content;
 }
 
+/** A bound epoch may exist only where activation has happened; anything else is UNKNOWN. */
+function validGraphEpochPlacement(
+  lifecycle: GraphRevisionLifecycle,
+  graphEpoch: unknown,
+): boolean {
+  if (!Number.isSafeInteger(graphEpoch)) return false;
+  return EPOCH_BOUND_STATES.includes(lifecycle)
+    ? (graphEpoch as number) >= 1 : graphEpoch === 0;
+}
+
 function validSubmissionPlacement(
   lifecycle: GraphRevisionLifecycle,
   submissionRef: unknown,
@@ -106,6 +117,7 @@ export function validGraphRevisionState(value: unknown): value is GraphRevisionS
   return validRef(value["revisionId"]) && validRef(value["goalRef"]) && validHex64(content)
     && validHex64(value["planHash"]) && Number.isSafeInteger(version) && (version as number) >= 1
     && validBoundPlacement(lifecycle, value["boundHashes"], content)
+    && validGraphEpochPlacement(lifecycle, value["graphEpoch"])
     && validSubmissionPlacement(lifecycle, value["submissionRef"]);
 }
 
