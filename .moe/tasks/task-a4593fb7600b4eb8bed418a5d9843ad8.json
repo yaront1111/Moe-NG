@@ -171,31 +171,47 @@
     {
       "stepId": "step-9",
       "description": "Prove the guarantees are load-bearing, and sweep for the things that silently destroy determinism. MUTATION DRILL at each mechanism's single source: the directory sort comparator, the id-derivation input, the provenance-time selection, the case/path conflict detector, the never-activate constraint, and the transaction boundary. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line expression is a syntax error that reddens the suite for the wrong reason and proves nothing. The comparator mutation matters most: replacing the total order with a constant must redden the two-run determinism test, and if it does not, DoD 1 is untested no matter how green the suite looks. Because this worktree is shared and another agent's completion hook can commit your mutation, capture `git rev-parse HEAD:<path>` before each drill and verify the restore against that sha rather than `git status`. Then the determinism sweep: grep the package for Date.now, new Date(, Math.random, uuid, and any sort without an explicit comparator, and confirm zero hits — a single one makes DoD 1 unprovable and will surface as a flaky hash days later.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-canonical.ts",
         "packages/import/src/source-manifest.ts",
         "packages/import/src/import-reconcile.ts"
       ],
-      "startedAt": "2026-08-09T10:36:23.103Z"
+      "modifiedFiles": [
+        "packages/import/src/source-manifest.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ],
+      "note": "6/6 mutants killed, and the FIRST ONE EXPOSED A TEST THAT WAS PASSING FOR THE WRONG REASON. Post-drill: typecheck exit 0, 5 files / 55 tests green (was 54 — the drill added one test).\n\nTHE COMPARATOR DRILL IS THE FINDING OF THIS STEP. Neutering byCodeUnit to always return 0 reddened 3 tests — but NOT the migration two-run determinism test, which the plan specifically said must go red or \"DoD 1 is untested no matter how green the suite looks\". It was right to say so, and the reason it stayed green is worth recording: NTFS hands back directory entries in case-insensitive alphabetical order, so for an all-lowercase fixture the sort is a NO-OP on this platform. Two runs agree, the expected-order assertion I added still passed, and the bug would only appear on ext4 or APFS — months later, for somebody else, unreproducible on the machine that wrote it.\n\nAdding an explicit expected-order assertion to the migration test did NOT fix it either; I verified that with the mutation still live rather than assuming. What finally distinguishes the two is a MIXED-CASE fixture: NTFS lists (alpha, Beta, Zulu, mid) case-insensitively, while code-unit order is (Beta, Zulu, alpha, mid) because \"B\" is 0x42 and \"a\" is 0x61. That is the only fixture shape on Windows that can tell a working comparator from a neutered one. Added as \"sorts by CODE UNIT, which differs from the host's case-insensitive listing\" in source-manifest.test.ts; with it, the same mutation reddens 4 tests including the manifest sort. Both test strengthenings were made and verified WHILE the mutant was live.\n\nFULL DRILL RESULTS, one at a time, each an operand neutralised with a constant rather than a deleted line:\n(a) byCodeUnit -> always 0: 4 RED (order permutation, canonical key sort, identical-commit, code-unit manifest sort).\n(b) deriveImportedId's manifestDigest -> \"\": 1 RED (two sources sharing a legacy id would collide).\n(c) provenance sourceTime -> always the sentinel: 2 RED (source-declared time, and committedAt derivation).\n(d) case-fold removed from the conflict detector: 2 RED (CASE_PATH_CONFLICT, and the twelve-class completeness sweep).\n(e) held claim -> HISTORICAL instead of SUSPENDED: 1 RED.\n(f) per-commit bound -> MAX_SAFE_INTEGER: 1 RED (refuses rather than splitting).\n\nRESTORATION verified against a pre-drill sha256 manifest rather than git status — my files are a mix of tracked-and-modified and untracked in this shared worktree, so `git rev-parse HEAD:<path>` does not exist for several of them and `git status` cannot distinguish my edit from a foreign hook's commit (mem:mutation-drills-in-shared-worktree). Result: 11 of 13 files byte-exact; the 2 that differ are exactly the two TEST files I deliberately strengthened. ZERO production files drifted.\n\nDETERMINISM SWEEP, scanned as CODE not prose. Raw grep for Date.now / new Date( / Math.random / uuid / localeCompare returns 3 hits, and all three are COMMENTS explaining why those constructs are banned — the same false-positive class that bit the control-room import ban (mem:pattern-import-ban-scans-specifiers-not-text). Re-running with comments stripped gives ZERO hits in code. Separately swept for `.sort()` with no comparator: none — every sort in the package passes one, which matters because a bare .sort() on the entry array would stringify objects.",
+      "startedAt": "2026-08-09T10:36:23.103Z",
+      "completedAt": "2026-08-09T10:41:51.059Z"
     },
     {
       "stepId": "step-10",
       "description": "Run the gates and verify the package loads outside vitest. Run fresh, capturing real output: `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test`, then the task's named gate `pnpm test:migration`, then root `pnpm typecheck`. Because packages/import and tests/migration did not exist before this task, a filter or path miss looks exactly like a passing run with zero tests — so assert the runs actually executed your suites by checking the reported file and test counts are non-zero, and treat 'No test files found' as a FAILURE of this step, not a pass. Then the loadability check this epic has been bitten by five times: run a plain-Node probe from the repo root importing `./packages/import/src/index.ts` with `--experimental-strip-types`, alongside a known-good control (@moe/scheduler or @moe/store source entry) so a cwd mistake cannot read as a defect, and confirm every export is defined rather than merely that the import resolved. If it fails, the missing `.js` bridges are yours to add here — unlike the retrofit sweeps, a package created in this task ships correct rather than joining the backlog.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/package.json"
-      ]
+      ],
+      "note": "Gates run fresh. Three of four green; the fourth is blocked on the still-outstanding amendment and one leg is red on a foreign path. Nothing self-approved.\n\n1. `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test` -> EXIT 0, 4 files / 48 tests. Non-zero, so this is not the zero-test pass the plan warned about.\n2. NAMED GATE `pnpm test:migration` -> STILL DOES NOT EXIST. Re-checked just now: root package.json has no such script and `git status --porcelain -- package.json` is clean, so nobody has added it and there is currently no collision with task-535e773b either. I did not add it myself. I ran the EXACT command the requested script would expand to, `npx vitest run tests/migration` -> 1 file / 7 tests, exit 0. That is the same work the gate would do, and I am reporting it as an equivalent rather than as the named gate.\n3. Root `pnpm typecheck` -> EXIT 1, 8 errors, ALL FOREIGN and all in apps/daemon: TS2307 for './review-ledger.js', './review-services.js' and '@moe/review' (a review surface another worker is mid-TDD on), plus TS2339/TS7006 fallout from the same. Attributed by path: ZERO errors in packages/import or tests/migration. This is the same shared-gate coupling I hit on the last two tasks.\n4. LOADABILITY, the check this epic has been bitten by five times. Plain Node from the repo root with --experimental-strip-types, run against a KNOWN-GOOD CONTROL alongside the subject so a cwd mistake could not read as a defect:\n     control @moe/store  : OK exports=26 undefined=none\n     subject @moe/import : OK exports=20 undefined=none\n   Both halves matter — the probe asserts every export is DEFINED, not merely that the import resolved, because a TDZ-undefined binding imports fine and only fails at first use. packages/import ships correct rather than joining the retrofit backlog: every production module has its one-line .js bridge, byte-verified earlier as LF-only with a trailing newline and zero 0x0D.\n\nWHAT REMAINS BLOCKED, and it is not work — it is a one-line decision. Either add \"test:migration\": \"vitest run tests/migration\" to root package.json, or amend this task's Verification to a command that exists. My completion evidence will quote the package gate and the direct migration run, both exit 0, and will state plainly that the named script was never created. I would rather report an equivalent honestly than invent the script myself and claim the named gate passed.",
+      "startedAt": "2026-08-09T10:42:00.133Z",
+      "completedAt": "2026-08-09T10:43:09.100Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the diff as an attacker: can ANY output depend on wall-clock time, filesystem order, Set or Map iteration order, or object key order — the four silent determinism killers; would two machines importing identical bytes agree, and is that proven by two real runs rather than by reading the code; is any source file's content or mtime modified on ANY path including the failure and interrupt paths; can an imported claim or link become active, a hard edge, a blocker or a hold by any route; are all seven ambiguity classes detected, or does one quietly fall through to a guess; does an interrupted import leave partial rows; does the one-byte-difference control actually produce a different hash. Then stage and commit by EXPLICIT PER-FILE pathspec — never a bare git commit, never git commit -a, never git add -A, never a directory — since many agents share this working directory. Root package.json and pnpm-lock.yaml are committed only if step 2's amendment was granted, and the lock must show only the single expected hunk. Run `git status --porcelain` first, unstage foreign paths with `git restore --staged`, and verify with `git show --stat` that only owned paths landed, with no probe, scratch, fixture-scratch or debug files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/import/src/canonical-bytes.ts",
+        "packages/import/src/source-manifest.test.ts"
+      ],
+      "note": "Adversarial review done, committed by explicit pathspec. Final: typecheck exit 0, 5 files / 55 tests green. All 8 production files under the 250 rail (max 234). Working tree clean under both owned paths — no probe, scratch or debug file left.\n\nTHE FOUR SILENT DETERMINISM KILLERS, traced in CODE with comments stripped:\n- WALL-CLOCK: zero hits. The only timestamp the design forces on us is the store's required committedAt, which is derived from the latest source-declared time or the sentinel, and is asserted by two tests.\n- FILESYSTEM ORDER: every listing and every entry array is sorted with byCodeUnit; the drill proved that guard load-bearing (see below).\n- SET/MAP ITERATION: three Map iterations reach output (split ownership, owner names, cycle roots) and all three are `[...map.keys()].sort(byCodeUnit)`. Swept for the pattern explicitly rather than eyeballed.\n- OBJECT KEY ORDER: both Object.keys sites sort — canonicalJson's key sort and the unknown-field scan.\n\nTWO MACHINES WOULD AGREE, and it is proven by two real runs over separate trees, separate creation orders and separate fresh databases, not by reading the code.\n\nTHE HONEST CAVEAT I WANT ON THE RECORD, because it is the most interesting thing I found. On NTFS the directory sort is a NO-OP for an all-lowercase fixture, so the migration two-run test passed even with byCodeUnit neutered to a constant — and adding an explicit expected-order assertion did NOT fix that, which I verified with the mutant still live rather than assuming. Only a MIXED-CASE fixture separates NTFS's case-insensitive listing from code-unit order (\"B\" 0x42 before \"a\" 0x61). That test now exists and reddens with the mutant. Anyone reading the migration suite alone would over-trust it; the sort is pinned in packages/import/src/source-manifest.test.ts.\n\nSOURCE IS NEVER WRITTEN, on every path: mtime and size asserted unchanged after a successful import, a refused manifest build, and a failed commit. A rollback that corrupts the source is still a failure, so the failure paths get their own assertions rather than sharing one.\n\nNOTHING CAN BECOME ACTIVE by any route: ImportedClaimStatus has no ACTIVE arm to construct, LegacyLink.evidenceOnly is the literal true, LEGACY_LINK_KINDS is exactly CONTAINS|RELATED, and the tests read those published vocabularies rather than restating them.\n\nALL TWELVE ambiguity classes detected, each on its own fixture, with a completeness assertion that fails BY NAME if one stops firing and a non-empty guard so it cannot pass vacuously.\n\nCOMMIT: e57086a, `git commit -F - -- <two explicit file paths>`. No bare commit, no -a, no -A, no directory pathspec. `git show --stat` shows exactly packages/import/src/canonical-bytes.ts and packages/import/src/source-manifest.test.ts.\n\nWHY ONLY TWO FILES: a foreign completion hook swept the rest of packages/import, tests/migration AND pnpm-lock.yaml into earlier commits while I worked — the same pattern as my previous two tasks. Those two were simply the files I touched after the last sweep.\n\nROOT package.json IS UNTOUCHED — verified clean immediately before and after committing. The amendment was never granted, so I did not add `test:migration` and did not commit that file. There is consequently no collision with task-535e773b. pnpm-lock.yaml carries only the single `packages/import: {}` importer entry and was already committed by the sweep; I confirmed its diff was empty before committing, so I captured none of it.",
+      "startedAt": "2026-08-09T10:43:18.346Z",
+      "completedAt": "2026-08-09T10:44:40.993Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f2e587cb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -220,7 +236,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-09T10:36:23.103Z",
+  "updatedAt": "2026-08-09T10:49:12.057Z",
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -233,7 +249,10 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:39.151Z",
@@ -241,7 +260,9 @@
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
     "firstClaimAt": "2026-08-09T10:14:28.760Z",
-    "executedStepCount": 8
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T10:49:12.057Z",
+    "wallClockMs": 2083297
   },
   "planningNotes": {
     "approachesConsidered": "(1) DETERMINISM COMES FROM DIGESTS, NOT FROM CARE. Design 21.7 is explicit: imported IDs, ordering, provenance times and canonical event payloads derive from source digests and the manifest, NEVER from wall-clock import time. So the design is a pure function from (frozen source bytes) to (canonical import), with the clock and the filesystem pushed to the edges. That is what makes DoD 1 provable rather than merely likely: the same bytes imported twice on two machines must produce byte-identical output, and the test asserts it by importing the SAME fixture twice and comparing canonical hashes, not by inspecting the code for `Date.now`.\n(2) READ-ONLY IS A PROPERTY OF THE SOURCE, AND MUST BE PROVEN, NOT PROMISED. Design 21.2 says never change source content or mtime. The proof is a before/after digest AND mtime snapshot of every source file, asserted unchanged after a full import, an interrupted import, and a failed import. A code review saying 'we only call readFile' is not that proof.\n(3) AMBIGUITY IS A FIRST-CLASS OUTCOME, NOT AN ERROR. Design 21.6 enumerates SEVEN classes (unknown fields, dangling refs, cycles, split ownership, corrupt bytes, case/path conflicts, plus exact counts) and says ambiguity becomes NEEDS_RECONCILIATION, never a guess. So the reconciler returns a typed classification per record and the import still completes; it does not throw. Each of the seven gets its own fixture, because a single 'bad input' case would let six of them regress unseen.\n(4) ATOMICITY REUSES THE STORE, IT DOES NOT REIMPLEMENT IT. @moe/store already commits all-or-nothing under BEGIN IMMEDIATE with proven crash behaviour (the projection crash/rebuild work drilled exactly this). The importer composes that seam rather than inventing a second transaction discipline.\n(5) WHY A NEW PACKAGE RATHER THAN A DAEMON SERVICE: owned paths say packages/import/**, the importer must be drivable offline with no daemon running, and M4 rail 1 says portability consumes frozen contracts rather than forking them.",
@@ -262,7 +283,44 @@
   },
   "planApprovedAt": "2026-08-09T10:07:41.176Z",
   "contextFetchedBy": [
-    "worker-f2e587cb"
+    "worker-f2e587cb",
+    "qa-812c17a0"
   ],
-  "workStartedAt": "2026-08-09T10:14:45.820Z"
+  "workStartedAt": "2026-08-09T10:14:45.820Z",
+  "reviewStartedAt": "2026-08-09T10:45:32.936Z",
+  "verification": {
+    "command": "pnpm --filter @moe/import typecheck && npx vitest run packages/import/src tests/migration",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  5 passed (5)\n      Tests  55 passed (55)\n\nGATE_EXIT=0\n\nplain-Node loadability probe (--experimental-strip-types, from repo root):\n  control @moe/store  : OK exports=26 undefined=none\n  subject @moe/import : OK exports=20 undefined=none",
+    "reportedAt": "2026-08-09T10:45:32.936Z"
+  },
+  "filesModified": [
+    "packages/import/package.json",
+    "packages/import/tsconfig.json",
+    "packages/import/src/index.ts",
+    "pnpm-lock.yaml",
+    "packages/import/src/import-contract.ts",
+    "packages/import/src/import-contract.js",
+    "packages/import/src/source-manifest.ts",
+    "packages/import/src/source-manifest.test.ts",
+    "packages/import/src/canonical-bytes.ts",
+    "packages/import/src/source-manifest.js",
+    "packages/import/src/canonical-bytes.js",
+    "packages/import/src/import-canonical.ts",
+    "packages/import/src/import-canonical.test.ts",
+    "packages/import/src/import-canonical.js",
+    "packages/import/src/import-reconcile.ts",
+    "packages/import/src/import-reconcile.test.ts",
+    "packages/import/src/import-skill-assets.ts",
+    "packages/import/src/import-reconcile.js",
+    "packages/import/src/import-skill-assets.js",
+    "packages/import/src/import-apply.ts",
+    "packages/import/src/import-apply.test.ts",
+    "packages/import/src/import-apply.js",
+    "packages/import/src/index.js",
+    "tests/migration/import/import-determinism.test.ts"
+  ],
+  "completedAt": "2026-08-09T10:49:12.057Z",
+  "reviewCompletedAt": "2026-08-09T10:49:12.057Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: @moe/import typecheck 0; `vitest run packages/import/src tests/migration` 5 files / 55 passed; tests/migration alone 1 file / 7 passed.\n\nThree drills, one per DoD, all restored SHA-identical.\n\nDoD1 determinism — replaced the record total order with a constant comparator. Reddens \"produces the same sequence from any input permutation\" AND \"produces an identical commit for two runs\". The permutation case is what makes this real: a two-run test over identically-ordered input would not have caught it. Restored 5691bff1.\n\nDoD2 never-activate — made a held legacy claim import as ACTIVE. Reddens \"imports a held legacy claim as SUSPENDED, never active\" and the closed-set \"can only ever produce the two non-active statuses\", so a third status cannot be added quietly. Restored f824fdf4.\n\nDoD3 atomicity — split the single commit into one commit per event. Reddens \"writes every event in a single commit\". The refusal path is right too: an import over the per-commit bound is REFUSED with IMPORT_TOO_LARGE_FOR_ONE_COMMIT rather than split. Restored f824fdf4.\n\nMY OWN SWEEPS, not taken on report: zero Date.now / Math.random / randomUUID in production — the one grep hit is a doc comment forbidding it — and every sort carries an explicit comparator. Zero filesystem write calls in production, so \"legacy bytes unchanged\" holds by construction, not only by assertion.\n\nLOADABILITY: 8 bridges, each exactly the one-line export-star form, 0 CR bytes. Plain-Node probe 20 exports, 0 undefined. This landing also turned tests/runtime/package-loadability.test.ts fully green at 7/7 — this package was its last red.\n\nSIZES: all files under 400, max 234.\n\nTWO NOTES, neither a rejection. `pnpm test:migration`, the DoD's named gate, is not a root script; root package.json is outside the owned paths so correctly not assumed, and the lane is covered by root vitest's tests/** include. And pnpm-lock gained one entry, mechanically required for a new workspace member."
 }

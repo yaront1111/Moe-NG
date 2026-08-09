@@ -16,21 +16,36 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. VAGUE dependency clause — \"full store/artifact/effect inventory implementations\" names no task titles, so it cannot be resolved mechanically. Resolved by inspection on disk instead, and the effect leg only became true today: (1) STORE — packages/store/src is extensive and its whole SPIDR chain including Projection outbox core is DONE; (2) ARTIFACT — packages/runner/src/artifacts ships artifact-contract.ts, artifact-node-fs.ts and artifact-store.ts with a content-digest surface plus its own test; (3) EFFECT — packages/runner/src/supervisor now holds 32 .ts files and its parent task-312c1de3 closed today on four QA-approved children, so the effect implementation this clause waits on exists as of a few minutes ago; (4) INVENTORY — the concepts this task's DoD needs (orphan inventory, backup generations, recovery anchors, fresh incarnation/key epochs) resolve to packages/core/src/project/project-contract.ts, where backupGeneration/recoveryAnchor/incarnation all appear. ARCHITECT: verify that fourth premise hardest. I confirmed those identifiers exist in that file but did NOT confirm they carry the full semantics this task's DoD assumes; if the inventory surface turns out to be thinner than the DoD needs, report_blocked and I will move it back — that reversal is cheap and expected, not a failure. Owned path tests/fault/disaster-restore/** is ABSENT (greenfield); tests/fault/foundation/ exists as the harness precedent to follow. DELIBERATELY NOT PROMOTED ALONGSIDE THIS: task-05ce9b8f (Security fault matrix), which owns the whole tests/fault/** tree and would collide head-on with this task's subdirectory — and which is in any case still genuinely gated, since \"all production adapters\" is unmet with Codex runtime adapter WORKING and Thin JetBrains adapter in BACKLOG.",
+  "reopenReason": "Restoring BLOCKED, set 2026-08-09 by architect-8a4a1764. moe.unblock_worker with retryTask:false released the WORKER but ALSO flipped this TASK to PLANNING as a side effect — see its unblockedTaskIds. That was not intended and the block is unchanged: no restore controller exists, only its witness shapes (RestoreQuiesceWitness / RecoveryCompletionWitness are declarations plus exact-key shape guards; quiesce() records that a restore happened, nothing performs one). Zero hits repo-wide for recoveryAnchor, keyEpoch, orphan inventory or UNKNOWN_TRUTH, and `pnpm test:fault` is not a script. Leaving this PLANNING would send the next architect into the same wall and cost a full session. Full analysis: mem:task-task-0c89476b78044024b07c86c0c8986bd0-handoff. Unblocks when a task implements the restore controller per design line 1201 (two-slot anchor installer, nonce/key-epoch minting with credential rejection, post-N effect inventory with quarantine, R3 recovery digest gate) plus a test:fault lane. SCHEDULING HAZARD for whoever routes it: task-05ce9b8f (Security fault matrix) owns the whole tests/fault/** tree and collides with this task's subdirectory.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 3,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-38459f966b4c495e8deb16840402d3e9",
+      "author": "governor-fce4d563",
+      "content": "GOVERNANCE — read before planning. This task returned to PLANNING after architect-8a4a1764 blocked it. The block was correct and governance upheld it (#governors msg-52d7aef8). Do NOT re-derive the audit; it costs a full context load to reach the same answer.\n\nTHE FINDING, measured on disk 2026-08-09, not read off the design:\n  EXISTS — project-contract.ts declares commands recovery.restore_quiesce and recovery.complete, plus RestoreQuiesceWitness {backupGenerationHash, recoveryIncarnationRef, truthClass} and RecoveryCompletionWitness {coverageProofHash, inventoryReconciliationHash, recoveryDecisionRef, ...}. project-reducer.ts:35,162 admits the transition and calls quiesce(). project-validation.ts:166,171 are exact-key SHAPE guards. Real fsync exists, but only in the artifact CAS.\n  DOES NOT EXIST — grep over packages/*/src and apps/*/src, zero hits each: recoveryAnchor / \"recovery anchor\" (the objective needs TWO-SLOT anchors and DoD 1 needs a crash at every prepare/install/fsync/switch boundary — no slot-install protocol exists); keyEpoch / \"key epoch\" (DoD 2 needs fresh key epochs with stale grants failing — recoveryIncarnationRef is a string field in a witness, nothing MINTS an incarnation).\n\nThe witness shapes are the vocabulary of a restore. The controller that performs one is absent. quiesce() recording that a restore happened is not a restore.\n\nWHAT NOT TO DO, both explicitly rejected by QA in advance (qa-812c17a0, #general msg-a4b06362): (a) reimplementing the controller inside a test fixture — a direct epic rail 6 violation, rejected on sight; (b) narrowing the DoD to \"shape guards accept well-formed witnesses\" — worse than (a), because it ships a green label over an untested mechanism. There is nothing to inject faults into, so there is no evidence to be had, and unverifiable evidence is UNKNOWN, never PASS. QA has stated they will not approve a task whose DoD requires proving a behaviour no production surface performs.\n\nREQUIRED OUTPUT INSTEAD: file the prerequisite production tasks, then leave this one blocked with their ids and an unblock trigger. At minimum a two-slot recovery anchor with its prepare/install/fsync/switch protocol, and key-epoch minting with stale-grant refusal; architect-8a4a1764's handoff (mem:task-task-0c89476b78044024b07c86c0c8986bd0-handoff) names the rest. Bound each as composition over existing core symbols where possible, and measure each gap symbol by symbol before writing the ticket.\n\nPRECEDENT TO COPY: architect-0b81de40 did exactly this off the Foundation canary's block report — three CRITICAL tickets (task-671578e5, task-9011e3b3, task-39fe2da5), each with the gap measured on disk and scoped as composition rather than new domain logic. Two are being coded now. That is the play; see task-97554aa4 comment-b6b518a5 for the shape of the block record.\n\nThis is the fourth instance of one pattern — vocabulary present, capability absent — and it is the subject of pending rail proposal prop-d68b105c.",
+      "timestamp": "2026-08-09T10:45:43.146Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-09T10:33:14.883Z",
+  "updatedAt": "2026-08-09T10:45:43.147Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "architect-8a4a1764"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T10:39:13.320Z"
+  },
+  "blockedReason": "Restoring BLOCKED, set 2026-08-09 by architect-8a4a1764. moe.unblock_worker with retryTask:false released the WORKER but ALSO flipped this TASK to PLANNING as a side effect — see its unblockedTaskIds. That was not intended and the block is unchanged: no restore controller exists, only its witness shapes (RestoreQuiesceWitness / RecoveryCompletionWitness are declarations plus exact-key shape guards; quiesce() records that a restore happened, nothing performs one). Zero hits repo-wide for recoveryAnchor, keyEpoch, orphan inventory or UNKNOWN_TRUTH, and `pnpm test:fault` is not a script. Leaving this PLANNING would send the next architect into the same wall and cost a full session. Full analysis: mem:task-task-0c89476b78044024b07c86c0c8986bd0-handoff. Unblocks when a task implements the restore controller per design line 1201 (two-slot anchor installer, nonce/key-epoch minting with credential rejection, post-N effect inventory with quarantine, R3 recovery digest gate) plus a test:fault lane. SCHEDULING HAZARD for whoever routes it: task-05ce9b8f (Security fault matrix) owns the whole tests/fault/** tree and collides with this task's subdirectory.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T10:45:04.502Z"
 }

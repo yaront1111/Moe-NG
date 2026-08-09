@@ -16,8 +16,8 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-5b5302ee",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -25,12 +25,27 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 2,
-  "comments": [],
+  "order": 8,
+  "comments": [
+    {
+      "id": "comment-23b012bdcb76459a9ec51a53b8095fd5",
+      "author": "architect-5b5302ee",
+      "content": "Expanded planning audit (2026-08-09, HEAD 7afa17d), preserving the BLOCKED verdict.\n\nThis task is also too broad for one <=60-minute implementation slice once its production subjects exist: the committed tree currently exposes at least eight security surfaces and eight fault surfaces. Re-plan it as the FINAL integration/hardening proof after these file-disjoint test slices land:\n\n1. Authority transport hostile matrix — tests/security/transports/**. Drive public production ingress for daemon HTTP/event stream, MCP stdio/Streamable HTTP, authenticated IDE/control-room, importer, and force paths. Case rows cover missing/malformed/expired/revoked/swapped/replayed credentials and stale version/epoch/binding/command/artifact identities. Each row pins exact stable code AND refusing layer/stage and reads authoritative state/effect/budget/audit deltas back as zero. Generated rows assert non-zero count and exact set equality with the production registry.\n2. Integrity/scope hostile matrix — tests/security/integrity/**. Drive production path/scope, symlink/junction/submodule/UNC/device/case, malicious Git ref, argv/env, N/N+1 bounds, provider-closure swap, evidence substitution/tamper, redaction and distribution handshake surfaces. Same code/layer and zero-authority assertions; same production-registry non-vacuity ratchet.\n3. Durable-store fault matrix — tests/fault/store/**. Real SQLite/subprocess schedules at transaction begin/write/commit/ack, WAL/checkpoint, corruption/permission/lock, outbox/inbox/projection poison and replay. Assert whole-or-none durable truth, exact STORE/OUTBOX code+layer, command replay idempotency, no lost acknowledged event, and no duplicate delivery. Test-produced helpers must not replace relay/controller production entry points.\n4. Runtime/provider fault matrix — tests/fault/runtime/**. Drive production dispatcher/supervisor/platform/provider/resource/budget/artifact composition before/after/race at registration, lock, activation, physical start, result, ack, cancel and recovery. Assert one authoritative effect, no budget mint/slot/resource duplication, exact recovery/refusal code+layer, and honest UNKNOWN for unobservable host facts. Host-malicious same-user behavior is explicitly OUTSIDE_SCOPE, never PASS or skip.\n5. Gate-lane wiring prerequisite — root package.json plus tests/fault/tsconfig.json and tests/security/tsconfig.json. Shell-neutral scripts must run strict tsc over all tests/** lane files before Vitest: pnpm test:fault and pnpm test:security. Root recursive typecheck does not cover tests/** today.\n6. This task then owns the full-matrix ratchet and final proof only: verify every prerequisite shipping task is DONE and reachable from a real consumer, exact design/benchmark hashes and one source commit, no confirmatory corpus bytes, exhaustive production registry ↔ executed-case set equality, exact UNKNOWN/outside-scope rows, and one adversarial mutation per refusal layer plus one deleted-case non-vacuity mutation.\n7. Final verification is exactly pnpm test:fault && pnpm test:security, followed by the epic-required path-attributed repo baseline comparison; no generated evidence file is committed.\n\nCurrent missing subjects, verified on disk: daemon HTTP has injected Authenticator/DecisionPort but no real composition/root export; core authenticateCommand has test-only callers; event stream has no auth/listener; MCP stdio/HTTP have no daemon dispatch/session port (HTTP internals are not root-exported); importer has no authenticated command/store composition; control room main mounts fixtures; R3/force handlers are absent; outbox relay is internal/unconsumed; activateEffect/platform launcher/OS lock are unconsumed or absent; provider probes do not spawn/pin processes; budget settlement/artifact concrete edges are unconsumed; J3/J4 are in flight; Codex/JetBrains/distribution/platform prerequisites are not DONE. The schedule checker is DONE but its 10 refs are abstract categories, not an exhaustive production boundary registry.\n\nDo not submit the parent plan until the new production-prerequisite task IDs are known; Clause 2 requires naming those shipping tasks in the acceptance plan. Preserve existing tests/fault/foundation/** (task-18c7921 DONE) and avoid disaster-restore/Linux/macOS owned subtrees.",
+      "timestamp": "2026-08-09T11:37:34.455Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:15.290Z",
-  "updatedAt": "2026-08-09T10:23:23.438Z",
+  "updatedAt": "2026-08-09T11:37:34.456Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "architect-5b5302ee"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T11:24:40.426Z"
+  },
+  "blockedReason": "Cannot submit a production-certifying plan without fabricating coverage. The pinned design requires security coverage across HTTP/event stream, MCP stdio/HTTP, IDE, importer, force paths and every external-effect boundary, while the task explicitly hard-depends on all production adapters. Fresh disk/board audit at HEAD 7afa17d shows adapters/ absent; Thin JetBrains adapter is BACKLOG, distribution manifest is not landed, Codex is not DONE, and J3/J4 composed production authority is still in flight. Linux/macOS platform effect ports are absent, so off-host fixture-only schedules would reimplement shapes rather than certify production. Root package.json has neither test:fault nor test:security, and that file is outside this task's owned paths; tests/** is otherwise not typechecked. Existing tests/fault/foundation/** also creates an unresolved ownership collision. Schedule coverage checker task-1de468316a7f4b499aa39408ec240b88 is DONE, so that prerequisite alone is satisfied. Under Clause 2 and fail-closed rails, missing subjects/scripts must remain UNKNOWN and require prerequisite production tasks/scope resolution, not a narrowed DoD or mock-backed plan.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T11:27:59.640Z"
 }

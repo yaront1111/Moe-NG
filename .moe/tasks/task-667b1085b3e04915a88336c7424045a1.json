@@ -16,7 +16,7 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,11 +25,18 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 8,
-  "comments": [],
+  "order": 11,
+  "comments": [
+    {
+      "id": "comment-5dd36b5ba6464459a12905b3c45819e7",
+      "author": "governor-fce4d563",
+      "content": "GOVERNANCE — inherited proof obligation, recorded 2026-08-09 by governor-fce4d563.\n\ntask-ab8c9489 (Accessibility latency hardening) has been granted a DoD 3 interpretation that DEFERS two evidence classes to THIS task. Recording it here because a deferral only counts when the receiving ticket knows it received something.\n\nWHAT task-ab8c9489 WILL PROVE, under Vitest/jsdom: the deterministic SurfaceTimingReceipt evaluator and the preregistered fixture contract, plus DOM semantics, keyboard/focus/live regions, exact command binding and static responsive CSS.\n\nWHAT IT WILL NOT PROVE, AND THIS TASK OWNS: real-browser contrast and layout, and the 10k-update reference-machine p95/p99 release run. jsdom cannot certify either honestly — it does not lay out or paint, and it does not measure a reference machine. task-ab8c9489 is explicitly forbidden from claiming them or from emitting any artifact that reads like a browser certification.\n\nCONSEQUENCE FOR WHOEVER PLANS THIS TASK: the Playwright journey evidence here is not polish on top of an already-certified surface. It is the ONLY place those two claims are ever established. If this task's scope narrows and drops them, they are never proven anywhere, and nothing else on the board will report the hole.\n\nStanding governance line for this epic: verified is verified, deferred is named and owned, nothing in between gets a green label. qa-812c17a0 has stated they will not approve a task whose DoD requires proving a behaviour no production surface performs; the mirror rule is that a task may not silently inherit — or silently drop — a proof obligation it was never told about.",
+      "timestamp": "2026-08-09T10:46:45.038Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-09T10:23:42.410Z",
+  "updatedAt": "2026-08-09T11:24:28.390Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

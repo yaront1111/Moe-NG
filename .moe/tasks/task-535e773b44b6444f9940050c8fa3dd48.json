@@ -96,21 +96,34 @@
     {
       "stepId": "step-6",
       "description": "Decide the lane, request the amendment if needed, and run the gates. The suite lives under tests/ and the root vitest config already includes `tests/**/*.test.ts`, so it runs under `pnpm test` with NO config change — confirm that is true rather than assuming it. If a dedicated script (e.g. `test:runtime`, following the existing `test:property` precedent) is genuinely wanted, that edits root package.json which is outside this task's owned paths: request the ownership amendment and WAIT for confirmation; do not self-approve, and note the suite is fully functional without it. Then run, capturing fresh output: `pnpm typecheck` and `pnpm test`, both of which must exit 0 — the gate must land green thanks to the allowlist, not red. Record the probe's full per-package report in the completion evidence, including the six allowlisted failures with their owning task ids, so the next reader sees exactly what is outstanding and who owns it. Attribute any unrelated red by path rather than by a remembered count.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json"
       ],
-      "startedAt": "2026-08-09T10:29:30.313Z"
+      "modifiedFiles": [
+        "tests/runtime/package-loadability-support.ts",
+        "tests/runtime/package-loadability.test.ts"
+      ],
+      "note": "Kept the suite in the existing root `tests/**/*.test.ts` lane; no package.json amendment/script was needed or made. Fresh foreground exact gate `pnpm typecheck && pnpm test` exited 0: recursive typecheck green across 16 of 17 workspace projects; Vitest 187 files passed, 3303 tests passed, 1 skipped (3304 total). Fresh real-Node per-package report exited 0 with EMPTY allowlist: daemon 31 exports; context 19; contracts 46; control-room-client 1; control-room-model 1; coordination 14; core 39; import 20; mcp 12; review 23; runner 116; scheduler 36; skills 15; store 26; testkit 11. Prior transient reds were path-attributed to active foreign @moe/import, Codex adapter, and daemon review-flow TDD windows; their owners were pinged and no foreign path was changed.",
+      "startedAt": "2026-08-09T10:29:30.313Z",
+      "completedAt": "2026-08-09T10:48:19.999Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial self-review, then commit by explicit pathspec. Read the suite as an attacker: could it pass without spawning a real Node process anywhere — the single failure that would make it worthless; is the package list discovered or quietly hard-coded; would a package added tomorrow be enrolled automatically; do BOTH controls exist and would the suite notice if the harness itself broke; does the negative control assert the literal ERR_MODULE_NOT_FOUND code rather than message text; does an allowlisted package that starts passing actually FAIL the suite, verified by the step-5 drill rather than by reading the code; does a failure name both the package and the unresolvable specifier; is a child-process timeout reported distinctly instead of silently passing; did any package's bridges get 'helpfully' fixed here, stealing another task's deliverable. Then stage and commit by EXPLICIT PATHSPEC — never a bare git commit, never git commit -a, never git add -A — since several agents share this working directory and other tasks have uncommitted work in packages/. Run `git status --porcelain` first, unstage any foreign path with `git restore --staged`, and verify with `git show --stat` that only tests/runtime/ (plus root package.json if the amendment was granted) landed, with no probe, scratch or debug files.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability-support.ts",
+        "tests/runtime/package-loadability.test.ts"
+      ],
+      "note": "Adversarial review complete against the full owned delta `git diff daadf47 HEAD -- tests/runtime/...`. Real Node remains mandatory (`process.execPath` plus marker); discovery remains workspace-glob-driven and non-vacuous; positive/negative controls survive declared missing entries; negative control pins ERR_MODULE_NOT_FOUND; MISSING_ENTRY pins stable code plus exact specifier, is emitted through observationIssues with package name, and cannot be allowlisted; timeout remains distinct. Concurrency uses unique mkdtemp roots/bounded children and finally cleanup; no shared mutable state. TOCTOU deletion after stat still fails actionably through the child import, while non-ENOENT filesystem errors remain fail-closed rather than being mislabeled missing. No package/bridge path was edited. Strict ad-hoc TSC exit 0; runtime suite 7/7; exact root gate 187 files, 3303 pass/1 skip, exit 0. Files are 299 and 164 physical lines. Shared-tree attribution: the original clean task commit is daadf47 (exactly the two owned files); reopen test bytes were swept into foreign 20c41a4 and the final support/test delta into foreign 878538b while this task was active. Current HEAD blobs exactly match disk (support 88a47e6335916abb171007b769d348d796a7d15d; test d13f0763a149b00430750fad440e04d1d51c59d0), both owned paths are clean, and the shared index is empty. I did not manufacture a no-op or formatting commit after the sweep.",
+      "startedAt": "2026-08-09T10:48:32.616Z",
+      "completedAt": "2026-08-09T10:49:47.941Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-533a53ab",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -129,13 +142,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:11:33.693Z",
-  "updatedAt": "2026-08-09T10:29:30.313Z",
+  "updatedAt": "2026-08-09T10:58:31.232Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -154,9 +169,11 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
     "firstClaimAt": "2026-08-09T09:31:37.646Z",
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-09T10:58:31.232Z",
+    "wallClockMs": 5213586
   },
   "planningNotes": {
     "approachesConsidered": "(1) SCOPE DECISION — the task description left this to the architect and I am making it: LAND THE GATE WITH A DATED, PER-ENTRY-JUSTIFIED ALLOWLIST, not red. A permanently-red gate in the repo-wide lane teaches everyone to ignore a red lane, and this fleet runs `pnpm test` as the final gate on multiple tasks — a standing red would block every one of them and would be routed around within the hour. The allowlist keeps the lane green and honest simultaneously: each of the six entries names its owning sweep task, and the suite FAILS if an allowlisted package starts passing (so a sweep landing forces the entry's removal, exactly like the absence ratchet that this repo already runs). That inverts the usual allowlist rot — the list cannot outlive its cause.\n(2) SPAWN REAL NODE, NEVER IN-PROCESS. An in-process `import()` inside vitest reproduces vitest's own `.js`->`.ts` rewriting, which is the precise blindness this gate exists to defeat. It must be a child process with --experimental-strip-types.\n(3) DISCOVER, NEVER LIST. @moe/context and @moe/review shipped with zero bridges days after being created; a hand-maintained package list would have missed both. Read pnpm-workspace.yaml globs, expand them, and assert the discovered set equals the directories on disk so a new package is covered the day it appears.\n(4) CONTROLS ARE NOT OPTIONAL HERE, and I have direct evidence why: my first probe while gathering this task's data used bare package names, reported ALL TEN packages failing including correctly-bridged @moe/scheduler, and was pure harness artifact. Only a passing control exposed it. A gate that can cry repo-wide catastrophe without a self-check will be disabled rather than believed.",
@@ -175,25 +192,26 @@
   },
   "planApprovedAt": "2026-08-09T09:31:21.395Z",
   "contextFetchedBy": [
-    "worker-533a53ab"
+    "worker-533a53ab",
+    "qa-812c17a0"
   ],
   "workStartedAt": "2026-08-09T09:32:13.232Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "reviewStartedAt": "2026-08-09T10:14:55.836Z",
+  "reviewStartedAt": "2026-08-09T10:56:31.159Z",
   "verification": {
     "command": "pnpm typecheck && pnpm test",
     "exitCode": 0,
-    "outputTail": "packages/coordination typecheck: Done\npackages/review typecheck: Done\napps/daemon typecheck: Done\napps/control-room typecheck: Done\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  170 passed (170)\n      Tests  3050 passed | 1 skipped (3051)\n   Start at  13:13:20\n   Duration  8.83s (transform 38.34s, setup 0ms, import 59.94s, tests 40.92s, environment 18ms)\n\n$ pnpm --recursive typecheck\n$ vitest run",
-    "reportedAt": "2026-08-09T10:14:55.836Z"
+    "outputTail": "apps/daemon typecheck: Done\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  187 passed (187)\n      Tests  3317 passed | 1 skipped (3318)\n   Duration  6.00s\n\nFINAL_EXACT_GATE_TYPECHECK=0 TEST=0\n$ pnpm --recursive typecheck\n$ vitest run",
+    "reportedAt": "2026-08-09T10:56:31.159Z"
   },
   "filesModified": [
     "tests/runtime/package-loadability.test.ts",
     "tests/runtime/package-loadability-support.ts"
   ],
-  "reviewCompletedAt": "2026-08-09T10:21:51.343Z",
+  "reviewCompletedAt": "2026-08-09T10:58:31.232Z",
   "rejectionDetails": {
     "failedDodItems": [
       "A failure names the offending package AND the unresolvable specifier, so the report is directly actionable rather than a bare red.",
@@ -274,5 +292,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-09T10:58:31.232Z",
+  "reviewSummary": "APPROVED after reopen 1/3. Both failed DoD items are closed, and the fix went past the minimum I set to the classified version I asked for.\n\nDoD4, actionable failure — `entryState` is now a real third state and MISSING_ENTRY is a stable code beside IMPORT_FAILED / TIMED_OUT / PROCESS_FAILED, carrying the specifier. `observationIssues` renders `<package>: MISSING_ENTRY <specifier>`, so the package name comes from the pipeline rather than a hand-written string that could drift. `isFile` guards ENOENT and returns false while RETHROWING everything else — that detail matters: a permissions error stays loud instead of being laundered into \"missing\".\n\nDoD3, controls survive a bad package — proven live, not by fixture alone. At 10:32, while @moe/import was still broken, I ran the suite myself: 1 failed / 6 passed, the single failure naming `@moe/import: ERR_MODULE_NOT_FOUND .../import-apply.js`. Before the fix the same condition took down all five tests with a bare ENOENT. Both controls, the timeout case and discovery now survive.\n\nMY OWN DRILL, not their reported one: forced `entryState` to a constant \"PRESENT\". Reddens exactly one case, \"classifies a declared missing entry with a stable actionable code\", and nothing else — precisely targeted, controls unaffected. Restored 5e281011, owned paths clean.\n\nDoD7: `pnpm typecheck && pnpm test` CHAIN_EXIT=0, 187 files / 3317 passed / 1 skipped. The loadability suite is 7/7 with an EMPTY allowlist and zero foreign red — every sweep landed, so the self-retiring ratchet retired itself exactly as designed.\n\nSIZES: 299 and 164, both under 400. Only the two owned files in tests/runtime, no scratch.\n\nCOMMIT: daadf47 was their clean pathspec commit; the reopen fix was swept into foreign 20c41a4 and 878538b. They did not manufacture a no-op commit and did not amend foreign history — they handed me `git diff daadf47 HEAD` over the two owned paths, +109/-29, entirely inside tests/runtime. That is the protocol I asked the board for."
 }

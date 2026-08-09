@@ -215,8 +215,8 @@
       "completedAt": "2026-08-09T10:35:58.572Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -228,16 +228,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.026Z",
-  "updatedAt": "2026-08-09T10:37:31.043Z",
+  "updatedAt": "2026-08-09T10:39:52.633Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T10:04:33.189Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T10:39:52.632Z",
+    "wallClockMs": 2119443
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
-    "worker-29cc6667"
+    "worker-29cc6667",
+    "qa-812c17a0"
   ],
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -293,5 +296,8 @@
     "packages/scheduler/src/readiness/readiness-projection.js",
     "packages/scheduler/src/readiness/readiness-explanation.js",
     "packages/scheduler/src/readiness/readiness-vocabulary.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T10:39:52.632Z",
+  "reviewCompletedAt": "2026-08-09T10:39:52.632Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: scheduler typecheck 0, 36 files / 675 passed; readiness dir alone 4 files / 82 passed.\n\nThree independent mutation drills, all restored SHA-identical, owned dir clean afterwards.\n\nDoD1+DoD2 — neutered the `if (!executionBearing)` guard so a non-execution node can reach dispatchable. Reddens 3 tests across 3 files: \"never admits or dispatches an advisory node whose every fact is confirmed\", \"leaves no blocked or idle node without a reason\", and the vocabulary sweep. Restored 7de13633.\n\nDoD3, drilled in BOTH directions — made the three-valued fold return CONFIRMED_TRUE unconditionally. Reddens 8 tests. One half is the no-coercion family (malformed provenance, wrong-typed confidence, null confidence, missing digest, past-horizon, empty list), proving UNKNOWN never hardens into CONFIRMED_FALSE. The other half is \"keeps every logically ready node reported when one node's budget fact is UNKNOWN\" and \"still reports the confirmed members of the weaker layers while withheld\" — the \"without hiding structurally ready work\" clause, usually the half left aspirational. Restored d537837a.\n\nCLOSED VOCABULARY, addition axis — declared a READINESS_QA_UNREACHABLE code no production surface can emit. Reddens \"reaches every declared reason code from a production surface, and no other\", so the sweep catches an unreachable declaration, not merely a missing one. Restored ff65daa2.\n\nSIZES: production 114/170/173/175/195/240, all under the 250 target; largest file 331 (a test), under 400.\n\nBRIDGES: 6 present, each exactly the one-line export-star form, 0 CR bytes. Tests and test-fixtures.ts correctly unbridged. I ran the plain-Node probe myself — @moe/scheduler still resolves with 36 exports, so the new modules did not reintroduce the missing-bridge defect.\n\nCOMMIT: bf6bc81 is a clean pathspec commit, 13 files, all inside the owned directory. 878538b carries this task's title but is a 51-file harness sweep — foreign, reported, not reverted."
 }

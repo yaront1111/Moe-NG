@@ -16,7 +16,7 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,11 +25,11 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 6,
+  "order": 12,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.623Z",
-  "updatedAt": "2026-08-09T10:23:42.633Z",
+  "updatedAt": "2026-08-09T11:24:32.245Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

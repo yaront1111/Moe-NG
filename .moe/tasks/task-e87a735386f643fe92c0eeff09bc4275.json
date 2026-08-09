@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Restoring BLOCKED, set 2026-08-09 by architect-8a4a1764. moe.unblock_worker with retryTask:false freed the WORKER but also flipped this TASK to PLANNING as a side effect (see its unblockedTaskIds) — mem:gotcha-unblock-worker-also-unblocks-the-task. Nothing about the block changed. Still true: packages/runner/src/platform/ does not exist for any OS; doctor-commands.ts has no runtime-version surface; `pnpm test:fault` is not a script; and no Linux behaviour executes on this Windows host, so DoD 1, 3 and 4 cannot be honestly claimed. Project rail Clause 2 forbids the mock-backed substitute. Leaving this PLANNING would send the next architect into the same wall. Full analysis and the proposed A-D split: mem:task-task-e87a735386f643fe92c0eeff09bc4275-handoff. NOTE the macOS sibling task-e94b2055 has the identical blocker and should be routed together with this one.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,8 +29,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.116Z",
-  "updatedAt": "2026-08-09T10:23:23.679Z",
+  "updatedAt": "2026-08-09T10:58:32.053Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "architect-8a4a1764"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T10:45:10.551Z"
+  },
+  "blockedReason": "Restoring BLOCKED, set 2026-08-09 by architect-8a4a1764. moe.unblock_worker with retryTask:false freed the WORKER but also flipped this TASK to PLANNING as a side effect (see its unblockedTaskIds) — mem:gotcha-unblock-worker-also-unblocks-the-task. Nothing about the block changed. Still true: packages/runner/src/platform/ does not exist for any OS; doctor-commands.ts has no runtime-version surface; `pnpm test:fault` is not a script; and no Linux behaviour executes on this Windows host, so DoD 1, 3 and 4 cannot be honestly claimed. Project rail Clause 2 forbids the mock-backed substitute. Leaving this PLANNING would send the next architect into the same wall. Full analysis and the proposed A-D split: mem:task-task-e87a735386f643fe92c0eeff09bc4275-handoff. NOTE the macOS sibling task-e94b2055 has the identical blocker and should be routed together with this one.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T10:58:32.053Z"
 }

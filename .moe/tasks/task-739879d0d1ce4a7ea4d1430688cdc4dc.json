@@ -16,7 +16,7 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 6,
+  "order": 10,
   "comments": [
     {
       "id": "comment-ec1dbb96b0c447eaba3243365ec878eb",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.684Z",
-  "updatedAt": "2026-08-09T10:23:41.945Z",
+  "updatedAt": "2026-08-09T11:24:26.094Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

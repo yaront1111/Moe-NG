@@ -3,7 +3,7 @@ project_doc_fallback_filenames = ["CLAUDE.md", ".codex/agent-instructions.md"]
 model_instructions_file = "agent-instructions.md"
 model_reasoning_effort = "xhigh"
 developer_instructions = """
-You are a worker agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly.
+You are a architect agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly.
 """
 [mcp_servers.moe]
 command = "node"

@@ -15,9 +15,118 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Ground the harness in the committed surfaces before writing a line of it. Read kernel.tsx (Fact, TruthChip, the reserved cr.fact./cr.chip. prefix invariant), shell/frame.tsx (useGating, ActionButton, actionTestId, GatingContext defaults), shell/j1-flow.test.tsx and shell/gating-keyboard.test.tsx (the bar assertions and the IS_REACT_ACT_ENVIRONMENT + cleanup pattern to follow), and the four existing surface key handlers (goals-home handleKey, doctor-console handleKey, reconciliation-inventory handleKey, board-surface KEY_MOVES) plus the provenance p-shortcut focus guard in provenance-panel.tsx and timeline-row.tsx. Write down the exact set of keys already owned surface-locally: j, k, h, l, ArrowLeft, ArrowRight, Enter, p, Escape. The global router in step 3 must NOT claim any of them. No files are modified in this step.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Verified committed production symbols before editing: Fact and TruthChip preserve exact cr.fact./cr.chip. wrapper/chip prefixes; GatingContext defaults fail closed; ActionButton derives controls solely from supplied commands; ShellFrame owns board/graph/timeline tab state. Existing local keys are j, k, h, l, ArrowLeft, ArrowRight, Enter, p, Escape across goals, doctor, board, recovery/reconciliation-inventory, provenance, timeline, and approval detail. The plan's exploratory reconciliation path is under src/recovery/, not src/reconciliation/. Existing tests use IS_REACT_ACT_ENVIRONMENT plus cleanup.",
+      "startedAt": "2026-08-09T11:33:13.409Z",
+      "completedAt": "2026-08-09T11:34:46.727Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: write the failing spec for the section 11.2 global keyboard map as pure logic, before any implementation. Cover, as a table-driven sweep over every binding: the g-chord (g then g/b/r/t resolving to goals/board/graph/timeline), single keys a (approvals), / (search), ? (help overlay), [ and ] (collapse/expand inspector). Then cover the refusal paths, and assert the SPECIFIC stable reason code returned for each, never merely that no action resolved: focus inside a text entry (input, textarea, contenteditable) refuses with TEXT_ENTRY_FOCUSED so typing a goal title never navigates; a key already owned by a surface (j, k, h, l, ArrowLeft, ArrowRight, Enter, p, Escape) refuses with SURFACE_LOCAL; an unbound key refuses with NO_BINDING; the first key of the chord returns CHORD_PENDING; and a chord whose second key is not one of g/b/r/t refuses with CHORD_ABANDONED and clears the pending prefix rather than leaving it armed. Assert the sweep actually generated cases (a table length greater than zero, and every declared binding exercised exactly once) so a silently empty sweep cannot pass. Tests fail because the module does not exist yet.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/keyboard-map.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/keyboard-map.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/keyboard-map.test.ts"
+      ],
+      "note": "TDD RED recorded. Added non-vacuous table-driven coverage for all 9 global bindings, all 9 surface-local keys, three text-entry shapes, and exact refusal codes TEXT_ENTRY_FOCUSED, SURFACE_LOCAL, NO_BINDING, CHORD_PENDING, CHORD_ABANDONED including cleared chord state. Fresh focused invocation failed for the expected reason: Failed to resolve import './keyboard-map.js'; 25 pre-existing app test files / 369 tests remained green.",
+      "startedAt": "2026-08-09T11:34:50.162Z",
+      "completedAt": "2026-08-09T11:36:29.895Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Make step 2 green with the minimum implementation. Export CONTROL_ROOM_KEYBOARD_MAP as a frozen table of the section 11.2 bindings the router owns, the frozen SURFACE_LOCAL_KEYS set it must defer on, and a pure resolver returning a discriminated result: either {matched:true, action} or {matched:false, reason} where reason is one of the stable codes TEXT_ENTRY_FOCUSED, SURFACE_LOCAL, NO_BINDING, CHORD_PENDING, CHORD_ABANDONED. Chord state is a caller-held value passed in and returned, so the resolver stays pure and testable without a DOM. Add a useKeyboardRouter hook in the same module that attaches one document-level keydown listener, delegates every decision to the resolver, calls preventDefault only when a binding actually matched, and removes the listener on unmount so a remount cannot double-handle. The hook derives nothing: it never infers an action the map does not declare. Keep the module under 250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/keyboard-map.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/keyboard-map.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/keyboard-map.ts",
+        "apps/control-room/src/a11y/keyboard-map.test.ts"
+      ],
+      "note": "Implemented a 142-line pure keyboard resolver plus document hook. The table and every nested binding/sequence are frozen; SURFACE_LOCAL_KEYS is an immutable ReadonlySet facade, not a mutable frozen Set. Resolver returns exact discriminated reason codes and caller-held chord state. Hook handles matched actions once, prevents defaults only on matches, and removes/reset its listener/state on cleanup. Added hook lifecycle/text/local/chord tests red-first. Fresh focused result: 1 file passed, 12 tests passed; control-room typecheck exit 0.",
+      "startedAt": "2026-08-09T11:37:05.958Z",
+      "completedAt": "2026-08-09T11:39:18.004Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red: write the failing spec for the shared surface-audit predicates. Each predicate must be asserted to be non-vacuous and to detect a real violation, using small hand-built DOM fragments plus at least one real rendered surface. Cover: auditFactChips (section 12 bar 3) flags a cr.fact.* wrapper with no cr.chip.* descendant and reports the offending fact id; auditActionLegality (bar 4) flags an enabled cr.action.* whose data-command-id is absent from the supplied nextAllowedCommands, and does NOT flag a disabled one; auditKeyboardReachability flags an interactive cr.action.* that is unreachable (negative tabindex, aria-hidden, or hidden) and confirms DOM order matches visual order; auditLiveRegions (section 11.1) flags a cr.banner.* carrying neither role=status/alert nor aria-live; auditActionParity (section 4.16 last clause) flags any cr.action.* test id present at wide width but missing at narrow. Every predicate returns a checked count, and every test asserts checked is greater than zero, so an audit that swept nothing fails instead of passing. Tests fail because the module does not exist yet.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/surface-audit.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/surface-audit.test.ts"
+      ],
+      "startedAt": "2026-08-09T11:39:43.597Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Make step 4 green. Implement the audit predicates over a supplied root element, each returning a frozen {checked, violations} record where violations name the offending element's test id and a stable code (FACT_WITHOUT_CHIP, ACTION_WITHOUT_COMMAND, ACTION_UNREACHABLE, BANNER_WITHOUT_LIVE_REGION, ACTION_MISSING_AT_NARROW). Selectors must use the reserved prefixes exactly as kernel.tsx documents them (cr.fact. names the wrapper alone, cr.chip. the chip alone), so prefix selection keeps counting facts and chips exactly. auditActionLegality takes the NextAllowedCommand list as a parameter and compares data-command-id, deriving no authority of its own. These are production modules under an owned path, not test helpers. Keep the module under 250 lines; if it approaches that, move the truth-class predicate of step 6 into a sibling module rather than growing this one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/surface-audit.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/surface-audit.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Add the CR-A11Y-001 monochrome predicate, red first then green, in the same two files. Export auditTruthClassMonochrome, which calls describeTruthClass from @moe/control-room-model for all five classes and asserts the (glyph, shortLabel, borderStyle) tuple is pairwise distinct with semanticTone deliberately excluded from the comparison. It must call the production function, never carry its own copy of the descriptors, or the property is asserted against a reimplementation instead of the real surface. It must assert it examined exactly five classes, so a shortened input list cannot pass. Note in a comment why border alone is insufficient: four classes are solid and only UNKNOWN is dashed, so the tuple carries the distinction, not the border. The test must also confirm the predicate is sensitive: feed it two descriptors made identical except for semanticTone and assert it reports a collision with a stable code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/surface-audit.ts",
+        "apps/control-room/src/a11y/surface-audit.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Fix the shell so keyboard operation is real, not just resolvable. In shell/frame.tsx add a skip-link as the first focusable element targeting the existing cr.shell.main outlet, with test id cr.shell.skiplink (deliberately NOT a cr.fact. or cr.chip. prefix, which would corrupt bar 3 for every surface), and mount useKeyboardRouter so the section 11.2 bindings are live app-wide. Wire the router's actions to the frame state that already exists: the tab setter for board/graph/timeline and the nav items for goals/approvals. Give focus styling a visible ring of at least 2 px per section 11.1. Update shell/gating-keyboard.test.tsx for the new first-focusable element and add assertions that the skip-link is reachable by keyboard as the first tab stop and moves focus to cr.shell.main, and that the router does not fire while focus is inside a form field rendered in the frame.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/shell/frame.tsx",
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Write the UI-wide acceptance fixture that runs the harness across every committed canonical surface, not just J1. Mount each surface inside ShellFrame with the existing CONTROL_ROOM_FIXTURES affordances and run auditFactChips, auditActionLegality, auditKeyboardReachability and auditLiveRegions over each: goals-home, board-surface, approval-inbox and the four approval details, doctor-console, evidence-inspect, timeline-list, reconciliation-inventory, recovery-status, node-authority, attempt-detail and review-surface. Assert per surface that checked is greater than zero before asserting zero violations, and assert the surface list itself is non-empty and covers each mounted surface exactly once. Add CR-A11Y-001 (the monochrome predicate over the real chips rendered by a surface, asserting all five classes appear distinguishable without colour) and CR-A11Y-002 (complete J1's three human actions keyboard-only, via userEvent.keyboard only with zero click calls, including the board h/l column traversal, and assert the count of human actions is at most 3 so bar 1 holds on the keyboard path too). Record bar 2 as an explicit not-applicable with its reason (the graph projection renders GraphPlaceholder in this slice and CR-J1-002 forbids cr.graph.* mounting), never as a passing assertion over zero cases. Also assert degraded and loading honesty on the surfaces that support it: a degraded surface renders its stale label and still exposes no enabled cr.action.* that is absent from nextAllowedCommands. If this file approaches 250 lines, split the keyboard journey into a sibling test file rather than letting it grow.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Verification. Run the one command that gates this task: pnpm --filter @moe/control-room test. Capture its fresh output verbatim as the completion evidence; do not reuse an earlier run. Then satisfy epic rail 6's mutation requirement, which a green suite cannot show on its own: for each failure-path test, mutate the production surface and confirm the test goes red, then revert the mutation. At minimum mutate the TEXT_ENTRY_FOCUSED guard in the resolver, the SURFACE_LOCAL deferral, the FACT_WITHOUT_CHIP violation branch, and the semanticTone exclusion in the monochrome predicate; a mutation that leaves the suite green means that test is not asserting what it claims. Record which mutations were performed and that each produced red. Attribute any repo-wide red by path: this task owns only apps/control-room/src/a11y/** and apps/control-room/src/shell/frame.tsx, so report foreign failures verbatim with their file paths rather than either hiding them or claiming them.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review before complete_task. Read the diff as an attacker, not the author. Check specifically: does any audit pass when it swept zero elements, on any surface, including one that renders empty or degraded (the vacuous-sweep defect project rail 1 names); does the global keydown listener double-handle after a remount, or survive unmount; can the g-chord be left armed so a later unrelated keypress navigates; does any new element use a cr.fact. or cr.chip. prefix and thereby corrupt bar 3 app-wide; does auditActionLegality derive any authority instead of comparing against the supplied nextAllowedCommands; does the monochrome predicate still call describeTruthClass rather than a local copy; does any test assert only that something was refused rather than naming the specific reason code and, where two layers can refuse, which layer did; is every production file under 250 lines; and are there any debug, probe, scratch or generated evidence files left in the commit. Confirm the plan's own stated non-coverage is reported honestly at completion rather than implied as done: the section 4.16 layout reflow, prefers-reduced-motion, and the four-phase timing clause of DoD item 2 (carved out to task-a62e3c2d58404bd7bc2fc2ca09930f1d) are NOT delivered by this task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-b6bbb60c",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -26,14 +135,59 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 7,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-7d411934c76a42ecb0369c65c94c351d",
+      "author": "architect-da724bb7",
+      "content": "Human said “plan more,” taken as confirmation to pursue the recommended deterministic harness groundwork. Planning audit found full DoD cannot be certified under current ownership/jsdom: central ShellFrame/TruthChip production fixes and a formal separation between deterministic receipt evaluation and later Playwright/reference-environment execution are required. Governance amendment requested in #general; no speculative plan will be submitted until ruled.",
+      "timestamp": "2026-08-09T10:42:35.886Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.717Z",
-  "updatedAt": "2026-08-09T10:33:09.741Z",
+  "updatedAt": "2026-08-09T11:39:43.597Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-1721c07f",
+    "worker-b6bbb60c"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T10:27:40.723Z"
-  }
+    "firstClaimAt": "2026-08-09T10:27:40.723Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 3
+  },
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T11:32:35.490Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Cram accessibility and four-phase timing into this one task. REJECTED on plan shape: it lands at ~10 distinct files and ~12 steps, exactly the daemon's hard-reject boundary, and any component fix beyond frame.tsx pushes it over. (2) Meet DoD item 2's timing clause with a mock clock inside the acceptance test. REJECTED by project rail 4 clause 2, which forbids a mock-backed journey or authority reimplemented inside the test when the capability is absent; the required output is a prerequisite production task. Carved out to task-a62e3c2d58404bd7bc2fc2ca09930f1d. (3) Read DoD item 3 as wall-clock millisecond budgets. REJECTED and confirmed with the human: the pinned spec declares NO render budget, and section 11.4 states the 500 ms p95 is the charter's target and 'the UI renders honestly, asserting nothing'. jsdom wall-clock is machine-dependent and would be flaky on the reference environment. Item 3 is the section 12 global bars. (4) Reimplement the truth-class table inside the monochrome audit. REJECTED by project rail 1 corollary 3: the property must be asserted against the production surface, so the audit calls describeTruthClass from @moe/control-room-model.",
+    "codebaseInsights": "Spec verified on disk at planning time: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md, sha256 c55af8a9fc7386e6492fd57e34a4b8321abaae4e4e08fff... matches the task rail exactly (confirmed via sha256sum).\n\nPRESENT capabilities this task certifies (probed by grep, not read from the design):\n- kernel.tsx exports Fact and TruthChip. TruthChip triple-encodes via descriptor.glyph, descriptor.shortLabel, descriptor.borderStyle and emits data-testid={descriptor.chipTestId}, data-truth-class, data-border, data-tone. The `cr.fact.` and `cr.chip.` prefixes are RESERVED for the wrapper and chip alone (inner parts are cr.label, cr.value, cr.glyph, cr.shortlabel) precisely so prefix selectors count exactly. Do not break that invariant.\n- The five classes: glyphs are the distinct set {solid-circle OBS, speech-balloon AGT, filled-square VER, fisheye HUM, diamond UNK}; shortLabels {OBS, AGT, VER, HUM, UNK}. CRITICAL: borderStyle is 'solid' for four classes and 'dashed' only for UNKNOWN, so border ALONE does not separate all five. CR-A11Y-001's bar is satisfied by the (glyph, shortLabel, borderStyle) TUPLE being pairwise distinct with semanticTone excluded. Assert the tuple, not border alone.\n- shell/frame.tsx: GatingContext + useGating() giving {actionsEnabled, commands, stale}; ActionButton renders data-command-id/data-command-kind and disables (never hides) when actions are off; actionTestId() maps a command kind to its cr.action.* id, with approval.decide pinned to cr.action.approval-decide.approve.\n- Surface-local keyboard already exists: goals-home, doctor-console and reconciliation-inventory handle j/k/Enter via handleKey; board-surface handles h/l/j/k via a KEY_MOVES table; provenance-panel and timeline-row handle the p shortcut but only when a cr.chip.* holds focus; approval-detail-plan handles Escape. Only ONE `event.key === \"...\"` literal exists outside these.\n- shell/j1-flow.test.tsx already asserts bar 1 (three human actions), bar 3 (one truth chip per fact), CR-J1-002 (no cr.graph.* mounted) and the p-shortcut focus guard. Extract those into reusable predicates and apply them surface-wide; do not fork a second copy.\n\nABSENT, measured symbol by symbol (this is what the task adds):\n- No global keyboard map. Zero document-level key listeners; no g-chord, no a, /, ?, [ or ] binding anywhere.\n- No skip-link: zero hits for skiplink/skip-link.\n- No prefers-reduced-motion: zero hits.\n- No narrow-window handling: zero hits for narrow, viewport, breakpoint or 960.\n- No clock or timing substrate at all (carved out to task-a62e3c2d58404bd7bc2fc2ca09930f1d).\n\nTest environment: apps/control-room/vite.config.ts owns its own Vitest config (jsdom, sequence.concurrent false, passWithNoTests false) and deliberately replaces the repo-root config, which is why app tests run via the package script. Tests set IS_REACT_ACT_ENVIRONMENT in beforeAll and call cleanup in afterEach; follow that existing pattern.",
+    "risks": "1. VACUOUS SWEEP is the primary failure mode here and project rail 1 names it explicitly: a surface audit that finds zero facts, zero actions, or zero chips PASSES while testing nothing. Every audit must return a `checked` count and every acceptance test must assert `checked` is greater than zero before asserting zero violations.\n\n2. GLOBAL ROUTER HIJACK. j/k/h/l/Enter/p/Esc are already surface-local. A global listener that also claims them will double-handle, and a global `a` or `/` binding will fire while the operator is typing in cr.goals.form. The router must own ONLY the bindings no surface owns (g-chord, a, /, ?, [, ]) and must refuse with a stable reason code when focus is in a text entry or when the event already originated inside a surface handler.\n\n3. REASON CODES, not booleans. Epic rail 6 and project rail 1: every refusal path in the resolver returns a specific stable code and the test asserts THAT code. A test asserting only 'did not navigate' is one added guard away from vacuous.\n\n4. ASSERT AGAINST PRODUCTION. auditMonochrome must call describeTruthClass from @moe/control-room-model. If it carries its own copy of the five descriptors, the test proves only that the copy is self-consistent.\n\n5. PREFIX INVARIANT. Adding any element whose test id starts with cr.fact. or cr.chip. that is not a real fact wrapper or chip silently corrupts bar 3 for every surface. The skip-link and help overlay must not use those prefixes.\n\n6. SPEC 4.16 LAYOUT IS NOT IN THIS TASK. Only its last clause ('nothing is desktop-only: every action available wide is available narrow') is a structural invariant assertable without layout work. The actual reflow (nav rail collapses to icons, inspector becomes an overlay sheet, sticky board headers, pinned decision buttons, two-line tables) is unimplemented and needs its own task. Do not half-build it here.\n\n7. prefers-reduced-motion (section 11.1) is also unimplemented and is NOT covered by this plan's DoD. jsdom does not implement matchMedia by default, so it needs a deliberate shim; flag it rather than smuggling it in.\n\n8. Bar 2 (one fan-out proposal costs at most one approval) is NOT applicable to the committed surfaces: the graph projection renders GraphPlaceholder in this slice and CR-J1-002 requires cr.graph.* never mount. State that in the harness as an explicit not-applicable with a reason, never as a passing assertion over zero cases.\n\n9. File size: if surface-audit.ts approaches 250 lines, split the truth/monochrome predicate into a sibling module rather than letting it grow. Same for the acceptance test file.",
+    "keyFiles": [
+      "apps/control-room/src/kernel.tsx",
+      "apps/control-room/src/shell/frame.tsx",
+      "apps/control-room/src/shell/j1-flow.test.tsx",
+      "apps/control-room/src/shell/gating-keyboard.test.tsx",
+      "apps/control-room/src/shell/provenance-panel.tsx",
+      "apps/control-room/src/board/board-surface.tsx",
+      "apps/control-room/src/goals/goals-home.tsx",
+      "apps/control-room/src/fixtures.ts",
+      "packages/control-room-model/src/index.ts",
+      "apps/control-room/vite.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-09T11:32:37.534Z",
+  "workStartedAt": "2026-08-09T11:33:13.409Z"
 }

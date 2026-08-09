@@ -1,0 +1,36 @@
+{
+  "id": "task-a62e3c2d58404bd7bc2fc2ca09930f1d",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Four-phase timing separation and shared latency feedback",
+  "description": "Objective: ship the production capability that separates server, stream, render, and human time in the standalone control room, and generalize the spec section 11.4 latency-feedback contract beyond the recovery surface.\n\nWHY THIS TASK EXISTS (project rail 4, clause 2 gap measurement). Task \"Accessibility latency hardening\" (task-ab8c9489ab6446c384e977a3e1cc8063) certifies operator journeys. Its DoD item 2 requires \"timing separates server, stream, render, and human time\". At planning time the architect probed the repository for that capability and found it ABSENT, symbol by symbol. A grep across apps/ and packages/ (excluding node_modules and *.test.*) for the alternation latency|elapsedMs|durationMs|serverTime|streamTime|renderTime|humanTime|observedAt|receivedAt|emittedAt returns ZERO matches. There is no clock abstraction, no injected time source, and no timestamp field on any control-room fixture or contract. The timing clause therefore had no production substrate to certify, so it was carved out into this production task rather than met by a narrowed DoD or a mock-backed journey.\n\nWHAT EXISTS TODAY (the seed to generalize, not to duplicate). apps/control-room/src/recovery/recovery-actions.tsx is the only implementation of the spec section 11.4 shape: RecoveryFeedback with state PENDING|CONFIRMED|REFUSED, role=\"status\" for pending/confirmed and role=\"alert\" for refused, RECOVERY_STILL_WORKING_COPY carrying the exact spec line-711 sentence, and RecoveryUnavailableReason carrying reasonCode plus the refusing layer. Its overTwoSeconds field is a caller-supplied boolean: nothing in the codebase measures it. That boolean is precisely the hole this task fills with a real clock.\n\nNOT IN SCOPE: accessibility, keyboard, monochrome, and the section 12 global bars (owned by task-ab8c9489ab6446c384e977a3e1cc8063). No wall-clock millisecond performance budget assertions: the pinned spec declares no render budget, and section 11.4 states the 500 ms p95 target is the charter's and \"the UI renders honestly, asserting nothing\". Do not invent a number.\n\nOwned paths: apps/control-room/src/performance/** plus the minimum call sites needed to land one real consumer edge.\n\nHard dependencies: none blocking. All canonical control-room surfaces are committed.\n\nVerification: pnpm --filter @moe/control-room test",
+  "definitionOfDone": [
+    "A time source is injectable and deterministic in tests: no production module in apps/control-room/src/performance/** reads Date.now(), performance.now(), or constructs new Date() directly, and a test drives elapsed time without real waiting.",
+    "A single timing record separates all four phases as distinct named fields (server, stream, render, human) and is asserted to keep them distinct: a test proves that collapsing any two phases into one changes the rendered output.",
+    "A phase whose source timestamp is absent or unparseable resolves to UNKNOWN with a stable reason code and never contributes a computed duration, and a test asserts that specific reason code rather than merely that the value was falsy.",
+    "The spec section 11.4 latency-feedback contract is available to surfaces beyond recovery: pending renders immediately with role=\"status\", the >2 s threshold renders the still-working sentence from a measured elapsed value rather than a caller-supplied boolean, and failure renders role=\"alert\" with a stable code plus refusing layer.",
+    "Clause 1 of project rail 4 is satisfied: at least one committed control-room surface outside src/performance/** imports the new module at a durable call site, so the package is composed and not merely exported.",
+    "pnpm --filter @moe/control-room test passes, and each new failure-path test is verified by mutating the production surface and confirming the test goes red."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F. Verified on disk at planning time.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength. A measured render or human duration is the UI's own observation and must be labeled as such: it may never be presented as a daemon-supplied fact, and it never upgrades a truth class.",
+    "Do not assert a wall-clock millisecond budget. Spec section 11.4 pins the 500 ms p95 as the charter's target and states the UI asserts nothing about it. The only spec-declared UI thresholds are the >2 s still-working line (section 11.4) and the >30 s stalled-lag banner (section 8.6); both are behavioral, driven by an injected clock, never by real waiting in a test.",
+    "Generalize the existing recovery implementation rather than forking it. apps/control-room/src/recovery/recovery-actions.tsx already carries the section 11.4 shape and the exact spec copy; the recovery surface must end up consuming the shared module, not keeping a second divergent copy.",
+    "Keep modules below 400 lines, target 250. Explicit owned paths only; no git add -A."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 12,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T11:29:53.609Z",
+  "updatedAt": "2026-08-09T11:29:53.609Z"
+}

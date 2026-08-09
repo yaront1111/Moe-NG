@@ -15,13 +15,102 @@
     "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the host reality and pin what already exists, because both decide this plan's shape. FIRST record `process.platform` for the machine you are on. At planning time the fleet host was `win32`, which means macOS conformance evidence CANNOT be produced here and the suite must not pretend otherwise — M4 epic rail 3 requires unsupported OS facts to stay typed UNSUPPORTED or UNKNOWN rather than guessed. Write the host into the step note; it belongs in the completion evidence too. THEN pin the surfaces this task consumes rather than duplicates: `providers/claude/claude-observation.ts` for the truth lattice (OBSERVATION_TRUTH_CLASSES = PROVEN | UNKNOWN, ProviderRuntimeObservation, PlatformIdentity, RuntimeClosureEntry, observationDigestInput); `recovery/crash-classification.ts` (classifyCrash) and `recovery/safe-boundary.ts` (admitResume, advanceRecoveryDrain) for crash and cancellation classification; `providers/claude/claude-cancel-reconcile.ts` for ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED); and `scope/scope-observation.ts` for path and symlink observation. Read `providers/codex/` to confirm the stated Codex dependency is real and note its actual exports. Confirm `packages/runner/src/platform/` and `tests/fault/macos/` do not exist. Produce no code.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Host reality verified fresh: Node reports process.platform=win32 and process.arch=x64 at HEAD 7afa17d3, so this machine cannot execute or observe macOS provider launch, POSIX signal, lock, path/symlink/firmlink, packaging, cancellation, or crash-recovery behavior. `packages/runner/src/platform/` and `tests/fault/macos/` are absent. Required shared symbols do exist and were verified at their definitions: OBSERVATION_TRUTH_CLASSES/ProviderRuntimeObservation/PlatformIdentity/RuntimeClosureEntry/observationDigestInput in claude-observation.ts; ClaudeProcessExit and reconcileClaudeRun; classifyCrash; admitResume/advanceRecoveryDrain; observeScope. The complete Codex provider surface exists with 8 bridged runtime modules. Root package.json pins Node >=24.16.0 <25 and pnpm 11.0.8 but has no test:fault script. doctor-commands.ts has schemaVersion only and no engine/runtime-version reporting subject. No files produced. New project Clause 2 plus the identical Linux sibling's BLOCKED handoff establish that synthesizing port shapes and an off-host test would be a mock-backed proof, not macOS conformance.",
+      "startedAt": "2026-08-09T10:57:31.172Z",
+      "completedAt": "2026-08-09T10:58:04.873Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "OWNERSHIP AMENDMENT for the fault lane. This task's stated verification is `pnpm test:fault`, which does not exist — root scripts are typecheck, test, test:meta, test:property, test:e2e, test:store, verify:foundation and verify:store, and root package.json is outside this task's owned paths. Request the amendment naming the exact one-line addition, following the `test:property` precedent (`vitest run tests/property`), and WAIT for confirmation; do not self-approve. NOTE THE LINUX SIBLING (task-e87a7353) NEEDS THE SAME SCRIPT, so coordinate rather than racing: if it has already been added, add nothing and say so in the evidence. Verify before and after that the existing `pnpm test` covers the same suite set, since silently widening the repo-wide gate would affect every other task's evidence. If the amendment is refused, the suite still has value under the existing lanes provided it lives under `tests/`, which the root vitest config already includes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Define the macOS observation contracts as exported frozen data — port-shaped, not shell-shaped. Create packages/runner/src/platform/macos/macos-platform-contract.ts with the observation records this adapter accepts and the vocabulary it classifies into. REUSE the existing truth lattice from claude-observation.ts (PROVEN | UNKNOWN) rather than inventing a second one — DoD 2's 'proven or UNKNOWN' is literally that vocabulary. Model as caller-supplied observations, never as calls: path and symlink resolution, process identity and liveness, lock ownership, and runtime closure. The whole runner subtree is fenced against child_process, spawn, kill, Date.now and Math.random, so an adapter that runs `sw_vers` or `codesign` both breaks the fence and makes itself untestable off-host. Include the macOS-specific facts that must be OBSERVED rather than assumed: filename normalization form (APFS/HFS+ may present NFD where Windows and Linux use NFC, so two paths that look identical can differ in bytes), case-insensitive-but-case-preserving volumes, symlink and firmlink resolution, and POSIX signal availability. Each is a field on an observation carrying its own truth class, never a hard-coded constant. Create the module's sibling one-line `.js` bridge in the same commit.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/macos/macos-platform-contract.ts",
+        "packages/runner/src/platform/macos/*.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/macos/macos-platform-contract.ts",
+        "packages/runner/src/platform/macos/*.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the classification and its refusals — DoD 2. Create packages/runner/src/platform/macos/macos-observations.ts turning supplied observations into typed verdicts. THE CENTRAL RULE: every fact is PROVEN or UNKNOWN, and UNKNOWN is a first-class result rather than an error — an adapter that throws when it cannot observe something forces its caller to guess, which is exactly what M4 rail 3 forbids. An observation that is absent, stale beyond its freshness window, or self-inconsistent yields UNKNOWN with a stable code, never an optimistic PROVEN. Consume the existing classifiers rather than re-implementing them: crash and cancellation outcomes come from classifyCrash and reconcileClaudeRun, which were drilled by the supervisor hardening gate, so a platform-local copy would drift from the version that was actually proven. Normalization is the subtle one: comparing an NFD-presented path against an NFC-declared path must be an explicit normalized comparison producing a definite verdict, not an accidental byte comparison that silently reports a mismatch. Target under 250 lines; bridge it in the same commit.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/macos/macos-observations.ts",
+        "packages/runner/src/platform/macos/macos-platform-contract.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/macos/macos-observations.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Unit-test the adapter, which IS fully testable on any host — this is the half that does not depend on running on macOS. Create packages/runner/src/platform/macos/macos-observations.test.ts feeding synthetic observations and asserting the verdicts: a complete, fresh, self-consistent observation is PROVEN; an absent one is UNKNOWN with its stable code; a stale one is UNKNOWN and DISTINGUISHABLE from absent, since 'we did not look' and 'we looked too long ago' are different facts; and a self-inconsistent one is UNKNOWN rather than partially believed. Assert the NFD-versus-NFC path comparison in BOTH directions: the same path presented in different normalization forms must compare EQUAL under the explicit normalized comparison, and two genuinely different paths must NOT — without the second half the comparison could be a constant true. Assert the truth-class set by set equality against the exported vocabulary so a third state cannot appear unnoticed, and assert every refusal's specific code and layer, never merely that it refused.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/macos/macos-observations.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/macos/macos-observations.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "The conformance gate — and the honesty mechanism that makes this task safe to run on the wrong host. Create tests/fault/macos/macos-effect-conformance.test.ts driving the declared effect boundaries through crash-before-activation, crash-after-activation and cancellation schedules, per DoD 1. IT MUST BEHAVE DIFFERENTLY BY HOST, and this is the point of the step: when `process.platform === 'darwin'` it runs the real schedules and its result is macOS conformance evidence; when it is anything else it must NOT pass silently — it reports the conformance status as UNSUPPORTED-on-this-host, asserts that no macOS conformance CLAIM was produced, and fails loudly if any code path tried to record one. A suite that goes green on Windows and is later quoted as proof that macOS works is the worst outcome available here and is exactly what epic rail 4 and M4 rail 3 exist to prevent. Assert the schedule list length is non-zero so an off-host run cannot degenerate to covering nothing, and record the host in the test output so the evidence is self-describing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/fault/macos/macos-effect-conformance.test.ts"
+      ],
+      "newFiles": [
+        "tests/fault/macos/macos-effect-conformance.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Packaging and doctor version reporting — DoD 3. Assert that the packaging facts this adapter reports are the PINNED engine and runtime rather than whatever happens to be installed, and that doctor reporting surfaces exact versions rather than ranges or approximations. On a non-macOS host these are, again, observations that stay UNKNOWN rather than being read from the running process — reporting the Windows host's Node version as the macOS packaging version would be precisely the fabricated evidence this task must avoid. Assert that a version string that is absent, non-exact, or does not match the pinned value produces UNKNOWN or a refusal with its stable code, never a silently accepted approximation. Keep the pinned values read from the repo's own configuration rather than duplicated as literals here, so the two cannot drift.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/macos/macos-observations.ts",
+        "packages/runner/src/platform/macos/macos-observations.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Prove the guards are load-bearing and sweep the fence. MUTATION DRILL at each mechanism's single source: the UNKNOWN-on-absent branch, the staleness check, the normalization comparison, the host gate in the conformance suite, and the pinned-version match. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens the suite for the wrong reason. Count failed SUITES as well as failed tests. THE HOST-GATE MUTATION IS THE ONE THAT MATTERS MOST: forcing the host check to always report darwin must make the off-host run claim conformance, and a test must go red when it does — if nothing reddens, the fabrication guard is decorative and this task's central safety property is untested. Capture `git rev-parse HEAD:<path>` before each drill and verify restores against that sha rather than `git status`, since this worktree is shared and another agent's completion hook can commit your mutation. Then the fence sweep: grep the new platform modules for child_process, spawn, kill, Date.now and Math.random and confirm ZERO hits — a single shell-out would break the port shape and make the adapter untestable off-host.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/macos/macos-observations.ts",
+        "tests/fault/macos/macos-effect-conformance.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Run the gates, then commit by explicit pathspec, and state the host honestly. Run fresh: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`, plus `pnpm test:fault` if step 2's amendment landed. Confirm the new modules have their `.js` bridges by running a plain-Node probe from the repo root against `./packages/runner/src/index.ts` with a known-good control — @moe/runner is covered by the repo-wide loadability gate and an unbridged module fails it. THE COMPLETION EVIDENCE MUST STATE THE HOST IT RAN ON and must say plainly whether macOS conformance was PROVEN or remains UNSUPPORTED pending a macOS host. Do not describe an off-host green run as macOS conformance; that is the fabricated pass epic rail 4 forbids, and it would be quoted downstream by the Portability shadow gate. Then adversarial review: can the suite claim conformance off-host by any route; does any module shell out; is UNKNOWN ever silently upgraded to PROVEN; is any macOS-specific fact hard-coded rather than observed; was the linux sibling path touched. Commit by EXPLICIT PER-FILE pathspec — never a directory under packages/runner/src/, since sibling tasks including task-e87a7353 (linux) are active in this tree — and verify with `git show --stat`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED promotion by governor-eae4fc53 2026-08-09 on human instruction. Dep \"Codex adapter\" = task-a0fa6da4, WORKING at 9/11 with its implementation ALREADY ON DISK: packages/runner/src/providers/codex/ holds codex-probe.ts, codex-capabilities.ts, codex-observation.ts, codex-cancel-reconcile.ts, codex-render-skills.ts and their tests. Read that surface directly rather than the dep's task description. \"Foundation runner\" is packages/runner, long since landed. Owned paths packages/runner/src/platform/macos/** and tests/fault/macos/** are greenfield and disjoint from the Linux sibling (task-e87a7353, promoted alongside this) and from tests/fault/disaster-restore/** (task-0c89476b, in PLANNING). COORDINATE WITH THE LINUX SIBLING: both tasks prove the same seven behaviours (provider launch, Git/workspace, locks, signals, cancellation, scope resolution, crash recovery) against the same runner surface. Whatever shared contract or fixture shape the two need, ONE of you must own it — do not both declare the same shared file in affectedFiles, since that field is write-once at submit_plan and the working directory is shared. If a shared seam is needed, say so in your plan and let the Linux task own it, or propose the split explicitly. PLATFORM WARNING, READ BEFORE PLANNING: development is pinned to a single Windows working directory by epic rail 2, and this task's verification is `pnpm test:fault`, which will execute on that Windows host. You very likely CANNOT execute real macOS launch, signal, lock or crash-recovery behaviour here. Do NOT fake it and do NOT claim a pass you did not observe. Precedent to follow is task-4a3b5ec0: \"all OS facts are caller-supplied observations; uncertainty stays SUSPECT or UNKNOWN and never gains authority\", with real OS wiring deliberately scoped to a later task. If the DoD cannot be honestly met without a real macOS host, report_blocked and say so — correct outcome, not a failure, and I will take it to the human.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,8 +118,46 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.243Z",
-  "updatedAt": "2026-08-09T10:23:23.799Z",
+  "updatedAt": "2026-08-09T11:21:46.498Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "worker-064d1267"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T10:51:11.794Z",
+  "metrics": {
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 6,
+    "firstClaimAt": "2026-08-09T10:56:34.855Z",
+    "executedStepCount": 1
+  },
+  "planningNotes": {
+    "approachesConsidered": "(1) THE FLEET RUNS ON WINDOWS. `process.platform` is `win32`. A macOS conformance task CANNOT produce macOS conformance evidence here, and the single worst outcome available is a suite that goes green on Windows and is later read as proof that macOS works. M4 epic rail 3 already answers this: 'Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.' So the plan splits along the host line: build the port-shaped adapter and its contracts (fully buildable and testable anywhere), and make the conformance gate REFUSE to claim macOS conformance when not running on macOS rather than pass vacuously. Real conformance evidence is produced when the suite runs on a macOS host, and the plan says so explicitly instead of pretending.\n(2) PORT-SHAPED, LIKE THE REST OF THE RUNNER. The whole runner subtree is fenced against child_process/spawn/kill/Date.now/Math.random — OS facts arrive as caller-supplied observations and pure code decides what they prove. A macOS adapter is therefore a set of observation CONTRACTS plus their classification, not a shell-out layer. That is also what makes DoD 2 ('proven or UNKNOWN') expressible: an observation carries its own truth class rather than being inferred.\n(3) THE CODEX DEPENDENCY IS SATISFIED — `packages/runner/src/providers/codex/` exists on disk. Verify its actual surface at step 1 rather than assuming which symbols it offers.\n(4) `test:fault` DOES NOT EXIST in root scripts, so the task's stated verification needs an ownership amendment — the same gate the canary needed for `test:e2e`. The linux sibling task needs the identical script, so that amendment must be coordinated rather than raced.",
+    "codebaseInsights": "VERIFIED ON DISK 2026-08-09:\n- **HOST IS `win32 x64`.** This is the fact that shapes the whole plan.\n- **`packages/runner/src/platform/` DOES NOT EXIST** — greenfield. Same for `tests/fault/macos/`; `tests/fault/` currently holds only `foundation/`.\n- **`pnpm test:fault` is ABSENT.** Root scripts: typecheck, test, test:meta, test:property, test:e2e, test:store, verify:foundation, verify:store. Adding it edits root package.json, outside this task's owned paths — ownership amendment, precedent `test:property` (`vitest run tests/property`) and the canary's `test:e2e`.\n- **The Codex adapter exists**: `packages/runner/src/providers/codex/` is present alongside `claude/`. The stated hard dependency is satisfied.\n- **The observation pattern to mirror** is `providers/claude/claude-observation.ts`: OBSERVATION_TRUTH_CLASSES = ['PROVEN','UNKNOWN'], ProviderRuntimeObservation, PlatformIdentity, RuntimeClosureEntry, ObservationFreshness, observationDigestInput, runtimePinningIsAuthoritative. DoD 2's 'proven or UNKNOWN' is literally that vocabulary — reuse it rather than inventing a second truth lattice.\n- **Crash/cancellation classification already exists** and must be consumed, not re-implemented: `recovery/crash-classification.ts` (classifyCrash), `recovery/safe-boundary.ts` (admitSuccessorOverlap, admitResume, advanceRecoveryDrain), and `providers/claude/claude-cancel-reconcile.ts` (ClaudeProcessExit = EXITED{code} | SIGNALLED{signal} | UNOBSERVED, reconcileClaudeRun).\n- **Scope and workspace observation already exist**: `scope/scope-observation.ts` (observeScope, ScopeObservation, SCOPE_ATTRIBUTION_CLASSES) and `workspace/workspace-manifest.ts`. DoD 2's path and symlink observations belong on top of these, not beside them.\n- **@moe/runner is bridged** (52 non-test .ts / 45 .js) and covered by the repo-wide runtime-loadability gate, so every new module needs its sibling one-line `.js` bridge in the same commit.\n- Owned paths are `packages/runner/src/platform/macos/**` and `tests/fault/macos/**` — do NOT touch the linux sibling (task-e87a7353, claimed by architect-8a4a1764) or `packages/runner/src/index.ts`.",
+    "risks": "1. **THE FABRICATION RISK IS THE MAIN RISK.** A macOS conformance suite that passes on a Windows host and is quoted as macOS evidence is worse than no suite. The gate must refuse to claim conformance off-host, and the completion evidence must state the host it ran on. Epic rail 4 and M4 rail 3 both bite here.\n2. **Do not shell out.** The runner subtree is fenced against child_process, spawn, kill, Date.now and Math.random. A macOS adapter that runs `sw_vers` or `codesign` breaks the fence and makes the module untestable off-host anyway. Grep for all five before the gate.\n3. **macOS-specific facts that are genuinely different and must not be assumed from Windows behaviour**: APFS/HFS+ filename normalization (macOS may present NFD where Windows and Linux use NFC, so two paths that look identical can differ in bytes); case-insensitive-but-case-preserving default volumes; symlink and firmlink resolution differing from Windows junctions; POSIX signals existing where Windows has none, so SIGNALLED is reachable on macOS and effectively not on Windows. Each is an observation to classify, never a constant to hard-code.\n4. **Signals are the sharpest asymmetry.** A cancellation schedule that assumes SIGTERM semantics will be wrong on Windows and right on macOS; keep the classification in the shared recovery layer and let the observation carry the platform fact.\n5. **Do not re-implement crash or cancellation classification** — classifyCrash and reconcileClaudeRun already own it and were drilled by the supervisor hardening gate. A platform-local copy would drift from the proven one.\n6. **UNKNOWN must be a first-class result, not an error.** DoD 2 says observations are proven or UNKNOWN; an adapter that throws when it cannot observe something forces callers to guess, which is the failure this rail exists to prevent.\n7. Root package.json is shared with every in-flight task — single-hunk change, verified with `git diff --stat`, committed by explicit pathspec, and only if the amendment is granted. The linux sibling needs the same script; coordinate.\n8. Do not touch `packages/runner/src/platform/linux/**` — that is task-e87a7353's owned path and it is claimed and active.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "packages/runner/src/providers/codex",
+      "packages/runner/src/recovery/crash-classification.ts",
+      "packages/runner/src/recovery/safe-boundary.ts",
+      "packages/runner/src/scope/scope-observation.ts",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 28800000
+  },
+  "planApprovedAt": "2026-08-09T10:51:13.810Z",
+  "workStartedAt": "2026-08-09T10:57:31.172Z",
+  "blockedReason": "Fresh host/disk audit proves the approved plan cannot honestly satisfy this conformance task. Host is win32 x64, not darwin. No production capability exists to certify: packages/runner/src/platform/ is absent, so there is no declared macOS launch/path/symlink/process/lock/signal/runtime-closure boundary; tests/fault/macos is absent. Global project Clause 2 forbids substituting pure shapes or a mock-backed/off-host journey for an acceptance/conformance subject. DoD 1 therefore has no shipped boundary to schedule and cannot be observed on this host. DoD 3 also lacks a subject: root only declares Node range >=24.16.0 <25 and pnpm 11.0.8, while apps/daemon/src/recovery/doctor-commands.ts exposes schemaVersion but no exact engine/runtime-version report. DoD 4 names pnpm test:fault, but that script is absent and Windows cannot produce macOS fault evidence. An off-host green UNSUPPORTED test would be useful guard code but would not prove 'macOS fault gate passes'; completing on it would fabricate conformance, violating epic rail 4. The identical Linux sibling task-e87a7353 is already BLOCKED on this exact Clause-2 ruling. Step 1 completed with the verified symbols and host; no code was created.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-09T10:58:28.873Z"
 }

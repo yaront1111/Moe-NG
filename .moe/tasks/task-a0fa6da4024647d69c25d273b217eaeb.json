@@ -177,29 +177,57 @@
     {
       "stepId": "step-10",
       "description": "Bridges, then verification and the mutation drill. Every non-test module under packages/runner/src/providers/codex/ needs its sibling .js bridge — the runner package now has 45+ of them and the claude modules all carry one, so the codex modules must too; a repo-wide runtime-loadability gate (task-535e773b) is landing that will enforce it. Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — copy an existing claude bridge. The testkit corpus gets NO bridge, matching claude-golden-streams.ts. Verify bytes: final byte 0x0A, no 0x0D. Then run pnpm --filter @moe/runner test and pnpm --filter @moe/testkit test, stating before/after test AND suite counts as explicit numbers — count suites, because a file that fails to parse reports zero tests and reads as a pass. Mutation-verify one at a time, restoring between each: flip one nibble of the pinned corpus digest (both suites must fail at module load, before any assertion consumes the fixture — this is how Claude's was red-teamed); make an unproven capability default to SUPPORTED; remove the closure path sort; let a contradicting observation still report SUPPORTED; compute GAP over delivery order instead of the sequence set; drop the malformed-record-occupies-a-slot rule; add a command field to the render output. Every one must go red. Verify restores with git diff on the specific file, not git status (mem:mutation-drills-in-shared-worktree).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/*.js",
         "packages/runner/src/providers/codex/*.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.js",
+        "packages/runner/src/providers/codex/codex-capabilities.js",
+        "packages/runner/src/providers/codex/codex-observation.js",
+        "packages/runner/src/providers/codex/codex-probe.js",
+        "packages/runner/src/providers/codex/codex-render-skills.js",
+        "packages/runner/src/providers/codex/codex-render.js",
+        "packages/runner/src/providers/codex/codex-stream-anomalies.js",
+        "packages/runner/src/providers/codex/codex-stream.js"
+      ],
+      "note": "TDD bridge gate first failed with exactly 8 missing Codex runtime modules, then passed 3/3 after adding the 8 exact LF one-line `.js` bridges. Binary audit: every bridge ends 0x0A, contains no 0x0D, and exactly equals `export * from \"./<name>.ts\";\\n`; real Node 24 strip-types imports exposed non-empty exports for all 8, while `codex-probe.test.js` refused with literal ERR_MODULE_NOT_FOUND. No testkit bridge was added. Baseline -> after counts are runner 30 files/980 tests -> 37 files/1040 tests, testkit 18 files/234 tests -> 19 files/239 tests. All 7 required production mutations went RED one at a time: a per-case pinned raw digest failed BOTH runner/testkit suites at module load (2 failed suites, 0 tests); unproven default SUPPORTED; closure sort removal; contradiction accepted; delivery-order GAP; malformed-slot removal; and render command field each failed its focused suite. Every mutation restored from an out-of-repo byte backup with before/after SHA-256 equality and path-specific git diff exit 0. Fresh post-restore runner 37/1040, testkit 19/239, and both typechecks exit 0.",
+      "startedAt": "2026-08-09T10:39:06.359Z",
+      "completedAt": "2026-08-09T10:44:04.609Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit. Read the diff as an attacker. Can any provider output reach a field that grants authority or satisfies verification — that is DoD 3, and the exact-sorted-key assertion on the render output is its proof, so re-check it covers every returned record and not just the top level. Can an unproven capability reach SUPPORTED by any path? Can a lying probe port crash the adapter instead of receiving a typed refusal? Is any returned record unfrozen or does any hold a Uint8Array? Grep the whole codex tree for the fence — child_process, spawn, .kill, Date.now, Math.random, new Date, performance.now — and expect ZERO code hits; the only permitted matches are doc comments stating the fence is not crossed. Confirm each production file is under 400 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe or scratch file remains. Then commit by explicit pathspec only: `git status --porcelain` first, confirm every staged entry is under packages/runner/src/providers/codex or packages/testkit/src/providers/codex, unstage anything foreign with `git restore --staged --`, then `git commit -- packages/runner/src/providers/codex packages/testkit/src/providers/codex` and verify with `git show --stat`. BE AWARE: on the Claude adapter the harness auto-commit swept all 13 files into three FOREIGN tasks' commits before the worker's own commit ran (mem:gotcha-moe-wrapper-autocommit). If that happens again, verify content integrity with git show HEAD:<path> rather than rewriting history, and report it in the completion note — the epic rails forbid reset.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-observation.ts",
         "packages/runner/src/providers/codex/codex-capabilities.ts",
         "packages/runner/src/providers/codex/codex-render.ts",
         "packages/runner/src/providers/codex/codex-cancel-reconcile.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.js",
+        "packages/runner/src/providers/codex/codex-capabilities.js",
+        "packages/runner/src/providers/codex/codex-observation.js",
+        "packages/runner/src/providers/codex/codex-probe.js",
+        "packages/runner/src/providers/codex/codex-render-skills.js",
+        "packages/runner/src/providers/codex/codex-render.js",
+        "packages/runner/src/providers/codex/codex-stream-anomalies.js",
+        "packages/runner/src/providers/codex/codex-stream.js",
+        "packages/runner/src/providers/codex/codex-stream-anomalies.ts",
+        "packages/runner/src/providers/codex/codex-stream.test.ts"
+      ],
+      "note": "Adversarial review read all 17 tracked Codex/testkit modules plus the 8 bridges from task-start base 82f4a354 and walked concurrency, hostile inputs, environmental assumptions, side effects, and output authority. The adapter is pure/no process control/shared mutation; final records are deeply frozen and byte fields are digest-bound base64, while exact render assertions cover all 9 top-level and all 7 layer keys with authority NONE/advisoryOnly true and no command/effect/lease/verification affordance. Unproven/contradictory probe paths remain typed UNSUPPORTED or stable refusals. Whole-tree fence grep has zero hits for child_process/spawn/.kill/time/random sources. wc -l reports every production file <400 (runner 97-216 lines; testkit corpus 262); no debug/scratch/TODO/only/skip artifacts. Review found a real bounded-input crash: Math.max(...262144 sequences) raised RangeError. TDD added a production-surface maximum-count case (RED RangeError, GREEN 13/13) and replaced spread with an O(n) min/max fold. Fresh post-review runner was 37 files/1091 tests, testkit 19/239, both typechecks exit 0 (runner total drift includes concurrent foreign tests). The harness had already swept the first 17 files into foreign commits 20c41a4 and 878538b; history was not rewritten. Explicit-path commit e21a3c1 contains the 8 bridges and overflow repair/test. HEAD byte audit matches all 25 scoped files and scoped diff is clean.",
+      "startedAt": "2026-08-09T10:44:15.141Z",
+      "completedAt": "2026-08-09T10:50:05.646Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-064d1267",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -218,17 +246,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-09T10:37:21.632Z",
+  "updatedAt": "2026-08-09T11:35:45.008Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:02:08.922Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 9
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T11:35:45.008Z",
+    "wallClockMs": 146016086
   },
   "contextFetchedBy": [
     "architect-d89636d1",
     "architect-8a4a1764",
-    "worker-064d1267"
+    "worker-064d1267",
+    "qa-812c17a0",
+    "qa-b2df68b9"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -247,7 +279,9 @@
     "step-6",
     "step-7",
     "step-8",
-    "step-9"
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:12:36.679Z",
@@ -262,5 +296,42 @@
     "escalatedAt": "2026-08-09T10:13:51.078Z"
   },
   "planApprovedAt": "2026-08-09T10:12:38.732Z",
-  "workStartedAt": "2026-08-09T10:14:20.497Z"
+  "workStartedAt": "2026-08-09T10:14:20.497Z",
+  "reviewStartedAt": "2026-08-09T10:56:20.568Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "CLEAN_SNAPSHOT_HEAD=511f6565e7fbbe201caa16dbb82dd530f8f80f87\n=== EXACT COMMITTED-SNAPSHOT FINAL VERIFICATION ===\n\n RUN  v4.1.10 D:/tmp/moe-codex-verify-dl0j7skv\n\n Test Files  37 passed (37)\n      Tests  1041 passed (1041)\n   Duration  2.09s (transform 7.11s, setup 0ms, import 10.19s, tests 3.29s, environment 3ms)\n\n$ vitest run --root ../.. packages/runner/src\n\nFINAL_VERIFICATION_EXIT=0",
+    "reportedAt": "2026-08-09T10:56:20.568Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/codex/codex-observation.ts",
+    "packages/runner/src/providers/codex/codex-observation.test.ts",
+    "packages/runner/src/providers/codex/codex-capabilities.ts",
+    "packages/runner/src/providers/codex/codex-capabilities.test.ts",
+    "packages/runner/src/providers/codex/codex-probe.ts",
+    "packages/runner/src/providers/codex/codex-probe.test.ts",
+    "packages/runner/src/providers/codex/codex-stream-anomalies.ts",
+    "packages/runner/src/providers/codex/codex-stream.ts",
+    "packages/runner/src/providers/codex/codex-stream.test.ts",
+    "packages/testkit/src/providers/codex/codex-golden-streams.ts",
+    "packages/testkit/src/providers/codex/codex-golden-streams.test.ts",
+    "packages/runner/src/providers/codex/codex-render-skills.ts",
+    "packages/runner/src/providers/codex/codex-render.ts",
+    "packages/runner/src/providers/codex/codex-render.test.ts",
+    "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
+    "packages/runner/src/providers/codex/codex-reconcile.test.ts",
+    "packages/runner/src/providers/codex/codex-parity.test.ts",
+    "packages/runner/src/providers/codex/codex-cancel-reconcile.js",
+    "packages/runner/src/providers/codex/codex-capabilities.js",
+    "packages/runner/src/providers/codex/codex-observation.js",
+    "packages/runner/src/providers/codex/codex-probe.js",
+    "packages/runner/src/providers/codex/codex-render-skills.js",
+    "packages/runner/src/providers/codex/codex-render.js",
+    "packages/runner/src/providers/codex/codex-stream-anomalies.js",
+    "packages/runner/src/providers/codex/codex-stream.js"
+  ],
+  "completedAt": "2026-08-09T11:35:45.008Z",
+  "reviewCompletedAt": "2026-08-09T11:35:45.008Z",
+  "reviewSummary": "APPROVED. Re-ran task.verification: `pnpm --filter @moe/runner test` 37 files/1104 tests exit 0. Also testkit 19/239, both typechecks exit 0, repo-wide vitest 187 files/3317 passed +1 skipped, ZERO foreign red. Codex subtree 7 files/61 tests.\n\nDoD1: probe/observation deeply frozen (codex-probe.ts:67,90; codex-observation.ts:191); codex-capabilities.ts:180-182 collapses every unproven case to UNSUPPORTED/proofMethod NONE, RESUME pinned false, frozen UNPROVEN_PROBE_REPORT covers throwing/partial/hostile ports. DoD2: codex-parity.test.ts compares PRODUCTION surfaces of both providers, asserts non-empty BEFORE set-equality, drives EXITED/SIGNALLED/UNOBSERVED through both real reconcilers, compares outcomes over the shared exit table, pins the one intentional diff (CWD_OBSERVATION) with hand-written lists plus empty reverse-diff. DoD3: codex-render.test.ts:86-94 pins exact sorted key lists of envelope AND layerManifest entry; authority NONE, frozen, renderedBase64 never Uint8Array, no command/effect/lease field.\n\nRe-ran four mutation drills myself rather than trusting the worker's, restoring each by sha256sum -c: record() always SUPPORTED = 2 files/7 tests RED; closure sort removed = 1 RED; per-case raw sha256 nibble in the corpus DATA block = BOTH suites die at module load (runner 61->48, one file dead; testkit \"no tests\"); real delivery-order GAP rule = 3 RED. All restores byte-exact.\n\nRails: fence grep (child_process|spawn|.kill|Date.now|Math.random|new Date|performance.now|process.env) over the codex tree = ZERO hits. Largest production file 216 lines by wc -l. All 8 bridges exactly `export * from \"./<name>.ts\";` + LF, no CR, load under Node v24.16.0 with non-empty exports; testkit corpus correctly bridgeless per codex-golden-streams.test.ts:57. Owned paths clean, 25 files at HEAD, no scratch files. Auto-commit again split attribution across 20c41a4/878538b/e21a3c1; HEAD matches tree, history untouched. Per epic rail 5 task LOC not scored."
 }

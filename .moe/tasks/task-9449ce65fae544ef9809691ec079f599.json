@@ -16,7 +16,7 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,11 +25,11 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 4,
+  "order": 9,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T10:23:40.984Z",
+  "updatedAt": "2026-08-09T11:24:24.167Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]
