@@ -4,11 +4,13 @@ import type { JSX } from "react";
 import { TruthChip } from "../kernel.js";
 import type { ShellTruthPresentation } from "../kernel.js";
 import type {
+  DocumentDossierCandidate,
   DocumentDossierReadyState,
   DocumentDossierSource,
   DocumentDossierState,
-  DocumentWorkCandidate,
-} from "./document-preview-data.js";
+} from "./document-dossier-state.js";
+
+const DOSSIER_SOURCES_FRAGMENT = "cr-preview-source-index";
 
 function DossierHeader({ heading, origin, revision }: {
   readonly heading: string;
@@ -24,20 +26,20 @@ function DossierHeader({ heading, origin, revision }: {
 }
 
 function CandidateSource({ candidate, onOpen, source }: {
-  readonly candidate: DocumentWorkCandidate;
+  readonly candidate: DocumentDossierCandidate;
   readonly onOpen: (sourceId: string) => void;
   readonly source: DocumentDossierSource;
 }): JSX.Element {
   return (
     <a data-testid={`cr.preview.decomposition.source.${source.id}-${candidate.id}`}
-      href={`#cr-preview-source-${source.id}`} onClick={() => { onOpen(source.id); }}>
+      href={`#${DOSSIER_SOURCES_FRAGMENT}`} onClick={() => { onOpen(source.id); }}>
       {source.label}
     </a>
   );
 }
 
 function sourcesFor(
-  candidate: DocumentWorkCandidate,
+  candidate: DocumentDossierCandidate,
   sourcesById: ReadonlyMap<string, DocumentDossierSource>,
 ): readonly DocumentDossierSource[] {
   return candidate.sourceIds.map((sourceId) => {
@@ -50,7 +52,7 @@ function sourcesFor(
 }
 
 function CandidateCard({ candidate, onOpenSource, onProvenance, sourcesById }: {
-  readonly candidate: DocumentWorkCandidate;
+  readonly candidate: DocumentDossierCandidate;
   readonly onOpenSource: (sourceId: string) => void;
   readonly onProvenance: (
     context: string, shown: ShellTruthPresentation, sourceLabels: readonly string[],
@@ -151,7 +153,8 @@ function ReadyDossier({ state }: { readonly state: DocumentDossierReadyState }):
             ))}
           </div>
         </section>
-        <section aria-labelledby="cr-dossier-sources-title" className="cr-dossier-sources">
+        <section aria-labelledby="cr-dossier-sources-title" className="cr-dossier-sources"
+          id={DOSSIER_SOURCES_FRAGMENT}>
           <header>
             <span>Source material / lineage</span>
             <strong id="cr-dossier-sources-title">
@@ -160,8 +163,7 @@ function ReadyDossier({ state }: { readonly state: DocumentDossierReadyState }):
           </header>
           <ol className="cr-dossier-source-list">
             {state.sources.map((source) => (
-              <li data-testid={`cr.preview.dossier.source.${source.id}`}
-                id={`cr-preview-source-${source.id}`} key={source.id}>
+              <li data-testid={`cr.preview.dossier.source.${source.id}`} key={source.id}>
                 <details onToggle={(event) => { setSourceOpen(source.id, event.currentTarget.open); }}
                   open={openSources.has(source.id)}>
                   <summary><span>{source.label}</span><code>{source.path}</code></summary>
@@ -214,7 +216,8 @@ export function DocumentDossier({ state }: DocumentDossierProps): JSX.Element {
       data-authority={state.authority.toLowerCase()}
       data-state={state.status} data-testid="cr.preview.dossier">
       {state.status === "LOADING" ? <LoadingDossier /> : state.status === "ERROR"
-        ? <ErrorDossier code={state.code} layer={state.layer} /> : <ReadyDossier state={state} />}
+        ? <ErrorDossier code={state.code} layer={state.layer} />
+        : <ReadyDossier key={state.dossierIdentity} state={state} />}
     </section>
   );
 }

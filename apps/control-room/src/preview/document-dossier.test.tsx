@@ -3,8 +3,8 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DocumentDossier } from "./document-dossier.js";
+import type { DocumentDossierState } from "./document-dossier-state.js";
 import { PREVIEW_DOCUMENT_DOSSIER_STATE } from "./document-preview-data.js";
-import type { DocumentDossierState } from "./document-preview-data.js";
 
 afterEach(cleanup);
 
@@ -44,6 +44,7 @@ const READY: DocumentDossierState = Object.freeze({
     }),
   ]),
   decompositionTruthClass: "AGENT_REPORTED",
+  dossierIdentity: "retry-recovery@9ac1",
   heading: "Retry recovery dossier",
   originLabel: "Document intake · supplied result",
   planQualityTruthClass: "UNKNOWN",
@@ -96,6 +97,58 @@ describe("DocumentDossier supplied presentation", () => {
 
     await user.click(within(candidates[0]!).getByRole("link", { name: "Incident brief" }));
     expect((sources[1]!.querySelector("details") as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it("resets open source and provenance state when the supplied dossier identity changes", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<DocumentDossier state={READY} />);
+    const candidate = screen.getAllByTestId(/^cr\.preview\.decomposition\.task\./u)[0]!;
+
+    await user.click(within(candidate).getByRole("link", { name: "Incident brief" }));
+    await user.click(within(candidate).getByRole("button", {
+      name: /Provenance for Prove retry recovery/u,
+    }));
+    expect((screen.getByTestId("cr.preview.dossier.source.brief")
+      .querySelector("details") as HTMLDetailsElement).open).toBe(true);
+    expect(screen.getByTestId("cr.preview.dossier.provenance")).toBeDefined();
+
+    rerender(<DocumentDossier state={Object.freeze({
+      ...READY,
+      dossierIdentity: "retry-recovery@9ac2",
+      heading: "Replacement retry dossier",
+    })} />);
+
+    expect(screen.queryByTestId("cr.preview.dossier.provenance")).toBeNull();
+    expect((screen.getByTestId("cr.preview.dossier.source.brief")
+      .querySelector("details") as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it("keeps hostile supplied source ids out of DOM fragments while opening the source", async () => {
+    const user = userEvent.setup();
+    const hostileSourceId = `\"><script>alert("source")</script>#fragment`;
+    const hostileState: DocumentDossierState = Object.freeze({
+      ...READY,
+      candidates: Object.freeze([Object.freeze({
+        ...READY.candidates[0]!,
+        sourceIds: Object.freeze([hostileSourceId]),
+      })]),
+      dossierIdentity: "hostile-source-id",
+      sources: Object.freeze([Object.freeze({
+        ...READY.sources[0]!,
+        id: hostileSourceId,
+      })]),
+    });
+    const { container } = render(<DocumentDossier state={hostileState} />);
+    const sourceLink = screen.getByRole("link", { name: "Recovery acceptance" });
+
+    expect(sourceLink.getAttribute("href")).toBe("#cr-preview-source-index");
+    expect(container.querySelector("#cr-preview-source-index")).not.toBeNull();
+    expect([...container.querySelectorAll("[id]")]
+      .some((element) => element.id.includes(hostileSourceId))).toBe(false);
+
+    await user.click(sourceLink);
+    expect((screen.getByTestId(`cr.preview.dossier.source.${hostileSourceId}`)
+      .querySelector("details") as HTMLDetailsElement).open).toBe(true);
   });
 
   it("renders LOADING without stale fixture, source, candidate, or action content", () => {

@@ -15,8 +15,78 @@
     "Recipient roles use the closed @moe/coordination vocabulary and are scoped to one project and active session.",
     "No command, lifecycle, effect, or mailbox authority may be added."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE (read-only). The governor's unblock reason is explicit that you must not trust it — I checked it and it holds, but confirm before writing.\n\n  git ls-tree -r HEAD --name-only -- apps/daemon/src/identity   # session-authority* present?\n  ls apps/daemon/src/coordination/                              # expect: does NOT exist yet\n\nVERIFIED BY ME at HEAD: apps/daemon/src/identity/ carries session-authenticator.ts, session-authority.ts, session-authority-contracts.ts, session-authority-protocol.ts and session-authority-store.ts, each with a .js bridge, plus session-authenticator.test.ts and session-authority.test.ts. The authority the original block said would have to be invented EXISTS and is consumable. apps/daemon/src/coordination/ does not exist — this task creates it.\n\nPIN THE ENTRY POINTS YOURSELF, by name and never by line number (these files are new and moving):\n  createSessionAuthority        apps/daemon/src/identity/session-authority.ts:83\n  createSessionAuthenticator    apps/daemon/src/identity/session-authenticator.ts:85\n  SessionAuthoritySnapshot, MutationReceipt, ReplayReceipt, SessionAuthorityCode,\n  SessionAuthorityLayer (= SessionAuthLayer | \"DURABLE_STORE\")   session-authority-contracts.ts\nRead session-authority.ts before choosing which of the two surfaces yields the \"authenticated ACTIVE-SESSION result\" DoD 1 requires. The authenticator maps a credential to an AuthenticationResult; the authority owns the durable snapshot and receipts. DoD 1 wants the authority's active-session evidence, not a caller's claim.\n\nROOT-EXPORT RULE: apps/daemon/src/index.ts does NOT export the session-authority surface. Your owned file is inside the same package, so a RELATIVE import is legitimate and expected. If you find you need it on the package root, STOP — that is a global rail Clause 1 consumer-edge gap belonging in a narrow follow-on publish task (the task-6054520bc / task-f5d1dae629 pattern), never silently inside this one.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "UNDERSTAND THE CLOSED VOCABULARIES (read-only). Everything this task needs already exists in @moe/coordination — invent no code, layer or role.\n\n  COORDINATION_ROLES (coordination-contracts.ts:16), exactly four and closed:\n    \"CODER\", \"CONTROL_ROOM\", \"REVIEWER\", \"TERMINAL\"\n  CoordinationAddress (:73) IS the address grammar this task validates:\n    { readonly effectId: string | null; readonly role: CoordinationRole; readonly sessionId: string }\n  COORDINATION_LAYERS (:26): ADDRESS, AUTHENTICATION, CAPABILITY, CORRELATION, DECODE, MAILBOX, STORE\n  COORDINATION_CODES (:32+) already includes COORDINATION_RECIPIENT_UNKNOWN,\n    COORDINATION_AUTHENTICATION_FAILED, COORDINATION_REPLY_ADDRESS_MISMATCH and others —\n    read the full frozen list and pick from it. Adding a code is out of scope.\n\nDoD 4 requires each refusal to assert its exact code AND the REFUSING LAYER at the writer boundary. Choose the layer honestly per refusal: a malformed role or address refuses at ADDRESS; an unauthenticated or expired session refuses at AUTHENTICATION; a persistence failure refuses at STORE. A refusal that reports the wrong layer is as misleading as the wrong code, and taskRail-level guidance on this board is that where more than one layer can refuse, the test must pin WHICH one did.\n\nAlso read packages/store/src/sqlite-event-store.ts (class at :89) for the real append/read surface before designing the event and receipt flow. Do not assume a method name.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — write apps/daemon/src/coordination/recipient-registry.test.ts before any implementation. DoD 3 requires REAL FILE tests: create sessions and recipients ONLY through production writers, never by hand-crafting rows or events.\n\nCreate the SQLite store over a real temp path via mkdtemp under the OS temp root, never inside the repo, and remove it in an afterEach that runs on failure (recursive, forced — this host is win32). A leftover .sqlite file in a commit breaks the no-scratch-files rail.\n\nRED cases for register/replace/revoke, each pinning the EXACT code and refusing layer:\n  - Happy path: an authenticated ACTIVE session registers a recipient; a versioned registry event and its receipt commit; the resolver then reports the recipient as known.\n  - IDEMPOTENCE: the same register replayed commits no second event and returns the same receipt/digest — assert the digest equality and the unchanged event count, not merely that it did not throw.\n  - REPLACE bumps the version; REVOKE makes the recipient unknown to the resolver.\n  - UNAUTHENTICATED / expired / rotated session -> refuse at AUTHENTICATION, durable state UNCHANGED.\n  - Malformed role (outside the four COORDINATION_ROLES) and malformed address -> refuse at ADDRESS.\n  - CROSS-PROJECT record -> refuse; a record from another project gains no authority.\n  - REVOKED and UNKNOWN recipients resolve to unknown, never to a stale positive.\n\nDoD 3's hardest clause: RECREATE THE STORE AND REGISTRY from the same file and prove replay yields identical facts and digests. A registry that only works in the process that wrote it is not durable.\n\nDoD 4: generated role/address cases must assert a NONZERO case count — a sweep that silently produces zero cases passes while testing nothing.\n\nOn every refusal assert durable state is UNCHANGED (event count and digest identical before and after). \"It returned an error\" is not the property; \"it refused AND wrote nothing\" is.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/coordination/recipient-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN, part 1 — implement the WRITER half of apps/daemon/src/coordination/recipient-registry.ts plus its one-line sibling .js bridge.\n\nregister / replace / revoke each:\n  1. Accept ONLY an authenticated active-session result obtained from the durable session authority. Do not accept a caller-supplied session id, role or address as proof of anything — taskRail 1 is explicit that the registry reports durable evidence and never infers from caller presentation.\n  2. Validate the closed role/address grammar against COORDINATION_ROLES and the CoordinationAddress shape.\n  3. Commit an IDEMPOTENT VERSIONED registry event plus receipt through SqliteEventStore.\n\nIdempotence must be structural, not best-effort: derive a deterministic identity for the operation and make a replay a no-op returning the original receipt. Two concurrent registers of the same recipient must not produce two events.\n\nFAIL CLOSED EVERYWHERE, matching the model already set by session-authenticator.ts, which treats an unreadable ledger and an ambiguous credential as UNAUTHENTICATED rather than guessing. Mirror that: any uncertainty refuses with a code and layer and writes nothing.\n\nSCOPE FENCE — taskRail 3 forbids adding command, lifecycle, effect or mailbox authority. No send, read, ack, start, stop, admit or drain. This module registers and resolves addresses; nothing else.\n\n.js bridge is mandatory and its absence is invisible — it fails neither tsc nor vitest and breaks only the plain-Node entrypoint. Match the sibling bridges in apps/daemon/src/identity/ exactly, trailing LF included; verify with `od -c`.\n\nDoD 5 caps production files below 400 lines; target 250. Measure with `grep -c ''`, not PowerShell Measure-Object -Line (it skips blank lines). If the writer and resolver together approach the cap, split the resolver into its own module rather than shipping one oversized file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.ts",
+        "apps/daemon/src/coordination/recipient-registry.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/coordination/recipient-registry.ts",
+        "apps/daemon/src/coordination/recipient-registry.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN, part 2 — the FROZEN RESOLVER (DoD 2), the half most likely to be got subtly wrong.\n\nThe resolver derives known role/session facts ONLY from committed registry records and CURRENT session-authority records. Freeze the returned structure (Object.freeze) so a consumer cannot mutate resolved authority after the fact.\n\nSIX CATEGORIES MUST REMAIN UNKNOWN AND GAIN NO AUTHORITY: unknown, revoked, expired, rotated, malformed, and cross-project records. Each is a distinct path — test them separately, because collapsing them into one \"not found\" branch is exactly how a rotated or cross-project record later reads as merely absent instead of actively refused.\n\nThe two that hide: ROTATED means a session whose key or credential has since changed — a registry row that was valid at write time must not resolve against the new session. CROSS-PROJECT means the row belongs to another projectId; the session authority is project-scoped and the resolver must be too (taskRail 2).\n\nEXPIRY IS EXCLUSIVE. session-authenticator.ts pins this to @moe/core's isSessionUsableAt: a session is unusable at exactly expiresAt, not after it. Use the same boundary or the registry and the authenticator will disagree about one millisecond, and the test that catches it will look like a flake.\n\nThe resolver is a pure read over committed state — it must not write, and must not repair. If it encounters unreadable bytes it reports unknown and fails closed, as the ledger reader does.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD 3 durability proof — the clause that distinguishes this from an in-memory map.\n\nIn the test file, after writing through the production writers: CLOSE the store, RECREATE both the SqliteEventStore and the registry from the same file path, and re-resolve. Assert:\n  - the same recipients resolve to the same facts, byte-identical digests, and the same versions;\n  - a revoked recipient stays revoked across the recreate — revocation must be durable, not a runtime flag;\n  - replaying the committed events yields the exact receipt/digest sequence recorded the first time.\n\nAssert digests by exact equality, never by presence. A digest assertion that only checks a non-empty string passes while the digest changes on every run, which is the specific way this class of test rots.\n\nAlso prove the negative: an event log that was never written produces unknown, not an empty-but-authoritative answer. \"We looked and found nothing\" and \"we never looked\" must not be the same value — the same invariant the recovery-inventory slice enforces elsewhere in this repo.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 4 mutation drills — \"mutating each production authority guard turns the focused test red\" is an explicit DoD clause, not optional hygiene. Run each, confirm the NAMED case kills it, revert, confirm green before the next, and record the exact failing assertion.\n\n  1. Remove the authenticated-active-session check from register, letting a caller-supplied session through. The AUTHENTICATION refusal case must go RED.\n  2. Widen the role validation to accept a string outside COORDINATION_ROLES. The ADDRESS refusal case must go RED.\n  3. Drop the project scoping in the resolver. The cross-project case must go RED.\n  4. Make revocation non-durable (runtime-only). The recreate-the-store case from step 6 must go RED.\n  5. Break idempotence so a replay commits a second event. The digest/event-count equality must go RED.\n\nIf any drill leaves the suite GREEN, the corresponding assertion is detached from the guard it was written for — fix the test, not the drill.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it sits on disk; three such commits landed today (71af97c, a646660, 1e3057a). After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>` — a clean diff alone is not proof. Leave no drill residue.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "DoD 5 — verification and adversarial review. Run the exact three-leg command LAST, fresh and foreground:\n\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck\n\nNote the third leg is REPO-WIDE `pnpm typecheck`, so this task's gate deliberately reaches beyond its own package. Run it from the repo root: a package-local run prints a convincing false green with no `Scope:` line. Under the path-attributed baseline rail, record repo-wide failures at merge-base and at HEAD and require the (HEAD minus merge-base) failing set intersected with owned paths to be EMPTY; disclose foreign red verbatim with exact lines and paths. Foreign red inside @moe/daemon itself is a BLOCK, not a disclosure.\n\nAdversarial review before complete_task:\n- Did I add any command, lifecycle, effect or mailbox authority? taskRail 3 forbids it. No send/read/ack/start/stop/admit/drain.\n- Does the resolver infer anything from caller presentation rather than committed evidence? taskRail 1 forbids it.\n- Are all six unknown categories (unknown, revoked, expired, rotated, malformed, cross-project) separately tested, or did some collapse into one branch?\n- Does every refusal assert the exact code AND the refusing layer, and prove durable state UNCHANGED?\n- Do generated role/address cases assert a nonzero count?\n- Is expiry exclusive, matching isSessionUsableAt?\n- Is the .js bridge present with a trailing LF (od -c verified)?\n- Did I touch apps/daemon/src/index.ts? I must NOT have — a root publish is a separate follow-on task.\n- Production files below 400 lines, measured with `grep -c ''`.\n- No temp SQLite file or fixture directory left inside the repo.\n- Record task-4afcb06422ed4adb89430b7ea9758d7f as the named production consumer (global rail Clause 1). Do not land the consumer edge here.\n- Stage and commit by EXPLICIT pathspec over the three owned files only. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/recipient-registry.ts",
+        "apps/daemon/src/coordination/recipient-registry.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,9 +99,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:22.408Z",
-  "updatedAt": "2026-08-09T18:43:36.978Z",
+  "updatedAt": "2026-08-09T19:05:47.641Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:32:52.514Z"
+    "firstClaimAt": "2026-08-09T14:32:52.514Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 3
   },
   "contextFetchedBy": [
     "architect-db2146e3"
@@ -50,5 +122,25 @@
       "releasedBy": "architect-db2146e3",
       "reason": "Explicit planning handoff after measuring the absent session authority and daemon coordination dependency edge."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T19:05:45.591Z",
+  "planningNotes": {
+    "approachesConsidered": "BIND TO session-authenticator.ts VS session-authority.ts — the plan directs the worker to the AUTHORITY, not the authenticator, and to confirm by reading before choosing. session-authenticator.ts maps a credential to an AuthenticationResult; DoD 1 asks for \"an authenticated ACTIVE-SESSION result from the durable session authority\", which is the authority's durable evidence. Binding to the authenticator alone would accept a credential check as proof of an active durable session and would miss the rotated-session case entirely.\n\nPUBLISHING THE SESSION-AUTHORITY SURFACE ON THE DAEMON ROOT — REJECTED and fenced. apps/daemon/src/index.ts does not export it. The owned file is in the same package so a relative import is legitimate; if a root export turns out to be needed that is a Clause 1 consumer-edge gap for a narrow follow-on publish task (the task-6054520bc / task-f5d1dae629 pattern), never a silent widening here. The plan tells the worker to STOP rather than publish.\n\nONE MODULE VS SPLITTING THE RESOLVER — left to measurement. The owned paths name a single recipient-registry.ts, and DoD 5 caps production files below 400 lines. Writer plus frozen resolver may approach that, so step 4 instructs splitting the resolver into its own module if it does, rather than shipping one oversized file. Per the project rail, per-FILE size is the real constraint and a task made of small focused files is compliant.\n\nHAND-CRAFTING EVENTS OR ROWS IN TESTS — REJECTED by DoD 3, which requires sessions and recipients be created only through production writers. A test that seeds the store directly proves the resolver agrees with the test's idea of the schema, not with the writer's.\n\nCOLLAPSING THE SIX UNKNOWN CATEGORIES INTO ONE \"NOT FOUND\" BRANCH — REJECTED. unknown, revoked, expired, rotated, malformed and cross-project are separate paths in DoD 2; merging them is how a rotated or cross-project record later reads as merely absent rather than actively refused.",
+    "codebaseInsights": "MEASURED AT HEAD 2026-08-09. The governor's unblock reason is accurate on both halves — verified rather than trusted.\n\nSESSION AUTHORITY EXISTS AND IS TRACKED. git ls-tree -r HEAD -- apps/daemon/src/identity returns session-authenticator.ts, session-authority.ts, session-authority-contracts.ts, session-authority-protocol.ts, session-authority-store.ts each with a .js bridge, plus session-authenticator.test.ts and session-authority.test.ts, alongside the older session-contracts / session-ledger / session-read-model / session-services modules. The original block measured all of these ABSENT; that is closed.\n\napps/daemon/src/coordination/ DOES NOT EXIST. This task creates the directory and all three owned files.\n\nENTRY POINTS: createSessionAuthority (session-authority.ts:83) and createSessionAuthenticator (session-authenticator.ts:85, signature (store: SqliteEventStore, config: SessionAuthenticatorConfig) => Authenticator). Contracts module exports SessionAuthoritySnapshot, MutationReceipt, ReplayReceipt, SessionAuthorityCode, SessionAuthorityEventType and SessionAuthorityLayer = SessionAuthLayer | \"DURABLE_STORE\", plus SESSION_TTL_MS 15min, SESSION_ABSOLUTE_LIFETIME_MS 8h, SESSION_PROOF_MAX_AGE_MS 60s and SESSION_PROOF_MAX_FUTURE_SKEW_MS 30s.\n\nTHE FAIL-CLOSED MODEL TO COPY is written into session-authenticator.ts: an unreadable ledger returns UNAUTHENTICATED because \"a close may not have folded\", and two sessions sharing a credential hash return UNAUTHENTICATED rather than picking a winner. Mirror that discipline.\n\nEXPIRY IS EXCLUSIVE, pinned in that same file to @moe/core's isSessionUsableAt: unusable at exactly expiresAt. A registry using an inclusive bound will disagree with the authenticator by one millisecond and the failure will look like a flake.\n\nCLOSED VOCABULARIES, all in packages/coordination/src/coordination-contracts.ts — invent nothing. COORDINATION_ROLES (:16) is exactly [\"CODER\",\"CONTROL_ROOM\",\"REVIEWER\",\"TERMINAL\"]. CoordinationAddress (:73) is { effectId: string | null; role: CoordinationRole; sessionId: string } and IS the address grammar to validate. COORDINATION_LAYERS (:26) is [\"ADDRESS\",\"AUTHENTICATION\",\"CAPABILITY\",\"CORRELATION\",\"DECODE\",\"MAILBOX\",\"STORE\"]. COORDINATION_CODES (:32+) already carries COORDINATION_RECIPIENT_UNKNOWN, COORDINATION_AUTHENTICATION_FAILED and COORDINATION_REPLY_ADDRESS_MISMATCH among others.\n\nSTORE: SqliteEventStore is a class at packages/store/src/sqlite-event-store.ts:89. Its append/read method names were not pinned here — read the class before designing the event flow rather than assuming a name.\n\nGATE NOTE: the third leg is repo-wide `pnpm typecheck`, so this task's gate reaches beyond @moe/daemon. Run it from the repo root; a run from a subdirectory prints a false green with no Scope: line.",
+    "risks": "1. TRUSTING CALLER PRESENTATION. The single defect this task exists to prevent — the deliverable is a registry \"the coordination adapter can consume WITHOUT caller-injected positive recipient answers\". Any path where a caller-supplied session id, role or address becomes authority defeats the whole task.\n\n2. COLLAPSING THE SIX UNKNOWN CATEGORIES. rotated and cross-project are the two that hide inside a generic not-found branch and then silently read as absent rather than refused.\n\n3. INCLUSIVE VS EXCLUSIVE EXPIRY. Off by one millisecond against isSessionUsableAt; presents as an intermittent failure rather than a logic error.\n\n4. BEST-EFFORT IDEMPOTENCE. If replay protection is a lookup-then-write rather than a structural deterministic identity, two concurrent registers commit two events and the digest assertion fails only under load.\n\n5. A DIGEST ASSERTED BY PRESENCE. `expect(digest).toBeTruthy()` passes forever while the digest changes every run. DoD 3 wants exact equality across a store recreate.\n\n6. IN-REPO TEST ARTEFACTS. A temp SQLite file or fixture directory left inside the repo violates the no-scratch-files rail. Use mkdtemp under the OS temp root and clean up in an afterEach that runs on failure, recursive and forced, since this host is win32.\n\n7. SCOPE CREEP INTO MAILBOX OR LIFECYCLE. taskRail 3 forbids command, lifecycle, effect and mailbox authority. The COORDINATION_CONTROL_KINDS vocabulary is deliberately non-lifecycle and must not be extended here.\n\n8. THE .js BRIDGE. Missing it fails neither tsc nor vitest and breaks only the plain-Node entrypoint. Verify the trailing LF with od -c.\n\n9. SHARED WORKTREE. Foreign whole-tree commits landed three times today. An empty `git status` over owned paths is ambiguous between swept-into-a-foreign-commit and never-committed; resolve per file with `git rev-parse --verify HEAD:<path>`.",
+    "keyFiles": [
+      "apps/daemon/src/identity/session-authority.ts",
+      "apps/daemon/src/identity/session-authority-contracts.ts",
+      "apps/daemon/src/identity/session-authenticator.ts",
+      "packages/coordination/src/coordination-contracts.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "apps/daemon/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-09T19:05:47.641Z"
 }

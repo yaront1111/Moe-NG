@@ -18,8 +18,89 @@
     "Tests assert the exact stable reason code and the INVENTORY_ADAPTER layer, and assert non-zero generated class coverage.",
     "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE (read-only; this step writes nothing), then read the ruling that changes the shape of this task.\n\nI verified every primitive the description names. All are PRESENT and, unusually for this board, the description is ACCURATE on them — confirm anyway, the staleness rail binds in both directions:\n  packages/runner/src/supervisor/launch-lock.ts:29 LaunchLockRegistration, :64 parseLaunchLockRegistration, :76 bindsClaim, :90 registerLaunchLock\n  packages/runner/src/supervisor/process-observation.ts:21 BoundProcessObservation, :60 intakeProcessObservation\n  packages/runner/src/workspace/workspace-manifest.ts:62 buildInputManifest, :189 buildResultManifest\n  packages/runner/src/workspace/workspace-contract.ts:59 WorkspaceInputEntry, :66 WorkspaceInputManifest, :91 WorkspaceTreeEntry\n  packages/runner/src/providers/claude/claude-probe.ts:56 probeClaudeRuntime, :89 capabilityStatus\n  packages/runner/src/providers/codex/codex-probe.ts:93 probeCodexRuntime, :102 capabilityStatus\nSlice 1 is landed AND tracked at HEAD (git ls-tree confirms 7 files): recovery-inventory-contract.ts 207 lines, recovery-inventory-shape.ts 223, recovery-inventory.ts 378, recovery-inventory.test.ts 615, plus .js bridges.\n\n*** THE RULING — DO NOT EDIT THE SLICE-1 AGGREGATE. *** The description lists \"the two-line registration edit in the slice-1 aggregate\" as an owned path. Do NOT make that edit; there is nothing there to edit. recovery-inventory.ts:53 createRecoveryInventoryRegistry(registrations) takes an IMMUTABLE CALLER-SUPPLIED TUPLE, and its doc comment rejects the alternative in terms naming this exact hazard: \"Registration is an immutable caller-supplied tuple rather than a module-global registry: a global would be order-dependent, race-prone across concurrent collections, and would let a sibling adapter slice change this aggregate's behaviour by importing it.\" Slice 2 IS that sibling adapter slice. Instead each new module EXPORTS a RecoveryInventoryRegistration constant; tests compose their own registry and the daemon coordinator composes the real one. Your final diff must show ZERO changes to recovery-inventory.ts, index.ts and index-surface.test.ts.\n\nNAME COLLISION: capabilityStatus is exported by BOTH probe modules over different profile/capability types. Importing both unaliased will not compile — alias them (claudeCapabilityStatus / codexCapabilityStatus).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "UNDERSTAND THE SEAM before writing either enumerator (read-only step). Getting this wrong makes the tests assert against a helper instead of production, which epic rail 6 forbids.\n\nAn enumerator is `RecoveryInventoryEnumerator = (context: RecoveryInventoryEnumerationContext) => unknown` (recovery-inventory-contract.ts:157). It returns exactly one of three shapes, validated by readPortResult (recovery-inventory-shape.ts:202), typed as RecoveryInventoryPortReading (contract:171):\n  { status: \"ENUMERATED\", items: readonly unknown[], complete: boolean, negativeProofDigest: string | null }\n  { status: \"UNAVAILABLE\" }\n  { status: \"UNSUPPORTED\" }\n\nTHE ENUMERATOR DOES NOT MINT COVERAGE CODES. collectRecoveryInventory (recovery-inventory.ts:68) maps a reading to a RecoveryInventoryCoverageProof carrying code RECOVERY_INVENTORY_COVERAGE_UNKNOWN, layer INVENTORY_ADAPTER and one RecoveryInventoryUnknownReason. Your job is to return the honest reading; the aggregate produces the refusal. That is why every DoD 3 case must be asserted END-TO-END through collectRecoveryInventory, never by unit-testing a private mapping helper inside your module.\n\nVOCABULARIES ALREADY EXIST — INVENT NOTHING. Classes (contract:24): this slice owns PROVIDER_PROCESS_LAUNCH_LOCK and WORKSPACE only; GIT_INTEGRATION_ON_DISK and ARTIFACT_OBJECT_STAGING are slice 3's. Layers: exactly [\"INVENTORY_ADAPTER\"]. Truth: [\"COMPLETE\",\"UNKNOWN\"]. Unknown reasons (contract:57) already cover every DoD 3 case: ENUMERATOR_UNREGISTERED, ENUMERATOR_UNAVAILABLE, ENUMERATOR_FAILED, CAPABILITY_UNSUPPORTED, RESULT_MALFORMED, RESULT_TRUNCATED, RESULT_OVER_LIMIT, NEGATIVE_PROOF_MISSING, ITEM_REJECTED. Duplicate identity has its own code: RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE.\n\nCONSUME THESE SHAPE HELPERS, DO NOT REBUILD THEM: identityKey (shape:121) for duplicate detection, readInventoryItem (:164), readOpaqueRef (:71), readWindow (:85), readIdentity (:106). Item shape (contract:105): { class, projectTag, identity, observedAt, facts, sourceProofDigest }. Ceilings: MAX_RECOVERY_INVENTORY_ITEMS 4096, MAX_RECOVERY_INVENTORY_TEXT_CHARS 400, MAX_RECOVERY_INVENTORY_FACTS 32.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — write provider-lock-inventory.test.ts before any implementation. Drive every case through the real collectRecoveryInventory with a registry composed from the exported registration, so assertions land on the production surface.\n\nCover, pinning the EXACT reason code AND the INVENTORY_ADAPTER layer on each refusal (never merely \"it failed\"):\n  - Happy path: real launch-lock registrations and process observations enumerate to items bound to PROVIDER_PROCESS_LAUNCH_LOCK with stable external identity, observed disposition facts and a sourceProofDigest. COMPLETE only when completeness was actually proven.\n  - A QUIET PROCESS IS NOT ABSENCE — the most important case here. process-observation.ts states the rule: \"UNOBSERVED is not death. Only an observed exit or signal proves an end.\" An unobserved process must NOT be omitted and must NOT be reported as terminated; it either appears as an item carrying its unobserved disposition or drives UNKNOWN. Assert this explicitly.\n  - Empty probe result with no negative proof -> code RECOVERY_INVENTORY_COVERAGE_UNKNOWN, layer INVENTORY_ADAPTER, reason NEGATIVE_PROOF_MISSING. An empty list is never COMPLETE by itself.\n  - Absent/unsupported provider capability, driven through the real capabilityStatus returning \"UNSUPPORTED\" -> reason CAPABILITY_UNSUPPORTED.\n  - Port throws or unavailable -> ENUMERATOR_UNAVAILABLE. Over-ceiling -> RESULT_OVER_LIMIT. complete:false -> RESULT_TRUNCATED.\n  - Two entries claiming one external identity REFUSE rather than merge.\n\nPut test doubles at the port boundary the probes already define (input.port.report()), so the real probe and real capabilityStatus stay in the path under test. Do NOT reimplement probe authority in a fixture — taskRail 2 and epic rail 6 both forbid it. Assert a non-zero generated case count for the class so a sweep producing nothing cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN — implement provider-lock-inventory.ts plus its one-line sibling .js bridge.\n\nExport an enumerator and a `RecoveryInventoryRegistration` constant for class PROVIDER_PROCESS_LAUNCH_LOCK. Compose the three shipped authorities and add none of your own: probeClaudeRuntime / probeCodexRuntime with the aliased capabilityStatus for provider capability; parseLaunchLockRegistration and bindsClaim for launch-lock records; intakeProcessObservation for process disposition.\n\nIMPORT launch-lock.ts RELATIVELY from inside the package. It is deliberately unpublished — do NOT add it to the @moe/runner root seam, and do not edit index.ts or index-surface.test.ts at all; slice 1 owns that seam.\n\nFail closed on every uncertain branch: return UNAVAILABLE or UNSUPPORTED rather than an empty ENUMERATED, and set complete:false with a null negativeProofDigest when you cannot prove you saw everything. Never let a quiet process read as an ended one.\n\nTHE .js BRIDGE IS NOT OPTIONAL AND ITS ABSENCE IS INVISIBLE — omitting it fails neither tsc nor vitest and breaks only the plain-Node entrypoint. Match the existing sibling bridges exactly including the trailing LF; verify with `od -c`.\n\nTarget <=250 physical lines, split before 400, measured with `grep -c ''` (PowerShell Measure-Object -Line undercounts by skipping blank lines).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD RED then GREEN for the WORKSPACE class — workspace-inventory.test.ts, then workspace-inventory.ts plus its .js bridge.\n\nDoD 5 requires REAL TEMPORARY FILESYSTEM BYTES here, not an in-memory double: build actual manifests through the shipped buildInputManifest (workspace-manifest.ts:62) and buildResultManifest (:189) over a real temp directory, and bind each workspace item with the same class/identity/facts/sourceProofDigest discipline as the provider enumerator.\n\nCreate the temp directory with mkdtemp under the OS temp root, NEVER inside the repo — a stray fixture directory in a commit breaks epic rail 5's no-scratch-files clause. Remove it in an afterEach that runs even when the test fails, recursive and forced, since this host is win32.\n\nMandatory cases, each pinning the exact code and INVENTORY_ADAPTER layer:\n  - Two entries claiming one external identity REFUSE rather than merge — DoD 2 names this explicitly. Compare with identityKey (shape:121) and expect RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE, not silent last-writer-wins.\n  - Truncated or over-limit manifest results -> RESULT_TRUNCATED / RESULT_OVER_LIMIT.\n  - Missing negative proof on an empty workspace -> NEGATIVE_PROOF_MISSING, never COMPLETE.\nAssert a non-zero generated case count for the WORKSPACE class.\n\nSame rules as the provider module: relative imports, no root-seam edit, .js bridge with od -c verified trailing LF, <=250 lines target.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD 4 — prove the registration seam end to end, WITHOUT editing the aggregate (step 1 ruling).\n\nIn one of the two test files, compose a registry with createRecoveryInventoryRegistry([providerLockRegistration, workspaceRegistration]) and drive collectRecoveryInventory. Assert:\n  - Both classes report COMPLETE only when the enumerator actually proved completeness: items enumerated AND complete:true AND, for an empty result, a non-null negativeProofDigest.\n  - Every other case reports UNKNOWN with code RECOVERY_INVENTORY_COVERAGE_UNKNOWN at layer INVENTORY_ADAPTER and its specific reason.\n  - THE ABSENT-REGISTRATION CASE, which DoD 4 names explicitly: compose a registry OMITTING one of the two classes while it REMAINS in configuredClasses, and assert that class answers UNKNOWN with reason ENUMERATOR_UNREGISTERED. This is slice 1's \"we never looked\" invariant — the class must not vanish from the report.\n  - Partial items never upgrade a class to COMPLETE, and a later success never launders an earlier UNKNOWN.\n\nAssert coverage proofs by whole-object equality on class, truth, code, reason and layer — not by a .length or truthiness check, so an extra or swapped proof fails.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 5 mutation drills — coverage handling that cannot go red proves nothing. Run each drill, confirm the NAMED case kills it, revert, and confirm green before the next. Record the exact failing assertion for each.\n\n  1. Make the provider enumerator return { status: \"ENUMERATED\", items: [], complete: true, negativeProofDigest: null } for an empty probe. The NEGATIVE_PROOF_MISSING case must go RED — this is the \"an empty list is not COMPLETE\" invariant.\n  2. Make a quiet/unobserved process read as terminated. The unobserved-is-not-death case must go RED.\n  3. Make the workspace enumerator merge two entries sharing one external identity instead of refusing. The duplicate case must go RED naming RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE.\n  4. Drop one registration from the composed registry. The ENUMERATOR_UNREGISTERED case must go RED rather than the class silently disappearing from the report.\n\nBack up mutated bytes OUTSIDE the repo and restore with verified sha256 equality.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it sits on disk — three such commits landed today (71af97c, a646660, 1e3057a). After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof. Leave no drill residue.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "DoD 6 — verification and adversarial review. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test\n\nBoth legs must exit 0 with nonzero discovery. Recorded baseline on this package from the sibling task: 43 files / 1366 tests. Your run must show MORE files — two new test files. A flat file count means your tests never ran.\n\nPath-attributed baseline per project rail: record repo-wide failures at merge-base and at HEAD, require the (HEAD minus merge-base) failing set intersected with owned paths to be EMPTY, and disclose foreign red verbatim with exact lines and paths. Foreign red INSIDE @moe/runner is a BLOCK, not a disclosure — the baseline never excuses package-local red.\n\nAdversarial review before complete_task:\n- Did I edit recovery-inventory.ts, index.ts or index-surface.test.ts? I must NOT have. Confirm with `git diff --stat`.\n- Is launch-lock.ts still unpublished — absent from the root seam?\n- Does any test assert against a helper that reimplements probe, manifest or observation authority? That is the epic rail 6 defect; properties must go through collectRecoveryInventory or the shipped surface.\n- Does every refusal test pin the exact reason code AND the INVENTORY_ADAPTER layer, not merely that it refused?\n- Did each of the two classes generate at least one coverage case with a non-zero asserted count?\n- Both .js bridges present with trailing LF, od -c verified?\n- No temp fixture directory left inside the repo; no scratch or generated-evidence files in the diff.\n- Per-file line counts under 400, target 250, measured with `grep -c ''`.\n- GLOBAL RAIL CLAUSE 1: name daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa as the production consumer in your completion evidence. Do NOT land the consumer edge here.\n- Stage and commit by EXPLICIT pathspec over the six owned files only. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -39,5 +120,36 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T18:43:59.732Z"
+  "updatedAt": "2026-08-09T19:02:26.947Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T18:57:07.679Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T19:02:24.895Z",
+  "planningNotes": {
+    "approachesConsidered": "EDIT THE SLICE-1 AGGREGATE TO REGISTER THE TWO ENUMERATORS — REJECTED, and this is the plan's most important decision. The task description lists \"the two-line registration edit in the slice-1 aggregate\" among the owned paths, so a worker following it literally would edit recovery-inventory.ts. There is nothing there to edit: createRecoveryInventoryRegistry (recovery-inventory.ts:53) takes an immutable caller-supplied tuple, and the function's own doc comment rejects the alternative in terms that name this exact hazard — \"a global would be order-dependent, race-prone across concurrent collections, and would let a sibling adapter slice change this aggregate's behaviour by importing it.\" Slice 2 is precisely that sibling adapter slice. So each module exports a RecoveryInventoryRegistration constant, tests compose their own registry, and the daemon coordinator composes the real one. Zero aggregate edits, and slice 3 can land the same way without colliding.\n\nUNIT-TESTING A PRIVATE MAPPING HELPER FOR THE DoD 3 REFUSALS — REJECTED. Enumerators return a RecoveryInventoryPortReading; the aggregate mints the coverage proof, code and reason. Asserting refusals against a helper inside the new module would test a reimplementation of the aggregate's authority, which epic rail 6 and taskRail 2 both forbid. Every DoD 3 case is therefore driven end to end through collectRecoveryInventory.\n\nIN-MEMORY WORKSPACE DOUBLES — REJECTED. DoD 5 requires real temporary filesystem bytes for the workspace class, so manifests are built through the shipped buildInputManifest/buildResultManifest over a real mkdtemp directory outside the repo.\n\nREIMPLEMENTING PROBE AUTHORITY IN A FIXTURE — REJECTED. The probes already define their own port boundary (input.port.report()); doubles belong there, keeping the real probe and the real capabilityStatus inside the path under test.\n\nNOTE ON PLAN SIZE: an earlier submission was rejected at 11 distinct affectedFiles because I had declared read-only reference modules (the contract, shape, aggregate, probes, launch-lock, workspace manifest) as affected. They are READ, not written. affectedFiles now lists only the six files this task creates; the reference paths and their line numbers live in the step text. The deliverable is unchanged and matches the description exactly: two enumerator modules, two .js bridges, two focused tests. No SPIDR split is warranted — the task is correctly sized.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-09 18:5xZ. Unusually for this board, the description's \"MEASURED PRESENT\" list is ACCURATE — every named primitive exists at the stated module. Verify anyway; the staleness rail binds in both directions.\n\nDEFINITION SITES (a plain grep -rl hits CONSUMERS first for several of these, so use these): supervisor/launch-lock.ts:29 LaunchLockRegistration, :64 parseLaunchLockRegistration, :76 bindsClaim, :90 registerLaunchLock. supervisor/process-observation.ts:21 BoundProcessObservation, :60 intakeProcessObservation. workspace/workspace-manifest.ts:62 buildInputManifest, :189 buildResultManifest. workspace/workspace-contract.ts:59 WorkspaceInputEntry, :66 WorkspaceInputManifest, :91 WorkspaceTreeEntry. providers/claude/claude-probe.ts:56 probeClaudeRuntime, :89 capabilityStatus. providers/codex/codex-probe.ts:93 probeCodexRuntime, :102 capabilityStatus.\n\nNAME COLLISION: capabilityStatus is exported by BOTH probe modules over different profile/capability types. Importing both unaliased will not compile.\n\nSLICE 1 IS LANDED AND TRACKED AT HEAD (git ls-tree confirms all 7 files): recovery-inventory-contract.ts 207 lines, recovery-inventory-shape.ts 223, recovery-inventory.ts 378, recovery-inventory.test.ts 615, plus three .js bridges.\n\nTHE SEAM. RecoveryInventoryEnumerator = (context: RecoveryInventoryEnumerationContext) => unknown (contract:157). The return must be one of three shapes (contract:171, validated by readPortResult at shape:202): ENUMERATED { items, complete, negativeProofDigest } | UNAVAILABLE | UNSUPPORTED. collectRecoveryInventory (recovery-inventory.ts:68) turns a reading into a RecoveryInventoryCoverageProof carrying code, reason and layer. THE ENUMERATOR NEVER MINTS A CODE — which is why DoD 3 must be asserted through the aggregate.\n\nVOCABULARIES ALREADY EXIST — invent nothing. Classes (contract:24): PROVIDER_PROCESS_LAUNCH_LOCK and WORKSPACE for this slice; GIT_INTEGRATION_ON_DISK and ARTIFACT_OBJECT_STAGING belong to slice 3. Layers: exactly [\"INVENTORY_ADAPTER\"]. Truth: [\"COMPLETE\",\"UNKNOWN\"]. Eleven error codes including RECOVERY_INVENTORY_COVERAGE_UNKNOWN and RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE. Nine unknown reasons (contract:57) covering every DoD 3 case: ENUMERATOR_UNREGISTERED, ENUMERATOR_UNAVAILABLE, ENUMERATOR_FAILED, CAPABILITY_UNSUPPORTED, RESULT_MALFORMED, RESULT_TRUNCATED, RESULT_OVER_LIMIT, NEGATIVE_PROOF_MISSING, ITEM_REJECTED.\n\nSHAPE HELPERS TO CONSUME, NOT REBUILD: identityKey (shape:121) for duplicate detection, readInventoryItem (:164), readOpaqueRef (:71), readWindow (:85), readIdentity (:106). Item shape (contract:105): { class, projectTag, identity, observedAt, facts, sourceProofDigest }. Ceilings: MAX_RECOVERY_INVENTORY_ITEMS 4096, MAX_RECOVERY_INVENTORY_TEXT_CHARS 400, MAX_RECOVERY_INVENTORY_FACTS 32.\n\nTHE GOVERNING INVARIANT for the provider class is written in process-observation.ts itself: \"UNOBSERVED is not death. Only an observed exit or signal proves an end.\"\n\nPACKAGE BASELINE from the sibling task on @moe/runner: 43 files / 1366 tests, exit 0.",
+    "risks": "1. EDITING THE SLICE-1 AGGREGATE. The description invites it; the design forbids it. A registration edit inside recovery-inventory.ts recreates the module-global coupling slice 1 explicitly refused, and it would collide with slice 3 doing the same. The final diff must show zero changes to that file.\n\n2. TREATING SILENCE AS ABSENCE — the failure this entire class exists to prevent. A quiet process, an empty probe result, or an empty manifest must never read as COMPLETE. Any empty result needs a non-null negativeProofDigest or it is UNKNOWN with NEGATIVE_PROOF_MISSING.\n\n3. ASSERTING REFUSALS AGAINST A LOCAL HELPER instead of collectRecoveryInventory. The code and layer are minted by the aggregate; a test that checks a private mapping function proves only that the module agrees with itself.\n\n4. capabilityStatus COLLIDES between the two probe modules — alias both imports.\n\n5. THE .js BRIDGE IS INVISIBLE WHEN MISSING — it fails neither tsc nor vitest and breaks only the plain-Node entrypoint. Two are required; verify the trailing LF with od -c.\n\n6. TEMP DIRECTORIES ON WINDOWS. Use mkdtemp under the OS temp root, never inside the repo, and remove recursively and forcefully in an afterEach that runs on failure. A leftover fixture directory in a commit breaks epic rail 5.\n\n7. SHARED WORKTREE. Foreign whole-tree commits landed three times today (71af97c, a646660, 1e3057a). An empty `git status` over owned paths is AMBIGUOUS — swept into a foreign commit, or never committed. Resolve per file with `git rev-parse --verify HEAD:<path>`, and never amend, reset or stash a foreign commit.\n\n8. PUBLISHING launch-lock.ts. It is deliberately unpublished — import it relatively and keep it out of the root seam. This slice must not touch index.ts or index-surface.test.ts at all; slice 1 owns that seam and slice 3 is queued behind it.",
+    "keyFiles": [
+      "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts",
+      "packages/runner/src/recovery-inventory/recovery-inventory-shape.ts",
+      "packages/runner/src/recovery-inventory/recovery-inventory.ts",
+      "packages/runner/src/supervisor/launch-lock.ts",
+      "packages/runner/src/supervisor/process-observation.ts",
+      "packages/runner/src/workspace/workspace-manifest.ts",
+      "packages/runner/src/workspace/workspace-contract.ts",
+      "packages/runner/src/providers/claude/claude-probe.ts",
+      "packages/runner/src/providers/codex/codex-probe.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-09T19:02:26.947Z"
 }

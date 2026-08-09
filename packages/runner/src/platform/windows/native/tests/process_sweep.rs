@@ -16,8 +16,9 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 use moe_windows_job_core::{
-    ContainedProcess, CreatedProcess, Job, NativeError, NativeOp, ProcessCalls, ProcessSpec,
-    RawHandle, Win32Calls, INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
+    query_exit_status, wait_for_process, ContainedProcess, CreatedProcess, ExitStatus, Job,
+    NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit, WaitOutcome, Waited,
+    Win32Calls, INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
 };
 
 /// A Win32 handle value the scripted table hands out. Any nonzero value works;
@@ -34,6 +35,7 @@ const INHERITED: [RawHandle; INHERITED_HANDLE_COUNT] =
 /// fail rather than pass.
 const SCRIPTED_PID: u32 = 4_321;
 const SCRIPTED_CREATION_TIME: u64 = 0x01DB_0000_0000_0001;
+const SCRIPTED_IMAGE: &str = "C:\\Windows\\System32\\PING.EXE";
 
 /// Scripted Win32 + construction boundary: records an ordered call log, counts
 /// closes per handle and attribute-list deletions, and can be programmed to
@@ -52,6 +54,17 @@ struct ScriptedCalls {
     /// error with. With a single `fail_at` the cleanup always succeeds and the
     /// test proves nothing.
     close_failure: Cell<Option<u32>>,
+    /// What `wait_for_process` reports when the CALL itself succeeds. Three of
+    /// the four Win32 results are Ok values, so this is programmable rather
+    /// than being folded into `fail_at`.
+    wait_outcome: Cell<WaitOutcome>,
+    /// What `exit_code` reports. 259 is a legitimate value here, not a sentinel.
+    exit_code: Cell<u32>,
+    /// How many more processes `query_active_processes` reports before it
+    /// reaches zero, decremented on every call. `TerminateJobObject` returns
+    /// before its processes are gone, so a single sample would let a
+    /// sample-once implementation pass.
+    active_remaining: Cell<u32>,
     log: RefCell<Vec<&'static str>>,
     closes: RefCell<BTreeMap<isize, usize>>,
     next_handle: Cell<isize>,
@@ -66,6 +79,9 @@ impl ScriptedCalls {
             in_job: Cell::new(true),
             prior_suspend_count: Cell::new(1),
             close_failure: Cell::new(None),
+            wait_outcome: Cell::new(WaitOutcome::Signalled),
+            exit_code: Cell::new(0),
+            active_remaining: Cell::new(0),
             log: RefCell::new(Vec::new()),
             closes: RefCell::new(BTreeMap::new()),
             next_handle: Cell::new(FIRST_HANDLE),
@@ -96,6 +112,22 @@ impl ScriptedCalls {
     /// Every close from here on fails with `code`, whatever else is programmed.
     fn fail_closes_with(&self, code: u32) {
         self.close_failure.set(Some(code));
+    }
+
+    /// The wait CALL succeeds and reports this outcome. Distinct from
+    /// `failing(WaitForProcess, _)`, which is the call itself failing.
+    fn reporting_wait(&self, outcome: WaitOutcome) {
+        self.wait_outcome.set(outcome);
+    }
+
+    /// The exit-code CALL succeeds and reports this number.
+    fn reporting_exit_code(&self, code: u32) {
+        self.exit_code.set(code);
+    }
+
+    /// The Job reports this many live processes, counting down one per query.
+    fn reporting_active_processes(&self, count: u32) {
+        self.active_remaining.set(count);
     }
 
     /// Records the call, then fails it if this arm is the programmed one.
@@ -151,7 +183,9 @@ impl Win32Calls for ScriptedCalls {
 
     fn query_active_processes(&self, _job: RawHandle) -> Result<u32, NativeError> {
         self.arm(NativeOp::QueryAccounting, "accounting")?;
-        Ok(0)
+        let remaining = self.active_remaining.get();
+        self.active_remaining.set(remaining.saturating_sub(1));
+        Ok(remaining)
     }
 
     fn close_handle(&self, handle: RawHandle) -> Result<(), NativeError> {
@@ -228,6 +262,29 @@ impl ProcessCalls for ScriptedCalls {
     fn resume_thread(&self, _thread: RawHandle) -> Result<u32, NativeError> {
         self.arm(NativeOp::ResumeThread, "resume")?;
         Ok(self.prior_suspend_count.get())
+    }
+
+    fn wait_for_process(
+        &self,
+        _process: RawHandle,
+        _timeout_ms: u32,
+    ) -> Result<WaitOutcome, NativeError> {
+        self.arm(NativeOp::WaitForProcess, "wait")?;
+        Ok(self.wait_outcome.get())
+    }
+
+    fn exit_code(&self, _process: RawHandle) -> Result<u32, NativeError> {
+        self.arm(NativeOp::QueryExitCode, "exit-code")?;
+        Ok(self.exit_code.get())
+    }
+
+    fn terminate_process(&self, _process: RawHandle) -> Result<(), NativeError> {
+        self.arm(NativeOp::TerminateProcess, "terminate-process")
+    }
+
+    fn image_name(&self, _process: RawHandle) -> Result<Vec<u16>, NativeError> {
+        self.arm(NativeOp::QueryImageName, "image-name")?;
+        Ok(wide(SCRIPTED_IMAGE))
     }
 
     /// Counted rather than logged, and infallible: windows-sys gives
@@ -366,7 +423,7 @@ const CASES: [Case; 9] = [
 
 /// The nine construction operations this sweep owns, written by hand and kept
 /// INDEPENDENT of `CASES`, exactly as job_sweep.rs keeps `JOB_OPS`.
-const PROCESS_OPS: [NativeOp; 9] = [
+const CONSTRUCTION_OPS: [NativeOp; 9] = [
     NativeOp::InitAttributeList,
     NativeOp::SetJobListAttribute,
     NativeOp::SetHandleListAttribute,
@@ -376,6 +433,16 @@ const PROCESS_OPS: [NativeOp; 9] = [
     NativeOp::QueryProcessId,
     NativeOp::QueryCreationTime,
     NativeOp::ResumeThread,
+];
+
+/// The four lifecycle operations this sweep owns, on the same terms: written by
+/// hand, independent of `LIFECYCLE_CASES`, so a dead case fails rather than
+/// agreeing with itself.
+const LIFECYCLE_OPS: [NativeOp; 4] = [
+    NativeOp::WaitForProcess,
+    NativeOp::QueryExitCode,
+    NativeOp::TerminateProcess,
+    NativeOp::QueryImageName,
 ];
 
 /// How many operations tests/job_sweep.rs owns. Hand-written here too: an
@@ -602,4 +669,176 @@ fn a_failed_close_is_never_laundered_into_success() {
     assert_eq!(error.code(), 998);
     assert_eq!(calls.close_count(FIRST_HANDLE + 1), 1, "process handle not closed exactly once");
     assert_eq!(calls.close_count(FIRST_HANDLE + 2), 1, "thread handle not closed exactly once");
+}
+
+/// A healthy Job plus a healthy contained process over the same call table.
+///
+/// The lifecycle tests below are about what happens AFTER construction, so a
+/// refusal here is a broken fixture rather than the thing under test.
+fn healthy_pair(
+    calls: &ScriptedCalls,
+) -> (Job<'_, ScriptedCalls>, ContainedProcess<'_, ScriptedCalls>) {
+    let job = Job::create(calls).expect("healthy Job construction must succeed");
+    let storage = SpecStorage::new();
+    let contained = ContainedProcess::create(calls, &job, &storage.spec())
+        .expect("healthy construction must succeed");
+    (job, contained)
+}
+
+#[test]
+fn an_exit_query_with_no_prior_wait_is_unknown_and_never_a_number() {
+    // THE STILL_ACTIVE TRAP. GetExitCodeProcess answers 259 for a process that
+    // is still running AND for one that genuinely exited with 259, so the
+    // number means nothing until a wait has reported the process signalled.
+    // Reporting it anyway is unverifiable evidence gaining authority.
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_exit_code(7);
+    let (job, contained) = healthy_pair(&calls);
+
+    let status = query_exit_status(&calls, &contained, None)
+        .expect("an unknown exit is not a call failure");
+
+    assert_eq!(status, ExitStatus::Unknown(UnknownExit::NotWaited));
+    // Not merely "the answer was Unknown": the query must not have been MADE.
+    // Calling it and then discarding the number would still be reading an
+    // ambiguous value, and would leave the arm reachable without a wait.
+    assert!(!calls.calls().contains(&"exit-code"), "queried an exit code with no prior wait");
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
+fn an_exit_query_after_a_timed_out_wait_is_unknown() {
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_wait(WaitOutcome::TimedOut);
+    calls.reporting_exit_code(7);
+    let (job, contained) = healthy_pair(&calls);
+
+    let waited = wait_for_process(&calls, &contained, 500).expect("a timeout is an Ok value");
+    assert!(matches!(waited, Waited::TimedOut), "WAIT_TIMEOUT must not be an error");
+
+    let status = query_exit_status(&calls, &contained, Some(&waited))
+        .expect("an unknown exit is not a call failure");
+
+    assert_eq!(status, ExitStatus::Unknown(UnknownExit::StillRunning));
+    assert!(!calls.calls().contains(&"exit-code"), "queried an exit code for a running process");
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
+fn an_exit_query_after_an_abandoned_wait_is_unknown() {
+    // WAIT_ABANDONED is neither "it exited" nor "it is still running". Folding
+    // it into either neighbour would report an unknown state as a known one.
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_wait(WaitOutcome::Abandoned);
+    calls.reporting_exit_code(7);
+    let (job, contained) = healthy_pair(&calls);
+
+    let waited = wait_for_process(&calls, &contained, 500).expect("WAIT_ABANDONED is an Ok value");
+    assert!(matches!(waited, Waited::Abandoned));
+
+    let status = query_exit_status(&calls, &contained, Some(&waited))
+        .expect("an unknown exit is not a call failure");
+
+    assert_eq!(status, ExitStatus::Unknown(UnknownExit::WaitAbandoned));
+    assert!(!calls.calls().contains(&"exit-code"), "queried an exit code after WAIT_ABANDONED");
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
+fn an_exit_code_is_reported_only_after_a_wait_reported_signalled() {
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_wait(WaitOutcome::Signalled);
+    calls.reporting_exit_code(3);
+    let (job, contained) = healthy_pair(&calls);
+
+    let waited = wait_for_process(&calls, &contained, u32::MAX).expect("a healthy wait must succeed");
+    assert!(matches!(waited, Waited::Signalled(_)));
+
+    let status = query_exit_status(&calls, &contained, Some(&waited))
+        .expect("a healthy exit query must succeed");
+
+    match status {
+        ExitStatus::Exited(code) => assert_eq!(code.value(), 3),
+        other => panic!("a signalled wait must yield an exit code, got {other:?}"),
+    }
+    assert!(calls.calls().contains(&"exit-code"), "the exit code was fabricated, not queried");
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
+fn an_exit_code_of_259_is_reported_as_exited_not_as_still_active() {
+    // The lazy implementation is `if code == 259 { unknown }`, which blacklists
+    // a legitimate exit code forever. The discipline is the PRIOR WAIT, never
+    // the value: once the process is signalled, 259 means exited with 259.
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_wait(WaitOutcome::Signalled);
+    calls.reporting_exit_code(259);
+    let (job, contained) = healthy_pair(&calls);
+
+    let waited = wait_for_process(&calls, &contained, u32::MAX).expect("a healthy wait must succeed");
+    let status = query_exit_status(&calls, &contained, Some(&waited))
+        .expect("a healthy exit query must succeed");
+
+    match status {
+        ExitStatus::Exited(code) => assert_eq!(code.value(), 259, "STILL_ACTIVE was blacklisted"),
+        other => panic!("259 after a signalled wait is an exit code, got {other:?}"),
+    }
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+#[test]
+fn three_of_the_four_wait_results_are_ok_values() {
+    // WaitForSingleObject returns a WAIT_EVENT, not a BOOL. A production
+    // surface shaped as `!= WAIT_OBJECT_0 -> Err` passes an is_err() test and
+    // makes the suspended-process acceptance test unwritable.
+    let outcomes = [WaitOutcome::Signalled, WaitOutcome::TimedOut, WaitOutcome::Abandoned];
+    assert_eq!(outcomes.len(), 3, "the wait-outcome sweep generated no cases");
+
+    for outcome in outcomes {
+        let calls = ScriptedCalls::healthy();
+        calls.reporting_wait(outcome);
+        let (job, contained) = healthy_pair(&calls);
+
+        let waited = wait_for_process(&calls, &contained, 500)
+            .unwrap_or_else(|error| panic!("{outcome:?} must be an Ok value, got {error:?}"));
+
+        let matched = match (outcome, &waited) {
+            (WaitOutcome::Signalled, Waited::Signalled(_)) => true,
+            (WaitOutcome::TimedOut, Waited::TimedOut) => true,
+            (WaitOutcome::Abandoned, Waited::Abandoned) => true,
+            _ => false,
+        };
+        assert!(matched, "{outcome:?} was reported as the wrong observation");
+
+        contained.close().expect("healthy close must succeed");
+        job.close().expect("healthy close must succeed");
+    }
+}
+
+#[test]
+fn a_failed_wait_call_carries_the_operating_systems_error() {
+    // WAIT_FAILED is the ONLY result that becomes an error, and it carries the
+    // real GetLastError value rather than our code 0. Construction never waits,
+    // so the same table can be programmed to fail this arm from the start.
+    let calls = ScriptedCalls::failing(NativeOp::WaitForProcess, 6);
+    let (job, contained) = healthy_pair(&calls);
+
+    let error =
+        wait_for_process(&calls, &contained, 500).err().expect("a failed wait CALL must refuse");
+
+    assert_eq!(error.op(), NativeOp::WaitForProcess);
+    assert_eq!(error.code(), 6, "a failed call must carry the OS error, not our refusal code");
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
 }

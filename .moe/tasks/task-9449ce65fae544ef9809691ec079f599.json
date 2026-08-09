@@ -150,7 +150,7 @@
       "completedAt": "2026-08-09T18:42:53.162Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -196,11 +196,17 @@
       "author": "governor-42b952c9",
       "content": "GOVERNOR MEASUREMENT at HEAD 025dc49, taken 2026-08-09T17:0xZ. This supersedes the disk facts in comment-81c563fe and comment-7c5e228e — those were correct at HEAD 3ec53d7, which is now five commits behind. Verify it yourself; do not trust this paste.\n\nFOREIGN SWEEP. Commit 71af97c \"chore(workspace): release gate scripts, fault/security lanes, manifest hygiene\" captured this task's bytes in a whole-tree commit. Known hazard under the global rail, not your defect and not yours to repair. Do not amend it, reset, stash, or file an empty claiming commit.\n\nALL FIVE OWNED PATHS ARE AT HEAD (git rev-parse --verify HEAD:<path>, all resolved):\n  package.json, pnpm-lock.yaml, scripts/release/release-subject.mjs,\n  scripts/release/supply-chain.mjs, tests/integration/release-supply-chain.test.mjs\n`git status --porcelain` over all five: EMPTY. Note the trap — an empty owned-path diff means \"swept elsewhere\" OR \"never committed\". I resolved it the only way that distinguishes them, by rev-parsing each path at HEAD, and every one exists.\n\nTHE BLOCK CAUSE IS DEAD. package.json:32 has @cyclonedx/cdxgen 12.8.2 and pnpm-lock.yaml carries 57 matching cdxgen entries. Package and lock are COHERENT at HEAD, so the ERR_PNPM_OUTDATED_LOCKFILE that produced RELEASE_SUPPLY_CHAIN_REFUSED / FROZEN_INSTALL_FAILED no longer has its cause.\n\nYOUR CORePACK FIX LANDED. supply-chain.mjs at HEAD resolves corepack pnpm.js under the Node installation, rejects any entry escaping the Node root or not named pnpm.js, and spawns via process.execPath. No pnpm.exe call survives. The file is exactly 250 physical lines — at the per-file target, compliant. Verify, do not re-apply.\n\ncomment-295ee5 IS RESOLVED and needs no scope amendment. test:integration reaches your .mjs suite through a `node --test tests/integration/release-supply-chain.test.mjs` leg. vitest.config.ts was never edited and must not be — it is not an owned path, and its include is still only packages/**/*.test.ts and tests/**/*.test.ts.\n\nWHAT I DID NOT DO: I did not run `pnpm release:evidence`. Task rail 3 forbids generating a confirmatory corpus before the implementation commit is frozen as specified, and that run is step 7's job at the frozen SHA. Coherent package+lock at HEAD is a necessary condition for it, not proof that it passes. Expect to do real work at step 7.",
       "timestamp": "2026-08-09T18:18:07.459Z"
+    },
+    {
+      "id": "comment-df21d02ebcc94259b30b83b3fe4707c4",
+      "author": "qa-5be1a8d6",
+      "content": "QA verdict: APPROVE. Full evidence (summary field is capped, so it lives here).\n\nRE-RAN THE GATE MYSELF, foreground, unpiped: `pnpm verify:release` EXIT 0 at HEAD 0ff900a5e713ca971e7e7209942dce79e42631d6 — five commits PAST the worker's frozen 6daa942, so this is an independent reproduction, not a replay. Legs: typecheck:release 0; typecheck:packaging 0; vitest tests/integration 2 files / 40 tests; node --test release suite 41/41 pass 0 fail, including the real end-to-end \"records truthful evidence through the actual package script\" (17.9s); release:evidence 0.\n\nEMITTED RECORD, mechanically inspected at dist/release/0ff900a5.../d84344bc.../evidence.json:\n- source {sha1, 0ff900a5...} == HEAD. buildCount 2, componentCount 5, templateCount 3.\n- builds[0].containers === builds[1].containers byte-for-byte (5 components each: control-room, daemon, mcp-bridge, provider-claude, provider-codex), across two independent git-archive + fresh `pnpm install --frozen-lockfile` trees.\n- sourceDigests lockBefore == lockAfter and packageBefore == packageAfter — frozen install mutated nothing.\n- sbomRawDigest DIFFERS between builds (cd40e2b5 vs e0a3ba20) while sbomNormalizedDigest MATCHES (3ded5fab), with the three reviewed pointers and <SOURCE_ROOT> token disclosed in the record. That is DoD 2's \"record non-reproducible bytes honestly\", not absorbed drift.\n- sbom 383 components, audit 95 deps / 0 advisories, licenses 4 groups / 94 packages, each with its own digest, all bound under the source-SHA path.\n- os: win32 PASS only; linux + darwin UNKNOWN with reason SUPPORTED_OS_EVIDENCE_MISSING and deferred ids task-e87a7353 / task-e94b2055. doctor UNKNOWN with missingSymbol @moe/daemon.collectDoctorVersionReport. releaseVerdict UNKNOWN, publicationAuthorized false, operation RECORDED. No private-key bytes anywhere in the record; only publicKeyHex + EPHEMERAL_VERIFICATION_ONLY.\n- tools observed: node 24.16.0, pnpm 11.0.8, cdxgen 12.8.2, git 2.54.0, bsdtar 3.8.4.\n\nMY OWN MUTATION DRILL (epic rail 6 — I did not take the worker's matrix on trust). Byte-exact anchor replace on scripts/release/supply-chain.mjs, abort on anchor count != 1, `node --check` gate so a syntax error cannot fake a kill, targeted `--test-name-pattern` run, restore, hash compare. 5/5 KILLED, each pass=0 fail=1:\n1. drop the cdxgen pin from the toolchain check -> \"refuses observed cdxgen identity drift\" RED\n2. delete the darwin UNKNOWN row -> RED\n3. publicationAuthorized false -> true -> RED\n4. doctor status UNKNOWN -> PASS -> RED\n5. neuter `observed.sourceSha !== source.sourceSha` -> \"differs from the observed head\" RED\nRestored byte-exact: git hash-object == git rev-parse HEAD:path == ed329fe19adf, git status clean.\n\nSHARED-TREE ATTRIBUTION: no commit bearing this task id carries package.json / pnpm-lock.yaml / release-subject.mjs — foreign sweeps 3ec53d7 and 71af97c captured those bytes first. Per the shared-tree rail that is not a rejection reason; I verified by base-ref diff 3ec53d7..HEAD over the five owned paths and by blob equality (worktree == HEAD for all five). The four task-attributed commits (06abc8c, 1153ed3, 8946b02, d227f7b) touch ONLY supply-chain.mjs and the test file. No debug/probe/scratch files; dist/ is gitignored.\n\nPER-FILE CAP: release-subject.mjs 224, supply-chain.mjs 253, test 542. 253 is 3 over the <=250 target but far under the 400 split threshold, so it is compliant. Task-level LOC is not a bar.\n\nNON-BLOCKING NOTES for whoever touches this next — none of these is a DoD gap or rail violation, and none of them can turn a refusal into a pass:\n1. release-subject.mjs:22 RELEASE_REFUSAL_REASONS omits SOURCE_ARCHIVE_FAILED, which supply-chain.mjs:61,63,205 actually emits, and nothing imports or asserts the list. The declared vocabulary has already detached from production; a future reader will trust it. Worth either enforcing it in releaseRefusal() or asserting the set in the suite.\n2. supply-chain.mjs:237 — one blanket `catch` over the entire run body maps ANY exception to EVIDENCE_WRITE_INTERRUPTED, so an unrelated internal fault reports a durable-write cause it did not have. Fails closed, but mislabels.\n3. supply-chain.mjs:205 `\"code\" in archived` throws when an injected archiveSource returns undefined, landing in the blanket catch. Only reachable via a port injection.\n4. The two source-text regex tests (test file 498-510) assert implementation strings rather than behaviour. Justified here — they guard real-process details the injected-port suite cannot see — but they rot silently if the code is refactored.",
+      "timestamp": "2026-08-09T19:04:49.365Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T18:44:58.526Z",
+  "updatedAt": "2026-08-09T19:05:42.971Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-f39f0c46",
@@ -209,13 +215,16 @@
     "worker-4addc779",
     "worker-b6bbb60c",
     "governor-42b952c9",
-    "worker-97d6df26"
+    "worker-97d6df26",
+    "qa-5be1a8d6"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T11:40:28.540Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T19:05:42.971Z",
+    "wallClockMs": 26714431
   },
   "stepsCompleted": [
     "step-1",
@@ -296,5 +305,8 @@
     "tests/integration/release-supply-chain.test.mjs",
     "scripts/release/release-subject.mjs",
     "scripts/release/supply-chain.mjs"
-  ]
+  ],
+  "completedAt": "2026-08-09T19:05:42.971Z",
+  "reviewCompletedAt": "2026-08-09T19:05:42.971Z",
+  "reviewSummary": "APPROVE. Full evidence: comment-df21d02ebcc94259b30b83b3fe4707c4.\n\nGATE RE-RUN BY ME: `pnpm verify:release` EXIT 0, foreground, at HEAD 0ff900a5 — five commits PAST the worker's frozen 6daa942, so an independent reproduction. typecheck:release 0; typecheck:packaging 0; vitest tests/integration 40 tests; node --test release suite 41/41 pass 0 fail INCLUDING the real end-to-end package-script test (17.9s); release:evidence 0.\n\nEVIDENCE RECORD inspected mechanically: source sha == HEAD; 2 builds x 5 components x 3 templates; builds[0].containers === builds[1].containers byte-for-byte across two independent git-archive + fresh frozen installs (DoD 1,2); lock/package digests unchanged by install; sbomRawDigest DIFFERS per build while normalized matches, 3 reviewed pointers + <SOURCE_ROOT> token disclosed — drift recorded, not absorbed; sbom 383 components, audit 95 deps/0 advisories, licenses 4 groups/94 packages, each digest-bound under the source-SHA path (DoD 3); win32 PASS only, linux+darwin UNKNOWN with deferred ids, doctor UNKNOWN, releaseVerdict UNKNOWN, publicationAuthorized false, no private-key bytes. DoD 4: gates exit 0.\n\nMY OWN MUTATION DRILL (epic rail 6, not the worker's): byte-exact anchors, node --check gated, hash-verified restore. 5/5 KILLED, pass=0 fail=1 each — dropped cdxgen pin, deleted darwin row, publicationAuthorized true, doctor PASS, neutered source-SHA check. Restored to ed329fe19adf, git clean.\n\nSCOPE: base-ref diff 3ec53d7..HEAD over the five owned paths; worktree==HEAD for all five. package.json/lock/release-subject.mjs sit in foreign sweeps 3ec53d7/71af97c — not a rejection reason under the shared-tree rail. No publishConfig/files/bin. Per-file 224/253/542; 253 is under the 400 threshold."
 }

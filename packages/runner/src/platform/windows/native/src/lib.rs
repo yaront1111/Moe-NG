@@ -49,14 +49,23 @@
 // surface.
 mod handle;
 mod job;
+mod lifecycle;
 mod process;
+mod spec;
+mod unwind;
 mod win32;
 
 pub use handle::OwnedHandle;
 pub use job::Job;
-pub use process::{ContainedProcess, CreatedProcess, ProcessSpec};
+pub use lifecycle::{
+    query_exit_status, query_identity, terminate_process, wait_for_process,
+    wait_until_job_is_empty, ExitCode, ExitStatus, Identity, SignalledProof, UnknownExit, Waited,
+};
+pub use process::ContainedProcess;
+pub use spec::{CreatedProcess, ProcessSpec};
+pub use unwind::{unwind_after_membership, unwind_before_membership};
 pub use win32::{
-    NativeError, NativeOp, ProcessCalls, RawHandle, SystemWin32, Win32Calls, ATTRIBUTE_HANDLE_LIST,
-    ATTRIBUTE_JOB_LIST, EXPECTED_PRIOR_SUSPEND_COUNT, INHERITED_HANDLE_COUNT,
-    REQUIRED_LIMIT_FLAGS,
+    NativeError, NativeOp, ProcessCalls, RawHandle, SystemWin32, WaitOutcome, Win32Calls,
+    ATTRIBUTE_HANDLE_LIST, ATTRIBUTE_JOB_LIST, EXPECTED_PRIOR_SUSPEND_COUNT,
+    INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
 };

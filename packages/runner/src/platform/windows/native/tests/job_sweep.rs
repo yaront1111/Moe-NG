@@ -168,11 +168,14 @@ fn drive(case: &Case, calls: &ScriptedCalls) -> NativeError {
             let job = Job::create(calls).expect("construction must succeed");
             job.close().err().expect("close must refuse")
         }
-        // The construction-side ops belong to tests/process_sweep.rs and can
-        // never appear in CASES. Listed EXPLICITLY rather than caught by `_`:
-        // a wildcard would let a future job-side variant land in a silent
+        // The process-side ops belong to tests/process_sweep.rs and can never
+        // appear in CASES. Listed EXPLICITLY rather than caught by `_`: a
+        // wildcard would let a future job-side variant land in a silent
         // fallthrough, whereas this arm keeps "add a variant, break this match"
         // as a compile error — the same forcing function NativeOp exists for.
+        // The four lifecycle variants below arrived exactly that way and were
+        // added here because the compiler demanded it, which is the mechanism
+        // working rather than a cost of it.
         NativeOp::InitAttributeList
         | NativeOp::SetJobListAttribute
         | NativeOp::SetHandleListAttribute
@@ -181,8 +184,12 @@ fn drive(case: &Case, calls: &ScriptedCalls) -> NativeError {
         | NativeOp::IsProcessInJob
         | NativeOp::QueryProcessId
         | NativeOp::QueryCreationTime
-        | NativeOp::ResumeThread => {
-            panic!("{:?} is a construction op; tests/process_sweep.rs owns it", case.op)
+        | NativeOp::ResumeThread
+        | NativeOp::WaitForProcess
+        | NativeOp::QueryExitCode
+        | NativeOp::TerminateProcess
+        | NativeOp::QueryImageName => {
+            panic!("{:?} is a process op; tests/process_sweep.rs owns it", case.op)
         }
     }
 }

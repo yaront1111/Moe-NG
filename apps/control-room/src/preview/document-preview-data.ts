@@ -1,55 +1,8 @@
-/** Presentation input for one document in a supplied dossier result. */
-export interface DocumentDossierSource {
-  readonly excerpt?: string | undefined;
-  readonly id: string;
-  readonly label: string;
-  readonly path: string;
-}
-
-/** One advisory work candidate and the exact source ids that support it. */
-export interface DocumentWorkCandidate {
-  readonly id: string;
-  readonly role?: string | undefined;
-  readonly sourceIds: readonly string[];
-  readonly title: string;
-  readonly truthClass: unknown;
-}
-
-interface DocumentDossierAdvisoryState {
-  readonly advisoryOnly: true;
-  readonly authority: "NONE";
-}
-
-export interface DocumentDossierLoadingState extends DocumentDossierAdvisoryState {
-  readonly status: "LOADING";
-}
-
-export interface DocumentDossierErrorState extends DocumentDossierAdvisoryState {
-  readonly code: string;
-  readonly layer: string;
-  readonly status: "ERROR";
-}
-
-export interface DocumentDossierReadyState extends DocumentDossierAdvisoryState {
-  readonly admissionLabel: string;
-  readonly boundaryText: string;
-  readonly candidateSummaryLabel: string;
-  readonly candidates: readonly DocumentWorkCandidate[];
-  readonly decompositionTruthClass: unknown;
-  readonly heading: string;
-  readonly originLabel: string;
-  readonly planQualityTruthClass: unknown;
-  readonly provenanceNote: string;
-  readonly revisionLabel: string;
-  readonly sources: readonly DocumentDossierSource[];
-  readonly status: "READY";
-}
-
-/** Closed presentation state. Every arm is advisory and has zero authority. */
-export type DocumentDossierState =
-  | DocumentDossierLoadingState
-  | DocumentDossierReadyState
-  | DocumentDossierErrorState;
+import type {
+  DocumentDossierCandidate,
+  DocumentDossierReadyState,
+  DocumentDossierSource,
+} from "./document-dossier-state.js";
 
 const PREVIEW_DOCUMENT_SOURCES: readonly DocumentDossierSource[] = Object.freeze([
   Object.freeze({
@@ -72,7 +25,7 @@ const PREVIEW_DOCUMENT_SOURCES: readonly DocumentDossierSource[] = Object.freeze
   }),
 ]);
 
-const PREVIEW_WORK_CANDIDATES: readonly DocumentWorkCandidate[] = Object.freeze([
+const PREVIEW_WORK_CANDIDATES: readonly DocumentDossierCandidate[] = Object.freeze([
   Object.freeze({
     id: "recovery-contract",
     role: "Docs",
@@ -105,6 +58,7 @@ export const PREVIEW_DOCUMENT_DOSSIER_STATE: DocumentDossierReadyState = Object.
   candidateSummaryLabel: "3 sample work candidates · not submitted",
   candidates: PREVIEW_WORK_CANDIDATES,
   decompositionTruthClass: "AGENT_REPORTED",
+  dossierIdentity: "sample/docs@7f3a:stale-port-recovery",
   heading: "Stale-port recovery dossier",
   originLabel: "Document intake · development fixture",
   planQualityTruthClass: "UNKNOWN",

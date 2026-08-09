@@ -6,7 +6,7 @@
 //! public path.
 
 use super::{NativeError, RawHandle};
-use crate::process::{CreatedProcess, ProcessSpec};
+use crate::spec::{CreatedProcess, ProcessSpec};
 
 /// `PROC_THREAD_ATTRIBUTE_JOB_LIST`.
 ///
@@ -49,11 +49,39 @@ const _: () = assert!(
         == windows_sys::Win32::System::Threading::PROC_THREAD_ATTRIBUTE_HANDLE_LIST
 );
 
-/// The injectable process-construction boundary.
+/// What a wait on a process handle observed.
+///
+/// FOUR OUTCOMES, AND ONLY ONE OF THEM IS AN ERROR. `WaitForSingleObject`
+/// returns a `WAIT_EVENT`, NOT a `BOOL`, so the shape
+/// `if result != WAIT_OBJECT_0 { Err(..) }` is wrong:
+///
+/// * `WAIT_OBJECT_0` (0) — the process is signalled, i.e. it has exited.
+/// * `WAIT_TIMEOUT` (258) — the wait expired with the process still running.
+///   That is a legitimate observation and an `Ok` value; treating it as a
+///   failure makes "prove the suspended thread never ran" unwritable, because
+///   the timeout IS the proof.
+/// * `WAIT_ABANDONED` (128) — kept as its own case rather than folded into
+///   either neighbour: it is neither "it exited" nor "it is still running", and
+///   collapsing it would let an unknown state be reported as one of them.
+/// * `WAIT_FAILED` (`u32::MAX`) — the CALL failed. This one, and only this one,
+///   becomes `Err` with the real `GetLastError` value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitOutcome {
+    Signalled,
+    TimedOut,
+    Abandoned,
+}
+
+/// The injectable process-construction and lifecycle boundary.
 ///
 /// Split from [`super::Win32Calls`] rather than folded into it so a Job can
 /// still be created and verified without dragging process creation along, and
 /// so the construction sweep can fail one arm without needing a live Job.
+///
+/// The lifecycle arms below are on THIS trait rather than a third one because
+/// `ContainedProcess` is already bounded on `Win32Calls + ProcessCalls`; a
+/// separate trait would change that bound and every implementation of it, for
+/// no isolation the sweep does not already have.
 pub trait ProcessCalls {
     /// The attribute list, owned by the implementation.
     ///
@@ -102,6 +130,39 @@ pub trait ProcessCalls {
     /// non-collapse rule as [`Self::is_process_in_job`]: `Err` is the call
     /// failing, `Ok(n)` for `n != 1` is our refusal.
     fn resume_thread(&self, thread: RawHandle) -> Result<u32, NativeError>;
+
+    /// Waits up to `timeout_ms` for the process handle to be signalled.
+    ///
+    /// See [`WaitOutcome`]: three of the four `WAIT_*` results are `Ok`, and
+    /// only `WAIT_FAILED` is an `Err`. Pass `u32::MAX` (`INFINITE`) to wait
+    /// without a bound.
+    fn wait_for_process(
+        &self,
+        process: RawHandle,
+        timeout_ms: u32,
+    ) -> Result<WaitOutcome, NativeError>;
+
+    /// The raw value `GetExitCodeProcess` reports, with no interpretation.
+    ///
+    /// IT IS NOT AUTHORITATIVE ON ITS OWN. `STILL_ACTIVE` (259) comes back both
+    /// for a process that is still running and for one that genuinely exited
+    /// with code 259, and nothing about this call can tell them apart. Deciding
+    /// what the number means is the caller's job, and the caller is only
+    /// allowed to decide it after a wait reported [`WaitOutcome::Signalled`].
+    fn exit_code(&self, process: RawHandle) -> Result<u32, NativeError>;
+
+    /// Terminates the process this handle refers to.
+    ///
+    /// RETURNING `Ok` IS NOT PROOF THE PROCESS IS GONE. Termination is
+    /// asynchronous; the caller must wait on the same handle afterwards.
+    fn terminate_process(&self, process: RawHandle) -> Result<(), NativeError>;
+
+    /// The full path of the image this process is running, as UTF-16.
+    ///
+    /// Read from the LIVE handle rather than from anything the caller supplied,
+    /// so it reports what the kernel actually loaded. The value is returned to
+    /// the caller and never placed in a [`super::NativeError`] or a log.
+    fn image_name(&self, process: RawHandle) -> Result<Vec<u16>, NativeError>;
 
     /// Infallible by construction: windows-sys declares
     /// `DeleteProcThreadAttributeList` with no return type, so there is nothing

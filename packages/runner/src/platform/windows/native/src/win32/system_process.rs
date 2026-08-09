@@ -21,9 +21,10 @@ use windows_sys::Win32::System::Threading::{
     STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW,
 };
 
+use super::system_lifecycle;
 use super::system_process_attrs::{self, OwnedAttributeList};
 use super::{NativeError, NativeOp, ProcessCalls, RawHandle, SystemWin32};
-use crate::process::{CreatedProcess, ProcessSpec};
+use crate::spec::{CreatedProcess, ProcessSpec};
 
 pub(super) fn as_handle(handle: RawHandle) -> HANDLE {
     handle.value() as HANDLE
@@ -167,6 +168,26 @@ impl ProcessCalls for SystemWin32 {
             return Err(last_error(NativeOp::ResumeThread));
         }
         Ok(prior)
+    }
+
+    fn wait_for_process(
+        &self,
+        process: RawHandle,
+        timeout_ms: u32,
+    ) -> Result<super::WaitOutcome, NativeError> {
+        system_lifecycle::wait(process, timeout_ms)
+    }
+
+    fn exit_code(&self, process: RawHandle) -> Result<u32, NativeError> {
+        system_lifecycle::exit_code(process)
+    }
+
+    fn terminate_process(&self, process: RawHandle) -> Result<(), NativeError> {
+        system_lifecycle::terminate(process)
+    }
+
+    fn image_name(&self, process: RawHandle) -> Result<Vec<u16>, NativeError> {
+        system_lifecycle::image_name(process)
     }
 
     fn delete_attribute_list(&self, list: OwnedAttributeList) {

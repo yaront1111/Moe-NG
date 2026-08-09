@@ -14,8 +14,8 @@ use core::fmt;
 mod process_calls;
 
 pub use process_calls::{
-    ProcessCalls, ATTRIBUTE_HANDLE_LIST, ATTRIBUTE_JOB_LIST, EXPECTED_PRIOR_SUSPEND_COUNT,
-    INHERITED_HANDLE_COUNT,
+    ProcessCalls, WaitOutcome, ATTRIBUTE_HANDLE_LIST, ATTRIBUTE_JOB_LIST,
+    EXPECTED_PRIOR_SUSPEND_COUNT, INHERITED_HANDLE_COUNT,
 };
 
 /// The closed set of native operations that can fail.
@@ -46,6 +46,10 @@ pub enum NativeOp {
     QueryProcessId,
     QueryCreationTime,
     ResumeThread,
+    WaitForProcess,
+    QueryExitCode,
+    TerminateProcess,
+    QueryImageName,
 }
 
 impl NativeOp {
@@ -53,7 +57,7 @@ impl NativeOp {
     /// they actually produced against this, so an unreached arm is a test
     /// failure. The array LENGTH is part of the type, so adding a variant
     /// without listing it here does not compile.
-    pub const ALL: [NativeOp; 15] = [
+    pub const ALL: [NativeOp; 19] = [
         NativeOp::CreateJobObject,
         NativeOp::SetInformation,
         NativeOp::QueryInformation,
@@ -69,6 +73,10 @@ impl NativeOp {
         NativeOp::QueryProcessId,
         NativeOp::QueryCreationTime,
         NativeOp::ResumeThread,
+        NativeOp::WaitForProcess,
+        NativeOp::QueryExitCode,
+        NativeOp::TerminateProcess,
+        NativeOp::QueryImageName,
     ];
 }
 
@@ -172,3 +180,6 @@ mod system_process;
 
 #[cfg(windows)]
 mod system_process_attrs;
+
+#[cfg(windows)]
+mod system_lifecycle;

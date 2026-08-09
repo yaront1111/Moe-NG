@@ -1,57 +1,22 @@
-//! Putting a process INSIDE the Job, and proving it is there before it runs.
+//! Putting a process INSIDE the Job, proving it is there before it runs, and
+//! unwinding correctly when any of that fails.
 //!
-//! SCOPE. Construction only: attribute list, suspended creation, assignment,
-//! membership proof, live-handle identity proof, resume. Wait, exit query,
-//! terminate, the `ActiveProcesses == 0` query and the reverse-order unwind of
-//! an already-created child are deliberately ABSENT — they belong to sibling 2b
-//! (task-af99cf146c9b4f4d99b49d8c00caed63).
+//! SCOPE. Construction and its unwind. The value types that cross the FFI
+//! boundary live in `spec.rs`; wait, exit query, terminate and the
+//! `ActiveProcesses == 0` query live in `lifecycle.rs`; the two unwind regimes
+//! live in `unwind.rs` and are invoked from here, because `create` is the only
+//! place a partial-construction fault can be observed.
 
 use crate::handle::OwnedHandle;
 use crate::job::Job;
+use crate::spec::{validate, CreatedProcess, ProcessSpec};
+use crate::unwind::{unwind_after_membership, unwind_before_membership};
 use crate::win32::{
     NativeError, NativeOp, ProcessCalls, RawHandle, Win32Calls, EXPECTED_PRIOR_SUSPEND_COUNT,
-    INHERITED_HANDLE_COUNT,
 };
 
 /// Attributes on the creation list: `JOB_LIST` and `HANDLE_LIST`, exactly two.
 const ATTRIBUTE_COUNT: u32 = 2;
-
-/// Everything `CreateProcessW` needs, and nothing it does not.
-///
-/// DELIBERATELY NOT `Debug`, for the same reason [`RawHandle`] is not: every
-/// field here is either a raw handle or exactly the executable / command line /
-/// working directory / environment that must never reach an error or a log. A
-/// derived `Debug` is how that rail gets broken, so it must not compile.
-pub struct ProcessSpec<'a> {
-    /// `lpApplicationName`, NUL-terminated UTF-16, and NEVER null.
-    ///
-    /// Letting `CreateProcessW` parse the image out of the command line is the
-    /// classic unquoted-path hijack: `C:\Program Files\app.exe` also tries
-    /// `C:\Program.exe` first. An explicit application name has no such search.
-    pub application: &'a [u16],
-    /// `lpCommandLine`, NUL-terminated UTF-16.
-    pub command_line: &'a [u16],
-    /// `lpCurrentDirectory`, NUL-terminated UTF-16.
-    pub current_directory: &'a [u16],
-    /// `lpEnvironment`: a DOUBLE-NUL-terminated UTF-16 block, passed with
-    /// `CREATE_UNICODE_ENVIRONMENT`. Explicit rather than inherited, so the
-    /// child cannot silently pick up this process's environment.
-    pub environment: &'a [u16],
-    /// The ONLY handles the child may inherit: standard input, output, error.
-    ///
-    /// Fixed-size, so "exactly three" is carried by the type. This is what the
-    /// `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` allowlist is built from.
-    pub inherited: [RawHandle; INHERITED_HANDLE_COUNT],
-}
-
-/// The two handles `CreateProcessW` hands back.
-///
-/// Not `Debug`, same reason as [`ProcessSpec`]. Both handles are raw here for
-/// exactly as long as it takes the caller to wrap them in owners.
-pub struct CreatedProcess {
-    pub process: RawHandle,
-    pub thread: RawHandle,
-}
 
 /// A process that is provably inside the Job and has been allowed to run.
 ///
@@ -70,16 +35,15 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
     /// Creates a suspended process already inside `job`, proves it is there, and
     /// only then lets it run.
     ///
-    /// Membership is established TWICE on purpose. The attribute list makes it
-    /// atomic with creation, closing the window in which this process could die
-    /// between create and assign and strand an uncontained child. The explicit
-    /// `AssignProcessToJobObject` that follows is what keeps assignment failure
-    /// a separately observable arm rather than an invisible property of
-    /// creation. Neither is trusted: the membership PROOF is what gates resume.
+    /// TWO UNWIND REGIMES, SPLIT AT THE MEMBERSHIP PROOF. Which cleanup is
+    /// correct depends entirely on whether the Job has been proved to contain
+    /// the child, so the two are separate branches below and separate functions
+    /// in `unwind.rs`. See [`contain`] and [`identify`] for where the line falls.
     ///
     /// Every handle acquired here is owned from the moment it is returned, so
     /// any refusal below closes both of them exactly once on the way out, and
-    /// the first error is what the caller sees.
+    /// the first error is what the caller sees -- an unwind that fails cannot
+    /// replace it.
     pub fn create(
         calls: &'c C,
         job: &Job<'c, C>,
@@ -90,18 +54,40 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
         let process = OwnedHandle::new(created.process, calls);
         let thread = OwnedHandle::new(created.thread, calls);
 
-        calls.assign_process_to_job(process.raw(), job.handle())?;
-        prove_membership(calls, process.raw(), job.handle())?;
+        // PRE-MEMBERSHIP REGIME. A child now exists that nothing has yet proved
+        // the Job contains, so a fault here must terminate and await THAT
+        // PROCESS directly. Terminating the Job instead could succeed while
+        // leaving the child running with nothing left to name it.
+        if let Err(first) = contain(calls, process.raw(), job.handle()) {
+            // The unwind's own outcome is deliberately not allowed to replace
+            // `first`: a cleanup failure must not hide the reason the run
+            // failed. It is surfaced by `unwind_before_membership` itself,
+            // which returns an error carrying its own NativeOp.
+            let _ = unwind_before_membership(calls, process.raw());
+            return Err(first);
+        }
 
-        // Identity is read from the LIVE handle, before anything can exit. A
-        // PID alone is reused by Windows; a PID paired with the creation time
-        // of the process this handle refers to is not.
-        let pid = calls.process_id(process.raw())?;
-        let creation_time = calls.creation_time(process.raw())?;
+        // POST-MEMBERSHIP REGIME. The Job owns the child from here, so a fault
+        // must terminate the JOB and wait for it to empty -- which also covers
+        // any grandchild the child may already have spawned.
+        match identify(calls, process.raw(), thread.raw()) {
+            Ok((pid, creation_time)) => Ok(Self { process, thread, pid, creation_time }),
+            Err(first) => {
+                let _ = unwind_after_membership(job);
+                Err(first)
+            }
+        }
+    }
 
-        resume(calls, thread.raw())?;
-
-        Ok(Self { process, thread, pid, creation_time })
+    /// The ORIGINAL process handle, for the lifecycle module.
+    ///
+    /// `pub(crate)` for the same reason `OwnedHandle::raw` is: handing the value
+    /// out of the crate is what would let a second owner close it. A consumer
+    /// outside the crate can only pass the `ContainedProcess` itself, so every
+    /// lifecycle operation acts on the handle construction proved -- there is no
+    /// path that reopens a process by PID, and a PID is reused by Windows.
+    pub(crate) fn process_handle(&self) -> RawHandle {
+        self.process.raw()
     }
 
     pub fn pid(&self) -> u32 {
@@ -117,8 +103,8 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
     /// would leak it — and the FIRST error is what survives, so a later close
     /// cannot overwrite the reason the run failed.
     ///
-    /// This is the RAII completion only. Terminate, wait, exit query and the
-    /// reverse-order unwind protocol belong to sibling 2b.
+    /// This is the RAII completion only. Terminate, wait and the exit query are
+    /// in `lifecycle.rs`; the unwind protocol is in `unwind.rs`.
     pub fn close(self) -> Result<(), NativeError> {
         let thread = self.thread.close();
         let process = self.process.close();
@@ -126,35 +112,39 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
     }
 }
 
-/// Refuses a spec whose strings are not terminated the way `CreateProcessW`
-/// requires.
+/// Everything between `CreateProcessW` returning and membership being PROVEN.
 ///
-/// THIS IS A SOUNDNESS CHECK, NOT A POLICY ONE. [`ProcessSpec`]'s fields are
-/// `pub` slices that are handed straight to `unsafe` FFI as `PCWSTR`, and a
-/// Win32 string function reads until it finds a NUL. An empty or unterminated
-/// slice therefore makes the OS read past the end of the caller's allocation —
-/// undefined behaviour that no scripted test can catch, because the double
-/// dereferences nothing. Refusing here converts that into a stable refusal.
+/// Kept as one function so the pre-membership regime has exactly one boundary:
+/// every failure it can produce belongs to that regime, and adding a step here
+/// cannot silently move the boundary.
 ///
-/// Reported as [`NativeOp::CreateProcess`] with code 0: the create arm is what
-/// is being refused, and 0 is child 1's convention for "ours, not the operating
-/// system's". No call has reached the boundary at this point, so there is no
-/// Win32 error to carry, and the refusal is observable as the ABSENCE of every
-/// boundary call rather than only as an `Err`.
-fn validate(spec: &ProcessSpec<'_>) -> Result<(), NativeError> {
-    let refusal = NativeError::new(NativeOp::CreateProcess, 0);
-    for string in [spec.application, spec.command_line, spec.current_directory] {
-        if string.last() != Some(&0) {
-            return Err(refusal);
-        }
-    }
-    // The environment is a BLOCK: every entry is NUL-terminated and the block
-    // itself ends with one more NUL, so the last two units are always zero --
-    // including for an empty environment, which is exactly `[0, 0]`.
-    if spec.environment.len() < 2 || spec.environment[spec.environment.len() - 2..] != [0, 0] {
-        return Err(refusal);
-    }
-    Ok(())
+/// Membership is established TWICE on purpose. The attribute list made it atomic
+/// with creation; this explicit `AssignProcessToJobObject` is what keeps
+/// assignment failure a separately observable arm rather than an invisible
+/// property of creation. Neither is trusted -- the PROOF is what gates resume.
+fn contain<C: ProcessCalls>(
+    calls: &C,
+    process: RawHandle,
+    job: RawHandle,
+) -> Result<(), NativeError> {
+    calls.assign_process_to_job(process, job)?;
+    prove_membership(calls, process, job)
+}
+
+/// Everything after membership is proven: identity, then resume.
+///
+/// Identity is read from the LIVE handle, before anything can exit. A PID alone
+/// is reused by Windows; a PID paired with the creation time of the process this
+/// handle refers to is not.
+fn identify<C: ProcessCalls>(
+    calls: &C,
+    process: RawHandle,
+    thread: RawHandle,
+) -> Result<(u32, u64), NativeError> {
+    let pid = calls.process_id(process)?;
+    let creation_time = calls.creation_time(process)?;
+    resume(calls, thread)?;
+    Ok((pid, creation_time))
 }
 
 /// Prepares the attribute list, creates the suspended process, and deletes the
