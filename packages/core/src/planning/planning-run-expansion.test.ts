@@ -137,11 +137,20 @@ describe("planning run EXPANSION submission", () => {
     "parentRunRef", "proposalBaseHash", "sourceFingerprint", "workerHandoff.digest",
     "workerHandoff.ref"];
 
+  /** Reads `generation` or `workerHandoff.digest` out of a binding by its dotted field name. */
+  function at(binding: unknown, field: string): unknown {
+    const parts = field.split(".");
+    const head = (binding as Record<string, unknown>)[parts[0] ?? ""];
+    return parts.length === 1 ? head : (head as Record<string, unknown>)[parts[1] ?? ""];
+  }
+
   it("refuses an EXPANSION proposal deviating on any single bound hold identity field", () => {
     expect(Object.keys(CHANGED_HOLDS).sort()).toEqual(IDENTITY_FIELDS);
+    const bound = HOLD as unknown as Record<string, unknown>;
     for (const field of IDENTITY_FIELDS) {
       const deviation = CHANGED_HOLDS[field];
       expect(validExpansionHoldBinding(deviation)).toBe(true);
+      expect(at(deviation, field)).not.toEqual(at(bound, field));
       const result = unchanged(owned, () => reducePlanningRun(owned,
         expansionPropose({ expansion: deviation })));
       expectIllegal(result, "plan.propose", "PLANNING");
