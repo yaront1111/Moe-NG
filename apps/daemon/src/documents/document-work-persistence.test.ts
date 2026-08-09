@@ -165,6 +165,11 @@ describe("document-work proposal persistence", () => {
         "EXPECTED_VERSION_CONFLICT",
         "DURABLE_STORE",
       );
+      expectRefusal(
+        recordDocumentWorkProposal(store, input()),
+        "EXPECTED_VERSION_CONFLICT",
+        "DURABLE_STORE",
+      );
       expect(store.getAggregateVersion(documentWorkAggregateId(PROJECT_ID))).toBe(1);
     } finally {
       store.close();

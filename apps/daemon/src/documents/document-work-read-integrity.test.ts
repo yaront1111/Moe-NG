@@ -10,8 +10,11 @@ import {
 import {
   PROJECT_ID,
   appendRawEvent,
+  appendUnscopedRawEvent,
+  encoder,
   expectRefusal,
   input,
+  proposal,
 } from "./document-work-service-test-fixtures.js";
 
 type ReadStore = Parameters<typeof readLatestDocumentWorkDossier>[0];
@@ -50,10 +53,26 @@ describe("document-work dossier decision binding", () => {
   it("rejects a raw valid-payload event without a scoped decision", () => {
     const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
     try {
-      appendRawEvent(store);
+      appendUnscopedRawEvent(store);
       expectRefusal(
         readLatestDocumentWorkDossier(store, PROJECT_ID),
         "DOCUMENT_WORK_DOSSIER_DECISION_MISMATCH",
+        "DAEMON_READ_MODEL",
+      );
+    } finally {
+      store.close();
+    }
+  });
+
+  it("rejects stored proposal bytes that are valid JSON but not normalized", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      appendRawEvent(store, {
+        payload: encoder.encode(`${JSON.stringify(proposal())} `),
+      });
+      expectRefusal(
+        readLatestDocumentWorkDossier(store, PROJECT_ID),
+        "DOCUMENT_WORK_DOSSIER_PAYLOAD_INVALID",
         "DAEMON_READ_MODEL",
       );
     } finally {
@@ -68,6 +87,9 @@ describe("document-work dossier decision binding", () => {
     ["request hash", (event: StoredEvent) => ({
       ...event, decisionTrace: { ...event.decisionTrace!, requestSha256: "f".repeat(64) },
     })],
+    ["receipt request hash", (event: StoredEvent) => ({
+      ...event, requestSha256: "f".repeat(64),
+    })],
     ["command identity", (event: StoredEvent) => ({
       ...event, decisionTrace: { ...event.decisionTrace!, commandId: "forged-command" },
     })],
@@ -77,6 +99,9 @@ describe("document-work dossier decision binding", () => {
     ["event identity", (event: StoredEvent) => ({ ...event, eventId: "forged-event" })],
     ["aggregate identity", (event: StoredEvent) => ({
       ...event, aggregateId: documentWorkAggregateId("other-project"),
+    })],
+    ["decision time", (event: StoredEvent) => ({
+      ...event, committedAt: "2026-08-09T18:00:01.000Z",
     })],
   ] as const)("rejects a forged tail %s", (_label, event) => {
     const subject = transformedStore({ event });

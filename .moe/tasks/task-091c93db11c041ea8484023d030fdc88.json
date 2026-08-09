@@ -77,7 +77,7 @@
     {
       "stepId": "step-5",
       "description": "TDD RED then GREEN for the WORKSPACE class — workspace-inventory.test.ts, then workspace-inventory.ts plus its .js bridge.\n\nDoD 5 requires REAL TEMPORARY FILESYSTEM BYTES here, not an in-memory double: build actual manifests through the shipped buildInputManifest (workspace-manifest.ts:62) and buildResultManifest (:189) over a real temp directory, and bind each workspace item with the same class/identity/facts/sourceProofDigest discipline as the provider enumerator.\n\nCreate the temp directory with mkdtemp under the OS temp root, NEVER inside the repo — a stray fixture directory in a commit breaks epic rail 5's no-scratch-files clause. Remove it in an afterEach that runs even when the test fails, recursive and forced, since this host is win32.\n\nMandatory cases, each pinning the exact code and INVENTORY_ADAPTER layer:\n  - Two entries claiming one external identity REFUSE rather than merge — DoD 2 names this explicitly. Compare with identityKey (shape:121) and expect RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE, not silent last-writer-wins.\n  - Truncated or over-limit manifest results -> RESULT_TRUNCATED / RESULT_OVER_LIMIT.\n  - Missing negative proof on an empty workspace -> NEGATIVE_PROOF_MISSING, never COMPLETE.\nAssert a non-zero generated case count for the WORKSPACE class.\n\nSame rules as the provider module: relative imports, no root-seam edit, .js bridge with od -c verified trailing LF, <=250 lines target.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts",
@@ -88,25 +88,39 @@
         "packages/runner/src/recovery-inventory/workspace-inventory.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.js"
       ],
-      "startedAt": "2026-08-09T19:20:47.046Z"
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.ts",
+        "packages/runner/src/recovery-inventory/workspace-inventory.js"
+      ],
+      "note": "RED THEN GREEN, and this time the red was observed and recorded. I wrote workspace-inventory.test.ts first, then landed a STUB whose enumerator returned UNAVAILABLE unconditionally, and ran it: \"Tests 9 failed | 4 passed (13)\" with the failures naming the right assertions - two arms expecting COMPLETE got UNKNOWN, the duplicate arm died on \"expected an enumeration, got UNAVAILABLE\", and the four reason-specific arms failed comparing UNKNOWN reasons. Only the three genuinely-UNAVAILABLE arms passed, which is exactly the shape a correct stub should leave. Then I replaced the stub with the real enumerator: 13/13 green, and the whole recovery-inventory directory is 89/89 across 3 files.\n\nREAL BYTES, NOT A DOUBLE: every workspace is an mkdtempSync(join(tmpdir(), \"moe-recovery-ws-\")) directory OUTSIDE the repo, with files actually written; afterEach removes it with rmSync recursive+force so it runs on failure too. The production enumerator does the walk itself (readdir recursive + readFile + sha256Hex) and seals through the shipped buildInputManifest / buildResultManifest. The test never builds a manifest itself.\n\nONE MEASURED CORRECTION TO THE PLAN. Step 5 says to compare with identityKey (shape:121); my first draft applied identityKey directly to the two raw identities and went red: \"expected 'PATH ws/alpha/alpha.txt' to be 'PATH ws\\alpha/alpha.txt'\". identityKey does NOT normalize - readIdentity (shape:106) does, and admitItems composes readIdentity THEN identityKey. Fixed the test to use the same composition the aggregate uses, so the property is asserted against the production normalizer rather than a convenient one.\n\nCases (11 generated coverage cases asserted by an exact count):\n- happy path over two real files incl. a nested one: identities ws/alpha/alpha.txt and ws/alpha/nested/beta.txt (proves real recursion), byteLength 5 and 4 matching the bytes written, distinct hex64 sha256 facts, sourceProofDigest hex64, exact whole-facts equality, COMPLETE.\n- result aspect: a second OPAQUE row workspace-result:ws/alpha with inheritedCount 1 / authoredCount 0, sealed through buildResultManifest against a sealed ScopeObservation.\n- DUPLICATE, two arms: the shipped readIdentity folds \"ws/alpha\" and \"ws\\alpha\" onto one key while the raw spellings differ, and end to end the aggregate answers RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE + ITEM_REJECTED with 0 items admitted. The enumerator deliberately does not dedupe.\n- NEGATIVE_PROOF_MISSING when nothing was sealed at all; COMPLETE with a hex64 negativeProofDigest when an existing empty root was walked and sealed.\n- RESULT_TRUNCATED twice: an unreadable/absent root, and a lister that cannot prove it saw every workspace.\n- ENUMERATOR_UNAVAILABLE three ways: lister throws, input manifest refuses to seal (bad baseIdentity), result manifest refuses to seal (authored path out of scope).\n- RESULT_OVER_LIMIT at exactly 4097 rows, array length asserted first.\n\nDESIGN NOTE FOR QA - the negative proof is a sealed digest, never a flag. listingComplete:true with zero workspaces produces nothing verifiable, so it is NEGATIVE_PROOF_MISSING; a root that was walked and sealed empty is COMPLETE because the empty manifest's digest is the artefact that proves someone looked. That is the distinction taskRail 1 asks for.\n\nPer-file counts by grep -c '': workspace-inventory.ts 250, provider-lock-inventory.ts 248 - both at/under the 250 target. .js bridge verified with od -c, trailing LF present. index.ts and index-surface.test.ts untouched.",
+      "startedAt": "2026-08-09T19:20:47.046Z",
+      "completedAt": "2026-08-09T19:28:27.577Z"
     },
     {
       "stepId": "step-6",
       "description": "DoD 4 — prove the registration seam end to end, WITHOUT editing the aggregate (step 1 ruling).\n\nIn one of the two test files, compose a registry with createRecoveryInventoryRegistry([providerLockRegistration, workspaceRegistration]) and drive collectRecoveryInventory. Assert:\n  - Both classes report COMPLETE only when the enumerator actually proved completeness: items enumerated AND complete:true AND, for an empty result, a non-null negativeProofDigest.\n  - Every other case reports UNKNOWN with code RECOVERY_INVENTORY_COVERAGE_UNKNOWN at layer INVENTORY_ADAPTER and its specific reason.\n  - THE ABSENT-REGISTRATION CASE, which DoD 4 names explicitly: compose a registry OMITTING one of the two classes while it REMAINS in configuredClasses, and assert that class answers UNKNOWN with reason ENUMERATOR_UNREGISTERED. This is slice 1's \"we never looked\" invariant — the class must not vanish from the report.\n  - Partial items never upgrade a class to COMPLETE, and a later success never launders an earlier UNKNOWN.\n\nAssert coverage proofs by whole-object equality on class, truth, code, reason and layer — not by a .length or truthiness check, so an extra or swapped proof fails.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/workspace-inventory.test.ts"
+      ],
+      "note": "DoD 4 proven end to end WITHOUT touching the aggregate. Added a \"registration seam for both classes\" block to workspace-inventory.test.ts that composes createRecoveryInventoryRegistry([providerLockInventoryRegistration(...), workspaceInventoryRegistration(...)]) - exactly the caller-supplied tuple the daemon coordinator will build - and drives collectRecoveryInventory with BOTH classes configured. 17/17 green in the file, typecheck exit 0.\n\nEvery arm asserts the WHOLE proof list by deep equality on {class, truth, code, reason, layer} in vocabulary order, not by .length or truthiness, so an extra, missing or swapped proof fails:\n- both registered and both provable -> [PROVIDER COMPLETE, WORKSPACE COMPLETE], report coverage COMPLETE, 2 items.\n- workspace omitted from the tuple while still in configuredClasses -> [PROVIDER COMPLETE, WORKSPACE UNKNOWN/RECOVERY_INVENTORY_COVERAGE_UNKNOWN/ENUMERATOR_UNREGISTERED/INVENTORY_ADAPTER]. The class does NOT vanish from the report - that is slice 1's \"we never looked\" invariant.\n- the mirror case with the provider omitted, so neither class can pass by being the one that happens to be registered.\n- LAUNDERING: provider truncated by an UNOBSERVED process while workspace proves COMPLETE -> coverage UNKNOWN, provider itemCount 0, workspace itemCount 1, and report.items.map(class) === [\"WORKSPACE\"]. A later COMPLETE cannot lift the earlier UNKNOWN, and the truncated class contributes no partial rows.\n\nCOMPLETE is only ever asserted where completeness was actually proven: rows enumerated AND complete:true, or - for the empty workspace arm earlier in the file - a non-null hex64 negativeProofDigest.\n\nThe coverage sweep guard moved to the end of the file (vitest runs describes in declaration order, so a sweep declared before these arms would have counted them as zero) and now pins exact hand-written totals: 15 WORKSPACE cases and 4 PROVIDER_PROCESS_LAUNCH_LOCK cases, plus a non-zero overall assertion. Deleting any arm fails the file rather than silently shrinking the sweep.\n\nAggregate untouched: no edit to recovery-inventory.ts, index.ts or index-surface.test.ts.",
+      "startedAt": "2026-08-09T19:28:31.220Z",
+      "completedAt": "2026-08-09T19:29:45.239Z"
     },
     {
       "stepId": "step-7",
       "description": "DoD 5 mutation drills — coverage handling that cannot go red proves nothing. Run each drill, confirm the NAMED case kills it, revert, and confirm green before the next. Record the exact failing assertion for each.\n\n  1. Make the provider enumerator return { status: \"ENUMERATED\", items: [], complete: true, negativeProofDigest: null } for an empty probe. The NEGATIVE_PROOF_MISSING case must go RED — this is the \"an empty list is not COMPLETE\" invariant.\n  2. Make a quiet/unobserved process read as terminated. The unobserved-is-not-death case must go RED.\n  3. Make the workspace enumerator merge two entries sharing one external identity instead of refusing. The duplicate case must go RED naming RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE.\n  4. Drop one registration from the composed registry. The ENUMERATOR_UNREGISTERED case must go RED rather than the class silently disappearing from the report.\n\nBack up mutated bytes OUTSIDE the repo and restore with verified sha256 equality.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it sits on disk — three such commits landed today (71af97c, a646660, 1e3057a). After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof. Leave no drill residue.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T19:29:48.917Z"
     },
     {
       "stepId": "step-8",
@@ -140,12 +154,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T19:20:47.046Z",
+  "updatedAt": "2026-08-09T19:29:48.917Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T18:57:07.679Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -154,7 +168,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T19:02:24.895Z",

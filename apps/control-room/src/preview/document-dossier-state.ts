@@ -45,7 +45,8 @@ const INVALID_DOSSIER_STATE: DocumentDossierErrorState = Object.freeze({
 });
 
 function proposalBindingsAreValid(proposal: DocumentWorkProposal): boolean {
-  if (!Array.isArray(proposal.sources) || !Array.isArray(proposal.candidates)) return false;
+  if (!Array.isArray(proposal.sources) || proposal.sources.length === 0
+    || !Array.isArray(proposal.candidates) || proposal.candidates.length === 0) return false;
   const sourceRefs = new Set<string>();
   for (const source of proposal.sources) {
     if (typeof source?.sourceRef !== "string" || sourceRefs.has(source.sourceRef)) return false;
@@ -55,7 +56,8 @@ function proposalBindingsAreValid(proposal: DocumentWorkProposal): boolean {
   for (const candidate of proposal.candidates) {
     if (typeof candidate?.candidateRef !== "string"
       || candidateRefs.has(candidate.candidateRef)
-      || !Array.isArray(candidate.sourceRefs)) return false;
+      || !Array.isArray(candidate.sourceRefs)
+      || candidate.sourceRefs.length === 0) return false;
     candidateRefs.add(candidate.candidateRef);
     const citations = new Set<string>();
     for (const sourceRef of candidate.sourceRefs) {

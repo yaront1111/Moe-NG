@@ -2,6 +2,11 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { readAffordanceRequest } from "./affordance-contract.js";
 import type { AffordancePort } from "./affordance-contract.js";
+import {
+  DOCUMENT_DOSSIER_PATH,
+  handleDocumentDossierReadRequest,
+} from "./document-dossier-read.js";
+import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { readEventPage } from "./event-stream.js";
 import { handleCommandRequest } from "./http-adapter.js";
@@ -33,9 +38,9 @@ export type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guard
  * Everything from authentication onward is already committed in
  * `handleCommandRequest`, and the resumable stream is already committed in
  * `readEventPage`. This module binds, guards the headers the adapter never
- * sees, and routes. It performs NO authentication, NO capability check, NO
- * decode of a command and NO error mapping of its own — duplicating any of
- * those would be a second authority that can drift from the first.
+ * sees, and routes. Authentication and compatibility stay in their shared
+ * adapter gate; this socket performs no capability check, command decode, or
+ * error mapping of its own.
  */
 export interface ControlRoomListener {
   close(): Promise<void>;
@@ -51,6 +56,8 @@ export interface StartListenerOptions {
   readonly affordances?: AffordancePort;
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
+  /** Absent means an authenticated dossier read refuses rather than inventing one. */
+  readonly documentDossiers?: DocumentDossierReadPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
@@ -130,6 +137,27 @@ function serveAffordances(
   reply(response, 200, options.affordances.readSurface());
 }
 
+function serveDocumentDossier(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleDocumentDossierReadRequest({
+    authenticator: options.deps.authenticator,
+    documentDossiers: options.documentDossiers,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
@@ -143,8 +171,13 @@ async function serve(
   const path = (request.url ?? "").split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
 
-  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== AFFORDANCE_PATH) {
+  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== AFFORDANCE_PATH
+    && path !== DOCUMENT_DOSSIER_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
+    return;
+  }
+  if (path === DOCUMENT_DOSSIER_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID");
     return;
   }
   const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
@@ -160,7 +193,8 @@ async function serve(
 
   if (path === COMMAND_PATH) serveCommand(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, options, body);
-  else serveAffordances(response, options, body);
+  else if (path === AFFORDANCE_PATH) serveAffordances(response, options, body);
+  else serveDocumentDossier(response, request, options, body);
 }
 
 export async function startControlRoomListener(

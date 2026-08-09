@@ -1,69 +1,67 @@
-import type {
-  DocumentDossierCandidate,
-  DocumentDossierReadyState,
-  DocumentDossierSource,
-} from "./document-dossier-state.js";
+import { DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION } from "@moe/contracts";
+import type { DocumentWorkProposal } from "@moe/contracts";
 
-const PREVIEW_DOCUMENT_SOURCES: readonly DocumentDossierSource[] = Object.freeze([
+import { documentDossierStateFromProposal } from "./document-dossier-state.js";
+
+const PREVIEW_SOURCES = Object.freeze([
   Object.freeze({
-    excerpt: "A stale ownership record keeps the daemon from reclaiming its discovery port.",
-    id: "incident-note",
-    label: "Incident note",
-    path: "docs/incidents/stale-port.md",
+    byteLength: 734,
+    contentSha256: "1".repeat(64),
+    displayPath: "docs/incidents/stale-port.md",
+    sourceRef: "incident-note",
   }),
   Object.freeze({
-    excerpt: "Startup must prove whether the recorded process still owns the configured port.",
-    id: "startup-contract",
-    label: "Startup contract",
-    path: "docs/contracts/startup-ownership.md",
+    byteLength: 936,
+    contentSha256: "2".repeat(64),
+    displayPath: "docs/acceptance/recovery.md",
+    sourceRef: "recovery-acceptance",
   }),
   Object.freeze({
-    excerpt: "Restart succeeds with the old port occupied and preserves the live owner.",
-    id: "recovery-acceptance",
-    label: "Recovery acceptance",
-    path: "docs/acceptance/recovery.md",
+    byteLength: 1182,
+    contentSha256: "3".repeat(64),
+    displayPath: "docs/contracts/startup-ownership.md",
+    sourceRef: "startup-contract",
   }),
 ]);
 
-const PREVIEW_WORK_CANDIDATES: readonly DocumentDossierCandidate[] = Object.freeze([
+const PREVIEW_CANDIDATES = Object.freeze([
   Object.freeze({
-    id: "recovery-contract",
-    role: "Docs",
-    sourceIds: Object.freeze(["incident-note", "startup-contract"]),
+    candidateRef: "recovery-contract",
+    objective: "Specify stale ownership recovery without granting startup authority.",
+    sourceRefs: Object.freeze(["incident-note", "startup-contract"]),
     title: "Write the recovery contract",
-    truthClass: "AGENT_REPORTED",
   }),
   Object.freeze({
-    id: "startup-ownership",
-    role: "Implementation",
-    sourceIds: Object.freeze(["recovery-acceptance", "startup-contract"]),
-    title: "Guard startup ownership",
-    truthClass: "AGENT_REPORTED",
-  }),
-  Object.freeze({
-    id: "stale-recovery-proof",
-    role: "Verification",
-    sourceIds: Object.freeze(["incident-note", "recovery-acceptance"]),
+    candidateRef: "stale-recovery-proof",
+    objective: "Verify stale record recovery while preserving a live port owner.",
+    sourceRefs: Object.freeze(["incident-note", "recovery-acceptance"]),
     title: "Prove stale-record recovery",
-    truthClass: "AGENT_REPORTED",
+  }),
+  Object.freeze({
+    candidateRef: "startup-ownership",
+    objective: "Check live port ownership before reclaiming a stale startup record.",
+    sourceRefs: Object.freeze(["recovery-acceptance", "startup-contract"]),
+    title: "Guard startup ownership",
   }),
 ]);
 
-/** The deterministic preview is explicit input, never a component fallback. */
-export const PREVIEW_DOCUMENT_DOSSIER_STATE: DocumentDossierReadyState = Object.freeze({
-  admissionLabel: "Admission not requested",
+/** Exact deterministic input for the preview; it has the public proposal shape. */
+export const PREVIEW_DOCUMENT_WORK_PROPOSAL: DocumentWorkProposal = Object.freeze({
   advisoryOnly: true,
   authority: "NONE",
-  boundaryText: "No daemon attached; no task records were created.",
-  candidateSummaryLabel: "3 sample work candidates · not submitted",
-  candidates: PREVIEW_WORK_CANDIDATES,
-  decompositionTruthClass: "AGENT_REPORTED",
+  candidates: PREVIEW_CANDIDATES,
+  contextManifestDigest: `9c2d${"0".repeat(60)}`,
+  projectId: "stale-port-recovery",
+  repositoryBaseHash: `7f3a${"0".repeat(60)}`,
+  schemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
+  sources: PREVIEW_SOURCES,
+  submissionState: "NOT_SUBMITTED",
+  truthClass: "AGENT_REPORTED",
+});
+
+/** The fixture crosses the same deterministic adapter seam intended for daemon results. */
+export const PREVIEW_DOCUMENT_DOSSIER_STATE = documentDossierStateFromProposal({
   dossierIdentity: "sample/docs@7f3a:stale-port-recovery",
-  heading: "Stale-port recovery dossier",
-  originLabel: "Document intake · development fixture",
-  planQualityTruthClass: "UNKNOWN",
-  provenanceNote: "Preview fixture only; no daemon event, actor, session, or receipt exists.",
-  revisionLabel: "sample/docs@7f3a",
-  sources: PREVIEW_DOCUMENT_SOURCES,
-  status: "READY",
+  origin: "FIXTURE",
+  proposal: PREVIEW_DOCUMENT_WORK_PROPOSAL,
 });

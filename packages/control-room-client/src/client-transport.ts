@@ -74,11 +74,13 @@ export interface DaemonAnswer {
 export type SendResult = DaemonAnswer | TransportRefused;
 
 export interface ControlRoomTransport {
+  readDocumentDossier(): Promise<SendResult>;
   readEventPage(request: EventPageRequest): Promise<SendResult>;
   sendCommand(envelope: RuntimeCommandEnvelope): Promise<SendResult>;
 }
 
 const COMMAND_PATH = "/command";
+const DOCUMENT_DOSSIER_PATH = "/documents/dossier/read";
 const EVENT_PAGE_PATH = "/events/read";
 
 function refuse(code: TransportRefusalCode): TransportRefused {
@@ -126,6 +128,8 @@ async function post(
 
 export function createControlRoomTransport(options: TransportOptions): ControlRoomTransport {
   return Object.freeze({
+    readDocumentDossier: async () =>
+      await post(options, DOCUMENT_DOSSIER_PATH, {}),
     readEventPage: async (request: EventPageRequest) =>
       await post(options, EVENT_PAGE_PATH, request),
     sendCommand: async (envelope: RuntimeCommandEnvelope) =>

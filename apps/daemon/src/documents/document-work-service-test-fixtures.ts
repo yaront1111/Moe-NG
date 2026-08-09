@@ -4,7 +4,9 @@ import { expect } from "vitest";
 
 import {
   DOCUMENT_WORK_EVENT_TYPE,
+  DOCUMENT_WORK_RECORD_COMMAND_KIND,
   documentWorkAggregateId,
+  documentWorkEventId,
   recordDocumentWorkProposal,
   readLatestDocumentWorkDossier,
 } from "./document-work-service.js";
@@ -87,17 +89,42 @@ export function appendRawEvent(
 ): void {
   const aggregateId = documentWorkAggregateId(PROJECT_ID);
   const expectedVersion = store.getAggregateVersion(aggregateId);
+  const commandId = `fixture-command-${String(expectedVersion)}`;
+  const principalId = "fixture-agent";
+  const payload = options.payload ?? bytes(proposal());
+  store.commitExpectedVersionDecision({
+    commandKind: DOCUMENT_WORK_RECORD_COMMAND_KIND,
+    committedResultBytes: payload,
+    correlationId: `fixture-correlation-${String(expectedVersion)}`,
+    decidedAt: "2026-08-09T18:00:00.000Z",
+    events: [{
+      domainSchemaVersion:
+        options.schemaVersion ?? DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
+      eventId: documentWorkEventId(PROJECT_ID, principalId, commandId),
+      eventType: options.eventType ?? DOCUMENT_WORK_EVENT_TYPE,
+      outbox: [],
+      payload,
+    }],
+    expectedVersion,
+    key: { commandId, principalId, projectId: PROJECT_ID },
+    requestBytes: payload,
+    targetAggregateId: aggregateId,
+  });
+}
+
+export function appendUnscopedRawEvent(store: SqliteEventStore): void {
+  const aggregateId = documentWorkAggregateId(PROJECT_ID);
+  const expectedVersion = store.getAggregateVersion(aggregateId);
   store.commit({
     aggregateId,
     commandBytes: bytes({ fixture: expectedVersion }),
     commandId: `raw-command-${String(expectedVersion)}`,
     committedAt: "2026-08-09T18:00:00.000Z",
     events: [{
-      domainSchemaVersion:
-        options.schemaVersion ?? DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
+      domainSchemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
       eventId: `raw-event-${String(expectedVersion)}`,
-      eventType: options.eventType ?? DOCUMENT_WORK_EVENT_TYPE,
-      payload: options.payload ?? bytes(proposal()),
+      eventType: DOCUMENT_WORK_EVENT_TYPE,
+      payload: bytes(proposal()),
     }],
     expectedVersion,
   });

@@ -2,6 +2,7 @@ import type { DocumentWorkProposal } from "@moe/contracts";
 import { describe, expect, it } from "vitest";
 
 import * as stateModule from "./document-dossier-state.js";
+import * as previewData from "./document-preview-data.js";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
@@ -67,6 +68,8 @@ describe("document dossier proposal state", () => {
   });
 
   it.each([
+    ["an empty source set", () => ({ ...proposal(), sources: [] })],
+    ["an empty candidate set", () => ({ ...proposal(), candidates: [] })],
     ["duplicate source refs", () => {
       const input = proposal();
       return { ...input, sources: [input.sources[0]!, { ...input.sources[0]! }] };
@@ -81,6 +84,10 @@ describe("document dossier proposal state", () => {
         ...input,
         candidates: [{ ...input.candidates[0]!, sourceRefs: ["source-1", "source-1"] }],
       };
+    }],
+    ["missing citations", () => {
+      const input = proposal();
+      return { ...input, candidates: [{ ...input.candidates[0]!, sourceRefs: [] }] };
     }],
     ["unbound citations", () => {
       const input = proposal();
@@ -103,5 +110,46 @@ describe("document dossier proposal state", () => {
       layer: "CONTROL_ROOM_PRESENTATION",
       status: "ERROR",
     });
+  });
+
+  it("exports the exact public proposal as the deeply frozen fixture input", () => {
+    const fixture = Reflect.get(previewData, "PREVIEW_DOCUMENT_WORK_PROPOSAL");
+    expect(fixture).toBeTypeOf("object");
+    if (fixture === null || typeof fixture !== "object") return;
+    const typed = fixture as DocumentWorkProposal;
+    expect(Object.keys(typed).sort()).toEqual([
+      "advisoryOnly", "authority", "candidates", "contextManifestDigest", "projectId",
+      "repositoryBaseHash", "schemaVersion", "sources", "submissionState", "truthClass",
+    ]);
+    expect([
+      typed.projectId,
+      typed.schemaVersion,
+      typed.repositoryBaseHash.length,
+      typed.contextManifestDigest.length,
+      typed.sources[0]?.sourceRef,
+      typed.sources[0]?.displayPath,
+      typed.sources[0]?.contentSha256.length,
+      typed.sources[0]?.byteLength,
+      typed.candidates[0]?.candidateRef,
+      typed.candidates[0]?.title,
+      typed.candidates[0]?.objective,
+      typed.candidates[0]?.sourceRefs.length,
+    ]).toEqual([
+      "stale-port-recovery",
+      "moe-document-work-proposal/1",
+      64,
+      64,
+      "incident-note",
+      "docs/incidents/stale-port.md",
+      64,
+      734,
+      "recovery-contract",
+      "Write the recovery contract",
+      "Specify stale ownership recovery without granting startup authority.",
+      2,
+    ]);
+    expect(Object.isFrozen(typed)).toBe(true);
+    expect(Object.isFrozen(typed.sources[0])).toBe(true);
+    expect(Object.isFrozen(typed.candidates[0]?.sourceRefs)).toBe(true);
   });
 });

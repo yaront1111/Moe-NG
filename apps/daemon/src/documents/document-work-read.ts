@@ -10,6 +10,7 @@ import {
 } from "@moe/store";
 
 import { validateDocumentWorkDecision } from "./document-work-decision.js";
+import { documentWorkEffectSha256 } from "./document-work-effect.js";
 import {
   documentWorkAggregateId,
   documentWorkEventId,
@@ -35,6 +36,7 @@ import type { DocumentWorkStorePort } from "./document-work-store-port.js";
 
 const encoder = new TextEncoder();
 const TAIL_ATTEMPTS = 3;
+const MAX_UINT64 = (1n << 64n) - 1n;
 const PAGE_KEYS = Object.freeze(["hasMore", "items", "nextCursor"]);
 const EVENT_KEYS = Object.freeze([
   "aggregateId", "aggregateSequence", "commandId", "committedAt", "domainSchemaVersion",
@@ -48,6 +50,7 @@ const TRACE_KEYS = Object.freeze([
 ]);
 
 interface TailEvent {
+  readonly metadata: Uint8Array;
   readonly values: Readonly<Record<string, unknown>>;
   readonly payload: Uint8Array;
 }
@@ -69,11 +72,12 @@ function snapshotEvent(value: unknown): TailEvent | null {
     || typeof values.eventType !== "string"
     || typeof values.globalPosition !== "bigint"
     || values.globalPosition < 1n
+    || values.globalPosition > MAX_UINT64
     || values.payloadCodecVersion !== OPAQUE_PAYLOAD_CODEC_VERSION
     || values.recordVersion !== EVENT_RECORD_VERSION
     || !sha256String(values.requestSha256)
   ) return null;
-  return { payload, values };
+  return { metadata, payload, values };
 }
 
 function stableTail(
@@ -169,6 +173,18 @@ function readStableDossier(
     commandId: trace.commandId,
     currentVersion,
     decidedAt: tail.values.committedAt as string,
+    effectSha256: documentWorkEffectSha256({
+      aggregateId,
+      aggregateSequence: currentVersion,
+      commandId: tail.values.commandId as string,
+      committedAt: tail.values.committedAt as string,
+      eventId: tail.values.eventId as string,
+      eventType: tail.values.eventType as string,
+      globalPosition: tail.values.globalPosition as bigint,
+      metadata: tail.metadata,
+      payload: tail.payload,
+      requestSha256: tail.values.requestSha256 as string,
+    }),
     eventId: expectedEventId,
     expectedVersion: currentVersion - 1,
     payload: tail.payload,

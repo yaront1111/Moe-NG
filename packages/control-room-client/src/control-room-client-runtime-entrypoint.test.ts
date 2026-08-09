@@ -194,6 +194,7 @@ it("excludes every test module for a named reason, and only those", () => {
   // silently reclassifying it, is a visible decision rather than a side effect.
   expect(verdicts).toEqual({
     "client-compat.test.ts": "test-file",
+    "client-transport-document-dossier.test.ts": "test-file",
     "client-transport.test.ts": "test-file",
     "control-room-client-runtime-entrypoint.test.ts": "test-file",
     "generated-coverage.test.ts": "test-file",

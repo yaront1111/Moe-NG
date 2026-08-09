@@ -28,6 +28,7 @@ const DECISION_KEYS = Object.freeze([
   "currentVersion", "effectDisposition", "previousVersion", "resultCode",
 ]);
 const KEY_KEYS = Object.freeze(["commandId", "principalId", "projectId"]);
+const encoder = new TextEncoder();
 
 export interface ExpectedDocumentWorkDecision {
   readonly aggregateId: string;
@@ -35,6 +36,7 @@ export interface ExpectedDocumentWorkDecision {
   readonly currentVersion: number;
   readonly decidedAt: string;
   readonly eventId: string;
+  readonly effectSha256?: string;
   readonly expectedVersion: number;
   readonly payload: Uint8Array;
   readonly principalId: string;
@@ -92,6 +94,8 @@ function commonMatches(parts: DecisionParts, expected: ExpectedDocumentWorkDecis
     && sha256String(decision.effectSha256)
     && sha256String(decision.requestSha256)
     && sha256String(decision.resultSha256)
+    && (expected.effectSha256 === undefined
+      || decision.effectSha256 === expected.effectSha256)
     && (expected.requestSha256 === undefined
       || decision.requestSha256 === expected.requestSha256);
 }
@@ -124,15 +128,25 @@ export function validateDocumentWorkDecision(
 
 function validRejection(parts: DecisionParts, expected: ExpectedDocumentWorkDecision): boolean {
   const { decision } = parts;
+  const observedVersion = decision.observedVersion;
+  const resultBytes = Number.isSafeInteger(observedVersion) && (observedVersion as number) >= 0
+    ? encoder.encode(JSON.stringify({
+      code: "EXPECTED_VERSION_CONFLICT",
+      expectedVersion: expected.expectedVersion,
+      observedVersion,
+      version: COMMAND_DECISION_RESULT_VERSION,
+    }))
+    : null;
   return commonMatches(parts, expected)
-    && Number.isSafeInteger(decision.observedVersion)
-    && (decision.observedVersion as number) >= 0
-    && decision.observedVersion !== expected.expectedVersion
+    && resultBytes !== null
+    && observedVersion !== expected.expectedVersion
     && decision.previousVersion === null
     && decision.currentVersion === null
     && typeof decision.auditEventId === "string"
+    && /^moe-internal:command-rejection-event:[0-9a-f]{64}$/u.test(decision.auditEventId)
     && parts.businessEventIds.length === 0
     && parts.outboxMessageIds.length === 0
+    && sameBytes(parts.resultBytes, resultBytes)
     && decision.effectDisposition === "NO_BUSINESS_EFFECT"
     && decision.resultCode === "EXPECTED_VERSION_CONFLICT";
 }
@@ -160,7 +174,7 @@ export function validateDocumentWorkResponse(
     return Object.freeze({ outcome: "COMMITTED", decision: committed, disposition });
   }
   const parts = decisionParts(response.decision);
-  if (parts !== null && validRejection(parts, expected) && disposition === "DECIDED") {
+  if (parts !== null && validRejection(parts, expected)) {
     return Object.freeze({ outcome: "EXPECTED_VERSION_CONFLICT" });
   }
   return null;

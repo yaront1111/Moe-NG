@@ -3,8 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { documentWorkAggregateId } from "./documents/document-work-service.js";
 import {
   STORE_DEPENDENCIES_ENV_MISSING,
   createStoreDependencies,
@@ -63,6 +65,29 @@ describe("readStoreDependencyEnv", () => {
 });
 
 describe("createStoreDependencies", () => {
+  it("provides a read-only document dossier port over the bound store", () => {
+    const port = provider.documentDossiers?.();
+    expect(port).toBeDefined();
+    if (port === undefined) return;
+
+    const inspection = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const aggregateId = documentWorkAggregateId(PROJECT);
+      const before = inspection.getAggregateVersion(aggregateId);
+      expect(port.readLatest(PROJECT)).toStrictEqual({
+        advisoryOnly: true,
+        authority: "NONE",
+        code: "DOCUMENT_WORK_DOSSIER_MISSING",
+        layer: "DAEMON_READ_MODEL",
+        ok: false,
+        outcome: "REFUSED",
+      });
+      expect(inspection.getAggregateVersion(aggregateId)).toBe(before);
+    } finally {
+      inspection.close();
+    }
+  });
+
   it("refuses an unknown credential at the AUTHENTICATE stage", () => {
     const result = dispatch(registerEnvelope(), "wrong-credential");
     expect(result).toMatchObject({

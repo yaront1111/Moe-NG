@@ -36,7 +36,16 @@ function driftingStore(always: boolean): {
       ) => {
         reads += 1;
         const page = real.readAggregateEvents(aggregateId, afterSequence, limit, maxBytes);
-        if (always || reads === 1) return { ...page, hasMore: true };
+        if (!always && reads === 1) {
+          recordDocumentWorkProposal(real, input(undefined, {
+            commandId: "document-command-interleaved",
+            correlationId: "document-correlation-interleaved",
+            decidedAt: "2026-08-09T18:00:01.000Z",
+            expectedVersion: 1,
+          }));
+          return page;
+        }
+        if (always) return { ...page, hasMore: true };
         return page;
       },
     } as unknown as ReadStore,

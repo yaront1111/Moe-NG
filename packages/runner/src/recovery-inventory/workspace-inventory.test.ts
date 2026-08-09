@@ -31,7 +31,11 @@ import type {
 } from "@moe/runner";
 
 import { canonicalDigest } from "../canonical.js";
-import { identityKey } from "./recovery-inventory-shape.js";
+import {
+  providerLockInventoryRegistration,
+  type ProviderLockInventoryInput,
+} from "./provider-lock-inventory.js";
+import { identityKey, readIdentity } from "./recovery-inventory-shape.js";
 import {
   enumerateWorkspaceInventory,
   workspaceInventoryRegistration,
@@ -241,11 +245,15 @@ describe("two entries claiming one external identity", () => {
         throw new Error(`expected an enumeration, got ${resolved.status}`);
       }
       expect(resolved.items).toHaveLength(2);
-      const [first, second] = resolved.items as readonly { identity: { kind: "PATH"; path: string } }[];
-      expect(first?.identity.path).not.toBe(second?.identity.path);
-      expect(identityKey({ kind: "PATH", path: first?.identity.path ?? "" })).toBe(
-        identityKey({ kind: "PATH", path: second?.identity.path ?? "" }),
-      );
+      const [first, second] = resolved.items as readonly { identity: unknown }[];
+      const left = readIdentity(first?.identity);
+      const right = readIdentity(second?.identity);
+      if (left === null || right === null) {
+        throw new Error("the enumerator emitted an identity the shipped reader rejects");
+      }
+      // The raw spellings differ; the shipped reader is what folds them together.
+      expect(JSON.stringify(first?.identity)).not.toBe(JSON.stringify(second?.identity));
+      expect(identityKey(left)).toBe(identityKey(right));
     });
   });
 
@@ -326,9 +334,142 @@ describe("availability and ceiling refusals", () => {
   }, 60_000);
 });
 
+/**
+ * DoD 4: the registration seam, proven WITHOUT editing the aggregate. Both
+ * enumerators are composed into one caller-supplied tuple exactly as the daemon
+ * coordinator will compose them; `recovery-inventory.ts` is not touched.
+ */
+const PLATFORM = { os: "windows", arch: "x64", osVersion: "10.0.26200" };
+
+function providerInput(exit: unknown = { kind: "EXITED", code: 0 }): ProviderLockInventoryInput {
+  const probe = {
+    resolvedRuntimeClosure: [],
+    reportedVersion: "v1",
+    schemaVersion: null,
+    pinningMethod: "UNSUPPORTED" as const,
+    structuredSample: null,
+    rawSampleBase64: null,
+    cancelObservation: null,
+    processTreeObservation: { childrenBefore: 2, childrenAfter: 0 },
+    runEnumeration: { enumeratedRunIds: ["run-a"], provenAbsentRunId: "run-z" },
+    tokenizer: null,
+    declaredContextLimit: null,
+    helpText: null,
+    resumeClaim: null,
+  };
+  return {
+    clock: CLOCK,
+    claude: { port: { report: () => probe }, clock: CLOCK, platformIdentity: PLATFORM },
+    codex: {
+      port: { report: () => ({ ...probe, cwdObservation: null }) },
+      clock: CLOCK,
+      platformIdentity: PLATFORM,
+    },
+    port: {
+      governingClaim: () => ({
+        claimId: "claim-1",
+        intentId: "intent-1",
+        wrapperIdentity: "wrapper-1",
+        lockIdentity: "lock-1",
+        claimedAt: "2026-08-05T11:00:00.000Z",
+      }),
+      launchLockRecords: () => [],
+      processRecords: () => [{ processIdentity: "pid-1", exit, reconciliation: null }],
+    },
+  };
+}
+
+const BOTH = ["PROVIDER_PROCESS_LAUNCH_LOCK", CLASS];
+
+async function collectBoth(
+  registrations: readonly ReturnType<typeof workspaceInventoryRegistration>[],
+): Promise<RecoveryInventoryReport> {
+  const result = await collectRecoveryInventory(request(BOTH), createRecoveryInventoryRegistry(registrations));
+  if (isRecoveryInventoryFailure(result)) {
+    throw new Error(`expected a report, got refusal ${result.code}`);
+  }
+  return result;
+}
+
+function proofShapes(report: RecoveryInventoryReport): readonly Record<string, unknown>[] {
+  return report.proofs.map((proof) => ({ class: proof.class, ...summary(proof) }));
+}
+
+describe("the registration seam for both classes", () => {
+  it("reports COMPLETE for both only when both enumerators proved completeness", async () => {
+    write("alpha.txt", "alpha");
+    const report = await collectBoth([
+      providerLockInventoryRegistration(providerInput()),
+      workspaceInventoryRegistration(input()),
+    ]);
+    expect(proofShapes(report)).toEqual([
+      { class: "PROVIDER_PROCESS_LAUNCH_LOCK", ...COMPLETE_PROOF },
+      { class: CLASS, ...COMPLETE_PROOF },
+    ]);
+    expect(report.coverage).toBe("COMPLETE");
+    expect(summary(proofFor(report, "PROVIDER_PROCESS_LAUNCH_LOCK"))).toEqual(COMPLETE_PROOF);
+    expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
+    expect(report.items).toHaveLength(2);
+  });
+
+  it("answers ENUMERATOR_UNREGISTERED for a configured class nobody registered", async () => {
+    write("alpha.txt", "alpha");
+    const report = await collectBoth([providerLockInventoryRegistration(providerInput())]);
+    expect(proofShapes(report)).toEqual([
+      { class: "PROVIDER_PROCESS_LAUNCH_LOCK", ...COMPLETE_PROOF },
+      { class: CLASS, truth: "UNKNOWN", code: UNKNOWN_CODE, reason: "ENUMERATOR_UNREGISTERED", layer: LAYER },
+    ]);
+    expect(report.coverage).toBe("UNKNOWN");
+    expect(summary(proofFor(report, "PROVIDER_PROCESS_LAUNCH_LOCK"))).toEqual(COMPLETE_PROOF);
+    expect(proofFor(report).reason).toBe("ENUMERATOR_UNREGISTERED");
+  });
+
+  it("does not let the other class vanish when the provider slice is unregistered", async () => {
+    write("alpha.txt", "alpha");
+    const report = await collectBoth([workspaceInventoryRegistration(input())]);
+    expect(proofShapes(report)).toEqual([
+      {
+        class: "PROVIDER_PROCESS_LAUNCH_LOCK",
+        truth: "UNKNOWN",
+        code: UNKNOWN_CODE,
+        reason: "ENUMERATOR_UNREGISTERED",
+        layer: LAYER,
+      },
+      { class: CLASS, ...COMPLETE_PROOF },
+    ]);
+    expect(report.coverage).toBe("UNKNOWN");
+    expect(proofFor(report, "PROVIDER_PROCESS_LAUNCH_LOCK").reason).toBe("ENUMERATOR_UNREGISTERED");
+    expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
+  });
+
+  it("never lets a later COMPLETE launder an earlier UNKNOWN", async () => {
+    write("alpha.txt", "alpha");
+    const report = await collectBoth([
+      providerLockInventoryRegistration(providerInput({ kind: "UNOBSERVED" })),
+      workspaceInventoryRegistration(input()),
+    ]);
+    expect(proofShapes(report)).toEqual([
+      {
+        class: "PROVIDER_PROCESS_LAUNCH_LOCK",
+        truth: "UNKNOWN",
+        code: UNKNOWN_CODE,
+        reason: "RESULT_TRUNCATED",
+        layer: LAYER,
+      },
+      { class: CLASS, ...COMPLETE_PROOF },
+    ]);
+    expect(report.coverage).toBe("UNKNOWN");
+    // The truncated class contributes nothing; the proven one keeps its rows.
+    expect(proofFor(report, "PROVIDER_PROCESS_LAUNCH_LOCK").itemCount).toBe(0);
+    expect(proofFor(report).itemCount).toBe(1);
+    expect(report.items.map((item) => item.class)).toEqual([CLASS]);
+  });
+});
+
 describe("coverage sweep", () => {
-  it("generated a coverage case for the class on every arm above", () => {
-    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(11);
+  it("generated a coverage case for both classes on every arm above", () => {
+    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(15);
+    expect(GENERATED.filter((entry) => entry === "PROVIDER_PROCESS_LAUNCH_LOCK")).toHaveLength(4);
     expect(GENERATED.length).toBeGreaterThan(0);
   });
 });

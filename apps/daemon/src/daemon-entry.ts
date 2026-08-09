@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 
-import type { AffordancePort } from "./http/affordance-contract.js";
-import type { SubscriptionPort } from "./http/event-stream-contract.js";
+import {
+  optionalPortFactoriesAreValid,
+  resolveOptionalDaemonPorts,
+} from "./daemon-entry-port-resolution.js";
+import type {
+  OptionalDaemonPortProvider,
+  ResolvedOptionalDaemonPorts,
+} from "./daemon-entry-port-resolution.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
 import type { ListenerRefused } from "./http/http-listener.js";
@@ -47,18 +53,8 @@ export const DAEMON_ENTRY_REFUSAL_CODES = Object.freeze([
 export type DaemonEntryRefusalCode = (typeof DAEMON_ENTRY_REFUSAL_CODES)[number];
 
 /** The one seam through which real authority reaches the transport. */
-export interface DaemonDependencyProvider {
-  /**
-   * Optional. Absent means the affordance route REFUSES rather than inventing
-   * an offer; same posture as `subscriptions`.
-   */
-  affordances?(): AffordancePort;
+export interface DaemonDependencyProvider extends OptionalDaemonPortProvider {
   provide(): CommandAdapterDeps;
-  /**
-   * Optional. Absent means the stream route REFUSES rather than serving an
-   * invented empty page, so a half-wired daemon is visible instead of silent.
-   */
-  subscriptions?(): SubscriptionPort;
 }
 
 export interface DaemonEntryRefused {
@@ -107,11 +103,7 @@ export function isDependencyProvider(value: unknown): value is DaemonDependencyP
   if (typeof value !== "object" || value === null) return false;
   try {
     const provide = Reflect.get(value, "provide") as unknown;
-    const subscriptions = Reflect.get(value, "subscriptions") as unknown;
-    const affordances = Reflect.get(value, "affordances") as unknown;
-    return typeof provide === "function" &&
-      (subscriptions === undefined || typeof subscriptions === "function") &&
-      (affordances === undefined || typeof affordances === "function");
+    return typeof provide === "function" && optionalPortFactoriesAreValid(value);
   } catch {
     return false;
   }
@@ -137,20 +129,10 @@ function isCommandAdapterDeps(value: unknown): value is CommandAdapterDeps {
   }
 }
 
-function isSubscriptionPort(value: unknown): value is SubscriptionPort {
-  return hasCallable(value, "readPage") && hasCallable(value, "reseat");
-}
-
-function isAffordancePort(value: unknown): value is AffordancePort {
-  return hasCallable(value, "readSurface");
-}
-
-type ResolvedDependencies = DaemonEntryRefused | {
-  readonly affordances?: AffordancePort;
+type ResolvedDependencies = DaemonEntryRefused | (ResolvedOptionalDaemonPorts & {
   readonly deps: CommandAdapterDeps;
   readonly ok: true;
-  readonly subscriptions?: SubscriptionPort;
-};
+});
 
 function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDependencies {
   let provided: unknown;
@@ -163,40 +145,9 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
     return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
   }
 
-  try {
-    const factory = provider.subscriptions;
-    let subscriptions: SubscriptionPort | undefined;
-    if (factory !== undefined) {
-      if (typeof factory !== "function") {
-        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
-      }
-      const candidate = factory.call(provider);
-      if (!isSubscriptionPort(candidate)) {
-        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
-      }
-      subscriptions = candidate;
-    }
-    const affordanceFactory = provider.affordances;
-    let affordances: AffordancePort | undefined;
-    if (affordanceFactory !== undefined) {
-      if (typeof affordanceFactory !== "function") {
-        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
-      }
-      const candidate = affordanceFactory.call(provider);
-      if (!isAffordancePort(candidate)) {
-        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
-      }
-      affordances = candidate;
-    }
-    return Object.freeze({
-      deps: provided,
-      ok: true,
-      ...(affordances === undefined ? {} : { affordances }),
-      ...(subscriptions === undefined ? {} : { subscriptions }),
-    } as const);
-  } catch {
-    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
-  }
+  const ports = resolveOptionalDaemonPorts(provider);
+  if (ports === null) return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+  return Object.freeze({ deps: provided, ok: true, ...ports } as const);
 }
 
 const ALREADY_STOPPED = Object.freeze({
@@ -223,6 +174,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(options.log === undefined ? {} : { log: options.log }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
+    ...(resolved.documentDossiers === undefined
+      ? {} : { documentDossiers: resolved.documentDossiers }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;

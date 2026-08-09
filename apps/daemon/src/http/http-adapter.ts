@@ -18,6 +18,7 @@ import {
 } from "./http-contract.js";
 import type {
   AuthenticatedPrincipal,
+  Authenticator,
   CommandAdapterDeps,
   CommandRegistryEntry,
   HttpCommandRequest,
@@ -89,6 +90,27 @@ function refuse(stage: HttpRefusalStage, error: RuntimeError): HttpRefused {
   });
 }
 
+export type HttpAccessResult = HttpRefused | {
+  readonly ok: true;
+  readonly principal: AuthenticatedPrincipal;
+};
+
+/** Shared authenticate -> compatibility gate for commands and authenticated reads. */
+export function authenticateHttpRequest(
+  authenticator: Authenticator,
+  credential: string | null,
+  protocolVersion: unknown,
+): HttpAccessResult {
+  const authenticated = authenticator.authenticate(credential);
+  if (authenticated.verdict !== "AUTHENTICATED") {
+    return refuse("AUTHENTICATE", AUTHENTICATION_FAILED);
+  }
+  if (protocolVersion !== WIRE_PROTOCOL_VERSION) {
+    return refuse("COMPATIBILITY", DISTRIBUTION_MISMATCH);
+  }
+  return Object.freeze({ ok: true, principal: authenticated.principal });
+}
+
 /**
  * Field count first, then the allow-list. A payload one field over the bound is a bound
  * refusal even when every one of its keys is listed, so the two rules cannot mask each
@@ -151,14 +173,12 @@ export function handleCommandRequest(
   deps: CommandAdapterDeps,
   request: HttpCommandRequest,
 ): HttpCommandResult {
-  const authenticated = deps.authenticator.authenticate(request.credential);
-  if (authenticated.verdict !== "AUTHENTICATED") {
-    return refuse("AUTHENTICATE", AUTHENTICATION_FAILED);
-  }
-
-  if (request.protocolVersion !== WIRE_PROTOCOL_VERSION) {
-    return refuse("COMPATIBILITY", DISTRIBUTION_MISMATCH);
-  }
+  const access = authenticateHttpRequest(
+    deps.authenticator,
+    request.credential,
+    request.protocolVersion,
+  );
+  if (!access.ok) return access;
 
   const decoded = decodeRuntimeCommandEnvelopeBytes(request.body);
   if (!decoded.ok) return refuse("DECODE", decoded.error);
@@ -166,12 +186,12 @@ export function handleCommandRequest(
   const entry = deps.registry.get(decoded.envelope.commandKind);
   if (entry === undefined) return refuse("REGISTRY", INPUT_INVALID);
 
-  if (!authenticated.principal.capabilities.includes(entry.requiredCapability)) {
+  if (!access.principal.capabilities.includes(entry.requiredCapability)) {
     return refuse("AUTHORIZE", CAPABILITY_DENIED);
   }
 
   const shapeError = checkPayload(decoded.envelope.payload, entry.payloadKeys);
   if (shapeError !== null) return refuse("PAYLOAD_SHAPE", shapeError);
 
-  return dispatch(deps, entry, decoded.envelope, authenticated.principal);
+  return dispatch(deps, entry, decoded.envelope, access.principal);
 }
