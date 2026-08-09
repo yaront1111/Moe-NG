@@ -1,19 +1,6 @@
-/** Presentation input for one document in a supplied dossier result. */
-export interface DocumentDossierSource {
-  readonly excerpt?: string | undefined;
-  readonly id: string;
-  readonly label: string;
-  readonly path: string;
-}
+import type { DocumentWorkProposal } from "@moe/contracts";
 
-/** One advisory presentation candidate and the exact source ids that support it. */
-export interface DocumentDossierCandidate {
-  readonly id: string;
-  readonly role?: string | undefined;
-  readonly sourceIds: readonly string[];
-  readonly title: string;
-  readonly truthClass: unknown;
-}
+export type DocumentDossierOrigin = "FIXTURE" | "DAEMON";
 
 interface DocumentDossierAdvisoryState {
   readonly advisoryOnly: true;
@@ -30,24 +17,88 @@ export interface DocumentDossierErrorState extends DocumentDossierAdvisoryState 
   readonly status: "ERROR";
 }
 
-export interface DocumentDossierReadyState extends DocumentDossierAdvisoryState {
-  readonly admissionLabel: string;
-  readonly boundaryText: string;
-  readonly candidateSummaryLabel: string;
-  readonly candidates: readonly DocumentDossierCandidate[];
-  readonly decompositionTruthClass: unknown;
+/** A READY state contains facts from the proposal and no caller-authored presentation claims. */
+export interface DocumentDossierReadyState {
   readonly dossierIdentity: string;
-  readonly heading: string;
-  readonly originLabel: string;
-  readonly planQualityTruthClass: unknown;
-  readonly provenanceNote: string;
-  readonly revisionLabel: string;
-  readonly sources: readonly DocumentDossierSource[];
+  readonly origin: DocumentDossierOrigin;
+  readonly proposal: DocumentWorkProposal;
   readonly status: "READY";
 }
 
-/** Closed presentation state. Every arm is advisory and has zero authority. */
 export type DocumentDossierState =
   | DocumentDossierLoadingState
   | DocumentDossierReadyState
   | DocumentDossierErrorState;
+
+export interface DocumentDossierProposalInput {
+  readonly dossierIdentity: string;
+  readonly origin: DocumentDossierOrigin;
+  readonly proposal: DocumentWorkProposal;
+}
+
+const INVALID_DOSSIER_STATE: DocumentDossierErrorState = Object.freeze({
+  advisoryOnly: true,
+  authority: "NONE",
+  code: "DOCUMENT_DOSSIER_STATE_INVALID",
+  layer: "CONTROL_ROOM_PRESENTATION",
+  status: "ERROR",
+});
+
+function proposalBindingsAreValid(proposal: DocumentWorkProposal): boolean {
+  if (!Array.isArray(proposal.sources) || !Array.isArray(proposal.candidates)) return false;
+  const sourceRefs = new Set<string>();
+  for (const source of proposal.sources) {
+    if (typeof source?.sourceRef !== "string" || sourceRefs.has(source.sourceRef)) return false;
+    sourceRefs.add(source.sourceRef);
+  }
+  const candidateRefs = new Set<string>();
+  for (const candidate of proposal.candidates) {
+    if (typeof candidate?.candidateRef !== "string"
+      || candidateRefs.has(candidate.candidateRef)
+      || !Array.isArray(candidate.sourceRefs)) return false;
+    candidateRefs.add(candidate.candidateRef);
+    const citations = new Set<string>();
+    for (const sourceRef of candidate.sourceRefs) {
+      if (typeof sourceRef !== "string" || citations.has(sourceRef) || !sourceRefs.has(sourceRef)) {
+        return false;
+      }
+      citations.add(sourceRef);
+    }
+  }
+  return true;
+}
+
+function frozenProposal(proposal: DocumentWorkProposal): DocumentWorkProposal {
+  const sources = proposal.sources.map((source) => Object.freeze({ ...source }));
+  const candidates = proposal.candidates.map((candidate) => Object.freeze({
+    ...candidate,
+    sourceRefs: Object.freeze([...candidate.sourceRefs]),
+  }));
+  return Object.freeze({
+    ...proposal,
+    candidates: Object.freeze(candidates),
+    sources: Object.freeze(sources),
+  });
+}
+
+/** Deterministic presentation adapter; it grants no authority and performs no admission. */
+export function documentDossierStateFromProposal(
+  input: DocumentDossierProposalInput,
+): DocumentDossierState {
+  try {
+    if ((input.origin !== "FIXTURE" && input.origin !== "DAEMON")
+      || input.dossierIdentity.length === 0
+      || input.proposal.advisoryOnly !== true
+      || input.proposal.authority !== "NONE"
+      || input.proposal.submissionState !== "NOT_SUBMITTED"
+      || !proposalBindingsAreValid(input.proposal)) return INVALID_DOSSIER_STATE;
+    return Object.freeze({
+      dossierIdentity: input.dossierIdentity,
+      origin: input.origin,
+      proposal: frozenProposal(input.proposal),
+      status: "READY",
+    });
+  } catch {
+    return INVALID_DOSSIER_STATE;
+  }
+}

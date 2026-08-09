@@ -9,10 +9,12 @@ import type { PlanningRunCommand, PlanningRunState } from "./planning-contract.j
 import {
   snapshotPlanningRunContractState,
   validExpansionCreatedEvent,
+  validExpansionHoldBinding,
   validExpansionSealedEvent,
 } from "./planning-expansion-validation.js";
 import { reducePlanningRun } from "./planning-run-reducer.js";
 import {
+  CHANGED_HOLDS,
   HOLD,
   IDENTITY,
   MALFORMED_HOLDS,
@@ -125,10 +127,25 @@ describe("planning run EXPANSION submission", () => {
     "plan.propose", "PLANNING");
   });
 
-  it("refuses an EXPANSION proposal that swaps the run's bound hold", () => {
-    const result = unchanged(owned, () => reducePlanningRun(owned,
-      expansionPropose({ expansion: { ...HOLD, holdId: "hold-2" } })));
-    expectIllegal(result, "plan.propose", "PLANNING");
+  /**
+   * Hand-written on purpose, never derived from the production key list: a sweep generated from
+   * `HOLD_IDENTITY_KEYS` would shrink silently the moment a key is dropped from that list and
+   * stay green. `lifecycle` and `truthClass` are absent because both are pinned constants, so no
+   * well-formed deviation of them exists and the schema layer refuses them first.
+   */
+  const IDENTITY_FIELDS = ["generation", "goalVersion", "graphEpoch", "holdId", "parentNodeRef",
+    "parentRunRef", "proposalBaseHash", "sourceFingerprint", "workerHandoff.digest",
+    "workerHandoff.ref"];
+
+  it("refuses an EXPANSION proposal deviating on any single bound hold identity field", () => {
+    expect(Object.keys(CHANGED_HOLDS).sort()).toEqual(IDENTITY_FIELDS);
+    for (const field of IDENTITY_FIELDS) {
+      const deviation = CHANGED_HOLDS[field];
+      expect(validExpansionHoldBinding(deviation)).toBe(true);
+      const result = unchanged(owned, () => reducePlanningRun(owned,
+        expansionPropose({ expansion: deviation })));
+      expectIllegal(result, "plan.propose", "PLANNING");
+    }
   });
 
   it("refuses an EXPANSION proposal against a run that is not an EXPANSION run", () => {

@@ -148,23 +148,38 @@
     {
       "stepId": "step-9",
       "description": "WIRE UP AND AUDIT SIZE. In src/lib.rs add `mod lifecycle;` (and `mod unwind;` if step 5 split it) and re-export the new public surface -- the lifecycle operations, the wait-outcome enum and the exit-result enum -- keeping every item on exactly one public path as the existing comment requires. Update the crate and module docs that still describe lifecycle and unwind as belonging to a future sibling task: src/process.rs and src/job.rs both carry scope comments naming task-af99cf14 as out-of-scope future work, and those are now false. Correct them rather than leaving a comment that contradicts the code. Then audit every Rust production source with `grep -c '' <file>` and record each count: lib.rs, win32.rs, win32/process_calls.rs, win32/system_job.rs, win32/system_process.rs, lifecycle.rs, process.rs, job.rs, handle.rs, plus any file created by a pre-authorised split. Every one must be <=250. Split by responsibility, never by reformatting, and do not proceed with a file over the bar.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/src/lib.rs",
         "packages/runner/src/platform/windows/native/src/process.rs",
         "packages/runner/src/platform/windows/native/src/job.rs"
       ],
-      "startedAt": "2026-08-09T19:14:42.529Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/lib.rs",
+        "packages/runner/src/platform/windows/native/src/job.rs",
+        "packages/runner/src/platform/windows/native/Cargo.toml"
+      ],
+      "note": "WIRED UP, STALE DOCS CORRECTED, SIZE AUDIT CLEAN. 36 tests still green after the doc edits.\n\nMODULES AND EXPORTS (landed in steps 4-5, confirmed here): `mod lifecycle; mod spec; mod unwind;` alongside handle/job/process/win32, all PRIVATE, with the public surface re-exported flat from the crate root so every item keeps exactly one public path per the existing comment. Exported: wait_for_process, query_exit_status, terminate_process, query_identity, wait_until_job_is_empty, unwind_before_membership, unwind_after_membership, ExitCode, ExitStatus, Identity, SignalledProof, UnknownExit, Waited, WaitOutcome, CreatedProcess, ProcessSpec.\n\nTHREE STALE COMMENTS CORRECTED, all of which now contradicted the code:\n1. src/lib.rs \"Scope and consumer\" said teardown \"is NOT here ... belongs to sibling task-af99cf14\". Replaced with the actual scope, and the \"a green suite proves less than it looks\" paragraph rewritten from a caution into a RECORD: it now names the concrete defect real_windows.rs caught on its first run (SetInformationJobObject rejecting KILL_ON_JOB_CLOSE through the basic class with ERROR_INVALID_PARAMETER, carried past two green suites and a QA pass) and says to keep that file running.\n2. src/job.rs said wait and partial-construction unwind \"belong to child 2 (task-a02496064e9e4e87a888cc112830d7a4)\". Replaced with where each actually lives now.\n3. Cargo.toml carried the reasoning that made the defect: \"KILL_ON_JOB_CLOSE is a documented basic LimitFlag, so the extended struct buys nothing\". Left in place it would tell the next reader to undo the fix. Replaced with the measurement and the result. Comment-only edit; no dependency, feature or version changed. Cargo.toml is outside my deliverable list -- disclosed rather than done quietly.\nsrc/process.rs's stale scope comment was already corrected in step 5.\n\nSIZE AUDIT, `grep -c ''`, all 13 production sources, ALL <= 250 (largest 218):\n  src/handle.rs 77 | src/job.rs 93 | src/lib.rs 73 | src/lifecycle.rs 198 | src/process.rs 218 | src/spec.rs 78 | src/unwind.rs 74 | src/win32.rs 185 | src/win32/process_calls.rs 171 | src/win32/system_job.rs 130 | src/win32/system_lifecycle.rs 105 | src/win32/system_process.rs 210 | src/win32/system_process_attrs.rs 162\nTests (not subject to the cap): job_sweep.rs 312, process_sweep.rs 1123, real_windows.rs 383.\nFour files were created by splits, every one by RESPONSIBILITY and never by reformatting: spec.rs (FFI value types + validation), unwind.rs (the two regimes), lifecycle.rs (queries), win32/system_lifecycle.rs (the real lifecycle boundary, forced additionally by Rust permitting only one `impl ProcessCalls for SystemWin32`).\n\nFOREIGN WHOLE-TREE COMMIT CAPTURED MY WORK -- disclosed, not repaired. HEAD moved 5ef522c -> c8e845e while I worked. Commit c199088 (task-1df0622e's completion hook) swept my in-progress crate files into a foreign commit: src/lifecycle.rs, src/unwind.rs, src/spec.rs, src/win32/system_lifecycle.rs, src/win32.rs, src/win32/process_calls.rs, src/process.rs, src/win32/system_process.rs and tests/job_sweep.rs are all now tracked at HEAD under another task's message. Per the project rail I did NOT amend, reset, or create a claiming commit. QA must review by base-ref diff: `git diff 5ef522c..HEAD -- packages/runner/src/platform/windows/native` plus the working tree. NOTE that range also contains 55dea5d, task-885a46e9's own follow-up fix to src/win32/system_process_attrs.rs (144 -> 162 lines) -- that file is 2a's and none of its bytes are mine. Re-ran the full suite after all of it: 36 green, exit 0, no warnings, so nothing of mine was clobbered by the sweep or by 2a's fix.",
+      "startedAt": "2026-08-09T19:14:42.529Z",
+      "completedAt": "2026-08-09T19:16:27.613Z"
     },
     {
       "stepId": "step-10",
       "description": "VERIFY, ATTACK, COMMIT. (a) Run the task's exact verification command -- the locked test run AND the locked release build -- and paste the real output; both must exit 0, and real_windows.rs must appear in the results as RUN, not filtered or ignored. State the test counts. (b) Compare against the step-1 baseline: any repo-wide red must be shown to exist at the merge-base too, or it is yours. (c) MUTATION DRILL, required by epic rail 6 because none of these defects are visible in a green suite: make the exit query return the raw code without requiring a prior Signalled wait and confirm the STILL_ACTIVE tests go RED; swap the two unwind regimes so a pre-membership fault terminates the Job and confirm the regime tests go RED; make WAIT_TIMEOUT return Err and confirm both the four-outcome test and real_windows TEST A go RED; delete one entry from PROCESS_OPS and confirm the totality assertion goes RED. Restore each and re-confirm green, then verify by reading the file contents -- not by trusting a clean git status -- that no mutation survived, because a foreign whole-tree commit can capture a drill edit. (d) Adversarial pass: NativeError still exposes only op and code; RawHandle still has no Debug; no executable path, argv, cwd, environment or handle value reaches an error, a log, or a panic message. (e) Confirm no target output, executable, marker or probe artifact is staged. (f) `git status --porcelain`, unstage anything foreign with `git restore --staged`, commit by explicit pathspec over this task's owned paths only, and verify with `git show --stat`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/lifecycle.rs",
+        "packages/runner/src/platform/windows/native/tests/process_sweep.rs",
+        "packages/runner/src/platform/windows/native/tests/real_windows.rs"
+      ],
+      "note": "(a) VERIFICATION, BOTH LEGS, EXACT COMMAND, EXIT 0.\n`cargo test --locked ... -p moe-windows-job-core` => job_sweep 7 passed, process_sweep 28 passed, real_windows 2 passed, doc-tests 0. 37 total, 0 failed, 0 IGNORED, 0 filtered out, no warnings. real_windows.rs appears as RUN with both test names listed.\n`cargo build --locked --release ...` => Finished `release` profile, exit 0.\n\n(b) BASELINE COMPARISON. Step-1 baseline at 5ef522c was 19 passed / exit 0 with the release build exit 0. Now 37 passed / exit 0. No red anywhere, so there is nothing to path-attribute.\n\n(c) MUTATION DRILL, 5 mutations, each applied alone, run, then restored from a backup OUTSIDE the repo and re-verified by sha256 AND by grepping the file contents -- never by trusting git status, since a foreign whole-tree commit did in fact fire twice during this task.\n1. Exit query returns the raw code with no prior wait. RED: `left: Exited(ExitCode(7)) right: Unknown(NotWaited)` in the sweep. AND RED on the real kernel: real_windows reported `left: Exited(ExitCode(259))` -- STILL_ACTIVE handed back as an exit code, the exact defect the design exists to stop, demonstrated live rather than argued.\n2. Two unwind regimes swapped. RED on all three regime assertions: a_pre_membership_fault..., a_post_membership_fault..., resume_never_runs_before_the_membership_proof_succeeds.\n3. WAIT_TIMEOUT becomes Err, in BOTH the production mapping and the real win32 arm. RED: three_of_the_four_wait_results_are_ok_values and an_exit_query_after_a_timed_out_wait_is_unknown, and real_windows TEST A. Mutating only the production mapping would NOT have reddened TEST A -- its suspended observation goes through the raw call table -- so both were mutated.\n4. One op dropped from the hand-written LIFECYCLE_OPS. RED on the totality assertion ITSELF (`left: 18 right: 19` at the sum), not merely on an earlier guard, plus the lifecycle set equality.\n5. The new proof-binding guard removed. RED: `left: Exited(ExitCode(7)) right: Unknown(ProofFromAnotherProcess)`.\nAll five restored; all four legs green again.\n\n(d) ADVERSARIAL PASS FOUND TWO REAL PROBLEMS AND BOTH ARE FIXED, NOT NOTED.\n- A `SignalledProof` was a bare token, so a proof obtained by waiting on process A would authorise an exit-code read on process B. The proof was genuine and it answered the wrong question -- unverifiable evidence gaining authority by borrowing someone else's. `SignalledProof` now carries the RawHandle it was produced for, `query_exit_status` refuses a mismatch with the new stable reason `UnknownExit::ProofFromAnotherProcess`, and a test proves both directions (mismatched proof refuses and never calls the exit arm; the same proof still works for its own process). Drill 5 above proves the guard is load-bearing.\n- tests/real_windows.rs compared the queried image path with `assert_eq!`, so a FAILING assertion would have printed the executable path into a panic message -- precisely the echo the rail forbids, and the same reason RawHandle has no Debug. Replaced with `assert!` over a case-folded comparison whose message names neither path.\nRemaining audit, all clean: NativeError still has exactly two private fields, op and code; RawHandle still has no Debug; Identity, ProcessSpec and CreatedProcess have no Debug; every Debug derive in the crate is on a numeric or enum type; no executable path, argv, cwd, environment or handle value appears in any error, log or panic message.\n\n(e) NO ARTIFACTS. `git status --porcelain | grep -E \"dist/|target/|\\.exe|\\.pdb\"` => none. The diagnostic probe from step 8 was deleted and greps to zero hits. No marker file or temp path is ever created.\n\n(f) COMMIT 95f5e5e, by explicit pathspec over three paths, verified with `git show --stat`: src/lifecycle.rs, tests/process_sweep.rs, tests/real_windows.rs. Nothing foreign in it. `git diff HEAD -- <crate>` is EMPTY, so committed bytes == gated bytes.\n\nREAD THIS BEFORE REVIEWING: TWO FOREIGN WHOLE-TREE COMMITS CAPTURED MOST OF THIS TASK'S WORK. c199088 (task-1df0622e) and c8e845e (task-a95ccf7e) swept my in-progress files into commits bearing other tasks' ids. Per the project rail I did not amend, reset, or claim them. REVIEW BY BASE-REF DIFF:\n  git diff 5ef522c..HEAD -- packages/runner/src/platform/windows/native\n=> 16 files, 1710 insertions, 157 deletions. That range also contains 55dea5d and 3b3682e, task-885a46e9's own fixes after its QA rejection; src/win32/system_process_attrs.rs (36 lines changed) is entirely 2a's and none of its bytes are mine. src/handle.rs is untouched by anyone.",
+      "startedAt": "2026-08-09T19:16:31.741Z",
+      "completedAt": "2026-08-09T19:22:04.247Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a87e980a",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -183,7 +198,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:40.833Z",
-  "updatedAt": "2026-08-09T19:14:42.529Z",
+  "updatedAt": "2026-08-09T19:23:43.029Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -204,7 +219,9 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T18:40:22.502Z",
@@ -212,7 +229,7 @@
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
     "firstClaimAt": "2026-08-09T18:40:31.376Z",
-    "executedStepCount": 8
+    "executedStepCount": 10
   },
   "planningNotes": {
     "approachesConsidered": "WHERE THE LIFECYCLE ARMS GO. Chose extending the existing `ProcessCalls` trait in src/win32/process_calls.rs (110 -> ~160 lines, under the bar). Rejected a separate `LifecycleCalls` trait: `ContainedProcess<'c, C: Win32Calls + ProcessCalls>` already carries that exact bound, so a third trait would force a signature change on 2a's type and every impl and test double -- churn in a sibling's file for no isolation benefit.\n\nHOW THE UNWIND REACHES THE JOB. `ContainedProcess` does not retain the Job and this plan does NOT add it. Inside `ContainedProcess::create` the Job is already a parameter and in scope, which is the only place partial-construction unwind can run. For post-construction lifecycle calls the caller passes `&Job` explicitly. DoD item 1 is satisfied either way -- the point is that the ORIGINAL handle is used rather than reopening by PID, and a `&Job` the caller already holds is the original handle.\n\nREAL-WINDOWS PROOF WITHOUT A MARKER FILE OR A HELPER BINARY. Rejected `src/bin/marker.rs` even though Cargo autobins would discover it without a manifest edit: epic rail 5 forbids probe files in commits and a marker helper reads as exactly that, and it would push the file count to 10. Rejected a filesystem marker copied by robocopy/xcopy: a temp path plus cleanup-on-every-path obligation, for a weaker signal. CHOSE a wait-based proof using PING.EXE resolved from %SystemRoot%: before resume, a bounded wait on the process handle returns WAIT_TIMEOUT even though `ping -n 1` would exit in well under a second, which IS the observation that the thread never ran; after resume the same wait returns WAIT_OBJECT_0. No filesystem, no race, no cleanup obligation, no shell, and it exercises the very arms this task adds. `ping -n 60` gives the long-lived process for the terminate test.\n\nINHERITED HANDLES IN THE ACCEPTANCE TEST. ProcessSpec demands exactly three. Open the NUL device three times as inheritable via CreateFileW in test setup. That is test FIXTURE code, not production authority, so it does not violate the rail against reimplementing authority in real_windows.rs -- and it keeps the child's output off the test console.\n\nPROVING ABSENCE OF AN OPEN-BY-PID ARM (DoD item 1). There is no way to assert a method does not exist, so the proof is the closed vocabulary: `NativeOp::ALL` is a fixed-size array whose length is part of its type, and the sweeps assert the exact total. Adding an OpenProcess arm would have to add a variant, which breaks the length assertion and the totality cross-check. Absence is enforced by the count, not by a comment.",
@@ -230,5 +247,29 @@
     "wallClockMs": 14400000
   },
   "planApprovedAt": "2026-08-09T18:40:24.560Z",
-  "workStartedAt": "2026-08-09T18:41:02.539Z"
+  "workStartedAt": "2026-08-09T18:41:02.539Z",
+  "reviewStartedAt": "2026-08-09T19:23:43.029Z",
+  "verification": {
+    "command": "cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core",
+    "exitCode": 0,
+    "outputTail": "Running tests\\job_sweep.rs\nrunning 7 tests\ntest result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nRunning tests\\process_sweep.rs\nrunning 28 tests\ntest result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.24s\n\nRunning tests\\real_windows.rs\nrunning 2 tests\ntest terminating_the_job_leaves_no_live_process_in_it ... ok\ntest a_suspended_child_is_inside_the_job_and_has_not_run_before_the_proofs ... ok\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s\n\nDoc-tests moe_windows_job_core\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\nTEST_EXIT=0\n\n   Compiling moe-windows-job-core v0.1.0 (D:\\projexts\\moe-next\\packages\\runner\\src\\platform\\windows\\native)\n    Finished `release` profile [optimized] target(s) in 0.20s\nBUILD_EXIT=0",
+    "reportedAt": "2026-08-09T19:23:43.029Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/native/src/win32.rs",
+    "packages/runner/src/platform/windows/native/src/win32/process_calls.rs",
+    "packages/runner/src/platform/windows/native/src/lib.rs",
+    "packages/runner/src/platform/windows/native/tests/process_sweep.rs",
+    "packages/runner/src/platform/windows/native/src/lifecycle.rs",
+    "packages/runner/src/platform/windows/native/src/process.rs",
+    "packages/runner/src/platform/windows/native/src/unwind.rs",
+    "packages/runner/src/platform/windows/native/src/spec.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_process.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_lifecycle.rs",
+    "packages/runner/src/platform/windows/native/tests/job_sweep.rs",
+    "packages/runner/src/platform/windows/native/tests/real_windows.rs",
+    "packages/runner/src/platform/windows/native/src/win32/system_job.rs",
+    "packages/runner/src/platform/windows/native/src/job.rs",
+    "packages/runner/src/platform/windows/native/Cargo.toml"
+  ]
 }

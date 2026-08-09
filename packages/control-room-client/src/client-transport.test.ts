@@ -226,3 +226,26 @@ it("reads an event page over the same header discipline and returns the frame ve
   if (!result.delivered) throw new Error("expected the daemon's answer to be delivered");
   expect(result.response).toEqual(frame);
 });
+
+it("reads the authenticated document dossier with an exact empty request", async () => {
+  const dossier = {
+    advisoryOnly: true,
+    authority: "NONE",
+    ok: true,
+    outcome: "DOSSIER",
+  };
+  const stub = stubFetch(jsonReply(200, dossier));
+  const result = await transportWith(stub).readDocumentDossier();
+
+  const call = stub.calls[0];
+  expect(call?.method).toBe("POST");
+  expect(call?.url).toBe(`${ORIGIN}/documents/dossier/read`);
+  expect(call?.url).not.toContain(CREDENTIAL);
+  expect(call?.headers["x-moe-session-credential"]).toBe(CREDENTIAL);
+  expect(call?.headers["x-moe-csrf"]).toBe(CSRF);
+  expect(call?.headers["x-moe-protocol-version"]).toBe(gatedSurface().wireProtocolVersion);
+  expect(call?.body).toBe("{}");
+  expect(result).toMatchObject({ delivered: true, status: 200 });
+  if (!result.delivered) throw new Error("expected the daemon's dossier answer to be delivered");
+  expect(result.response).toEqual(dossier);
+});

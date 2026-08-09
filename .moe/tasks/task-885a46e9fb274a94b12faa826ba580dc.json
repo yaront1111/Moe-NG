@@ -167,7 +167,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-5be1a8d6",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -192,7 +192,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:00.580Z",
-  "updatedAt": "2026-08-09T19:15:19.103Z",
+  "updatedAt": "2026-08-09T19:23:46.681Z",
   "contextFetchedBy": [
     "worker-4091b158",
     "qa-5be1a8d6"

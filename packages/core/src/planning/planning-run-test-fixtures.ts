@@ -147,6 +147,28 @@ export const MALFORMED_HOLDS: Readonly<Record<string, Record<string, unknown>>> 
   WRONG_GRAPH_EPOCH: { ...HOLD, graphEpoch: -1 },
 };
 
+/**
+ * Well-formed single-field deviations, one per hold field the identity guard compares. Each stays
+ * VALID at the schema layer deliberately: a malformed value is refused by
+ * `validExpansionProposeCommand` first and can never reach the identity comparison behind it, so a
+ * malformed fixture would leave that comparison untested while reading as coverage. `lifecycle`
+ * and `truthClass` are pinned constants, so no well-formed deviation of them exists.
+ */
+export const CHANGED_HOLDS: Readonly<Record<string, Record<string, unknown>>> = {
+  generation: { ...HOLD, generation: 3 },
+  goalVersion: { ...HOLD, goalVersion: 4 },
+  graphEpoch: { ...HOLD, graphEpoch: 5 },
+  holdId: { ...HOLD, holdId: "hold-2" },
+  parentNodeRef: { ...HOLD, parentNodeRef: "node-parent-2" },
+  parentRunRef: { ...HOLD, parentRunRef: "planning-run-9" },
+  proposalBaseHash: { ...HOLD, proposalBaseHash: hash("ab") },
+  sourceFingerprint: { ...HOLD, sourceFingerprint: hash("cd") },
+  "workerHandoff.digest": { ...HOLD,
+    workerHandoff: { ...HOLD.workerHandoff, digest: hash("ef") } },
+  "workerHandoff.ref": { ...HOLD,
+    workerHandoff: { ...HOLD.workerHandoff, ref: "handoff-2" } },
+};
+
 export function expansionCreate(
   overrides: Readonly<Record<string, unknown>> = {},
 ): PlanningRunCommand {

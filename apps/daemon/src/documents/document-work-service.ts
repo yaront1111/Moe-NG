@@ -1,27 +1,32 @@
-import { createHash } from "node:crypto";
-
 import {
   DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
   decodeDocumentWorkProposalBytes,
 } from "@moe/contracts";
 import type { DocumentWorkProposal } from "@moe/contracts";
-import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
+import { validateDocumentWorkResponse } from "./document-work-decision.js";
+import {
+  documentWorkAggregateId,
+  documentWorkEventId,
+} from "./document-work-identifiers.js";
+import { snapshotDocumentWorkRecordInput } from "./document-work-ingress.js";
+import { durableStoreRefusal, refuse } from "./document-work-result.js";
 import {
   DOCUMENT_WORK_EVENT_TYPE,
   DOCUMENT_WORK_RECORD_COMMAND_KIND,
 } from "./document-work-service-contract.js";
 import type {
-  DocumentWorkDossier,
   DocumentWorkProposalRecorded,
-  DocumentWorkServiceErrorCode,
-  DocumentWorkServiceLayer,
-  DocumentWorkServiceRefused,
-  ReadDocumentWorkDossierResult,
   RecordDocumentWorkProposalInput,
   RecordDocumentWorkProposalResult,
 } from "./document-work-service-contract.js";
+import type { DocumentWorkStorePort } from "./document-work-store-port.js";
 
+export {
+  documentWorkAggregateId,
+  documentWorkEventId,
+} from "./document-work-identifiers.js";
+export { readLatestDocumentWorkDossier } from "./document-work-read.js";
 export {
   DOCUMENT_WORK_EVENT_TYPE,
   DOCUMENT_WORK_RECORD_COMMAND_KIND,
@@ -40,50 +45,8 @@ export type {
 } from "./document-work-service-contract.js";
 
 const encoder = new TextEncoder();
-const AGGREGATE_PREFIX = "document-work/";
-const EVENT_PREFIX = "document-work-proposal/";
-const AGGREGATE_ID_DOMAIN = "moe.document-work.aggregate-id.v1";
-const EVENT_ID_DOMAIN = "moe.document-work.event-id.v1";
 
-function framedDigest(domain: string, values: readonly string[]): string {
-  const hash = createHash("sha256").update(`${domain}\u0000`, "utf8");
-  for (const value of values) {
-    const valueBytes = encoder.encode(value);
-    hash.update(`${String(valueBytes.byteLength)}:`, "ascii").update(valueBytes);
-  }
-  return hash.digest("hex");
-}
-
-export function documentWorkAggregateId(projectId: string): string {
-  return `${AGGREGATE_PREFIX}${framedDigest(AGGREGATE_ID_DOMAIN, [projectId])}`;
-}
-
-export function documentWorkEventId(
-  projectId: string,
-  principalId: string,
-  commandId: string,
-): string {
-  return `${EVENT_PREFIX}${framedDigest(
-    EVENT_ID_DOMAIN,
-    [projectId, principalId, commandId],
-  )}`;
-}
-
-function refuse(
-  code: DocumentWorkServiceErrorCode,
-  layer: DocumentWorkServiceLayer,
-): DocumentWorkServiceRefused {
-  return Object.freeze({
-    advisoryOnly: true,
-    authority: "NONE",
-    code,
-    layer,
-    ok: false,
-    outcome: "REFUSED",
-  });
-}
-
-/** The contracts decoder already returns a normalized, detached, deeply frozen proposal. */
+/** The public decoder returns a normalized, detached, deeply frozen proposal. */
 function normalizedBytes(proposal: DocumentWorkProposal): Uint8Array {
   return encoder.encode(JSON.stringify(proposal));
 }
@@ -92,19 +55,17 @@ function recorded(
   aggregateId: string,
   eventId: string,
   proposal: DocumentWorkProposal,
-  response: ReturnType<SqliteEventStore["commitExpectedVersionDecision"]>,
-): DocumentWorkProposalRecorded | DocumentWorkServiceRefused {
-  const { decision } = response;
-  if (decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(decision.resultCode, "DURABLE_STORE");
-  }
+  decisionId: string,
+  currentVersion: number,
+  disposition: "DECIDED" | "REPLAYED",
+): DocumentWorkProposalRecorded {
   return Object.freeze({
     advisoryOnly: true,
     aggregateId,
     authority: "NONE",
-    currentVersion: decision.currentVersion,
-    decisionId: decision.decisionId,
-    disposition: response.disposition,
+    currentVersion,
+    decisionId,
+    disposition,
     eventId,
     ok: true,
     outcome: "RECORDED",
@@ -112,101 +73,80 @@ function recorded(
   });
 }
 
-/**
- * Persists one inert proposal event. The raw bytes remain the idempotency identity;
- * normalized bytes are the only payload/result that become durable.
- */
+/** Persists exactly one inert proposal event after an exact hostile-input snapshot. */
 export function recordDocumentWorkProposal(
-  store: SqliteEventStore,
+  store: DocumentWorkStorePort,
   input: RecordDocumentWorkProposalInput,
 ): RecordDocumentWorkProposalResult {
-  const decoded = decodeDocumentWorkProposalBytes(input.proposalBytes);
+  const snapshot = snapshotDocumentWorkRecordInput(input);
+  if (snapshot === null) {
+    return refuse("DOCUMENT_WORK_SERVICE_INPUT_INVALID", "DAEMON_INGRESS");
+  }
+  const decoded = decodeDocumentWorkProposalBytes(snapshot.proposalBytes);
   if (!decoded.ok) return refuse(decoded.code, decoded.layer);
-  if (decoded.proposal.projectId !== input.projectId) {
+  if (decoded.proposal.projectId !== snapshot.projectId) {
     return refuse("DOCUMENT_WORK_PROPOSAL_PROJECT_MISMATCH", "DAEMON_PROVENANCE");
   }
 
-  const aggregateId = documentWorkAggregateId(input.projectId);
+  const aggregateId = documentWorkAggregateId(snapshot.projectId);
   const eventId = documentWorkEventId(
-    input.projectId,
-    input.principalId,
-    input.commandId,
+    snapshot.projectId,
+    snapshot.principalId,
+    snapshot.commandId,
   );
   const payload = normalizedBytes(decoded.proposal);
-  const response = store.commitExpectedVersionDecision({
-    commandKind: DOCUMENT_WORK_RECORD_COMMAND_KIND,
-    committedResultBytes: payload,
-    correlationId: input.correlationId,
-    decidedAt: input.decidedAt,
-    events: [{
-      domainSchemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
-      eventId,
-      eventType: DOCUMENT_WORK_EVENT_TYPE,
-      payload,
-    }],
-    expectedVersion: input.expectedVersion,
-    key: {
-      commandId: input.commandId,
-      principalId: input.principalId,
-      projectId: input.projectId,
-    },
-    requestBytes: input.proposalBytes as Uint8Array,
-    targetAggregateId: aggregateId,
+  let rawResponse: unknown;
+  try {
+    rawResponse = store.commitExpectedVersionDecision({
+      commandKind: DOCUMENT_WORK_RECORD_COMMAND_KIND,
+      committedResultBytes: payload,
+      correlationId: snapshot.correlationId,
+      decidedAt: snapshot.decidedAt,
+      events: [{
+        domainSchemaVersion: DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
+        eventId,
+        eventType: DOCUMENT_WORK_EVENT_TYPE,
+        outbox: [],
+        payload,
+      }],
+      expectedVersion: snapshot.expectedVersion,
+      key: {
+        commandId: snapshot.commandId,
+        principalId: snapshot.principalId,
+        projectId: snapshot.projectId,
+      },
+      requestBytes: snapshot.proposalBytes,
+      targetAggregateId: aggregateId,
+    });
+  } catch (error) {
+    const mapped = durableStoreRefusal(error);
+    if (mapped !== null) return mapped;
+    throw error;
+  }
+
+  const response = validateDocumentWorkResponse(rawResponse, {
+    aggregateId,
+    commandId: snapshot.commandId,
+    currentVersion: snapshot.expectedVersion + 1,
+    decidedAt: snapshot.decidedAt,
+    eventId,
+    expectedVersion: snapshot.expectedVersion,
+    payload,
+    principalId: snapshot.principalId,
+    projectId: snapshot.projectId,
   });
-  return recorded(aggregateId, eventId, decoded.proposal, response);
-}
-
-function latestEvent(
-  store: SqliteEventStore,
-  aggregateId: string,
-): StoredEvent | DocumentWorkServiceRefused {
-  const version = store.getAggregateVersion(aggregateId);
-  if (version === 0) {
-    return refuse("DOCUMENT_WORK_DOSSIER_MISSING", "DAEMON_READ_MODEL");
+  if (response === null) {
+    return refuse("DOCUMENT_WORK_DECISION_MISMATCH", "DURABLE_STORE");
   }
-  const event = store.readAggregateEvents(aggregateId, version - 1, 1).items[0];
-  if (event === undefined || event.aggregateSequence !== version) {
-    return refuse("DOCUMENT_WORK_DOSSIER_MISSING", "DAEMON_READ_MODEL");
+  if (response.outcome === "EXPECTED_VERSION_CONFLICT") {
+    return refuse("EXPECTED_VERSION_CONFLICT", "DURABLE_STORE");
   }
-  return event;
-}
-
-function dossier(
-  event: StoredEvent,
-  proposal: DocumentWorkProposal,
-): DocumentWorkDossier {
-  return Object.freeze({
-    advisoryOnly: true,
-    aggregateId: event.aggregateId,
-    aggregateSequence: event.aggregateSequence,
-    authority: "NONE",
-    committedAt: event.committedAt,
-    eventId: event.eventId,
-    ok: true,
-    outcome: "DOSSIER",
-    proposal,
-  });
-}
-
-/** Reads only the aggregate tail and refuses any record outside the exact inert contract. */
-export function readLatestDocumentWorkDossier(
-  store: SqliteEventStore,
-  projectId: string,
-): ReadDocumentWorkDossierResult {
-  const tail = latestEvent(store, documentWorkAggregateId(projectId));
-  if ("ok" in tail) return tail;
-  if (tail.eventType !== DOCUMENT_WORK_EVENT_TYPE) {
-    return refuse("DOCUMENT_WORK_DOSSIER_EVENT_TYPE_MISMATCH", "DAEMON_READ_MODEL");
-  }
-  if (tail.domainSchemaVersion !== DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION) {
-    return refuse("DOCUMENT_WORK_DOSSIER_SCHEMA_MISMATCH", "DAEMON_READ_MODEL");
-  }
-  const decoded = decodeDocumentWorkProposalBytes(tail.payload);
-  if (!decoded.ok) {
-    return refuse("DOCUMENT_WORK_DOSSIER_PAYLOAD_INVALID", "DAEMON_READ_MODEL");
-  }
-  if (decoded.proposal.projectId !== projectId) {
-    return refuse("DOCUMENT_WORK_PROPOSAL_PROJECT_MISMATCH", "DAEMON_PROVENANCE");
-  }
-  return dossier(tail, decoded.proposal);
+  return recorded(
+    aggregateId,
+    eventId,
+    decoded.proposal,
+    response.decision.decisionId,
+    response.decision.currentVersion,
+    response.disposition,
+  );
 }

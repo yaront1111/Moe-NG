@@ -180,7 +180,7 @@
       "completedAt": "2026-08-09T19:05:20.314Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -214,20 +214,29 @@
       "author": "worker-901cc711",
       "content": "SCOPE DISCLOSURE — 11th file written outside the plan's 10 owned paths, deliberately and not quietly.\n\nFile: packages/testkit/src/schedule/schedule-universe-tables.ts (+3/-2, committed as 0ff900a).\n\nWhy it was mandatory rather than scope growth: landing `graph.supersede` from ACTIVE made `tests/property/schedule/schedule-coverage.test.ts` fail with TWO assertions, and the failure is attributable to MY diff by the (2)-minus-(1) delta rule, so the path-attribution rail explicitly forbids me from disclosing it as foreign red:\n  - \"keeps the authored tables in lockstep with every landed reducer\": expected [...] to deeply equal [ 'ACTIVE|graph.supersede', ...(7) ] — the authored table lacked the edge the reducer now lands.\n  - \"classifies every empty landed table row as genesis or never-legal\": expected [ 'graph.supersede', 'graph_revision.create' ] to deeply equal [ 'graph_revision.create' ] — the manifest still classified graph.supersede as NEVER_LEGAL.\n\nThe edit is the minimum that re-establishes lockstep, and it is data, not logic: add `revSupersede: edge(REVISION, \"ACTIVE\", \"graph.supersede\", \"SUPERSEDED\")` to EDGE, remove `\"graph.supersede\"` from NEVER_LEGAL_COMMANDS.GRAPH_REVISION, and delete the now-false comment \"A revision reaches SUPERSEDED through authority loss, never through this table.\" File is 212 physical lines, under the cap.\n\nThe alternative was report_blocked, which I rejected: it would have parked the task with my transition already committed and the repo-wide schedule guard red on a failure I caused. The plan's \"no eleventh file, report_blocked instead\" guidance targets scope GROWTH; this is the completion of the change already in scope. Flagging it for QA to weigh rather than deciding silently.\n\nVerified after the sync: `pnpm exec vitest run --root . tests/property/schedule/` -> Test Files 2 passed (2), Tests 43 passed (43), exit 0. `pnpm --filter @moe/testkit typecheck` exit 0.",
       "timestamp": "2026-08-09T19:00:28.905Z"
+    },
+    {
+      "id": "comment-a1cedc711d0e465c961e2c5cc1a0a1ee",
+      "author": "qa-5be1a8d6",
+      "content": "QA verification evidence (qa-5be1a8d6) — APPROVED.\n\nREVIEWED BY BASE-REF DIFF, not by commit. No commit bears this task's bytes under its own id: `c199088` titled for this task carries FOREIGN work only (control-room, daemon documents, runner windows native). The owned bytes reached HEAD via `bb29326` (task-885a46e9) and `5172b3e` (task-4d226307) whole-tree hooks, plus the worker's own pathspec-scoped `a3335ed` + `0ff900a`. Per epic rail 3 / board rail, neither fact is a rejection reason.\n`git diff 8946b02d..HEAD -- <11 paths>` = +426/-38. `git status --porcelain -- packages/core packages/testkit` empty, so committed bytes == gated bytes.\n\nGATES RE-RUN BY ME, not read from the worker's summary:\n- `pnpm --filter @moe/core typecheck` exit 0.\n- `pnpm --filter @moe/core test` -> Test Files 22 passed, Tests 359 passed. 22 > 20 at baseline, so not a narrowed invocation.\n- Repo-wide `pnpm test` -> 209 files, 3980 passed | 1 skipped.\n- Repo-wide `pnpm typecheck` exit 1, ALL failing paths foreign: apps/daemon/src/documents/document-work-{decision-validation,read-integrity,tail}.test.ts and src/identity/session-authenticator.test.ts. Two of those are untracked in-flight files from another agent. Intersection with owned paths is EMPTY; disclosed, not excused, and no owned leg is red.\n\nSEVEN MUTATION DRILLS RUN BY ME. Each reddened a NAMED owned test; all three production files restored and verified byte-exact with `sha256sum -c`:\nD1 transitions admit APPROVED -> \"refuses supersede from every lifecycle except active...\"\nD2 predecessor revisionId echoed from command instead of live state -> \"refuses a self-consistent supersession naming a predecessor that is not this one\"\nD3 epoch echoed from command instead of live state -> same test\nD4 `rejected()` returns layer SUPERSESSION_KERNEL -> 20 tests red\nD5 validGraphEpochPlacement accepts 0 for ACTIVE -> \"refuses a state whose bound epoch does not match its lifecycle\"\nD6 SUPERSEDED terminal guard removed -> 3 tests red across 2 files\nD7 activation lands graphEpoch 0 -> invariant walk + \"freezes an active revision...\" red\nD2/D3 are the ones that matter: they prove the reducer hands `decideSupersession` the LIVE state and does not echo the command's own claim back at it.\n\n11TH FILE JUSTIFICATION VERIFIED BY MEASUREMENT, not accepted as prose. packages/testkit/src/schedule/schedule-universe-tables.ts is outside the plan's 10 paths. I reverted it to its base version and ran tests/property/schedule/schedule-coverage.test.ts: 2 assertions go red (\"keeps the authored tables in lockstep with every landed reducer\", \"classifies every empty landed table row as genesis or never-legal\"). The manifest is cross-checked against production LANDED_TRANSITIONS, so admitting supersede from ACTIVE forces the edit. That red is attributable to this diff and could NOT have been disclosed as foreign. +3/-2 is minimal repair, not scope creep. Restored byte-exact.\n\nNON-VACUITY CHECKED DIRECTLY. planning-invariants.test.ts collects `entry[1]` across all 5 seeds and asserts `observed.has(\"SUPERSEDED\")`. Driver entries are `[kind, lifecycle, version]` on accept and `[kind, errorCode]` on refusal; no error code is the bare string \"SUPERSEDED\", so that assertion can only be satisfied by an ACCEPTED result landing SUPERSEDED. The walk really reaches it. Both narrowed loops pair their `continue` with a positive assertion plus an exact refused-count (`GRAPH_REVISION_COMMAND_KINDS.length - 1`).\n\nPER-FILE CAP, hand-measured with `grep -c ''` (not Measure-Object): contract 188, reducer 237, validation 127, results 86, test-fixtures 177, reducer.test 219, supersession.test 196, invariant-drivers 244, invariants.test 144, invariant-fixtures 89, schedule-universe-tables 212. Max 244, all <= 250. Task-level LOC is not a bar and was not applied.\n\nWorker's own two commits carry only owned paths; no scratch, probe or generated files; no untracked leftovers under packages/core or packages/testkit. planning-invariant-drivers.ts imports the test fixtures but is not reachable from packages/core/src/index.ts, so no test surface leaks into production exports.\n\nDISCLOSED GAP ACCEPTED, not waived: initial activation sets graphEpoch = 1 literally, so a SUCCESSOR revision's own activation does not yet land at predecessor epoch + 1. DoD 2 requires only that the supersede RESULT emit that binding, and the accepted event does (successor.graphEpoch === predecessor + 1, kernel-enforced, asserted against the kernel's own return value). Successor activation belongs to task-069853689ed643988cfec2d689f7edb7.\n\nCorrection to the plan's step-11 prediction for anyone reading forward: the scheduler package-boundary shebang red is GONE. Do not carry that warning into a later task.",
+      "timestamp": "2026-08-09T19:21:59.193Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:30:12.550Z",
-  "updatedAt": "2026-08-09T19:06:58.501Z",
+  "updatedAt": "2026-08-09T19:23:11.666Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:44:35.057Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-09T19:23:11.666Z",
+    "wallClockMs": 13116609
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
-    "worker-901cc711"
+    "worker-901cc711",
+    "qa-5be1a8d6"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -304,5 +313,8 @@
     "packages/core/src/planning/planning-invariant-drivers.ts",
     "packages/core/src/planning/planning-invariants.test.ts",
     "packages/testkit/src/schedule/schedule-universe-tables.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T19:23:11.666Z",
+  "reviewCompletedAt": "2026-08-09T19:23:11.666Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-a1cedc711d0e465c961e2c5cc1a0a1ee.\n\nReviewed by base-ref diff, not commit: c199088 is titled for this task but holds only FOREIGN bytes; owned bytes reached HEAD via whole-tree hooks bb29326/5172b3e plus worker commits a3335ed/0ff900a. git diff 8946b02d..HEAD over the 11 paths = +426/-38; porcelain empty on packages/core + packages/testkit, so committed bytes == gated bytes.\n\nGates I re-ran: core typecheck exit 0; core test 22 files / 359 tests passed (20 at baseline, so not narrowed). Repo-wide test 209 files / 3980 passed. Repo-wide typecheck exit 1 on foreign apps/daemon paths only (documents/document-work-*.test.ts, identity/session-authenticator.test.ts, two of them untracked in-flight); intersection with owned paths EMPTY.\n\nSEVEN mutation drills run by me, each reddening a NAMED owned test, all files restored byte-exact per sha256sum -c: transitions widened; predecessor revisionId echoed from command not live state; graphEpoch echoed from command; layer left as SUPERSESSION_KERNEL (20 red); epoch placement accepts 0 for ACTIVE; SUPERSEDED guard removed; activation lands epoch 0. Drills 2-3 prove the reducer hands decideSupersession the LIVE state, not the command's own claim.\n\n11th file (packages/testkit schedule-universe-tables.ts, outside the plan's 10) verified by MEASUREMENT: reverted to base, schedule-coverage.test.ts reddens 2 assertions cross-checked against production LANDED_TRANSITIONS. Forced repair of a red this diff caused, not scope creep; the core-filtered gate cannot see that consumer.\n\nNon-vacuity confirmed: the invariant walk asserts observed.has(\"SUPERSEDED\"), satisfiable only by an ACCEPTED result; both narrowed loops pair the skip with a positive assertion and exact refused count.\n\nDoD 1-6 evidenced. Per-file lines via grep -c '': max 244, all <=250. No scratch files. Successor-activation gap disclosed and accepted."
 }

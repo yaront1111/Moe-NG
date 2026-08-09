@@ -11,7 +11,6 @@ import {
   bytes,
   expectRefusal,
   input,
-  proposal,
 } from "./document-work-service-test-fixtures.js";
 
 type RecordStore = Parameters<typeof recordDocumentWorkProposal>[0];
@@ -23,7 +22,9 @@ function transformedStore(
   return {
     close: () => real.close(),
     store: {
-      commitExpectedVersionDecision: (request) =>
+      commitExpectedVersionDecision: (
+        request: Parameters<RecordStore["commitExpectedVersionDecision"]>[0],
+      ) =>
         transform(real.commitExpectedVersionDecision(request)),
       getAggregateVersion: real.getAggregateVersion.bind(real),
       getCommandDecision: real.getCommandDecision.bind(real),

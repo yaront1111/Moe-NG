@@ -40,19 +40,24 @@
     {
       "stepId": "step-3",
       "description": "TDD RED — write provider-lock-inventory.test.ts before any implementation. Drive every case through the real collectRecoveryInventory with a registry composed from the exported registration, so assertions land on the production surface.\n\nCover, pinning the EXACT reason code AND the INVENTORY_ADAPTER layer on each refusal (never merely \"it failed\"):\n  - Happy path: real launch-lock registrations and process observations enumerate to items bound to PROVIDER_PROCESS_LAUNCH_LOCK with stable external identity, observed disposition facts and a sourceProofDigest. COMPLETE only when completeness was actually proven.\n  - A QUIET PROCESS IS NOT ABSENCE — the most important case here. process-observation.ts states the rule: \"UNOBSERVED is not death. Only an observed exit or signal proves an end.\" An unobserved process must NOT be omitted and must NOT be reported as terminated; it either appears as an item carrying its unobserved disposition or drives UNKNOWN. Assert this explicitly.\n  - Empty probe result with no negative proof -> code RECOVERY_INVENTORY_COVERAGE_UNKNOWN, layer INVENTORY_ADAPTER, reason NEGATIVE_PROOF_MISSING. An empty list is never COMPLETE by itself.\n  - Absent/unsupported provider capability, driven through the real capabilityStatus returning \"UNSUPPORTED\" -> reason CAPABILITY_UNSUPPORTED.\n  - Port throws or unavailable -> ENUMERATOR_UNAVAILABLE. Over-ceiling -> RESULT_OVER_LIMIT. complete:false -> RESULT_TRUNCATED.\n  - Two entries claiming one external identity REFUSE rather than merge.\n\nPut test doubles at the port boundary the probes already define (input.port.report()), so the real probe and real capabilityStatus stay in the path under test. Do NOT reimplement probe authority in a fixture — taskRail 2 and epic rail 6 both forbid it. Assert a non-zero generated case count for the class so a sweep producing nothing cannot pass.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts"
       ],
-      "startedAt": "2026-08-09T19:15:11.203Z"
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts"
+      ],
+      "note": "Wrote packages/runner/src/recovery-inventory/provider-lock-inventory.test.ts (405 lines, 20 cases) BEFORE the implementation existed. HONEST SCOPE NOTE ON \"RED\": I authored the test against a module that did not yet exist, but I did not run it in that state, so the only red I would have captured was an unresolved-import error - which proves nothing behavioural. The behavioural reddenability proof required by DoD 5 is step 7's four mutation drills, and I will record the exact failing assertion for each there rather than claim a red I did not observe here.\n\nEvery refusal case is driven END TO END through the shipped collectRecoveryInventory with a registry composed from the exported registration, so assertions land on the aggregate that actually mints codes. Doubles sit at the port boundary the probes already define (input.port.report()) - the real probeClaudeRuntime, probeCodexRuntime and the real capabilityStatus stay inside the path under test, and no probe/launch-lock/observation authority is reimplemented in a fixture.\n\nCases, each pinning truth+code+reason+layer together by whole-object equality (never \"it refused\"):\n- happy path: 1 lock + 1 observed process -> COMPLETE, 2 items, class/projectTag/observedAt bound, sourceProofDigest matches /^[0-9a-f]{64}$/, exact facts asserted for both rows.\n- the one-time bootstrap credential digest never appears anywhere in the emitted items.\n- a lock binding a foreign wrapper is reported with bindsGoverningClaim:false, not dropped.\n- QUIET PROCESS, two arms: (a) the exported enumerator's own reading keeps the UNOBSERVED row with exitKind UNOBSERVED, dispositionProven false, ended FALSE, and complete false - so it is neither omitted nor reported as terminated; (b) end to end it answers UNKNOWN / RECOVERY_INVENTORY_COVERAGE_UNKNOWN / RESULT_TRUNCATED / INVENTORY_ADAPTER.\n- an unparsable process record and an unparsable lock record each truncate rather than shrink the population.\n- NEGATIVE_PROOF_MISSING when neither provider can prove absence, AND when only one of the two can - that second arm is what stops a single provider laundering the proof.\n- COMPLETE on an empty population only against a non-null negativeProofDigest (asserted hex64).\n- CAPABILITY_UNSUPPORTED three ways: claude cannot observe a process tree, codex cannot, and surviving children disprove termination.\n- ENUMERATOR_UNAVAILABLE four ways: locks port throws, processes port throws, the runtime observation itself refuses (clock returns a non-canonical instant), governing claim does not parse.\n- RESULT_OVER_LIMIT at exactly 4097 items, with the generated array length asserted first so a sweep that produced nothing cannot pass.\n- two locks claiming one external identity -> RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE + ITEM_REJECTED, 0 items admitted (refuse, never merge).\n- ENUMERATOR_UNREGISTERED with the class still present in the report.\n- coverage sweep guard: a module-level counter asserts exactly 19 generated coverage cases for PROVIDER_PROCESS_LAUNCH_LOCK and non-zero overall, so deleting an arm fails the file.",
+      "startedAt": "2026-08-09T19:15:11.203Z",
+      "completedAt": "2026-08-09T19:20:22.517Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN — implement provider-lock-inventory.ts plus its one-line sibling .js bridge.\n\nExport an enumerator and a `RecoveryInventoryRegistration` constant for class PROVIDER_PROCESS_LAUNCH_LOCK. Compose the three shipped authorities and add none of your own: probeClaudeRuntime / probeCodexRuntime with the aliased capabilityStatus for provider capability; parseLaunchLockRegistration and bindsClaim for launch-lock records; intakeProcessObservation for process disposition.\n\nIMPORT launch-lock.ts RELATIVELY from inside the package. It is deliberately unpublished — do NOT add it to the @moe/runner root seam, and do not edit index.ts or index-surface.test.ts at all; slice 1 owns that seam.\n\nFail closed on every uncertain branch: return UNAVAILABLE or UNSUPPORTED rather than an empty ENUMERATED, and set complete:false with a null negativeProofDigest when you cannot prove you saw everything. Never let a quiet process read as an ended one.\n\nTHE .js BRIDGE IS NOT OPTIONAL AND ITS ABSENCE IS INVISIBLE — omitting it fails neither tsc nor vitest and breaks only the plain-Node entrypoint. Match the existing sibling bridges exactly including the trailing LF; verify with `od -c`.\n\nTarget <=250 physical lines, split before 400, measured with `grep -c ''` (PowerShell Measure-Object -Line undercounts by skipping blank lines).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
         "packages/runner/src/recovery-inventory/provider-lock-inventory.js"
@@ -60,12 +65,19 @@
       "newFiles": [
         "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
         "packages/runner/src/recovery-inventory/provider-lock-inventory.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.ts",
+        "packages/runner/src/recovery-inventory/provider-lock-inventory.js"
+      ],
+      "note": "GREEN. provider-lock-inventory.ts (248 physical lines by grep -c '') plus the one-line .js bridge; focused run 20/20 pass.\n\nComposes only shipped authority: probeClaudeRuntime/probeCodexRuntime with capabilityStatus imported ALIASED (claudeCapabilityStatus / codexCapabilityStatus - the collision the plan warned about is real and unaliased imports do not compile), parseLaunchLockRegistration + bindsClaim for lock records, intakeProcessObservation for process disposition, parseEffectClaim for the governing claim. launch-lock.ts is imported RELATIVELY and stays unpublished; index.ts and index-surface.test.ts are untouched.\n\nONE DELIBERATE DEVIATION FROM THE STEP TEXT, and it follows the step-1 ruling rather than contradicting it. The step says \"export a RecoveryInventoryRegistration CONSTANT\". A constant cannot carry per-composition ports without module-global state, which is precisely the order-dependent coupling createRecoveryInventoryRegistry refused. So the module exports providerLockInventoryRegistration(input): RecoveryInventoryRegistration - a factory returning a frozen { class, enumerate } tuple member. The daemon composes the real one; tests compose their own. Zero aggregate edits, and slice 3 can land the same shape without colliding.\n\nDESIGN DECISION WORTH QA'S ATTENTION: a provider is NOT emitted as a recoverable row. The two probes are the authority that says (a) whether this population can be observed at all - gated on PROCESS_TREE_TERMINATION through the real capabilityStatus, UNSUPPORTED -> CAPABILITY_UNSUPPORTED - and (b) whether its absence can be proven - RUN_ENUMERATION_NEGATIVE_PROOF on BOTH providers mints negativeProofDigest, otherwise null. Emitting a row per provider would make the class permanently non-empty and silently retire the negative-proof requirement the empty case exists to enforce. Rows are launch locks and process observations only.\n\nFail-closed mapping, chosen against the aggregate's precedence order measured in step 2:\n- probe refuses (bad clock/platform), port throws, or claim unparsable -> UNAVAILABLE, never an empty ENUMERATED.\n- process tree unobservable on either provider -> UNSUPPORTED.\n- a record this seam cannot read (lock or process) -> complete:false, so an unreadable record truncates the enumeration instead of shrinking the population.\n- an UNOBSERVED process -> row KEPT with exitKind UNOBSERVED, dispositionProven false, ended FALSE, and complete:false. Never omitted, never terminated. `ended` is computed from processExit.kind !== \"UNOBSERVED\" so the drill target is a single explicit expression.\n- empty population -> complete:true with negativeProofDigest null when unprovable, which is the only shape that reaches NEGATIVE_PROOF_MISSING.\nThe bootstrap credential digest is excluded from facts (launch-lock keeps it out of every outcome) but stays inside the one-way sourceProofDigest, and a test asserts it never appears in the emitted items.\n\n.js bridge verified with od -c: `export * from \"./provider-lock-inventory.ts\";\\n`, trailing LF present, byte-identical in form to the three sibling slice-1 bridges.",
+      "startedAt": "2026-08-09T19:20:25.107Z",
+      "completedAt": "2026-08-09T19:20:44.201Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD RED then GREEN for the WORKSPACE class — workspace-inventory.test.ts, then workspace-inventory.ts plus its .js bridge.\n\nDoD 5 requires REAL TEMPORARY FILESYSTEM BYTES here, not an in-memory double: build actual manifests through the shipped buildInputManifest (workspace-manifest.ts:62) and buildResultManifest (:189) over a real temp directory, and bind each workspace item with the same class/identity/facts/sourceProofDigest discipline as the provider enumerator.\n\nCreate the temp directory with mkdtemp under the OS temp root, NEVER inside the repo — a stray fixture directory in a commit breaks epic rail 5's no-scratch-files clause. Remove it in an afterEach that runs even when the test fails, recursive and forced, since this host is win32.\n\nMandatory cases, each pinning the exact code and INVENTORY_ADAPTER layer:\n  - Two entries claiming one external identity REFUSE rather than merge — DoD 2 names this explicitly. Compare with identityKey (shape:121) and expect RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE, not silent last-writer-wins.\n  - Truncated or over-limit manifest results -> RESULT_TRUNCATED / RESULT_OVER_LIMIT.\n  - Missing negative proof on an empty workspace -> NEGATIVE_PROOF_MISSING, never COMPLETE.\nAssert a non-zero generated case count for the WORKSPACE class.\n\nSame rules as the provider module: relative imports, no root-seam edit, .js bridge with od -c verified trailing LF, <=250 lines target.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts",
@@ -75,7 +87,8 @@
         "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.ts",
         "packages/runner/src/recovery-inventory/workspace-inventory.js"
-      ]
+      ],
+      "startedAt": "2026-08-09T19:20:47.046Z"
     },
     {
       "stepId": "step-6",
@@ -127,19 +140,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T19:15:11.203Z",
+  "updatedAt": "2026-08-09T19:20:47.046Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T18:57:07.679Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 2
+    "executedStepCount": 4
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T19:02:24.895Z",

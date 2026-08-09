@@ -3,26 +3,31 @@ import type {
   DocumentWorkProposalErrorCode,
   DocumentWorkProposalLayer,
 } from "@moe/contracts";
+import type { DurableStoreErrorCode } from "@moe/store";
 
 /** Internal durable record only; this is deliberately not a runtime command affordance. */
 export const DOCUMENT_WORK_RECORD_COMMAND_KIND = "document-work.record" as const;
 export const DOCUMENT_WORK_EVENT_TYPE = "DocumentWorkProposalRecorded" as const;
 
 export const DOCUMENT_WORK_SERVICE_ERROR_CODES = Object.freeze([
+  "DOCUMENT_WORK_SERVICE_INPUT_INVALID",
   "DOCUMENT_WORK_PROPOSAL_PROJECT_MISMATCH",
+  "DOCUMENT_WORK_DECISION_MISMATCH",
   "DOCUMENT_WORK_DOSSIER_MISSING",
   "DOCUMENT_WORK_DOSSIER_EVENT_TYPE_MISMATCH",
   "DOCUMENT_WORK_DOSSIER_SCHEMA_MISMATCH",
   "DOCUMENT_WORK_DOSSIER_PAYLOAD_INVALID",
-  "EXPECTED_VERSION_CONFLICT",
+  "DOCUMENT_WORK_DOSSIER_DECISION_MISMATCH",
+  "DOCUMENT_WORK_DOSSIER_TAIL_UNSTABLE",
 ] as const);
 
 export const DOCUMENT_WORK_SERVICE_LAYERS = Object.freeze([
-  "DAEMON_PROVENANCE", "DAEMON_READ_MODEL", "DURABLE_STORE",
+  "DAEMON_INGRESS", "DAEMON_PROVENANCE", "DAEMON_READ_MODEL", "DURABLE_STORE",
 ] as const);
 
 export type DocumentWorkServiceErrorCode =
   | DocumentWorkProposalErrorCode
+  | DurableStoreErrorCode
   | (typeof DOCUMENT_WORK_SERVICE_ERROR_CODES)[number];
 export type DocumentWorkServiceLayer =
   | DocumentWorkProposalLayer
