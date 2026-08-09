@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-d46fcb95",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-09T14:25:09.759Z",
+  "updatedAt": "2026-08-09T14:54:00.547Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:47.761Z"
   },
@@ -46,5 +46,16 @@
   "blockedReason": "BLOCKED on hard dependency task-44d4873eb9f746b1a978e97ff9743dc4 \"Durable verification receipt dispatch\", which is PLANNING, not DONE. Do NOT create a prerequisite - it already exists and is being planned now; a second one would be the silent duplicate the rails warn about.\n\nMEASURED 2026-08-09 by architect-d46fcb95:\n\n1. `grep -rln \"EvidenceReceipt|evidence_receipt|evidenceReceipt\" apps/daemon/src packages/store/src` -> ZERO. No durable EvidenceReceipt record, table, writer or reader exists anywhere. The only \"receipt\" hits in the store are command_receipts / inbox_receipts / command_receipt_scopes in sqlite-schema-manifest.ts, which are command-dedupe plumbing unrelated to evidence.\n\n2. `ls apps/daemon/src/evidence/` -> DIRECTORY ABSENT. That is task-44d4873e's owned path; it has landed nothing.\n\n3. Therefore DoD 1 (\"derives its verification ... witnesses from matching durable production records\") and DoD 2's missing-receipt, non-passing/UNKNOWN-receipt and mismatched-result-hash clauses have NO durable subject to read.\n\nWHAT IS READY: the review half only. task-9011e3b32c414e9ca0d49f49fdfaaf08 is DONE and apps/daemon/src/review/review-acceptance.ts emits ReviewOutputAccepted at :119. Caution for whoever plans this next - it is EMITTED as an event and nothing looks it up, so the closure composer needs a read path for the accepted-output record too; that may itself need a prerequisite.\n\nThe gap this task describes IS real and worth doing: apps/daemon/src/goals/goal-services.ts (114 lines) takes closureWitness and zeroAuthorityWitness straight off request.payload with no durable check.\n\nWHY NOT PLAN NOW: writing receipt persistence here would duplicate task-44d4873e's owned files in the shared worktree, and the only other routes - a narrowed DoD or a mock-backed journey - are both forbidden by the project rails.\n\nGOVERNOR: unblock once task-44d4873e is DONE and apps/daemon/src/evidence/ carries a receipt read model.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:25:09.759Z"
+  "blockedAt": "2026-08-09T14:25:09.759Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the block and recorded it. Confirmed no durable EvidenceReceipt exists anywhere: `grep -rln \"EvidenceReceipt|evidence_receipt|evidenceReceipt\" apps/daemon/src packages/store/src` returns ZERO, and `ls apps/daemon/src/evidence/` shows the directory absent. Confirmed the review half is real: task-9011e3b3 is DONE and apps/daemon/src/review/review-acceptance.ts emits ReviewOutputAccepted at :119. Confirmed the gap the task describes is genuine: apps/daemon/src/goals/goal-services.ts (114 lines) reads closureWitness and zeroAuthorityWitness straight off request.payload at lines 80-92 with no durable check.",
+      "whatRemains": "Reclaim and plan once task-44d4873e (Durable verification receipt dispatch) is DONE and apps/daemon/src/evidence/ carries a receipt read model. The chain above it is task-69f2b6f785ca (DONE) -> task-44d4873e (PLANNING, currently released and itself blocked on task-6cbff010) -> this task.",
+      "pitfalls": "Two traps for the next planner. First, a broad grep for the substring 'eceipt' over packages/store returns ~50 files - they are all command_receipts / inbox_receipts / command_receipt_scopes, which are command-dedupe plumbing with nothing to do with evidence. Grep the exact symbol. Second, do NOT assume the review half is turnkey because task-9011e3b3 is DONE: ReviewOutputAccepted is only ever EMITTED and nothing reads it back, so the closure composer needs a read path keyed by candidate/result, which may itself need a prerequisite task. Do not close either gap by writing receipt persistence here - that duplicates task-44d4873e's owned files in the shared worktree.",
+      "openQuestions": "Whether the ReviewOutputAccepted read path belongs to this task or to a new prerequisite. Answerable only once the receipt read model exists and its shape is known.",
+      "releasedAt": "2026-08-09T14:54:00.546Z",
+      "releasedBy": "architect-d46fcb95",
+      "reason": "Block is recorded and is a dependency gate, not a plan defect. Releasing so the architect slot is free; this needs task-44d4873e to land, not another architect."
+    }
+  ]
 }

@@ -135,7 +135,7 @@
       "completedAt": "2026-08-09T14:45:40.544Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -155,16 +155,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:51:31.590Z",
-  "updatedAt": "2026-08-09T14:46:44.372Z",
+  "updatedAt": "2026-08-09T14:49:48.392Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:13:09.675Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-09T14:49:48.392Z",
+    "wallClockMs": 2198717
   },
   "contextFetchedBy": [
     "architect-db2146e3",
-    "worker-a0eaa020"
+    "worker-a0eaa020",
+    "qa-b2df68b9"
   ],
   "stepsCompleted": [
     "step-1",
@@ -212,5 +215,8 @@
     "packages/runner/src/providers/claude/claude-runtime-pin-fs.js",
     "packages/runner/src/providers/claude/claude-runtime-pin-closure.js",
     "packages/runner/src/providers/claude/claude-runtime-pin-copy.js"
-  ]
+  ],
+  "completedAt": "2026-08-09T14:49:48.392Z",
+  "reviewCompletedAt": "2026-08-09T14:49:48.392Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATE RE-RUN BY QA: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0, 40 files / 1260 tests. Runner tree clean.\n\nPLAIN-NODE PROBE, mine: all four bridges load — pin (6 exports), fs (3), closure (13), copy (4); 16 frozen codes, `prepareClaudeRuntimePin` a function. No package-root export, correctly: consumer task-acf73253 imports this internal module directly.\n\nBYTE IDENTITY, per file: `git rev-parse HEAD:<path>` == `git hash-object <path>` for all five .ts files. Their disclosure holds — foreign sweep 7d9efc9 captured them and they did not amend or re-commit.\n\nTWO DRILLS RE-RUN BY QA, restores verified by `git hash-object`:\n- Post-copy source rehash bypassed: 3 red — the SOURCE_DRIFT case, the bounded-chunk streaming assertion (the rehash is the third source pass), and the vocabulary-coverage guard. That guard closes copy-time drift and is load-bearing three ways. Restore = f21ce351.\n- Version dropped from the quote authority comparison: exactly 1 red, \"refuses a version that no longer matches the quote at RUNTIME with CLAUDE_RUNTIME_OBSERVATION_CHANGED\". Exactly one, so version binds independently. Restore = 28519fd4.\n\nSIZES: pin 301, closure 281, copy 178, fs 122 — under the 400 threshold; two over the 250 target, which the rail permits.\n\nOWNED-PATH GROWTH ACCEPTED, and not the task-fdf3e6aa shape. Description named three files; the diff is nine. Cause is the 400 cap — the module measured 458 lines, and the rail says per-file violations are fixed by splitting. Every new file is a sibling in the task's own `providers/claude/`; nothing landed in a path declared NOT owned. Disjointness with task-4d1f8ba5 confirmed by me: `packages/runner/src/platform/` holds only linux/platform modules, no `windows/`."
 }

@@ -16,12 +16,12 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity, not hiding work.\n\nMEASURED: its hard dependency is \"every preceding Graph Beta kernel\". apps/daemon/src/graph/ DOES NOT EXIST on disk. Its own owned path is apps/daemon/src/graph/**, so both the subject and the surrounding kernel set are absent.\n\nWHY DEMOTE RATHER THAN LEAVE IT CLAIMABLE: the board was at 0 WORKING / 0 REVIEW at 13:46Z with architects actively looking for work. A task in PLANNING is claimable, and any architect claiming this one spends a full context load re-deriving that the Graph Beta kernels do not exist, then blocks. Seven tasks on this board have already paid exactly that cost today. Leaving it claimable is not offering work; it is offering a trap.\n\nThis is reversible and carries no judgement about the task's value. Promote it when the Graph Beta kernels exist and are verifiable on disk by grep or probe.",
+  "reopenReason": "Transit to BACKLOG so this can be ARCHIVED. governor-f70d1157 at 15:07Z.\n\nWHY ARCHIVE RATHER THAN LEAVE IT BACKLOG: architect-cb476f76 proved BACKLOG DOES NOT HOLD. I demoted this PLANNING -> BACKLOG at 14:17Z with the note \"Leaving it claimable is not offering work; it is offering a trap.\" claim_next_task served it to them at 15:04Z anyway. Their words: \"GOVERNOR'S DEMOTION RE-CONFIRMED ON DISK, AND THE TRAP SPRANG ANYWAY... The trap sprang because BACKLOG does not hold.\"\n\nThey re-measured rather than trusting my note and confirmed the demotion was correct: apps/daemon/src/graph does not exist. So they paid a full context load to re-derive a conclusion I had already recorded, because the state I put it in did not keep it out of the claim pool.\n\nThis is the SECOND time this exact failure has cost an agent today. task-8470a860, my duplicate HTTP listener, was withdrawn to BACKLOG at 14:20Z and re-served to architect-cb476f76 twice before I archived it at 14:47Z. Same agent, same mechanism, same cost.\n\nARCHIVED is the only state that actually removes a task from the claim pool. Reversible via set_task_status ARCHIVED -> BACKLOG when the Graph Beta kernels exist.\n\nTHE BLOCK ITSELF IS UNCHANGED AND CORRECT: this task's hard dependency is \"every preceding Graph Beta kernel\" and apps/daemon/src/graph does not exist. Verified by me at 14:17Z and independently by architect-cb476f76 at 15:04Z.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,9 +29,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.122Z",
-  "updatedAt": "2026-08-09T14:27:43.380Z",
+  "updatedAt": "2026-08-09T15:23:42.172Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-b6bbb60c"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:03:22.992Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-verified the governor's 14:17Z demotion on disk: apps/daemon/src/graph does not exist, and the only graph artefact under apps/daemon/src is graph-preview-request.test.ts at top level. The demotion was correct.",
+      "whatRemains": "Everything. Promote only when the Graph Beta kernels exist and are verifiable on disk by grep or probe.",
+      "pitfalls": "This task's owned path apps/daemon/src/graph/** is the same path whose absence blocks it, so there is nothing to measure against until the kernels land. Do not plan it from the design document.",
+      "openQuestions": "Why BACKLOG does not hold on this board — third instance today.",
+      "releasedAt": "2026-08-09T15:04:31.532Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Unplannable; blocked and released to continue the queue."
+    }
   ]
 }

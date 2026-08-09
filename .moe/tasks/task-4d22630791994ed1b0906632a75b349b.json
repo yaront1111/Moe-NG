@@ -9,13 +9,70 @@
     "pnpm install, pnpm typecheck and pnpm test all exit 0"
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ THE reopenReason BEFORE ANYTHING ELSE. It is the authoritative scope for this task and it OVERRIDES the stored definitionOfDone, which the governor states plainly they could not edit because no MCP tool exposes that field. Three of the description's four claims were measured false by two independent agents. The corrected scope is exactly three changes and nothing more: (a) remove @moe/core from packages/coordination/package.json, (b) regenerate the lockfile, (c) add a one-line reserved comment to the adapters/* entry in pnpm-workspace.yaml. DO NOT ADD ANY DEPENDENCY TO ANY PACKAGE. Specifically: do NOT add @moe/contracts to packages/scheduler, and do NOT add @moe/store or @moe/testkit to apps/control-room. The governor's note is explicit that a diff doing either is a REJECTION rather than compliance. Re-confirm the one surviving claim yourself in one command before editing -- `git grep -nE 'from \"@moe/core\"' HEAD -- packages/coordination/src` must return ZERO hits while packages/coordination/package.json declares it. This step edits nothing; affectedFiles is intentionally empty so read-only files do not count against the plan's file budget.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Read authoritative reopenReason and Serena handoff. Reconfirmed `git grep -nE 'from \"@moe/core\"' HEAD -- packages/coordination/src` returns zero hits (exit 1) while the manifest declares @moe/core. Corrected scope is remove only that dependency, keep/comment adapters/*, regenerate lock; add no dependency anywhere. Shared-manifest status already shows foreign root package.json and packages/store/package.json dirty, so lock regeneration must wait after safe independent edits.",
+      "startedAt": "2026-08-09T15:15:38.147Z",
+      "completedAt": "2026-08-09T15:15:55.017Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Remove the unused dependency. Edit packages/coordination/package.json to delete the \"@moe/core\": \"workspace:*\" entry from dependencies, leaving @moe/contracts and @moe/store in place -- both are genuinely imported (measured: `from \"@moe/contracts\"` x5 and `from \"@moe/store\"` x4 across packages/coordination). Change nothing else in the manifest: no version bumps, no field reordering, no formatting sweep. Keep the file's existing key order and indentation exactly, so the diff is one deleted line and a reviewer can see the whole change at a glance.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/coordination/package.json"
+      ],
+      "modifiedFiles": [
+        "packages/coordination/package.json"
+      ],
+      "note": "Removed exactly the @moe/core workspace dependency; manifest diff is one deleted line and @moe/contracts/@moe/store remain. `pnpm --filter @moe/coordination typecheck` exit 0. pnpm auto-synchronized pnpm-lock.yaml during that command; inspected its diff and it is exactly the same three-line coordination -> @moe/core importer removal, with no unrelated importer changes. Lock ownership remains for step 4 and will not be committed before collision clears.",
+      "startedAt": "2026-08-09T15:16:00.134Z",
+      "completedAt": "2026-08-09T15:16:40.047Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Mark the reserved workspace glob. In pnpm-workspace.yaml add a single comment line directly above the `- adapters/*` entry recording that the directory is intentionally reserved for external integration boundaries and is not yet populated. Do NOT remove the glob: the governor's recorded decision at 14:48Z, unchanged in the second correction, is that the design reserves adapters/* for external integration boundaries, task-9fd52b41 owns adapters/jetbrains/**, and several blocked tasks await that surface -- a glob for a path the plan intends to populate is correct rather than dead config. Reference that ownership in the comment so the next person to notice the empty directory finds the answer in the file instead of re-litigating it. Leave the four settings below the packages list (autoInstallPeers, engineStrict, saveExact, strictPeerDependencies) untouched.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "pnpm-workspace.yaml"
+      ],
+      "modifiedFiles": [
+        "pnpm-workspace.yaml"
+      ],
+      "note": "Added exactly one comment directly above adapters/*: it records the path is reserved/not yet populated for external integrations and names task-9fd52b41 as adapters/jetbrains owner. Glob retained; all four workspace settings below remain byte-for-byte unchanged.",
+      "startedAt": "2026-08-09T15:16:46.435Z",
+      "completedAt": "2026-08-09T15:17:23.846Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Regenerate the lockfile, guarding against the one hazard that makes this step unsafe in a shared working directory. pnpm-lock.yaml is a WHOLE-WORKSPACE artifact: any foreign manifest edit that happens to be dirty when install runs gets baked into the lock and lands in this task's commit. So first run `git status --porcelain -- '*package.json' 'pnpm-lock.yaml' pnpm-workspace.yaml` and confirm the ONLY dirty manifest is packages/coordination/package.json. If any other package.json is dirty, stop and wait for its owner rather than regenerating over it -- packages/store/package.json was dirty from a foreign task earlier today, so this is a live hazard and not a hypothetical. Then run `pnpm install`, and inspect the resulting `git diff -- pnpm-lock.yaml`: it should show the removal of the coordination -> @moe/core edge and nothing else. A lockfile diff touching unrelated packages means a foreign manifest was picked up; discard and retry when the tree is clean.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "pnpm-lock.yaml"
+      ],
+      "startedAt": "2026-08-09T15:17:39.001Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verify, then commit by pathspec. Run the exact verification command `pnpm install && pnpm typecheck && pnpm test`. The typecheck leg is the one that matters here: it is what would catch a removal that was actually load-bearing, because if anything in packages/coordination did import @moe/core the removal would surface as an unresolved module rather than as a silent runtime failure later. Both other legs are repo-wide in a shared working directory, so if either is red apply the path-attributed baseline rail -- record failures at the merge-base, then at HEAD, and complete only if the delta intersected with this task's owned paths (packages/coordination/package.json, pnpm-workspace.yaml, pnpm-lock.yaml) is EMPTY, disclosing any foreign red verbatim with its exact failing file paths rather than hiding it or claiming a green it did not get. Then confirm with `git status --porcelain` that no foreign path is staged and commit by explicit pathspec only: `git commit -- packages/coordination/package.json pnpm-workspace.yaml pnpm-lock.yaml`. Verify with `git show --stat` that exactly those three files landed. In the completion note, state explicitly that the scheduler and control-room clauses of the stored DoD item 1 were struck by the governor at 14:56Z and were deliberately NOT implemented, and quote the two measurements that falsified them, so QA reads the corrected scope rather than the stale DoD text.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/coordination/package.json",
+        "pnpm-workspace.yaml",
+        "pnpm-lock.yaml"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:48Z with TWO governance decisions recorded. architect-cb476f76's block was correct on both counts.\n\nDECISION 1 — DoD ITEM 1 IS CORRECTED. Drop the clause \"control-room declares @moe/store and @moe/testkit as devDependencies\". Do NOT add those dependencies.\n\nI verified the falsification myself rather than accepting the report. `grep -rnE 'from \"@moe/(store|testkit)\"' apps/control-room/src` returns ZERO real import specifiers. Every textual occurrence is a ban artifact:\n- evidence-timeline-ban.test.ts:82 lists \"@moe/store\" as a FORBIDDEN package inside the ban list itself\n- evidence-timeline-ban.test.ts:221 plants `import { CURSOR_GAP } from \"@moe/store/subscriptions\"` as a string to prove the ban bites\n- scaffold.test.tsx:269 tests a regex against a held-out import string\n- timeline-contract.ts:27 is a prose comment\n\nAdding those two devDependencies would declare packages that nothing imports — creating exactly the defect this task exists to remove, in the same DoD item that asks to remove coordination's unused @moe/core. The description's claim (2) was measured at HEAD 7183c04 and is stale; the architect measured at a423722/7d9efc9 and I re-measured at 14:47Z. This is the stale-disk-claims pattern that rail proposal prop-7210748b describes, in its silent direction.\n\nDoD ITEM 1 THEREFORE READS: scheduler declares @moe/contracts; coordination no longer declares @moe/core; lockfile regenerated. Claims (1) and (3) were not challenged and still stand — re-measure them anyway before editing.\n\nDECISION 2 — THE adapters/* GLOB STAYS. DoD item 2 explicitly asks for \"an explicit governor decision recorded for its removal\". Recording the opposite: KEEP the glob in pnpm-workspace.yaml and add the one-line reserved comment.\n\nReasoning: the design reserves adapters/* for external integration boundaries. Removing it would be a design deviation, and the directory's absence is a not-yet-built state rather than an abandoned one — task-9fd52b41 (Thin JetBrains adapter) explicitly owns adapters/jetbrains/**, and architect-5b5302ee's security audit named adapters/ as an absent production surface that several blocked tasks are waiting on. A workspace glob for a path the plan intends to populate is correct, not dead configuration. Do not remove it and do not treat its emptiness as evidence of anything.\n\nBOTH DECISIONS ARE RECORDED HERE BECAUSE I CANNOT EDIT definitionOfDone — no MCP tool exposes it, and this task has no plan steps yet, so there is nothing to amend. This reason field is the durable record; QA inherits it.\n\nFOR QA: item 1 is satisfied WITHOUT the control-room devDependencies. A diff that adds them is a rejection, not compliance. Item 2 is satisfied by the kept glob plus its comment.",
+  "reopenReason": "RE-UNBLOCKED by governor-f70d1157 at 14:56Z with a SECOND DoD correction. architect-21f667ae re-measured as my 14:48 reason instructed and found claim (1) is also falsified. They were right, and the instruction to re-measure is what caught it.\n\nCLAIM 1 FALSIFIED — DO NOT ADD @moe/contracts TO packages/scheduler. Verified by me against the committed tree at 14:55Z: `git grep -n \"@moe/contracts\" HEAD -- packages/scheduler/src` returns exactly two hits, and NEITHER is an import:\n- budget-measurement.ts:15 is a PROSE COMMENT that literally says \"No @moe/core or @moe/contracts import\"\n- package-boundary.test.ts:258 is a TEST FIXTURE STRING labelled \"an unrelated import\", used to prove a ban bites\n`git grep -nE 'from \"@moe/contracts\"' HEAD -- packages/scheduler/src` returns only that fixture line. There are ZERO real import specifiers.\n\nTHIS IS THE SAME DEFECT AS CLAIM 2, WHICH I CORRECTED AT 14:48. Both were produced by a grep that counted ban-test artifacts and comments as imports. Three of the description's four claims were wrong in exactly one way, and the task's own objective — \"make workspace manifests match real imports\" — is what they violate: adding either dependency would DECLARE A PACKAGE NOTHING IMPORTS, creating the defect this task exists to remove.\n\nCLAIM 3 HOLDS, verified: packages/coordination/package.json declares @moe/core in dependencies, and `git grep -nE 'from \"@moe/core\"' HEAD -- packages/coordination/src` returns ZERO. The declaration is genuinely unused. Remove it.\n\nCLAIM 4 — governor decision recorded at 14:48 and unchanged: KEEP the adapters/* glob and add the reserved comment. The design reserves it for external integration boundaries, task-9fd52b41 owns adapters/jetbrains/**, and several blocked tasks await that surface. A glob for a path the plan intends to populate is correct, not dead config.\n\nTHE CORRECTED SCOPE, which is now genuinely small: (a) remove @moe/core from packages/coordination/package.json, (b) regenerate the lockfile, (c) add the one-line reserved comment to the adapters/* entry in pnpm-workspace.yaml. Nothing else. Do NOT add any dependency to any package.\n\nDoD ITEM 1 THEREFORE READS: coordination no longer declares @moe/core; lockfile regenerated. The scheduler and control-room clauses are struck.\n\nFOR QA: a diff that ADDS @moe/contracts to scheduler, or @moe/store/@moe/testkit to control-room, is a REJECTION — not compliance. Both were measured false against the committed tree by two independent agents.\n\nI cannot edit definitionOfDone; no MCP tool exposes it and this task has no plan steps to amend. This reason field is the durable record and QA inherits it. That limitation has now bitten twice on one task — worth the human knowing.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -26,22 +83,51 @@
       "author": "architect-cb476f76",
       "content": "ARCHITECT RE-MEASUREMENT, 2026-08-09. Description measured at HEAD 7183c04; I measured at a423722/7d9efc9. Three of four claims hold. Claim 2 is falsified and DoD item 1 requires it, so this is BLOCKED pending a one-line DoD amendment. Full evidence below.\n\nMETHOD NOTE: a bare `grep -rhoE '@moe/[a-z-]+'` gives the wrong answer here, because these packages discuss their own dependency policy in prose comments and one app plants fake import strings as test fixtures. Every count below is from `grep -rnoE \"(from|import|mock|require)\\s*\\(?\\s*[\\\"']@moe/[a-z-]+\"` — real specifiers only — cross-checked against an unfiltered grep of the whole directory.\n\nCLAIM 1 — CONFIRMED, with a correction to the fix shape.\n`packages/scheduler/src` real external specifiers: `from \"@moe/contracts\"` x1. `packages/scheduler/package.json` has NO dependencies and NO devDependencies field at all — it is `{}`, so the worker must CREATE `dependencies`, not append to it. Add only `\"@moe/contracts\": \"workspace:*\"`.\nDO NOT ALSO ADD @moe/core. A raw grep shows `@moe/core` in packages/scheduler/src, but both hits are comments stating the opposite: budget-measurement.ts:15 \"No @moe/core or @moe/contracts import — the projected budget fact mirrors...\" and budget-reservation.ts:13 \"@moe/core is not imported by design and no policy is re-evaluated\". Adding it would break a documented design boundary.\nAlso observed, out of scope, flagged only: `from \"@moe/scheduler\"` x7 inside its own src (self-referential package-root imports, e.g. index-surface.test.ts). That resolves through the pnpm self-link and is not a manifest defect; not planning it.\n\nCLAIM 2 — FALSIFIED. DO NOT IMPLEMENT AS WRITTEN.\n`@moe/store` and `@moe/testkit` have ZERO real import specifiers anywhere in apps/control-room. Every occurrence is a ban artifact:\n- evidence/evidence-timeline-ban.test.ts:82 — `\"@moe/store\"` is an entry in `BANNED_PACKAGES`, alongside @moe/contracts, @moe/coordination and @moe/core. The comment above it at :74 states the intent: these packages own authority and \"reaching for one would give this app a second path to daemon truth beside the gated client\".\n- evidence-timeline-ban.test.ts:221 — a PLANTED fixture string, ``const planted = `import { CURSOR_GAP } from \"@moe/store/subscriptions\";` ``, synthesized to prove the ban detector fires.\n- evidence-timeline-ban.test.ts:225 — the assertion that the detector caught it.\n- scaffold.test.tsx:269 — `@moe/testkit/foundation/model.js` inside a `heldOutImport.test(...)` regex assertion, again a held-out import, not an import.\nDeclared in apps/control-room/package.json: @moe/contracts, @moe/control-room-client, @moe/control-room-model. Real specifiers: @moe/contracts x38, @moe/control-room-client x4, @moe/control-room-model x6. The manifest already matches the imports exactly. There is nothing to fix.\nAdding @moe/store and @moe/testkit as devDependencies would declare two packages nothing imports — creating precisely the defect claim 3 exists to remove, and inverting this task's stated objective, \"make workspace manifests match real imports\".\n\nCLAIM 3 — CONFIRMED EXACTLY.\npackages/coordination real specifiers (src + tests): @moe/contracts x5, @moe/store x4. Declares @moe/contracts, @moe/core, @moe/store. `@moe/core` is declared and never imported. Remove it.\n\nCLAIM 4 — CONFIRMED.\npnpm-workspace.yaml lists `apps/*`, `adapters/*`, `packages/*`. `ls -d adapters` -> \"No such file or directory\". Keep the glob, add the reserved comment, as the description directs.\n\nREQUESTED DoD AMENDMENT — item 1, replace:\n  \"scheduler declares @moe/contracts; control-room declares @moe/store and @moe/testkit as devDependencies; coordination no longer declares @moe/core; lockfile regenerated\"\nwith:\n  \"scheduler declares @moe/contracts; coordination no longer declares @moe/core; apps/control-room/package.json is unchanged and the plan records why; lockfile regenerated\"\nItems 2 and 3 need no change. With that amendment this is a clean 4-5 step task and I will plan it immediately.\n\nINCIDENTAL, FOR WHOEVER PLANS IT: at 14:38Z apps/daemon/package.json and two src files were staged-modified in the shared index, which would have polluted a `pnpm install` lockfile regeneration. As of HEAD 7d9efc9 that has cleared — no manifest or lockfile path is dirty, and only recovery/continuation-service.ts (task-5855a9c6, legitimately WORKING) remains modified under apps/daemon. Re-check `git status --porcelain -- '*package.json' 'pnpm-lock.yaml'` immediately before running install, because the lock is a whole-workspace artifact and any foreign manifest edit present at that moment gets baked in.",
       "timestamp": "2026-08-09T14:41:11.886Z"
+    },
+    {
+      "id": "comment-1fd6bbec654d45f1a11a804c4a4d32d6",
+      "author": "architect-21f667ae",
+      "content": "SECOND STALE-CLAIM RE-MEASUREMENT at committed HEAD 56cebfcc55e3: scheduler does NOT import @moe/contracts. `git grep -n '@moe/contracts' HEAD -- packages/scheduler/src` returns only (1) budget-measurement.ts:15 prose explicitly saying there is no import and (2) package-boundary.test.ts:258 a held-out fixture string. Current-tree specifier scan likewise finds no real scheduler import. packages/scheduler/package.json has no dependency fields, but adding @moe/contracts would now create an UNUSED dependency and contradict this task's hygiene objective, just like the already-corrected control-room clause. The task is BLOCKED again pending governance correction of DoD item 1 to remove `scheduler declares @moe/contracts`. Exact remaining DoD should be: coordination no longer declares @moe/core; lockfile regenerated; adapters/* kept with reserved comment. Current scheduler source dirty paths belong to active task-36ac4b43 and were not touched. Do not add scheduler dependency.",
+      "timestamp": "2026-08-09T14:53:18.805Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:24:26.624Z",
-  "updatedAt": "2026-08-09T14:45:32.086Z",
+  "updatedAt": "2026-08-09T15:45:31.788Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:38:19.004Z"
+    "firstClaimAt": "2026-08-09T14:38:19.004Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
-    "architect-cb476f76"
+    "architect-cb476f76",
+    "architect-21f667ae",
+    "worker-d61b2685"
   ],
-  "blockedReason": null,
+  "blockedReason": "Blocked at step 4 by the plan's explicit whole-workspace lockfile safety precondition and live file collision. `git status --porcelain -- '*package.json' pnpm-lock.yaml pnpm-workspace.yaml` shows foreign dirty `package.json` (task-b5e9bd64 test:fault/test:security scripts) and `packages/store/package.json` (`./projections/*` export), while task-9449ce65 is live under worker-b6bbb60c and also owns pnpm-lock.yaml. The plan says stop rather than regenerate/commit with any foreign package.json dirty. Completed safe steps 1-3: removed only coordination's unused @moe/core and added the reserved adapters comment. A filtered coordination typecheck auto-synchronized the lock; its diff is exactly the three-line coordination @moe/core importer removal, no unrelated importer, but I will not treat that as authorization to bypass the precondition. Coordination request posted as msg-51d60a99833e4f0c8d1367d16f6cc2a1. Unblock when foreign manifests are committed/clean and the lock owner releases, or authorize the already-exact filtered lock synchronization after coordination.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-09T15:20:34.236Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Applied the approved narrow changes and preserved them uncommitted: removed @moe/core from packages/coordination/package.json; added the one-line reserved adapters/* comment to pnpm-workspace.yaml; pnpm updated pnpm-lock.yaml by deleting only the coordination @moe/core importer entry. git grep confirmed no @moe/core imports in coordination src. pnpm --filter @moe/coordination typecheck passed.",
+      "whatRemains": "Wait until foreign package.json changes are clean and the active release-supply-chain task no longer owns pnpm-lock.yaml. Then regenerate/verify the lockfile from the settled workspace, run the plan verification commands fresh, commit only the three owned paths, complete remaining steps, and submit.",
+      "pitfalls": "Do not reset/stash/delete the preserved task bytes. Foreign dirty manifests were root package.json (test:fault/test:security scripts) and packages/store/package.json (./projections/* export). task-9449ce65... overlapped pnpm-lock.yaml. Do not add scheduler/control-room dependencies; corrected reopen scope overrides stale DoD.",
+      "openQuestions": "Whether governance will authorize proceeding before all foreign manifests are clean; otherwise wait for their owners to settle.",
+      "releasedAt": "2026-08-09T15:45:31.787Z",
+      "releasedBy": "worker-d61b2685",
+      "reason": "Explicit handoff: the user requested the next task while this task remains blocked on foreign package-manifest dirtiness and overlapping pnpm-lock.yaml ownership."
+    },
+    {
+      "whatIsDone": "Re-read prior handoff/governor decisions, re-measured all real specifiers at HEAD 56cebfcc55e3, proved scheduler also has no @moe/contracts import, posted exact correction, reported blocked, and wrote Serena handoff.",
+      "whatRemains": "Governor removes scheduler clause from DoD item 1; then plan only coordination manifest removal, reserved workspace comment, lock regeneration, and gates.",
+      "pitfalls": "Do not add unused scheduler/control-room dependencies. Do not regenerate pnpm-lock while foreign manifests are dirty. Preserve active scheduler refactor bytes.",
+      "openQuestions": "Only governance acceptance of the second stale-claim correction.",
+      "releasedAt": "2026-08-09T14:53:58.605Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Fresh committed-tree falsification and exact DoD correction are durably handed off; free architect capacity pending governance."
+    },
     {
       "whatIsDone": "Full re-measurement of all four description claims at HEAD a423722/7d9efc9, recorded in comment-532fdfa3147e4c41b019a59d5e482151. Claims 1, 3 and 4 confirmed with exact fix shapes; claim 2 falsified with file:line evidence. Exact DoD replacement text supplied.",
       "whatRemains": "A governor amends DoD item 1, then the whole task is a clean 4-5 step plan: create dependencies in packages/scheduler/package.json with only @moe/contracts, remove @moe/core from packages/coordination/package.json, add the reserved comment to the adapters/* glob in pnpm-workspace.yaml, regenerate the lockfile, verify.",
@@ -51,5 +137,29 @@
       "releasedBy": "architect-cb476f76",
       "reason": "Blocked on a DoD amendment only a governor can make; releasing so I do not hold it while working the rest of the queue."
     }
-  ]
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T15:07:12.388Z",
+  "planningNotes": {
+    "approachesConsidered": "NOT NARROWING THE DoD ON MY OWN AUTHORITY. When I first planned this task I blocked rather than submitting a plan that skipped DoD item 1's control-room clause, because item 1 is the gate QA reads literally and a worker following such a plan would be rejected for obeying it. That was the right call and it is why the task came back with a governor-recorded correction instead of a silent scope change. The same reasoning now applies in reverse: with the governor's correction on the record, the plan can safely omit the struck clauses, and step 5 requires the worker to restate the correction in the completion note so QA reads the corrected scope rather than the stale DoD text.\n\nREMOVING THE GLOB. Rejected, twice, and the second time by the governor explicitly. An empty adapters/ directory looks like dead config, but the design reserves adapters/* for external integration boundaries and task-9fd52b41 owns adapters/jetbrains/**. Removing it would be a design deviation requiring a governor decision, and it would break the next task to populate that path. The comment exists so the next person to notice the empty directory finds the answer in the file rather than re-opening the question.\n\nFIXING THE SCHEDULER MANIFEST HERE ANYWAY. Rejected. packages/scheduler/package.json is genuinely {} with no dependencies field, which looks like a defect worth fixing while nearby. But nothing in scheduler currently imports across a package boundary, so there is nothing to declare -- adding an entry would create the very defect this task removes from coordination. Separately, task-cda6bddf4e6e464e895c696e79bc9784 (Same-bug circuit breaker) adds a genuine @moe/context import to scheduler and its plan correctly creates the dependencies field there. With the scheduler clause struck from this task, that collision no longer exists and the two tasks are now file-disjoint.\n\nA FORMATTING OR VERSION SWEEP WHILE IN THE FILES. Rejected as scope creep. The description's NOT-in-scope line rules out version bumps and any dependency beyond the named ones, and a one-line diff is what makes this reviewable.",
+    "codebaseInsights": "THE STORED definitionOfDone IS STALE AND MUST NOT BE FOLLOWED LITERALLY. The governor states in reopenReason that no MCP tool exposes definitionOfDone for editing, so the corrected scope lives in that field and QA inherits it from there. Item 1 still reads \"scheduler declares @moe/contracts; control-room declares @moe/store and @moe/testkit as devDependencies; coordination no longer declares @moe/core; lockfile regenerated\". Only the third and fourth clauses survive. The governor's note is explicit: a diff that adds @moe/contracts to scheduler, or @moe/store/@moe/testkit to control-room, is a REJECTION rather than compliance.\n\nMEASUREMENT HISTORY ON THIS TASK, because it is the point of the task. The description's four claims were produced by a grep that counted comments and ban-test fixtures as imports. Claim 2 (control-room) I falsified at 14:48. Claim 1 (scheduler) architect-21f667ae falsified at ~14:55 -- I had checked control-room's fixtures but not scheduler's, and reported scheduler's single hit as real. I re-verified their finding myself: `grep -rn 'from \"@moe/contracts\"' packages/scheduler/src` returns exactly ONE line, packages/scheduler/src/package-boundary.test.ts:258, and it is an entry in an `allowedContentCases` table labelled \"an unrelated import\" holding the string 'import { decode } from \"@moe/contracts\";'. `git grep -nE 'from \"@moe/[a-z-]+\"' HEAD -- packages/scheduler/src` returns that fixture and nothing else. packages/scheduler/src has ZERO real cross-package @moe imports.\n\nCLAIM 3, THE ONE THAT SURVIVES, verified independently by me: packages/coordination/package.json declares @moe/contracts, @moe/core and @moe/store. Real specifiers across packages/coordination are `from \"@moe/contracts\"` x5 and `from \"@moe/store\"` x4. Zero for @moe/core. The declaration is genuinely unused.\n\nCLAIM 4, verified: pnpm-workspace.yaml lists apps/*, adapters/*, packages/* and then autoInstallPeers, engineStrict, saveExact, strictPeerDependencies. `ls -d adapters` -> \"No such file or directory\". Governor decision recorded twice and unchanged: KEEP the glob, add the reserved comment, because task-9fd52b41 owns adapters/jetbrains/** and blocked tasks await that surface.\n\nWHY THE SURVIVING FIX IS SAFE: removing a declared-but-unimported dependency cannot break a build, and `pnpm typecheck` is the leg that proves it -- had anything in packages/coordination actually imported @moe/core, the removal would surface immediately as an unresolved module rather than as a silent runtime failure.\n\nLOCKFILE HAZARD, measured: pnpm-lock.yaml is a whole-workspace artifact and packages/store/package.json was dirty from a foreign task earlier today. Any foreign manifest dirty at install time is baked into the lock and lands in this commit. Step 4 gates on `git status --porcelain -- '*package.json'` for exactly this reason.",
+    "risks": "1. THE STALE DoD IS THE PRIMARY RISK ON THIS TASK, and it has already bitten twice. A worker who reads definitionOfDone and not reopenReason will add two or three dependencies that nothing imports, which is a rejection. Step 1 exists solely to force reading the correction first, and step 5 makes the worker restate it in the completion note.\n\n2. THE FIXTURE TRAP THAT CAUSED ALL OF THIS. Both false claims came from a grep counting ban-test fixtures and prose comments as imports. If the worker re-measures anything here, use a specifier-shaped pattern (`from \"@moe/...\"`), then OPEN each hit and check whether it sits inside a fixture table, a comment, or a quoted string. In this repo a hit inside a file named *-ban.test.* or *package-boundary.test.* is evidence AGAINST the dependency, not for it. I made exactly this mistake on scheduler after having already written up the pattern for control-room.\n\n3. LOCKFILE CONTAMINATION. `pnpm install` regenerates a whole-workspace artifact. If a foreign package.json is dirty at that moment its changes land in this task's lockfile diff and then in this task's commit. Gate on `git status --porcelain -- '*package.json'` immediately before install, and inspect the lockfile diff afterwards -- it should show only the coordination -> @moe/core edge disappearing.\n\n4. REPO-WIDE VERIFICATION LEGS IN A SHARED TREE. `pnpm typecheck` and `pnpm test` are repo-wide and several agents are active. Attribute red by path before treating it as this task's defect, and disclose foreign red verbatim rather than hiding it or fabricating a green.\n\n5. LOW RISK OF REAL BREAKAGE. This is a three-file, largely subtractive change. The one way it could be wrong is if @moe/core were imported somewhere I did not look; `pnpm typecheck` is the leg that would catch it, which is why step 5 calls it out specifically rather than treating all three legs as interchangeable.",
+    "keyFiles": [
+      "packages/coordination/package.json",
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "apps/control-room/src/evidence/evidence-timeline-ban.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-09T15:07:14.432Z",
+  "workStartedAt": "2026-08-09T15:15:38.147Z"
 }

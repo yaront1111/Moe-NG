@@ -15,13 +15,140 @@
     "Persist durable evidence and public-key material only; never persist plaintext credentials, private keys, or presented proofs.",
     "Coordination capabilities remain explicit transport scopes; never synthesize RuntimeCommandKinds or colon-containing core capability IDs."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Read-only protocol/dependency preflight — verify the design hash and section 12.1/12.3, the human-approved comment comment-68aea9ba1a4b44b8a19743a2762377d1, task-b4f12e63baca4ecc9f2c159ed3c3ad78 DONE, and the committed bare-root @moe/core/@moe/store probe and exact seven core layers. Re-run `git grep` for SessionAuthority and inspect the existing bearer session path to confirm this non-command scope is still absent rather than duplicate; require all nine planned paths clean/absent and no live owner. Record exact physical-line baselines and the current package/repo failure-path baseline. The present core/daemon typecheck red belongs to in-flight task-fcad40b6 paths; disclose it verbatim, do not edit around it, and stop if any dependency/API/ownership fact differs.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Preflight verified, all facts re-measured on disk at HEAD 88a42e0.\n\nDESIGN: sha256 of D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md = 1d9d1ec97d3f07247fbbc088045e0ba2fd6da8307f10a9026c55106419383191 (matches epic rail). Sections 12.1 (proof-of-possession client key, idempotency-decision row keyed project/principal/commandId, IDEMPOTENCY_CONFLICT on reused id + different bytes) and 12.3 (rotation preserves principal/lease/epoch and revokes the old credential) read and consistent with the approved protocol.\n\nPROTOCOL: human decision consumed from mem:decision-daemon-session-proof-protocol-v1 (Ed25519; DER SPKI lowercase hex; clientKeyId=SHA-256(SPKI); 64-byte hex signature; domain moe.session-proof.v1 + u32be-framed scalars; 60s age / 30s future skew; 15m TTL, 8h absolute; renew=expiry only; rotate=both keys sign one challenge, generation+1, old revoked; replay identity (sessionId,generation,clientKeyId,nonce)).\n\nDEPENDENCY: task-b4f12e63baca4ecc9f2c159ed3c3ad78 status DONE (\"Reusable core session authentication seam\"). Plain-node bare-root probe from apps/daemon (not vitest): authenticateSession/createPrincipal/createSession/createCredential/rotateCredential all \"function\"; SESSION_AUTH_LAYERS exactly [\"BINDING\",\"PROOF\",\"REPLAY\",\"GENERATION\",\"SESSION_STATE\",\"EXPIRY\",\"TRANSPORT\"]; @moe/store SqliteEventStore \"function\". Read authenticate-session.ts (233 lines) and identity-session.ts (183) directly: input is SessionAuthenticationInput with daemon-owned verifyProof/checkReplay closures; codes are exactly AUTHENTICATION_FAILED | SESSION_REPLAYED | SESSION_EXPIRED | CAPABILITY_DENIED. NOTE for step 6: core rotateCredential preserves session.clientKeyId, so installing the next client key requires rebuilding the session through createSession with the rotated generation — the plan already routes all records through the core factories.\n\nSTORE API confirmed public on SqliteEventStore: open(path), openForProject(path,projectId), commitExpectedVersionDecision(CommitExpectedVersionDecisionInput): CommandDecisionResponse, getAggregateVersion, getCommandDecision(CommandDecisionKey), readAggregateEvents(aggregateId, after, limit, maxDecodedBytes): CursorPage<StoredEvent,number>, close(). Decision key carries NO kind (session-ledger.ts:172 documents the reuse hazard).\n\nOWNERSHIP/ABSENCE: `git grep -ln \"SessionAuthority|session-authority|sessionAuthority\" -- apps packages` returns nothing. `ls apps/daemon/src/identity` shows only the legacy bearer command path (session-contracts/-ledger/-read-model/-services/-authenticator + fixtures). All NINE owned paths are absent; physical-line baseline is 0 for each. Legacy path is a separate command-envelope bearer flow with no Ed25519 key, no credential generation, no durable proof replay — this task neither calls nor mutates it.\n\nBRIDGE RULE: runtime-entrypoint.test.ts:179 requires every runtime-tier module (module owning a .test.ts sibling, plus its transitive `./x.js` imports) to have a bridge whose bytes are exactly `export * from \"./<base>.ts\";\\n`, and forbids bridges for test-tier modules. Verified against session-services.js via od -c. All four production leaves therefore need exact LF bridges; no daemon-root export is required by this task.\n\nBASELINE (path-attributed, measured at HEAD 88a42e0 BEFORE writing any bytes):\n- `pnpm --filter @moe/core test` RED: Test Files 2 failed | 17 passed (19); Tests 23 failed | 295 passed (318). Failing files verbatim: `FAIL packages/core/src/expansion/planning-expansion-contract.test.ts`, `FAIL packages/core/src/planning/planning-source-size.test.ts` (offender entry `{ \"file\": \"planning-expansion-validation.ts\", \"lines\": 261 }`).\n- `pnpm --filter @moe/daemon typecheck` GREEN (the red the plan predicted has since cleared).\n- `pnpm --filter @moe/daemon test` GREEN: 39 files / 747 tests.\n- `pnpm typecheck` RED, packages/core only, all 11 errors in `packages/core/src/expansion/planning-expansion-contract.test.ts` (TS2322/TS2578/TS2353); every other package prints Done.\nBoth red legs are foreign paths outside apps/daemon/src/identity/session-authority*. Recorded for the step-8 HEAD-minus-baseline delta. Completion still requires the exact chained command to exit 0; if the foreign core red persists at step 8 I report blocked rather than claim green.",
+      "startedAt": "2026-08-09T16:09:41.379Z",
+      "completedAt": "2026-08-09T16:12:47.387Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, protocol and durable lifecycle — create session-authority.test.ts using a real temporary-file SqliteEventStore, real Node Ed25519 keypairs, and only the future production `canonicalSessionProofBytes`/request-digest surface for signing (no test encoder or injected positive verifier). Pin every protocol constant and the exact challenge bytes/frame order, canonical SPKI/clientKeyId/signature/nonce rules, 60s age/30s future-skew boundaries, 15m session TTL, and 8h absolute cap. Drive `createSessionAuthority(store,{projectId,clock})` through createPrincipal and self-proofed openSession; require exact immutable principal/session/generation-1 credential/public-key/scopes, durable command receipt/request/result digests, exact event counts, same-command replay identity, conflicting-command refusal, and byte-identical reconstruction after close/reopen of the database. Confirm RED is only missing production modules.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "TDD RED created the real-file SqliteEventStore + real Node Ed25519 test surface. Focused daemon Vitest command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/identity/session-authority.test.ts` exits 1 at import with only missing future `./session-authority-contracts.js`. Fresh daemon typecheck exits 1 with exactly three TS2307 missing-production-module diagnostics (`session-authority-contracts.js`, `session-authority-protocol.js`, `session-authority.js`) and no independent test error. Tests pin protocol constants, literal 232-byte frame encoding, canonical key/signature/nonce behavior, skew/age boundaries, TTL/lifetime, frozen exact generation-1 state, durable receipt hashes/event counts, command replay/conflict, and DB recreation.",
+      "startedAt": "2026-08-09T16:42:53.558Z",
+      "completedAt": "2026-08-09T16:50:11.368Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, authentication/lifecycle/race matrix — extend the real-file suite for `authenticate`, `renewSession`, `rotateCredential`, `closeSession`, `readSessionAuthority`, and `readActiveSession`. Authentication input contains only exact proof/request fields—never verifier, replay, stored-session, or capability verdict callbacks—and success returns frozen core facts plus durable session version/authority digest/replay receipt. Generate a positive nonzero matrix that covers every SESSION_AUTH_LAYERS value exactly: unknown/cross-project/malformed -> AUTHENTICATION_FAILED/BINDING; forged, unsupported, stale/future proof -> AUTHENTICATION_FAILED/PROOF; reused nonce -> SESSION_REPLAYED/REPLAY; rotated/revoked credential -> SESSION_REPLAYED/GENERATION; closed -> SESSION_REPLAYED/SESSION_STATE; session expiry -> SESSION_EXPIRED/EXPIRY; unlisted transport scope -> CAPABILITY_DENIED/TRANSPORT. Assert exact code and layer, never only `ok:false`. Prove same request with fresh nonce is allowed, raw signature/nonce/proof/private/plaintext bytes never appear in any stored event/result/ID, replay facts survive recreation, renewal changes expiry only and never exceeds the absolute cap, rotation atomically increments generation/revokes old/installs new after both keys verify the same challenge, close is terminal, both auth-before-rotate and rotate-before-auth orders are honest, hostile/cyclic/extra-key inputs fail closed, and authority event/state counts remain unchanged on every refusal except the explicitly expected hashed replay observation.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Extended TDD RED with exact no-injection authentication input, frozen success facts/sessionVersion/authorityDigest/replay receipt, fresh-nonce allowance and durable replay across database recreation; explicit BINDING/PROOF subcases; a nonzero seven-row matrix equal to SESSION_AUTH_LAYERS with exact codes/layers; renewal-only expiry plus 34-step absolute-cap proof; two rotation/auth orderings with both-key proof and revoked old generation; terminal close/active reads; hostile proxies/accessors/cycles/extra verdict callbacks; and a raw durable corpus secret scan. Fresh daemon typecheck reports only the three expected TS2307 future-module absences. Focused Vitest reaches only the expected missing `session-authority-contracts.js` import. No production module exists yet.",
+      "startedAt": "2026-08-09T16:50:21.213Z",
+      "completedAt": "2026-08-09T16:56:09.331Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the closed contracts — create session-authority-contracts.ts and its exact LF one-line bridge. Freeze protocol version/algorithm/domain/key/signature/TTL/skew/session-lifetime constants, bounded exact request/proof/mutation vocabularies, event/schema names, stable daemon refusal codes/layers, immutable principal/session/credential/public-key snapshots, mutation receipts, UNKNOWN/ABSENT/FOUND read results, and operation input/result unions. Use the existing core Principal/Session/Credential/AuthenticatedSessionFacts and SessionAuthCode/Layer types through @moe/core; do not clone their authority vocabulary. Bound IDs/scopes to 1..256 UTF-8 bytes, scope count to a finite published maximum, require caller-supplied scope arrays already sorted/unique rather than normalizing them positive, and document task-04e4367443214a588ed6277b92969a33 plus task-4afcb06422ed4adb89430b7ea9758d7f as the consumers. Add no RuntimeCommandKind, colon-derived CapabilityGrant, recipient/effect/mailbox, or lifecycle-dispatch authority.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "note": "Implemented the closed contract leaf (220 physical lines) and exact one-line LF bridge. It imports core Principal/Session/Credential/auth facts/code/layer types rather than cloning authority vocabulary; freezes all approved protocol/key/signature/nonce/timing/bound constants, schema/events, daemon codes/layer, exact request/proof/mutation/read/result unions, immutable snapshots and receipts, unknown/absent/found reads, and documents both consumer task IDs with explicit no-authority scope. Tests now pin every published protocol constant. Fresh daemon typecheck reports only the two remaining future-module TS2307 errors (`session-authority-protocol.js`, `session-authority.js`).",
+      "startedAt": "2026-08-09T16:56:15.538Z",
+      "completedAt": "2026-08-09T16:58:24.201Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement protocol v1 and concrete proof verification — create session-authority-protocol.ts plus its exact LF bridge. Snapshot exact own data properties once; build the domain plus eleven u32be-length-framed canonical scalar byte sequences in the approved order; expose the canonical challenge/request digest functions so production and tests share one surface. Validate safe integer/time bounds, lowercase hex lengths, canonical Ed25519 DER SPKI by createPublicKey/asymmetricKeyType/export round-trip, SHA-256 clientKeyId, and exact 64-byte signature before `node:crypto.verify(null,...)`; contain all crypto/parser throws as false. Derive the replay aggregate/key only from SHA-256 of the framed sessionId/generation/clientKeyId/nonce tuple so no raw nonce/proof/signature is returned or persisted. For rotation, require current and proposed keys to verify the identical canonical challenge whose requestDigest binds nextCredentialId, next clientKeyId/SPKI, and next generation. Keep this leaf deterministic, synchronous, IO-free, and <=250 physical lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js"
+      ],
+      "startedAt": "2026-08-09T16:58:35.152Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement durable folding and the authority service — create session-authority-store.ts/.js and session-authority.ts/.js. In the store leaf, namespace deterministic principal/session/replay aggregates, page all aggregate events, strictly decode exact schema/event payloads, return UNKNOWN on any gap/unknown/malformed bytes, and use only public SqliteEventStore commitExpectedVersionDecision/read APIs. Store fixed-order redacted request/result bytes and public facts/digests; return the original persisted mutation result/receipt on replay and delegate version/store failures with their exact code under DURABLE_STORE. In the service factory, expose frozen createPrincipal/openSession/renewSession/rotateCredential/closeSession/authenticate/readSessionAuthority/readActiveSession methods. Build all core records through createPrincipal/createSession/createCredential/rotateCredential; open requires the durable principal and a fresh self-proof; renew/rotate/close require current core authentication. `authenticate` owns concrete verifyProof/checkReplay closures, commits the hashed replay marker at expected version 0, passes only durable records into authenticateSession, and returns a module-private nominally branded frozen success with sessionVersion/authorityDigest/replayDigest. Re-read current state for readActiveSession; CLOSED/expired/generation/key/profile/project mismatches never become active. Keep each production .ts <=250 where practical and strictly below 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review and mutation drill — inspect the exact nine-path diff for same-ID/different-bytes replay, concurrent same/different nonce behavior, read/rotate/close orderings, off-by-one TTL/skew/expiry/absolute lifetime, unsafe integers, noncanonical DER/hex/UTF-8/frame lengths, duplicate/unsorted/huge scopes, hostile getters/proxies/cycles, unreadable event pages, store recreation, partial positive folds, mutable nested results, and accidental secret/command/recipient/effect/mailbox authority. Enumerate every persisted payload/result/identifier and assert no private key, plaintext credential, signature, nonce, raw proof, or challenge bytes occur. Temporarily bypass real Ed25519 verification, replay-key existence, generation revocation, and transport matching one at a time; run the focused production test and require RED at the exact expected core code/layer, then restore verified bytes. Mutate the production canonical frame order and require the real signature test to fail. Reconfirm generated counts are >0, all four bridges are exact LF, all production files remain <400 (target <=250), consumers are recorded, and status/diff contains only the nine owned paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js",
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Single final gate, no edits afterward — first rerun repo-wide `pnpm test` and the exact-command legs against the step-1 baseline, normalize/report every foreign failing line/path verbatim, and require the HEAD-minus-baseline delta intersected with these nine paths to be empty; the current foreign task-fcad40b6 core red cannot be called green or waived from the task's named command, so wait/report blocked if it persists. Recheck nonzero daemon test discovery, real-file cleanup on Windows/macOS/Linux, <400 line counts (target <=250), exact LF bridges, secret/authority scans, and explicit-path status/diff. Then run LAST in the foreground with no subsequent edits: `pnpm --filter @moe/core test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`; it must exit 0 for complete_task evidence. If committing manually, unstage every foreign entry and use only `git commit -- apps/daemon/src/identity/session-authority-contracts.ts apps/daemon/src/identity/session-authority-contracts.js apps/daemon/src/identity/session-authority-protocol.ts apps/daemon/src/identity/session-authority-protocol.js apps/daemon/src/identity/session-authority-store.ts apps/daemon/src/identity/session-authority-store.js apps/daemon/src/identity/session-authority.ts apps/daemon/src/identity/session-authority.js apps/daemon/src/identity/session-authority.test.ts`, then verify the commit contains only those paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/identity/session-authority-contracts.ts",
+        "apps/daemon/src/identity/session-authority-contracts.js",
+        "apps/daemon/src/identity/session-authority-protocol.ts",
+        "apps/daemon/src/identity/session-authority-protocol.js",
+        "apps/daemon/src/identity/session-authority-store.ts",
+        "apps/daemon/src/identity/session-authority-store.js",
+        "apps/daemon/src/identity/session-authority.ts",
+        "apps/daemon/src/identity/session-authority.js",
+        "apps/daemon/src/identity/session-authority.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a87e980a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 15:38Z. Its blockedReason is now entirely stale, and I verified the replacement facts by plain-Node probe rather than by status field.\n\nTHE STALE BLOCK: architect-21f667ae blocked this because \"task-b4f12e63 is BLOCKED after step 1 because its approved plan says a generated refusal table is length 9 while enumerating 10 required cases\", and noted their own amend attempt was rejected NOT_ALLOWED by runtime role metadata.\n\nBOTH HALVES ARE RESOLVED:\n1. I made that amendment myself at 14:39Z (amend-1 on task-b4f12e63 step-2, correcting the count 9 -> 10 after counting the enumeration independently). task-b4f12e63 reached DONE at 15:12Z.\n2. The role gate that blocked their amend attempt was fixed by architect-d46fcb95 at ~14:44Z — architects now hold role \"architect\" on team-1606a3214e814d0eb5af0b13baece333 and can call amend_plan_step again.\n\nCAPABILITY VERIFIED AS USABLE, NOT MERELY PRESENT — the check my three bad promotions today all skipped:\n- packages/core/src/identity/authenticate-session.ts is TRACKED (git ls-files), not sitting uncommitted like task-00956ac3's deliverable.\n- It is root-reachable: packages/core/src/index.ts:237 does `export * from \"./identity/index.js\"`, and the comment at :234 explains identity/index.ts already curates the three identity modules.\n- PLAIN-NODE PROBE FROM A REAL CONSUMER, run from apps/daemon against the bare \"@moe/core\" specifier — not vitest, which resolves NodeNext .js back to .ts and cannot see a missing bridge:\n    authenticateSession: function\n    SESSION_AUTH_LAYERS: object [\"BINDING\",\"PROOF\",\"REPLAY\",\"GENERATION\",\"SESSION_STATE\",\"EXPIRY\",\"TRANSPORT\"]\n  Seven layers, exactly the set amend-1 preserved when it corrected the case count to 10. Clause 1 satisfied in both directions: the capability exists AND has a published, reachable consumer edge.\n\nNO DUPLICATE AUTHORITY EXISTS: `git grep -ln \"sessionAuthority|session-authority|SessionAuthority\" HEAD -- apps/daemon/src packages/core/src` returns nothing. An audit agent raised a possible duplicate-authority conflict; I checked and it does not exist on disk. Do not plan around a phantom.\n\nFOR THE ARCHITECT: the human-approved Ed25519 session proof protocol is recorded in task comment comment-68aea9ba1a4b44b8a19743a2762377d1 and Serena memory decision-daemon-session-proof-protocol-v1 — consume it rather than re-deciding it. Re-measure the surface before naming symbols; if anything has moved, report blocked and I return this without argument.\n\nDOWNSTREAM: this unblocks task-04e43674 (Durable coordination recipient registry), which unblocks task-4afcb064 (Daemon coordination authority adapter, currently ARCHIVED as a trap). A chain of three moves off this one.",
   "createdBy": "WORKER",
   "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
   "priority": "CRITICAL",
@@ -32,21 +159,34 @@
       "author": "architect-21f667ae",
       "content": "HUMAN PRODUCT DECISION APPROVED in the REPL on 2026-08-09. Protocol v1: Ed25519; canonical DER SPKI public keys persisted as lowercase hex; 64-byte signatures lowercase hex; clientKeyId=SHA-256(SPKI). Signed bytes are domain `moe.session-proof.v1` followed by fixed-order u32be-length-prefixed byte frames for principal, project, session, credential id/generation, client key, transport/scope, request id/digest, issued-at epoch milliseconds, and a 128-bit nonce. Proof TTL 60s with 30s future skew. Session TTL 15m, renewable only with a fresh current-generation proof up to an absolute 8h lifetime; renewal changes expiry only. Rotation atomically increments generation, replaces credential and client key, revokes the prior generation, and requires old-key plus new-key signatures over the same rotation challenge. Durable replay identity is (sessionId,generation,clientKeyId,nonce); reuse is SESSION_REPLAYED, while the same request may retry with a fresh nonce. This resolves the task's explicit product-decision rail. Planning remains dependency-gated on task-b4f12e63baca4ecc9f2c159ed3c3ad78.",
       "timestamp": "2026-08-09T14:35:49.839Z"
+    },
+    {
+      "id": "comment-848e5e5107c54d09b84f178bb1b78508",
+      "author": "worker-5981deec",
+      "content": "STEP-1 PREFLIGHT EVIDENCE, HANDED TO THE REAL OWNER (worker-2bc13005). I am worker-5981deec; my session was launched with a stale claimed_task_context for this task, but the durable record shows `worker-2bc13005 claimed task: Durable daemon session authority` at 16:10:22Z and .moe/workers/worker-2bc13005.json is CODING on it right now. I own nothing here and wrote ZERO bytes to any of the nine owned paths — `git status --porcelain -- apps/daemon/src/identity/` is empty. All I did was read-only measurement, so the work is yours, unpolluted.\n\nONE THING I DID MOVE, DISCLOSED: my `moe.start_step(step-1)` landed before the ownership mismatch surfaced, so step-1 reads IN_PROGRESS with no work behind it. That status is mine, not evidence of a second implementation. `moe.complete_step` then refused me with `[NOT_ALLOWED] claimed by worker-2bc13005`, which is how I found out.\n\nEverything below is fresh measurement from this working tree, so you can skip the probes:\n\nDESIGN HASH: sha256sum docs/plans/2026-08-05-moe-rebuild-design.md = 1d9d1ec97d3f07247fbbc088045e0ba2fd6da8307f10a9026c55106419383191 — exact match to the epic rail pin.\n\nDEPENDENCY, bare-root plain-Node probe from apps/daemon (NOT vitest, which resolves NodeNext .js back to .ts and cannot see a missing bridge):\n  authenticateSession function; createPrincipal/createSession/createCredential/rotateCredential function\n  SESSION_AUTH_LAYERS = [\"BINDING\",\"PROOF\",\"REPLAY\",\"GENERATION\",\"SESSION_STATE\",\"EXPIRY\",\"TRANSPORT\"]\n  SqliteEventStore function from @moe/store\n  CORRECTION TO THE PLAN'S IMPLIED SURFACE: `revokeCredential` and `SESSION_AUTH_CODES` are NOT exported. The code set exists only as the TYPE `SessionAuthCode` (AUTHENTICATION_FAILED | SESSION_REPLAYED | SESSION_EXPIRED | CAPABILITY_DENIED). Do not import a runtime code table that does not exist; layers do have a runtime array, codes do not.\n\nCORE API, read at packages/core/src/identity/authenticate-session.ts:42-69 and :207-219 — SessionAuthenticationInput takes principal/session/credential/projectId/transportId/now/requestId/requestDigest/presentedCredentialId/proof plus verifyProof(challenge)->boolean and checkReplay(challenge)->\"FRESH\"|\"REPLAYED\". ProofChallenge is exactly {commandId, requestDigest, credentialId, clientKeyId}; note `commandId`, not `requestId`, on the challenge object. Precedence is PROOF, REPLAY(null->AUTHENTICATION_FAILED/REPLAY, \"REPLAYED\"->SESSION_REPLAYED/REPLAY), GENERATION, SESSION_STATE, EXPIRY, TRANSPORT, with BINDING as the catch-all. identity-session.ts:145 confirms expiry is EXCLUSIVE (now < expiresAt), :150 isCurrentGeneration, :165 rotateCredential(+1 generation, revokes previous, carries expiry unchanged).\n\nSTORE API: commitExpectedVersionDecision({commandKind, committedResultBytes, correlationId, decidedAt, events, expectedVersion, key{commandId,principalId,projectId}, requestBytes, targetAggregateId}) -> {decision, disposition:\"DECIDED\"|\"REPLAYED\", ...}. A version mismatch does NOT throw: decision.effectDisposition becomes \"NO_BUSINESS_EFFECT\" with resultCode \"EXPECTED_VERSION_CONFLICT\" (store-contracts.ts:119-127) — session-ledger.ts:154 is the existing precedent for surfacing that under DURABLE_STORE. Real-file open is SqliteEventStore.openForProject(path, projectId); the mkdtempSync + close-before-reopen harness at apps/daemon/src/recovery/recovery-succession.test.ts:51-85 is the Windows-safe pattern to copy.\n\nBRIDGE RULE, runtime-entrypoint.test.ts:174-211: content must be byte-exact `export * from \"./<basename>.ts\";\\n`. Runtime tier = entry + every module owning a .test.ts sibling + transitive relative imports, so session-authority.test.ts pulls all four leaves into the tier: all four need a bridge and no extra .js may exist.\n\nSCOPE STILL ABSENT: `git grep -ln \"SessionAuthority|session-authority|sessionAuthority\" HEAD -- apps/daemon/src packages/core/src packages/store/src` = no match. git ls-files shows only the legacy bearer path. Not a duplicate.\n\nBASELINE, all four legs run fresh before any byte was written:\n- pnpm --filter @moe/core test: RED exit 1. 2 files / 23 tests failed, 17 files / 295 passed. packages/core/src/expansion/planning-expansion-contract.test.ts (22) and packages/core/src/planning/planning-source-size.test.ts (1: {\"file\":\"planning-expansion-validation.ts\",\"lines\":261} over cap).\n- pnpm --filter @moe/daemon typecheck: GREEN, no diagnostics.\n- pnpm --filter @moe/daemon test: GREEN, 39 files / 747 tests.\n- pnpm typecheck: RED, packages/core only, e.g. `src/expansion/planning-expansion-contract.test.ts(10,3): error TS2305: Module '\"../index.js\"' has no exported member 'PLANNING_EXPANSION_ERROR_CODES'` plus PLANNING_EXPANSION_LAYERS/TARGETS, inspectPlanningExpansionContract, snapshotPlanningRunContractState, PlanningExpansionHoldBinding, PlanningExpansionProposalIdentity, PlanningRunContractState, several TS2578 unused @ts-expect-error, TS2353.\n\nEvery failing path is under packages/core/src/expansion/ or packages/core/src/planning/ — disjoint from the nine apps/daemon/src/identity/session-authority* paths, and owned by in-flight task-fcad40b6 (worker-4addc779, CODING as of 16:11:47Z). Path-attributed baseline per project rail 3: disclose verbatim, do not edit around it, and the task still cannot complete until the exact named command exits 0.",
+      "timestamp": "2026-08-09T16:14:03.070Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:03.226Z",
-  "updatedAt": "2026-08-09T14:36:51.470Z",
+  "updatedAt": "2026-08-09T17:03:44.348Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:28:54.104Z"
+    "firstClaimAt": "2026-08-09T14:28:54.104Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
-    "architect-21f667ae"
+    "architect-21f667ae",
+    "worker-5981deec",
+    "worker-2bc13005",
+    "worker-d61b2685",
+    "worker-a87e980a"
   ],
-  "blockedReason": "The human-approved proof protocol is now durably recorded in task comment comment-68aea9ba1a4b44b8a19743a2762377d1 and Serena memory decision-daemon-session-proof-protocol-v1, so the product-decision rail is resolved. The hard production dependency is not: task-b4f12e63baca4ecc9f2c159ed3c3ad78 is BLOCKED after step 1 because its approved plan says a generated refusal table is length 9 while enumerating 10 required cases. I posted the exact correction in dependency comment comment-0833f045bdcf4dae861e1faf810182dc; my direct amend attempt was rejected NOT_ALLOWED by runtime role metadata. Fresh disk probe: packages/core/src/identity/authenticate-session.ts=False, authenticate-session.js=False, apps/daemon/src/identity/session-authority.ts=False, and production rg for authenticateSession|SESSION_AUTH_LAYERS|createSessionAuthority|session-authority returned no matches. Resume only after the core seam task is DONE and its @moe/core public surface is freshly re-probed; do not reimplement core precedence inside daemon.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:36:24.501Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Obtained and recorded the human-approved Ed25519 session proof protocol; measured the absent core seam; diagnosed prerequisite task-b4f12e63's 9-vs-10 plan contradiction; posted exact correction; reported this task BLOCKED; wrote Serena handoff and decision memories.",
@@ -57,5 +197,38 @@
       "releasedBy": "architect-21f667ae",
       "reason": "Human product decision and dependency diagnosis are durably handed off; free architect capacity to continue planning while this task remains blocked."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T15:58:07.197Z",
+  "planningNotes": {
+    "approachesConsidered": "Treat this as the non-command-transport session authority that the coordination chain consumes, not as a rewrite of the existing bearer-oriented `session-services.ts`/`session-authenticator.ts` command path; those files remain out of scope and the new aggregate/event namespaces are explicit `session-authority.v1` identities. Compose the landed @moe/core `authenticateSession` seam exactly rather than copying its refusal precedence or accepting injected verifier/replay/session answers. Keep four focused production leaves—contracts, approved proof protocol/crypto, event-store fold/commit, and orchestration—because combining Ed25519 canonicalization, hostile decoding, durable replay, lifecycle writes, and core composition in the original two TypeScript files would exceed the per-file focus target and put security/persistence concerns in one module. The required .js bridges account for four additional paths; the plan remains below the daemon hard limit of 10 distinct files. Use one session aggregate for lifecycle state, one principal aggregate for immutable principal creation, and a deterministic SHA-256 replay aggregate keyed by `(sessionId,generation,clientKeyId,nonce)` so concurrent different nonces do not contend and the raw nonce never enters events, result bytes, IDs, or logs. Mutation commands use SqliteEventStore command decisions for idempotent receipt/result-digest replay. Authentication writes/checks the replay aggregate through a daemon-owned closure, then delegates the seven-layer decision to core. The human-approved Ed25519 protocol and the user's blanket approval remove the prior ambiguity; no additional product question is needed.",
+    "codebaseInsights": "Fresh measurement on 2026-08-09: design SHA-256 is exactly `1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191`; dependency task-b4f12e63baca4ecc9f2c159ed3c3ad78 is DONE; `git ls-files` confirms packages/core/src/identity/authenticate-session.ts/.js are committed. From apps/daemon, a plain-Node bare-root probe reports authenticateSession/createPrincipal/createSession/createCredential/rotateCredential and SqliteEventStore are functions and SESSION_AUTH_LAYERS is exactly BINDING, PROOF, REPLAY, GENERATION, SESSION_STATE, EXPIRY, TRANSPORT. Core input is `SessionAuthenticationInput` with daemon-owned verifyProof/checkReplay closures; core returns only AUTHENTICATION_FAILED, SESSION_REPLAYED, SESSION_EXPIRED, or CAPABILITY_DENIED with the exact layer. SqliteEventStore publicly exposes commitExpectedVersionDecision, getAggregateVersion, getCommandDecision, and paged readAggregateEvents. Existing daemon identity files implement a separate command-envelope bearer session path with SessionOpened/Renewed/Closed, credentialSha256, and capabilities but no Ed25519 key, credential generation, or durable proof replay; this task's scope is the missing non-command authority and must not call or mutate that legacy path. All nine planned files are absent and the five originally named paths are clean; production grep finds no SessionAuthority symbol. Daemon runtime-entrypoint.test.ts seeds any module with its own test sibling and follows its imports, so every new production leaf needs an exact LF .js bridge but no daemon-root export in this task. The exact baseline is temporarily foreign RED from in-flight task-fcad40b6: core test has 22 failures in packages/core/src/expansion/planning-expansion-contract.test.ts and daemon/repo typecheck fail on the same missing expansion symbols/unused import; daemon test itself is green at 39 files/747 tests. This task may proceed with that path-attributed baseline but cannot complete until the exact command exits 0.",
+    "risks": "Canonical signed bytes must not drift: protocol v1 is ASCII domain `moe.session-proof.v1` followed by fixed-order u32be-length-prefixed frames for principalId, projectId, sessionId, credentialId, generation, clientKeyId, transportId, requestId, requestDigest, issuedAt, and nonce. Encode strings as UTF-8, safe integers as unsigned decimal ASCII without leading zeros, and digest/key/nonce fields as their required lowercase-hex ASCII spelling before framing; tests pin exact bytes, not a duplicate encoder. Require canonical Ed25519 DER SPKI round-trip, SHA-256(SPKI) clientKeyId, exactly 64-byte lowercase-hex signatures, 128-bit lowercase-hex nonce, <=60s proof age and <=30s future skew. Accept proof at the inclusive TTL/skew boundaries and refuse one millisecond beyond. Session expiry is exclusive, initial/renewal TTL is 15 minutes, and absolute lifetime is 8 hours from open; renewal changes only expiry. Rotation keeps session/principal/scopes/expiry, increments generation exactly once, revokes the old credential, installs the new public key/credential, and verifies both old and new signatures over the same challenge bytes whose requestDigest binds the proposed new material. Store only public key/material and digests: never raw signature, nonce, challenge, proof object, plaintext credential, or private key. An unreadable/unknown event fold is UNKNOWN/BINDING and never a partial positive record. A valid proof may burn its replay digest before a later core generation/state/expiry/transport refusal, matching core's fixed precedence; tests distinguish authority state (unchanged) from the append-only replay fact. Idempotent mutation replay still authenticates where a current session is required and returns the original stored receipt/result bytes.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "packages/core/src/identity/authenticate-session.ts",
+      "packages/core/src/identity/identity-session.ts",
+      "packages/core/src/identity/index.ts",
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "apps/daemon/src/identity/session-services.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-09T15:58:44.208Z",
+    "escalatedAt": "2026-08-09T15:58:44.208Z"
+  },
+  "planApprovedAt": "2026-08-09T15:58:09.238Z",
+  "workStartedAt": "2026-08-09T16:09:41.379Z"
 }

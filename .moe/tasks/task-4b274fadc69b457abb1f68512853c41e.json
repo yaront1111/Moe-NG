@@ -22,11 +22,11 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-705f0380",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 15:44Z with a DoD ITEM 1 CORRECTION. architect-cb476f76's block was correct: DoD 1 as written is unimplementable, and the reason is that the codebase moved, not that anyone erred.\n\nSTATED DEPENDENCY IS SATISFIED: task-ab8c9489 (Accessibility latency hardening) is DONE, not WORKING as this task's description still claims. CR-A11Y-001 and surface-audit.ts are committed. That blocker is gone.\n\nDoD ITEM 1 IS CORRECTED. As written it requires a guard asserting \"no transition: or animation: declaration with a value other than none\" across every .css under apps/control-room/src. That was true when written and is FALSE NOW — verified by me at 15:43Z:\n  apps/control-room/src/shell/shell-layout.css:35  transition: inline-size 160ms ease;\n  apps/control-room/src/shell/shell-layout.css:58  transition: transform 160ms ease;\n\nBUT THE ACCESSIBILITY PROPERTY IS ACTUALLY HONOURED, which is why the DoD is wrong rather than the code:\n  shell-layout.css:131  @media (prefers-reduced-motion: reduce) {\n  shell-layout.css:136    animation: none;\n  shell-layout.css:138    transition: none;\nAnd the same gate exists in approvals/approval-layout.css:34, board/board-layout.css:68 and styles/responsive.css:151.\n\nSo motion EXISTS and is correctly SUPPRESSED for users who ask for that. A guard banning motion outright would forbid legitimate, accessible UI and would have to be either weakened or deleted the moment anyone adds a transition — the exact \"guard that rots into false evidence\" failure epic rail 6 exists to prevent.\n\nCORRECTED DoD ITEM 1: assert that EVERY motion declaration in apps/control-room/src/**/*.css is overridden to none within a @media (prefers-reduced-motion: reduce) block in the same stylesheet. Assert the sweep found a NON-ZERO number of motion declarations before asserting they are all gated — a sweep that silently matches nothing must not pass, per epic rail 6. A stylesheet that introduces motion without its own reduced-motion block fails, which is the property worth guarding and it is stable as the UI grows.\n\nITEMS 2-6 ARE UNAFFECTED and were already ready per the architect's own assessment.\n\nI cannot edit definitionOfDone — no MCP tool exposes it and this task has no plan steps to amend — so this reason field is the durable record and QA inherits it. FOR QA: a diff satisfying item 1 by BANNING motion, or by deleting/weakening the guard, is a rejection. The guard must prove motion is gated, not absent.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "LOW",
@@ -34,5 +34,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:00:58.203Z",
-  "updatedAt": "2026-08-09T14:24:25.597Z"
+  "updatedAt": "2026-08-09T17:03:42.776Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:10:58.683Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Dependency cleared (task-ab8c9489 is DONE, not WORKING as the description says). Confirmed the zero-motion premise is now FALSE: shell-layout.css:24 and :54 carry real 160ms transitions, and shell-layout.css:104-112 properly suppresses both. All three stylesheets carry a reduced-motion block. Exact replacement text for DoD item 1 supplied in the block reason.",
+      "whatRemains": "Governor amends DoD item 1, then the whole task is a clean ~6 step, 3 file plan: a motion-suppression source-text guard and a colour-independence sweep as new files under a11y/, plus tightening the role assertion in shell/gating-keyboard.test.tsx:102.",
+      "pitfalls": "Do NOT write the guard as DoD 1 literally specifies -- it is red on arrival against fully compliant code, and task rail 2 forbids adding production code to fix it. Do NOT ban scroll-snap-type or scroll-snap-align. Consume auditLiveRegions and auditTruthClassMonochrome from a11y/surface-audit.ts by NAME rather than reimplementing them; that file is actively changing so every line number in the description is stale. Note task-a95ccf7e (colour token layer) adds a fourth stylesheet whose plan already requires a reduced-motion block, so the two are compatible -- but if it lands first, DoD 5(a)'s 'no colour value exists anywhere' record becomes stale and should be re-worded rather than asserted.",
+      "openQuestions": "None technical. Only whether the governor accepts the suppression-matching guard in place of the pin-at-zero guard.",
+      "releasedAt": "2026-08-09T15:13:05.561Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Blocked on a DoD item 1 amendment; released to continue the queue."
+    }
+  ],
+  "contextFetchedBy": [
+    "architect-705f0380"
+  ]
 }

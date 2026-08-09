@@ -16,21 +16,47 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity.\n\nMEASURED, both halves of its hard dependency: \"Multi-node daemon composition\" is task-9634ed3b, which I have just demoted because apps/daemon/src/graph/ does not exist. \"Live control-room seam\" IS DONE, so half the dependency is genuinely satisfied — but the half that supplies the graph authority this task renders is not, and its own owned path apps/control-room/src/graph/** does not exist either.\n\nA control-room surface over a daemon composition that has not been built is the surface-for-absent-data shape that has blocked seven tasks on this board today. Same reason I held task-ddb3bf77 (circuit-breaker operator surfaces) in BACKLOG in the same sweep.\n\nPromote when task-9634ed3b is DONE and its graph authority is verifiable on disk.",
+  "reopenReason": "Transit to BACKLOG for ARCHIVE by governor-f70d1157 at 15:25Z. Block unchanged and still correct.\n\nWHY ARCHIVE: architect-cb476f76 proved at 15:04Z that BACKLOG does not hold — claim_next_task re-serves demoted tasks, so a demotion is not a park. This task was demoted at 14:17Z and is currently re-servable to any architect, who would pay a full context load re-deriving a conclusion already recorded.\n\nBLOCK EVIDENCE, unchanged: its hard dependency is Multi-node daemon composition (task-9634ed3b), which I archived minutes ago because apps/daemon/src/graph does not exist. Its own owned path apps/control-room/src/graph/** does not exist either. The other half of its dependency, Live control-room seam, IS DONE — so half is genuinely satisfied and the graph-authority half is not. A control-room surface over a daemon composition nobody has built is the surface-for-absent-data shape that has blocked seven tasks today.\n\nReversible via set_task_status ARCHIVED -> BACKLOG once task-9634ed3b is built and its graph authority is verifiable on disk.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 65,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-22ec1ef0960a41b18ff50e383fb37cdd",
+      "author": "architect-21f667ae",
+      "content": "Fresh hard-dependency audit blocks planning. `moe.search_tasks` reports Multi-node daemon composition task-9634ed3b72014fe781591c7df9674da2 BLOCKED with no plan; Live control-room seam task-2d1f94f91da240c0a3262d2524c127af is DONE. Disk agrees: `Test-Path apps/daemon/src/graph` and `Test-Path apps/control-room/src/graph` are both false. `git grep` finds no daemon/control-room production FrontierSnapshot, DependencyChallenge, ExpansionProposal, fan-in, or supersession projection/call site; daemon has only the top-level advisory graph-preview-request test plus unrelated activeGraphRevisionRef fields, while contracts expose command vocabulary only. This task is an operator journey/proof surface, so global Clause 2 forbids planning it against mocks, copied DTOs, or UI-owned authority. Reclaim only after task-9634ed3b is DONE and its committed authenticated graph commands/projections and generated-client facts are re-probed symbol by symbol.",
+      "timestamp": "2026-08-09T15:13:37.894Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.248Z",
-  "updatedAt": "2026-08-09T14:17:54.257Z",
+  "updatedAt": "2026-08-09T15:24:28.760Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-21f667ae"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:12:51.404Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded current planning guidance; reverified both hard dependencies and disk; proved Live control-room seam DONE but Multi-node daemon composition BLOCKED and apps/daemon/src/graph plus authoritative graph projections absent; commented exact gap; reported BLOCKED; wrote Serena handoff.",
+      "whatRemains": "After task-9634ed3b is DONE, re-probe its committed authenticated graph commands/projections/generated facts and then draft the control-room journey plan.",
+      "pitfalls": "Do not substitute generic transport, copied DTOs, mocks, or UI-derived readiness/authority. apps/control-room/src/graph absence is expected deliverable; apps/daemon/src/graph absence is the blocking subject.",
+      "openQuestions": "None until the named daemon dependency lands.",
+      "releasedAt": "2026-08-09T15:14:08.960Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Explicit architect handoff after verified hard-dependency block; free architect to plan another task."
+    }
   ]
 }

@@ -16,7 +16,7 @@
     "Root publication must be curated and exact; no wildcard collision or deep-import workaround."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:47:45.147Z",
-  "updatedAt": "2026-08-09T13:47:57.803Z"
+  "updatedAt": "2026-08-09T15:00:11.417Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:54:04.572Z"
+  },
+  "contextFetchedBy": [
+    "architect-d46fcb95"
+  ],
+  "blockedReason": "BLOCKED. Clause 2 acceptance task: 0 of 5 hard dependencies are DONE and 3 of 4 certified capabilities are absent on disk. Measured symbol by symbol 2026-08-09, not read off the board.\n\nDEPENDENCIES: task-7f089e11 = REVIEW (7/7, unapproved); task-fcad40b6 = PLANNING (0 steps); task-93b0314e, task-2561a780, task-b863bae8 = BLOCKED. Description requires all five DONE.\n\nCAP 1 expansion hold/request = PRESENT. packages/core/src/expansion/expansion-planning-hold.ts ships EXPANSION_HOLD_COMMAND_KINDS/CAUSES/ERROR_CODES/LAYERS, published from the core root at index.ts:222,230. Its owner is in REVIEW and can still be rejected.\n\nCAP 2 hold-bound PlanningRun EXPANSION submission = ABSENT. planning-run-reducer.ts:77 and planning-run-submission.ts:52 both still hard-refuse every non-INITIAL kind with PLANNING_KIND_UNSUPPORTED. EXPANSION exists only as a forward-compatibility enum member (planning-command-contract.ts:8).\n\nCAP 3 all-or-none scheduler admission/preparation = ABSENT. packages/scheduler/src/fairness does not exist; grep EXPANSION_ADMISSION|admitExpansion|prepareExpansion over packages/scheduler/src returns ZERO.\n*** TRAP: FairnessTicket/WDRR/capRevision DO match, but only under packages/testkit/src/scheduler-fairness/**. This epic's own architectureNotes call that \"a non-authoritative oracle, not production scheduler state.\" Do not mistake it for the shipped capability. ***\n\nCAP 4 manual approval binding = ABSENT. grep ExpansionApproval|EXPANSION_APPROVAL|manualApprovalBinding across every packages/*/src returns ZERO.\n\ntests/integration/ holds only control-room and distribution; no expansion suite.\n\nDO NOT create prerequisites - all four producers already exist. A fifth would be the duplicate the rails warn about.\n\nPlanning now forces a mock-backed journey or authority reimplemented in the integration test, both forbidden by task rail 2 and Clause 2.\n\nGOVERNOR: reclaim only after all five are DONE and committed, then re-probe caps 2-4 by symbol.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:55:44.444Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Probed all four certified capabilities on disk, symbol by symbol, and recorded the block. CAP 1 (expansion hold/request) is PRESENT at packages/core/src/expansion/expansion-planning-hold.ts and published from the core root at index.ts:222,230, but its owner task-7f089e11 is in REVIEW (7/7, unapproved). CAP 2, 3 and 4 are ABSENT. Dependency statuses re-measured: 0 of 5 are DONE.",
+      "whatRemains": "Reclaim only after task-7f089e11, task-fcad40b6, task-93b0314e, task-2561a780 and task-b863bae8 are all DONE and committed, then re-probe capabilities 2-4 by symbol before drafting. The durable consumer to record per Clause 1 is task-9634ed3b (Multi-node daemon composition).",
+      "pitfalls": "Two traps that will cost you a context load each. FIRST: grep for FairnessTicket|WDRR|capRevision returns five hits and reads as 'fairness exists' - every one is under packages/testkit/src/scheduler-fairness/**, which this epic's architectureNotes explicitly call 'a non-authoritative oracle, not production scheduler state'. packages/scheduler/src/fairness does not exist and EXPANSION_ADMISSION|admitExpansion|prepareExpansion returns ZERO. Filter capability probes by package before concluding a symbol exists. SECOND: EXPANSION is a representable PlanningRunKind at planning-command-contract.ts:8, which looks like support - but planning-run-reducer.ts:77 and planning-run-submission.ts:52 both still hard-refuse every non-INITIAL kind with PLANNING_KIND_UNSUPPORTED. Check the reducer, not the type. Do NOT create prerequisite tasks: all four producers already exist on the board.",
+      "openQuestions": "Whether CAP 1 survives review. task-7f089e11 is at 7/7 in REVIEW; if QA rejects it, the one present capability moves too and this task's ground shifts again.",
+      "releasedAt": "2026-08-09T15:00:11.416Z",
+      "releasedBy": "architect-d46fcb95",
+      "reason": "Dependency/capability gate, not a plan defect. Releasing so the architect slot is free; this needs the four producer tasks to land, not another architect."
+    }
+  ]
 }

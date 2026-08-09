@@ -15,13 +15,144 @@
     "An expansion hold binding is evidence of planning containment, never approval or activation.",
     "Preserve the stable INITIAL wire/state surface."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Replan preflight and baseline, read-only — reverify the pinned design hash, dependency task-7f089e11daea44e9a483197ff139d725 is DONE, and the committed ExpansionHandoffBinding/active-hold fields and current PlanningRun shapes still match planningNotes. Re-run the exact line-count/status/grep probes over the six planned paths; require planning-validation.ts to remain exactly the untouched legacy surface, the new validator/test to remain absent, index.ts to have enough headroom to stay <=250, and no competing PlanningExpansion/sealedProposal work or foreign owner. Run `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` as the pre-change package baseline and record repo-wide `pnpm typecheck`/`pnpm test` failing paths for later attribution. Stop with the measured mismatch rather than adapting foreign bytes if any premise changed.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Preflight PASSED at HEAD 16bd8e5501810ff95dd31bc6f4072352ae04c779. Read-only; zero bytes written.\n\nPREMISES RE-VERIFIED (all TRUE):\n- Design SHA-256 exact: 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191.\n- Physical lines ([System.IO.File]::ReadAllLines): command-contract 216, event-contract 163, planning-validation 250, planning-source-size.test 136, graph-revision-validation 115, index.ts 237. All match planningNotes exactly.\n- ABSENT as required: planning-expansion-validation.ts, planning-expansion-validation.js, expansion/planning-expansion-contract.test.ts.\n- git status --porcelain over all six owned paths: EMPTY. planning-validation.ts also clean (untouched legacy surface).\n- No competing symbol: grep PlanningExpansion|sealedProposal|expansionBinding|proposalKind over packages/core/src finds only the pre-existing PlanProposeCommand.proposalKind: PlanningRunKind (planning-command-contract.ts:165) and its fixtures/reducer uses. No foreign owner.\n- Producer surface confirmed on disk: ExpansionHandoffBinding = exactly { readonly digest: string; readonly ref: string } at expansion-planning-hold.ts:26; root exports at index.ts:216-230.\n\nCONSTRAINTS MEASURED (bind steps 4-6):\n- planning-source-size.test.ts MAX_PHYSICAL_LINES=250 sweeps every .ts in packages/core/src/planning/ with no allowlist. The new leaf must be <=250. Only one size guard exists in core and it is scoped to planning/; index.ts is not swept but rail 5 still targets <=250 (13 lines free).\n- runtime-entrypoint.test.ts requires exact reachability from index.ts plus bridge bytes exactly `export * from \"./<basename>.ts\";\\n`. Verified LF on the precedent: `cat -A graph-revision-validation.js` -> `export * from \"./graph-revision-validation.ts\";$`.\n- planning-snapshot.validRef has NO upper bound (length > 0 only), so the 1..256 expansion bound must be leaf-local and must not alter legacy behavior.\n\nPACKAGE BASELINE (pre-change): `pnpm --filter @moe/core typecheck` exit 0; `pnpm --filter @moe/core test` exit 0, 18 files / 279 tests.\n\nREPO-WIDE BASELINE for later attribution — both FOREIGN, both pre-existing, neither in my six owned paths:\n1. `pnpm typecheck` exit 1, Scope: 16 of 17 workspace projects. Sole failure: apps/daemon/src/recovery/recovery-succession.ts(197,22): error TS2304: Cannot find name 'decodeRecord'. Another worker is mid-task on that file.\n2. `pnpm test` exit 1. Test Files 1 failed | 201 passed (202); Tests 1 failed | 3810 passed | 1 skipped (3812). Sole failure: packages/scheduler/src/package-boundary.test.ts > keeps scheduler registrars behind the package-root import boundary. Committed and unowned — I root-caused it this session (its own tokenizer mis-lexes the shebang in apps/daemon/src/daemon-main.ts; that file is correct) and reported it in chat; it has no task.",
+      "startedAt": "2026-08-09T15:34:24.795Z",
+      "completedAt": "2026-08-09T15:37:04.925Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, public type/wire contract — create planning-expansion-contract.test.ts and import the future contract/validator values and types through `../index.js`, not a deep package boundary. Pin readonly PlanningExpansionHoldBinding to exactly generation, goalVersion, graphEpoch, holdId, lifecycle:'ACTIVE', parentNodeRef, parentRunRef, proposalBaseHash, sourceFingerprint, truthClass:'DAEMON_VERIFIED', and the landed ExpansionHandoffBinding workerHandoff; pin PlanningExpansionProposalIdentity to exactly proposalHash, proposalRef, truthClass:'DAEMON_VERIFIED'. Require only EXPANSION create/created/state variants to carry `expansion`, and only EXPANSION propose/sealed variants to carry `proposalKind:'EXPANSION'`, the same expansion binding, and `sealedProposal` (null before submission in state, non-null afterward). Add `satisfies`/`@ts-expect-error` checks for readonly and cross-kind illegality. Byte-pin existing INITIAL command/state/event JSON through reducePlanningRun and assert REVISION still returns exact code `PLANNING_KIND_UNSUPPORTED`; confirm focused typecheck/test RED is caused only by the missing new root surface.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "note": "RED achieved and attributed. Created planning-expansion-contract.test.ts (15 tests), importing everything under test through ../index.js.\n\nRED PROOF, both legs, caused only by the missing new root surface:\n- typecheck exit 1. First errors: TS2305 no exported member 'snapshotPlanningRunContractState' / 'PlanningExpansionHoldBinding' / 'PlanningExpansionProposalIdentity'; TS2724 no exported member 'PlanningRunContractState'; then TS2353 'expansion' does not exist in type 'PlanningCreateDraftCommand'/'PlanProposeCommand' and TS2578 unused @ts-expect-error at every cross-kind case. Every error names the absent surface.\n- test exit 1: 1 failed | 293 passed (294). The single failure is `publishes the contract-state snapshot as a callable root export` — expected 'undefined' to be 'function'. No other suite moved (18 other files still pass).\n\nPINNED THIS STEP: 11-key PlanningExpansionHoldBinding and 3-key PlanningExpansionProposalIdentity by mutually-assignable Exact<> key-set equality (a missing OR extra key fails, not just a missing one); lifecycle 'ACTIVE' and both truthClass 'DAEMON_VERIFIED' as literals, not widened; workerHandoff reusing the landed {digest,ref}; EXPANSION-only create/created/state and propose/sealed variants with 7 @ts-expect-error cross-kind cases; INITIAL create bytes byte-pinned through reducePlanningRun; REVISION and EXPANSION drafts both still returning exact PLANNING_KIND_UNSUPPORTED.\n\nMEASURED DEVIATION — step 5's \"retain the public PlanningRunState as an exact union\" is NOT implementable inside the six owned paths, and I proved it rather than assumed it. Probe: made PlanningRunState a discriminated union, ran the real package typecheck, then reverted (SHA-256 verified byte-identical, git status clean). Result: exit 1 with exactly two errors, BOTH in UNOWNED files — planning-results.ts:92 (clonedState: `{...state, ...patch}` over a union yields a 4-member cross-product whose mixed members are not assignable) and planning-run-test-fixtures.ts:90. Two alternative union encodings (`?: never` exclusive union; null-typed common keys narrowed per branch) fail identically at the same spread. Commands and events are NOT affected: unioning PlanningCreateDraftCommand, PlanProposeCommand, PlanningRunCreated and PlanningSubmissionSealed typechecks at exit 0 with zero errors, so those follow step 4/5 exactly.\n\nRESOLUTION, still inside the six owned paths and using the architect's own vocabulary: PlanningRunState stays byte-unchanged, and the discriminated surface is an ADDITIVE projection `PlanningRunContractState = (PlanningRunState & {runKind:'INITIAL'|'REVISION'}) | (PlanningRunState & {expansion; runKind:'EXPANSION'; sealedProposal|null})` exported from the owned event-contract leaf. Step 2/6 already name `snapshotPlanningRunContractState` and \"the whole PlanningRun contract state\", so the contract-state concept is the plan's own. Verified by probe: clonedState and successorData compile untouched, discriminant narrowing works, EXPANSION-without-binding and expansion-on-INITIAL are both type errors, and every contract state widens to PlanningRunState. DoD 1 keeps full type-level cross-kind illegality; zero unowned files are edited; task rail 1 holds because this extends the same contract module rather than adding a parallel aggregate.\n\nAlso corrected one of my own assertions before completing: the readonly test originally asserted a write did NOT land. `readonly` is erased at runtime and freezes nothing, so that pinned a guarantee the type never made. It now asserts the writes DO land and states that the @ts-expect-error directives are the real assertion, with runtime immutability deferred to the frozen production snapshot.",
+      "startedAt": "2026-08-09T15:37:09.204Z",
+      "completedAt": "2026-08-09T15:44:59.742Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, fail-closed production matrix — extend the focused test for the future root-exported `inspectPlanningExpansionContract`, command/event predicates, and `snapshotPlanningRunContractState`. Generate positive nonzero matrices for hold binding, proposal identity, create, propose, created event, sealed event, and state; for every target independently cover missing/extra keys, empty/257-character refs, uppercase/non-64-hex digests, negative/fractional/unsafe versions, non-ACTIVE lifecycle, weak/UNKNOWN truth, malformed handoff, stale-shaped payloads, cross-kind expansion injection/omission, and proposal hash/ref mismatch to submissionHash/witness.submissionRef. Every invalid case must assert its exact stable `PLANNING_EXPANSION_*_INVALID` code and exact target layer, plus unchanged input; every generated list asserts exact cardinality and `>0`. Assert snapshots are detached/frozen and accepted shapes contain none of child/graph/budget/resource/lease/effect/slot/allocation/activation/dispatch authority. Keep RED until production guards exist; helpers may build fixtures but may not reimplement acceptance.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "note": "Fail-closed matrix written and RED. File now 39 tests; 22 fail, and EVERY failure names a missing production export (TypeError: inspectPlanningExpansionContract is not a function / PLANNING_EXPANSION_TARGETS is not iterable / snapshotPlanningRunContractState is not a function). Typecheck exit 1 with 30 errors, ALL confined to this one file (verified by grouping the error lines by path — no other source appears).\n\nSURFACE THE TEST PINS (drives steps 4-6): inspectPlanningExpansionContract(target, value) over a closed 7-entry PLANNING_EXPANSION_TARGETS, returning {ok:true,target,value} or {code,layer,ok:false,target}; frozen PLANNING_EXPANSION_ERROR_CODES (7 PLANNING_EXPANSION_*_INVALID codes) and PLANNING_EXPANSION_LAYERS (BINDING/IDENTITY/COMMAND/EVENT/STATE), with layer derived from the selected target; snapshotPlanningRunContractState.\n\nMATRIX: 269 invalid cases, exact per-target cardinality CONTRACT_STATE 41, CREATED_EVENT 23, CREATE_COMMAND 40, HOLD_BINDING 78, PROPOSAL_IDENTITY 23, PROPOSE_COMMAND 33, SEALED_EVENT 31. Every target independently covers missing key (one per key, derived from the fixture's own key set), extra key, non-record, null, array, empty/257-char refs, uppercase/63-char/65-char/non-hex digests, 0/negative/fractional/NaN/MAX_SAFE_INTEGER+1/string versions, non-ACTIVE lifecycle, HUMAN_APPROVED/AGENT_REPORTED/UNKNOWN truth, malformed handoff (missing either leg, uppercase digest, empty ref, extra key, non-record), a stale-shaped nested binding, cross-kind injection AND omission, and sealed-proposal hash/ref mismatch against submissionHash and witness.submissionRef.\n\nANTI-VACUITY, all asserted BEFORE any production call so they hold in the red state and already PASS: exact count per target, >0 per target, label uniqueness per target, exact total 269, and structuralCases(HOLD_BINDING).length === HOLD_BINDING_KEYS.length + 4. Counts were derived by hand from the generator arithmetic and checked with an independent standalone script — not transcribed from a run, because a count copied off an actual result can only agree with itself. Refusals are reported by LABEL, not by count, so a regression names the case.\n\nTWO CORRECTIONS TO MY OWN TESTS, both found by running them:\n1. The authority-vocabulary sweep flagged `graphEpoch` because it substring-matches \"graph\". That is a staleness counter, not a handle — it carries an integer the daemon compares for currency and can address nothing. Rather than dropping it from the sweep (which would also stop catching a genuine `graphRef`), it is a NAMED exception, the assertion pins the flagged set to exactly that name, and a second assertion requires every named exception to still be present in the introduced key set so an unused entry cannot silence a future field.\n2. Added a positive control proving the sweep can still fail: childRef/graphRef/budgetHandle/dispatchToken must all be flagged. Without it, an empty offender list would be indistinguishable from a broken matcher.\n\nAlso pinned: rejected inputs stay byte-identical (JSON compared before/after), an unknown target refuses rather than defaulting positive, the published vocabulary is frozen and equals the set the matrix actually uses, the snapshot is deeply frozen and detached from the caller's object, and a legacy INITIAL state still snapshots unchanged so the projection widened nothing.",
+      "startedAt": "2026-08-09T15:45:25.520Z",
+      "completedAt": "2026-08-09T15:49:53.576Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the existing command contract variants — in planning-command-contract.ts import ExpansionHandoffBinding as a type from the landed expansion-hold leaf; define/export PlanningExpansionHoldBinding and PlanningExpansionProposalIdentity with the exact tested readonly fields; and refactor the unchanged exported PlanningCreateDraftCommand and PlanProposeCommand names into discriminated legacy-versus-EXPANSION unions. INITIAL/REVISION branches retain exactly their committed properties; only EXPANSION create requires `expansion`, and only EXPANSION propose requires `proposalKind:'EXPANSION'`, `expansion`, and `sealedProposal`. Preserve PlanningRunCommand and all existing witness/type names, add no runtime/authority value, document why an active hold is containment rather than approval, and record task-93b0314e09f248118e21f92699989468 as the composition consumer. Keep the file <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts"
+      ],
+      "note": "Command contract landed. planning-command-contract.ts: 216 -> 249 physical lines, UNDER the hard 250 the planning sweep enforces; longest line 96 chars, so nothing was bought with long-line evasion. planning-source-size.test.ts passes.\n\nADDED: type-only import of the landed ExpansionHandoffBinding from ../expansion/expansion-planning-hold.js (reused, not restated); PlanningExpansionHoldBinding with exactly the 11 tested readonly fields; PlanningExpansionProposalIdentity with exactly 3. PlanningCreateDraftCommand and PlanProposeCommand keep their exported names and became discriminated unions over a private ...Base interface — INITIAL/REVISION branches carry exactly their committed properties, only EXPANSION create requires `expansion`, only EXPANSION propose requires proposalKind:'EXPANSION' + expansion + sealedProposal. PlanningRunCommand and every witness/proof name are untouched. No runtime value and no authority field was added.\n\nDOCUMENTED per the step: the binding is containment, not approval — it proves a bounded planning window is open and current, addresses no child/graph/budget/resource/lease/effect/slot, and `graphEpoch`/`generation` are staleness counters compared for currency rather than handles, so an ACTIVE lifecycle is never an approval or activation and grants no transition. task-93b0314e09f248118e21f92699989468 is recorded in the module as the composition consumer.\n\nBLAST RADIUS RE-MEASURED after the change: `pnpm --filter @moe/core typecheck` errors are still confined to src/expansion/planning-expansion-contract.test.ts and nothing else — grouped the error lines by path to confirm. The command unions broke no reducer, submission, validation, fixture or result module, exactly as the step-2 probe predicted. Suite: 22 failed | 296 passed (318); every remaining failure is a missing step-6 export.\n\nTwo lines needed compacting to fit the cap (multiple readonly fields per line, the precedented style in the sibling expansion-planning-hold.ts). I recorded WHY in the module docstring so the next editor does not \"tidy\" it back over the ceiling.",
+      "startedAt": "2026-08-09T15:49:57.633Z",
+      "completedAt": "2026-08-09T15:51:57.559Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement state/event discrimination — in planning-event-contract.ts factor unchanged common fields and retain the public PlanningRunState, PlanningRunCreated, and PlanningSubmissionSealed names as exact unions. INITIAL/REVISION state and events must serialize to the same keys/bytes. EXPANSION state requires the opening `expansion` plus `sealedProposal` (null until submission and exact identity afterward); EXPANSION PlanningRunCreated requires expansion; EXPANSION PlanningSubmissionSealed requires proposalKind:'EXPANSION', expansion, and non-null sealedProposal. Reuse the command-leaf binding/identity types, preserve existing reducer result/event unions and narrowing, and add no approval, activation, child, graph, budget, resource, lease, effect, slot, or dispatch affordance. Keep the file <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-event-contract.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-event-contract.ts"
+      ],
+      "note": "State/event discrimination landed. planning-event-contract.ts: 163 -> 194 physical lines, comfortably under the 250 sweep.\n\nEVENTS follow the step exactly. PlanningRunCreated and PlanningSubmissionSealed keep their exported names and became unions over private ...Base interfaces. INITIAL/REVISION created events carry exactly their committed keys, so their bytes are unchanged. The committed sealed event has no run-kind discriminator, so its legacy branch is the base type verbatim and only the EXPANSION branch adds proposalKind:'EXPANSION' + expansion + non-null sealedProposal. Both reuse the command-leaf binding/identity types rather than restating them. PlanningRunEvent, the reducer result unions and their narrowing are untouched.\n\nSTATE uses the measured deviation reported at step 2 and in chat (msg-193b3c15). PlanningRunState is left BYTE-IDENTICAL and the discrimination lives in an additive `PlanningRunContractState` projection in this same owned leaf. The reason is recorded in the module so nobody re-derives it: `clonedState` spreads Partial<PlanningRunState> over the state, and a discriminated union there yields a cross-product whose mixed members are unassignable — that breaks planning-results.ts:92 and planning-run-test-fixtures.ts:90, both UNOWNED. Every PlanningRunContractState still widens to a PlanningRunState, so the contract surface narrows without forking the aggregate. EXPANSION requires the opening binding plus a sealedProposal slot that is null until a submission is sealed and the exact identity afterward.\n\nNO new affordance: nothing approval-, activation-, child-, graph-, budget-, resource-, lease-, effect-, slot- or dispatch-shaped was added. The module states that representability enables no transition — the reducer still answers PLANNING_KIND_UNSUPPORTED for every non-INITIAL kind, and the test pins that for both REVISION and EXPANSION.\n\nVERIFIED AFTER THE CHANGE: typecheck errors remain confined to src/expansion/planning-expansion-contract.test.ts (grouped by path), so the event unions and the state projection broke no consumer. Suite unchanged at 22 failed | 296 passed (318), every failure still a missing step-6 export.",
+      "startedAt": "2026-08-09T15:52:00.715Z",
+      "completedAt": "2026-08-09T15:53:00.088Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement the focused validation/publication leaf — create planning-expansion-validation.ts plus the exact LF one-line `.js -> .ts` bridge. Export exact predicates for hold binding, proposal identity, create, propose, created event, sealed event, and the whole PlanningRun contract state, plus a detached `snapshotPlanningRunContractState` and frozen reason-code/layer inspection result. Snapshot hostile inputs once; use frozen exact-key lists; bound expansion refs/IDs to 1..256; require lowercase 64-hex hashes/digests, positive safe generation/goalVersion/event/state versions, nonnegative safe graphEpoch/expectedVersion, expectedVersion 0 on create, lifecycle ACTIVE, and truth exactly DAEMON_VERIFIED. Compose unchanged validSubmission/validEffectTerminal and validate a 12-key state projection through the production validPlanningRunState before adding expansion rules; do not copy legacy facet/content logic or edit planning-validation.ts. Require sealed identity equality with submissionHash/witness.submissionRef and null/non-null state placement. In index.ts add only compact curated value/type exports for this leaf and the two expansion types so runtime-entrypoint bridge reachability and bare-root imports pass, keeping index.ts <=250. Get focused/core tests green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js",
+        "packages/core/src/index.ts",
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js",
+        "packages/core/src/index.ts",
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "note": "Completed the resumed validation/publication leaf. Added exact expansion-local predicates for all seven targets, composed validPlanningRunState/validSubmission/validEffectTerminal, bounded identifiers and counters, enforced exact keys, DAEMON_VERIFIED evidence, create expectedVersion=0, and sealed proposal hash/ref binding. The inspector snapshots hostile inputs once, returns detached deeply frozen accepted evidence, and freezes stable code+layer refusals; unknown targets now refuse with PLANNING_EXPANSION_TARGET_INVALID at TARGET. Added the exact LF bridge and compact curated root exports after the colliding task owner explicitly deregistered/released; index.ts is 249 lines. Fixed the TDD spec's directive placement/helper typing and strengthened it for exact unknown-target refusal plus frozen/detached inspection evidence. Fresh focused test: 1 file / 40 tests exit 0. Fresh `pnpm --filter @moe/core typecheck` exit 0 and `pnpm --filter @moe/core test` 19 files / 319 tests exit 0. Production line counts: command 249, event 194, validation 239, index 249.",
+      "startedAt": "2026-08-09T16:10:30.395Z",
+      "completedAt": "2026-08-09T16:22:49.680Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review and mutation drill — review the exact six-path diff as an attacker for optional-field leakage, structural-union excess keys, hostile proxy/accessor/cycle inputs, 0/negative/fractional/MAX_SAFE_INTEGER boundaries, uppercase hashes, weak truth, stale generation/epoch, proposal rebinding, caller mutation, legacy-byte drift, root export collisions, bridge CRLF/wrong target, and accidental authority vocabulary. Temporarily weaken the production expansion exact-key guard, target/kind correlation, and DAEMON_VERIFIED or proposal-identity equality guard one at a time; run the focused test after each mutation and require RED at the exact stable code and exact refusing layer, then restore verified bytes. Reconfirm all generated sweeps are nonzero, INITIAL JSON is unchanged, REVISION pins PLANNING_KIND_UNSUPPORTED, task-93b0314e09f248118e21f92699989468 is recorded, planning-validation.ts is unchanged, every production .ts including index is <=250, the bridge is exact LF, and status/diff contain only the six planned paths with no debug/generated evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js",
+        "packages/core/src/index.ts",
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js",
+        "packages/core/src/index.ts",
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "note": "Adversarial review completed across all six owned paths. Added hostile carrier coverage for revoked proxies, throwing accessors, and cycles, each pinned to PLANNING_EXPANSION_HOLD_BINDING_INVALID at BINDING. TDD also found and fixed a real target-boundary defect: a revoked non-string target threw during property-key coercion; the new test first failed with that TypeError, then the inspector was hardened to refuse frozen {code: PLANNING_EXPANSION_TARGET_INVALID, layer: TARGET, target: <invalid-target>}. Focused suite is now 42/42 green; a strict single-file TypeScript compile of the owned spec/import closure exits 0. Mutation drills were run one at a time with binary backup/restore and identical SHA after each: (1) accepting unexpectedField reddened only the exact HOLD_BINDING code/layer row and named `extra key`; (2) weakening create runKind correlation reddened only the CREATE_COMMAND row and named `cross-kind: INITIAL carrying a binding`; (3) weakening DAEMON_VERIFIED reddened only HOLD_BINDING and named the weak truth cases; (4) removing proposal-hash equality reddened only PROPOSE_COMMAND and named `sealed proposal hash not equal to submissionHash`. Legacy planning-validation.ts diff is empty; INITIAL/REVISION pins remain green; consumer task-93b0314e... remains recorded. Exact bridge bytes end in LF and target the .ts leaf. Production lines: command 249, event 194, validation 243, index 249. Current full core typecheck is temporarily foreign-red only in untracked packages/core/src/supersession/supersession-engine.test.ts after task-14eb91a1 entered its TDD red phase; it was green for this exact owned diff before that lane appeared, and final step will require the named gate to return to exit 0.",
+      "startedAt": "2026-08-09T16:23:03.096Z",
+      "completedAt": "2026-08-09T16:29:11.573Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Single final gate, no edits afterward — first rerun repo-wide `pnpm typecheck` and `pnpm test`, compare failing paths with the step-1 merge-base baseline, report foreign red verbatim, and require the HEAD-minus-baseline failing-path delta intersected with the six owned paths to be empty. Recheck <=250 physical lines for command/event/new-validation/index, exact LF bridge bytes, explicit-path status/diff, positive test discovery, and absence of debug/probe/generated artifacts. Then run the exact completion-evidence command LAST in the foreground: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`; it must exit 0. If committing manually, first unstage every foreign entry and use only `git commit -- packages/core/src/planning/planning-command-contract.ts packages/core/src/planning/planning-event-contract.ts packages/core/src/planning/planning-expansion-validation.ts packages/core/src/planning/planning-expansion-validation.js packages/core/src/index.ts packages/core/src/expansion/planning-expansion-contract.test.ts`, then verify the commit contains only those paths.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/core/src/planning/planning-command-contract.ts",
+        "packages/core/src/planning/planning-event-contract.ts",
+        "packages/core/src/planning/planning-expansion-validation.ts",
+        "packages/core/src/planning/planning-expansion-validation.js",
+        "packages/core/src/index.ts",
+        "packages/core/src/expansion/planning-expansion-contract.test.ts"
+      ],
+      "startedAt": "2026-08-09T16:29:27.888Z"
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-1a528e3e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "reopenReason": "Producer gate cleared by measurement, not by assumption. worker-d61b2685 blocked this at 16:41Z because the exact final command `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` could not exit 0 while sibling task-14eb91a1 was TDD-red in an UNTRACKED packages/core/src/supersession/supersession-engine.test.ts and held index.ts. All three conditions are now false, measured by governor-42b952c9 at HEAD=025dc49: (1) task-14eb91a1 is DONE, 7/7 steps; (2) the spec is COMMITTED, not untracked — git ls-tree HEAD lists supersession-engine.ts/.test.ts/.js; (3) git status --porcelain on packages/core/src/index.ts is EMPTY, so the shared index is released. Gate re-run just now: typecheck exit 0; core suite 20 files / 332 tests passed; focused supersession spec 1 file / 11 tests passed. Steps 1-7 stay COMPLETE — commit a646660 holds the six owned paths and hash-matched HEAD. Do NOT redo them: read moe.get_handoff_history first, then run only the step-8 gate.",
   "createdBy": "WORKER",
   "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
   "priority": "HIGH",
@@ -36,19 +167,45 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:24.731Z",
-  "updatedAt": "2026-08-09T14:28:11.350Z",
+  "updatedAt": "2026-08-09T17:06:36.764Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:27:05.232Z"
+    "firstClaimAt": "2026-08-09T14:27:05.232Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
-    "worker-b6bbb60c"
+    "worker-b6bbb60c",
+    "architect-21f667ae",
+    "worker-4addc779",
+    "architect-5b5302ee",
+    "worker-d61b2685",
+    "worker-1a528e3e"
   ],
-  "blockedReason": "The declared producer is currently WORKING at 0/7 and its production surface is absent: packages/core/src/expansion does not exist and no ExpansionPlanningHold/reduceExpansionPlanningHold/EXPANSION_HOLD_* symbol is on disk. This task must extend the exact landed hold command/state/event binding; planning now would guess types and risk a parallel authority schema, which its own rail forbids. Reclaim only after the producer is DONE, committed/clean, and its exact public and runtime-reachable surface is probeable.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:27:53.509Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-7 complete. Commit a646660 contains exactly the six owned paths and all six working hashes matched HEAD. Focused expansion spec 42/42 green; strict owned import-closure typecheck green; prior full core gate was 19 files/319 tests green before sibling task-14eb91a1 entered TDD red. Four mutation drills bit and restored; hostile target/carrier defects are covered. Repo-wide current-minus-baseline failure intersection with owned paths is empty.",
+      "whatRemains": "After task-14eb91a1 publishes/commits its supersession root surface and releases clean index.ts, unblock/reclaim this task. Re-run repo-wide typecheck/test for attribution, then run LAST `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` and require exit 0. Complete step 8 and complete_task without edits.",
+      "pitfalls": "Do not amend a646660 or absorb sibling supersession bytes. task-14eb91a1's plan forbade index edits while this task was WORKING, so this task was deliberately moved BLOCKED to clear its step-5 precondition. Current foreign reds are packages/core/src/supersession/supersession-engine.test.ts plus the pre-existing scheduler package-boundary shebang failure. Production line counts at a646660: command 249, event 194, validator 243, index 249.",
+      "openQuestions": "None after task-14eb91a1 finishes; if its publish changes/removes this task's committed index exports, report the exact committed-byte mismatch rather than repairing foreign work.",
+      "releasedAt": "2026-08-09T16:42:17.399Z",
+      "releasedBy": "worker-d61b2685",
+      "reason": "Explicit handoff after resolving the shared-index serialization cycle: committed work is complete through step 7; only the sibling-gated exact final command remains."
+    },
+    {
+      "whatIsDone": "Steps 1-5 of 8 COMPLETE. worker-4addc779 re-verified every planningNotes claim as TRUE before working: design SHA exact, task-7f089e11 (Expansion planning hold lifecycle) DONE, ExpansionHandoffBinding is exactly {digest,ref} at line 26, and the expansion root exports are live on the @moe/core root (EXPANSION_HOLD_CAUSES, EXPANSION_HOLD_COMMAND_KINDS, EXPANSION_HOLD_ERROR_CODES, EXPANSION_HOLD_LAYERS, reduceExpansionPlanningHold at packages/core/src/index.ts:217-221). Governor independently confirmed those root exports at 14:53Z.",
+      "whatRemains": "Steps 6-8. NOTE: worker-4addc779 reported this task BLOCKED at 15:22Z for FILE-BUDGET INFEASIBILITY — explicitly not a dependency gap — and routed the measured detail to architect-21f667ae in chan-c57d1d6529e943f98aae342b98e7e9f0 msg-e5e3aa47417b40d0aaf4db51151c48bc. READ THAT MESSAGE BEFORE RESUMING. If the remaining steps genuinely cannot fit the <=10 distinct affectedFiles ceiling, the correct output is a SPIDR split proposed to an architect, not a squeezed plan that blows the per-file line cap.",
+      "pitfalls": "1. This task crossed its 3600000ms budget cap at 15:33Z. The overrun is governance round-trips and a crashed session, not slow work — do not let a budget alert push you into shortcuts. 2. The shared worktree has ~72 dirty/untracked paths and the git INDEX is shared state: after `git add` of your own paths, run `git diff --cached --name-only` and confirm the list is EXACTLY yours before committing. I nearly swept a foreign package.json into an unrelated commit this way at 15:52Z. 3. Root package.json and pnpm-lock.yaml currently carry task-9449ce65's live in-flight work — do not touch them.",
+      "openQuestions": "Is the file-budget infeasibility real at steps 6-8, or was it an artefact of planning all three steps as one unit? An architect ruling may be needed. architect-21f667ae holds the detail.",
+      "releasedAt": "2026-08-09T16:14:12.830Z",
+      "releasedBy": "governor-f70d1157",
+      "reason": "Released by governor-f70d1157 at 16:12Z on a CONFIRMED CRASH with the human's explicit approval. Not an idle release: moe.list_workers reports worker-4addc779 with status DEAD (not merely stale), 613s since last activity, currentTaskId null on the worker record while the task still named them as assignee. That is a dead session holding an assignment, which is the one case my role doc permits release for.\n\nThe task stays in WORKING so the next claimer resumes rather than restarts.\n\nSTATE PRESERVED — 5 of 8 steps are COMPLETE and the work is real. Do not redo it. Read moe.get_handoff_history first."
+    },
     {
       "whatIsDone": "Re-measured dependency status and disk; confirmed task-7f089e11 is WORKING 0/7 and its expansion hold surface is wholly absent; verified owned paths clean; commented, reported BLOCKED, and wrote Serena handoff.",
       "whatRemains": "After task-7f089e11 is DONE and committed, probe its exact exported command/state/event/binding types and then submit this schema plan.",
@@ -58,5 +215,41 @@
       "releasedBy": "architect-8c9073cd",
       "reason": "Explicit dependency-gate handoff; free architect for another PLANNING task."
     }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T15:33:51.430Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep the schema inside the existing PlanningRun public names as discriminated INITIAL/REVISION versus EXPANSION variants; reject universal optional fields and any parallel expansion aggregate because either makes cross-kind leakage possible or creates a second authority. The first approved plan tried to place all guards in planning-validation.ts, but the worker correctly measured that planning-source-size.test.ts hard-enforces 250 physical lines and planning-validation.ts is already exactly 250. Reject legacy-validator reformat churn and long-line cap evasion. Instead add a focused planning-expansion-validation.ts leaf, compose the unchanged legacy validPlanningRunState/validSubmission/validEffectTerminal surfaces, and leave planning-validation.ts byte-untouched. Add the exact LF bridge and a compact curated root export because runtime-entrypoint.test.ts requires every bridge to be reachable from packages/core/src/index.ts; an orphan bridge would fail the package gate. This advances only the expansion contract/validation surface; task-a1e7f75e9681486cb0a8f93e9397b8b5 still owns complete-protocol namespace hardening. Expose one reason-coded inspection surface over the predicates so every malformed/cross-kind case pins a stable code and refusing layer rather than asserting only false. Record task-93b0314e09f248118e21f92699989468 as the real behavior consumer.",
+    "codebaseInsights": "Fresh replan measurement at HEAD 961fc1826d3649dfddc91736c47bc12bc79aaf26: `[System.IO.File]::ReadAllLines` reports planning-command-contract.ts 216, planning-event-contract.ts 163, planning-validation.ts 250, planning-source-size.test.ts 136, graph-revision-validation.ts 115, and packages/core/src/index.ts 237 physical lines. planning-expansion-validation.ts/.js and expansion/planning-expansion-contract.test.ts are absent; `git status --porcelain -- <six planned paths>` returned empty; `rg PlanningExpansion|sealedProposal` found no competing planning schema. planning-source-size.test.ts defines MAX_PHYSICAL_LINES=250 and sweeps every planning .ts file. runtime-entrypoint.test.ts computes exact runtime reachability from index.ts and rejects both missing and unexpected .js bridges, so the new bridge must be root-reachable in this task. graph-revision-validation.js is the exact one-line LF bridge precedent. The landed producer still exposes ExpansionHandoffBinding {digest,ref}; the existing planning surfaces and reducer behavior remain as previously measured, including PLANNING_KIND_UNSUPPORTED for non-INITIAL create/propose. A fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exited 0 with 18 files/279 tests. The submission consumer task-93b0314e09f248118e21f92699989468 exists and is BLOCKED specifically on this contract.",
+    "risks": "packages/core/src/index.ts has only 13 lines of target headroom; remeasure and stop on any foreign owner/change, keep the curated export block compact but readable, and never compress into hostile long lines. Do not make planning-validation.ts import/re-export the new leaf or introduce a cycle; the new leaf may import its stable legacy validators, while index.ts independently publishes the new leaf. For expansion state, project the unchanged 12 common keys into validPlanningRunState so common lifecycle/facet/content rules are composed rather than reimplemented, then validate the exact expansion-only keys and sealed-proposal placement. The legacy sealed event has no run-kind discriminator, so its exact old keys remain one branch and only the EXPANSION branch carries proposalKind/expansion/sealedProposal. DAEMON_VERIFIED is mandatory for active-hold and sealed-proposal evidence; HUMAN_APPROVED, AGENT_REPORTED, and UNKNOWN must not pass. The reason-coded inspector must derive its code/layer from the selected production target, snapshot hostile input once, and never normalize an invalid shape into success. No schema/result may expose child, graph, budget, resource, lease, effect, slot, allocation, activation, or dispatch authority.",
+    "keyFiles": [
+      "packages/core/src/planning/planning-source-size.test.ts",
+      "packages/core/src/runtime-entrypoint.test.ts",
+      "packages/core/src/expansion/expansion-planning-hold.ts",
+      "packages/core/src/planning/planning-command-contract.ts",
+      "packages/core/src/planning/planning-event-contract.ts",
+      "packages/core/src/planning/planning-validation.ts",
+      "packages/core/src/planning/planning-snapshot.ts",
+      "packages/core/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-09T15:23:30.760Z",
+    "escalatedAt": "2026-08-09T15:33:57.783Z"
+  },
+  "planApprovedAt": "2026-08-09T15:33:53.477Z",
+  "workStartedAt": "2026-08-09T15:14:44.075Z",
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ]
 }

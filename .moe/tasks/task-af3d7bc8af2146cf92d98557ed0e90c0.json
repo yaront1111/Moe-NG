@@ -18,7 +18,7 @@
     "Keep each Rust production source focused, target <=250 physical lines and split before 400; no executable, Cargo target, transcript, or generated smoke evidence may be committed."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:36:05.450Z",
-  "updatedAt": "2026-08-09T14:40:19.817Z"
+  "updatedAt": "2026-08-09T14:52:05.865Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:50:47.603Z"
+  },
+  "contextFetchedBy": [
+    "architect-21f667ae"
+  ],
+  "blockedReason": "Hard task rail forbids starting until task-ea76e0cf9bdb4f1888aaa9e49323c782 is DONE. Fresh board measurement: that task is a BLOCKED SPIDR parent shell; child task-a24cb925a9a94002b805e9ccf1715978 is WORKING with zero completed steps and child task-a02496064e9e4e87a888cc112830d7a4 is unassigned PLANNING with no plan. Fresh disk probe: packages/runner/src/platform/windows/native, its Cargo.toml, and src/lib.rs are absent; production rg for CreateJobObjectW|PROC_THREAD_ATTRIBUTE_JOB_LIST|AssignProcessToJobObject|moe-windows-job-core returned no matches. Therefore the broker cannot import the required Rust crate or name its stable lifecycle API without guessing/reimplementing Win32 authority. Existing children already own the missing production capability. Resume only after both children and the parent shell are DONE, then re-probe Cargo package names, public Rust symbols, operation enum, RAII types, and locked metadata before planning.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:51:43.184Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified the native crate/core is absent on disk, measured the parent shell and both child statuses, reported the broker BLOCKED, and wrote task-task-af3d7bc8af2146cf92d98557ed0e90c0-handoff.",
+      "whatRemains": "Complete both Win32 core child tasks, close task-ea76e0cf through its required review hop, then re-probe and plan the broker against landed Rust APIs.",
+      "pitfalls": "Do not restate Win32 syscalls, invent crate symbols, or use taskkill/PID enumeration. Broker planning must wait for exact core operation/handle contracts.",
+      "openQuestions": "Exact landed crate API remains intentionally unknown until the dependency completes.",
+      "releasedAt": "2026-08-09T14:52:05.864Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Dependency absence is measured and durably handed off; free architect capacity while the Win32 core children land."
+    }
+  ]
 }

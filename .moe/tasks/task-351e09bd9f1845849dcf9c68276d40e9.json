@@ -16,21 +16,47 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. This one is the closest of the four to being genuinely free, and I want the measurement recorded so it is promoted the moment it is.\n\nMEASURED, dependency by dependency: \"Predecessor input materializer\" is DONE. \"Evidence receipt pipeline\" is DONE. \"Expansion admission protocol\" (task-005c9896) is BLOCKED. So TWO OF THREE are satisfied and exactly one is not.\n\nIts own owned path packages/integration/** does not exist yet, which is fine — that is its deliverable, not its subject.\n\nUNBLOCK CONDITION, and it is a single item: task-005c9896 DONE. Nothing else gates this. When that lands, promote this immediately — it is the nearest thing to free in the whole BACKLOG and it in turn unblocks task-cda6bddf (Same-bug circuit breaker), which unblocks task-dddfaf83 (Graph supersession engine). One task releases a chain of three.\n\nDemoted rather than left claimable because the board was at 0 WORKING / 0 REVIEW with architects actively claiming, and a two-thirds-satisfied dependency still blocks. An architect claiming it would spend a full context load establishing what this reason field now records in one line.",
+  "reopenReason": "Transit to BACKLOG for ARCHIVE by governor-f70d1157 at 15:26Z. Block unchanged.\n\nWHY ARCHIVE: BACKLOG does not hold; claim_next_task re-serves demoted tasks. This task was demoted at 14:17Z and is currently re-servable, and architect-21f667ae has already been served it once since — they blocked it again at 15:0xZ.\n\nBLOCK EVIDENCE, and this one is the CLOSEST of all archived tasks to being genuinely free, so record the condition precisely: of its three hard dependencies, TWO ARE DONE — Predecessor input materializer and Evidence receipt pipeline. Exactly one is unmet: Expansion admission protocol (task-005c9896), which is BLOCKED and is itself a SPIDR parent shell whose six children own the work.\n\nIts own owned path packages/integration/** does not exist yet, which is fine — that is its deliverable, not its subject.\n\nUNBLOCK CONDITION IS A SINGLE ITEM: task-005c9896 DONE (or, more precisely, its children complete and the parent closed). Nothing else gates this.\n\nWHY IT MATTERS: landing this unblocks task-cda6bddf (Same-bug circuit breaker), which unblocks task-dddfaf83 (Graph supersession engine). One task releases a chain of three. Promote it the moment its single dependency clears — this is the highest-value archived task on the board.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 67,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-e1b8d453afcf4360bd63a56a8edde24a",
+      "author": "architect-21f667ae",
+      "content": "Fresh dependency and disk audit: task-e17da1c9f2a9434caff3aa99bcdb555e (Predecessor input materializer) is DONE and task-1e512b957a9e498a87a4e2de3ad32f35 (Evidence receipt pipeline) is DONE, but task-005c9896f9724ece80b27f44789d0435 (Expansion admission protocol) remains BLOCKED as an unclosed decomposition shell. `packages/integration` is absent, which is expected for this task's deliverable, but the required complete all-or-none expansion proposal/admission/preparation/public surface is not available: current committed hits are only the generic `integration.accept_output` review command and advisory graph-preview completionNodeKey. The parent expansion task's children for PlanningRun submission, scheduler admission/preparation, approval binding, and public hardening are not all DONE. Planning now would have to invent proposal/preparation/epoch semantics or test helpers, violating the hard dependency and stale-by-default rail. Reclaim after task-005c9896 and its six children are DONE, then probe exact root-exported expansion result identities before drafting.",
+      "timestamp": "2026-08-09T15:14:55.858Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.747Z",
-  "updatedAt": "2026-08-09T14:18:12.340Z",
+  "updatedAt": "2026-08-09T15:25:32.071Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-21f667ae"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:14:18.368Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning guidance; reverified all three dependency statuses and disk; confirmed predecessor materializer and evidence pipeline DONE, expansion protocol BLOCKED and complete expansion identity absent; commented, reported BLOCKED, and wrote Serena handoff.",
+      "whatRemains": "After task-005c9896 and its decomposed children are DONE, re-probe exact exported proposal/admission/preparation identities and plan the integration package.",
+      "pitfalls": "Do not treat integration.accept_output or graph-preview fixtures as fan-in authority; do not invent producing-epoch/closure/preparation records.",
+      "openQuestions": "None until expansion protocol closes.",
+      "releasedAt": "2026-08-09T15:15:16.158Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Explicit architect handoff after verified single-dependency block; free architect for another planning task."
+    }
   ]
 }

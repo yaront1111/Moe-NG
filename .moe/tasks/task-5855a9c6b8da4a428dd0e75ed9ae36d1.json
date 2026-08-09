@@ -155,8 +155,8 @@
       "completedAt": "2026-08-09T14:44:02.480Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-58b24ffb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -171,16 +171,24 @@
       "author": "architect-8c9073cd",
       "content": "Consumer edge: Foundation self-host canary `task-97554aa4293e40eab56c0b642e18513a` will certify this durable recovery boundary after it is DONE. The canary must not deep-import or duplicate the rule.",
       "timestamp": "2026-08-09T12:29:45.234Z"
+    },
+    {
+      "id": "comment-a70633864ee5406d811e2280a1910ad0",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD (approval summary capped at 2000 chars).\n\nGATE RE-RUN BY ME, DoD 6's exact chain: `@moe/runner` typecheck exit 0, `@moe/runner` test exit 0 (**40 files / 1260 tests**), `@moe/daemon` typecheck exit 0, and the three named continuation/reconciliation suites exit 0 (3 files / 29 tests). CHAIN=0.\n\nTHE GOVERNOR'S THREE REJECT CONDITIONS, checked first because they were explicit:\n1. **`continuationEvidence` is NOT optional.** Declared `readonly continuationEvidence: ContinuationEvidence;` — no `?` — on **all five** classification variants in `crash-classification.ts` (:50, :56, :63, :70, :78). A `CrashClassification` carrying no continuation evidence is unrepresentable, which is the hole re-opening the worker refused.\n2. **No assertion in `platform-observation.test.ts` changed.** The whole diff is one added line to the CRASH fixture literal: `continuationEvidence: { predecessorRelease: \"UNKNOWN\", safeHandoff: null }`. Exactly the authorised scope, nothing else.\n3. **No other unowned file touched.**\n\nDoD 1 — MET. `RESUMABLE_RECOVERY_CLASSIFICATIONS = Object.freeze([\"ABSENT\"] as const)` — frozen, closed, one member. The facts are derived by `continuationEvidenceOf(records)` from parsed restart records, so no caller field manufactures either one.\n\nDoD 2 — MET, and the sweep asserts its own generation rather than assuming it. `KINDS` is hand-transcribed, `toHaveLength(5)`, and there is an explicit partition test (\"the resumable one and four non-resumable\") plus generation assertions on both paths: \"sweeps all five classifications through overlap / through resume and generates a case for each\".\n\nDoD 3 / 5 — MET, and this is the strongest design decision in the diff. Schema `/2` does not merely stop reading `predecessorRelease` and `safeHandoff` — it **REMOVES them from the request**. The module comment states it exactly: *\"they are not merely unread — they are UNDECLARED, so a request still carrying them\"* is rejected by the exact-shape gate. That makes caller-asserted authority **unrepresentable rather than merely ignored**: an implementation that only stopped reading the fields would pass identical happy-path tests and be one careless read away from regressing. Covered by \"rejects a hostile request asserting its own predecessor release\" and \"moves a reconciled attempt forward on a SINGLE command using only stored facts\".\n\nDoD 4 — MET, including the negative arm: \"refuses a proven release carrying no stored handoff, so admitResume is load-bearing\" — the name states why the case exists, which is the right way to keep a test from being deleted as redundant later.\n\nMUTATION DRILL RUN BY ME, targeted at the exact vacuity the production comment predicts. `safe-boundary.ts:81-84` warns that QUARANTINED reads ACTIVE while resources are held, so a lattice-first implementation refuses under `RECOVERY_PREDECESSOR_ACTIVE` — *\"leaving a test that asserts only 'refused' green with this gate deleted outright.\"* So I deleted the gate outright (`if (isResumableClassification(kind)) return null;` -> `if (true) return null;`) and ran the suite:\n\n**RED, 12 tests**, and the list is the DoD 2 surface itself:\n- all four non-resumable kinds on overlap AND on resume, each \"with the exact code and layer\"\n- **\"answers the classification before the release lattice for QUARANTINED + ACTIVE\"**\n- \"answers the classification before the handoff check for SUSPECT + no handoff\"\n- both five-class generation sweeps\n\nThose two precedence cases are the ones that matter: without them, QUARANTINED would still refuse under a different code and a \"did it refuse?\" test would stay green with the gate gone. The suite pins *which layer answered first*, so the guard cannot silently stop being load-bearing. Failure line confirmed at `:263`, `expect(verdict.failure.code).toBe(\"RECOVERY_CLASSIFICATION_NOT_RES…`. Restored via `git cat-file blob` and verified `git hash-object` == `aced26ce`.\n\nWHAT THIS CLOSES, for the record. @qa-b2df68b9 raised this on task-39fe2da5 as a **design observation** and correctly declined to reject, because no DoD required it and a daemon-side gate would have been the daemon deciding rather than composing. @architect-8c9073cd's live probe at 12:29Z then proved it: caller-supplied `PROVEN_RELEASED` plus a handoff returned BOUND for **all five** durable classifications, including SUSPECT and QUARANTINED with held resources. It is now fixed where it belonged — in the `@moe/runner` admission contract, carrying the classification — rather than bolted onto the daemon. The judgement not to reject, and the fix landing in the right layer, are the same decision paying off.\n\nPROCESS: the worker blocked rather than making `continuationEvidence` optional to keep the gate green, which would have kept the suite green while permitting precisely the state this task exists to forbid. That is the third refusal of a green-gate trade the governor has recorded today, and it is why the fix is real.",
+      "timestamp": "2026-08-09T14:48:11.304Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.631Z",
-  "updatedAt": "2026-08-09T14:46:29.699Z",
+  "updatedAt": "2026-08-09T14:48:39.970Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:39:14.751Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-09T14:48:39.970Z",
+    "wallClockMs": 7765219
   },
   "contextFetchedBy": [
     "architect-db2146e3",
@@ -247,5 +255,8 @@
     "apps/daemon/src/recovery/restart-reconciliation.ts",
     "apps/daemon/src/recovery/continuation-contracts.ts",
     "apps/daemon/src/recovery/continuation-service.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T14:48:39.970Z",
+  "reviewCompletedAt": "2026-08-09T14:48:39.970Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-a70633864ee5406d811e2280a1910ad0.\n\nGATE RE-RUN BY ME, DoD 6's exact chain: runner typecheck 0, runner test 0 (40 files / 1260 tests), daemon typecheck 0, the three continuation/reconciliation suites 0 (3 files / 29 tests).\n\nGOVERNOR'S THREE REJECT CONDITIONS, checked first. (1) `continuationEvidence` is NOT optional — declared without `?` on all five classification variants, so a CrashClassification with no continuation evidence is unrepresentable. (2) No assertion in platform-observation.test.ts changed: the whole diff is the one authorised fixture line. (3) No other unowned file touched.\n\nDoD1 `RESUMABLE_RECOVERY_CLASSIFICATIONS = Object.freeze([\"ABSENT\"])`, facts derived by `continuationEvidenceOf(records)` from parsed restart records, not from any caller field. DoD2 five-class sweep with hand-transcribed KINDS, `toHaveLength(5)`, an explicit resumable/non-resumable partition, and generation assertions on both overlap and resume.\n\nDoD3/5 is the strongest decision in the diff: schema `/2` does not merely stop READING `predecessorRelease`/`safeHandoff` — it REMOVES them, so they are UNDECLARED and the exact-shape gate rejects a request still carrying them. Caller-asserted authority is unrepresentable rather than ignored; an implementation that only stopped reading them would pass identical happy-path tests and be one careless read from regressing.\n\nDRILL RUN BY ME, aimed at the vacuity the production comment predicts: QUARANTINED reads ACTIVE while resources are held, so a \"did it refuse?\" test stays green with the gate deleted. I deleted it outright — RED, 12 tests: all four non-resumable kinds on overlap AND resume each with exact code and layer, both generation sweeps, and crucially \"answers the classification before the release lattice for QUARANTINED + ACTIVE\". The suite pins WHICH layer answered first, so the guard cannot silently stop being load-bearing. Restored, `git hash-object` == aced26ce."
 }

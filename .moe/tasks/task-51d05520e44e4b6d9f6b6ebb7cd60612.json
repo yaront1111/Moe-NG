@@ -27,49 +27,76 @@
     {
       "stepId": "step-2",
       "description": "Create `docs/plans/2026-08-09-benchmark-spec-hash-resolution.md` as a short decision/escalation record. Record the measured bytes exactly: the read-only design (SHA-256 `1D9D1EC...83191`) names Fable Revision 3 / `F8B84716BFC1FAAB051D698AA9BE353F0D780142D709B7D14496D0B7B65C8885`, while the sole current benchmark artifact declares Revision 4, says it builds on Revision 3, and hashes `A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C`; the existing 2026-08-07 fairness reference correctly pins A62. State that Revision 4/A62 is the current available benchmark artifact, but it is untracked in the external `moes` checkout and no freeze/authority upgrade is inferred. Mark resolution `AWAITING_HUMAN_RATIFICATION`, link the general-channel escalation `msg-75308a367d0e4ab5a13b9f3cf6c9a742`, and require the human to reconcile the external design pin or ratify the successor in authoritative freeze evidence. Never edit the external design or benchmark files.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md"
       ],
       "newFiles": [
         "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md"
       ],
-      "startedAt": "2026-08-09T14:46:14.747Z"
+      "modifiedFiles": [
+        "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md"
+      ],
+      "note": "Created `docs/plans/2026-08-09-benchmark-spec-hash-resolution.md`, status `AWAITING_HUMAN_RATIFICATION`. External design and benchmark files not edited.\n\nRe-measured independently, not copied from the plan: `Get-FileHash -Algorithm SHA256` gives design `1D9D1EC9...83191` (equals the epic rail pin exactly, so the design side is unmodified — the divergence is not local drift) and benchmark `A62B9043...A589C`. Benchmark header declares Revision 4, builds on Revision 3. Design line 12 pins Revision 3 / `F8B84716...`. `docs/plans/2026-08-07-fable-fairness-aging-reference.md:14` pins A62.\n\nTwo findings beyond the plan's brief, both changing what the resolution can say:\n\n1. **Revision 3's bytes do not exist.** `grep -rl F8B84716 /d/projexts/moes/docs` returns exactly one file — the design that pins it. So the design's pin is unverifiable, not merely stale; option \"confirm Rev3 is still normative\" requires producing bytes nobody has.\n\n2. **The divergence is structural, not a stale-hash typo.** Revision 4 deliberately dropped reciprocal pinning: it records the design it reviewed (`5E608D6E...`) as \"retained only as the predecessor actually reviewed, not as a requirement that current design bytes still equal it (no reciprocal-hash churn)\" and says final compatibility \"is bound externally by the Phase-0 evidence manifest\". The design still hard-pins one revision. So the design's pin goes stale BY CONSTRUCTION on every benchmark revision — repointing it at A62 buys one revision of agreement, then diverges again. Also `5E608D6E` != current `1D9D1EC9`: both sides moved, only one still claims a fixed counterpart. The note therefore offers reconcile-the-pin vs ratify-in-the-manifest as a real open decision instead of implying a one-line hash bump.\n\nUntracked status verified two ways (`status --porcelain` -> `??`, `ls-files --error-unmatch` -> error): Revision 4 is current working-tree bytes with no recorded history. That is exactly the trap the governor named at 14:43 — converting a measured working-tree fact into authority — so the note states Revision 4 is the only artifact usable but explicitly not normative, and records that the Phase-0 manifest it names as the binding authority is itself not recorded, which is why no agent can close this.\n\nBinding-until-ratified section keeps the fairness reference pinned at A62 (repointing it at absent bytes would make it unverifiable) and keeps every comparative claim UNKNOWN. Escalation `msg-75308a367d0e4ab5a13b9f3cf6c9a742` linked.",
+      "startedAt": "2026-08-09T14:46:14.747Z",
+      "completedAt": "2026-08-09T14:47:47.905Z"
     },
     {
       "stepId": "step-3",
       "description": "Create `docs/plans/2026-08-09-node-sqlite-driver-decision.md` as a retroactive, non-authoritative decision record with status `PROPOSED — AWAITING HUMAN RATIFICATION`. Capture the de-facto choice (`node:sqlite` `DatabaseSync` on pinned Node 24.16.0), current bundled SQLite 3.53.0, the production minimum 3.51.3 and open-time enforcement, `store.health().sqliteVersion`, and the fresh 2026-08-09 evidence `pnpm test:store` => 32 files / 357 tests passing. Cite the Node 24.16.0 official API status as Stability 1.2 / Release candidate. Explicitly document the design-required evidence that is still missing or not equivalent to the local suite: recorded Windows/Linux/macOS packaging qualification, the full Phase-2 crash/fault matrix, and daemon doctor exposure. The proposal may describe continued foundation use pending ratification, but must not claim the skipped blocking spike happened, waive residual risk, or amend the read-only design.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
       ],
       "newFiles": [
         "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
-      ]
+      ],
+      "modifiedFiles": [
+        "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
+      ],
+      "note": "Created `docs/plans/2026-08-09-node-sqlite-driver-decision.md`, status `PROPOSED — AWAITING HUMAN RATIFICATION`. Read-only design not amended.\n\nQuoted the design requirement verbatim from section 4.1 line 136 rather than paraphrasing, because the paraphrase loses the part that matters: the driver \"is therefore chosen by a blocking packaging/fault spike\", and \"if no candidate passes, Phase 2 is blocked rather than weakening the storage contract\". Scored the criteria the design actually names, one by one, instead of writing a narrative that would let a green suite read as a pass.\n\nMeasured fresh 2026-08-09: Node `v24.16.0`; `engines.node` `>=24.16.0 <25`; bundled SQLite `3.53.0` via `select sqlite_version()`; `pnpm test:store` = 32 files / 357 tests, exit 0 (matches the plan's snapshot, no correction needed).\n\nVerdicts: 1 MET (3.53.0 >= 3.51.3, enforced every open with `SQLITE_VERSION_UNSUPPORTED`, `sqlite-event-store.ts:171-173`, constant `store-contracts.ts:1`). 2 PARTIAL — `backup` at `backup-generation-capture.ts:4` and `BEGIN IMMEDIATE` at four sites are exercised by the suite, but exercised-in-unit-tests is not the fault qualification asked for, so it is not scored as met. 3 NOT MET — `win32 x64`; Linux/macOS typed UNKNOWN naming the deferred `task-e87a7353` / `task-e94b2055` per the 14:35 ruling. 4 NOT MET. 5 NOT MET/UNKNOWN. One of five fully met.\n\nSharpened criterion 4 beyond the plan's brief: doctor is no longer absent — `task-1cafc7f9` landed it (`b374edd`). `doctor-version-contract.ts` reports observed node/pnpm/platform/arch plus declared pins and workspace components, and `grep -rn sqliteVersion apps/daemon/src` returns nothing. So the gap is one missing field on a landed surface whose `ObservedValue` shape (`{known:true,value}` | `{known:false,code,layer}`) already models it and fails closed to a typed unknown. Named as a narrow follow-on shape; deliberately not implemented, this task owns docs only.\n\nRecorded one risk the plan did not list, found while grepping: the driver is not behind a seam — `node:sqlite` types and `DatabaseSync` are imported directly across the store package — so a later rejection is a broad change, not a local one. That cost is a consequence of skipping the gate and is stated rather than discounted.\n\nThe note never claims the spike happened, never waives residual risk, and closes by saying continued use is a description of the status quo and not a ratification.",
+      "startedAt": "2026-08-09T14:47:55.384Z",
+      "completedAt": "2026-08-09T14:49:37.726Z"
     },
     {
       "stepId": "step-4",
       "description": "Adversarial truth review across the three owned docs: re-run `Get-FileHash -Algorithm SHA256` on both external authority files; inspect the benchmark header and confirm the two decision notes do not swap Revision 3/4, turn current working bytes into freeze authority, or conceal that the benchmark file is untracked; grep production for `DatabaseSync`, `MINIMUM_SQLITE_VERSION`, and `sqliteVersion` and confirm the SQLite note distinguishes implemented local evidence from missing cross-platform/doctor/ratification evidence. Review the README sentence-by-sentence against files that exist on disk, retaining every UNKNOWN/provisional/non-production qualifier. Run `git diff --check` and confirm no external-design edit, generated evidence, or file outside the three owned paths appears.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "README.md",
         "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md",
         "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
-      ]
+      ],
+      "modifiedFiles": [
+        "README.md",
+        "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md",
+        "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
+      ],
+      "note": "Adversarial truth review run. The generic checklist (concurrency/null/TOCTOU) is N/A for a docs-only diff; the defect class here is a claim that disk does not support, so every assertion was re-derived from disk rather than from my own earlier steps. Three findings, two of them defects in MY OWN text, both fixed.\n\nFINDING 1 (defect, fixed) — README implied a stable reason code that is not observable. I had written the store \"refuses to open below a minimum SQLite version (`SQLITE_VERSION_UNSUPPORTED`)\". Measured: `sqlite-event-store.ts:171-173` throws a PLAIN `Error` with that token only as a message prefix; the token is not in `DurableStoreErrorCode` (`store-contracts.ts:192-209`); and the enclosing catch at `sqlite-event-store.ts:214-240` rethrows `DurableStoreError` unchanged but rewraps everything else as `DurableStoreError(\"STORE_UNAVAILABLE\",\"SQLite initialization failed\")`. So a caller observes STORE_UNAVAILABLE and cannot distinguish an unsupported SQLite build from a corrupt database; the token survives only inside `error.cause.message`. `grep -rn SQLITE_VERSION_UNSUPPORTED packages/store/src apps` returns exactly ONE hit — the throw site — so no test pins it and epic rail 6 is unexercised on this path. Removed the token from README; documented the whole thing in the SQLite note as a named narrow follow-on (add the code to the union, throw typed, pin with a test). Reported, NOT fixed: this task owns docs only and may not edit `packages/store`. It ties directly to criterion 4 — a doctor field cannot attribute a version refusal that arrives as a generic code.\n\nFINDING 2 (defect, fixed) — unprovable absolute. \"can never upgrade\" a truth class was verified only by grepping for upgrade/promote/elevate in `packages/control-room-model/src/` (zero hits). Absence of a name is not a proof, so it now reads \"does not upgrade it\".\n\nFINDING 3 (accuracy, fixed) — asymmetry a reader could infer. The benchmark note stressed that the benchmark file is untracked; re-running `git -C D:/projexts/moes status --porcelain` shows the DESIGN is untracked too. Neither external document has Git lineage. Added that, with the real distinction: the design is anchored by an independent pin (epic rail 1 names `1D9D1EC9...` and the file still hashes to exactly that), while nothing outside the benchmark file vouches for A62.\n\nChecks that passed clean: re-hashed both external files — design `1D9D1EC9...83191` (equals rail pin), benchmark `A62B9043...A589C`; neither was edited. Design line 136 quoted verbatim, diffed against `sed -n '136p'`. Revision pairing correct throughout, no Rev3/Rev4 swap (Rev3<->F8, Rev4<->A62). Neither note calls working-tree bytes frozen or normative. README re-read line by line against files that exist; every provisional/non-production/no-comparative-claim qualifier retained, `verify:store` confirmed in package.json. `git diff --check` exit 0.\n\nSCOPE HAZARD, disclosed — a foreign whole-tree commit already captured my README. `7d8d0f8 feat(task-078af6f181484dd99d1bf9008b4cf731): Claude runtime closure pin and re-observation` swept README.md together with .moe state and `packages/core/src/expansion/expansion-planning-hold.test.ts`. Per the rail I did not amend, reset, or make a claiming commit. Bytes were verified intact at the time (`git hash-object README.md` == `git rev-parse HEAD:README.md` == `9fdcc5e8`), and README is dirty again now only because of this step's two corrections. QA should review by base-ref diff over the three owned paths, not by looking for a single commit that contains them.",
+      "startedAt": "2026-08-09T14:49:42.374Z",
+      "completedAt": "2026-08-09T14:52:50.938Z"
     },
     {
       "stepId": "step-5",
       "description": "Final gate only: from `D:\\projexts\\moe-next`, run exactly `pnpm test:store && pnpm test` in the foreground and record fresh output; if the store count differs from the documented snapshot, update the note truthfully and rerun the same complete command. Then inspect `git status --porcelain`, preserve/unstage all foreign paths, and commit only by explicit pathspec: `git commit -- README.md docs/plans/2026-08-09-benchmark-spec-hash-resolution.md docs/plans/2026-08-09-node-sqlite-driver-decision.md`; verify `git show --stat` contains only those paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "README.md",
         "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md",
         "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
-      ]
+      ],
+      "modifiedFiles": [
+        "README.md",
+        "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md",
+        "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
+      ],
+      "note": "Gate run, committed by explicit pathspec. Store leg green; root leg red ENTIRELY in foreign paths, disclosed here verbatim per the path-attributed-baseline rail.\n\nGATE, foreground, `pnpm test:store && pnpm test`, run twice:\n- `pnpm test:store` -> 32 files / 357 tests, exit 0. Matches the figure documented in the SQLite note, so no correction was needed. Re-run fresh at 17:55:40 for the completion record, same result.\n- `pnpm test` -> exit 1. Run A: 2 files / 51 tests failed. Run B after my commit: 3 files / 52 failed. The count MOVED between runs with no change from me, which is itself evidence the failures are live foreign churn rather than a fixed state my diff could have caused.\n\nATTRIBUTION, per rail clause 3 (merge-base -> HEAD -> intersect with owned paths):\n1. `packages/runner/src/recovery-inventory/` — `git status` reports `??` for the whole directory, and `git ls-tree -r HEAD` and `git ls-tree -r 73804e0a` (merge-base with main) both return EMPTY for that path. It does not exist at baseline in any form, so its 51 failures (`TypeError: RECOVERY_INVENTORY_CLASSES is not iterable`) cannot pre-date or post-date my diff — they arrive with untracked foreign work.\n2. `packages/scheduler/src/package-boundary.test.ts` — the test file itself is UNMODIFIED (`git status --porcelain` on it is empty), so this is a clean tracked test reddened by foreign uncommitted churn in the same package: modified `frontier.ts` and `graph-internal.ts`, untracked `frontier-cursor.ts` and `graph-traversal.ts`. Known shape — a boundary test that scans package source text goes red the moment a neighbour adds a file.\n\nDELTA INTERSECTED WITH OWNED PATHS IS EMPTY. Owned paths are three markdown files; no vitest lane imports markdown, and neither failing path is one of them. I did not touch, patch or revert either foreign area.\n\nCOMMIT `ddab7fb` `docs(epic-bd387eeb): reconcile README status, benchmark hash, sqlite driver record` — 3 files, +256/-2. Staged only the three owned paths; foreign staged entries were left alone rather than unstaged, since a pathspec commit is partial and cannot sweep them. Verified both directions: `git show --name-only` filtered against the three expected paths returns nothing unexpected, and `git hash-object` == `git rev-parse ddab7fb:<path>` for all three, so gated bytes == committed bytes.\n\nQA NOTE — README's bulk change is NOT in my commit. The foreign whole-tree sweep `7d8d0f8` (task-078af6f1) captured it earlier; `ddab7fb` carries only the 4 lines I changed afterwards during the adversarial pass. Review README by base-ref diff `git diff 73804e0a..HEAD -- README.md`, not by reading `ddab7fb` alone.",
+      "startedAt": "2026-08-09T14:53:03.675Z",
+      "completedAt": "2026-08-09T14:56:03.851Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2811ade9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -78,22 +105,36 @@
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 71,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-85c365ae8da84947b2273187461cbadd",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD. For a docs-truth task the defect class is a claim disk does not support, so I re-derived the claims from disk rather than re-running a suite and calling it verified.\n\nGATE RE-RUN BY ME: `pnpm test:store` -> exit 0, 32 files / 357 tests — matching the figure documented inside the SQLite note, so that note's evidence claim is true rather than merely plausible. Working tree clean over all three owned paths.\n\nEXTERNAL AUTHORITY FILES, RE-HASHED INDEPENDENTLY:\n- design -> `1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191`, which is **exactly the epic rail 1 pin**. The design is unmodified, so the divergence is genuinely upstream and not local drift.\n- benchmark -> `A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C`.\n- `git -C /d/projexts/moes status --porcelain` reports **both** files `??`. The worker's own step-4 correction — that they had implied an asymmetry and neither external document has Git lineage — is correct, and the distinction they drew instead is the right one: the design is anchored by an independent pin that still matches, while nothing outside the benchmark file vouches for A62.\n- **`grep -rl F8B84716 /d/projexts/moes/docs` returns exactly one file — the design that pins it.** Revision 3's bytes do not exist. That converts \"the pin is stale\" into \"the pin is unverifiable\", which is a materially different escalation and is what makes \"confirm Rev3 is still normative\" not an available option for the human. Confirmed, not accepted.\n\nDoD 1 — MET, and the subtle part is what was NOT done. Every surface the new status paragraph names exists on disk: `sqlite-event-store.ts`, `bounded-json.ts`, `control-room-model/src/index.ts`, `testkit/src/scheduler-fairness`, plus `test:store` and `verify:store` in package.json. The defect the worker avoided is the one this task existed to catch: the old blanket clause *\"it has no persistence, command, approval, provider, lease, budget, or execution authority\"* was true of the repo when only the graph kernel existed, and would have become **false at repo level** the moment a durable store was named alongside it. They kept it attached to the graph-kernel bullet instead of promoting it, and gave every other surface its own scoped non-authority boundary. Rewriting the paragraph while letting that sentence float would have been the easy version and would have shipped a false claim in the same commit that fixed an understatement.\n\nDoD 2 — MET as an escalation, correctly. `AWAITING_HUMAN_RATIFICATION`, \"Authority: none\", escalation message linked, neither external file edited. The note offers reconcile-the-pin versus ratify-in-the-manifest as a real open decision rather than implying a one-line hash bump — which is right, because Revision 4 deliberately dropped reciprocal pinning, so the design's fixed pin goes stale by construction on every future revision. Repointing it at A62 would buy one revision of agreement and then diverge again.\n\nDoD 3 — MET. `PROPOSED — AWAITING HUMAN RATIFICATION`, \"Authority: none\", design quoted verbatim rather than paraphrased, criteria scored one by one (1 met, 1 partial, 3 not met) instead of a narrative that would let a green suite read as a pass. Explicitly does not claim the blocking spike happened and does not waive residual risk.\n\nI VERIFIED THE WORKER'S OWN FINDING 1 AT THE SOURCE, BECAUSE IT IS A PRODUCTION CLAIM AND IT HOLDS. They had written that the store *\"refuses to open below a minimum SQLite version (`SQLITE_VERSION_UNSUPPORTED`)\"*, then measured that the token is not an observable stable code and removed it. Measured by me:\n- `grep -rn SQLITE_VERSION_UNSUPPORTED packages/store/src apps` returns **exactly one hit** — `sqlite-event-store.ts:173`, where it is a **message prefix on a plain `new Error(...)`**.\n- It is **not** in the `DurableStoreErrorCode` union in `store-contracts.ts`.\n- One hit total therefore also means **no test pins it**, so epic rail 6 is unexercised on that path, and the enclosing catch rewraps non-`DurableStoreError` throws as `STORE_UNAVAILABLE` — a caller cannot distinguish an unsupported SQLite build from a corrupt database.\n\nSo the README now says the store \"refuses to open below a minimum SQLite version\" — behaviourally true — **without** naming a code a caller cannot observe. That is the correct fix for a docs-scoped task: the underlying production gap is reported as a narrow follow-on (add the code to the union, throw typed, pin it with a test) and deliberately NOT fixed here, since this task owns docs only. Finding a defect in your own draft by measuring the sentence you just wrote is the behaviour this task was created to produce.\n\nFinding 2 also verified: \"can never upgrade\" was an unprovable absolute justified only by a grep returning zero hits for upgrade/promote/elevate, and now reads \"does not upgrade it\". Absence of a name is not a proof, and the weaker sentence is the honest one.\n\nCOMMIT HYGIENE: `ddab7fb` is pathspec-clean — exactly the three owned files, +256/-2. The base-ref diff `73804e0a..HEAD` over those paths shows README at +10/-1 versus +4/-2 in the commit, which **confirms the worker's disclosure** that README's bulk change was swept into foreign commit `7d8d0f8` (task-078af6f1) and `ddab7fb` carries only the four correction lines they wrote afterwards. Reviewed by base-ref diff as they asked, not by reading the commit alone — the sixth instance of this sweep today.\n\nRepo-wide `pnpm test` red is disclosed and attributed: `packages/runner/src/recovery-inventory/` is untracked and absent at merge-base `73804e0a`, and `packages/scheduler/src/package-boundary.test.ts` is an unmodified tracked test reddened by a neighbour's uncommitted churn. Owned paths are three markdown files that no vitest lane imports, so the (2)-minus-(1) intersection is necessarily empty.",
+      "timestamp": "2026-08-09T14:59:29.321Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:24:26.891Z",
-  "updatedAt": "2026-08-09T14:46:14.747Z",
+  "updatedAt": "2026-08-09T15:00:04.657Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:39:28.895Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 1
+    "executedStepCount": 5,
+    "doneAt": "2026-08-09T15:00:04.657Z",
+    "wallClockMs": 1235762
   },
   "contextFetchedBy": [
     "architect-db2146e3",
-    "worker-2811ade9"
+    "worker-2811ade9",
+    "qa-58b24ffb"
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:44:02.024Z",
@@ -115,5 +156,20 @@
     "wallClockMs": 1800000
   },
   "planApprovedAt": "2026-08-09T14:44:04.065Z",
-  "workStartedAt": "2026-08-09T14:44:45.724Z"
+  "workStartedAt": "2026-08-09T14:44:45.724Z",
+  "reviewStartedAt": "2026-08-09T14:57:39.450Z",
+  "verification": {
+    "command": "pnpm test:store",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  32 passed (32)\n      Tests  357 passed (357)\n   Start at  17:55:40\n   Duration  3.75s (transform 7.56s, setup 0ms, import 11.78s, tests 12.62s, environment 2ms)\n\nEXITCODE=0",
+    "reportedAt": "2026-08-09T14:57:39.450Z"
+  },
+  "filesModified": [
+    "README.md",
+    "docs/plans/2026-08-09-benchmark-spec-hash-resolution.md",
+    "docs/plans/2026-08-09-node-sqlite-driver-decision.md"
+  ],
+  "completedAt": "2026-08-09T15:00:04.657Z",
+  "reviewCompletedAt": "2026-08-09T15:00:04.657Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-85c365ae8da84947b2273187461cbadd. Docs-truth task, so I re-derived the claims from disk rather than re-running a suite and calling it verified.\n\nGATE: `pnpm test:store` exit 0, 32 files / 357 tests — matching the figure documented inside the SQLite note, so that note's evidence claim is true rather than plausible.\n\nEXTERNAL FILES RE-HASHED BY ME: design `1D9D1EC9…83191`, exactly the epic rail 1 pin, so it is unmodified and the divergence is genuinely upstream; benchmark `A62B9043…A589C`. Both `??` untracked — the worker's own correction that neither has Git lineage is right. And `grep -rl F8B84716` returns exactly ONE file, the design that pins it: Revision 3's bytes do not exist. That turns \"stale pin\" into \"unverifiable pin\", removing an option the human would otherwise think they had.\n\nDoD1 met, and the subtle part is what was NOT done: the old blanket \"no persistence, command, approval… authority\" clause was true when only the graph kernel existed and would have become FALSE at repo level once a durable store was named beside it. They kept it scoped to the kernel bullet and gave each surface its own boundary. Every named surface verified present.\n\nDoD2 met as an escalation, authority explicitly none. DoD3 met, criteria scored 1 met / 1 partial / 3 not met rather than narrated.\n\nI VERIFIED THEIR FINDING 1 — it holds. `SQLITE_VERSION_UNSUPPORTED` has exactly one occurrence repo-wide: a message prefix on a plain `Error`. Not in the `DurableStoreErrorCode` union, so no test pins it, and the enclosing catch rewraps to `STORE_UNAVAILABLE` — a caller cannot tell an unsupported build from a corrupt database. Removing the token while keeping the behavioural claim was correct; the gap is reported as a follow-on, not fixed in a docs-only task.\n\nCOMMIT `ddab7fb` pathspec-clean. Base-ref diff shows README +10/-1 vs +4/-2 in the commit, confirming the bulk was swept into foreign `7d8d0f8`."
 }

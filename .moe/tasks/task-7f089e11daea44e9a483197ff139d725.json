@@ -117,18 +117,26 @@
     {
       "stepId": "step-7",
       "description": "Single verification gate — run fresh in the foreground exactly `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require owned-package exit 0, record the exact output tail, compare repo/package failures against the step-1 merge-base baseline using path attribution, and disclose any foreign red verbatim. Recheck explicit-path git diff/status, line caps, exact bridge reachability, no generated/debug artifacts, and both consumer IDs before using this exact command/output as complete_task evidence.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-planning-hold.ts",
         "packages/core/src/expansion/expansion-planning-hold.js",
         "packages/core/src/expansion/expansion-planning-hold.test.ts",
         "packages/core/src/index.ts"
       ],
-      "startedAt": "2026-08-09T14:45:55.658Z"
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/expansion/expansion-planning-hold.test.ts",
+        "packages/core/src/index.ts"
+      ],
+      "note": "Final exact foreground gate `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0: typecheck clean, 18 files/271 tests passed. Committed/worktree blobs match for all four owned paths; base-ref diff is A/A/A/M, diff-check clean, TS 300 (<400), index 237 (<=250), exact bridge ends 3B0A, both consumer IDs remain in the module header. Broader regression: `pnpm typecheck` exit 0, `pnpm verify:foundation` 408/408, `pnpm verify:store` 357/357. Root `pnpm test` disclosed one foreign failure only: packages/scheduler/src/package-boundary.test.ts could not scan apps/daemon/src/daemon-main.ts due `unterminated regular expression source token`; failing-path intersection with owned paths is empty. Final explicit hardening commits: 645fcbd, 3576e06, 56cebfc; earlier bytes were captured by known foreign whole-tree commits 7d9efc9/462a610/7d8d0f8 and were not amended or reset.",
+      "startedAt": "2026-08-09T14:45:55.658Z",
+      "completedAt": "2026-08-09T14:52:25.920Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b6bbb60c",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -147,16 +155,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:44:11.795Z",
-  "updatedAt": "2026-08-09T14:45:55.658Z",
+  "updatedAt": "2026-08-09T14:54:39.348Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:11:19.310Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T14:54:39.348Z",
+    "wallClockMs": 2600038
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
-    "worker-b6bbb60c"
+    "worker-b6bbb60c",
+    "qa-b2df68b9"
   ],
   "stepsCompleted": [
     "step-1",
@@ -164,7 +175,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:25:48.136Z",
@@ -187,5 +199,21 @@
     "wallClockMs": 6300000
   },
   "planApprovedAt": "2026-08-09T14:25:50.188Z",
-  "workStartedAt": "2026-08-09T14:26:31.981Z"
+  "workStartedAt": "2026-08-09T14:26:31.981Z",
+  "reviewStartedAt": "2026-08-09T14:52:59.797Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  18 passed (18)\n      Tests  271 passed (271)\n   Start at  17:52:41\n   Duration  669ms (transform 2.98s, setup 0ms, import 4.18s, tests 699ms, environment 1ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src",
+    "reportedAt": "2026-08-09T14:52:59.797Z"
+  },
+  "filesModified": [
+    "packages/core/src/expansion/expansion-planning-hold.test.ts",
+    "packages/core/src/expansion/expansion-planning-hold.ts",
+    "packages/core/src/expansion/expansion-planning-hold.js",
+    "packages/core/src/index.ts"
+  ],
+  "completedAt": "2026-08-09T14:54:39.348Z",
+  "reviewCompletedAt": "2026-08-09T14:54:39.348Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATE RE-RUN BY QA: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exit 0, 18 files / 271 tests. Core tree clean.\n\nPURITY CHECKED BY GREP, not taken from the note: no Date.now, Math.random, new Date, node:crypto, node:fs, child_process or fetch in the reducer. Its ONLY import is `@moe/contracts` — no runner or scheduler authority forked, so task rail 2 and the dependency direction both hold.\n\nROOT REACHABILITY, my own plain-Node probe via bare `@moe/core`: EXPANSION_HOLD_CAUSES, COMMAND_KINDS, ERROR_CODES, LAYERS and `reduceExpansionPlanningHold`. Curated, not wildcarded.\n\nDRILL RE-RUN BY QA: weakened the safe-boundary check by dropping its `truthClass === \"DAEMON_VERIFIED\"` requirement. RED, exactly the right test — \"refuses every semantically unproven release at SAFE_BOUNDARY\". Task rail 1 enforced in production: AGENT_REPORTED rationale cannot upgrade safe-boundary truth. Restore verified by `git hash-object` = 2fd1ac3d.\n\nSIZES: reducer 300 (<400), index.ts 237 (<=250), bridge exactly one LF-terminated line.\n\nTHE DISCLOSED FOREIGN RED, DIAGNOSED so nobody hunts it in the wrong package. `packages/scheduler/src/package-boundary.test.ts` fails with \"boundary scan failed for apps\\daemon\\src\\daemon-main.ts: unterminated regular expression source token\". daemon-main.ts is NOT broken — `pnpm --filter @moe/daemon typecheck` parses it exit 0. It is the SCHEDULER's boundary scanner failing to tokenize TypeScript. The message reads like a daemon syntax error and is not one. Correctly attributed foreign; owned intersection empty. It reddens root `pnpm test` for every task that runs it.\n\nTheir own adversarial pass found and TDD-fixed two real fail-closed gaps rather than reporting them as acceptable: a forged terminal snapshot carrying an impossible cause/lifecycle pair or duplicate creation commandId, and absent-state concurrency checked after lifecycle instead of before."
 }

@@ -107,12 +107,17 @@
     {
       "stepId": "step-6",
       "description": "Mutation-drill every production guard (DoD item 4, epic rail 6 — a failure-path assertion that has quietly detached from its subject is invisible to a green suite). One at a time, in authenticate-session.ts, bypass a guard, run `pnpm --filter @moe/core test`, confirm authenticate-session.test.ts goes RED, then restore the exact original bytes before the next drill. Drill all seven layers: BINDING (make bindingsHold return true unconditionally), PROOF (accept `verified !== false` instead of `verified !== true`), REPLAY-UNKNOWN (drop the neither-FRESH-nor-REPLAYED check), REPLAY-REPLAYED (drop the replay === \"REPLAYED\" arm), GENERATION (drop the !isCurrentGeneration arm), SESSION_STATE (drop the status !== \"ACTIVE\" check), EXPIRY (change isSessionUsableAt to allow now === expiresAt), TRANSPORT (drop the transportIds.includes check). Also drill the layer values themselves: swap one returned layer for another and confirm red, which proves the tests assert the layer and not only the code. Additionally remove one entry from REFUSAL_CASES and confirm the length-9 assertion goes red, proving the sweep guard is live. Beware: in this shared working directory another agent's completion hook can commit a tree containing your drill edit — git status will look clean while the mutation is still live, so trust the red test, not the status output, and verify restoration with `git diff -- packages/core/src/identity/authenticate-session.ts` returning empty. Record each drill's red confirmation; leave no drill edit behind.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-session.test.ts"
       ],
+      "modifiedFiles": [
+        "packages/core/src/identity/authenticate-session.test.ts"
+      ],
+      "note": "Mutation drill complete; every mutant made `pnpm --filter @moe/core test` exit 1 and was restored before the next: BINDING, PROOF_NON_TRUE, REPLAY_UNKNOWN, REPLAY_REPLAYED, GENERATION, SESSION_STATE, EXPIRY_EXCLUSIVE, TRANSPORT, swapped LAYER_VALUE, dropped-one CASE_COUNT, and whole-layer LAYER_SET. The PROOF_NON_TRUE drill initially exposed the need for a standalone truthy-non-boolean verifier assertion (the frozen 10-case table remains exactly 10); added it and confirmed the mutant red. Separate sweep drills proved exact count (9 vs 10) and full layer-set coverage independently. Final restored SHA-256: source 86D9CCD1EE54048582F7F126F78ECD33E4936F5E8CF9289FC5318292482A5647; test BB2D61CB687D91669F2CDE656C6CC1B7538BAD461E36D7CD57E20CC9E5DA9408. Owned status empty after restoration. Fresh final core suite exit 0: 18 files / 271 tests. Foreign completion commit 7d8d0f8 swept all current owned bytes during the drill; no live mutant was captured, as confirmed by the restored hashes and green suite.",
       "startedAt": "2026-08-09T14:45:59.879Z",
+      "completedAt": "2026-08-09T14:52:33.377Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -127,17 +132,27 @@
     {
       "stepId": "step-7",
       "description": "Adversarial self-review, then the exact gate. Review your own diff as an attacker: can a caller reach ok:true by supplying a positive boolean anywhere (proof.verified, a getter on the session record, a truthy non-true verifier return)? Does a hostile getter that throws mid-read deny rather than propagate? Is every refusal arm free of any principal/session field? Is precedence still total — AUTHENTICATION_FAILED before SESSION_REPLAYED before SESSION_EXPIRED before CAPABILITY_DENIED — including the combined-fault cases already pinned in authenticate-command.test.ts? Confirm the negative scope: no new RuntimeCommandKind value, no coordination endpoint string, no proof algorithm, no persistence, no capability mapping was introduced. Then run the exact verification command `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm typecheck` and paste its fresh output as complete_task evidence. The final `pnpm typecheck` leg is repo-wide and this is a shared working directory: if it is red, apply the path-attributed baseline rail — record repo-wide failures at the merge-base, then at HEAD, and complete only if (HEAD failures minus merge-base failures) intersected with this task's owned paths is EMPTY, reporting any foreign red verbatim with its exact failing file paths. Never fabricate a green. Commit by explicit pathspec only — `git commit -- packages/core/src/identity/authenticate-session.ts packages/core/src/identity/authenticate-session.js packages/core/src/identity/authenticate-session.test.ts packages/core/src/identity/authenticate-command.ts packages/core/src/identity/index.ts` — after checking `git status --porcelain` for foreign staged entries, and verify with `git show --stat` that only these five paths landed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-session.test.ts",
         "packages/core/src/identity/authenticate-command.ts",
         "packages/core/src/identity/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/authenticate-session.ts",
+        "packages/core/src/identity/authenticate-session.js",
+        "packages/core/src/identity/authenticate-session.test.ts",
+        "packages/core/src/identity/authenticate-command.ts",
+        "packages/core/src/identity/index.ts"
+      ],
+      "note": "Adversarial review complete: strict literal-true verifier, rebuilt frozen challenge, hostile getters contained at BINDING, scalars/records snapshotted once, transportIds cloned/frozen before callbacks, refusal arms contain exactly ok/code/layer, existing combined-fault precedence remains green, and negative-scope grep found no command-kind/coordination/crypto/persistence/capability additions. Added red-green proof that a verifier cannot mutate transport authority. Fresh exact gate exit 0: core typecheck; core 18 files / 279 tests; repo-wide typecheck all 16/17 projects green. `pnpm verify:foundation` exit 0 (26/411) and `pnpm verify:store` exit 0 (32/357). Separate root `pnpm test` is foreign-red at scheduler package-boundary scanner and runner recovery-inventory __proto__ test only, no owned-path intersection. Explicit-path commit 832eb0b contains only two final owned files; earlier task bytes were swept by foreign commits 462a610/7d8d0f8, so QA should use base-ref diff a423722..HEAD across the five owned paths. Production lines 233/126; bridge exact 43-byte LF.",
+      "startedAt": "2026-08-09T14:52:43.970Z",
+      "completedAt": "2026-08-09T15:07:08.182Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-d61b2685",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,21 +167,30 @@
       "author": "architect-21f667ae",
       "content": "Dependency unblock diagnosis for task-21713cf1: the worker's count is correct. Step 2 explicitly enumerates 10 cases (1 BINDING + 2 PROOF + 2 REPLAY-evidence + 1 REPLAYED + 1 GENERATION + 1 SESSION_STATE + 1 EXPIRY + 1 TRANSPORT), so amend both `exactly 9` occurrences to `exactly 10`. Step 6's live sweep drill must likewise say `length-10 assertion`. Preserve all cases; remove none. I attempted moe.amend_plan_step, but runtime returned NOT_ALLOWED because it currently does not recognize architect-21f667ae as being on an architect/governor team despite the wrapper role. An authorized architect/governor must apply the two textual amendments and resume the worker.",
       "timestamp": "2026-08-09T14:30:53.342Z"
+    },
+    {
+      "id": "comment-9b715576ba9140839ef62cd6822822ee",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD. Graded clause by clause against the written DoD text — deliberately, because on my previous review I checked the named auto-rejections and my own suggested property and missed the authorisation's positive requirement.\n\nOWNED-PACKAGE LEGS RE-RUN BY ME: `pnpm --filter @moe/core typecheck` exit 0; `pnpm --filter @moe/core test` exit 0, **18 files / 279 tests**.\n\nDoD 5's THIRD LEG (`pnpm typecheck`) FAILS FOR ME, AND IT IS FOREIGN. Four `TS7006: Parameter 'ref' implicitly has an 'any' type` in `packages/runner/src/scope/scope-git.test.ts`. Attributed rather than scored:\n- `git status --porcelain` reports that file `??` — **untracked, it does not exist at HEAD at all**, and `git log` returns nothing for it. It was created by another agent after the worker's 15:05:39Z run.\n- `scope-contract.ts` and `scope-git.ts` are also modified-uncommitted in the same foreign package.\n- Owned paths here are `packages/core/src/identity/**`; `@moe/core` typechecks clean on its own.\nSo the (2)-minus-(1) delta intersected with owned paths is empty by construction, and the worker's recorded exit 0 was true when made. Seventh instance today of a shared-tree state moving under a completed record.\n\nAMEND-1 APPLIED CORRECTLY AND NOT LOOSENED — the specific thing the reopen said to check. `expect(REFUSAL_CASES).toHaveLength(10)` is an **exact** count, not `>= 9`. `Object.isFrozen(REFUSAL_CASES)` is asserted. All ten cases are present and match the governor's independent enumeration exactly: missing session/BINDING, proof rejected/PROOF, verifier throws/PROOF, replay unknown/REPLAY, replay throws/REPLAY, proof replayed/REPLAY, generation stale/GENERATION, session closed/SESSION_STATE, session expired/EXPIRY, transport unlisted/TRANSPORT.\n\nAnd the layer assertion is stronger than the count: `expect([...new Set(REFUSAL_CASES.map(({layer}) => layer))]).toEqual([...SESSION_AUTH_LAYERS])` compares the distinct layers against the **production** constant, in order. A case list that dropped a layer, or a production layer with no case, both redden. That is the \"assert the case list, not just the case count\" property in its strong form.\n\nDoD 2's PRECEDENCE CLAUSE — I could not find it by grep and settled it by mutation instead of by assumption. My grep for `preced|before|simultaneous|both|wins|first` returned nothing, which is exactly the point at which a reviewer either shrugs or rejects on absence. I did neither: I **inverted the precedence in production**, hoisting the EXPIRY guard above the REPLAY guard. Every individual REFUSAL_CASE trips exactly one condition, so only a real precedence assertion could notice.\n\n**RED, 3 tests, 2 files** — including, by name:\n```\n× prefers SESSION_REPLAYED over SESSION_EXPIRED when combined\n× reports SESSION_REPLAYED for {... status: 'CLOSED' ...} (closed session)\n× refuses session closed at SESSION_STATE\n```\nThe precedence test exists; my grep missed it because it is named \"prefers … when combined\". It is load-bearing, and the reds crossing **two** files show the ordering is preserved through the `authenticateCommand` delegation as well as inside the seam. DoD 2 and DoD 4's precedence-branch requirement are both met. Restored via `git cat-file blob`, `git hash-object` == `ad77b204`.\n\nDoD 1 — MET, including the \"does not accept caller-supplied positive booleans as authority\" clause, which has two separate tests rather than one: \"rejects a truthy non-boolean verifier result at PROOF\" (a verifier returning `1` is not a `true`) and \"ignores a caller-supplied positive proof boolean\". Plus \"contains a hostile record getter at BINDING\" for a principal whose `principalId` getter throws, and \"returns deeply frozen facts derived from committed records\".\n\nDoD 2's remaining clauses — MET. Every refusal asserts `toEqual({ ok: false, code, layer })` **and** `Object.keys(result)).toEqual([\"ok\",\"code\",\"layer\"])`, so zero principal/session authority is structural: the result cannot carry an extra field. UNKNOWN replay (`replay === null`) and a throwing replay guard both deny at REPLAY.\n\nDoD 3 — MET, and verified the right way. `authenticate-command.test.ts` is **unchanged** across the base-ref range; only `authenticate-command.ts` moved (-129/+59, a delegation refactor). An untouched existing test file still passing is the byte-for-byte compatibility proof, and it is stronger than any assertion the worker could have added.\n\nDoD 4 — MET; the guards are load-bearing by my own drill above, not by the step note.\n\nRAIL 1 — the seam takes `verifyProof` and `checkReplay` as injected observations and treats a throw or an UNKNOWN as denial rather than inferring truth. RAIL 3 — codes, layers and precedence preserved, confirmed by the delegation tests reddening alongside the seam tests under my drill.\n\nONE NOTE FOR WHOEVER OWNS THE CONSUMER EDGE: DoD 5 requires the daemon authority prerequisite be **named** as the real consumer, which the task does. This lands the seam and no call site, correctly scoped — worth tracking that the named consumer actually composes it, since \"exports the symbols\" is not composition under clause 1.",
+      "timestamp": "2026-08-09T15:11:13.286Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:06:18.722Z",
-  "updatedAt": "2026-08-09T14:45:59.879Z",
+  "updatedAt": "2026-08-09T15:12:11.206Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:24.531Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T15:12:11.206Z",
+    "wallClockMs": 3226675
   },
   "contextFetchedBy": [
     "architect-cb476f76",
     "worker-d61b2685",
-    "architect-d46fcb95"
+    "architect-d46fcb95",
+    "qa-58b24ffb"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -176,7 +200,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:23:24.744Z",
@@ -203,5 +229,24 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-09T15:08:28.377Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "Fresh post-commit run at 2026-08-09 15:05:39Z: @moe/core typecheck exit 0; @moe/core test: Test Files 18 passed (18), Tests 279 passed (279), Duration 655ms; repo pnpm typecheck: Scope 16 of 17 workspace projects, packages/contracts/context/control-room-model/import/scheduler/store/control-room-client/core/mcp/runner/skills/testkit/coordination/review plus apps/control-room and apps/daemon all reported Done; overall exit 0. Commands printed: $ tsc --project tsconfig.json; $ vitest run --root ../.. packages/core/src; $ pnpm --recursive typecheck.",
+    "reportedAt": "2026-08-09T15:08:28.377Z"
+  },
+  "filesModified": [
+    "packages/core/src/identity/authenticate-command.ts",
+    "packages/core/src/identity/authenticate-command.test.ts",
+    "packages/core/src/identity/authenticate-session.test.ts",
+    "packages/core/src/identity/authenticate-session.ts",
+    "packages/core/src/identity/authenticate-session.js",
+    "packages/core/src/identity/index.ts",
+    "packages/core/src/runtime-entrypoint.test.ts"
+  ],
+  "completedAt": "2026-08-09T15:12:11.206Z",
+  "reviewCompletedAt": "2026-08-09T15:12:11.206Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-9b715576ba9140839ef62cd6822822ee. Graded clause by clause against the written DoD — deliberately, since on my previous review I checked the named auto-rejections plus my own suggested property and missed the positive requirement.\n\nOWNED LEGS RE-RUN BY ME: `@moe/core` typecheck 0; `@moe/core` test 0, 18 files / 279 tests.\n\nDoD5's THIRD LEG FAILS FOR ME AND IT IS FOREIGN: four TS7006 in `packages/runner/src/scope/scope-git.test.ts`, which git status reports `??` — untracked, absent at HEAD, created by another agent after the worker's 15:05:39Z run. Owned paths are `packages/core/src/identity/**`; core typechecks clean alone. Their exit-0 record was true when made.\n\nAMEND-1 CORRECT AND NOT LOOSENED: `toHaveLength(10)` exact, frozen asserted, all ten cases present. Stronger than a count — the distinct layers are compared to the PRODUCTION `SESSION_AUTH_LAYERS` in order, so a dropped case or an unexercised layer both redden.\n\nDoD2's PRECEDENCE CLAUSE — I could not find it by grep and settled it by mutation rather than by assumption or by rejecting on absence. I inverted precedence in production, hoisting EXPIRY above REPLAY; every individual case trips exactly one condition, so only a real precedence assertion could notice. RED, 3 tests across 2 files, including by name \"prefers SESSION_REPLAYED over SESSION_EXPIRED when combined\". It exists — my grep missed \"prefers…when combined\" — it is load-bearing, and reds in BOTH files show the ordering survives the delegation. Restored, hash == ad77b204.\n\nDoD1 met with two anti-forgery tests: a truthy non-boolean verifier result, and a caller-supplied positive proof boolean. DoD2's rest met — every refusal asserts `Object.keys(result)` equals exactly [\"ok\",\"code\",\"layer\"], so zero-authority is structural.\n\nDoD3 met the right way: `authenticate-command.test.ts` is UNCHANGED across the base-ref range while `authenticate-command.ts` was refactored -129/+59."
 }

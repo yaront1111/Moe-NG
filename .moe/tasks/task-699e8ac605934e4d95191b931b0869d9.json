@@ -16,12 +16,12 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Demoted PLANNING -> BACKLOG by governor-f70d1157 at 14:17Z. Protecting architect capacity.\n\nMEASURED: hard dependencies are \"all Graph Beta tasks and Foundation self-host canary\". task-97554aa4 (Foundation self-host canary) is BLOCKED and has NINE named production prerequisites of its own. The Graph Beta chain does not exist on disk at all — apps/daemon/src/graph/ and apps/control-room/src/graph/ are both absent, and I demoted its two nearest links (task-9634ed3b, task-779d6804) in this same sweep.\n\nThis is a CANARY, so Clause 2 binds hardest: it must name the production capability it certifies and the task that shipped it, verified on disk. Nothing it certifies exists. An architect claiming it would produce the same block seven architects have already produced today, at the same cost.\n\nIt is also transitively behind the canary it depends on, which is itself behind nine prerequisites — this is among the furthest tasks from claimable on the whole board, and it was sitting in the claimable column.\n\nPromote when the Graph Beta chain and task-97554aa4 are DONE, verified by probe rather than by status field.",
+  "reopenReason": "Transit to BACKLOG for ARCHIVE by governor-f70d1157 at 15:25Z. Block unchanged and still correct.\n\nWHY ARCHIVE: BACKLOG does not hold — proven by architect-cb476f76 at 15:04Z when claim_next_task served them a task I demoted at 14:17Z. This one is re-servable right now.\n\nBLOCK EVIDENCE, unchanged and among the strongest on the board: hard dependencies are \"all Graph Beta tasks and Foundation self-host canary\". The canary (task-97554aa4) is BLOCKED behind nine named prerequisites of its own. The Graph Beta chain does not exist on disk at all — apps/daemon/src/graph and apps/control-room/src/graph are both absent, and I archived its two nearest links (task-9634ed3b, task-779d6804) in this same sweep.\n\nThis is a CANARY, so global rail Clause 2 binds hardest: it must name the production capability it certifies and the task that shipped it, verified on disk. Nothing it certifies exists. It is transitively behind a canary that is itself behind nine prerequisites, which makes it among the furthest tasks from claimable on the entire board — and it was sitting in the claimable pool.\n\nReversible when the Graph Beta chain and task-97554aa4 are DONE, verified by probe rather than status field.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,8 +29,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:11.373Z",
-  "updatedAt": "2026-08-09T14:18:04.945Z",
+  "updatedAt": "2026-08-09T15:24:37.724Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-5b5302ee"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:13:35.742Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fresh Moe/on-disk Clause-2 audit completed; task reported BLOCKED. Exact Graph and Foundation prerequisite chains recorded in the blocked reason and Serena memory task-task-699e8ac605934e4d95191b931b0869d9-handoff. No files edited and no plan submitted.",
+      "whatRemains": "Re-promote only after all Graph Beta producer/consumer tasks and Foundation canary task-97554aa4293e40eab56c0b642e18513a are DONE and public-root probes at one exact commit confirm the real three-agent composition; then plan tests/e2e/graph-beta.",
+      "pitfalls": "Do not narrow the canary, use mocks, or certify pure scheduler shapes. apps/daemon/src/graph and apps/control-room/src/graph are absent at audited HEAD ffa39d6.",
+      "releasedAt": "2026-08-09T15:23:42.230Z",
+      "releasedBy": "architect-5b5302ee",
+      "reason": "Explicit architect handoff after Clause-2 block; free capacity to plan another eligible task."
+    }
   ]
 }

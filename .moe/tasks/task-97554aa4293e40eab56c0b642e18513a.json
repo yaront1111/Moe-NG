@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-09T12:34:15.386Z",
+  "updatedAt": "2026-08-09T15:15:22.270Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -223,7 +223,8 @@
     "architect-da724bb7",
     "architect-8a4a1764",
     "governor-fce4d563",
-    "architect-8c9073cd"
+    "architect-8c9073cd",
+    "architect-5b5302ee"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
   "blockedReason": "Clause-2 production audit disproved the reopen premise. Plain Node shows @moe/daemon.runReviewCommand, reconcileOnRestart, evaluateContinuationCommandBytes, and the real dispatch host are undefined; production has no Claude/verifier child-process launcher or durable attempt/evidence composition. A live probe also proves caller-supplied PROVEN_RELEASED/handoff currently returns BOUND for all five durable recovery classifications, including SUSPECT and QUARANTINED with held resources, while goal.close trusts opaque witness refs. Existing 34 E2E tests cover only harness/manifest shapes. A canary written now would have to mock or reimplement the authority it claims to certify. Nine bounded production prerequisites were created and linked; preserve completed harness steps 1-4 and resume only after all nine are DONE and re-probed.",

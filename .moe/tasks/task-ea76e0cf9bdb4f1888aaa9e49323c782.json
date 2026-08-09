@@ -18,8 +18,8 @@
     "This is a native primitive, not authority: no @moe/runner root export, Claude policy, activation grant, daemon/store call, or evidence claim."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-cb476f76",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,8 +31,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:34:08.847Z",
-  "updatedAt": "2026-08-09T14:44:42.761Z",
+  "updatedAt": "2026-08-09T14:48:47.167Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:44:42.761Z"
-  }
+  },
+  "blockedReason": "SPLIT, NOT STUCK. This is now a SPIDR parent shell. Blocking only to keep it out of the PLANNING claim pool; it must not be planned or implemented directly.\n\nWHY SPLIT, on plan shape and never on lines (epic rail 5): a single plan needs 12 distinct files -- Cargo.toml, Cargo.lock, rust-toolchain.toml, lib.rs, win32.rs, handle, job.rs, process.rs, lifecycle.rs and 2-3 test files -- against the hard ceiling of 10 distinct affectedFiles, and ~11-12 steps against the ceiling of 12. Squeezing to exactly 10 is possible only by merging job and process concerns into modules that would each land well past the 250-line per-file target on dense unsafe Win32 code. The responsibilities are genuinely separable: making a configured Job, versus putting a process inside it and proving membership before it can run.\n\nCHILDREN CREATED, parent id recorded on both:\n- task-a24cb925a9a94002b805e9ccf1715978 (PLANNING, order 72.1) -- pinned crate, Win32 call-table seam, RAII handles, Job create/configure/query-back/terminate/active-query. 7 DoD items, ~8 files. Planning it now.\n- task-a02496064e9e4e87a888cc112830d7a4 (BACKLOG, order 72.2) -- CREATE_SUSPENDED process, PROC_THREAD_ATTRIBUTE_JOB_LIST, explicit assignment, membership and identity proof, ResumeThread, unwind, real-Windows acceptance. 6 DoD items, ~6 files. Depends on child 1; promote when it is DONE.\nAll six parent DoD items are carried by the children with none dropped.\n\nPREREQUISITES RE-MEASURED at HEAD 7d9efc9, all green: the native directory does not exist; no Cargo.toml exists outside node_modules, so this is the first Rust in the repo; rustc and cargo report exactly 1.96.0, matching the pin; a scratch `cargo add windows-sys@=0.61.2 --features Win32_System_JobObjects` resolved and locked against crates.io. Nothing blocks child 1.\n\nCLOSING THIS SHELL: once both children are DONE, closing needs a REVIEW transit hop -- a direct move to DONE is refused, and skipping it makes history read as a QA pass that never happened.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:48:37.240Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Split into two children on plan shape, with all six parent DoD items carried forward and none dropped: task-a24cb925a9a94002b805e9ccf1715978 (PLANNING, crate + call-table seam + RAII + Job operations) and task-a02496064e9e4e87a888cc112830d7a4 (BACKLOG, process + membership + resume + unwind + real-Windows acceptance). All prerequisites re-measured green at HEAD 7d9efc9: rustc/cargo exactly 1.96.0, windows-sys =0.61.2 resolves with the Win32_System_JobObjects feature, native directory genuinely absent, first Rust in the repo.",
+      "whatRemains": "Nothing on this shell. Child 1 is being planned now. Promote child 2 when child 1 is DONE. Close this shell via a REVIEW transit hop once both children are DONE.",
+      "pitfalls": "Do not plan or implement this parent directly -- it is a shell, and a single plan cannot fit under the 10-file hard ceiling without merging job and process concerns into modules that breach the 250-line per-file target. A direct BACKLOG-to-DONE close is refused by the daemon; the REVIEW transit hop is required or the history reads as a QA pass that never happened.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-09T14:48:47.166Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "SPIDR parent shell; released so I can plan its child 1."
+    }
+  ]
 }

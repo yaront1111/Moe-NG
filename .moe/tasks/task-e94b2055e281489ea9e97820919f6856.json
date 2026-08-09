@@ -105,7 +105,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -118,7 +118,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.243Z",
-  "updatedAt": "2026-08-09T14:32:15.229Z",
+  "updatedAt": "2026-08-09T15:25:48.490Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-064d1267"

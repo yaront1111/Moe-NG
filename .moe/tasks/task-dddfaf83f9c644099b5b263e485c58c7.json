@@ -16,7 +16,7 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,8 +29,28 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.998Z",
-  "updatedAt": "2026-08-09T13:47:09.933Z",
+  "updatedAt": "2026-08-09T15:44:26.231Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-d46fcb95",
+    "architect-db2146e3"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:00:15.456Z"
+  },
+  "blockedReason": "SPIDR-split into 2 children by architect-d46fcb95 on human direction 2026-08-09; now a parent shell with no work of its own.\n\nNOT a dependency block. Of the four named hard dependencies, Lease presence core and Policy approval core are DONE; Fan-in integration pipeline and Same-bug circuit breaker are PLANNING but are referenced by ZERO of the four DoD items, and task rail 3 says \"order is a presentation hint, not a fabricated hard dependency\". This task was plannable.\n\nWHY SPLIT (mechanical): 13 distinct files against a 10-file hard cap - core supersession x3, graph-revision x4, core/index.ts, scheduler supersession x3, scheduler/index.ts, scheduler/index-surface.test.ts.\n\nKEY MEASUREMENT. `graph.supersede` is DECLARED BUT DELIBERATELY UNIMPLEMENTED: graph-revision-reducer.ts:59 lists the kind, :68 gives it an EMPTY admitted-from list, :170 routes it to `illegal` unconditionally. :196 already refuses further commands once SUPERSEDED. Vocabulary and fail-closed guard exist; the transition does not. GraphRevisionSupersedeCommand (contract.ts:77) carries only a refusal witness, no successor/epoch binding.\n\nHUMAN DECISION: the core slice owns that transition, so its owned paths add graph-revision-{contract,reducer,validation}.ts and graph-revision-reducer.test.ts. Without it the engine computes dispositions nothing applies - a pure package with no consumer edge, which Clause 1 forbids completing.\n\nALSO MEASURED: admission-wait.ts:10 already defers to this by name. lease-drain.ts already ships DrainDisposition/applyDrainReason/releaseWork, so drain is composed, not rebuilt. scheduler/index-surface.test.ts pins the exact namespace with toBe(36).\n\nCHILDREN (BACKLOG, parentTaskId set):\n- task-6b8d0e2e948b48f7a1f40ad5a00a4a13 Core revision supersession (promotable now)\n- task-069853689ed643988cfec2d689f7edb7 Scheduler supersession dispositions (needs core slice)\n\nGOVERNOR: promote task-6b8d0e2e now.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T15:18:51.941Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the task fully and split it into two children: task-6b8d0e2e948b48f7a1f40ad5a00a4a13 (Core revision supersession, epochs and carry binding - owns the graph.supersede transition per human decision) and task-069853689ed643988cfec2d689f7edb7 (Scheduler supersession dispositions). Both carry parentTaskId of this shell, full DoDs, rails and the on-disk measurements.",
+      "whatRemains": "Nothing for an architect on this parent. Promote and plan task-6b8d0e2e first (no unbuilt dependency), then task-06985368 once the core vocabulary lands. Closing this shell later needs a REVIEW-transit hop; BACKLOG to DONE is blocked in Moe.",
+      "pitfalls": "Do NOT block this family on its named hard dependencies. Lease presence core and Policy approval core are DONE; Fan-in integration pipeline and Same-bug circuit breaker are PLANNING but appear in zero of the four DoD items, and task rail 3 says order is a presentation hint, not a fabricated hard dependency. Separately: graph.supersede is a DELIBERATE PLACEHOLDER, not a gap and not a landed feature - the kind is listed at graph-revision-reducer.ts:59, its admitted-from list is EMPTY at :68, and :170 routes it to illegal unconditionally, while :196 already refuses commands once SUPERSEDED. Reading grep hit counts alone misleads in both directions. Finally, drain/resource/budget/approval-invalidation primitives and the whole supersession vocabulary in @moe/contracts already exist - compose them, never mint a second set.",
+      "openQuestions": "None. The one real fork - whether the engine owns the graph.supersede transition or leaves it refusing - was put to the human and answered: the core slice owns it, and its owned paths were amended to include graph-revision-{contract,reducer,validation}.ts plus graph-revision-reducer.test.ts.",
+      "releasedAt": "2026-08-09T15:44:26.230Z",
+      "releasedBy": "architect-d46fcb95",
+      "reason": "Parent shell after SPIDR split; no implementation work of its own. Releasing so the architect slot is free."
+    }
   ]
 }

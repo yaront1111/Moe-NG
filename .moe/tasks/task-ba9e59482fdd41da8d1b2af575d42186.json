@@ -16,7 +16,7 @@
     "This task creates the production reporting capability only; Linux/macOS conformance remains a separate real-host proof."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T11:56:29.637Z",
-  "updatedAt": "2026-08-09T14:28:16.827Z"
+  "updatedAt": "2026-08-09T15:25:54.082Z"
 }
