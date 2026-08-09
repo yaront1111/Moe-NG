@@ -21,11 +21,52 @@ interface QuotedValue {
 
 interface TemplateValue {
   readonly expressions: readonly string[];
+  readonly literal: string | null;
   readonly nextIndex: number;
 }
 
 const identifierStart = /[A-Za-z_$]/u;
 const identifierPart = /[\w$]/u;
+const regexPrefixIdentifiers: ReadonlySet<string> = new Set([
+  "await", "case", "delete", "do", "else", "in", "instanceof", "new",
+  "of", "return", "throw", "typeof", "void", "yield",
+] as const);
+const regexPrefixPunctuation: ReadonlySet<string> = new Set([
+  "(", "[", "{", "=", ":", ",", ";", "!", "?", "&", "|", "+", "-", "*", "%", "^", "~", ">",
+] as const);
+
+function canStartRegularExpression(tokens: readonly SourceToken[]): boolean {
+  const previous = tokens[tokens.length - 1];
+  if (previous === undefined) return true;
+  if (previous.kind === "identifier") return regexPrefixIdentifiers.has(previous.value);
+  return previous.kind === "punctuation" && regexPrefixPunctuation.has(previous.value);
+}
+
+function readRegularExpression(contents: string, startIndex: number): number {
+  let inCharacterClass = false;
+  let index = startIndex + 1;
+  while (index < contents.length) {
+    const character = contents[index];
+    if (character === "\\") {
+      index += 2;
+    } else if (character === "\n" || character === "\r") {
+      throw new Error("unterminated regular expression source token");
+    } else if (character === "[") {
+      inCharacterClass = true;
+      index += 1;
+    } else if (character === "]") {
+      inCharacterClass = false;
+      index += 1;
+    } else if (character === "/" && !inCharacterClass) {
+      index += 1;
+      while (/[A-Za-z]/u.test(contents[index] ?? "")) index += 1;
+      return index;
+    } else {
+      index += 1;
+    }
+  }
+  throw new Error("unterminated regular expression source token");
+}
 
 function readQuoted(contents: string, startIndex: number): QuotedValue {
   const quote = contents[startIndex];
@@ -38,6 +79,9 @@ function readQuoted(contents: string, startIndex: number): QuotedValue {
       value += contents[index + 1];
       index += 2;
       continue;
+    }
+    if (character === "\n" || character === "\r") {
+      throw new Error("unterminated quoted source token");
     }
     value += character;
     index += 1;
@@ -77,23 +121,27 @@ function templateExpressionEnd(contents: string, startIndex: number): number {
 
 function readTemplate(contents: string, startIndex: number): TemplateValue {
   const expressions: string[] = [];
+  let literal: string | null = "";
   let index = startIndex + 1;
   while (index < contents.length) {
     const character = contents[index];
     if (character === "\\") {
+      if (literal !== null && index + 1 < contents.length) literal += contents[index + 1];
       index += 2;
     } else if (character === "\u0060") {
-      return { expressions, nextIndex: index + 1 };
+      return { expressions, literal, nextIndex: index + 1 };
     } else if (character === "$" && contents[index + 1] === "{") {
+      literal = null;
       const expressionStart = index + 2;
       const expressionEnd = templateExpressionEnd(contents, expressionStart);
       expressions.push(contents.slice(expressionStart, expressionEnd));
       index = expressionEnd < contents.length ? expressionEnd + 1 : expressionEnd;
     } else {
+      if (literal !== null) literal += character;
       index += 1;
     }
   }
-  return { expressions, nextIndex: contents.length };
+  return { expressions, literal, nextIndex: contents.length };
 }
 
 function sourceTokens(contents: string): SourceToken[] {
@@ -110,13 +158,20 @@ function sourceTokens(contents: string): SourceToken[] {
     } else if (character === "/" && next === "*") {
       const end = contents.indexOf("*/", index + 2);
       index = end < 0 ? contents.length : end + 2;
+    } else if (character === "/" && canStartRegularExpression(tokens)) {
+      index = readRegularExpression(contents, index);
     } else if (character === "'" || character === '"') {
       const quoted = readQuoted(contents, index);
       tokens.push({ kind: "string", value: quoted.value });
       index = quoted.nextIndex;
     } else if (character === "\u0060") {
       const template = readTemplate(contents, index);
-      for (const expression of template.expressions) tokens.push(...sourceTokens(expression));
+      if (template.literal !== null) tokens.push({ kind: "string", value: template.literal });
+      for (const expression of template.expressions) {
+        tokens.push({ kind: "punctuation", value: "{" });
+        tokens.push(...sourceTokens(expression));
+        tokens.push({ kind: "punctuation", value: "}" });
+      }
       index = template.nextIndex;
     } else if (identifierStart.test(character)) {
       let end = index + 1;
@@ -179,6 +234,9 @@ const forbiddenImportCases: ReadonlyArray<readonly [string, string]> = [
   ["side-effect import", 'import "@moe/scheduler/authority/private.js";'],
   ["export-from", 'export { fence } from "../../scheduler/src/authority/private.js";'],
   ["dynamic import", 'const scheduler = await import("@moe/scheduler/authority/private.js");'],
+  ["backtick dynamic import", 'const scheduler = import(\x60@moe/scheduler/authority/private.js\x60);'],
+  ["backtick require", 'const scheduler = require(\x60../../scheduler/src/authority/private.js\x60);'],
+  ["backtick import-from", 'import { fence } from \x60../../scheduler/src/authority/private.js\x60;'],
   ["dynamic import inside a template expression", 'const value = \x60${import("@moe/scheduler/authority/private.js")}\x60;'],
   ["CommonJS require", 'const scheduler = require("..\\\\scheduler\\\\src\\\\authority\\\\private.js");'],
   ["comment before a genuine import", '// explanation\nimport { fence } from "@moe/scheduler/authority/private.js";'],
@@ -193,6 +251,8 @@ const allowedContentCases: ReadonlyArray<readonly [string, string]> = [
   ["a block comment containing import syntax", '/** import { fence } from "@moe/scheduler/authority/private.js"; */'],
   ["a string containing import syntax", "const example = 'import { fence } from \\\"@moe/scheduler/authority/private.js\\\"';"],
   ["template-literal prose", 'const prose = \x60import { fence } from "@moe/scheduler/authority/private.js"\x60;'],
+  ["interpolated template specifier", 'const scheduler = import(\x60@moe/scheduler/${segment}\x60);'],
+  ["constant-string interpolated template specifier", 'const scheduler = import(\x60${"@moe/scheduler/authority/private.js"}\x60);'],
   ["an empty file", ""],
   ["the scheduler package root", 'import { fenceAuthority } from "@moe/scheduler";'],
   ["an unrelated import", 'import { decode } from "@moe/contracts";'],
@@ -232,9 +292,12 @@ it("keeps scheduler registrars behind the package-root import boundary", async (
     const files = await sourceFiles(join(repositoryRoot, root));
     for (const file of files) {
       const contents = await readFile(file, "utf8");
-      scanned.push(relative(repositoryRoot, file));
-      if (containsForbiddenSchedulerImport(contents)) {
-        violations.push(relative(repositoryRoot, file));
+      const repositoryPath = relative(repositoryRoot, file);
+      scanned.push(repositoryPath);
+      try {
+        if (containsForbiddenSchedulerImport(contents)) violations.push(repositoryPath);
+      } catch (error) {
+        throw new Error(`boundary scan failed for ${repositoryPath}: ${String(error)}`);
       }
     }
   }
@@ -254,6 +317,11 @@ it.each(forbiddenImportCases)("detects %s", (_label, contents) => {
 
 it.each(allowedContentCases)("allows %s", (_label, contents) => {
   expect(containsForbiddenSchedulerImport(contents)).toBe(false);
+});
+
+it("detects a genuine import after a regex containing a quote", () => {
+  const contents = 'const pattern = /"/;\nimport { fence } from "@moe/scheduler/authority/private.js";';
+  expect(containsForbiddenSchedulerImport(contents)).toBe(true);
 });
 
 it.each([
