@@ -1,0 +1,47 @@
+/*
+ * Spec section 4.16: the approval decision buttons stay reachable at narrow
+ * width. The surface has rendered `data-pinned="true"` since the approval
+ * surfaces landed (approval-detail-plan.tsx) and nothing targeted it; this is
+ * that rule. The marker is NOT duplicated here — one fact, one source.
+ *
+ * Nothing below removes content. Section 4.16 reflows; it never drops a field,
+ * so there is no display:none, no visibility:hidden, no overflow:hidden and no
+ * ellipsis anywhere in this file.
+ */
+
+[data-testid="cr.approvals.detail.actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  overflow: visible;
+}
+
+@media (max-width: 959px) {
+  /*
+   * Pinned to the bottom edge rather than scrolled away with the plan body, so
+   * a long consequence preview cannot push the decision out of reach. Keyed off
+   * the marker the surface already renders.
+   */
+  [data-pinned="true"][data-testid="cr.approvals.detail.actions"] {
+    background: inherit;
+    bottom: 0;
+    padding-block: 0.5rem;
+    position: sticky;
+    z-index: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * board-layout.css carries this today. The guarantee is per-stylesheet, so a
+   * second sheet without one narrows it the moment it exists.
+   *
+   * Motion only: animation and transition. Deliberately NOT scroll-snap, which
+   * is section 4.16's own column behaviour on the board and not motion at all.
+   */
+  [data-testid="cr.approvals.detail.actions"],
+  [data-testid^="cr.approvals.decision."] {
+    animation: none;
+    transition: none;
+  }
+}

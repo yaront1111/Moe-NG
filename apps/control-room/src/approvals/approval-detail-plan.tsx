@@ -5,6 +5,7 @@ import type { JSX } from "react";
 import { FactRow } from "../nodes/node-authority.js";
 import type { ProvenanceHandler, SuppliedFact } from "../nodes/node-authority.js";
 import { idleConsequence } from "./approval-fixtures.js";
+import "./approval-layout.css";
 import type {
   ApprovalDecision,
   ApprovalDecisionKind,
