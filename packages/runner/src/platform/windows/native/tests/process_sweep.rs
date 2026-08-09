@@ -534,6 +534,41 @@ fn every_acquired_handle_closes_once_and_the_attribute_list_is_deleted_once() {
 }
 
 #[test]
+fn an_unterminated_spec_is_refused_before_any_boundary_call() {
+    // Every field here is handed to `unsafe` FFI as a PCWSTR, and a Win32
+    // string function reads until it finds a NUL -- so an empty or
+    // unterminated slice reads past the caller's allocation. No scripted test
+    // could ever observe that: the double dereferences nothing. The refusal is
+    // what makes it observable, and it must land BEFORE the boundary.
+    let good = SpecStorage::new();
+    let unterminated = wide("cmd.exe")[..7].to_vec();
+
+    let mut cases: Vec<ProcessSpec<'_>> = Vec::new();
+    cases.push(ProcessSpec { application: &unterminated, ..good.spec() });
+    cases.push(ProcessSpec { command_line: &unterminated, ..good.spec() });
+    cases.push(ProcessSpec { current_directory: &unterminated, ..good.spec() });
+    cases.push(ProcessSpec { application: &[], ..good.spec() });
+    // A block that terminates its entry but not the block itself.
+    cases.push(ProcessSpec { environment: &[0x41, 0x3D, 0x42, 0], ..good.spec() });
+    cases.push(ProcessSpec { environment: &[0], ..good.spec() });
+    assert_eq!(cases.len(), 6, "the malformed-spec sweep generated no cases");
+
+    for (index, spec) in cases.iter().enumerate() {
+        let calls = ScriptedCalls::healthy();
+        let job = Job::create(&calls).expect("healthy Job construction must succeed");
+        let error = ContainedProcess::create(&calls, &job, spec)
+            .err()
+            .unwrap_or_else(|| panic!("malformed spec {index} was accepted"));
+
+        assert_eq!(error.op(), NativeOp::CreateProcess, "wrong arm for malformed spec {index}");
+        assert_eq!(error.code(), 0, "a malformed spec is our refusal, not a Win32 failure");
+        // Only the three Job arms ran: construction never reached the boundary.
+        assert_eq!(calls.calls(), vec!["create", "set", "query"], "case {index} touched Win32");
+        assert_eq!(calls.deletes(), 0, "case {index} allocated an attribute list");
+    }
+}
+
+#[test]
 fn the_first_failure_survives_a_failing_cleanup_close() {
     // Assignment fails after BOTH handles were acquired, and every close fails
     // too -- so a cleanup outcome genuinely exists to overwrite the first error

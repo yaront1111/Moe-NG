@@ -85,6 +85,7 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
         job: &Job<'c, C>,
         spec: &ProcessSpec<'_>,
     ) -> Result<Self, NativeError> {
+        validate(spec)?;
         let created = create_suspended(calls, job.handle(), spec)?;
         let process = OwnedHandle::new(created.process, calls);
         let thread = OwnedHandle::new(created.thread, calls);
@@ -123,6 +124,37 @@ impl<'c, C: Win32Calls + ProcessCalls> ContainedProcess<'c, C> {
         let process = self.process.close();
         thread.and(process)
     }
+}
+
+/// Refuses a spec whose strings are not terminated the way `CreateProcessW`
+/// requires.
+///
+/// THIS IS A SOUNDNESS CHECK, NOT A POLICY ONE. [`ProcessSpec`]'s fields are
+/// `pub` slices that are handed straight to `unsafe` FFI as `PCWSTR`, and a
+/// Win32 string function reads until it finds a NUL. An empty or unterminated
+/// slice therefore makes the OS read past the end of the caller's allocation —
+/// undefined behaviour that no scripted test can catch, because the double
+/// dereferences nothing. Refusing here converts that into a stable refusal.
+///
+/// Reported as [`NativeOp::CreateProcess`] with code 0: the create arm is what
+/// is being refused, and 0 is child 1's convention for "ours, not the operating
+/// system's". No call has reached the boundary at this point, so there is no
+/// Win32 error to carry, and the refusal is observable as the ABSENCE of every
+/// boundary call rather than only as an `Err`.
+fn validate(spec: &ProcessSpec<'_>) -> Result<(), NativeError> {
+    let refusal = NativeError::new(NativeOp::CreateProcess, 0);
+    for string in [spec.application, spec.command_line, spec.current_directory] {
+        if string.last() != Some(&0) {
+            return Err(refusal);
+        }
+    }
+    // The environment is a BLOCK: every entry is NUL-terminated and the block
+    // itself ends with one more NUL, so the last two units are always zero --
+    // including for an empty environment, which is exactly `[0, 0]`.
+    if spec.environment.len() < 2 || spec.environment[spec.environment.len() - 2..] != [0, 0] {
+        return Err(refusal);
+    }
+    Ok(())
 }
 
 /// Prepares the attribute list, creates the suspended process, and deletes the

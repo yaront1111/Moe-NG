@@ -23,16 +23,26 @@
 //!
 //! # Scope and consumer
 //!
-//! Composed by child 2, task-a02496064e9e4e87a888cc112830d7a4 (suspended
-//! process creation, `PROC_THREAD_ATTRIBUTE_JOB_LIST` membership, identity,
-//! resume, unwind, real-Windows acceptance). Process creation, assignment and
-//! membership are deliberately absent here.
+//! Suspended process creation, atomic `PROC_THREAD_ATTRIBUTE_JOB_LIST`
+//! membership, the explicit assignment confirmation, the membership and
+//! live-handle identity proofs, and resume were added by
+//! task-885a46e9fb274a94b12faa826ba580dc. Teardown is NOT here: wait, exit
+//! query, terminate, the `ActiveProcesses == 0` query, the reverse-order unwind
+//! protocol and the real-Windows acceptance test belong to sibling
+//! task-af99cf146c9b4f4d99b49d8c00caed63.
 //!
-//! Note for that work: `win32.rs` sits at 246 of its 250-line target, so new
-//! arms should arrive with a split by responsibility rather than by
-//! reformatting. [`NativeOp`] is a closed enum with no catch-all, so adding a
-//! variant is a compile error at every match site — the intended forcing
-//! function, not an obstacle.
+//! A GREEN SUITE PROVES LESS THAN IT LOOKS. Everything here runs through the
+//! scripted call tables in tests/, so the suite proves the real windows-sys
+//! implementations COMPILE — never that they work. Only that sibling's
+//! real-Windows test can close that seam.
+//!
+//! Note for later work: every source is held to 250 physical lines, so new arms
+//! arrive with a split by responsibility rather than by reformatting — that is
+//! why `win32/` holds one file per seam. [`NativeOp`] is a closed enum with no
+//! catch-all, so adding a variant is a compile error at every match site AND at
+//! [`NativeOp::ALL`], whose length is part of its type. That is the intended
+//! forcing function, not an obstacle: both sweeps in tests/ then fail until the
+//! new variant has a case.
 
 // Modules are private: every item has exactly one public path, re-exported
 // below. The sweep's scripted call table lives in tests/ and never reaches this
