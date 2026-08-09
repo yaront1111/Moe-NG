@@ -19,12 +19,12 @@
     "An epoch that cannot be verified is UNKNOWN and refuses; it never defaults to 0, to 1, or to the predecessor's value."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": "architect-705f0380",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 20:02Z. Both halves of the block are resolved, verified on disk rather than read off a status field.\n\nTHE BLOCK WAS PRECISE AND WELL-MADE — its author explicitly separated the two halves: \"NOT a missing symbol — blocked on an ACTIVE CONCURRENT WRITER in the one file this task must rewrite... Hard dependency task-1df0622e87cf42beae2cd82280e9ff99 is WORKING with an 11-step plan, NOT DONE... Half holds, half does not. VERIFIED PRESENT at HEAD — every MEASURED ON DISK claim checks out: graphEpoch at graph-revision-contract.ts:111.\"\n\nBOTH HALVES NOW CLEAR, measured at 20:01Z:\n1. task-1df0622e (Graph revision supersession transition) is DONE with assignedWorkerId null. It was WORKING with an 11-step plan when the block was written.\n2. THE CONCURRENT WRITER IS GONE — this is the half that actually mattered and it is the half a status check alone would miss. `git status --porcelain -- packages/core/src/planning/` returns EMPTY. No uncommitted work sits on the contended file, so the rewrite this task must perform will not collide with another agent's in-flight edits.\n3. The symbol the block confirmed present is still present AND committed: graphEpoch is declared at packages/core/src/planning/graph-revision-contract.ts:111, and git ls-files confirms the file is tracked rather than sitting untracked like two deliverables did earlier today.\n\nWHY THE THIRD CHECK MATTERS HERE. A dependency being DONE does not mean its bytes are in the tree — that failure occurred twice on this board today, once requiring me to commit a QA-approved deliverable myself at 88a42e0. I checked tracked-ness explicitly rather than inferring it from DONE.\n\nFOR THE ARCHITECT: the prior author left a full measurement in comment-1ca883c715ad43bfa37a5c7bbf883341 and wrote \"whoever unblocks should not need to re-probe\". Read that comment — it is the cheapest context available. Re-measure the symbols before naming them anyway, since the file has been rewritten by the dependency since that comment was written. If graphEpoch's shape or the supersede transition moved under you, report blocked and I return this to BLOCKED without argument.\n\nCONCURRENCY CAUTION, because this task rewrites a shared file: the git index on this board is shared state. After `git add` of your owned paths, run `git diff --cached --name-only` and confirm the list is EXACTLY yours before committing — a foreign package.json arrived pre-staged in my own commit earlier today and I nearly swept an active task's work.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -45,12 +45,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T18:36:26.728Z",
-  "updatedAt": "2026-08-09T19:08:12.113Z",
+  "updatedAt": "2026-08-09T20:25:15.408Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T19:05:56.224Z"
   },
-  "blockedReason": "NOT a missing symbol — blocked on an ACTIVE CONCURRENT WRITER in the one file this task must rewrite. Full measurement in comment-1ca883c715ad43bfa37a5c7bbf883341; whoever unblocks should not need to re-probe.\n\nHard dependency task-1df0622e87cf42beae2cd82280e9ff99 is WORKING with an 11-step plan, NOT DONE. This description is explicit: \"Nothing here is plannable until that task is DONE and graphEpoch exists on GraphRevisionState on disk.\" Half holds, half does not.\n\nVERIFIED PRESENT at HEAD — every \"MEASURED ON DISK\" claim checks out: graphEpoch at graph-revision-contract.ts:111; graph.supersede admitted from ACTIVE at graph-revision-reducer.ts:78, routed to supersede() at :200, no longer illegal; goal-side epoch authority intact at goal-reducer.ts:94/110/113/175.\n\nTHE HAZARD IS COLLISION. mtime offset-corrected (+0300 host, UTC board): graph-revision-reducer.ts written 18:55:40Z, ELEVEN MINUTES before I measured at 19:06Z. Clean-vs-HEAD plus a fresh mtime means that worker commits as they go — the bytes are moving, not settled.\n\nOVERLAP IS EXACT. DoD 2 here must replace the literal graphEpoch: 1 in the activation path with a goal-issued epoch. That literal lives in graph-revision-reducer.ts's activation path — the same file task-1df0622e is mutating, and its DoD 1 is what put it there. Two plans rewriting one activation path in a shared worktree is what epic rail 3 forbids; the loser silently loses bytes. Any line number pinned now goes stale before a worker reads it.\n\nUNBLOCK: (1) task-1df0622e DONE and committed; (2) re-measure where the epoch literal landed. Then it plans immediately.\n\nOPTIONAL SPLIT, your call: the goal-side advance (DoD 1) touches only packages/core/src/goal/ and does NOT overlap. Could land now, but taskRail 2 requires it to name a consumer — which is this task's graph-revision half.\n\nSIZING, grep -c '': goal-reducer.ts 247, goal-validation.ts 245. Zero headroom, so DoD 6 forces a FILE SPLIT, not growth.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T19:08:12.113Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

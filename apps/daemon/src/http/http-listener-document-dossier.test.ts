@@ -2,9 +2,7 @@ import { request as httpRequest } from "node:http";
 
 import { expect, it } from "vitest";
 
-import { startDaemon } from "../daemon-entry.js";
-import type { DaemonDependencyProvider } from "../daemon-entry.js";
-import { fixtureDependencies } from "../daemon-entry-fixtures.js";
+import type { ReadDocumentWorkDossierResult } from "../documents/document-work-service.js";
 import { startControlRoomListener } from "./http-listener.js";
 import type { ControlRoomListener, StartListenerOptions } from "./http-listener.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
@@ -23,6 +21,29 @@ const SERVICE_REFUSAL = Object.freeze({
   outcome: "REFUSED",
 } as const);
 
+const SERVICE_DOSSIER = Object.freeze({
+  advisoryOnly: true,
+  aggregateId: "document-work/aggregate",
+  aggregateSequence: 3,
+  authority: "NONE",
+  committedAt: "2026-08-09T19:00:00.000Z",
+  eventId: "document-work-proposal/event",
+  ok: true,
+  outcome: "DOSSIER",
+  proposal: Object.freeze({
+    advisoryOnly: true,
+    authority: "NONE",
+    candidates: Object.freeze([]),
+    contextManifestDigest: "a".repeat(64),
+    projectId: PROJECT,
+    repositoryBaseHash: "b".repeat(64),
+    schemaVersion: "moe-document-work-proposal/1",
+    sources: Object.freeze([]),
+    submissionState: "NOT_SUBMITTED",
+    truthClass: "AGENT_REPORTED",
+  }),
+} as const satisfies ReadDocumentWorkDossierResult);
+
 interface Harness {
   readonly authCalls: { count: number };
   readonly decisionCalls: { count: number };
@@ -40,6 +61,7 @@ function authentication(credential: string | null): AuthenticationResult {
 }
 
 async function start(options: {
+  readonly result?: ReadDocumentWorkDossierResult;
   readonly withPort?: boolean;
 } = {}): Promise<Harness> {
   const authCalls = { count: 0 };
@@ -73,7 +95,7 @@ async function start(options: {
       documentDossiers: {
         readLatest: (projectId: string) => {
           portCalls.push(projectId);
-          return SERVICE_REFUSAL;
+          return options.result ?? SERVICE_REFUSAL;
         },
       },
     }),
@@ -97,6 +119,7 @@ async function send(
   options: {
     readonly body?: Buffer | string;
     readonly credential?: string | null;
+    readonly host?: string;
     readonly method?: string;
     readonly path?: string;
     readonly protocol?: string;
@@ -106,7 +129,7 @@ async function send(
   const headers: Record<string, string | number> = {
     "content-length": Buffer.byteLength(payload),
     "content-type": "application/json",
-    host: `127.0.0.1:${listener.port}`,
+    host: options.host ?? `127.0.0.1:${listener.port}`,
     origin: listener.origin,
     "x-moe-csrf": CSRF,
     "x-moe-protocol-version": options.protocol ?? WIRE_PROTOCOL_VERSION,
@@ -147,6 +170,16 @@ it("reads the dossier for the authenticated project and forwards its refusal at 
     expect(harness.authCalls.count).toBe(1);
     expect(harness.decisionCalls.count).toBe(0);
     expect(harness.registryCalls.count).toBe(0);
+  } finally {
+    await harness.listener.close();
+  }
+});
+
+it("forwards the successful service dossier without adding a transport wrapper", async () => {
+  const harness = await start({ result: SERVICE_DOSSIER });
+  try {
+    expect(await send(harness.listener)).toStrictEqual({ body: SERVICE_DOSSIER, status: 200 });
+    expect(harness.portCalls).toStrictEqual([PROJECT]);
   } finally {
     await harness.listener.close();
   }
@@ -264,128 +297,17 @@ it("accepts the dossier route only as POST", async () => {
   }
 });
 
-it("resolves the optional dossier factory through the daemon entry point", async () => {
-  const projects: string[] = [];
-  const started = await startDaemon({
-    csrfToken: CSRF,
-    dependencies: {
-      documentDossiers: () => ({
-        readLatest: (projectId: string) => {
-          projects.push(projectId);
-          return SERVICE_REFUSAL;
-        },
-      }),
-      provide: fixtureDependencies,
-    } as DaemonDependencyProvider,
-  });
-  if (!started.ok) throw new Error(`daemon failed: ${started.code}`);
+it("preserves Host validation ahead of the dossier method refusal", async () => {
+  const harness = await start();
   try {
-    expect(await send(started, { credential: "sess-good" })).toStrictEqual({
-      body: SERVICE_REFUSAL,
-      status: 200,
-    });
-    expect(projects).toStrictEqual(["proj-0001"]);
+    expect(await send(harness.listener, { host: "attacker.invalid", method: "GET" }))
+      .toStrictEqual({
+        body: { code: "LISTENER_HOST_INVALID", layer: "CONTROL_ROOM_LISTENER" },
+        status: 403,
+      });
+    expect(harness.authCalls.count).toBe(0);
+    expect(harness.portCalls).toStrictEqual([]);
   } finally {
-    await started.shutdown();
+    await harness.listener.close();
   }
-});
-
-it("refuses a malformed optional dossier port before binding", async () => {
-  const result = await startDaemon({
-    dependencies: {
-      documentDossiers: () => ({}),
-      provide: fixtureDependencies,
-    } as unknown as DaemonDependencyProvider,
-  });
-  if (result.ok) await result.shutdown();
-  expect(result).toStrictEqual({
-    code: "DAEMON_ENTRY_DEPENDENCIES_INVALID",
-    layer: "DAEMON_ENTRY",
-    ok: false,
-  });
-});
-
-it.each(["affordances", "documentDossiers", "subscriptions"] as const)(
-  "preserves PROVIDER_THREW when the optional %s factory throws",
-  async (factory) => {
-    const result = await startDaemon({
-      dependencies: {
-        [factory]: (): never => { throw new Error("optional factory exploded"); },
-        provide: fixtureDependencies,
-      } as DaemonDependencyProvider,
-    });
-    expect(result).toStrictEqual({
-      code: "DAEMON_ENTRY_PROVIDER_THREW",
-      layer: "DAEMON_ENTRY",
-      ok: false,
-    });
-  },
-);
-
-it("preserves PROVIDER_THREW when an optional factory accessor throws", async () => {
-  const provider = new Proxy({ provide: fixtureDependencies }, {
-    get: (target, property, receiver): unknown => {
-      if (property === "documentDossiers") throw new Error("optional accessor exploded");
-      return Reflect.get(target, property, receiver) as unknown;
-    },
-  }) as DaemonDependencyProvider;
-  expect(await startDaemon({ dependencies: provider })).toStrictEqual({
-    code: "DAEMON_ENTRY_PROVIDER_THREW",
-    layer: "DAEMON_ENTRY",
-    ok: false,
-  });
-});
-
-it("preserves the existing optional-port order and stops at the first malformed port", async () => {
-  const calls: string[] = [];
-  const result = await startDaemon({
-    dependencies: {
-      affordances: () => {
-        calls.push("affordances");
-        return { readSurface: () => ({ outcome: "SURFACE" }) } as never;
-      },
-      documentDossiers: () => {
-        calls.push("documentDossiers");
-        return { readLatest: () => SERVICE_REFUSAL };
-      },
-      provide: fixtureDependencies,
-      subscriptions: () => {
-        calls.push("subscriptions");
-        return {} as never;
-      },
-    },
-  });
-  expect(result).toStrictEqual({
-    code: "DAEMON_ENTRY_DEPENDENCIES_INVALID",
-    layer: "DAEMON_ENTRY",
-    ok: false,
-  });
-  expect(calls).toStrictEqual(["subscriptions"]);
-});
-
-it("resolves the new dossier factory after the two existing optional factories", async () => {
-  const calls: string[] = [];
-  const started = await startDaemon({
-    dependencies: {
-      affordances: () => {
-        calls.push("affordances");
-        return { readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }) };
-      },
-      documentDossiers: () => {
-        calls.push("documentDossiers");
-        return { readLatest: () => SERVICE_REFUSAL };
-      },
-      provide: fixtureDependencies,
-      subscriptions: () => {
-        calls.push("subscriptions");
-        return {
-          readPage: () => ({ code: "TEST", detail: "test", layer: "TEST", outcome: "REFUSED" }),
-          reseat: () => ({ code: "TEST", detail: "test", layer: "TEST", outcome: "REFUSED" }),
-        };
-      },
-    },
-  });
-  if (!started.ok) throw new Error(`daemon failed: ${started.code}`);
-  await started.shutdown();
-  expect(calls).toStrictEqual(["subscriptions", "affordances", "documentDossiers"]);
 });

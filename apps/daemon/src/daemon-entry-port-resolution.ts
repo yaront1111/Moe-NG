@@ -20,12 +20,16 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "affordances", "documentDossiers", "subscriptions",
+  "subscriptions", "affordances", "documentDossiers",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
   if (typeof value !== "object" || value === null) return false;
-  return keys.every((key) => typeof Reflect.get(value, key) === "function");
+  try {
+    return keys.every((key) => typeof Reflect.get(value, key) === "function");
+  } catch {
+    return false;
+  }
 }
 
 /** Structural startup validation for module-loaded providers. */
@@ -41,15 +45,27 @@ export function resolveOptionalDaemonPorts(
   provider: OptionalDaemonPortProvider,
 ): OptionalDaemonPortResolution {
   try {
-    const subscriptions = provider.subscriptions?.call(provider);
+    const subscriptionFactory = provider.subscriptions;
+    if (subscriptionFactory !== undefined && typeof subscriptionFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const subscriptions = subscriptionFactory?.call(provider);
     if (subscriptions !== undefined && !hasMethods(subscriptions, ["readPage", "reseat"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
-    const affordances = provider.affordances?.call(provider);
+    const affordanceFactory = provider.affordances;
+    if (affordanceFactory !== undefined && typeof affordanceFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const affordances = affordanceFactory?.call(provider);
     if (affordances !== undefined && !hasMethods(affordances, ["readSurface"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
-    const documentDossiers = provider.documentDossiers?.call(provider);
+    const dossierFactory = provider.documentDossiers;
+    if (dossierFactory !== undefined && typeof dossierFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const documentDossiers = dossierFactory?.call(provider);
     if (documentDossiers !== undefined && !hasMethods(documentDossiers, ["readLatest"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }

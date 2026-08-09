@@ -5,7 +5,6 @@ import type { SessionAuthenticatorConfig } from "./session-authenticator.js";
 import {
   CREDENTIAL,
   EXPIRES_AT_MS,
-  OPENER,
   PROJECT_ID,
   SESSION_ID,
   closeStores,

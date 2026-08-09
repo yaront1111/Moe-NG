@@ -128,21 +128,22 @@ describe("production control-room composition", () => {
     render(<ControlRoomScaffold />);
     const dossier = screen.getByTestId("cr.preview.dossier");
     expect(dossier.getAttribute("data-authority")).toBe("none");
-    expect(within(dossier).getByText("Stale-port recovery dossier")).toBeTruthy();
-    expect(within(dossier).getByText("3 sample work candidates · not submitted"))
+    expect(within(dossier).getByText("Document work proposal")).toBeTruthy();
+    expect(within(dossier).getByText("3 document-derived candidates · not submitted"))
       .toBeTruthy();
     expect(within(dossier).getByText(
       "No daemon attached; no task records were created.",
     )).toBeTruthy();
 
     const sourceLinks = within(dossier).getAllByTestId(/^cr\.preview\.decomposition\.source\./u);
-    expect(sourceLinks.map((link) => link.textContent)).toEqual([
-      "Incident note", "Startup contract", "Recovery acceptance",
-      "Startup contract", "Incident note", "Recovery acceptance",
+    expect(sourceLinks.map((link) => link.querySelector("code")?.textContent)).toEqual([
+      "incident-note", "startup-contract", "incident-note",
+      "recovery-acceptance", "recovery-acceptance", "startup-contract",
     ]);
     for (const link of sourceLinks) {
       const href = link.getAttribute("href") ?? "";
-      expect(href).toMatch(/^#cr-preview-source-[a-z-]+$/u);
+      expect(href).toMatch(/^#cr-dossier-[a-zA-Z0-9_-]+-source-[0-9]+$/u);
+      expect(link.getAttribute("aria-controls")).toBe(href.slice(1));
       expect(document.querySelector(href)).not.toBeNull();
     }
     for (const source of within(dossier)
@@ -157,17 +158,17 @@ describe("production control-room composition", () => {
     expect(candidates).toHaveLength(3);
     expect(candidates.map((card) => within(card).getByRole("heading").textContent)).toEqual([
       "Write the recovery contract",
-      "Guard startup ownership",
       "Prove stale-record recovery",
+      "Guard startup ownership",
     ]);
     for (const card of candidates) {
       expect(card.textContent).toContain("Candidate · not submitted");
-      expect(card.textContent).toContain("Unassigned");
-      expect(card.textContent).toContain("Not started");
+      expect(card.textContent).not.toContain("Unassigned");
+      expect(card.textContent).not.toContain("Not started");
       expect(within(card).getByTestId("cr.chip.agent_reported")).toBeTruthy();
     }
     expect(within(dossier).getByTestId("cr.preview.decomposition.quality")
-      .querySelector("[data-testid='cr.chip.unknown']")).not.toBeNull();
+      .querySelector("[data-testid='cr.chip.agent_reported']")).not.toBeNull();
     expect(dossier.querySelectorAll("[data-testid^='cr.action.']")).toHaveLength(0);
   });
 
@@ -176,7 +177,7 @@ describe("production control-room composition", () => {
     render(<ControlRoomScaffold />);
     const dossier = screen.getByTestId("cr.preview.dossier");
     const candidate = within(dossier)
-      .getByTestId("cr.preview.decomposition.task.recovery-contract");
+      .getByTestId("cr.preview.decomposition.task.0");
     const chip = within(candidate).getByRole("button", {
       name: /provenance for write the recovery contract/iu,
     });
@@ -186,9 +187,10 @@ describe("production control-room composition", () => {
     const provenance = within(dossier).getByTestId("cr.preview.dossier.provenance");
     expect(provenance.textContent).toContain("Write the recovery contract");
     expect(provenance.textContent).toContain("Asserted by an agent; not independently verified.");
-    expect(provenance.textContent).toContain("Incident note · Startup contract");
+    expect(provenance.textContent).toContain("incident-note · docs/incidents/stale-port.md");
+    expect(provenance.textContent).toContain("startup-contract · docs/contracts/startup-ownership.md");
     expect(provenance.textContent)
-      .toContain("Preview fixture only; no daemon event, actor, session, or receipt exists.");
+      .toContain("Fixture proposal · NOT_SUBMITTED · advisory only · authority NONE.");
   });
 
   it("keeps decomposition first in visual, DOM, and focus order and opens linked sources", async () => {
@@ -196,11 +198,12 @@ describe("production control-room composition", () => {
     render(<ControlRoomScaffold />);
     const dossier = screen.getByTestId("cr.preview.dossier");
     const decomposition = within(dossier).getByTestId("cr.preview.decomposition");
-    const source = within(dossier).getByTestId("cr.preview.dossier.source.incident-note");
+    const source = within(dossier).getByTestId("cr.preview.dossier.source.0");
     expect(decomposition.compareDocumentPosition(source) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
-    await user.click(within(decomposition).getAllByRole("link", { name: "Incident note" })[0]!);
+    await user.click(within(decomposition)
+      .getByTestId("cr.preview.decomposition.source.0.0"));
 
     expect((source.querySelector("details") as HTMLDetailsElement).open).toBe(true);
   });

@@ -4,12 +4,18 @@ import type { JSX } from "react";
 import "./live-board.css";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import { Fact } from "../kernel.js";
+import { DocumentDossier } from "../preview/document-dossier.js";
+import type { DocumentDossierState } from "../preview/document-dossier-state.js";
 import { ShellFrame } from "../shell/frame.js";
 import { LiveBoard } from "./live-board.js";
 import { createBoardFeed } from "./live-board-feed.js";
 import type { SurfaceFrame } from "./live-board-feed.js";
 import { createLiveEventFeed } from "./live-event-feed.js";
 import type { LiveFrame } from "./live-event-feed.js";
+import {
+  LIVE_DOCUMENT_DOSSIER_LOADING,
+  createLiveDocumentDossierFeed,
+} from "./live-document-dossier.js";
 import { resolveLiveSetup } from "./live-config.js";
 import type { LiveSetupResult } from "./live-config.js";
 
@@ -116,6 +122,12 @@ export interface LiveControlRoomProps {
 }
 
 export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
+  const [documentView, setDocumentView] = useState<{
+    readonly setup: LiveSetupResult;
+    readonly state: DocumentDossierState;
+  }>(() => ({ setup, state: LIVE_DOCUMENT_DOSSIER_LOADING }));
+  const documentDossier = documentView.setup === setup
+    ? documentView.state : LIVE_DOCUMENT_DOSSIER_LOADING;
   const [frame, setFrame] = useState<LiveFrame | null>(null);
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const feed = useMemo(() => (setup.ok
@@ -134,12 +146,20 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
       onFrame: setSurface,
     })
     : null), [setup]);
+  const documentFeed = useMemo(() => (setup.ok
+    ? createLiveDocumentDossierFeed({
+      intervalMs: POLL_INTERVAL_MS,
+      onState: (state) => { setDocumentView({ setup, state }); },
+      transport: setup.transport,
+    })
+    : null), [setup]);
 
   useEffect(() => {
     feed?.start();
     boardFeed?.start();
-    return (): void => { feed?.stop(); boardFeed?.stop(); };
-  }, [feed, boardFeed]);
+    documentFeed?.start();
+    return (): void => { feed?.stop(); boardFeed?.stop(); documentFeed?.stop(); };
+  }, [feed, boardFeed, documentFeed]);
 
   if (!setup.ok) return <LiveRefusedPanel result={setup} />;
   return (
@@ -178,6 +198,7 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
           sessionCredential={setup.sessionCredential}
           transport={setup.transport}
         />
+        <DocumentDossier state={documentDossier} />
         <LiveTimeline frame={frame} />
       </div>
     </ShellFrame>

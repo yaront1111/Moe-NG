@@ -141,7 +141,22 @@ export function createLiveDocumentDossierFeed(
 ): LiveDocumentDossierFeed {
   let active = false;
   let generation = 0;
+  let lastReady: { readonly identity: string; readonly proposal: string } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const nextVisibleState = (state: DocumentDossierState): DocumentDossierState | null => {
+    if (state.status !== "READY") {
+      lastReady = null;
+      return state;
+    }
+    const proposal = JSON.stringify(state.proposal);
+    if (lastReady?.identity === state.dossierIdentity) {
+      return lastReady.proposal === proposal
+        ? null : errorState("DOCUMENT_DOSSIER_IDENTITY_REBOUND", LIVE_DOCUMENT_LAYER);
+    }
+    lastReady = { identity: state.dossierIdentity, proposal };
+    return state;
+  };
 
   const poll = async (run: number): Promise<void> => {
     let state: DocumentDossierState;
@@ -151,7 +166,8 @@ export function createLiveDocumentDossierFeed(
       state = errorState("DOCUMENT_DOSSIER_FEED_FAILED", LIVE_DOCUMENT_LAYER);
     }
     if (!active || run !== generation) return;
-    options.onState(state);
+    const visible = nextVisibleState(state);
+    if (visible !== null) options.onState(visible);
     timer = setTimeout(() => { void poll(run); }, options.intervalMs);
   };
 
@@ -160,6 +176,7 @@ export function createLiveDocumentDossierFeed(
       if (active) return;
       active = true;
       generation += 1;
+      lastReady = null;
       options.onState(LIVE_DOCUMENT_DOSSIER_LOADING);
       void poll(generation);
     },

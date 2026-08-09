@@ -39,7 +39,14 @@ it("tolerates a workspace glob whose base directory is absent", async () => {
   const patterns = await readWorkspacePatterns(repositoryRoot);
 
   expect(patterns).toContain("adapters/*");
-  await expect(expandWorkspacePattern(repositoryRoot, "adapters/*")).resolves.toEqual([]);
+  // adapters/ was empty when this was written and is populated as of
+  // task-c2d92880989b4ed2bc76494ee6979d91, so the absent-base tolerance moved to a
+  // base that is genuinely absent. Dropping the property instead would leave
+  // expandWorkspacePattern's missing-directory path unasserted.
+  await expect(expandWorkspacePattern(repositoryRoot, "adapters/*"))
+    .resolves.toContain("adapters/ide-contract");
+  await expect(expandWorkspacePattern(repositoryRoot, "no-such-workspace-base/*"))
+    .resolves.toEqual([]);
 });
 
 it("classifies a declared missing entry with a stable actionable code", async () => {

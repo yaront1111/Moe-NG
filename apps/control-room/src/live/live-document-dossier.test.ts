@@ -1,5 +1,5 @@
 import type { SendResult } from "@moe/control-room-client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PREVIEW_DOCUMENT_WORK_PROPOSAL } from "../preview/document-preview-data.js";
 import {
@@ -7,6 +7,8 @@ import {
   createLiveDocumentDossierFeed,
   mapDocumentDossierAnswer,
 } from "./live-document-dossier.js";
+
+afterEach(() => { vi.useRealTimers(); });
 
 const DOSSIER = Object.freeze({
   advisoryOnly: true,
@@ -116,4 +118,57 @@ it("ignores an in-flight dossier answer after the feed stops", async () => {
   await Promise.resolve();
 
   expect(states).toStrictEqual([LIVE_DOCUMENT_DOSSIER_LOADING]);
+});
+
+it("does not reset live disclosure state for an unchanged durable dossier", async () => {
+  vi.useFakeTimers();
+  let reads = 0;
+  const states: unknown[] = [];
+  const feed = createLiveDocumentDossierFeed({
+    intervalMs: 10,
+    onState: (state) => states.push(state),
+    transport: {
+      readDocumentDossier: async () => {
+        reads += 1;
+        return delivered({ ...DOSSIER, proposal: { ...PREVIEW_DOCUMENT_WORK_PROPOSAL } });
+      },
+    },
+  });
+
+  feed.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(states).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(10);
+
+  expect(reads).toBe(2);
+  expect(states).toHaveLength(2);
+  feed.stop();
+});
+
+it("refuses changed proposal content rebound to the same durable event identity", async () => {
+  vi.useFakeTimers();
+  let reads = 0;
+  const states: Array<{ readonly code?: string; readonly status: string }> = [];
+  const feed = createLiveDocumentDossierFeed({
+    intervalMs: 10,
+    onState: (state) => states.push(state),
+    transport: {
+      readDocumentDossier: async () => {
+        reads += 1;
+        return delivered(reads === 1 ? DOSSIER : {
+          ...DOSSIER,
+          proposal: { ...PREVIEW_DOCUMENT_WORK_PROPOSAL, projectId: "rebound-project" },
+        });
+      },
+    },
+  });
+
+  feed.start();
+  await vi.advanceTimersByTimeAsync(10);
+
+  expect(states.at(-1)).toMatchObject({
+    code: "DOCUMENT_DOSSIER_IDENTITY_REBOUND",
+    status: "ERROR",
+  });
+  feed.stop();
 });

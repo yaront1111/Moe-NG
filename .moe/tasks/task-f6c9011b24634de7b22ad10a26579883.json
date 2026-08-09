@@ -101,11 +101,18 @@
     {
       "stepId": "step-6",
       "description": "After task-00956ac has landed and released the clean shared root files, publish only the new contracts/constants/factory-returned capability through the existing @moe/runner root export blocks; no deep-import workaround and no .js bridge edits are needed because the existing bridges already export their TS modules. Re-measure index.ts and keep it <=250 physical lines (split/replan before 400). Update index-surface.test.ts from its then-current hand-written namespace: add each new runtime value exactly once and bump the then-current literal by the exact delta; type-only exports do not inflate the runtime count. Assert plain-Node package-root loadability and record task-d7da9be4a3254f7b9dcd58369d7e15a1 as the named production consumer that will call both enumerators.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "ROOT EXPORTS PUBLISHED. Only index.ts and index-surface.test.ts touched; both were clean at HEAD before I edited (git status over packages/runner/src returned empty, index.ts 261 in tree AND 261 at HEAD — the architect's precondition re-measured and confirmed, so no editing across foreign bytes).\n\nRE-MEASURED, NOT TRUSTED: the export literal was 147 at index-surface.test.ts:157 at the moment of edit (task text said 116, an earlier note 135). Bumped to 150 — delta exactly 3, as the architect predicted.\n\nTHREE RUNTIME VALUES, per the architect's named list: parseRefListing (from ./scope/scope-refs.js, the owning module rather than scope-git's re-export), enumerateArtifactsAt (./artifacts/artifact-enumeration.js), MAX_ARTIFACT_ENUMERATION_ENTRIES (./artifacts/artifact-contract.js). I deliberately did NOT publish the runtime layer arrays SCOPE_OBSERVER_LAYERS / ARTIFACT_ENUMERATION_LAYERS / ARTIFACT_DIRECTORY_ENTRY_KINDS even though every sibling seam publishes its own: the architect's ruling treats the layer vocabularies as TYPE exports, type-level narrowing is enough for a consumer to attribute a refusal, and adding them would put delta at 6 with no measured caller. If task-d7da9be4 needs them at runtime it can publish them then.\n\nELEVEN TYPE EXPORTS, the full closure a consumer needs to name both results without a deep import: GitRefListing, GitRefObservation, ScopeObserverLayer; ArtifactDirectoryEntry, ArtifactDirectoryEntryKind, ArtifactEnumerationFailure, ArtifactEnumerationLayer, ArtifactEnumerationOk, ArtifactEnumerationResult, ArtifactObjectObservation, ArtifactStagingObservation. Arms exported alongside their union, matching the file's existing precedent (ArtifactFailure/StagedArtifact beside StageArtifactResult).\n\nTYPE PUBLICATION IS ASSERTED, NOT ASSUMED. Three new tests in index-surface.test.ts reach both capabilities BY CALLING through the bare @moe/runner specifier and annotate every one of the eleven types on a value obtained from that call, so a type that failed to publish is a tsc error rather than a silent gap. They pin two refusals by exact code AND layer: parseRefListing on a record with no LF terminator -> RUNNER_SCOPE_STATUS_MALFORMED / GIT_OBSERVER; enumerateArtifactsAt with a port lacking listDirectory -> RUNNER_ARTIFACT_ENUMERATION_UNAVAILABLE / ARTIFACT_STORE (the STORE layer, because nothing was read). The third lists a real directory through the shipped createNodeArtifactFs port and is anchored — it asserts index.ts is FILE and scope is DIRECTORY, so a scan root that silently narrowed could not pass a bare length check.\n\nPLAIN-NODE LOADABILITY: already covered, and I verified it rather than assuming. runtime-entrypoint.test.ts imports @moe/runner in a real child `node --experimental-strip-types` process and asserts undefinedBindingCount === 0 over every key, so the three new bindings are exercised through the .js bridges; its derived sweep also proves both new bridges exist with exact content. That file is NOT in my owned paths and was not touched. Ran it explicitly: 2 files / 185 tests passed.\n\nMUTATION DRILL ON THIS STEP'S OWN WORK. Backed index.ts up to $TMP (outside the repo, so no foreign whole-tree sweep could capture the mutation), deleted the parseRefListing export line, re-ran: 3 tests failed — the namespace-equality test (\"expected [ …(149) ] to deeply equal [ …(150) ]\"), the per-export kind case, and the new ref-listing test. Restored from backup and re-verified sha256 equality (4bb721a2c3ea7c802ebb79c7b5f829f10dd3e95656613b0f7ea7cdd1d8a167ec). The hand-written list is not policing itself.\n\nLINE COUNT DISCLOSED per the architect's ruling: index.ts is 275 physical lines (grep -c ''), up from 261 at HEAD. 11 of the excess over the 250 target arrived in commit 88a42e0's foreign recovery-inventory seam; 14 are mine — 1 value + 8 types in the artifact block, 3 types in the scope block, and 2 new one-line export statements. Above the 250 target, well under epic rail 5's 400 hard bar. Not splitting a shared root barrel mid-epic in a shared worktree.\n\nCONSUMER, global rail Clause 1 option (a): task-d7da9be4a3254f7b9dcd58369d7e15a1 (\"Git, integration-on-disk and artifact inventory adapters\", same epic) is the named production consumer that will call both enumerators. Not landing the edge here — that would duplicate its work.\n\npnpm --filter @moe/runner typecheck exit 0. Focused run 185/185.",
+      "startedAt": "2026-08-09T20:25:14.028Z",
+      "completedAt": "2026-08-09T20:32:21.272Z"
     },
     {
       "stepId": "step-7",
@@ -140,7 +147,7 @@
     {
       "stepId": "step-8",
       "description": "Run the single final verification gate only after all edits/mutations are restored: first rerun repo-wide pnpm typecheck and pnpm test to compute the normalized Git-relative `(HEAD failures - merge-base failures) ∩ owned paths` delta, require it empty, and disclose every remaining foreign-red line/path verbatim. Then run the task's exact completion command LAST, fresh and foreground: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`. Both owned-package legs must exit 0 with nonzero discovery; the path-attributed baseline cannot excuse package-local RED, so wait/report blocked if task-00956 or another owner still leaves @moe/runner red. Verify the final diff/commit contains only the nine explicit owned paths and no design, bridge, transcript, or generated-evidence files.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/scope/scope-contract.ts",
         "packages/runner/src/scope/scope-git.ts",
@@ -151,10 +158,17 @@
         "packages/runner/src/artifacts/artifact-enumeration.test.ts",
         "packages/runner/src/index.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "FINAL GATE PASSED. Everything below is a fresh foreground run; no background jobs.\n\nPATH-ATTRIBUTED BASELINE IS TRIVIALLY EMPTY BECAUSE THE REPO IS FULLY GREEN. There is no foreign red to disclose on this task.\n  repo-wide `pnpm typecheck` -> exit 0, every one of the 16 projects \"Done\" (adapters/ide-contract, packages/{import,store,control-room-client,coordination,mcp,core,scheduler,skills,testkit,runner,review}, apps/{control-room,daemon}).\n  repo-wide `pnpm test` -> exit 0, 213 test files passed, 4030 passed / 1 skipped.\nSince the HEAD failing-path set is EMPTY, (HEAD failures - merge-base failures) is empty for every path, so its intersection with the task's owned paths is empty by construction. Note the prior worker's plan premise \"foreign RED from active task-00956\" is dead twice over: that task's bytes are committed at 88a42e0 and nothing anywhere is red.\n\nTASK COMPLETION COMMAND, run LAST, fresh and foreground, exactly as the plan names it:\n  pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test\n  -> exit 0. tsc clean. vitest: 45 test files passed, 1409 tests passed, 0 failed. Nonzero discovery confirmed (45 files / 1409 tests, up from the prior worker's recorded 43/1366 - the extra two files are other owners' landed work, the extra tests include this step's three).\n\nINDEX.TS LINE COUNT, disclosed per the architect's step 6 ruling: 275 physical lines by `grep -c ''`, from 261 at HEAD before my edit. Over the 250 target, well under epic rail 5's 400 hard bar. 11 lines of the overage predate this task (the recovery-inventory seam committed at 88a42e0); 14 are mine. Not splitting a shared root barrel mid-epic in a shared worktree.\n\nDIFF CONTENTS VERIFIED - ONLY OWNED PATHS. `git status --porcelain -- packages/runner/` showed exactly the two root files I edited, nothing else. I staged them by explicit pathspec (never -A) and committed them alone at fbb2122: 2 files changed, 114 insertions, 8 deletions. No design file, no bridge edit, no transcript, no scratch or generated evidence file - the one mutation-drill backup this session lived in $TMP outside the repo and was deleted, so no foreign whole-tree sweep could have captured it.\n\nWHERE QA SHOULD LOOK. This task's bytes span two commits:\n  76012b8 (steps 1-5 and 7) - the 11 capability files. Base-ref diff: `git diff 76012b8^..HEAD -- packages/runner/src/scope/ packages/runner/src/artifacts/`. Careful reading that range for the two ROOT files: it shows index.ts +46 and index-surface.test.ts +63, but most of that is FOREIGN - the recovery-inventory seam from 88a42e0 landed in the same range.\n  fbb2122 (step 6) - this session's root publication, and only mine: `git show fbb2122`.\n\nTWO FACTS STILL RECORDED UNKNOWN, deliberately not upgraded (epic rail 4): the win32 ENOBUFS-to-overflow promotion has no passing assertion because a real maxBuffer overflow cannot be provoked deterministically, and the symlink case cannot run unprivileged on this Windows host - its fallback asserts process.platform === \"win32\" so it proves the platform rather than silently passing.",
+      "startedAt": "2026-08-09T20:32:32.351Z",
+      "completedAt": "2026-08-09T20:34:45.561Z"
     }
   ],
-  "status": "AWAITING_APPROVAL",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -174,16 +188,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:18:36.217Z",
-  "updatedAt": "2026-08-09T18:56:34.231Z",
+  "updatedAt": "2026-08-09T20:36:16.194Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
-    "worker-5981deec"
+    "worker-5981deec",
+    "worker-97d6df26"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:47:58.588Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -194,7 +209,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-7"
+    "step-7",
+    "step-6",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:02:09.486Z",
@@ -217,7 +234,7 @@
     "warnedAt": "2026-08-09T18:52:01.267Z",
     "escalatedAt": "2026-08-09T18:52:01.267Z"
   },
-  "planApprovedAt": "2026-08-09T15:02:11.536Z",
+  "planApprovedAt": "2026-08-09T20:24:27.671Z",
   "workStartedAt": "2026-08-09T15:02:32.595Z",
   "blockedReason": null,
   "blockedResourceId": null,
@@ -242,5 +259,27 @@
       "releasedBy": "worker-5981deec",
       "reason": "Dependency-gated at step 6 on another task's uncommitted root files; releasing rather than parking the slot, per the governor's standing guidance. Steps 1-5 and 7 are done, green and self-consistent on disk."
     }
+  ],
+  "reviewStartedAt": "2026-08-09T20:36:16.194Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  45 passed (45)\n      Tests  1409 passed (1409)\n   Start at  23:33:24\n   Duration  3.08s (transform 8.84s, setup 0ms, import 12.71s, tests 7.93s, environment 3ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-09T20:36:16.194Z"
+  },
+  "filesModified": [
+    "packages/runner/src/scope/scope-git.test.ts",
+    "packages/runner/src/artifacts/artifact-enumeration.test.ts",
+    "packages/runner/src/scope/scope-contract.ts",
+    "packages/runner/src/artifacts/artifact-contract.ts",
+    "packages/runner/src/scope/scope-git.ts",
+    "packages/runner/src/scope/scope-refs.ts",
+    "packages/runner/src/scope/scope-refs.js",
+    "packages/runner/src/artifacts/artifact-node-fs.ts",
+    "packages/runner/src/artifacts/artifact-store.ts",
+    "packages/runner/src/artifacts/artifact-enumeration.ts",
+    "packages/runner/src/artifacts/artifact-enumeration.js",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/index-surface.test.ts"
   ]
 }

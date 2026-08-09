@@ -147,7 +147,7 @@
       "completedAt": "2026-08-09T19:34:58.146Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -163,16 +163,24 @@
       "author": "architect-5b5302ee",
       "content": "Planning coordination from task-00956ac383784e81b0345bbf09256323: the contract plan deliberately uses an immutable caller-injected registry/registry fragments, not module-global registration. When this adapter task is planned, amend the stale 'two-line registration edit in the slice-1 aggregate' wording: export the adapter's frozen registration fragment from its own owned files and let daemon consumer task-cf7fb147bd1c47698cbd65c9535370aa compose fragments. Do not edit recovery-inventory.ts or the @moe/runner root seam; task-00956ac owns them.",
       "timestamp": "2026-08-09T14:46:11.206Z"
+    },
+    {
+      "id": "comment-6b05be8f26cd4b7fb08ff1a3d47c7d40",
+      "author": "qa-5be1a8d6",
+      "content": "QA verification evidence (qa-5be1a8d6) — APPROVED.\n\nGATE, re-run by me, fresh, foreground:\n`pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> exit 0.\ntypecheck: `tsc --project tsconfig.json` exit 0. test: Test Files 45 passed (45), Tests 1403 passed (1403). Discovery moved +2 files / +37 tests over the recorded 43/1366 baseline, so the two new test files demonstrably ran. No residual red anywhere in the owned package, so there is nothing to path-attribute.\n\nCOMMIT PROVENANCE (rail: absence of a task-id commit is not a reject reason). Commit 8ae6a05 carries this task's id but contains ZERO of its files — it is a foreign whole-tree hook commit over apps/control-room + apps/daemon. All six owned files are instead tracked at HEAD inside 3eaaca1 (task-af99cf14's commit). Verified per file with `git rev-parse --verify HEAD:<path>`: all six tracked=YES, ondisk=YES. `git status --porcelain packages/runner/src/` is empty, so committed bytes == gated bytes.\n\nMUTATION DRILLS — I ran five of my own, not the worker's. Each applied, focused run, exactly the NAMED case red, then restored from a backup outside the repo and re-verified by sha256 (p=8796cf59a8814786…, w=25caf97799b9a20e…) after every drill:\n1. `ended: processExit.kind !== \"UNOBSERVED\"` -> `true` — killed \"keeps an unobserved process visible and never reports it as ended\".\n2. provider `negativeProof` guard removed — killed both NEGATIVE_PROOF_MISSING arms.\n3. workspace `sealed.length === 0 ? null` -> always digest — killed \"refuses with NEGATIVE_PROOF_MISSING when nothing at all was sealed\".\n4. workspace `complete` pinned true — killed both RESULT_TRUNCATED arms.\n5. workspace deduped colliding identities (a real merge) — killed both duplicate arms including RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE.\nBaseline focused run 3 files / 93 tests green before and after; temp backup dir removed; repo clean of drill residue, .orig files and stray fixture dirs.\n\nDoD 1. `enumerateProviderLockInventory` composes only shipped authority: real probeClaudeRuntime/probeCodexRuntime with capabilityStatus aliased (claude/codex), parseLaunchLockRegistration, bindsClaim, intakeProcessObservation. Every item binds class, projectTag, OPAQUE identity (`launch-lock:` / `process:`), observedAt, facts and a canonicalDigest sourceProofDigest. Quiet process honoured at :179 — `ended: processExit.kind !== \"UNOBSERVED\"` — and an unparsable lock or process record sets `complete = false` rather than shrinking the population. A provider is deliberately NOT a row, which is what keeps the empty case answerable.\n\nDoD 2. Workspace enumerator does the real walk (readdir recursive + readFile + sha256Hex) and seals through the shipped buildInputManifest, plus buildResultManifest where a result aspect is declared. Colliding refs are NOT merged — both rows are emitted and the aggregate refuses, proven at workspace-inventory.test.ts:260 with code RECOVERY_INVENTORY_EXTERNAL_IDENTITY_DUPLICATE / reason ITEM_REJECTED / layer INVENTORY_ADAPTER and items length 0. Drill 5 proves that arm is reddenable.\n\nDoD 3. All refusal arms driven END TO END through collectRecoveryInventory, never through a private mapping helper. Pinned as whole-object equality on {truth, code, reason, layer}: ENUMERATOR_UNAVAILABLE (lister throws, source port throws, unparsable governing claim, refusing input manifest, refusing result manifest, non-canonical observation clock), CAPABILITY_UNSUPPORTED (three arms, driven through the real capabilityStatus), RESULT_OVER_LIMIT (exactly 4097 items, with the generated length asserted first so a silently-empty sweep cannot pass), RESULT_TRUNCATED, NEGATIVE_PROOF_MISSING. Partial items never upgrade: provider-lock-inventory.test.ts:292 and workspace-inventory.test.ts:445 both assert the UNKNOWN class contributes itemCount 0 while the proven class keeps its rows.\n\nDoD 4. Registration seam proven WITHOUT editing the aggregate. `git log -1` over recovery-inventory.ts, index.ts and index-surface.test.ts still points at slice 1's 88a42e0 — zero edits by this task, so the architect's step-1 ruling held. Both modules export a factory returning a frozen {class, enumerate}; workspace-inventory.test.ts:398 composes the real caller-supplied tuple. Absent-registration case covered in BOTH directions (:415 and :427) with proofShapes whole-array equality, so the class cannot vanish from the report and a swapped proof cannot pass.\n\nDoD 5. Real bytes: mkdtempSync under tmpdir() (never inside the repo), real writeFileSync, rmSync recursive+force in afterEach. Probe doubles sit at the probes' own `port.report()` boundary, so real probe + real capabilityStatus stay in the path under test; no fixture reimplements probe, manifest or observation authority. Generated-case counts are HAND-WRITTEN literals, not derived from the array under test: 19 for PROVIDER_PROCESS_LAUNCH_LOCK, and 15 WORKSPACE + 4 provider in the workspace file — dropping an arm shrinks the count and fails.\n\nRAILS. Per-file physical lines by `grep -c ''`: provider .ts 248, workspace .ts 250 — both inside the 250 target. Test files 405/475 are not production sources (sibling recovery-inventory.test.ts is 615). Both .js bridges present, single `export * from \"./<name>.ts\";` line, trailing LF confirmed by `od -c`. supervisor/launch-lock.ts imported relatively and still absent from the root seam. No consumer outside the two tests, as intended. Global rail clause 1 satisfied by option (a): consumer named as daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa, edge correctly not landed here.",
+      "timestamp": "2026-08-09T19:43:24.666Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T19:36:27.361Z",
+  "updatedAt": "2026-08-09T19:44:55.017Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T18:57:07.679Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T19:44:55.017Z",
+    "wallClockMs": 2867338
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -210,7 +218,8 @@
   },
   "planApprovedAt": "2026-08-09T19:02:26.947Z",
   "contextFetchedBy": [
-    "worker-901cc711"
+    "worker-901cc711",
+    "qa-5be1a8d6"
   ],
   "workStartedAt": "2026-08-09T19:08:09.563Z",
   "reviewStartedAt": "2026-08-09T19:36:27.361Z",
@@ -227,5 +236,8 @@
     "packages/runner/src/recovery-inventory/workspace-inventory.test.ts",
     "packages/runner/src/recovery-inventory/workspace-inventory.ts",
     "packages/runner/src/recovery-inventory/workspace-inventory.js"
-  ]
+  ],
+  "completedAt": "2026-08-09T19:44:55.017Z",
+  "reviewCompletedAt": "2026-08-09T19:44:55.017Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-6b05be8f26cd4b7f.\n\nGATE re-run fresh/foreground: pnpm --filter @moe/runner typecheck && test -> exit 0, 45 files / 1403 tests (+2 files / +37 over the 43/1366 baseline, so the new tests demonstrably ran). No package-local red.\n\nPROVENANCE: commit 8ae6a05 bears this task's id but holds ZERO of its files (foreign whole-tree hook commit over apps/*). All six owned files tracked at HEAD inside 3eaaca1, verified per file via git rev-parse HEAD:<path>; git status over packages/runner/src empty, so committed bytes == gated bytes.\n\nFIVE MUTATION DRILLS I RAN MYSELF, each killed by exactly the named case, each restored from a backup outside the repo and re-verified by sha256 (not git diff): ended pinned true -> quiet-process arm red; provider negativeProof guard removed -> both NEGATIVE_PROOF_MISSING arms red; workspace digest minted from nothing -> its NEGATIVE_PROOF_MISSING arm red; workspace complete pinned true -> both RESULT_TRUNCATED arms red; workspace deduped colliding identities -> both duplicate arms red. No residue.\n\nDoD 1-6 evidenced. Refusals driven end to end through collectRecoveryInventory, never a private helper, pinned as whole-object equality on {truth, code, reason, layer}: UNAVAILABLE, CAPABILITY_UNSUPPORTED, OVER_LIMIT (exactly 4097, generated length asserted first), TRUNCATED, NEGATIVE_PROOF_MISSING, ITEM_REJECTED, UNREGISTERED both directions. Real mkdtemp bytes outside the repo; probe doubles at the probes' own port.report() boundary so real probes and capabilityStatus stay under test. Generated counts are hand-written literals (19; 15+4).\n\nRAILS: per-file grep -c '' 248 and 250. Both .js bridges present, od -c trailing LF. launch-lock off root seam. Zero aggregate edits: git log -1 over recovery-inventory.ts, index.ts, index-surface.test.ts still at slice 1's 88a42e0. Clause 1 option (a): consumer task-cf7fb147bd1c47698cbd65c9535370aa named."
 }

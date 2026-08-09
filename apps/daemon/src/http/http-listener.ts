@@ -173,13 +173,13 @@ async function serve(
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
   }
-  if (path === DOCUMENT_DOSSIER_PATH && request.method !== "POST") {
-    refuseRequest(response, "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID");
-    return;
-  }
   const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
   if (headerFault !== null) {
     refuseRequest(response, headerFault);
+    return;
+  }
+  if (path === DOCUMENT_DOSSIER_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID");
     return;
   }
   const body = await readBoundedBody(request);

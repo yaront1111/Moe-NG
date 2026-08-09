@@ -24,6 +24,8 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@24.13.3)(jsdom@30.0.1)(yaml@2.9.0)
 
+  adapters/ide-contract: {}
+
   apps/control-room:
     dependencies:
       '@moe/contracts':

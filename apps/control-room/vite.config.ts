@@ -10,7 +10,7 @@ import { defineConfig } from "vitest/config";
  * package script instead of the repository-wide test gate.
  *
  * Live-mode support (DEVELOPMENT_ONLY):
- * - `/command` and `/events/read` are proxied to the local daemon so the browser
+ * - Command, event, affordance, and document-dossier reads are proxied to the daemon so the browser
  *   stays same-origin; the proxy restores the Origin/Host pair the daemon's
  *   listener guards expect. Target override: MOE_DAEMON_ORIGIN.
  * - `__MOE_DEV_COMPAT_REPORT__` is built at config time from the generated
@@ -57,7 +57,9 @@ export default defineConfig(async () => ({
   plugins: [react()],
   server: {
     proxy: Object.fromEntries(
-      ["/command", "/events/read", "/affordances/read"].map((path) => [path, {
+      [
+        "/command", "/events/read", "/affordances/read", "/documents/dossier/read",
+      ].map((path) => [path, {
         changeOrigin: true,
         headers: { origin: DAEMON_ORIGIN },
         target: DAEMON_ORIGIN,
