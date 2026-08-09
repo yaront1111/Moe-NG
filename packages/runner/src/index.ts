@@ -148,6 +148,48 @@ export * from "./surface/claude-surface.js";
 export * from "./surface/evidence-surface.js";
 export * from "./surface/recovery-surface.js";
 
+/**
+ * The platform boundary seam. `PLATFORM_BOUNDARIES` and `PLATFORM_ERROR_CODES`
+ * are the frozen vocabulary an OS conformance task schedules faults against.
+ * `PLATFORM_LAYERS` beside `PLATFORM_LINUX_LAYER` is what lets a consumer tell
+ * the OS-neutral shape gate's refusal from the Linux classifier's — a
+ * distinction that is the whole reason the two modules are separate, and one
+ * macOS will need in order NOT to inherit a Linux verdict. `platformFailure`
+ * and `isPlatformFailure` narrow a refusal without redeclaring its shape, and
+ * `observeLinuxPlatform` / `classifyLinuxBoundary` are the whole-observation
+ * and single-boundary entry points. Named explicitly rather than `export *`:
+ * this seam is a reviewed decision and must not grow on its own.
+ */
+export {
+  PLATFORM_BOUNDARIES,
+  PLATFORM_ERROR_CODES,
+  PLATFORM_LAYERS,
+  PLATFORM_OBSERVATION_VERSION,
+  PLATFORM_TRUTH_CLASSES,
+  isPlatformFailure,
+  platformFailure,
+  type PlatformBoundary,
+  type PlatformBoundaryVerdict,
+  type PlatformErrorCode,
+  type PlatformFactEnvelope,
+  type PlatformFailure,
+  type PlatformHostIdentity,
+  type PlatformLayer,
+  type PlatformObservation,
+  type PlatformTruthClass,
+} from "./platform/platform-contract.js";
+export {
+  LINUX_SUPPORTED_ARCHITECTURES,
+  PLATFORM_LINUX_LAYER,
+  classifyLinuxBoundary,
+  observeLinuxPlatform,
+  type LinuxBoundaryFacts,
+  type LinuxClassificationContext,
+  type LinuxPathFact,
+  type LinuxWorkspaceFact,
+  type ObserveLinuxPlatformInput,
+} from "./platform/linux-observation.js";
+
 export {
   MAX_WORKSPACE_ENTRIES,
   RUNNER_WORKSPACE_ERROR_CODES,

@@ -41,6 +41,12 @@ import type {
   ScopeObservation, VerificationRecipe, VerifierIdentity, WorkspaceInputManifest,
   WorkspaceResultManifest,
 } from "@moe/runner";
+/** The platform boundary seam, through the same root. */
+import type {
+  LinuxBoundaryFacts, LinuxClassificationContext, LinuxPathFact, ObserveLinuxPlatformInput,
+  PlatformBoundary, PlatformBoundaryVerdict, PlatformFactEnvelope, PlatformFailure,
+  PlatformHostIdentity, PlatformLayer, PlatformObservation, PlatformTruthClass,
+} from "@moe/runner";
 
 it("resolves the self-referencing package root specifier @moe/runner", () => {
   expect(typeof runner.observeScope).toBe("function");
@@ -49,10 +55,11 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
 type ExportKind = "array" | "function" | "number" | "regexp" | "string";
 /**
  * Hand-transcribed: 26 pre-existing runner values, 40 supervisor values, 50
- * recovery / evidence / Claude observation values, and the 8 values the verifier
- * process wrapper publishes. Read off the module sources, never off the
- * namespace under test — a list derived from what it checks asserts only that
- * the namespace equals itself.
+ * recovery / evidence / Claude observation values, the 8 values the verifier
+ * process wrapper publishes, and the 11 values the platform boundary seam
+ * publishes. Read off the module sources, never off the namespace under test —
+ * a list derived from what it checks asserts only that the namespace equals
+ * itself.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ADMITTED_EFFECT_TRANSITIONS", "array"], ["ARTIFACT_ADDRESS_PATTERN", "regexp"],
@@ -123,11 +130,18 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["RUNTIME_PINNING_METHODS", "array"], ["buildProviderRuntimeObservation", "function"],
   ["observationDigestInput", "function"], ["reconcileClaudeRun", "function"],
   ["runtimePinningIsAuthoritative", "function"],
+  // platform/: the OS-neutral boundary vocabulary and the Linux classifier.
+  ["LINUX_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_BOUNDARIES", "array"],
+  ["PLATFORM_ERROR_CODES", "array"], ["PLATFORM_LAYERS", "array"],
+  ["PLATFORM_LINUX_LAYER", "string"], ["PLATFORM_OBSERVATION_VERSION", "string"],
+  ["PLATFORM_TRUTH_CLASSES", "array"], ["classifyLinuxBoundary", "function"],
+  ["isPlatformFailure", "function"], ["observeLinuxPlatform", "function"],
+  ["platformFailure", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(124);
+  expect(EXPECTED_EXPORTS.length).toBe(135);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -928,4 +942,60 @@ it("pins the published Claude capability and stream vocabularies by value", () =
   expect([...runner.CLAUDE_STREAM_DISPOSITIONS]).toContain("INCOMPLETE");
   expect([...runner.CLAUDE_STREAM_ANOMALIES]).toContain("TRUNCATION");
   expect(runner.CLAUDE_STREAM_RECORD_VERSION).toBe("moe-claude-stream-record/1");
+});
+
+/**
+ * The platform seam is DRIVEN here, not merely resolved. Reaching a symbol
+ * proves a name is published; building an input, getting a verdict back and
+ * narrowing a refusal proves the published type closure is actually sufficient
+ * to compose against — which is the thing an OS conformance task needs and the
+ * thing a cardinality check cannot tell you.
+ */
+it("lets a consumer drive the Linux platform seam using root exports alone", () => {
+  const host: PlatformHostIdentity = { os: "linux", arch: "x64", osVersion: "6.8.0-41-generic" };
+  const context: LinuxClassificationContext = {
+    host,
+    asOf: "2026-08-09T12:00:00.000Z",
+    maxFactAgeMs: 60_000,
+  };
+  const facts: LinuxBoundaryFacts = {
+    PROVIDER_LAUNCH: null, GIT_WORKSPACE: null, PATH_SYMLINK: null, LOCK: null,
+    SIGNAL_CANCELLATION: null, RUNTIME_CLOSURE: null, CRASH_RECOVERY: null,
+  };
+  const input: ObserveLinuxPlatformInput = { ...context, facts };
+
+  const observation: PlatformObservation = runner.observeLinuxPlatform(input);
+  const aggregate: PlatformTruthClass = observation.truthClass;
+  expect(aggregate).toBe("UNKNOWN");
+  expect(observation.verdicts.map((verdict: PlatformBoundaryVerdict) => verdict.boundary))
+    .toEqual([...runner.PLATFORM_BOUNDARIES]);
+
+  const absent: PlatformFailure | null = observation.verdicts[0]?.failure ?? null;
+  expect(absent?.code).toBe("PLATFORM_FACT_ABSENT");
+  const layer: PlatformLayer | undefined = absent?.layer;
+  expect(layer).toBe(runner.PLATFORM_LINUX_LAYER);
+
+  // A coherent on-host fact proves through the root, so PROVEN is reachable and
+  // the UNKNOWN above is a judgement rather than the only answer available.
+  const boundary: PlatformBoundary = "PATH_SYMLINK";
+  const fact: LinuxPathFact = {
+    path: "/srv/moe/work", symlinkTarget: null, resolvedPath: "/srv/moe/work",
+  };
+  const envelope: PlatformFactEnvelope<LinuxPathFact> = {
+    host, observedAt: "2026-08-09T11:59:59.000Z", truthClass: "PROVEN", fact,
+  };
+  const verdict = runner.classifyLinuxBoundary(boundary, envelope, context);
+  if (runner.isPlatformFailure(verdict)) throw new Error("a known boundary must return a verdict");
+  expect([verdict.boundary, verdict.truthClass, verdict.failure]).toEqual([
+    "PATH_SYMLINK", "PROVEN", null,
+  ]);
+
+  // The other layer is reachable from the root too: an unusable boundary NAME is
+  // the OS-neutral contract's refusal, not Linux's.
+  const refused = runner.classifyLinuxBoundary("NETWORK", envelope, context);
+  if (!runner.isPlatformFailure(refused)) throw new Error("an unknown boundary must refuse");
+  expect([refused.code, refused.layer, refused.boundary]).toEqual([
+    "PLATFORM_BOUNDARY_UNKNOWN", "PLATFORM_CONTRACT", null,
+  ]);
+  expect(runner.PLATFORM_ERROR_CODES).toContain(refused.code);
 });
