@@ -61,9 +61,15 @@ export async function runDaemonMain(
 
   const host = flag(argv, "host");
   const port = parsePort(flag(argv, "port"));
+  // Operator-supplied CSRF token for local development, so an external client
+  // (e.g. the control room dev server) can present it. Design 19.2 still holds:
+  // the value is never logged and never travels on a URL. Absent, the daemon
+  // mints a random in-process token exactly as before.
+  const csrfToken = flag(argv, "csrf-token");
   const started = await startDaemon({
     dependencies: provider,
     log,
+    ...(csrfToken === null ? {} : { csrfToken }),
     ...(host === null ? {} : { host }),
     ...(port === undefined ? {} : { port }),
   });

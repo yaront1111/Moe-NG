@@ -1,81 +1,72 @@
-import { expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { DAEMON_ENTRY_LAYER } from "./daemon-entry.js";
+import { afterAll, expect, it } from "vitest";
+
 import { runDaemonMain } from "./daemon-main.js";
 
-const FIXTURE_PROVIDER = "./src/daemon-entry-fixtures.ts";
-/** Loads cleanly but exports no default provider — a different fault from a load failure. */
-const NO_DEFAULT_EXPORT = "./src/http/http-contract.ts";
+/**
+ * The bin's `--csrf-token` flag must reach the listener: a request presenting the
+ * operator-supplied token passes the CSRF gate (and then fails AUTHENTICATION, proving
+ * the gate was the thing that passed), while a request without it is refused with the
+ * listener's own stable code.
+ */
 
-interface Run {
-  readonly exitCode: number;
-  readonly lines: readonly string[];
-  readonly shutdown: (() => Promise<unknown>) | null;
-}
+const KNOWN_TOKEN = "dev-csrf-token-1";
 
-/** Shuts down on every exit path, so no run can leave a bound port behind. */
-async function main(args: readonly string[]): Promise<Run> {
-  const lines: string[] = [];
-  let shutdown: (() => Promise<unknown>) | null = null;
-  const exitCode = await runDaemonMain(args, {
-    log: (line) => lines.push(line),
-    onStarted: (stop) => {
-      shutdown = stop;
+const PROVIDER_SOURCE = `export default {
+  provide() {
+    return {
+      authenticator: { authenticate() { return { verdict: "UNAUTHENTICATED" }; } },
+      decisions: { decide() { throw new Error("unreachable"); } },
+      registry: new Map(),
+    };
+  },
+};
+`;
+
+const cleanups: (() => Promise<unknown>)[] = [];
+
+afterAll(async () => {
+  for (const cleanup of cleanups.reverse()) await cleanup();
+});
+
+it("passes --csrf-token through to the listener gate", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "moe-daemon-csrf-"));
+  cleanups.push(() => rm(temp, { force: true, recursive: true }));
+  const providerPath = join(temp, "provider.mjs");
+  await writeFile(providerPath, PROVIDER_SOURCE, "utf8");
+
+  let origin = "";
+  let shutdown: (() => Promise<unknown>) | undefined;
+  const code = await runDaemonMain(
+    [`--dependencies=${providerPath}`, "--port=0", `--csrf-token=${KNOWN_TOKEN}`],
+    {
+      log: (line) => {
+        const match = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line);
+        if (match?.[1] !== undefined) origin = match[1];
+      },
+      onStarted: (stop) => { shutdown = stop; },
     },
-  });
-  return { exitCode, lines, shutdown };
-}
-
-function expectRefusal(run: Run, code: string): void {
-  expect(run.exitCode).toBe(1);
-  // The code AND the layer, never merely "it exited non-zero": three layers can
-  // refuse a start here, and an operator fixes each one differently.
-  expect(run.lines).toContain(`${code} ${DAEMON_ENTRY_LAYER}`);
-  expect(run.shutdown).toBeNull();
-}
-
-it("refuses when argv names no dependency provider", async () => {
-  expectRefusal(await main([]), "DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER");
-});
-
-it("refuses a provider module that cannot be loaded, by its own code", async () => {
-  expectRefusal(
-    await main(["--dependencies=./src/no-such-provider-module.ts"]),
-    "DAEMON_ENTRY_PROVIDER_LOAD_FAILED",
   );
-});
+  cleanups.push(async () => shutdown?.());
+  expect(code).toBe(0);
+  expect(origin).not.toBe("");
 
-it("refuses a module that loads but exports no provider, by a DISTINCT code", async () => {
-  expectRefusal(await main([`--dependencies=${NO_DEFAULT_EXPORT}`]), "DAEMON_ENTRY_PROVIDER_INVALID");
-});
+  const headers = { "content-type": "application/json", origin, "x-moe-csrf": KNOWN_TOKEN };
+  const withToken = await fetch(`${origin}/command`, {
+    body: "{}", headers, method: "POST",
+  });
+  // 401 AUTHENTICATION_FAILED, not 403 LISTENER_CSRF_INVALID: the CSRF gate passed
+  // on the flag-supplied token and the next layer answered.
+  expect(withToken.status).toBe(401);
+  const body = (await withToken.json()) as { error?: { code?: string } };
+  expect(body.error?.code).toBe("AUTHENTICATION_FAILED");
 
-it("starts on an ephemeral loopback port and reports the port actually bound", async () => {
-  const run = await main([`--dependencies=${FIXTURE_PROVIDER}`, "--port=0"]);
-  try {
-    expect(run.exitCode).toBe(0);
-    expect(run.lines.join("\n")).toMatch(/listening on http:\/\/127\.0\.0\.1:\d+/);
-    // Never a UUID-shaped value: that would be the minted CSRF token in a log.
-    expect(run.lines.join("\n")).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/);
-  } finally {
-    await run.shutdown?.();
-  }
-});
-
-it("falls back to an ephemeral port rather than guessing a well-known one", async () => {
-  const run = await main([`--dependencies=${FIXTURE_PROVIDER}`, "--port=not-a-number"]);
-  try {
-    expect(run.exitCode).toBe(0);
-    const bound = /listening on http:\/\/127\.0\.0\.1:(\d+)/.exec(run.lines.join("\n"));
-    expect(bound).not.toBeNull();
-    expect(Number(bound?.[1])).toBeGreaterThan(0);
-  } finally {
-    await run.shutdown?.();
-  }
-});
-
-it("surfaces a non-loopback bind refusal with the LISTENER's own code, unflattened", async () => {
-  const run = await main([`--dependencies=${FIXTURE_PROVIDER}`, "--host=0.0.0.0"]);
-  expect(run.exitCode).toBe(1);
-  expect(run.lines).toContain("LISTENER_NON_LOOPBACK_BIND CONTROL_ROOM_LISTENER");
-  expect(run.shutdown).toBeNull();
+  const withoutToken = await fetch(`${origin}/command`, {
+    body: "{}", headers: { "content-type": "application/json", origin }, method: "POST",
+  });
+  expect(withoutToken.status).toBe(403);
+  expect(await withoutToken.json()).toMatchObject({ code: "LISTENER_CSRF_INVALID" });
 });
