@@ -1,0 +1,54 @@
+:root {
+  --cr-rail: #141c2b;
+  --cr-rail-soft: #202a3d;
+  --cr-canvas: #eef1f3;
+  --cr-surface: #fbfcfd;
+  --cr-surface-muted: #f4f6f7;
+  --cr-ink: #1d2633;
+  --cr-ink-soft: #5d6978;
+  --cr-line: #d8dee5;
+  --cr-line-strong: #b9c3ce;
+  --cr-action: #4b66d2;
+  --cr-action-deep: #324aa9;
+  --cr-link: #324aa9;
+  --cr-attention: #c8783c;
+  --cr-attention-text: #93491e;
+  --cr-attention-wash: #f7eadf;
+  --cr-success-wash: #e4f1ec;
+  --cr-unknown-wash: #faeaf5;
+  --cr-white: #ffffff;
+  --cr-rail-text: #e8edf6;
+  --cr-truth-observed: #5e6d74;
+  --cr-truth-agent: #9a621b;
+  --cr-truth-verified: #176f5b;
+  --cr-truth-human: #3c65d4;
+  --cr-truth-unknown: #b33b8f;
+  --cr-font-display: "Aptos Display", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --cr-font-body: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --cr-font-utility: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --cr-radius-xs: 0.35rem;
+  --cr-radius-sm: 0.65rem;
+  --cr-radius-md: 1rem;
+  --cr-radius-lg: 1.35rem;
+  --cr-shadow-low: 0 1px 2px rgb(20 28 43 / 7%), 0 8px 22px rgb(20 28 43 / 5%);
+  --cr-shadow-high: 0 24px 80px rgb(20 28 43 / 22%);
+  --cr-ease: cubic-bezier(0.2, 0.72, 0.26, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cr-canvas: #111820;
+    --cr-surface: #18212b;
+    --cr-surface-muted: #202a34;
+    --cr-ink: #edf2f6;
+    --cr-ink-soft: #a9b4bf;
+    --cr-line: #2f3b47;
+    --cr-line-strong: #52606d;
+    --cr-link: #9bafff;
+    --cr-attention-text: #e5a06d;
+    --cr-attention-wash: #38271f;
+    --cr-success-wash: #17332c;
+    --cr-unknown-wash: #351e32;
+    --cr-shadow-low: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 18%);
+  }
+}

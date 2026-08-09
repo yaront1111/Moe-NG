@@ -145,12 +145,14 @@ export function useKeyboardRouter(onAction: (action: KeyboardAction) => void): v
 type ProjectionAction = Extract<KeyboardAction, "board" | "graph" | "timeline">;
 
 export interface ShellKeyboardController {
+  readonly collapseInspector: () => void;
   readonly closeHelp: () => void;
   readonly focusMain: () => void;
   readonly helpOpen: boolean;
   readonly inspectorExpanded: boolean;
   readonly mainRef: RefObject<HTMLElement | null>;
   readonly rootRef: RefObject<HTMLDivElement | null>;
+  readonly toggleInspector: () => void;
 }
 
 function focusWithin(root: ParentNode | null, selector: string): void {
@@ -159,30 +161,62 @@ function focusWithin(root: ParentNode | null, selector: string): void {
 
 export function useShellKeyboardController(
   onTab: (tab: ProjectionAction) => void,
+  initialInspectorExpanded = true,
 ): ShellKeyboardController {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const helpReturnFocus = useRef<HTMLElement | null>(null);
+  const helpRestorePending = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [inspectorExpanded, setInspectorExpanded] = useState(true);
+  const [inspectorExpanded, setInspectorExpanded] = useState(initialInspectorExpanded);
   const handleAction = useCallback((action: KeyboardAction): void => {
+    const modal = rootRef.current
+      ?.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
+    const inspectorMayOpenHelp = action === "help"
+      && modal?.getAttribute("data-testid") === "cr.shell.inspector";
+    if (modal !== null && modal !== undefined && !inspectorMayOpenHelp) return;
     switch (action) {
       case "board": case "graph": case "timeline": onTab(action); return;
       case "goals": case "approvals":
         focusWithin(rootRef.current, `[data-testid='cr.nav.${action}']`); return;
       case "search":
         focusWithin(rootRef.current, "[role='searchbox'], input[type='search']"); return;
-      case "help": setHelpOpen(true); return;
+      case "help":
+        helpReturnFocus.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        helpRestorePending.current = false;
+        setHelpOpen(true);
+        return;
       case "collapse-inspector": setInspectorExpanded(false); return;
       case "expand-inspector": setInspectorExpanded(true); return;
     }
   }, [onTab]);
+  const closeHelp = useCallback((): void => {
+    helpRestorePending.current = true;
+    setHelpOpen(false);
+  }, []);
+  useEffect(() => {
+    if (helpOpen || !helpRestorePending.current) return;
+    const target = helpReturnFocus.current;
+    if (target?.isConnected === true && target.closest("[hidden]") === null) target.focus();
+    else mainRef.current?.focus();
+    helpReturnFocus.current = null;
+    helpRestorePending.current = false;
+  }, [helpOpen]);
+  const collapseInspector = useCallback((): void => { setInspectorExpanded(false); }, []);
+  const toggleInspector = useCallback((): void => {
+    setInspectorExpanded((expanded) => !expanded);
+  }, []);
   useKeyboardRouter(handleAction);
   return {
-    closeHelp: () => setHelpOpen(false),
+    collapseInspector,
+    closeHelp,
     focusMain: () => mainRef.current?.focus(),
     helpOpen,
     inspectorExpanded,
     mainRef,
     rootRef,
+    toggleInspector,
   };
 }

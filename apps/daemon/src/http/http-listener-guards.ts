@@ -17,6 +17,8 @@ export const CONTROL_ROOM_LISTENER_LAYER = "CONTROL_ROOM_LISTENER" as const;
  * exhaustively; a code produced here but absent from this list is a defect.
  */
 export const LISTENER_REFUSAL_CODES = Object.freeze([
+  "LISTENER_AFFORDANCE_REQUEST_INVALID",
+  "LISTENER_AFFORDANCES_UNAVAILABLE",
   "LISTENER_BODY_TOO_LARGE",
   "LISTENER_CSRF_INVALID",
   "LISTENER_HOST_INVALID",
@@ -68,6 +70,8 @@ export function refuse(code: ListenerRefusalCode): ListenerRefused {
 }
 
 export function statusFor(code: ListenerRefusalCode): number {
+  if (code === "LISTENER_AFFORDANCE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_AFFORDANCES_UNAVAILABLE") return 503;
   if (code === "LISTENER_BODY_TOO_LARGE") return 413;
   if (code === "LISTENER_REQUEST_FAILED") return 500;
   if (code === "LISTENER_ROUTE_UNKNOWN") return 404;

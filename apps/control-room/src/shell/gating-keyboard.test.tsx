@@ -100,6 +100,8 @@ describe("disconnected disables rather than hides", () => {
     renderFrame(dropped);
     const banner = screen.getByTestId("cr.banner.disconnected");
     expect(["status", "alert"]).toContain(banner.getAttribute("role"));
+    expect(screen.getByTestId("cr.shell.statusstrip").getAttribute("data-stale")).toBe("true");
+    expect(screen.getByTestId("cr.shell.stalelabel")).toBeTruthy();
     expect(actionsIn().length).toBe(dropped.nextAllowedCommands.length);
     for (const action of actionsIn()) expect(action.disabled).toBe(true);
   });
@@ -183,10 +185,13 @@ describe("keyboard reachability and provenance drill-down", () => {
     );
     await user.keyboard("gt");
     expect(screen.getByTestId("cr.shell.tab.timeline").getAttribute("aria-pressed")).toBe("true");
+    await user.click(screen.getByTestId("cr.shell.tab.board"));
     await user.keyboard("a");
     expect(document.activeElement).toBe(screen.getByTestId("cr.nav.approvals"));
     await user.keyboard("?");
     expect(screen.getByTestId("cr.shell.help").getAttribute("role")).toBe("dialog");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("cr.shell.help")).toBeNull();
     await user.keyboard("[BracketLeft]");
     expect(screen.getByTestId("cr.shell.inspector").hasAttribute("hidden")).toBe(true);
     await user.keyboard("[BracketRight]");
@@ -217,6 +222,34 @@ describe("keyboard reachability and provenance drill-down", () => {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
     expect(document.querySelectorAll("[data-testid^='cr.graph.']").length).toBe(0);
+  });
+
+  it("uses an honest timeline placeholder when no timeline projection is supplied", async () => {
+    const user = userEvent.setup();
+    render(
+      <ShellFrame affordance={affordanceFor("CONNECTED")}>
+        <div data-testid="cr.test.boardprojection">Board projection</div>
+      </ShellFrame>,
+    );
+    await user.click(screen.getByTestId("cr.shell.tab.timeline"));
+    expect(screen.getByTestId("cr.shell.timelineplaceholder")).toBeTruthy();
+    expect(screen.queryByTestId("cr.test.boardprojection")).toBeNull();
+  });
+
+  it("treats keyboard help as a modal and restores the invoking focus", async () => {
+    const user = userEvent.setup();
+    renderFrame(affordanceFor("CONNECTED"));
+    const invoker = screen.getByTestId("cr.nav.goals");
+    invoker.focus();
+    await user.keyboard("?");
+    const help = screen.getByTestId("cr.shell.help");
+    expect(help.getAttribute("aria-modal")).toBe("true");
+    expect(document.activeElement).toBe(within(help).getByRole("button", { name: /close/iu }));
+    await user.tab();
+    expect(help.contains(document.activeElement)).toBe(true);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("cr.shell.help")).toBeNull();
+    expect(document.activeElement).toBe(invoker);
   });
 
   it("reaches every action by tabbing in DOM order", async () => {

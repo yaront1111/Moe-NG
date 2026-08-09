@@ -38,6 +38,9 @@ describe("control-room scaffold mounts", () => {
     vi.resetModules();
     await act(async () => void (await import("./main.js")));
     expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
+    expect(within(container).getByTestId("cr.shell.context.title").textContent)
+      .toBe("Ship the J1 vertical slice");
+    expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
     const main = await import("./main.js");
     expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
     container.remove();
@@ -49,13 +52,91 @@ describe("control-room scaffold mounts", () => {
     await expect(import("./main.js")).rejects.toThrow("CONTROL_ROOM_ROOT_MISSING");
   });
 
-  it("renders one labelled surface per fixture surface", () => {
+  it("exposes every fixture-backed surface through the workspace and rail", async () => {
+    const user = userEvent.setup();
     render(<ControlRoomScaffold />);
-    for (const surface of CONTROL_ROOM_FIXTURES.surfaces) {
-      expect(screen.getByTestId(`cr.surface.${surface.surfaceId}`)).toBeTruthy();
-    }
+    for (const surfaceId of ["goals", "board", "node", "evidence"] as const)
+      expect(screen.getByTestId(`cr.surface.${surfaceId}`)).toBeTruthy();
+    await user.click(screen.getByTestId("cr.nav.approvals"));
+    expect(screen.getByTestId("cr.surface.approval")).toBeTruthy();
+    await user.click(screen.getByTestId("cr.nav.health"));
+    expect(screen.getByTestId("cr.surface.doctor")).toBeTruthy();
     expect(CONTROL_ROOM_FIXTURES.surfaces.map((surface) => surface.surfaceId))
       .toEqual([...SURFACE_IDS]);
+  });
+});
+
+describe("production control-room composition", () => {
+  it("mounts the operational ledger shell instead of the fixture placeholder", () => {
+    render(<ControlRoomScaffold />);
+
+    const root = screen.getByTestId("cr.shell.root");
+    expect(root.getAttribute("data-theme")).toBe("ledger");
+    expect(screen.getByTestId("cr.shell.brand").textContent).toContain("Moe");
+    expect(screen.getByTestId("cr.shell.navrail")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.contextbar")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.context.title").textContent)
+      .toBe("Ship the J1 vertical slice");
+    expect(screen.getByTestId("cr.shell.main")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.inspector")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.statusstrip")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.statusstrip").getAttribute("data-connection"))
+      .toBe("DISCONNECTED");
+    expect(screen.getByTestId("cr.banner.disconnected")).toBeTruthy();
+    expect(screen.getByTestId("cr.shell.eventspine")).toBeTruthy();
+  });
+
+  it("opens on the board-first goal workspace and reaches every rail destination", async () => {
+    const user = userEvent.setup();
+    render(<ControlRoomScaffold />);
+
+    expect(screen.getByTestId("cr.nav.goals").getAttribute("aria-current")).toBe("page");
+    expect(screen.getByTestId("cr.surface.board")).toBeTruthy();
+
+    const destinations = [
+      ["approvals", "cr.surface.approval"],
+      ["runs", "cr.surface.runs"],
+      ["resources", "cr.surface.resources"],
+      ["health", "cr.surface.doctor"],
+      ["policy", "cr.surface.policy"],
+    ] as const;
+    for (const [nav, surface] of destinations) {
+      await user.click(screen.getByTestId(`cr.nav.${nav}`));
+      expect(screen.getByTestId(surface)).toBeTruthy();
+      expect(screen.getByTestId(`cr.nav.${nav}`).getAttribute("aria-current")).toBe("page");
+    }
+
+    expect(screen.getByTestId("cr.preview.inspector.empty").textContent)
+      .toContain("No claim focused");
+    expect(screen.queryByTestId("cr.surface.node")).toBeNull();
+
+    await user.click(screen.getByTestId("cr.nav.goals"));
+    expect(screen.getByTestId("cr.surface.board")).toBeTruthy();
+  });
+
+  it("keeps goal creation behind an explicit progressive-disclosure control", () => {
+    render(<ControlRoomScaffold />);
+    const composer = screen.getByTestId("cr.workspace.goalcomposer");
+    expect(composer.tagName).toBe("DETAILS");
+    expect((composer as HTMLDetailsElement).open).toBe(false);
+    expect(within(composer).getByText("Start another goal")).toBeTruthy();
+    expect(within(composer).getByText(/attach the daemon/iu)).toBeTruthy();
+    expect(within(composer).queryByTestId("cr.goals.create")).toBeNull();
+  });
+
+  it("keeps preview affordances visible but disabled without live authority", async () => {
+    const user = userEvent.setup();
+    render(<ControlRoomScaffold />);
+    await user.click(screen.getByTestId("cr.nav.approvals"));
+    const action = screen.getByTestId("cr.action.approval-decide.approve") as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+  });
+
+  it("exposes projections as a pressed-button group without claiming full tab semantics", () => {
+    render(<ControlRoomScaffold />);
+    expect(screen.getByRole("group", { name: "Goal projection" })).toBeTruthy();
+    expect(screen.queryAllByRole("tab")).toEqual([]);
+    expect(screen.getByTestId("cr.shell.tab.board").getAttribute("aria-pressed")).toBe("true");
   });
 });
 
@@ -146,16 +227,32 @@ describe("every fact wrapper carries a chip descendant", () => {
     expect(container.querySelectorAll("[data-testid^='cr.fact.']").length).toBe(1);
   });
 
-  it("holds the invariant across the whole scaffold", () => {
-    const { container } = render(<ControlRoomScaffold />);
-    const wrappers = container.querySelectorAll("[data-testid^='cr.fact.']");
-    expect(wrappers.length)
-      .toBe(CONTROL_ROOM_FIXTURES.surfaces.reduce((n, s) => n + s.facts.length, 0));
-    expect(wrappers.length).toBeGreaterThanOrEqual(6);
-    // Both prefixes must count elements exactly: one chip per fact, no more.
-    expect(container.querySelectorAll("[data-testid^='cr.chip.']").length).toBe(wrappers.length);
-    for (const wrapper of wrappers) {
-      expect(wrapper.querySelector("[data-testid^='cr.chip.']")).not.toBeNull();
+  it("holds the invariant across every routed fixture surface", async () => {
+    const user = userEvent.setup();
+    render(<ControlRoomScaffold />);
+    const assertSurfaceFacts = (surfaceId: string, expectedFactIds: readonly string[]): void => {
+      const surface = screen.getByTestId(surfaceId);
+      const wrappers = surface.querySelectorAll("[data-testid^='cr.fact.']");
+      expect(wrappers.length).toBeGreaterThanOrEqual(expectedFactIds.length);
+      for (const factId of expectedFactIds)
+        expect(within(surface).getByTestId(`cr.fact.${factId}`)).toBeTruthy();
+      for (const wrapper of wrappers)
+        expect(wrapper.querySelectorAll("[data-testid^='cr.chip.']").length).toBe(1);
+      for (const chip of surface.querySelectorAll("[data-testid^='cr.chip.']"))
+        expect(chip.getAttribute("data-truth-class")).not.toBeNull();
+    };
+
+    assertSurfaceFacts("cr.workspace.goal", [
+      "goal.title", "goal.progress", "board.frontier", "board.readiness",
+    ]);
+    const destinations = [
+      ["approvals", "cr.surface.approval", ["approval.request", "approval.validity"]],
+      ["runs", "cr.surface.runs", ["run.node.state", "run.node.attempt"]],
+      ["health", "cr.surface.doctor", ["doctor.store", "doctor.relay"]],
+    ] as const;
+    for (const [destination, surfaceId, factIds] of destinations) {
+      await user.click(screen.getByTestId(`cr.nav.${destination}`));
+      assertSurfaceFacts(surfaceId, factIds);
     }
   });
 });

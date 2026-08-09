@@ -8,7 +8,6 @@
   },
   "dependencies": {
     "@moe/contracts": "workspace:*",
-    "@moe/core": "workspace:*",
     "@moe/store": "workspace:*"
   },
   "scripts": {

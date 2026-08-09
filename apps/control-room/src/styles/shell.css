@@ -1,0 +1,129 @@
+[data-theme="ledger"] {
+  background: var(--cr-canvas);
+  color: var(--cr-ink);
+  isolation: isolate;
+}
+
+[data-testid="cr.shell.skiplink"] {
+  background: var(--cr-white);
+  border-radius: var(--cr-radius-sm);
+  color: #17202d;
+  font-weight: 700;
+  margin-inline-start: 4.75rem;
+  padding: 0.7rem 1rem;
+}
+
+[data-testid="cr.shell.navrail"] {
+  align-items: center;
+  background: var(--cr-rail);
+  border-inline-end: 1px solid rgb(255 255 255 / 8%);
+  color: var(--cr-rail-text);
+  padding: 0.65rem 0.45rem;
+  position: relative;
+  z-index: 30;
+}
+
+.cr-shell-brand {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  margin-block: 0.15rem 1.4rem;
+  position: relative;
+}
+
+.cr-shell-brand-mark {
+  align-items: center;
+  background: var(--cr-rail-text);
+  border-radius: 0.8rem 0.8rem 0.25rem;
+  color: var(--cr-rail);
+  display: flex;
+  font-family: var(--cr-font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  inline-size: 2.55rem;
+  justify-content: center;
+  min-block-size: 2.55rem;
+}
+
+.cr-shell-brand-name {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.cr-shell-nav-items {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.45rem;
+  inline-size: 100%;
+}
+
+.cr-shell-nav-items button {
+  align-items: center;
+  background: transparent;
+  border-radius: var(--cr-radius-sm);
+  color: #9da9bb;
+  display: flex;
+  inline-size: 100%;
+  justify-content: center;
+  min-block-size: 3rem;
+  padding: 0;
+  position: relative;
+  transition: background 140ms var(--cr-ease), color 140ms var(--cr-ease);
+}
+
+.cr-shell-nav-items button:hover,
+.cr-shell-nav-items button:focus-visible {
+  background: rgb(255 255 255 / 8%);
+  color: var(--cr-white);
+}
+
+.cr-shell-nav-items button[aria-current="page"] {
+  background: var(--cr-rail-soft);
+  box-shadow: inset 3px 0 0 var(--cr-attention);
+  color: var(--cr-white);
+}
+
+.cr-shell-nav-icon {
+  block-size: 1.35rem;
+  inline-size: 1.35rem;
+}
+
+.cr-shell-nav-label {
+  background: var(--cr-rail);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: var(--cr-radius-xs);
+  box-shadow: var(--cr-shadow-low);
+  color: var(--cr-white);
+  font-size: 0.78rem;
+  font-weight: 650;
+  inset: 50% auto auto calc(100% + 0.7rem);
+  opacity: 0;
+  padding: 0.42rem 0.6rem;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-0.25rem, -50%);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+  z-index: 90;
+}
+
+.cr-shell-nav-items button:hover .cr-shell-nav-label,
+.cr-shell-nav-items button:focus-visible .cr-shell-nav-label {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.cr-shell-rail-signature {
+  color: #68758a;
+  display: grid;
+  font-family: var(--cr-font-utility);
+  font-size: 0.55rem;
+  gap: 0.08rem;
+  letter-spacing: 0.12em;
+  padding-block-end: 0.35rem;
+}

@@ -1,0 +1,72 @@
+[data-testid="cr.surface.board"] {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(5, minmax(7.25rem, 1fr));
+  overflow-x: auto;
+  padding-block-end: 0.6rem;
+}
+
+[data-testid="cr.surface.board"] > [data-testid^="cr.factslot."] {
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-sm);
+  grid-column: span 2;
+  padding-inline: 0.8rem;
+}
+
+[data-testid="cr.surface.board"] > [data-testid^="cr.factslot."]:nth-child(2) {
+  grid-column: span 3;
+}
+
+[data-testid^="cr.board.column."] {
+  background: color-mix(in srgb, var(--cr-surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cr-line) 76%, transparent);
+  border-radius: var(--cr-radius-md);
+  min-block-size: 18rem;
+  min-inline-size: 7.25rem;
+  padding: 0.55rem;
+  position: relative;
+}
+
+[data-testid^="cr.board.column."] > h2 {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  margin: 0;
+  padding: 0.4rem 0.35rem 0.75rem;
+  text-transform: uppercase;
+}
+
+[data-testid^="cr.board.column."] > h2::after {
+  background: var(--cr-line-strong);
+  block-size: 0.32rem;
+  border-radius: 50%;
+  content: "";
+  inline-size: 0.32rem;
+  inset: 0.7rem 0.65rem auto auto;
+  position: absolute;
+}
+
+[data-testid^="cr.board.card."] {
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-line);
+  border-block-start: 3px solid var(--cr-attention);
+  border-radius: var(--cr-radius-sm);
+  box-shadow: var(--cr-shadow-low);
+  padding: 0.85rem;
+}
+
+[data-testid="cr.board.card.name"] {
+  font-size: 0.9rem;
+  line-height: 1.25;
+  margin-block-end: 1rem;
+}
+
+[data-testid="cr.board.card.phase"] {
+  color: var(--cr-ink-soft);
+  display: block;
+  font-size: 0.62rem;
+  margin-block-end: 0.65rem;
+}

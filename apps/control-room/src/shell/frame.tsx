@@ -1,16 +1,20 @@
 import { EMPTY_NEXT_ALLOWED_COMMANDS } from "@moe/contracts";
 import type { NextAllowedCommand, RuntimeCommandKind } from "@moe/contracts";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
 import "./shell-layout.css";
 import { useShellKeyboardController } from "../a11y/keyboard-map.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
-import { CircuitBreakerBanner } from "./circuit-breaker-banner.js";
 import type { CircuitBreakerFact } from "./circuit-breaker-banner.js";
 import { InspectorSheet } from "./inspector-sheet.js";
-import { CONTROL_ROOM_NAV_ITEMS, NavRail } from "./nav-rail.js";
+import { NavRail } from "./nav-rail.js";
+import type { NavLabel } from "./nav-rail.js";
 import { ProvenanceProvider } from "./provenance-panel.js";
+import {
+  ContextBar, GraphPlaceholder, HelpOverlay, StatusStrip, TimelinePlaceholder,
+} from "./shell-chrome.js";
+import type { ControlRoomTab } from "./shell-chrome.js";
 import { useViewportMode } from "./viewport.js";
 
 export { CONTROL_ROOM_NAV_ITEMS } from "./nav-rail.js";
@@ -104,115 +108,72 @@ export function ActionBar({ kind }: ActionBarProps): JSX.Element {
   );
 }
 
-/** Projection tabs on the context bar (spec line 51). */
-export const CONTROL_ROOM_TABS = ["board", "graph", "timeline"] as const;
-export type ControlRoomTab = (typeof CONTROL_ROOM_TABS)[number];
-
-function Banners({ affordance }: { readonly affordance: FixtureAffordanceSnapshot }): JSX.Element {
-  const disconnected = affordance.connection === "DISCONNECTED";
-  if (disconnected) {
-    return (
-      <div data-testid="cr.banner.disconnected" role="status">
-        {affordance.statusLabel}
-      </div>
-    );
-  }
-  if (affordance.statusLabel === "") return <></>;
-  return (
-    <div data-testid="cr.banner.lag" role="status">
-      {affordance.statusLabel}
-    </div>
-  );
-}
-
-function ContextBar({
-  affordance,
-  breaker,
-  onTab,
-  tab,
-}: {
-  readonly affordance: FixtureAffordanceSnapshot;
-  readonly breaker?: CircuitBreakerFact | undefined;
-  readonly onTab: (tab: ControlRoomTab) => void;
-  readonly tab: ControlRoomTab;
-}): JSX.Element {
-  return (
-    <div data-testid="cr.shell.contextbar">
-      {CONTROL_ROOM_TABS.map((name) => (
-        <button aria-pressed={tab === name} data-testid={`cr.shell.tab.${name}`} key={name}
-          onClick={() => onTab(name)} type="button">
-          {name}
-        </button>
-      ))}
-      {/* ALONGSIDE, not inside: `Banners` early-returns ONE banner, and a circuit breaker
-          is orthogonal to connection state. See circuit-breaker-banner.tsx. */}
-      <Banners affordance={affordance} />
-      <CircuitBreakerBanner breaker={breaker} />
-    </div>
-  );
-}
-
-function HelpOverlay({ onClose, open }: {
-  readonly onClose: () => void;
-  readonly open: boolean;
-}): JSX.Element {
-  if (!open) return <></>;
-  return (
-    <section aria-label="Keyboard shortcuts" data-testid="cr.shell.help" role="dialog">
-      <p>Global keyboard shortcuts are available throughout the control room.</p>
-      <ul>
-        {CONTROL_ROOM_NAV_ITEMS.map((label) => <li key={label}>{label}</li>)}
-      </ul>
-      <button onClick={onClose} type="button">Close keyboard help</button>
-    </section>
-  );
-}
-
-/**
- * The graph projection is reachable as a tab but mounts nothing in this slice.
- *
- * `CR-J1-002` requires that `cr.graph.*` is never mounted during J1, so selecting the
- * tab renders this placeholder instead of a canvas. The placeholder deliberately
- * carries no `cr.graph.` prefix — a stub with that id would satisfy the eye and fail
- * the bar.
- */
-function GraphPlaceholder(): JSX.Element {
-  return (
-    <p data-testid="cr.shell.graphplaceholder">
-      The graph projection is not part of this slice. Everything in J1 is completable
-      from the board and the inbox.
-    </p>
-  );
-}
-
 export interface ShellFrameProps {
+  readonly activeNavItem?: NavLabel | undefined;
   readonly affordance: FixtureAffordanceSnapshot;
   /** Absent means the daemon reported no circuit breaker; the banner then renders nothing. */
   readonly breaker?: CircuitBreakerFact | undefined;
   readonly children?: ReactNode;
+  readonly contextEyebrow?: string | undefined;
+  readonly contextTitle?: string | undefined;
   readonly inspector?: ReactNode;
+  readonly onNavigate?: ((label: NavLabel) => void) | undefined;
+  readonly projectionEnabled?: boolean | undefined;
+  readonly timeline?: ReactNode;
 }
 
 export function ShellFrame(
-  { affordance, breaker, children, inspector }: ShellFrameProps,
+  {
+    activeNavItem = "Goals", affordance, breaker, children,
+    contextEyebrow = "Active goal", contextTitle = "Moe control room", inspector,
+    onNavigate, projectionEnabled = true, timeline,
+  }: ShellFrameProps,
 ): JSX.Element {
   const [tab, setTab] = useState<ControlRoomTab>("board");
-  const keyboard = useShellKeyboardController(setTab);
   const viewport = useViewportMode();
   const narrow = viewport.ok && viewport.mode === "NARROW";
+  const previousNarrow = useRef(narrow);
+  const focusWasInInspector = useRef(false);
+  const enteringNarrow = narrow && !previousNarrow.current;
+  const keyboard = useShellKeyboardController(setTab, !narrow);
+  useLayoutEffect(() => {
+    if (enteringNarrow) {
+      keyboard.collapseInspector();
+      if (focusWasInInspector.current) {
+        keyboard.rootRef.current
+          ?.querySelector<HTMLElement>("[data-testid='cr.shell.inspector.toggle']")
+          ?.focus();
+      }
+    }
+    previousNarrow.current = narrow;
+  }, [enteringNarrow, keyboard.collapseInspector, narrow]);
   const gating = useMemo<GatingValue>(
     () => ({
       actionsEnabled: affordance.mutationsEnabled,
       commands: affordance.nextAllowedCommands,
-      stale: affordance.connection === "LAGGING" || affordance.connection === "HISTORICAL"
-        || affordance.requiresAffordanceRefresh,
+      stale: affordance.connection !== "CONNECTED" || affordance.requiresAffordanceRefresh,
     }),
     [affordance],
   );
+  const inspectorExpanded = keyboard.inspectorExpanded && !enteringNarrow;
+  const inspectorVisible = inspectorExpanded && !keyboard.helpOpen;
+  const projection = !projectionEnabled
+    ? children
+    : tab === "graph"
+      ? <GraphPlaceholder />
+      : tab === "timeline"
+        ? (timeline ?? <TimelinePlaceholder />)
+        : children;
   return (
     <GatingContext.Provider value={gating}>
       <ProvenanceProvider>
-        <div data-narrow={narrow ? "true" : undefined} data-testid="cr.shell.root"
+        <div data-banner={affordance.statusLabel !== "" || breaker !== undefined ? "true" : undefined}
+          data-narrow={narrow ? "true" : undefined} data-testid="cr.shell.root"
+          onFocusCapture={(event) => {
+            const sheet = keyboard.rootRef.current?.querySelector("#cr-shell-inspector");
+            focusWasInInspector.current = sheet?.contains(event.target) ?? false;
+          }}
+          data-theme="ledger"
           ref={keyboard.rootRef}>
           <a
             data-testid="cr.shell.skiplink"
@@ -222,23 +183,21 @@ export function ShellFrame(
           >
             Skip to main content
           </a>
-          <NavRail narrow={narrow} />
-          <ContextBar affordance={affordance} breaker={breaker} onTab={setTab} tab={tab} />
+          <NavRail activeItem={activeNavItem} narrow={narrow} onNavigate={onNavigate} />
+          <ContextBar affordance={affordance} breaker={breaker} eyebrow={contextEyebrow}
+            inspectorExpanded={inspectorVisible} narrow={narrow}
+            onInspectorToggle={keyboard.toggleInspector} onTab={setTab}
+            projectionEnabled={projectionEnabled} tab={tab} title={contextTitle} />
           <HelpOverlay onClose={keyboard.closeHelp} open={keyboard.helpOpen} />
           <main data-testid="cr.shell.main" id="cr-shell-main" ref={keyboard.mainRef} tabIndex={-1}>
-            {tab === "graph" ? <GraphPlaceholder /> : children}
+            {projection}
           </main>
-          <InspectorSheet expanded={keyboard.inspectorExpanded} narrow={narrow}>
+          <InspectorSheet expanded={inspectorExpanded} narrow={narrow}
+            obscured={keyboard.helpOpen}
+            onDismiss={keyboard.collapseInspector}>
             {inspector}
           </InspectorSheet>
-          <footer
-            data-connection={affordance.connection}
-            data-stale={String(gating.stale)}
-            data-testid="cr.shell.statusstrip"
-          >
-            <span data-testid="cr.shell.cursor">{affordance.connection}</span>
-            {gating.stale ? <span data-testid="cr.shell.stalelabel">Showing stale data</span> : null}
-          </footer>
+          <StatusStrip affordance={affordance} stale={gating.stale} />
         </div>
       </ProvenanceProvider>
     </GatingContext.Provider>

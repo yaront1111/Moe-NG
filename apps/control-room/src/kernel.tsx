@@ -5,8 +5,7 @@ import type {
 } from "@moe/control-room-model";
 import type { CSSProperties, JSX } from "react";
 
-import { CONTROL_ROOM_FIXTURES } from "./fixtures.js";
-import type { FixtureSurface } from "./fixtures.js";
+import { ControlRoomPreview } from "./preview/control-room-preview.js";
 
 export { describeTruthClass };
 export type { TruthClass, TruthPresentationDescriptor };
@@ -152,35 +151,10 @@ export function Fact({
   );
 }
 
-function SurfacePanel({ surface }: { readonly surface: FixtureSurface }): JSX.Element {
-  return (
-    <section data-testid={`cr.surface.${surface.surfaceId}`}>
-      <h2>{surface.title}</h2>
-      {surface.facts.map((fact) => (
-        <Fact
-          factId={fact.factId}
-          key={fact.factId}
-          label={fact.label}
-          truthClass={fact.truthClass}
-          value={fact.value}
-        />
-      ))}
-    </section>
-  );
-}
-
 /**
- * Placeholder application root: it proves the scaffold mounts and that the fact
- * wrapper invariant holds over real fixture data. The shell frame task replaces
- * this body; nothing here renders an action or constructs a command.
+ * Deterministic browser entry. The preview composes the real shell and presentation
+ * surfaces while retaining the fixture boundary: no daemon or transport is attached.
  */
 export function ControlRoomScaffold(): JSX.Element {
-  return (
-    <main data-testid="cr.shell.root">
-      <h1>Moe control room</h1>
-      {CONTROL_ROOM_FIXTURES.surfaces.map((surface) => (
-        <SurfacePanel key={surface.surfaceId} surface={surface} />
-      ))}
-    </main>
-  );
+  return <ControlRoomPreview />;
 }

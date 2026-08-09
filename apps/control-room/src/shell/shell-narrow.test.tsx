@@ -71,9 +71,15 @@ function ShellFixture({ board = BOARD_PROPS }: {
   return (
     <ShellFrame
       affordance={lagging()}
-      inspector={<p data-testid="cr.inspector.identity">inspector-42</p>}
+      inspector={(
+        <>
+          <p data-testid="cr.inspector.identity">inspector-42</p>
+          <button data-testid="cr.inspector.focusable" type="button">Inspect receipt</button>
+        </>
+      )}
     >
       <ActionBar />
+      <input aria-label="Fixture search" type="search" />
       <Fact factId="shell.identity" label="Identity" truthClass="OBSERVED" value="same" />
       <BoardSurface {...board} />
     </ShellFrame>
@@ -95,13 +101,22 @@ describe("ShellFrame narrow state", () => {
   it("tracks the rendered narrow marker through resize events", () => {
     const rendered = renderAt(1_280);
     const root = within(rendered.container).getByTestId("cr.shell.root");
+    const inspector = within(rendered.container).getByTestId("cr.shell.inspector");
+    const inspectorControl = within(inspector).getByTestId("cr.inspector.focusable");
     expect(root.hasAttribute("data-narrow")).toBe(false);
+    expect(inspector.hasAttribute("hidden")).toBe(false);
+    inspectorControl.focus();
+    expect(document.activeElement).toBe(inspectorControl);
 
     act(() => {
       setWidth(800);
       window.dispatchEvent(new Event("resize"));
     });
     expect(root.getAttribute("data-narrow")).toBe("true");
+    expect(inspector.hasAttribute("hidden")).toBe(true);
+    expect(document.activeElement).toBe(
+      within(rendered.container).getByTestId("cr.shell.inspector.toggle"),
+    );
 
     act(() => {
       setWidth(1_280);
@@ -127,28 +142,64 @@ describe("ShellFrame narrow state", () => {
     expect(listed).toHaveLength(CONTROL_ROOM_NAV_ITEMS.length);
   });
 
-  it("closes only the narrow inspector on Escape without losing its identity", async () => {
+  it("starts narrow with proof available on demand and closes it on Escape", async () => {
     const rendered = renderAt(800);
     const inspector = within(rendered.container).getByTestId("cr.shell.inspector");
+    const toggle = within(rendered.container).getByTestId("cr.shell.inspector.toggle");
+    expect(inspector.hasAttribute("hidden")).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    await userEvent.click(toggle);
     expect(inspector.getAttribute("role")).toBe("dialog");
+    expect(inspector.getAttribute("aria-modal")).toBe("true");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const closeButton = within(inspector).getByRole("button", { name: "Close inspector" });
+    expect(document.activeElement).toBe(closeButton);
+    await userEvent.keyboard("a");
+    expect(document.activeElement).toBe(closeButton);
+    await userEvent.keyboard("/");
+    expect(document.activeElement).toBe(closeButton);
+    await userEvent.tab();
+    expect(inspector.contains(document.activeElement)).toBe(true);
+    const helpInvoker = within(inspector).getByTestId("cr.inspector.focusable");
+    expect(document.activeElement).toBe(helpInvoker);
 
     await userEvent.keyboard("?");
-    expect(within(rendered.container).getAllByRole("dialog")).toHaveLength(2);
+    const help = within(rendered.container).getByTestId("cr.shell.help");
+    expect(within(rendered.container).getAllByRole("dialog")).toEqual([help]);
+    expect(inspector.hasAttribute("hidden")).toBe(true);
+    await userEvent.keyboard("?");
+    expect(document.activeElement).toBe(
+      within(help).getByRole("button", { name: "Close keyboard help" }),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(within(rendered.container).queryByTestId("cr.shell.help")).toBeNull();
+    expect(inspector.hasAttribute("hidden")).toBe(false);
+    expect(inspector.getAttribute("role")).toBe("dialog");
+    expect(document.activeElement).toBe(helpInvoker);
     await userEvent.keyboard("{Escape}");
 
     const closed = within(rendered.container).getByTestId("cr.shell.inspector");
     expect(closed.hasAttribute("hidden")).toBe(true);
-    const help = within(rendered.container).getByTestId("cr.shell.help");
-    expect(help.hasAttribute("hidden")).toBe(false);
-    expect(within(rendered.container).getAllByRole("dialog")).toEqual([help]);
+    expect(within(rendered.container).queryAllByRole("dialog")).toEqual([]);
     expect(within(closed).getByTestId("cr.inspector.identity").textContent).toBe("inspector-42");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
     act(() => {
       setWidth(1_280);
       window.dispatchEvent(new Event("resize"));
     });
-    expect(closed.hasAttribute("hidden")).toBe(false);
+    expect(closed.hasAttribute("hidden")).toBe(true);
     expect(closed.getAttribute("role")).toBeNull();
+
+    act(() => {
+      setWidth(800);
+      window.dispatchEvent(new Event("resize"));
+    });
+    const reopenedToggle = within(rendered.container).getByTestId("cr.shell.inspector.toggle");
+    await userEvent.click(reopenedToggle);
+    await userEvent.click(within(inspector).getByRole("button", { name: "Close inspector" }));
+    expect(inspector.hasAttribute("hidden")).toBe(true);
   });
 
   it("does not undo the operator's collapsed choice on resize", async () => {

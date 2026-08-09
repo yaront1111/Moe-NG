@@ -1,0 +1,167 @@
+button[data-testid^="cr.chip."] {
+  border-color: transparent;
+  border-radius: 999px;
+  border-width: 1px;
+  color: #ffffff;
+  font-family: var(--cr-font-utility);
+  font-size: 0.58rem;
+  font-weight: 700;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  transition: box-shadow 130ms ease, transform 130ms ease;
+}
+
+button[data-testid^="cr.chip."]:hover {
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+button[data-testid^="cr.chip."][data-tone="neutral slate"] {
+  background: var(--cr-truth-observed);
+}
+
+button[data-testid^="cr.chip."][data-tone="amber"] {
+  background: var(--cr-truth-agent);
+}
+
+button[data-testid^="cr.chip."][data-tone="green"] {
+  background: var(--cr-truth-verified);
+}
+
+button[data-testid^="cr.chip."][data-tone="blue"] {
+  background: var(--cr-truth-human);
+}
+
+button[data-testid^="cr.chip."][data-tone="high-contrast magenta"] {
+  background: var(--cr-truth-unknown);
+}
+
+button[data-testid^="cr.chip."][data-truth-class="UNKNOWN"] {
+  border-color: #ffffff;
+  border-style: dashed;
+  box-shadow: 0 0 0 2px var(--cr-truth-unknown);
+}
+
+[data-testid^="cr.fact."] {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem 0.7rem;
+  grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) auto;
+  min-block-size: 2.55rem;
+}
+
+[data-testid^="cr.fact."] [data-testid="cr.label"] {
+  color: var(--cr-ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+[data-testid^="cr.fact."] [data-testid="cr.value"] {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-testid^="cr.factslot."] + [data-testid^="cr.factslot."],
+[data-testid^="cr.inspector.section."] + [data-testid^="cr.inspector.section."] {
+  border-block-start: 1px solid var(--cr-line);
+}
+
+[data-testid^="cr.inspector.section."] {
+  padding-block: 0.75rem;
+}
+
+[data-testid^="cr.action."],
+[data-testid="cr.goals.create"],
+.cr-empty-state button {
+  background: var(--cr-action);
+  border: 1px solid var(--cr-action);
+  border-radius: var(--cr-radius-sm);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-block-size: 2.45rem;
+  padding: 0.55rem 0.85rem;
+}
+
+[data-testid^="cr.action."]:hover,
+[data-testid="cr.goals.create"]:hover,
+.cr-empty-state button:hover {
+  background: var(--cr-action-deep);
+}
+
+[data-testid^="cr.action."]:disabled {
+  background: var(--cr-surface-muted);
+  border-color: var(--cr-line-strong);
+  color: var(--cr-ink-soft);
+  opacity: 0.78;
+}
+
+[data-testid="cr.goals.cancel"],
+[data-testid="cr.provenance.close"] {
+  background: transparent;
+  border: 1px solid var(--cr-line-strong);
+  border-radius: var(--cr-radius-sm);
+  min-block-size: 2.45rem;
+  padding: 0.55rem 0.85rem;
+}
+
+[data-testid="cr.shell.actionbar"],
+[data-testid^="cr.board.actions."] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+[data-testid="cr.evidence.receipt"] {
+  background: var(--cr-rail);
+  border-radius: var(--cr-radius-md);
+  color: var(--cr-rail-text);
+  display: grid;
+  font-family: var(--cr-font-utility);
+  font-size: 0.68rem;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+[data-testid="cr.evidence.receipt"] span:first-child {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+[data-testid="cr.evidence.receipt.exit"] {
+  color: #75d7b8;
+}
+
+[data-testid="cr.chip.provenance"] dl {
+  display: grid;
+  gap: 0.6rem;
+}
+
+[data-testid="cr.chip.provenance"] dl > div {
+  border-block-end: 1px solid var(--cr-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  padding-block-end: 0.6rem;
+}
+
+[data-testid="cr.chip.provenance"] dt {
+  color: var(--cr-ink-soft);
+  font-size: 0.7rem;
+}
+
+[data-testid="cr.chip.provenance"] dd {
+  font-family: var(--cr-font-utility);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+[data-testid="cr.chip.provenance"] a,
+[data-testid="cr.chip.provenance"] button {
+  margin-block-start: 0.8rem;
+  margin-inline-end: 0.5rem;
+}

@@ -1,0 +1,122 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--cr-canvas);
+  color: var(--cr-ink);
+  font-family: var(--cr-font-body);
+  font-synthesis: none;
+  min-block-size: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-block-size: 100vh;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button,
+select,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-line-strong);
+  border-radius: var(--cr-radius-sm);
+  min-block-size: 2.7rem;
+  padding: 0.65rem 0.8rem;
+}
+
+textarea {
+  min-block-size: 6rem;
+  resize: vertical;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--cr-action);
+  outline-offset: 3px;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+a {
+  color: var(--cr-link);
+  text-underline-offset: 0.18em;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd {
+  margin-block-start: 0;
+}
+
+h1,
+h2,
+h3,
+strong {
+  font-family: var(--cr-font-display);
+}
+
+code,
+kbd,
+[data-testid*="cursor"],
+[data-testid*="receipt"],
+[data-testid*="phase"] {
+  font-family: var(--cr-font-utility);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--cr-action) 25%, transparent);
+}
+
+* {
+  scrollbar-color: var(--cr-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  block-size: 0.55rem;
+  inline-size: 0.55rem;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--cr-line-strong);
+  border: 2px solid transparent;
+  border-radius: 1rem;
+  background-clip: padding-box;
+}
