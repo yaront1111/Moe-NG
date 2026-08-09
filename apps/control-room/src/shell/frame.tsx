@@ -6,6 +6,8 @@ import type { JSX, ReactNode } from "react";
 import "./shell-layout.css";
 import { useShellKeyboardController } from "../a11y/keyboard-map.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
+import { CircuitBreakerBanner } from "./circuit-breaker-banner.js";
+import type { CircuitBreakerFact } from "./circuit-breaker-banner.js";
 import { InspectorSheet } from "./inspector-sheet.js";
 import { CONTROL_ROOM_NAV_ITEMS, NavRail } from "./nav-rail.js";
 import { ProvenanceProvider } from "./provenance-panel.js";
@@ -125,10 +127,12 @@ function Banners({ affordance }: { readonly affordance: FixtureAffordanceSnapsho
 
 function ContextBar({
   affordance,
+  breaker,
   onTab,
   tab,
 }: {
   readonly affordance: FixtureAffordanceSnapshot;
+  readonly breaker?: CircuitBreakerFact | undefined;
   readonly onTab: (tab: ControlRoomTab) => void;
   readonly tab: ControlRoomTab;
 }): JSX.Element {
@@ -140,7 +144,10 @@ function ContextBar({
           {name}
         </button>
       ))}
+      {/* ALONGSIDE, not inside: `Banners` early-returns ONE banner, and a circuit breaker
+          is orthogonal to connection state. See circuit-breaker-banner.tsx. */}
       <Banners affordance={affordance} />
+      <CircuitBreakerBanner breaker={breaker} />
     </div>
   );
 }
@@ -180,11 +187,15 @@ function GraphPlaceholder(): JSX.Element {
 
 export interface ShellFrameProps {
   readonly affordance: FixtureAffordanceSnapshot;
+  /** Absent means the daemon reported no circuit breaker; the banner then renders nothing. */
+  readonly breaker?: CircuitBreakerFact | undefined;
   readonly children?: ReactNode;
   readonly inspector?: ReactNode;
 }
 
-export function ShellFrame({ affordance, children, inspector }: ShellFrameProps): JSX.Element {
+export function ShellFrame(
+  { affordance, breaker, children, inspector }: ShellFrameProps,
+): JSX.Element {
   const [tab, setTab] = useState<ControlRoomTab>("board");
   const keyboard = useShellKeyboardController(setTab);
   const viewport = useViewportMode();
@@ -212,7 +223,7 @@ export function ShellFrame({ affordance, children, inspector }: ShellFrameProps)
             Skip to main content
           </a>
           <NavRail narrow={narrow} />
-          <ContextBar affordance={affordance} onTab={setTab} tab={tab} />
+          <ContextBar affordance={affordance} breaker={breaker} onTab={setTab} tab={tab} />
           <HelpOverlay onClose={keyboard.closeHelp} open={keyboard.helpOpen} />
           <main data-testid="cr.shell.main" id="cr-shell-main" ref={keyboard.mainRef} tabIndex={-1}>
             {tab === "graph" ? <GraphPlaceholder /> : children}
