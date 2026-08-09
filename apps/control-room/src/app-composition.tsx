@@ -156,9 +156,11 @@ function InspectorHint(): JSX.Element {
 export interface AppCompositionProps {
   /** Overridable for tests; the entry point mounts the CONNECTED fixture snapshot. */
   readonly affordance?: FixtureAffordanceSnapshot | undefined;
+  /** Live mode swaps the fixture timeline for the daemon-fed one; fixtures otherwise. */
+  readonly timeline?: JSX.Element | undefined;
 }
 
-export function AppComposition({ affordance }: AppCompositionProps): JSX.Element {
+export function AppComposition({ affordance, timeline }: AppCompositionProps): JSX.Element {
   const snapshot = affordance ?? ENTRY_AFFORDANCE;
   return (
     <ShellFrame affordance={snapshot} inspector={<InspectorHint />}>
@@ -202,14 +204,16 @@ export function AppComposition({ affordance }: AppCompositionProps): JSX.Element
         />
       </Section>
       <Section heading="Timeline" id="timeline">
-        <TimelineList
-          cursorState={CURSOR}
-          filterOptions={{
-            actor: ["agent/session-a", "daemon/runner"], node: ["node-2"],
-            type: ["step.finish", "approval.request"],
-          }}
-          maxRows={10} source={timelineSource} startCursor={null}
-        />
+        {timeline ?? (
+          <TimelineList
+            cursorState={CURSOR}
+            filterOptions={{
+              actor: ["agent/session-a", "daemon/runner"], node: ["node-2"],
+              type: ["step.finish", "approval.request"],
+            }}
+            maxRows={10} source={timelineSource} startCursor={null}
+          />
+        )}
       </Section>
     </ShellFrame>
   );

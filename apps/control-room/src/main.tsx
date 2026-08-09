@@ -1,8 +1,10 @@
 import { StrictMode } from "react";
+import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
-import { AppComposition } from "./app-composition.js";
+import { ControlRoomScaffold } from "./kernel.js";
+import { LiveControlRoom, resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
 
@@ -28,13 +30,23 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
   now: (): number => performance.now(),
 });
 
+/**
+ * `?live=1` mounts the DEVELOPMENT-ONLY live attachment (see live/live-app.tsx);
+ * the flag carries no secret — credentials arrive via Vite env into headers only.
+ * Anything else mounts the fixture experience.
+ */
+function chooseRoot(): JSX.Element {
+  const live = new URLSearchParams(globalThis.location?.search ?? "").get("live") === "1";
+  return live ? <LiveControlRoom setup={resolveLiveSetupFromBuild()} /> : <ControlRoomScaffold />;
+}
+
 /** Mounts the application into a caller-supplied container and returns its root. */
 export function mountControlRoom(container: Element, clock: Clock = BROWSER_CLOCK): Root {
   const root = createRoot(container);
   root.render(
     <StrictMode>
       <ClockProvider clock={clock}>
-        <AppComposition />
+        {chooseRoot()}
       </ClockProvider>
     </StrictMode>,
   );
