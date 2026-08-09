@@ -82,13 +82,17 @@ describe("operator credential", () => {
 });
 
 describe("session credentials over the durable ledger", () => {
-  it("open -> authenticate roundtrip yields the session principal and capabilities", () => {
+  it("open -> authenticate roundtrip yields the SESSION as the working principal", () => {
     const { authenticate, store } = harness();
     openDefaultSession(store);
+    // The working principal is the session id, never the opener: two sessions
+    // opened by one operator must stay distinct identities or per-agent fences
+    // (work claims, decision keys) collapse into one. The opener remains on the
+    // durable session record for audit.
     expect(authenticate(CREDENTIAL)).toEqual({
       principal: {
         capabilities: ["review.submit", "work.claim"],
-        principalId: OPENER,
+        principalId: "session-alpha",
         projectId: PROJECT_ID,
       },
       verdict: "AUTHENTICATED",
