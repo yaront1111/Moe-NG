@@ -99,6 +99,7 @@ export {
   type WireSnapshot,
 } from "./http/event-stream-contract.js";
 export { readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
+export * from "./daemon-entry.js";
 export {
   DOCTOR_COMMAND_KINDS,
   DOCTOR_ERROR_CODES,
@@ -140,6 +141,18 @@ export type {
   ReviewRefused,
   ReviewRoundRecord,
 } from "./review/review-ledger.js";
+// Packed rather than one-name-per-line only to spend fewer physical lines here;
+// see the recovery-incarnation module for the reviewed surface.
+export {
+  RECOVERY_INCARNATION_ERROR_CODES, RECOVERY_INCARNATION_SCHEMA_VERSION,
+  createNodeRecoveryCryptoPort, createRecoveryIncarnationService,
+  type RecoveryIncarnationBinding, type RecoveryIncarnationCryptoPort,
+  type RecoveryIncarnationErrorCode, type RecoveryIncarnationKeyHandle,
+  type RecoveryIncarnationKeyPair, type RecoveryIncarnationMinted,
+  type RecoveryIncarnationProof, type RecoveryIncarnationRefused,
+  type RecoveryIncarnationRequest, type RecoveryIncarnationResult,
+  type RecoveryIncarnationService,
+} from "./recovery/recovery-incarnation.js";
 
 const SCHEMA_VERSION = "moe-graph-preview-request/1";
 const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);

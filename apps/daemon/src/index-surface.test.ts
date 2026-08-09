@@ -44,6 +44,15 @@ import type {
   HandlerContext,
   HandlerTable,
   PrerequisiteRefusalCode,
+  RecoveryIncarnationBinding,
+  RecoveryIncarnationCryptoPort,
+  RecoveryIncarnationErrorCode,
+  RecoveryIncarnationKeyPair,
+  RecoveryIncarnationMinted,
+  RecoveryIncarnationRefused,
+  RecoveryIncarnationRequest,
+  RecoveryIncarnationResult,
+  RecoveryIncarnationService,
   ReviewAccepted,
   ReviewCommandHandler,
   ReviewCommandKind,
@@ -109,15 +118,21 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["BOOTSTRAP_REQUEST_KEYS", "object"],
   ["BOOTSTRAP_SCHEMA_VERSION", "string"],
   ["CLAIM_LEGS", "object"],
+  ["CONTROL_ROOM_LISTENER_LAYER", "string"],
+  ["DAEMON_ENTRY_LAYER", "string"],
+  ["DAEMON_ENTRY_REFUSAL_CODES", "object"],
   ["DOCTOR_COMMAND_KINDS", "object"],
   ["DOCTOR_ERROR_CODES", "object"],
   ["DOCTOR_RECOVERY_SCHEMA_VERSION", "string"],
   ["EVENT_STREAM_LAYER", "string"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
   ["GOAL_HANDLERS", "object"],
+  ["LISTENER_REFUSAL_CODES", "object"],
   ["MAX_EVENT_PAGE_SIZE", "number"],
   ["PLANNING_HANDLERS", "object"],
   ["PREREQUISITE_REFUSAL_CODES", "object"],
+  ["RECOVERY_INCARNATION_ERROR_CODES", "object"],
+  ["RECOVERY_INCARNATION_SCHEMA_VERSION", "string"],
   ["REVIEW_HANDLERS", "object"],
   ["SERVICE_REFUSED_BY", "object"],
   ["SLOT_CEILING_LEG", "string"],
@@ -128,13 +143,19 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
   ["claimWork", "function"],
+  ["createNodeRecoveryCryptoPort", "function"],
+  ["createRecoveryIncarnationService", "function"],
   ["decodeBootstrapRequestBytes", "function"],
   ["evaluateDoctorCommandBytes", "function"],
   ["evaluateGraphPreviewRequestBytes", "function"],
+  ["isDependencyProvider", "function"],
   ["parseWorkRequest", "function"],
   ["readEventPage", "function"],
+  ["refuseEntry", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
+  ["startControlRoomListener", "function"],
+  ["startDaemon", "function"],
 ];
 
 /** Transcribed from review-services.ts; the table is frozen and owns exactly these kinds. */
@@ -159,7 +180,7 @@ const surface: Readonly<Record<string, unknown>> = daemon;
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(32);
+    expect(EXPECTED_EXPORTS.length).toBe(44);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -309,6 +330,34 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<ReviewHandlerTable[ReviewCommandKind]>()
       .toEqualTypeOf<ReviewCommandHandler | undefined>();
     expectTypeOf(daemon.REVIEW_HANDLERS).toEqualTypeOf<ReviewHandlerTable>();
+  });
+
+  it("names every recovery incarnation branch and keeps the mint non-authoritative", () => {
+    expectTypeOf<(typeof daemon.RECOVERY_INCARNATION_ERROR_CODES)[number]>()
+      .toEqualTypeOf<RecoveryIncarnationErrorCode>();
+    expectTypeOf<RecoveryIncarnationResult>()
+      .toEqualTypeOf<RecoveryIncarnationMinted | RecoveryIncarnationRefused>();
+    expectTypeOf<RecoveryIncarnationMinted["binding"]>()
+      .toEqualTypeOf<RecoveryIncarnationBinding>();
+    // Both branches carry authority NONE: neither a mint nor a refusal may be
+    // read as PREPARED. RecoveryAnchor alone owns that.
+    expectTypeOf<RecoveryIncarnationMinted["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoveryIncarnationRefused["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoveryIncarnationRefused["truth"]>().toEqualTypeOf<"UNKNOWN">();
+    expectTypeOf<RecoveryIncarnationRefused["layer"]>().toEqualTypeOf<"RECOVERY_INCARNATION">();
+    expectTypeOf<RecoveryIncarnationRequest["restoreCommandId"]>().toEqualTypeOf<string>();
+    expectTypeOf<Parameters<RecoveryIncarnationService["mint"]>>()
+      .toEqualTypeOf<[request: unknown]>();
+    expectTypeOf<ReturnType<RecoveryIncarnationService["mint"]>>()
+      .toEqualTypeOf<Promise<RecoveryIncarnationResult>>();
+    expectTypeOf<Parameters<typeof daemon.createRecoveryIncarnationService>>()
+      .toEqualTypeOf<[port: RecoveryIncarnationCryptoPort]>();
+    expectTypeOf<ReturnType<typeof daemon.createRecoveryIncarnationService>>()
+      .toEqualTypeOf<RecoveryIncarnationService>();
+    expectTypeOf<ReturnType<typeof daemon.createNodeRecoveryCryptoPort>>()
+      .toEqualTypeOf<RecoveryIncarnationCryptoPort>();
+    expectTypeOf<ReturnType<RecoveryIncarnationCryptoPort["generateSigningKey"]>>()
+      .toEqualTypeOf<Promise<RecoveryIncarnationKeyPair>>();
   });
 
   it("keeps graph preview branches advisory through the published root", () => {
