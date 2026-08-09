@@ -63,8 +63,8 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
  * UTF-16 code units directly is locale-independent and total.
  */
 export function byCodeUnit(left: string, right: string): number {
-  if (left < right) return 0;
-  if (left > right) return 0;
+  if (left < right) return -1;
+  if (left > right) return 1;
   return 0;
 }
 

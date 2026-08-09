@@ -75,6 +75,22 @@ describe("the manifest imposes its own total order", () => {
     expect(manifest.version).toBe(SOURCE_MANIFEST_VERSION);
   });
 
+  it("sorts by CODE UNIT, which differs from the host's case-insensitive listing", () => {
+    // The only fixture on Windows that can tell the two apart. NTFS hands back
+    // directory entries case-insensitively (alpha, Beta), while code-unit order puts
+    // uppercase first ("B" is 0x42, "a" is 0x61). An all-lowercase fixture cannot
+    // distinguish a working comparator from a neutered one on this filesystem, so
+    // without this case the sort looks tested here and is not.
+    const manifest = manifestOf(buildSourceManifest(tree([
+      ["alpha.json", "{}"],
+      ["Beta.json", "{}"],
+      ["Zulu.json", "{}"],
+      ["mid.json", "{}"],
+    ])));
+    expect(manifest.entries.map((entry) => entry.path))
+      .toEqual(["Beta.json", "Zulu.json", "alpha.json", "mid.json"]);
+  });
+
   it("uses forward slashes so a manifest does not depend on the host separator", () => {
     const manifest = manifestOf(buildSourceManifest(tree(SAMPLE)));
     for (const entry of manifest.entries) {
