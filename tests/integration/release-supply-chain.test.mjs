@@ -340,6 +340,58 @@ describe("release supply-chain evidence", () => {
       "REPRODUCIBILITY_MISMATCH");
   });
 
+  test("refuses a source SHA that differs from the observed head before external work", async () => {
+    const ports = fakePorts({
+      resolveSource: spy(async () => ({ objectFormat: "sha1", sourceSha: "0".repeat(40) })),
+    });
+    const { runReleaseSupplyChain } = await loadSupplyChain();
+    const result = await runReleaseSupplyChain({
+      evidenceRoot: temp(),
+      platform: "win32",
+      repositoryRoot: REPO_ROOT,
+      source: { objectFormat: "sha1", sourceSha: SOURCE_SHA },
+    }, ports);
+    expectReleaseRefusal(result, "SOURCE_PROVENANCE_INVALID");
+    assert.equal(ports.archiveSource.calls.length, 0);
+    assert.equal(ports.frozenInstall.calls.length, 0);
+  });
+
+  test("refuses an audit report whose advisories field is absent", async () => {
+    expectReleaseRefusal(await runSupply({}, {
+      generateAudit: spy(async () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({ metadata: { dependencies: 95 } }),
+      })),
+    }), "DEPENDENCY_AUDIT_INVALID");
+  });
+
+  test("refuses SBOM component drift that normalization must not absorb", async () => {
+    let call = 0;
+    expectReleaseRefusal(await runSupply({}, {
+      generateSbom: spy(async () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          bomFormat: "CycloneDX",
+          components: [{ name: `fixture-${call += 1}` }],
+          metadata: { timestamp: `2026-08-09T00:00:0${call}Z` },
+          serialNumber: `urn:uuid:0000000${call}`,
+        }),
+      })),
+    }), "REPRODUCIBILITY_MISMATCH");
+  });
+
+  test("refuses conflicting durable content through the real publisher", async () => {
+    const evidenceRoot = temp();
+    const first = await runSupply({ evidenceRoot });
+    assert.equal(first.ok, true);
+    writeFileSync(first.evidencePath, "conflicting-durable-bytes");
+    const second = await runSupply({ evidenceRoot });
+    expectReleaseRefusal(second, "EVIDENCE_PUBLICATION_CONFLICT");
+    assert.equal(readFileSync(first.evidencePath, "utf8"), "conflicting-durable-bytes");
+  });
+
   test("publishes idempotently and refuses conflicting concurrent content", async () => {
     const evidenceRoot = temp();
     const [first, second] = await Promise.all([
