@@ -11,12 +11,13 @@ import {
 const encoder = new TextEncoder();
 
 /**
- * The nine kinds this task owns, restated as a literal rather than derived from the
- * production list: set equality against a derived list is vacuous, because a tenth kind
+ * The ten kinds this surface owns, restated as a literal rather than derived from the
+ * production list: set equality against a derived list is vacuous, because an eleventh kind
  * added to production would silently appear on both sides of the comparison.
  */
 const OWNED_KINDS = [
   "approval.decide",
+  "goal.close",
   "goal.create",
   "plan.propose",
   "policy.install",
@@ -46,10 +47,10 @@ function validEnvelope(): Record<string, unknown> {
 }
 
 describe("bootstrap command vocabulary", () => {
-  it("covers exactly the nine command kinds this task owns", () => {
+  it("covers exactly the ten command kinds this surface owns", () => {
     expect(new Set<string>(BOOTSTRAP_COMMAND_KINDS)).toEqual(new Set<string>(OWNED_KINDS));
-    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(9);
-    expect(OWNED_KINDS).toHaveLength(9);
+    expect(BOOTSTRAP_COMMAND_KINDS).toHaveLength(10);
+    expect(OWNED_KINDS).toHaveLength(10);
   });
 
   it("names only kinds that exist in the runtime command vocabulary", () => {

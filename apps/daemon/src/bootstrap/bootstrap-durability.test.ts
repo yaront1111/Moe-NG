@@ -8,8 +8,7 @@ import {
   OBSERVATION,
   PROJECT_ID,
   RUN_ID,
-  SUBMISSION_HASH,
-  approvalCommand,
+  approvalPayload,
   approvalRecord,
   bootstrapSequence,
   closeStores,
@@ -107,7 +106,7 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
   it("drives every owned command kind exactly once", () => {
-    expect(sequence).toHaveLength(9);
+    expect(sequence).toHaveLength(10);
     expect(sequence).toHaveLength(BOOTSTRAP_COMMAND_KINDS.length);
     expect(new Set(sequence.map((entry) => entry.kind)))
       .toEqual(new Set<string>(BOOTSTRAP_COMMAND_KINDS));
@@ -173,11 +172,9 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("approval.decide", 0, {
-      command: approvalCommand(),
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
       record: approvalRecord(hex64("ffff")),
-      runId: RUN_ID,
-    }));
+    })));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
@@ -278,11 +275,7 @@ describe("hostile inputs commit no unauthorized mutation (DoD 3)", () => {
     const store = openStore();
     driveThrough(store, "approval.decide");
 
-    const accepted = send(store, envelope("approval.decide", 0, {
-      command: approvalCommand(),
-      record: approvalRecord(SUBMISSION_HASH),
-      runId: RUN_ID,
-    }));
+    const accepted = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(accepted.ok, accepted.ok ? "" : accepted.code).toBe(true);
     expect(readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)).toBeDefined();

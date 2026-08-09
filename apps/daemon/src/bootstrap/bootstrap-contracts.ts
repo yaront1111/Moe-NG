@@ -19,9 +19,13 @@ import type {
 export const BOOTSTRAP_SCHEMA_VERSION = "moe-bootstrap-command/1" as const;
 
 /**
- * The nine kinds composed by this task. Each is also a member of `RUNTIME_COMMAND_KINDS`;
+ * The ten kinds composed by this surface. Each is also a member of `RUNTIME_COMMAND_KINDS`;
  * that containment is asserted by test rather than derived, so widening this list cannot
  * silently widen the surface.
+ *
+ * `goal.close` is APPENDED, never inserted: existing suites assert against this array, and
+ * J1's initial-graph activation deliberately adds no kind of its own — it composes inside
+ * `approval.decide`, which is what keeps J1 at three human actions (design 299).
  */
 export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "approval.decide",
@@ -33,6 +37,7 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "project.bind_repository",
   "project.register",
   "provider.probe",
+  "goal.close",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];

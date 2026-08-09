@@ -17,6 +17,9 @@ import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contrac
  */
 export const COMMAND_PREREQUISITES = Object.freeze({
   "approval.decide": Object.freeze(["plan.propose"]),
+  // Acceptance can only follow the approval that activated the graph, so the goal it accepts
+  // is durably EXECUTION_ENABLED before the core is ever asked.
+  "goal.close": Object.freeze(["approval.decide"]),
   "goal.create": Object.freeze(["project.activate"]),
   "plan.propose": Object.freeze(["goal.create"]),
   "policy.install": Object.freeze([]),
