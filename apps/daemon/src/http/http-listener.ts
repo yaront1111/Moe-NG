@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
+import { readAffordanceRequest } from "./affordance-contract.js";
+import type { AffordancePort } from "./affordance-contract.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { readEventPage } from "./event-stream.js";
 import { handleCommandRequest } from "./http-adapter.js";
@@ -45,6 +47,8 @@ export interface ControlRoomListener {
 export type StartListenerResult = ControlRoomListener | ListenerRefused;
 
 export interface StartListenerOptions {
+  /** Absent means the affordance route refuses rather than inventing an offer. */
+  readonly affordances?: AffordancePort;
   readonly csrfToken: string;
   readonly deps: CommandAdapterDeps;
   readonly host?: string;
@@ -57,6 +61,7 @@ export interface StartListenerOptions {
 
 const COMMAND_PATH = "/command";
 const EVENT_PAGE_PATH = "/events/read";
+const AFFORDANCE_PATH = "/affordances/read";
 
 function reply(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -107,6 +112,24 @@ function serveEventPage(
   reply(response, 200, readEventPage(options.subscriptions, request));
 }
 
+function serveAffordances(
+  response: ServerResponse,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  if (options.affordances === undefined) {
+    refuseRequest(response, "LISTENER_AFFORDANCES_UNAVAILABLE");
+    return;
+  }
+  if (readAffordanceRequest(body) === null) {
+    refuseRequest(response, "LISTENER_AFFORDANCE_REQUEST_INVALID");
+    return;
+  }
+  // Always 200: the frame carries its own outcome, code and layer, exactly
+  // like the event page — the seam holds no translation table.
+  reply(response, 200, options.affordances.readSurface());
+}
+
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
@@ -120,7 +143,7 @@ async function serve(
   const path = (request.url ?? "").split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
 
-  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH) {
+  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== AFFORDANCE_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
   }
@@ -136,7 +159,8 @@ async function serve(
   }
 
   if (path === COMMAND_PATH) serveCommand(response, request, options, body);
-  else serveEventPage(response, options, body);
+  else if (path === EVENT_PAGE_PATH) serveEventPage(response, options, body);
+  else serveAffordances(response, options, body);
 }
 
 export async function startControlRoomListener(

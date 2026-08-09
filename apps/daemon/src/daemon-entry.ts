@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { AffordancePort } from "./http/affordance-contract.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
@@ -47,6 +48,11 @@ export type DaemonEntryRefusalCode = (typeof DAEMON_ENTRY_REFUSAL_CODES)[number]
 
 /** The one seam through which real authority reaches the transport. */
 export interface DaemonDependencyProvider {
+  /**
+   * Optional. Absent means the affordance route REFUSES rather than inventing
+   * an offer; same posture as `subscriptions`.
+   */
+  affordances?(): AffordancePort;
   provide(): CommandAdapterDeps;
   /**
    * Optional. Absent means the stream route REFUSES rather than serving an
@@ -102,8 +108,10 @@ export function isDependencyProvider(value: unknown): value is DaemonDependencyP
   try {
     const provide = Reflect.get(value, "provide") as unknown;
     const subscriptions = Reflect.get(value, "subscriptions") as unknown;
+    const affordances = Reflect.get(value, "affordances") as unknown;
     return typeof provide === "function" &&
-      (subscriptions === undefined || typeof subscriptions === "function");
+      (subscriptions === undefined || typeof subscriptions === "function") &&
+      (affordances === undefined || typeof affordances === "function");
   } catch {
     return false;
   }
@@ -133,7 +141,12 @@ function isSubscriptionPort(value: unknown): value is SubscriptionPort {
   return hasCallable(value, "readPage") && hasCallable(value, "reseat");
 }
 
+function isAffordancePort(value: unknown): value is AffordancePort {
+  return hasCallable(value, "readSurface");
+}
+
 type ResolvedDependencies = DaemonEntryRefused | {
+  readonly affordances?: AffordancePort;
   readonly deps: CommandAdapterDeps;
   readonly ok: true;
   readonly subscriptions?: SubscriptionPort;
@@ -152,15 +165,35 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
 
   try {
     const factory = provider.subscriptions;
-    if (factory === undefined) return Object.freeze({ deps: provided, ok: true } as const);
-    if (typeof factory !== "function") {
-      return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    let subscriptions: SubscriptionPort | undefined;
+    if (factory !== undefined) {
+      if (typeof factory !== "function") {
+        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+      }
+      const candidate = factory.call(provider);
+      if (!isSubscriptionPort(candidate)) {
+        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+      }
+      subscriptions = candidate;
     }
-    const subscriptions = factory.call(provider);
-    if (!isSubscriptionPort(subscriptions)) {
-      return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+    const affordanceFactory = provider.affordances;
+    let affordances: AffordancePort | undefined;
+    if (affordanceFactory !== undefined) {
+      if (typeof affordanceFactory !== "function") {
+        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+      }
+      const candidate = affordanceFactory.call(provider);
+      if (!isAffordancePort(candidate)) {
+        return refuseEntry("DAEMON_ENTRY_DEPENDENCIES_INVALID");
+      }
+      affordances = candidate;
     }
-    return Object.freeze({ deps: provided, ok: true, subscriptions } as const);
+    return Object.freeze({
+      deps: provided,
+      ok: true,
+      ...(affordances === undefined ? {} : { affordances }),
+      ...(subscriptions === undefined ? {} : { subscriptions }),
+    } as const);
   } catch {
     return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
   }
@@ -189,6 +222,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
     ...(options.port === undefined ? {} : { port: options.port }),
+    ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;

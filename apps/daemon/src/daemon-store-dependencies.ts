@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
@@ -18,6 +19,7 @@ import type { SessionOutcome } from "./identity/session-ledger.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
+import { createAffordancePort } from "./http/affordance-read.js";
 import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
@@ -305,7 +307,14 @@ export function createStoreDependencies(
     });
   };
 
+  const affordances = () => createAffordancePort({
+    mintId: () => randomUUID(),
+    projectId: config.projectId,
+    store,
+  });
+
   return Object.freeze({
+    affordances,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     provide,
     subscriptions,
