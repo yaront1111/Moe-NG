@@ -5,6 +5,8 @@ import type {
   JsonValue,
   RuntimeCommandKind,
 } from "@moe/contracts";
+import { DOCTOR_VERSION_ERROR_CODES, versionsReported } from "./doctor-version-contract.js";
+import type { DoctorVersionReport, DoctorVersionsReported } from "./doctor-version-contract.js";
 
 /**
  * Doctor recovery commands: the daemon-side half of "nothing silently resumes".
@@ -29,12 +31,14 @@ export const DOCTOR_COMMAND_KINDS = Object.freeze([
   "doctor.propose_resource_release",
   "doctor.propose_quarantine_export",
   "doctor.propose_resume",
+  "doctor.report_versions",
 ] as const);
 export type DoctorCommandKind = (typeof DOCTOR_COMMAND_KINDS)[number];
 
 export const DOCTOR_ERROR_CODES = Object.freeze([
   "DOCTOR_REQUEST_SHAPE_INVALID",
   "DOCTOR_AUTHORITY_STALE",
+  ...DOCTOR_VERSION_ERROR_CODES,
 ] as const);
 export type DoctorErrorCode = (typeof DOCTOR_ERROR_CODES)[number];
 
@@ -104,7 +108,9 @@ export type DoctorCommandResult =
   | DoctorRequestInvalid
   | DoctorAuthorityStale
   | DoctorReported
-  | DoctorProposed;
+  | DoctorProposed
+  | DoctorVersionsReported
+  | DoctorVersionReportAbsent;
 
 interface DoctorRequest {
   readonly kind: DoctorCommandKind;
@@ -120,6 +126,16 @@ const SHAPE_INVALID: DoctorRequestInvalid = Object.freeze({
   code: "DOCTOR_REQUEST_SHAPE_INVALID",
   message: `Doctor recovery request must match ${DOCTOR_RECOVERY_SCHEMA_VERSION} exactly.`,
 });
+
+/** The doctor reads no host state: the report is built at the daemon edge and passed in. */
+const VERSION_REPORT_ABSENT = Object.freeze({
+  ok: false as const,
+  outcome: "VERSION_REPORT_ABSENT" as const,
+  layer: "DOCTOR" as const,
+  code: "DOCTOR_VERSION_REPORT_ABSENT" as const,
+  message: "A doctor version report must be supplied by the daemon edge, never read here.",
+});
+export type DoctorVersionReportAbsent = typeof VERSION_REPORT_ABSENT;
 
 const AUTHORITY_STALE: DoctorAuthorityStale = Object.freeze({
   ok: false,
@@ -212,7 +228,9 @@ function compose(request: DoctorRequest): DoctorCommandResult {
   });
 }
 
-export function evaluateDoctorCommandBytes(input: unknown): DoctorCommandResult {
+export function evaluateDoctorCommandBytes(
+  input: unknown, versionReport?: DoctorVersionReport,
+): DoctorCommandResult {
   const decoded = decodeBoundedJsonBytes(input);
   if (!decoded.ok) {
     return Object.freeze({
@@ -225,5 +243,8 @@ export function evaluateDoctorCommandBytes(input: unknown): DoctorCommandResult 
   const request = parseRequest(decoded.value);
   if (request === null) return SHAPE_INVALID;
   if (request.observedEpoch < request.recordEpoch) return AUTHORITY_STALE;
+  if (request.kind === "doctor.report_versions") {
+    return versionReport === undefined ? VERSION_REPORT_ABSENT : versionsReported(versionReport);
+  }
   return compose(request);
 }

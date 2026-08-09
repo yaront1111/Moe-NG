@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   evaluateDoctorCommandBytes,
   DOCTOR_COMMAND_KINDS,
+  DOCTOR_ERROR_CODES,
   DOCTOR_RECOVERY_SCHEMA_VERSION,
 } from "./doctor-commands.js";
+import { buildDoctorVersionReport, known } from "./doctor-version-contract.js";
 
 /**
  * Doctor recovery commands REPORT and PROPOSE. None of them applies a repair.
@@ -20,6 +22,23 @@ const EXPECTED_KINDS = [
   "doctor.propose_resource_release",
   "doctor.propose_quarantine_export",
   "doctor.propose_resume",
+  "doctor.report_versions",
+] as const;
+
+/**
+ * Hand-transcribed, including the six the version surface contributes. Deriving
+ * this from DOCTOR_ERROR_CODES would assert only that the array equals itself,
+ * and a code emitted in production but declared nowhere would stay invisible.
+ */
+const EXPECTED_CODES = [
+  "DOCTOR_REQUEST_SHAPE_INVALID",
+  "DOCTOR_AUTHORITY_STALE",
+  "DOCTOR_VERSION_REPORT_ABSENT",
+  "DOCTOR_RUNTIME_VERSION_UNREADABLE",
+  "DOCTOR_TOOL_VERSION_UNREADABLE",
+  "DOCTOR_DECLARED_PIN_UNREADABLE",
+  "DOCTOR_COMPONENT_INVENTORY_EMPTY",
+  "DOCTOR_PIN_RANGE_UNSUPPORTED",
 ] as const;
 
 /** Each proposal names one operation the runtime command vocabulary declares. */
@@ -66,6 +85,65 @@ describe("the doctor recovery command surface", () => {
   it("pins the request schema version literal", () => {
     expect(DOCTOR_RECOVERY_SCHEMA_VERSION).toBe("moe-doctor-recovery-request/1");
   });
+
+  it("declares exactly the refusal codes it can emit, by set equality", () => {
+    expect([...DOCTOR_ERROR_CODES].sort()).toEqual([...EXPECTED_CODES].sort());
+    expect(Object.isFrozen(DOCTOR_ERROR_CODES)).toBe(true);
+  });
+});
+
+describe("the version command reports only what the daemon edge supplied", () => {
+  const report = buildDoctorVersionReport({
+    observed: {
+      node: known("v24.16.0"),
+      pnpm: known("11.0.8"),
+      platform: known("win32"),
+      arch: known("x64"),
+    },
+    declared: {
+      nodeVersionFile: known("24.16.0\n"),
+      packageManager: known("pnpm@11.0.8"),
+      enginesNode: known(">=24.16.0 <25"),
+      enginesPnpm: known("11.0.8"),
+    },
+    components: [{ name: "@moe/daemon", version: known("0.0.0") }],
+    componentInventory: known("1"),
+  });
+
+  /**
+   * The doctor is PURE: it reads no host state. Asked for versions without a
+   * report it must refuse with a stable code, never return an empty or optimistic
+   * one — an absent report that rendered as a report would be the worst outcome
+   * this surface can produce.
+   */
+  it("refuses under the doctor layer when no report was supplied", () => {
+    const result = evaluate({ kind: "doctor.report_versions" });
+    expect(result.outcome).toBe("VERSION_REPORT_ABSENT");
+    if (result.outcome !== "VERSION_REPORT_ABSENT") return;
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("DOCTOR_VERSION_REPORT_ABSENT");
+    expect(result.layer).toBe("DOCTOR");
+  });
+
+  it("returns the supplied report frozen, and still applies no change", () => {
+    const result = evaluateDoctorCommandBytes(
+      encode(request({ kind: "doctor.report_versions" })),
+      report,
+    );
+    expect(result.outcome).toBe("VERSIONS_REPORTED");
+    if (result.outcome !== "VERSIONS_REPORTED") return;
+    expect(result.report).toBe(report);
+    expect(result.appliesChange).toBe(false);
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("still refuses a stale authority before it looks at the report", () => {
+    const result = evaluateDoctorCommandBytes(
+      encode(request({ kind: "doctor.report_versions", recordEpoch: 9, observedEpoch: 2 })),
+      report,
+    );
+    expect(result.outcome).toBe("AUTHORITY_STALE");
+  });
 });
 
 describe("doctor commands report and propose without applying", () => {
@@ -88,10 +166,16 @@ describe("doctor commands report and propose without applying", () => {
   });
 
   it("never applies a change on any declared command", () => {
-    const outcomes = DOCTOR_COMMAND_KINDS.map((kind) => evaluate({ kind }));
+    const outcomes = DOCTOR_COMMAND_KINDS.map((kind) => [kind, evaluate({ kind })] as const);
     expect(outcomes).toHaveLength(EXPECTED_KINDS.length);
     expect(outcomes.length).toBeGreaterThan(0);
-    for (const result of outcomes) {
+    for (const [kind, result] of outcomes) {
+      // One kind takes an argument. Branching on it keeps every OTHER kind pinned
+      // to ok:true; loosening the assertion for all of them would retire the case.
+      if (kind === "doctor.report_versions") {
+        expect(result.ok).toBe(false);
+        continue;
+      }
       expect(result.ok).toBe(true);
       if (!result.ok) continue;
       expect(result.appliesChange).toBe(false);
