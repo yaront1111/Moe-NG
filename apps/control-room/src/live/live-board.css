@@ -1,0 +1,95 @@
+/* Live board geometry + card chrome, on the shared tokens. */
+
+.cr-liveboard-columns {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: 1rem;
+}
+
+.cr-liveboard-column {
+  background: color-mix(in srgb, var(--cr-surface) 55%, transparent);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-block-size: 16rem;
+  padding: 0.8rem;
+}
+
+.cr-liveboard-column > h2 {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.cr-liveboard-card {
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-line);
+  border-radius: var(--cr-radius-sm);
+  box-shadow: var(--cr-shadow-low);
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+}
+
+.cr-liveboard-card[draggable="true"] {
+  border-color: color-mix(in srgb, var(--cr-action) 45%, var(--cr-line));
+  cursor: grab;
+}
+
+.cr-liveboard-card header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: space-between;
+}
+
+.cr-liveboard-card header span {
+  font-family: var(--cr-font-utility);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.cr-liveboard-card header code,
+.cr-liveboard-card small {
+  color: var(--cr-ink-soft);
+  font-size: 0.62rem;
+}
+
+.cr-liveboard-card button {
+  background: var(--cr-action);
+  border-radius: var(--cr-radius-xs);
+  color: var(--cr-white);
+  font-size: 0.68rem;
+  font-weight: 700;
+  justify-self: start;
+  min-block-size: 1.9rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.cr-liveboard-card button:hover {
+  background: var(--cr-action-deep);
+}
+
+.cr-liveboard-card p[data-testid^="cr.liveboard.report."] {
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+  margin: 0;
+}
+
+.cr-liveboard-card p[data-ok="false"] {
+  color: var(--cr-attention);
+}
+
+[data-testid="cr.liveboard.dropnote"] {
+  background: var(--cr-attention-wash);
+  border: 1px solid color-mix(in srgb, var(--cr-attention) 38%, var(--cr-line));
+  border-radius: var(--cr-radius-xs);
+  font-size: 0.72rem;
+  padding: 0.4rem 0.6rem;
+}

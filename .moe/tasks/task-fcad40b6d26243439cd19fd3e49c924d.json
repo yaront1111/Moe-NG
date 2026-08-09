@@ -149,8 +149,8 @@
       "completedAt": "2026-08-09T17:08:22.826Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-1a528e3e",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:24.731Z",
-  "updatedAt": "2026-08-09T17:08:22.826Z",
+  "updatedAt": "2026-08-09T17:08:47.283Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:27:05.232Z",
     "plannedStepCount": 8,
@@ -254,5 +254,20 @@
   "workStartedAt": "2026-08-09T15:14:44.075Z",
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "reviewStartedAt": "2026-08-09T17:08:47.283Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  20 passed (20)\n      Tests  332 passed (332)\n   Start at  20:08:00\n   Duration  665ms (transform 3.49s, setup 0ms, import 5.02s, tests 671ms, environment 1ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-09T17:08:47.283Z"
+  },
+  "filesModified": [
+    "packages/core/src/expansion/planning-expansion-contract.test.ts",
+    "packages/core/src/planning/planning-command-contract.ts",
+    "packages/core/src/planning/planning-event-contract.ts",
+    "packages/core/src/planning/planning-expansion-validation.ts",
+    "packages/core/src/planning/planning-expansion-validation.js",
+    "packages/core/src/index.ts"
   ]
 }

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
+import "./live-board.css";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import { Fact } from "../kernel.js";
 import { ShellFrame } from "../shell/frame.js";
+import { LiveBoard } from "./live-board.js";
+import { createBoardFeed } from "./live-board-feed.js";
+import type { SurfaceFrame } from "./live-board-feed.js";
 import { createLiveEventFeed } from "./live-event-feed.js";
 import type { LiveFrame } from "./live-event-feed.js";
 import { resolveLiveSetup } from "./live-config.js";
@@ -113,6 +117,7 @@ export interface LiveControlRoomProps {
 
 export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
   const [frame, setFrame] = useState<LiveFrame | null>(null);
+  const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const feed = useMemo(() => (setup.ok
     ? createLiveEventFeed({
       intervalMs: POLL_INTERVAL_MS,
@@ -122,11 +127,19 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
       transport: setup.transport,
     })
     : null), [setup]);
+  const boardFeed = useMemo(() => (setup.ok
+    ? createBoardFeed({
+      headers: setup.headers,
+      intervalMs: POLL_INTERVAL_MS,
+      onFrame: setSurface,
+    })
+    : null), [setup]);
 
   useEffect(() => {
     feed?.start();
-    return (): void => { feed?.stop(); };
-  }, [feed]);
+    boardFeed?.start();
+    return (): void => { feed?.stop(); boardFeed?.stop(); };
+  }, [feed, boardFeed]);
 
   if (!setup.ok) return <LiveRefusedPanel result={setup} />;
   return (
@@ -154,11 +167,17 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
           <p>Development live attachment</p>
           <h1>What the daemon says, as it says it.</h1>
           <span>
-            Every row is copied from the committed event ledger over the real
-            transport. Nothing is inferred, cached, or invented — including the
-            absence of command affordances.
+            The board is the daemon&apos;s own offer surface: dispatch or drag a
+            ready card onto Committed to hand its affordance back. Cards move
+            only when the ledger does.
           </span>
         </header>
+        <LiveBoard
+          client={setup.client}
+          frame={surface}
+          sessionCredential={setup.sessionCredential}
+          transport={setup.transport}
+        />
         <LiveTimeline frame={frame} />
       </div>
     </ShellFrame>
