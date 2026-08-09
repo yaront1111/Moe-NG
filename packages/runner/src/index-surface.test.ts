@@ -11,6 +11,9 @@
  * derived from the namespace under test, so a removed export AND an unreviewed
  * addition both go red.
  */
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { expect, it } from "vitest";
 
 import * as runner from "@moe/runner";
@@ -53,6 +56,13 @@ import type {
   PlatformBoundary, PlatformBoundaryVerdict, PlatformFactEnvelope, PlatformFailure,
   PlatformHostIdentity, PlatformLayer, PlatformObservation, PlatformTruthClass,
 } from "@moe/runner";
+/** The Git ref and artifact object enumeration seam, through the same root. */
+import type {
+  ArtifactDirectoryEntry, ArtifactDirectoryEntryKind, ArtifactEnumerationFailure,
+  ArtifactEnumerationLayer, ArtifactEnumerationOk, ArtifactEnumerationResult,
+  ArtifactObjectObservation, ArtifactStagingObservation, GitRefListing, GitRefObservation,
+  ScopeObserverLayer,
+} from "@moe/runner";
 
 it("resolves the self-referencing package root specifier @moe/runner", () => {
   expect(typeof runner.observeScope).toBe("function");
@@ -60,7 +70,7 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
 
 type ExportKind = "array" | "function" | "number" | "regexp" | "string";
 /**
- * Hand-transcribed: 26 pre-existing runner values, 40 supervisor values, 50
+ * Hand-transcribed: 29 runner scope/artifact/workspace values, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
  * process wrapper publishes, and the 11 values the platform boundary seam
  * publishes. Read off the module sources, never off the namespace under test —
@@ -71,9 +81,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ADMITTED_EFFECT_TRANSITIONS", "array"], ["ARTIFACT_ADDRESS_PATTERN", "regexp"],
   ["ATTEMPT_SLICE_STATES", "array"], ["EFFECT_CALLER_CONTRACT", "array"],
   ["EFFECT_COMMANDS", "array"], ["EFFECT_STATES", "array"],
-  ["GRANT_STATES", "array"], ["MAX_SCOPE_OBSERVATION_BYTES", "number"],
-  ["MAX_SCOPE_PATHS", "number"], ["MAX_SUPERVISOR_COUNT", "number"],
-  ["MAX_SUPERVISOR_TEXT_CHARS", "number"], ["MAX_WORKSPACE_ENTRIES", "number"],
+  ["GRANT_STATES", "array"], ["MAX_ARTIFACT_ENUMERATION_ENTRIES", "number"],
+  ["MAX_SCOPE_OBSERVATION_BYTES", "number"], ["MAX_SCOPE_PATHS", "number"],
+  ["MAX_SUPERVISOR_COUNT", "number"], ["MAX_SUPERVISOR_TEXT_CHARS", "number"],
+  ["MAX_WORKSPACE_ENTRIES", "number"],
   ["MIRRORED_LEASE_KINDS", "array"], ["MIRRORED_LEASE_STATES", "array"],
   ["RUNNER_ARTIFACT_ERROR_CODES", "array"], ["RUNNER_SCOPE_ERROR_CODES", "array"],
   ["RUNNER_WORKSPACE_ERROR_CODES", "array"], ["SCOPE_ATTRIBUTION_CLASSES", "array"],
@@ -88,7 +99,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["canonicalPathRejection", "function"], ["consumeActivationGrant", "function"],
   ["createArtifactStore", "function"], ["createNodeArtifactFs", "function"],
   ["createNodeGitObserver", "function"], ["createNodeScopePaths", "function"],
-  ["deriveGrantId", "function"], ["fenceMirroredLease", "function"],
+  ["deriveGrantId", "function"], ["enumerateArtifactsAt", "function"],
+  ["fenceMirroredLease", "function"],
   ["grantRefusal", "function"], ["hermeticGitEnvironment", "function"],
   ["initialGrantBinding", "function"], ["inputManifestDigestInput", "function"],
   ["isTerminalEffectState", "function"], ["observeScope", "function"],
@@ -96,8 +108,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["parseCommandInput", "function"], ["parseDependencyWitness", "function"],
   ["parseEffectClaim", "function"], ["parseEffectIntent", "function"],
   ["parseEffectTombstone", "function"], ["parseMirroredLease", "function"],
-  ["parseMirroredProof", "function"], ["parseSettlementEvidence", "function"],
-  ["parseUncertaintyEvidence", "function"], ["refMatches", "function"],
+  ["parseMirroredProof", "function"], ["parseRefListing", "function"],
+  ["parseSettlementEvidence", "function"], ["parseUncertaintyEvidence", "function"],
+  ["refMatches", "function"],
   ["refRejection", "function"], ["resultManifestDigestInput", "function"],
   ["scopeObservationDigestInput", "function"], ["supervisorFailure", "function"],
   ["validateActivationCommit", "function"], ["withLeg", "function"],
@@ -154,7 +167,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(147);
+  expect(EXPECTED_EXPORTS.length).toBe(150);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1113,4 +1126,83 @@ it("composes the recovery-inventory seam through the root, naming every closure 
   expect(report.coverage).toBe("UNKNOWN");
   expect(seen.map((context) => context.class)).toEqual(["WORKSPACE"]);
   expect(runner.RECOVERY_INVENTORY_ERROR_CODES).toContain("RECOVERY_INVENTORY_COVERAGE_UNKNOWN");
+});
+
+/* ------------------------------------------------------------------ *
+ * The Git ref and artifact object enumeration seam.
+ *
+ * Both capabilities are reached by CALLING through the root, never by naming a
+ * literal that would typecheck against a locally re-declared shape. Both
+ * refusals pin the exact code AND the layer that answered: a caller that cannot
+ * tell the port's I/O fault from the store's layout verdict has lost the whole
+ * reason the two-layer vocabulary exists.
+ * ------------------------------------------------------------------ */
+
+const SRC_DIR = dirname(fileURLToPath(import.meta.url));
+
+it("parses a ref listing at the root and names the layer refusing a truncated one", () => {
+  const record = `refs/heads/main\0${HEAD_OID}\0commit\0\n`;
+  const listing: GitRefListing = runner.parseRefListing(
+    new TextEncoder().encode(record),
+    "for-each-ref",
+  );
+  const observed: readonly GitRefObservation[] = listing.refs;
+  expect([observed.map((ref) => ref.refName), observed.map((ref) => ref.targetCommit)]).toEqual([
+    ["refs/heads/main"], [HEAD_OID],
+  ]);
+  // The digest is carried even by an empty observation, so "observed, nothing
+  // there" never degrades into bare proof of absence.
+  expect(listing.refCount).toBe(1);
+  expect(listing.observationDigest).toMatch(/^[0-9a-f]{64}$/u);
+
+  let refused: unknown;
+  try {
+    runner.parseRefListing(new TextEncoder().encode("refs/heads/x\0"), "for-each-ref");
+  } catch (error) {
+    refused = error;
+  }
+  if (!(refused instanceof runner.ScopeObserverError)) {
+    throw new Error("a record with no LF terminator must refuse, not return");
+  }
+  const layer: ScopeObserverLayer | undefined = refused.layer;
+  expect([refused.code, layer]).toEqual(["RUNNER_SCOPE_STATUS_MALFORMED", "GIT_OBSERVER"]);
+});
+
+it("enumerates artifacts at the root and separates the two refusing layers", () => {
+  const unavailable: ArtifactEnumerationResult = runner.enumerateArtifactsAt(
+    { exists: () => true } as unknown as ArtifactFsPort,
+    "store-root/objects",
+  );
+  if (unavailable.ok) throw new Error("a port with no listDirectory must refuse");
+  const failure: ArtifactEnumerationFailure = unavailable;
+  const failureLayer: ArtifactEnumerationLayer = failure.layer;
+  // The STORE refuses, not the port: nothing was read, so "empty" is not a
+  // claim this call is entitled to make.
+  expect([failure.code, failureLayer]).toEqual(
+    ["RUNNER_ARTIFACT_ENUMERATION_UNAVAILABLE", "ARTIFACT_STORE"],
+  );
+
+  const emptyPort = { exists: () => true, listDirectory: () => [] } as unknown as ArtifactFsPort;
+  const empty: ArtifactEnumerationResult = runner.enumerateArtifactsAt(emptyPort, "root/objects");
+  if (!empty.ok) throw new Error(`a readable empty directory must succeed, got ${empty.code}`);
+  const observation: ArtifactEnumerationOk = empty;
+  const objects: readonly ArtifactObjectObservation[] = observation.objects;
+  const staging: readonly ArtifactStagingObservation[] = observation.staging;
+  expect([objects.length, staging.length, observation.entryCount]).toEqual([0, 0, 0]);
+  expect(observation.observationDigest).toMatch(/^[0-9a-f]{64}$/u);
+  expect(runner.MAX_ARTIFACT_ENUMERATION_ENTRIES).toBe(100_000);
+});
+
+it("lists a real directory through the published node artifact port", () => {
+  const port: ArtifactFsPort = runner.createNodeArtifactFs();
+  const listDirectory = port.listDirectory;
+  if (listDirectory === undefined) throw new Error("the shipped port must supply listDirectory");
+  const entries: readonly ArtifactDirectoryEntry[] = listDirectory.call(port, SRC_DIR);
+  const kinds: readonly ArtifactDirectoryEntryKind[] = entries.map((entry) => entry.kind);
+  // Non-vacuous by assertion, and anchored: a scan root that silently narrowed
+  // to an empty or wrong directory would still satisfy a bare length check.
+  expect(entries.length).toBeGreaterThan(0);
+  expect(entries.find((entry) => entry.name === "index.ts")?.kind).toBe("FILE");
+  expect(entries.find((entry) => entry.name === "scope")?.kind).toBe("DIRECTORY");
+  expect(kinds.filter((kind) => !["FILE", "DIRECTORY", "OTHER"].includes(kind))).toEqual([]);
 });

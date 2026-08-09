@@ -1,12 +1,21 @@
 export {
   ARTIFACT_ADDRESS_PATTERN,
+  MAX_ARTIFACT_ENUMERATION_ENTRIES,
   RUNNER_ARTIFACT_ERROR_CODES,
   refMatches,
   refRejection,
+  type ArtifactDirectoryEntry,
+  type ArtifactDirectoryEntryKind,
+  type ArtifactEnumerationFailure,
+  type ArtifactEnumerationLayer,
+  type ArtifactEnumerationOk,
+  type ArtifactEnumerationResult,
   type ArtifactFailure,
   type ArtifactFsPort,
+  type ArtifactObjectObservation,
   type ArtifactRef,
   type ArtifactReferenceProof,
+  type ArtifactStagingObservation,
   type ArtifactStore,
   type ArtifactStoreOptions,
   type DeleteArtifactResult,
@@ -15,6 +24,7 @@ export {
   type StagedArtifact,
   type VerifyArtifactResult,
 } from "./artifacts/artifact-contract.js";
+export { enumerateArtifactsAt } from "./artifacts/artifact-enumeration.js";
 export { createNodeArtifactFs } from "./artifacts/artifact-node-fs.js";
 export { createArtifactStore } from "./artifacts/artifact-store.js";
 
@@ -27,6 +37,8 @@ export {
   canonicalPathRejection,
   scopeObservationDigestInput,
   type GitObserver,
+  type GitRefListing,
+  type GitRefObservation,
   type ObserveScopeInput,
   type ObserveScopeResult,
   type RunnerScopeErrorCode,
@@ -35,6 +47,7 @@ export {
   type ScopeFailure,
   type ScopeGitAttribution,
   type ScopeObservation,
+  type ScopeObserverLayer,
   type ScopePathObserver,
 } from "./scope/scope-contract.js";
 export {
@@ -44,6 +57,7 @@ export {
   hermeticGitEnvironment,
 } from "./scope/scope-git.js";
 export { observeScope } from "./scope/scope-observation.js";
+export { parseRefListing } from "./scope/scope-refs.js";
 
 /**
  * The supervisor effect seam, curated rather than blanket re-exported: a consumer
