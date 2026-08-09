@@ -16,7 +16,7 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 3,
+  "order": 14,
   "comments": [
     {
       "id": "comment-38459f966b4c495e8deb16840402d3e9",
@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-09T10:45:43.147Z",
+  "updatedAt": "2026-08-09T11:40:05.530Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8a4a1764"
@@ -44,8 +44,8 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T10:39:13.320Z"
   },
-  "blockedReason": "Restoring BLOCKED, set 2026-08-09 by architect-8a4a1764. moe.unblock_worker with retryTask:false released the WORKER but ALSO flipped this TASK to PLANNING as a side effect — see its unblockedTaskIds. That was not intended and the block is unchanged: no restore controller exists, only its witness shapes (RestoreQuiesceWitness / RecoveryCompletionWitness are declarations plus exact-key shape guards; quiesce() records that a restore happened, nothing performs one). Zero hits repo-wide for recoveryAnchor, keyEpoch, orphan inventory or UNKNOWN_TRUTH, and `pnpm test:fault` is not a script. Leaving this PLANNING would send the next architect into the same wall and cost a full session. Full analysis: mem:task-task-0c89476b78044024b07c86c0c8986bd0-handoff. Unblocks when a task implements the restore controller per design line 1201 (two-slot anchor installer, nonce/key-epoch minting with credential rejection, post-N effect inventory with quarantine, R3 recovery digest gate) plus a test:fault lane. SCHEDULING HAZARD for whoever routes it: task-05ce9b8f (Security fault matrix) owns the whole tests/fault/** tree and collides with this task's subdirectory.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T10:45:04.502Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

@@ -63,25 +63,31 @@
     {
       "stepId": "step-4",
       "description": "TDD red: write the failing spec for the shared surface-audit predicates. Each predicate must be asserted to be non-vacuous and to detect a real violation, using small hand-built DOM fragments plus at least one real rendered surface. Cover: auditFactChips (section 12 bar 3) flags a cr.fact.* wrapper with no cr.chip.* descendant and reports the offending fact id; auditActionLegality (bar 4) flags an enabled cr.action.* whose data-command-id is absent from the supplied nextAllowedCommands, and does NOT flag a disabled one; auditKeyboardReachability flags an interactive cr.action.* that is unreachable (negative tabindex, aria-hidden, or hidden) and confirms DOM order matches visual order; auditLiveRegions (section 11.1) flags a cr.banner.* carrying neither role=status/alert nor aria-live; auditActionParity (section 4.16 last clause) flags any cr.action.* test id present at wide width but missing at narrow. Every predicate returns a checked count, and every test asserts checked is greater than zero, so an audit that swept nothing fails instead of passing. Tests fail because the module does not exist yet.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/a11y/surface-audit.test.ts"
       ],
       "newFiles": [
         "apps/control-room/src/a11y/surface-audit.test.ts"
       ],
-      "startedAt": "2026-08-09T11:39:43.597Z"
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/surface-audit.test.ts"
+      ],
+      "note": "TDD RED recorded for five non-vacuous production audit surfaces. Tests pin exact offending ids and stable codes, include enabled/disabled/supplied command cases, all three unreachable shapes, explicit DOM/visual-order agreement and mismatch, live-region semantics, wide/narrow action parity, a real rendered Fact, and the POL actor-badge exclusion. Fresh focused run failed solely because ./surface-audit.js does not yet exist.",
+      "startedAt": "2026-08-09T11:39:43.597Z",
+      "completedAt": "2026-08-09T11:41:35.286Z"
     },
     {
       "stepId": "step-5",
       "description": "Make step 4 green. Implement the audit predicates over a supplied root element, each returning a frozen {checked, violations} record where violations name the offending element's test id and a stable code (FACT_WITHOUT_CHIP, ACTION_WITHOUT_COMMAND, ACTION_UNREACHABLE, BANNER_WITHOUT_LIVE_REGION, ACTION_MISSING_AT_NARROW). Selectors must use the reserved prefixes exactly as kernel.tsx documents them (cr.fact. names the wrapper alone, cr.chip. the chip alone), so prefix selection keeps counting facts and chips exactly. auditActionLegality takes the NextAllowedCommand list as a parameter and compares data-command-id, deriving no authority of its own. These are production modules under an owned path, not test helpers. Keep the module under 250 lines; if it approaches that, move the truth-class predicate of step 6 into a sibling module rather than growing this one.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/a11y/surface-audit.ts"
       ],
       "newFiles": [
         "apps/control-room/src/a11y/surface-audit.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T11:41:38.638Z"
     },
     {
       "stepId": "step-6",
@@ -145,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.717Z",
-  "updatedAt": "2026-08-09T11:39:43.597Z",
+  "updatedAt": "2026-08-09T11:41:38.638Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-1721c07f",
@@ -155,7 +161,7 @@
     "firstClaimAt": "2026-08-09T10:27:40.723Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -164,7 +170,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T11:32:35.490Z",

@@ -146,13 +146,29 @@
     {
       "stepId": "step-8",
       "description": "Adversarial self-review, then commit by explicit pathspec, and state what this completes. Review: is there ANY path from crashed to running that skips a classified record and an explicit continuation; can an attempt whose state cannot be established be adopted, through any route including a default branch; can the interrupted attempt's record be rewritten, deleted or reclassified by a continuation; does continuation genuinely take ONE command, or did the implementation leave a caller to orchestrate two; is any recovery rule restated in the daemon rather than consumed from @moe/runner; is @moe/runner imported anywhere by a deep subpath; does any refusal surface a locally invented code where the runner's own code and layer should have survived; does reconciliation duplicate rows when run twice; was doctor-commands.ts modified. Then stage and commit by EXPLICIT PER-FILE pathspec — never a bare git commit, never git add -A, and NEVER a directory pathspec under apps/daemon/src/, since sibling tasks own bootstrap/, goals/, planning/, work/ and http/ in the same tree. Run `git status --porcelain` first and unstage foreign paths. Finally record in the completion evidence that this closes J3's daemon-side composition: with J1 (task-671578e5) and J4 (task-9011e3b3), all three journeys the Foundation canary needs now have owners, and the canary itself remains the gate that proves them together.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T11:39:20.139Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/continuation-binding.test.ts",
+        "apps/daemon/src/recovery/continuation-contracts.js",
+        "apps/daemon/src/recovery/continuation-contracts.ts",
+        "apps/daemon/src/recovery/continuation-service.js",
+        "apps/daemon/src/recovery/continuation-service.test.ts",
+        "apps/daemon/src/recovery/continuation-service.ts",
+        "apps/daemon/src/recovery/continuation-test-harness.ts",
+        "apps/daemon/src/recovery/recovery-test-fixtures.ts",
+        "apps/daemon/src/recovery/restart-reconciliation-idempotence.test.ts",
+        "apps/daemon/src/recovery/restart-reconciliation.js",
+        "apps/daemon/src/recovery/restart-reconciliation.test.ts",
+        "apps/daemon/src/recovery/restart-reconciliation.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW, each question answered against the code rather than the intent:\n\n- Path from crashed to running that skips a classified record? None. The only writer of a continuation binding is evaluateContinuationCommandBytes, and it refuses before any commit unless readReconciliationRecords returns a record for that attempt whose classification is a member of the runner's RECOVERY_OUTCOME_KINDS. Reconciliation itself cannot resume anything: the vocabulary it can produce has no RESUMED arm, so a silent resume is unexpressible rather than merely unchecked.\n- Can an unestablished attempt be adopted through any route, including a default branch? No. recordOf forwards classifyCrash's own kind; there is no default arm and no local re-derivation. Drill 3 confirms — substituting the constant \"ADOPTED\" reddens 4 suites / 10 tests including both \"uncertainty stays suspect\" cases.\n- Can a continuation rewrite, delete or reclassify the interrupted attempt's record? No, and this is now proven rather than asserted: bindingTarget is the only place a write target is chosen, and the drill that pointed it at the attempt's aggregate reddens the byte-identity test by name.\n- Does continuation take ONE command? Yes — one kind in the vocabulary, one entry point, one durable row per call, and the test counts all three rather than checking the end state is reachable.\n- Any recovery rule restated in the daemon? No. classifyCrash, admitSuccessorOverlap, admitResume, RECOVERY_OUTCOME_KINDS and PREDECESSOR_RELEASES are all consumed; the request parser validates the release lattice against the runner's exported list, not a local copy.\n- Deep subpath import of @moe/runner? None: `grep -rn \"@moe/runner/\" apps/daemon/src/` returns nothing. Additionally the three bridged modules were LOADED in a plain Node process (node --experimental-strip-types, run from apps/daemon) and resolved their @moe/runner root imports at runtime, so the wall vitest would have hidden is checked directly.\n- Locally invented code where the runner's should have survived? No. boundaryRefusal carries the runner's code, layer and message verbatim; the four daemon codes cover ingress and the daemon's own gates, which have no runner equivalent, and all four are raised at layer \"CONTINUATION\" so the two layers stay distinguishable.\n- Duplicate rows on a second reconciliation? No — proven by reading row counts back, on unchanged state AND after a legitimate reclassification.\n- doctor-commands.ts modified? No. It is absent from the change set; it still reports and proposes for an operator, and continuation now APPLIES the same \"work.resume\" operation it proposes.\n\nCOMMIT — READ THIS, IT IS NOT THE NORMAL SHAPE. There is no commit of this task's own. Between the gate run and the staging step, a sibling task's completion hook (task-9011e3b3, J4) swept the whole working tree and committed all twelve of these files inside `5ef4bcc feat(task-9011e3b32c414e9ca0d49f49fdfaaf08): Persist the review flow...`. By the time `git add -- <twelve explicit paths>` ran there was nothing left to stage, and `git diff --cached --name-only` was empty. I did not amend the foreign commit, did not create an empty commit, and did not stage anything foreign — the staged index was verified empty before and after.\n\nWhat I verified instead, so the bytes under review are the bytes that passed the gates: `git show HEAD:apps/daemon/src/recovery/continuation-service.ts | sha256sum` equals the working-tree sha a23af655ecad358659266d61b1679da23882256754ae1eaa55aa395bce09f91b, which is the same sha recorded before the step-7 drills and restored after them; and `git status --porcelain -- apps/daemon/src/recovery/` is empty, so every one of the twelve matches HEAD. QA should review by `git diff 7afa17d..HEAD -- apps/daemon/src/recovery/`, which lists exactly the twelve owned files and nothing else.\n\nGATES, run fresh as one chained command after all of the above: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` -> exit 0. Daemon suite 26 files / 480 tests passed; every package typechecks Done.\n\nWHAT THIS COMPLETES. This closes J3's daemon-side composition: restart now reads the durable record set and produces adopted / absent / suspect / quarantined / reconciliation records with truth chips, and healthy continuation is ONE safe action that appends a traceable successor binding instead of editing history. With J1 (task-671578e5) and J4 (task-9011e3b3), all three journeys the Foundation canary needs now have owners. The canary itself remains the gate that proves them together — nothing here claims that proof.",
+      "startedAt": "2026-08-09T11:39:20.139Z",
+      "completedAt": "2026-08-09T11:41:53.715Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5981deec",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-b2df68b9",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -171,7 +187,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T10:40:22.680Z",
-  "updatedAt": "2026-08-09T11:39:20.139Z",
+  "updatedAt": "2026-08-09T11:42:54.256Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
@@ -179,7 +195,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:41:40.226Z",
@@ -187,7 +204,7 @@
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
     "firstClaimAt": "2026-08-09T10:46:31.243Z",
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "planningNotes": {
     "approachesConsidered": "(1) THE TWO HALVES SHARE A TASK because they share the same durable record set and the same store transaction discipline, and because splitting them would let restart reconciliation land without any way to act on its output — a board full of SUSPECT records and no continuation command is worse than neither. They are also both small: this is composition over @moe/runner's finished recovery subtree.\n(2) THE HARD DEPENDENCY IS REAL AND MUST BE CHECKED AT STEP 1, not assumed. task-7d0abdcd publishes classifyCrash / admitResume / advanceRecoveryDrain on the @moe/runner root. Until it lands they are unreachable: the exports map is exclusive and a deep subpath does not resolve at runtime. If a worker reaches for a deep import to get moving, this task ships a runtime failure that vitest will hide — the exact wall that has cost this board several task-days.\n(3) APPEND-ONLY IS THE PROPERTY MOST LIKELY TO BE IMPLEMENTED WRONG, because the natural way to 'continue an interrupted attempt' is to update that attempt's row. Design 1099 requires a traceable continuation BINDING and explicitly says 'not edited history'. I gave it its own step and a byte-comparison assertion, because a test that only checks 'a new record exists' passes against an in-place rewrite.\n(4) NOTHING SILENTLY RESUMES IS ASSERTED AS AN ABSENCE, which is hard to test well. The plan does it two ways: totality (every in-flight attempt lands in exactly one classified record) and a vocabulary check (the outcome kinds equal @moe/runner's exported RECOVERY_OUTCOME_KINDS, which deliberately contains no RESUMED arm). Together those make a silent resume unexpressible rather than merely untested.",
@@ -211,7 +228,29 @@
     "worker-f2e587cb",
     "worker-533a53ab",
     "worker-5981deec",
-    "architect-5b5302ee"
+    "architect-5b5302ee",
+    "qa-b2df68b9"
   ],
-  "workStartedAt": "2026-08-09T10:46:48.006Z"
+  "workStartedAt": "2026-08-09T10:46:48.006Z",
+  "reviewStartedAt": "2026-08-09T11:42:49.548Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "apps/daemon typecheck: Done\n\n Test Files  26 passed (26)\n      Tests  480 passed (480)\n\npackages/contracts typecheck: Done\npackages/store typecheck: Done\npackages/core typecheck: Done\npackages/runner typecheck: Done\npackages/review typecheck: Done\npackages/coordination typecheck: Done\napps/control-room typecheck: Done\napps/daemon typecheck: Done\nVERIFY_EXIT=0",
+    "reportedAt": "2026-08-09T11:42:49.548Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/recovery-test-fixtures.ts",
+    "apps/daemon/src/recovery/restart-reconciliation.test.ts",
+    "apps/daemon/src/recovery/restart-reconciliation.ts",
+    "apps/daemon/src/recovery/restart-reconciliation.js",
+    "apps/daemon/src/recovery/restart-reconciliation-idempotence.test.ts",
+    "apps/daemon/src/recovery/continuation-service.test.ts",
+    "apps/daemon/src/recovery/continuation-service.ts",
+    "apps/daemon/src/recovery/continuation-service.js",
+    "apps/daemon/src/recovery/continuation-contracts.ts",
+    "apps/daemon/src/recovery/continuation-contracts.js",
+    "apps/daemon/src/recovery/continuation-test-harness.ts",
+    "apps/daemon/src/recovery/continuation-binding.test.ts"
+  ]
 }

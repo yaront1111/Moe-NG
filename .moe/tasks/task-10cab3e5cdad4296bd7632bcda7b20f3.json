@@ -16,7 +16,7 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 5,
+  "order": 16,
   "comments": [
     {
       "id": "comment-80f83dea71414ff8b1d2bdcf80fec23a",
@@ -36,15 +36,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-09T11:21:46.488Z",
+  "updatedAt": "2026-08-09T11:40:12.277Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:45:35.201Z"
   },
-  "blockedReason": "Hard dependency “closure of all reference-model blocker findings” remains UNKNOWN: d33240c is the only correction candidate but has no independent closure artifact, and the landed DEVELOPMENT_ONLY reference explicitly excludes WDRR rings and resource queues required by this task. Production WorkItem/ring/resource/opportunity-evidence/cap-revision contracts are absent; the reference trusts caller-declared bypass IDs and retains hostile-state gaps. Implementing from it would invent policy/authority and violate the task rails. Honest contracts/input, WDRR, aging/cap, resources, composition/property, and root-publication responsibilities also exceed the 10-file cap once mandatory TypeScript bridges and tests are included.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T10:58:47.404Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
