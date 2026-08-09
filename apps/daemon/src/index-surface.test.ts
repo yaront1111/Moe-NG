@@ -25,6 +25,8 @@ import type {
   DoctorProposed,
   DoctorReported,
   DoctorRequestInvalid,
+  DoctorVersionReportAbsent,
+  DoctorVersionsReported,
   DurableAggregate,
   DurableLedger,
   EventGapFrame,
@@ -298,7 +300,7 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<(typeof daemon.DOCTOR_ERROR_CODES)[number]>().toEqualTypeOf<DoctorErrorCode>();
     expectTypeOf<DoctorCommandResult>().toEqualTypeOf<
       DoctorAuthorityStale | DoctorInputRejected | DoctorProposed | DoctorReported
-      | DoctorRequestInvalid
+      | DoctorRequestInvalid | DoctorVersionsReported | DoctorVersionReportAbsent
     >();
     expectTypeOf<ReturnType<typeof daemon.evaluateDoctorCommandBytes>>()
       .toEqualTypeOf<DoctorCommandResult>();
