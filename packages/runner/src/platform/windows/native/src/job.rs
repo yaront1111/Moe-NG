@@ -2,10 +2,10 @@
 //!
 //! SCOPE. This is containment configuration only: create, configure, verify,
 //! terminate, count, close. Process creation, `PROC_THREAD_ATTRIBUTE_JOB_LIST`,
-//! `AssignProcessToJobObject`, membership, identity, resume, wait and
-//! partial-construction unwind are deliberately ABSENT — they belong to child 2
-//! (task-a02496064e9e4e87a888cc112830d7a4), and implementing them here would
-//! collide with its owner in the shared working directory.
+//! `AssignProcessToJobObject`, membership, identity and resume live in
+//! `process.rs`; wait, exit query and the `ActiveProcesses == 0` poll live in
+//! `lifecycle.rs`; the two unwind regimes live in `unwind.rs`. Those modules
+//! build on this one and none of them belongs here.
 
 use crate::handle::OwnedHandle;
 use crate::win32::{NativeError, NativeOp, RawHandle, Win32Calls, REQUIRED_LIMIT_FLAGS};

@@ -21,20 +21,22 @@
 //! consuming [`OwnedHandle::close`] is therefore the supported path, and `Drop`
 //! is only a leak guard.
 //!
-//! # Scope and consumer
+//! # Scope
 //!
-//! Suspended process creation, atomic `PROC_THREAD_ATTRIBUTE_JOB_LIST`
-//! membership, the explicit assignment confirmation, the membership and
-//! live-handle identity proofs, and resume were added by
-//! task-885a46e9fb274a94b12faa826ba580dc. Teardown is NOT here: wait, exit
-//! query, terminate, the `ActiveProcesses == 0` query, the reverse-order unwind
-//! protocol and the real-Windows acceptance test belong to sibling
-//! task-af99cf146c9b4f4d99b49d8c00caed63.
+//! Job configuration and verification; suspended process creation with atomic
+//! `PROC_THREAD_ATTRIBUTE_JOB_LIST` membership, the explicit assignment
+//! confirmation, the membership and live-handle identity proofs and resume; and
+//! teardown — wait, exit query, terminate, the `ActiveProcesses == 0` query and
+//! the two-regime reverse-order unwind.
 //!
-//! A GREEN SUITE PROVES LESS THAN IT LOOKS. Everything here runs through the
-//! scripted call tables in tests/, so the suite proves the real windows-sys
-//! implementations COMPILE — never that they work. Only that sibling's
-//! real-Windows test can close that seam.
+//! A GREEN SWEEP PROVES LESS THAN IT LOOKS, AND THAT IS NOT THEORETICAL. The
+//! sweeps in tests/ drive a scripted call table, so they prove the production
+//! logic and prove the windows-sys implementations COMPILE — never that they
+//! work. tests/real_windows.rs is the only thing that reaches the kernel, and
+//! the first time it ran it caught `SetInformationJobObject` rejecting
+//! `KILL_ON_JOB_CLOSE` through the basic limit class with
+//! ERROR_INVALID_PARAMETER, a defect two green suites and a QA pass had already
+//! carried. Keep that file running.
 //!
 //! Note for later work: every source is held to 250 physical lines, so new arms
 //! arrive with a split by responsibility rather than by reformatting — that is

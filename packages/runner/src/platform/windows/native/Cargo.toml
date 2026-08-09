@@ -26,10 +26,15 @@ publish = false
 # DeleteProcThreadAttributeList) and ResumeThread are ALL declared in
 # Win32/System/Threading. Without the feature none of them exist.
 #
-# The Job side still uses JOBOBJECT_BASIC_LIMIT_INFORMATION rather than the
-# EXTENDED struct, and that stays a deliberate choice rather than a consequence
-# of the feature set: KILL_ON_JOB_CLOSE is a documented basic LimitFlag, so the
-# extended struct buys nothing and would widen what a query-back must match.
+# CORRECTION, measured on a real kernel by tests/real_windows.rs. This comment
+# used to claim the Job side deliberately used JOBOBJECT_BASIC_LIMIT_INFORMATION
+# because "KILL_ON_JOB_CLOSE is a documented basic LimitFlag". That is false in
+# practice: SetInformationJobObject with JobObjectBasicLimitInformation and
+# exactly that flag returns FALSE with ERROR_INVALID_PARAMETER (87), while
+# JobObjectExtendedLimitInformation with the identical flag succeeds. The Job
+# side therefore uses the EXTENDED struct, and the query-back reads the same
+# class it was set through. Nothing is widened: the extended struct's extra
+# fields are zero and each is ignored unless its own limit flag is set.
 #
 # AssignProcessToJobObject and IsProcessInJob need NO manifest change — both are
 # declared in Win32/System/JobObjects and were already reachable.

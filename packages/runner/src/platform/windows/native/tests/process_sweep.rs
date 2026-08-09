@@ -16,7 +16,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 use moe_windows_job_core::{
-    query_exit_status, wait_for_process, ContainedProcess, CreatedProcess, ExitStatus, Job,
+    query_exit_status, query_identity, terminate_process, unwind_after_membership,
+    unwind_before_membership, wait_for_process, ContainedProcess, CreatedProcess, ExitStatus, Job,
     NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit, WaitOutcome, Waited,
     Win32Calls, INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
 };
@@ -1089,4 +1090,34 @@ fn a_failed_accounting_query_during_unwind_surfaces_its_own_op() {
     assert_eq!(error.op(), NativeOp::QueryAccounting);
     assert_eq!(error.code(), 6, "a failed CALL carries the OS error, not our refusal code");
     assert_eq!(calls.calls(), vec!["create", "set", "query", "terminate", "accounting"]);
+}
+
+/// The production poll bound, hand-written here for the same reason
+/// `JOB_OP_COUNT` is: an integration test cannot share a const with the crate,
+/// and the duplication is what lets this file fail independently.
+const EMPTY_POLL_ATTEMPTS: usize = 500;
+
+#[test]
+fn a_job_that_never_empties_is_uncertain_and_never_reported_as_empty() {
+    // The count is scripted to stay nonzero for longer than the bound allows,
+    // so the wait exhausts. An emptiness that was never observed must not be
+    // reported: it refuses as QueryAccounting with code 0, our refusal rather
+    // than the operating system's.
+    //
+    // This also PINS THE POLL: the exact number of accounting entries proves
+    // the surface sampled repeatedly instead of reading the count once, which
+    // is the defect TerminateJobObject's asynchrony invites.
+    let calls = ScriptedCalls::healthy();
+    calls.reporting_active_processes(u32::MAX);
+    let job = Job::create(&calls).expect("healthy Job construction must succeed");
+
+    let error = unwind_after_membership(&job)
+        .err()
+        .expect("a Job that never empties must not report success");
+
+    assert_eq!(error.op(), NativeOp::QueryAccounting);
+    assert_eq!(error.code(), 0, "an unobserved emptiness is our refusal, not a Win32 failure");
+
+    let polls = calls.calls().iter().filter(|name| **name == "accounting").count();
+    assert_eq!(polls, EMPTY_POLL_ATTEMPTS, "the process count was not polled to the bound");
 }

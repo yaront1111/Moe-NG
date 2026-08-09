@@ -19,8 +19,11 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE (read-only). The governor's unblock reason is explicit that you must not trust it — I checked it and it holds, but confirm before writing.\n\n  git ls-tree -r HEAD --name-only -- apps/daemon/src/identity   # session-authority* present?\n  ls apps/daemon/src/coordination/                              # expect: does NOT exist yet\n\nVERIFIED BY ME at HEAD: apps/daemon/src/identity/ carries session-authenticator.ts, session-authority.ts, session-authority-contracts.ts, session-authority-protocol.ts and session-authority-store.ts, each with a .js bridge, plus session-authenticator.test.ts and session-authority.test.ts. The authority the original block said would have to be invented EXISTS and is consumable. apps/daemon/src/coordination/ does not exist — this task creates it.\n\nPIN THE ENTRY POINTS YOURSELF, by name and never by line number (these files are new and moving):\n  createSessionAuthority        apps/daemon/src/identity/session-authority.ts:83\n  createSessionAuthenticator    apps/daemon/src/identity/session-authenticator.ts:85\n  SessionAuthoritySnapshot, MutationReceipt, ReplayReceipt, SessionAuthorityCode,\n  SessionAuthorityLayer (= SessionAuthLayer | \"DURABLE_STORE\")   session-authority-contracts.ts\nRead session-authority.ts before choosing which of the two surfaces yields the \"authenticated ACTIVE-SESSION result\" DoD 1 requires. The authenticator maps a credential to an AuthenticationResult; the authority owns the durable snapshot and receipts. DoD 1 wants the authority's active-session evidence, not a caller's claim.\n\nROOT-EXPORT RULE: apps/daemon/src/index.ts does NOT export the session-authority surface. Your owned file is inside the same package, so a RELATIVE import is legitimate and expected. If you find you need it on the package root, STOP — that is a global rail Clause 1 consumer-edge gap belonging in a narrow follow-on publish task (the task-6054520bc / task-f5d1dae629 pattern), never silently inside this one.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RE-MEASURED at HEAD c8e845e. Step-1's own claims HOLD; two blockers the plan did not measure do NOT.\n\nCONFIRMED PRESENT (governor + architect were right): git ls-tree -r HEAD -- apps/daemon/src/identity returns session-authenticator.ts/.js/.test.ts, session-authority.ts/.js/.test.ts, session-authority-contracts.ts/.js, session-authority-protocol.ts/.js, session-authority-store.ts/.js. apps/daemon/src/coordination/ does NOT exist. So the session-authority half of the original block is genuinely closed.\n\nBLOCKER A - @moe/coordination is NOT resolvable from apps/daemon. taskRail 2 and plan step-2 mandate the closed @moe/coordination vocabulary (COORDINATION_ROLES, CoordinationAddress, COORDINATION_LAYERS, COORDINATION_CODES). Four independent measurements say the daemon cannot import it:\n  1. apps/daemon/package.json dependencies = contracts, core, mcp, review, runner, scheduler, store. No coordination.\n  2. pnpm-lock.yaml importer `apps/daemon:` (line 76) lists those same seven. No coordination.\n  3. ls apps/daemon/node_modules/@moe/ = contracts core mcp review runner scheduler store. No coordination symlink. Root node_modules/@moe/ does not exist.\n  4. Runtime probe, cwd apps/daemon: node --input-type=module -e \"await import('@moe/coordination')\" -> ERR_MODULE_NOT_FOUND: Cannot find package '@moe/coordination' imported from D:\\projexts\\moe-next\\apps\\daemon\nNo re-export escape hatch: grep for COORDINATION_ROLES / COORDINATION_CODES / COORDINATION_LAYERS / CoordinationAddress across packages+apps returns ZERO definitions or re-exports outside packages/coordination/src (only string literals in apps/control-room/src/evidence/evidence-timeline-ban.test.ts and a comment in timeline-contract.ts). No tsconfig escape hatch either: tsconfig.base.json has NO `paths` and uses moduleResolution NodeNext, so tsc resolves through node_modules exactly as node does. Deep-import escape hatch is also closed: apps/daemon/tsconfig.json sets rootDir \"src\" with composite true, so a relative import of packages/coordination/src/*.ts is TS6059 (not under rootDir).\n\nBLOCKER B - gate leg 1 is RED at baseline on a foreign committed file inside my own package. Run before writing any bytes, per the plan's own instruction:\n  pnpm --filter @moe/daemon typecheck -> exit 1\n    src/identity/session-authenticator.test.ts(8,3): error TS6133: 'OPENER' is declared but its value is never read.\n  pnpm --filter @moe/daemon test -> exit 0 (Test Files 47 passed, Tests 795 passed)\n  pnpm typecheck (repo root, all 17 projects) -> exit 1, SAME single error, apps/daemon the only Failed package; every other package prints \"Done\".\nAttribution: git log -1 -- that file = 5ef522c \"feat(daemon): durable work claiming - agents pick their own work\". git status --porcelain on it = clean, so it is committed foreign work, not an active writer I could wait out. Plan step-8 states verbatim \"Foreign red inside @moe/daemon itself is a BLOCK, not a disclosure\", and the path-attributed-baseline rail rescues only repo-wide legs, never owned-package legs.\n\nNo bytes written. Working tree carries none of my changes.",
+      "startedAt": "2026-08-09T19:09:06.228Z",
+      "completedAt": "2026-08-09T19:11:50.464Z"
     },
     {
       "stepId": "step-2",
@@ -86,8 +89,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-97d6df26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -96,22 +99,31 @@
   "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
   "priority": "CRITICAL",
   "order": 61,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f78e57c30a6a45b5a06cfbdb5facd5c6",
+      "author": "worker-97d6df26",
+      "content": "FULL BLOCK EVIDENCE — worker-97d6df26, measured at HEAD c8e845e, zero bytes written. Whoever unblocks should not need to re-probe.\n\nWHAT THE GOVERNOR GOT RIGHT. Both halves of the original block ARE closed. `git ls-tree -r HEAD --name-only -- apps/daemon/src/identity` returns session-authenticator.ts/.js/.test.ts, session-authority.ts/.js/.test.ts, session-authority-contracts.ts/.js, session-authority-protocol.ts/.js, session-authority-store.ts/.js. `apps/daemon/src/coordination/` does not exist. The session authority is real and consumable. I am not re-blocking on that.\n\nI am blocking on a THIRD condition the unblock's \"two halves\" did not cover, plus a fourth that arose after it.\n\n============================================================\nBLOCKER A — @moe/coordination is NOT resolvable from apps/daemon\n============================================================\ntaskRail 2 (\"Recipient roles use the closed @moe/coordination vocabulary\"), plan step-2, and DoD 1/2/4 all require COORDINATION_ROLES, CoordinationAddress, COORDINATION_LAYERS and COORDINATION_CODES. The daemon package cannot import them. Four independent measurements:\n\n1. MANIFEST. apps/daemon/package.json dependencies = @moe/contracts, @moe/core, @moe/mcp, @moe/review, @moe/runner, @moe/scheduler, @moe/store. No @moe/coordination.\n2. LOCKFILE. pnpm-lock.yaml importer `apps/daemon:` at line 76 lists those same seven. No @moe/coordination.\n3. INSTALLED TREE. `ls apps/daemon/node_modules/@moe/` -> contracts core mcp review runner scheduler store. No coordination symlink. Root `node_modules/@moe/` does not exist at all.\n4. RUNTIME PROBE (cwd apps/daemon, writes nothing):\n     node --input-type=module -e \"await import('@moe/coordination')\"\n     Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@moe/coordination' imported from D:\\projexts\\moe-next\\apps\\daemon\n\nNothing else in the repo declares it either: `grep -rl '\"@moe/coordination\"' --include=package.json` returns only packages/coordination/package.json itself.\n\nALL THREE ESCAPE HATCHES ARE CLOSED — I checked each rather than assuming:\n- RE-EXPORT: grep for COORDINATION_ROLES / COORDINATION_CODES / COORDINATION_LAYERS / CoordinationAddress across `packages` and `apps` returns ZERO definitions or re-exports outside packages/coordination/src. The only hits are string literals in apps/control-room/src/evidence/evidence-timeline-ban.test.ts and a prose comment in apps/control-room/src/timeline/timeline-contract.ts.\n- TSCONFIG PATHS: tsconfig.base.json has NO `paths` key and sets `\"moduleResolution\": \"NodeNext\"`, so tsc resolves through node_modules exactly as node does. There is no compile-time-only shortcut that would let typecheck pass.\n- DEEP RELATIVE IMPORT: apps/daemon/tsconfig.json sets `\"rootDir\": \"src\"` with `composite: true` and `include: [\"src/**/*.ts\"]`. A relative import reaching packages/coordination/src/*.ts is TS6059 (file not under rootDir). Prior handoff memory for this task also explicitly forbids deep-importing coordination source or duplicating its role/address vocabulary locally, and taskRail 2 forbids inventing a local vocabulary.\n\nWHY I CANNOT FIX THIS MYSELF. The fix is three artifacts, none of them owned by this task, and one of them is a global mutation:\n  (a) apps/daemon/package.json — add `\"@moe/coordination\": \"workspace:*\"`\n  (b) pnpm-lock.yaml — add the matching importer entry\n  (c) `pnpm install` — to materialise apps/daemon/node_modules/@moe/coordination. Without (c) both tsc and node still fail, and (c) rewrites shared state for all 17 workspace projects while other agents are mid-build in this single shared worktree (epic rail 2).\nThis task's owned paths are exactly three files under apps/daemon/src/coordination/. Epic rail 3 restricts me to those. Additionally, sibling task-4d22630791994ed1b0906632a75b349b (Workspace manifest hygiene) is actively governing manifest state and its governor correction states \"A diff that ADDS any dependency is a REJECTION, not compliance\" — so unilaterally adding a dependency here would collide with live work, not merely exceed scope.\n\n============================================================\nBLOCKER B — gate leg 1 is RED at baseline, on a foreign committed file inside my own package\n============================================================\nRun BEFORE writing any bytes, exactly as plan step-8 and the owned-package-gate rule require. Working tree carried none of my changes.\n\n  LEG 1  pnpm --filter @moe/daemon typecheck   -> EXIT 1\n         src/identity/session-authenticator.test.ts(8,3): error TS6133: 'OPENER' is declared but its value is never read.\n  LEG 2  pnpm --filter @moe/daemon test        -> EXIT 0   (Test Files 47 passed (47), Tests 795 passed (795))\n  LEG 3  pnpm typecheck  (from repo root)      -> EXIT 1\n         Same single error. apps/daemon is the ONLY package that prints \"Failed\"; import, store, control-room-client, coordination, core, mcp, skills, testkit, runner, scheduler, review and apps/control-room all print \"Done\".\n\nATTRIBUTION, done by provenance not by dirtiness:\n  git log -1 -- apps/daemon/src/identity/session-authenticator.test.ts\n    5ef522c  feat(daemon): durable work claiming — agents pick their own work\n  git status --porcelain on that file -> EMPTY (clean). So it is committed foreign work, not an in-flight writer I could wait out. Line 8 imports OPENER from ./session-test-fixtures and never uses it.\n\nWHY THIS IS A BLOCK AND NOT A DISCLOSURE. The path-attributed-baseline rail permits disclosing foreign red only on REPO-WIDE legs, and only when the (HEAD minus merge-base) failing set intersected with owned paths is empty. Leg 1 is an OWNED-PACKAGE leg, and the rail's completion condition is explicit that \"the owned-package legs are exit 0\". Plan step-8 says it verbatim: \"Foreign red inside @moe/daemon itself is a BLOCK, not a disclosure.\" moe.complete_task also hard-rejects a nonzero exitCode, so no amount of disclosure gets this task to REVIEW while leg 1 is red.\n\n============================================================\nWHAT UNBLOCKS THIS\n============================================================\nBLOCKER B is a one-line deletion in a file owned by whoever owns 5ef522c / the session-authenticator work (task-21713cf152c047c597da9765d8d95510 area): remove `OPENER,` from the import at apps/daemon/src/identity/session-authenticator.test.ts:8. It blocks the daemon typecheck leg for EVERY task touching this package, so it is worth routing regardless of this task's fate. I did not touch it; it is not mine.\n\nBLOCKER A needs a scope or sequencing decision that only an architect/governor can make. Three options, my recommendation first:\n  1. PREFERRED — a narrow prerequisite task that adds `@moe/coordination` to apps/daemon/package.json + pnpm-lock.yaml and runs `pnpm install`, owning exactly those paths. Same shape as the consumer-edge publish tasks already used on this board (task-6054520bc / task-f5d1dae629), and it keeps the shared `pnpm install` inside one owner rather than racing it against sibling manifest work.\n  2. Amend THIS task's owned paths to include apps/daemon/package.json and pnpm-lock.yaml, and confirm the `pnpm install` is sanctioned despite the shared worktree.\n  3. Re-site the registry inside packages/coordination (which already depends on @moe/contracts and @moe/store) — but that contradicts the task's stated owned paths and the daemon-side framing, so I do not recommend it without an explicit design ruling.\n\nI have no preference beyond option 1 being the least disruptive. Named production consumer task-4afcb06422ed4adb89430b7ea9758d7f is unchanged and still correct.\n\nSTATE ON DISK: nothing written, nothing staged, nothing committed by me. `apps/daemon/src/coordination/` still does not exist.",
+      "timestamp": "2026-08-09T19:12:31.873Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:22.408Z",
-  "updatedAt": "2026-08-09T19:05:47.641Z",
+  "updatedAt": "2026-08-09T19:13:44.450Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:32:52.514Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-db2146e3"
+    "architect-db2146e3",
+    "worker-97d6df26"
   ],
-  "blockedReason": null,
+  "blockedReason": "FULL EVIDENCE IN comment-f78e57c30a6a45b5a06cfbdb5facd5c6. HEAD c8e845e, zero bytes written by me.\n\nGovernor's unblock was CORRECT on both halves it named (session-authority* present and consumable; coordination/ absent). Not re-blocking on those. Two conditions it did not cover.\n\nBLOCKER A - @moe/coordination is NOT resolvable from apps/daemon, so taskRail 2 / step-2 / DoD 1,2,4 cannot be met. (1) apps/daemon/package.json deps: contracts, core, mcp, review, runner, scheduler, store. (2) pnpm-lock.yaml importer apps/daemon: line 76, same seven. (3) apps/daemon/node_modules/@moe/ has no coordination symlink. (4) probe in apps/daemon: node -e \"await import('@moe/coordination')\" -> ERR_MODULE_NOT_FOUND. Escape hatches all closed: no re-export outside packages/coordination/src; tsconfig.base.json has no paths (NodeNext); deep relative import is TS6059 (daemon rootDir \"src\" + composite). Local duplication forbidden by taskRail 2. Fix needs package.json + pnpm-lock.yaml + pnpm install - none owned here, and that install rewrites shared state for 17 projects while sibling task-4d22630791994ed1b0906632a75b349b governs manifests.\n\nBLOCKER B - gate leg 1 RED at baseline on foreign committed code in my own package. pnpm --filter @moe/daemon typecheck exit 1: src/identity/session-authenticator.test.ts(8,3): error TS6133: 'OPENER' is declared but its value is never read. Leg 2 exit 0 (795 tests). Leg 3 pnpm typecheck exit 1, same single error, apps/daemon the only Failed package. git log -1 on that file = 5ef522c; git status CLEAN = committed foreign work, not a waitable writer. Step-8 says verbatim \"Foreign red inside @moe/daemon itself is a BLOCK, not a disclosure\".\n\nUNBLOCK. B: delete \"OPENER,\" from that import - one line, owned by the 5ef522c author; blocks the daemon typecheck leg for EVERY task in this package. A (recommended): a narrow prerequisite task owning apps/daemon/package.json + pnpm-lock.yaml adding \"@moe/coordination\": \"workspace:*\" plus the install.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-09T19:13:44.450Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Confirmed the @moe/coordination role/address surface exists publicly, proved the durable session authority and registry files are absent, proved apps/daemon lacks the direct coordination dependency, reported BLOCKED, and wrote the Serena handoff.",
@@ -123,7 +135,9 @@
       "reason": "Explicit planning handoff after measuring the absent session authority and daemon coordination dependency edge."
     }
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T19:05:45.591Z",
   "planningNotes": {
@@ -140,7 +154,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-09T19:08:49.793Z",
+    "escalatedAt": "2026-08-09T19:08:49.793Z"
   },
-  "planApprovedAt": "2026-08-09T19:05:47.641Z"
+  "planApprovedAt": "2026-08-09T19:05:47.641Z",
+  "workStartedAt": "2026-08-09T19:09:06.228Z"
 }

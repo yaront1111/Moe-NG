@@ -2,7 +2,7 @@ import {
   DOCUMENT_WORK_PROPOSAL_SCHEMA_VERSION,
   decodeDocumentWorkProposalBytes,
 } from "@moe/contracts";
-import { IdempotencyConflictError, SqliteEventStore } from "@moe/store";
+import { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -145,8 +145,11 @@ describe("document-work proposal persistence", () => {
       const changed = new Uint8Array(raw.length + 1);
       changed.set(raw);
       changed[raw.length] = 0x20;
-      expect(() => recordDocumentWorkProposal(store, input(changed)))
-        .toThrowError(IdempotencyConflictError);
+      expectRefusal(
+        recordDocumentWorkProposal(store, input(changed)),
+        "IDEMPOTENCY_CONFLICT",
+        "DURABLE_STORE",
+      );
       expect(store.readEvents(documentWorkAggregateId(PROJECT_ID))).toHaveLength(1);
     } finally {
       store.close();
