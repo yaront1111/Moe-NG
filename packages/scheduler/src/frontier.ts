@@ -1,26 +1,15 @@
-import {
-  deepFreeze,
-  makeIssue,
-  sortIssues,
-  sortedCopy,
-} from "./graph-internal.js";
+import { admitFrontierCursor } from "./frontier-cursor.js";
+import { deepFreeze, makeIssue, sortIssues, sortedCopy } from "./graph-internal.js";
 import { isGraphKey } from "./graph-key.js";
-import {
-  ABSOLUTE_MAX_GRAPH_NODES,
-  ABSOLUTE_MAX_GRAPH_TOTAL_EDGES,
-} from "./graph-policy.js";
 import {
   hasValidatedGraphProvenance,
   registerFrontierPartition,
 } from "./graph-provenance.js";
 import {
-  hasExactDenseArrayShape,
   hasOnlyOwnStringKeys,
-  isPlainArray,
   isPlainRecord,
   readOwnArrayElement,
   readOwnDataProperty,
-  readPlainArrayLength,
 } from "./runtime-shape.js";
 import type {
   BlockedNode,
@@ -28,25 +17,15 @@ import type {
   FrontierPartition,
   FrontierResult,
   GraphIssue,
-  HardEdgeSatisfaction,
   TraversalCounter,
   ValidatedGraph,
 } from "./graph-model.js";
 
-const CURSOR_KEYS = Object.freeze([
-  "hardEdgeFacts",
-  "nodeAvailabilityFacts",
-] as const);
-const HARD_EDGE_FACT_KEYS = Object.freeze(["edgeKey", "state"] as const);
 const NODE_FACT_KEYS = Object.freeze([
   "admissionEligible",
   "dispatchAvailable",
   "nodeKey",
 ] as const);
-
-function isSatisfaction(value: unknown): value is HardEdgeSatisfaction {
-  return value === "SATISFIED" || value === "UNSATISFIED" || value === "UNKNOWN";
-}
 
 /**
  * Partition the graph's nodes into the three distinct readiness concepts plus
@@ -59,20 +38,25 @@ function isSatisfaction(value: unknown): value is HardEdgeSatisfaction {
  * admission or dispatch availability must withhold the frontier instead of
  * encoding UNKNOWN as `false`; the analysis API then reports null widths.
  * External adapters must reject bodies over 1 MiB before parsing, then enforce
- * the design's depth/string caps during decode or before invocation; exact
- * schema checks enumerate the resulting bounded input's own keys.
+ * the design's depth/string caps during decode or before invocation.
  *
  * Readiness rules (never collapsed into one "ready" boolean):
  *  - logicalReady: every incoming HARD dependency SATISFIED; UNKNOWN never counts.
  *  - admissionReady ⊆ logicalReady (caller admission eligibility).
  *  - dispatchable   ⊆ admissionReady (caller dispatch/resource availability).
  *  - ADVISORY edges never block readiness.
+ *
+ * The hostile cursor read lives in `frontier-cursor.ts`; this file keeps what
+ * counts as ready, plus the single place a FrontierResult is sorted, frozen and
+ * registered.
  */
 export function partitionFrontier(
   graph: ValidatedGraph,
   cursor: unknown,
   counter?: TraversalCounter,
 ): FrontierResult {
+  // Provenance FIRST: a graph this runtime did not validate has no facts worth
+  // parsing a cursor against at all.
   if (!hasValidatedGraphProvenance(graph)) {
     return fail([
       makeIssue(
@@ -83,162 +67,15 @@ export function partitionFrontier(
       ),
     ]);
   }
-  const rawCursor = cursor as unknown;
-  const cursorShape = isPlainRecord(rawCursor) && hasOnlyOwnStringKeys(rawCursor, CURSOR_KEYS);
-  const hardFactsProperty = cursorShape
-    ? readOwnDataProperty(rawCursor, "hardEdgeFacts")
-    : { ok: false as const };
-  const nodeFactsProperty = cursorShape
-    ? readOwnDataProperty(rawCursor, "nodeAvailabilityFacts")
-    : { ok: false as const };
-  const hardEdgeFacts = hardFactsProperty.ok && hardFactsProperty.present
-    ? hardFactsProperty.value
-    : undefined;
-  const nodeAvailabilityFacts = nodeFactsProperty.ok && nodeFactsProperty.present
-    ? nodeFactsProperty.value
-    : undefined;
-  if (!isPlainArray(hardEdgeFacts) || !isPlainArray(nodeAvailabilityFacts)) {
-    return fail([
-      makeIssue(
-        "FRONTIER_MALFORMED_CURSOR",
-        "cursor schema is malformed; it requires only own hardEdgeFacts and nodeAvailabilityFacts arrays",
-        [],
-        [],
-      ),
-    ]);
-  }
 
-  const issues: GraphIssue[] = [];
-
-  const hardEdgeKeys = new Set<string>();
-  for (const edge of graph.edges) {
-    if (edge.kind === "HARD") {
-      hardEdgeKeys.add(edge.edgeKey);
-    }
+  const admitted = admitFrontierCursor(graph, cursor);
+  if (!admitted.ok) {
+    return fail(admitted.issues);
   }
-
-  const countIssues: GraphIssue[] = [];
-  const hardEdgeFactCount = readPlainArrayLength(hardEdgeFacts);
-  const nodeAvailabilityFactCount = readPlainArrayLength(nodeAvailabilityFacts);
-  if (hardEdgeFactCount === null || nodeAvailabilityFactCount === null) {
-    return fail([
-      makeIssue(
-        "FRONTIER_MALFORMED_CURSOR",
-        "cursor collection lengths could not be read safely",
-        [],
-        [],
-      ),
-    ]);
-  }
-  if (hardEdgeFactCount > ABSOLUTE_MAX_GRAPH_TOTAL_EDGES) {
-    countIssues.push(
-      makeIssue(
-        "FRONTIER_MALFORMED_CURSOR",
-        `cursor declares ${hardEdgeFactCount} HARD-edge facts; parser ceiling is ${ABSOLUTE_MAX_GRAPH_TOTAL_EDGES}`,
-        [],
-        [],
-      ),
-    );
-  }
-  if (nodeAvailabilityFactCount > ABSOLUTE_MAX_GRAPH_NODES) {
-    countIssues.push(
-      makeIssue(
-        "FRONTIER_MALFORMED_CURSOR",
-        `cursor declares ${nodeAvailabilityFactCount} node facts; parser ceiling is ${ABSOLUTE_MAX_GRAPH_NODES}`,
-        [],
-        [],
-      ),
-    );
-  }
-  if (countIssues.length > 0) {
-    return fail(countIssues);
-  }
-  if (
-    !hasExactDenseArrayShape(hardEdgeFacts, hardEdgeFactCount) ||
-    !hasExactDenseArrayShape(
-      nodeAvailabilityFacts,
-      nodeAvailabilityFactCount,
-    )
-  ) {
-    return fail([
-      makeIssue(
-        "FRONTIER_MALFORMED_CURSOR",
-        "cursor collections must contain only dense own data elements",
-        [],
-        [],
-      ),
-    ]);
-  }
-
-  // --- HARD edge facts ---
-  const edgeState = new Map<string, HardEdgeSatisfaction>();
-  const seenEdgeFacts = new Set<string>();
-  for (let i = 0; i < hardEdgeFactCount; i += 1) {
-    const factProperty = readOwnArrayElement(hardEdgeFacts, i);
-    const fact = factProperty.ok && factProperty.present
-      ? factProperty.value
-      : undefined;
-    const factShape = isPlainRecord(fact) && hasOnlyOwnStringKeys(fact, HARD_EDGE_FACT_KEYS);
-    const edgeKeyProperty = factShape
-      ? readOwnDataProperty(fact, "edgeKey")
-      : { ok: false as const };
-    const stateProperty = factShape
-      ? readOwnDataProperty(fact, "state")
-      : { ok: false as const };
-    const edgeKey = edgeKeyProperty.ok && edgeKeyProperty.present
-      ? edgeKeyProperty.value
-      : undefined;
-    const state = stateProperty.ok && stateProperty.present
-      ? stateProperty.value
-      : undefined;
-    if (!factShape || !isGraphKey(edgeKey) || !isSatisfaction(state)) {
-      issues.push(
-        makeIssue(
-          "FRONTIER_MALFORMED_CURSOR",
-          `hardEdgeFacts[${i}] is malformed or has an invalid state`,
-          [],
-          [],
-        ),
-      );
-      continue;
-    }
-    if (!hardEdgeKeys.has(edgeKey)) {
-      issues.push(
-        makeIssue(
-          "FRONTIER_EDGE_FACT_UNKNOWN_EDGE",
-          `hardEdgeFacts references "${edgeKey}", which is not a HARD edge`,
-          [],
-          [edgeKey],
-        ),
-      );
-      continue;
-    }
-    if (seenEdgeFacts.has(edgeKey)) {
-      issues.push(
-        makeIssue(
-          "FRONTIER_EDGE_FACT_DUPLICATE",
-          `duplicate satisfaction fact for HARD edge "${edgeKey}"`,
-          [],
-          [edgeKey],
-        ),
-      );
-      continue;
-    }
-    seenEdgeFacts.add(edgeKey);
-    edgeState.set(edgeKey, state);
-  }
-  for (const edgeKey of sortedCopy(hardEdgeKeys)) {
-    if (!seenEdgeFacts.has(edgeKey)) {
-      issues.push(
-        makeIssue(
-          "FRONTIER_EDGE_FACT_MISSING",
-          `no satisfaction fact supplied for HARD edge "${edgeKey}"`,
-          [],
-          [edgeKey],
-        ),
-      );
-    }
-  }
+  // HARD-edge issues seed the list so node issues append AFTER them, preserving
+  // the pre-split accumulation order the canonical sort is applied to.
+  const issues: GraphIssue[] = [...admitted.issues];
+  const { edgeState, nodeAvailabilityFacts, nodeAvailabilityFactCount } = admitted;
 
   // --- Node availability facts ---
   const nodeKeys = new Set<string>(graph.nodes.map((node) => node.nodeKey));
