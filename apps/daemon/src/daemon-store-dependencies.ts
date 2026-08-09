@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
@@ -12,14 +11,19 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import type { HandlerTable, ServiceOutcome } from "./bootstrap/bootstrap-ledger.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
+import { createSessionAuthenticator } from "./identity/session-authenticator.js";
+import { SESSION_SCHEMA_VERSION } from "./identity/session-contracts.js";
+import type { SessionCommandKind } from "./identity/session-contracts.js";
+import type { SessionOutcome } from "./identity/session-ledger.js";
+import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { buildCommandRegistry } from "./http/http-contract.js";
 import type {
-  AuthenticationResult,
   CommandAdapterDeps,
   CommandDecisionPort,
   CommandHandler,
@@ -78,8 +82,17 @@ const REVIEW_FAMILY: Readonly<Record<ReviewCommandKind, string>> = Object.freeze
   "review.submit": CAPABILITIES.REVIEW,
 });
 
+/** Session lifecycle is an operator concern until scoped delegation lands. */
+const SESSION_FAMILY: Readonly<Record<SessionCommandKind, string>> = Object.freeze({
+  "session.close": CAPABILITIES.ADMIN,
+  "session.open": CAPABILITIES.ADMIN,
+  "session.renew": CAPABILITIES.ADMIN,
+});
+
+type WiredCommandKind = BootstrapCommandKind | ReviewCommandKind | SessionCommandKind;
+
 /** Exact top-level payload keys each command admits; an unlisted key is refused upstream. */
-const PAYLOAD_KEYS: Readonly<Record<BootstrapCommandKind | ReviewCommandKind, readonly string[]>> =
+const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
     "escalation.decide": ["escalationRef", "subjectRef"],
@@ -99,6 +112,9 @@ const PAYLOAD_KEYS: Readonly<Record<BootstrapCommandKind | ReviewCommandKind, re
       "nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions",
     ],
     "review.submit": ["findings", "packageItems", "subjectRef"],
+    "session.close": ["sessionId"],
+    "session.open": ["capabilities", "credentialSha256", "expiresAt", "sessionId"],
+    "session.renew": ["expiresAt", "sessionId"],
   });
 
 const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
@@ -133,13 +149,6 @@ export function readStoreDependencyEnv(
   });
 }
 
-function constantTimeMatches(presented: string, expected: string): boolean {
-  const presentedBytes = Buffer.from(presented, "utf8");
-  const expectedBytes = Buffer.from(expected, "utf8");
-  if (presentedBytes.length !== expectedBytes.length) return false;
-  return timingSafeEqual(presentedBytes, expectedBytes);
-}
-
 const encoder = new TextEncoder();
 
 class DomainRefusal extends Error {
@@ -155,7 +164,7 @@ class DomainRefusal extends Error {
   }
 }
 
-function decisionOf(outcome: ReviewOutcome | ServiceOutcome): DurableDecision {
+function decisionOf(outcome: ReviewOutcome | ServiceOutcome | SessionOutcome): DurableDecision {
   if (!outcome.ok) {
     throw new DomainRefusal(
       outcome.code,
@@ -210,32 +219,30 @@ export function createStoreDependencies(
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
-  const entryOf = (kind: BootstrapCommandKind | ReviewCommandKind): CommandRegistryEntry => {
+  const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     const review = kind in REVIEW_FAMILY;
+    const session = kind in SESSION_FAMILY;
+    const schemaVersion = review
+      ? REVIEW_SCHEMA_VERSION
+      : session ? SESSION_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
-      const bytes = requestOf(
-        kind,
-        review ? REVIEW_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION,
-        envelope,
-        principal.principalId,
-      );
-      return decisionOf(review
-        ? runReviewCommand(store, bytes)
-        : runBootstrapCommand(store, bytes, bootstrapTable));
+      const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
+      if (review) return decisionOf(runReviewCommand(store, bytes));
+      if (session) return decisionOf(runSessionCommand(store, bytes));
+      return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
     };
+    const requiredCapability = review
+      ? REVIEW_FAMILY[kind as ReviewCommandKind]
+      : session
+        ? SESSION_FAMILY[kind as SessionCommandKind]
+        : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
     return Object.freeze({
-      handler,
-      kind,
-      payloadKeys: PAYLOAD_KEYS[kind],
-      requiredCapability: review
-        ? REVIEW_FAMILY[kind as ReviewCommandKind]
-        : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind],
+      handler, kind, payloadKeys: PAYLOAD_KEYS[kind], requiredCapability,
     });
   };
 
   const registry = buildCommandRegistry(
-    (Object.keys(PAYLOAD_KEYS) as readonly (BootstrapCommandKind | ReviewCommandKind)[])
-      .map(entryOf),
+    (Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf),
   );
 
   const decisions: CommandDecisionPort = {
@@ -260,29 +267,40 @@ export function createStoreDependencies(
     },
   };
 
-  const authenticate = (credential: string | null): AuthenticationResult => {
-    if (credential === null || !constantTimeMatches(credential, config.credential)) {
-      return Object.freeze({ verdict: "UNAUTHENTICATED" } as const);
-    }
-    return Object.freeze({
-      principal: Object.freeze({
-        capabilities: OPERATOR_CAPABILITIES,
-        principalId: config.principalId,
-        projectId: config.projectId,
-      }),
-      verdict: "AUTHENTICATED",
-    } as const);
-  };
+  // Real credential resolution: operator secret OR an open unexpired session whose
+  // credential hash matches — both resolved by the committed session ledger fold.
+  const authenticator = createSessionAuthenticator(store, {
+    clock: () => Date.now(),
+    operatorCapabilities: OPERATOR_CAPABILITIES,
+    operatorCredential: config.credential,
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+  });
 
   const provide = (): CommandAdapterDeps =>
-    Object.freeze({ authenticator: Object.freeze({ authenticate }), decisions, registry });
+    Object.freeze({ authenticator, decisions, registry });
+
+  /** Default stream reader; the transport seam owns real subscriber lifecycle later. */
+  const DEFAULT_READER = "control-room-1";
 
   const subscriptions = (): SubscriptionPort => {
     const database = subscriptionDatabase ?? new DatabaseSync(config.storePath);
     subscriptionDatabase = database;
     database.exec("PRAGMA busy_timeout = 5000;");
+    const board = createBoardProjectionService({ database, store });
+    // Idempotent: publishes generation 1 once, then seats the default reader. An
+    // already-registered reader refuses SUBSCRIPTION_INPUT_INVALID — expected on
+    // every boot after the first, so only unexpected refusals surface.
+    const baseline = board.ensureBaseline("daemon provider startup");
+    if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
     return Object.freeze({
-      readPage: (request: StreamPageRequest) => readSubscriptionPage(store, database, request),
+      // Fold-on-read: pages always reflect every committed event. The fold refusal
+      // (if any) is deliberately not masked by a possibly-stale page read.
+      readPage: (request: StreamPageRequest) => {
+        const folded = board.foldOnce();
+        if (folded.outcome !== "FOLDED") return folded;
+        return readSubscriptionPage(store, database, request);
+      },
       reseat: (request: StreamReseatRequest) => reseatToSnapshot(database, request),
     });
   };
