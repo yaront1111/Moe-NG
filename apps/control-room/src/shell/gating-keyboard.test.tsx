@@ -44,6 +44,18 @@ const actionsIn = (): readonly HTMLButtonElement[] =>
 const enabledActions = (): readonly HTMLButtonElement[] =>
   actionsIn().filter((action) => !action.disabled);
 
+/**
+ * Section 11.1 line 687: banners announce POLITELY. `role="alert"` and
+ * `aria-live="assertive"` are rejected by name rather than the polite spellings merely
+ * being allowed, so a banner that started interrupting the operator fails here.
+ */
+function politeness(banner: HTMLElement): string {
+  const role = banner.getAttribute("role");
+  const live = banner.getAttribute("aria-live");
+  if (role === "alert" || live === "assertive") return "ASSERTIVE";
+  return role === "status" || live === "polite" ? "POLITE" : "NO_LIVE_REGION";
+}
+
 function renderFrame(affordance: FixtureAffordanceSnapshot): void {
   render(
     <ShellFrame affordance={affordance}>
@@ -99,7 +111,7 @@ describe("disconnected disables rather than hides", () => {
     expect(dropped.nextAllowedCommands.length).toBeGreaterThan(0);
     renderFrame(dropped);
     const banner = screen.getByTestId("cr.banner.disconnected");
-    expect(["status", "alert"]).toContain(banner.getAttribute("role"));
+    expect(politeness(banner)).toBe("POLITE");
     expect(screen.getByTestId("cr.shell.statusstrip").getAttribute("data-stale")).toBe("true");
     expect(screen.getByTestId("cr.shell.stalelabel")).toBeTruthy();
     expect(actionsIn().length).toBe(dropped.nextAllowedCommands.length);
@@ -127,7 +139,9 @@ describe("lag labels the display without blocking commands", () => {
     expect(lagging.nextAllowedCommands.length).toBeGreaterThan(0);
     renderFrame(lagging);
     expect(screen.getByTestId("cr.shell.statusstrip").getAttribute("data-stale")).toBe("true");
-    expect(screen.getByTestId("cr.banner.lag").textContent).toContain(lagging.statusLabel);
+    const banner = screen.getByTestId("cr.banner.lag");
+    expect(banner.textContent).toContain(lagging.statusLabel);
+    expect(politeness(banner)).toBe("POLITE");
     expect(screen.queryByTestId("cr.banner.disconnected")).toBeNull();
     expect(actionsIn().length).toBe(lagging.nextAllowedCommands.length);
     for (const action of actionsIn()) expect(action.disabled).toBe(false);
