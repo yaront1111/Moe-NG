@@ -103,8 +103,13 @@ function analyzeSequences(lines: readonly ParsedStreamLine[]): Set<CodexStreamAn
     last = sequence;
   }
   if (!anomalies.has("COUNTER_REGRESSION") && seen.size > 0) {
-    const sequences = [...seen];
-    const span = Math.max(...sequences) - Math.min(...sequences) + 1;
+    let minimum = Number.MAX_SAFE_INTEGER;
+    let maximum = Number.MIN_SAFE_INTEGER;
+    for (const sequence of seen) {
+      minimum = Math.min(minimum, sequence);
+      maximum = Math.max(maximum, sequence);
+    }
+    const span = maximum - minimum + 1;
     if (seen.size + malformed < span) anomalies.add("GAP");
   }
   return anomalies;

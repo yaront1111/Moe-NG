@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_FRAMED_LINES } from "./codex-stream-anomalies.js";
+import {
+  MAX_FRAMED_LINES,
+  analyzeStream,
+  type ParsedStreamLine,
+} from "./codex-stream-anomalies.js";
 import {
   CODEX_ACCEPTED_SCHEMA_VERSIONS,
   MAX_INLINE_STREAM_BYTES,
@@ -195,6 +199,21 @@ describe("Codex structured/raw stream", () => {
       ok: false,
       code: "CODEX_STREAM_EVENT_LIMIT_EXCEEDED",
     });
+  });
+
+  it("analyzes the maximum bounded event count without argument-spread overflow", () => {
+    const empty = new Uint8Array();
+    const lines = Array.from({ length: MAX_FRAMED_LINES }, (_, ordinal): ParsedStreamLine => ({
+      ordinal,
+      bytes: empty,
+      declaredSequence: ordinal + 1,
+      type: "assistant",
+      subtype: null,
+      schemaVersion: "codex-stream-json/1",
+      resumedFrom: null,
+    }));
+    expect(analyzeStream({ lines, truncatedTailByteLength: 0, lineLimitExceeded: false },
+      CODEX_ACCEPTED_SCHEMA_VERSIONS)).toMatchObject({ anomalies: [], disposition: "INCOMPLETE" });
   });
 
   it.each([
