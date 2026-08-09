@@ -95,7 +95,7 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }
-  const builders = input.client.commands as Readonly<Record<
+  const builders = input.client.commands as unknown as Readonly<Record<
     string,
     (affordance: unknown, caller: unknown) => { envelope?: unknown; error?: { code?: string }; ok: boolean }
   >>;

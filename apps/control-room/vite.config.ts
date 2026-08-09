@@ -56,18 +56,13 @@ export default defineConfig(async () => ({
   },
   plugins: [react()],
   server: {
-    proxy: {
-      "/command": {
+    proxy: Object.fromEntries(
+      ["/command", "/events/read", "/affordances/read"].map((path) => [path, {
         changeOrigin: true,
         headers: { origin: DAEMON_ORIGIN },
         target: DAEMON_ORIGIN,
-      },
-      "/events/read": {
-        changeOrigin: true,
-        headers: { origin: DAEMON_ORIGIN },
-        target: DAEMON_ORIGIN,
-      },
-    },
+      }]),
+    ),
   },
   test: {
     environment: "jsdom",
