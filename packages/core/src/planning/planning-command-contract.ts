@@ -1,5 +1,7 @@
 import type { RuntimeTruthClass } from "@moe/contracts";
 
+import type { ExpansionHandoffBinding } from "../expansion/expansion-planning-hold.js";
+
 /**
  * `REVISION` and `EXPANSION` stay representable for forward compatibility (design section 8.1
  * rows 293-303) but every Foundation Preview path returns the typed UNSUPPORTED variant; the
@@ -131,12 +133,38 @@ export interface PlanningCancellationWitness {
   readonly truthClass: RuntimeTruthClass;
 }
 
-export interface PlanningCreateDraftCommand extends PlanningRunCommandBase {
-  readonly goalRef: string;
-  readonly kind: "planning.create_draft";
-  readonly runId: string;
-  readonly runKind: PlanningRunKind;
+/**
+ * The active EXPANSION_PLANNING hold this run was opened under, projected from the landed hold
+ * aggregate. Evidence of CONTAINMENT only: it proves a bounded planning window is open and
+ * current, and addresses no child, graph, budget, resource, lease, effect or slot. `graphEpoch`
+ * and `generation` are staleness counters compared for currency, never handles, so an ACTIVE
+ * lifecycle is never an approval or an activation and grants no transition. Fields are packed
+ * because every planning source is held to a hard 250 physical lines by its own sweep.
+ * Composition consumer: task-93b0314e09f248118e21f92699989468.
+ */
+export interface PlanningExpansionHoldBinding {
+  readonly generation: number; readonly goalVersion: number; readonly graphEpoch: number;
+  readonly holdId: string; readonly lifecycle: "ACTIVE"; readonly parentNodeRef: string;
+  readonly parentRunRef: string; readonly proposalBaseHash: string;
+  readonly sourceFingerprint: string; readonly truthClass: "DAEMON_VERIFIED";
+  readonly workerHandoff: ExpansionHandoffBinding;
 }
+
+/** Bound to the existing submission witness rather than being a second free identity. */
+export interface PlanningExpansionProposalIdentity {
+  readonly proposalHash: string; readonly proposalRef: string;
+  readonly truthClass: "DAEMON_VERIFIED";
+}
+
+interface PlanningCreateDraftCommandBase extends PlanningRunCommandBase {
+  readonly goalRef: string; readonly kind: "planning.create_draft"; readonly runId: string;
+}
+
+/** Discriminated on `runKind`, so a binding on INITIAL/REVISION is not representable at all. */
+export type PlanningCreateDraftCommand =
+  | (PlanningCreateDraftCommandBase & { readonly runKind: "INITIAL" | "REVISION" })
+  | (PlanningCreateDraftCommandBase & { readonly expansion: PlanningExpansionHoldBinding;
+    readonly runKind: "EXPANSION" });
 
 export interface PlanningReadyCommand extends PlanningRunCommandBase {
   readonly kind: "planning.ready";
@@ -159,13 +187,18 @@ export interface PlanningRecoverAbsentCommand extends PlanningRunCommandBase {
   readonly witness: PlanningAbsenceRecoveryWitness;
 }
 
-export interface PlanProposeCommand extends PlanningRunCommandBase {
+interface PlanProposeCommandBase extends PlanningRunCommandBase {
   readonly effectTerminalProof?: PlanningEffectTerminalProof;
-  readonly kind: "plan.propose";
-  readonly proposalKind: PlanningRunKind;
-  readonly submissionHash: string;
+  readonly kind: "plan.propose"; readonly submissionHash: string;
   readonly witness: PlanSubmissionWitness;
 }
+
+/** An EXPANSION proposal seals its identity against the same submission the witness names. */
+export type PlanProposeCommand =
+  | (PlanProposeCommandBase & { readonly proposalKind: "INITIAL" | "REVISION" })
+  | (PlanProposeCommandBase & { readonly expansion: PlanningExpansionHoldBinding;
+    readonly proposalKind: "EXPANSION";
+    readonly sealedProposal: PlanningExpansionProposalIdentity });
 
 export interface PlanningFinalizeSubmissionCommand extends PlanningRunCommandBase {
   readonly kind: "planning.finalize_submission";

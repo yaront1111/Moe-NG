@@ -229,6 +229,18 @@ export type {
   TransitionExpansionHoldCommand,
 } from "./expansion/expansion-planning-hold.js";
 
+export {
+  PLANNING_EXPANSION_ERROR_CODES, PLANNING_EXPANSION_LAYERS, PLANNING_EXPANSION_TARGETS,
+  inspectPlanningExpansionContract, snapshotPlanningRunContractState,
+  validExpansionCreateCommand, validExpansionCreatedEvent, validExpansionHoldBinding,
+  validExpansionProposalIdentity, validExpansionProposeCommand, validExpansionSealedEvent,
+  validPlanningRunContractState,
+} from "./planning/planning-expansion-validation.js";
+export type { PlanningExpansionErrorCode, PlanningExpansionInspection,
+  PlanningExpansionLayer, PlanningExpansionTarget } from "./planning/planning-expansion-validation.js";
+export type { PlanningExpansionHoldBinding, PlanningExpansionProposalIdentity } from "./planning/planning-command-contract.js";
+export type { PlanningRunContractState } from "./planning/planning-event-contract.js";
+
 /**
  * Identity is re-exported through its own curated area seam rather than as per-module blocks:
  * `./identity/index.ts` already curates the three identity modules, so duplicating its surface

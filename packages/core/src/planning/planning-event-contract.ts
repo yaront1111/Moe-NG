@@ -6,6 +6,8 @@ import type {
   PlanningActivationWitness,
   PlanningCancellationWitness,
   PlanningClaimWitness,
+  PlanningExpansionHoldBinding,
+  PlanningExpansionProposalIdentity,
   PlanningReadinessWitness,
   PlanningReleaseWitness,
   PlanningRunKind,
@@ -42,17 +44,37 @@ export interface PlanningRunState {
 export type PlanningRunSuccessorData =
   Omit<PlanningRunState, "version"> & { readonly version: 1 };
 
+/**
+ * The EXPANSION projection of a run's state. `PlanningRunState` itself is deliberately left
+ * byte-identical: `clonedState` spreads `Partial<PlanningRunState>` over it, and a discriminated
+ * union there produces a cross-product whose mixed members are unassignable, which breaks
+ * `planning-results.ts` and `planning-run-test-fixtures.ts` — measured, not assumed. Every
+ * `PlanningRunContractState` still widens to a `PlanningRunState`, so this narrows the contract
+ * surface without forking the aggregate. `sealedProposal` is null until a submission is sealed
+ * and carries the exact identity afterward; a stale or cross-kind shape is refused, never
+ * normalized. Representability alone enables no transition: the reducer still answers
+ * PLANNING_KIND_UNSUPPORTED for every non-INITIAL kind.
+ */
+export type PlanningRunContractState =
+  | (PlanningRunState & { readonly runKind: "INITIAL" | "REVISION" })
+  | (PlanningRunState & { readonly expansion: PlanningExpansionHoldBinding;
+    readonly runKind: "EXPANSION";
+    readonly sealedProposal: PlanningExpansionProposalIdentity | null });
+
 interface PlanningRunEventBase {
   readonly commandId: string;
   readonly version: number;
 }
 
-export interface PlanningRunCreated extends PlanningRunEventBase {
-  readonly goalRef: string;
-  readonly kind: "PlanningRunCreated";
-  readonly runId: string;
-  readonly runKind: PlanningRunKind;
+interface PlanningRunCreatedBase extends PlanningRunEventBase {
+  readonly goalRef: string; readonly kind: "PlanningRunCreated"; readonly runId: string;
 }
+
+/** INITIAL and REVISION serialize to exactly their committed keys and bytes. */
+export type PlanningRunCreated =
+  | (PlanningRunCreatedBase & { readonly runKind: "INITIAL" | "REVISION" })
+  | (PlanningRunCreatedBase & { readonly expansion: PlanningExpansionHoldBinding;
+    readonly runKind: "EXPANSION" });
 
 export interface PlanningRunReady extends PlanningRunEventBase {
   readonly kind: "PlanningRunReady";
@@ -75,11 +97,20 @@ export interface PlanningRecoveredAbsent extends PlanningRunEventBase {
   readonly witness: PlanningAbsenceRecoveryWitness;
 }
 
-export interface PlanningSubmissionSealed extends PlanningRunEventBase {
-  readonly draining: boolean;
-  readonly kind: "PlanningSubmissionSealed";
+interface PlanningSubmissionSealedBase extends PlanningRunEventBase {
+  readonly draining: boolean; readonly kind: "PlanningSubmissionSealed";
   readonly submissionHash: string;
 }
+
+/**
+ * The committed sealed event carries no run-kind discriminator, so the legacy branch stays
+ * exactly its old shape and only the EXPANSION branch adds `proposalKind`.
+ */
+export type PlanningSubmissionSealed =
+  | PlanningSubmissionSealedBase
+  | (PlanningSubmissionSealedBase & { readonly expansion: PlanningExpansionHoldBinding;
+    readonly proposalKind: "EXPANSION";
+    readonly sealedProposal: PlanningExpansionProposalIdentity });
 
 export interface PlanRevisionCreated extends PlanningRunEventBase {
   readonly hashes: PlanRevisionHashes;
