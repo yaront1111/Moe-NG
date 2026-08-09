@@ -1,0 +1,153 @@
+{
+  "id": "task-8d19851491ad4c0c85bd15d3ed830b7b",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Retire two stale foreign gate assertions blocking every epic completion",
+  "description": "Objective: retire two stale assertions in files whose owning tasks are already DONE and closed, so root `pnpm test` and the scheduler package gate can reach exit 0 again. Created by governor-eae4fc53 2026-08-09 because the board is fully jammed: zero tasks WORKING, five BLOCKED, and BOTH blockers are one-line edits on foreign paths that no live task may legally touch under epic rail 3. Every candidate owner is DONE: `packages/testkit/src/foundation/**` belongs to task-18c7921f (DONE); `packages/runner/src/supervisor/effect-test-fixtures.ts` belongs to task-2580a578 (DONE). This task exists solely to give those two files a live owner. NOT in scope: any behaviour change, any new surface, any fix to the blocked tasks themselves — they complete on their own once the gates go green.\n\nBLOCKER A — the absence ratchet, firing exactly as designed. `packages/testkit/src/foundation/foundation-fault-schedule.ts` declares `probe:scheduler-authority-lease` (line 83, and the schedule entry at line 168) as expecting `PRODUCTION_BEHAVIOR_ABSENT` with missingSurface \"exported lease/authority fencing surface\". That surface NOW EXISTS: `fenceAuthority` is exported from `packages/scheduler/src/index.ts:62`, landed by task-8ee125d0 in commit 239aa4f. So `tests/fault/foundation/j4-replan-stale.test.ts > schedule:j4-stale-lease-enforcement` receives `{kind: PASS_EXPECTED}` where the fixture still declares `{kind: PRODUCTION_BEHAVIOR_ABSENT}`. THIS IS NOT A BUG — the ratchet is doing its job: a surface that was absent is now present, so the manifest entry must be retired. Retire it correctly (flip the entry to the present-surface expectation the schedule supports); do NOT delete the probe, do NOT weaken the ratchet, do NOT special-case the assertion. Independently diagnosed by three workers: worker-d1ecc56a (msg-83d2232), worker-f8533806 (msg-6604f631), worker-e46fb0dc. IMPACT: this single failure makes root `pnpm test` exit 1, which blocks final-task completion for the ENTIRE epic.\n\nBLOCKER B — a doc comment matching an import regex. `packages/scheduler/src/package-boundary.test.ts:10` scans raw file CONTENTS of every source file under `packages/` with `/(?:@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/])/u`. It matches PROSE, not just imports. The offending text is a doc comment in `packages/runner/src/supervisor/effect-test-fixtures.ts` (around lines 15-19) which path-quotes `packages/scheduler/src/authority/test-fixtures.ts`. Nothing actually deep-imports scheduler — verified. The comment is self-aware and still trips the check: it explains that the module is \"named rather than path-quoted on purpose\" while path-quoting it two lines later. Landed in commit 72545bb (task-2580a578, DONE). PREFER the regex fix over the comment fix: anchor `forbiddenInternalPath` to genuine import/from positions so prose can never trip it again. The comment reword is acceptable as a fallback but only relocates the landmine. If you anchor the regex, prove it still catches a real deep import by adding that case.\n\nOwned paths: packages/testkit/src/foundation/foundation-fault-schedule.ts, packages/scheduler/src/package-boundary.test.ts, and packages/runner/src/supervisor/effect-test-fixtures.ts (comment text only — do NOT touch its builders, they are load-bearing for the supervisor suites and were QA-approved). Verification: root `pnpm typecheck` (expected 0, already 0) && root `pnpm test` must reach exit 0, AND `pnpm --filter @moe/scheduler test` must reach exit 0. Baseline before you start, measured: root pnpm test = 1 failed / 2866 passed / 1 skipped across 158 files; scheduler test = exit 1 on package-boundary only.",
+  "definitionOfDone": [
+    "Root `pnpm test` exits 0 with the j4-replan-stale ratchet retired rather than weakened: the probe still exists, still asserts, and a mutation that removes `fenceAuthority` from the scheduler root export makes it go red again. Prove that mutation, restore, and verify the restore with git hash-object.",
+    "`pnpm --filter @moe/scheduler test` exits 0 and the package-boundary check still fails on a genuine deep import — add that positive case and show it red before your fix makes the prose case green.",
+    "Test counts prove no coverage was lost: report before/after totals and account for every changed assertion. A test deleted or narrowed to reach green is a failed task, not a passed one.",
+    "Only the three named owned paths are staged and committed, by explicit per-file pathspec, verified with `git show --stat` after commit."
+  ],
+  "taskRails": [
+    "Do not weaken, delete, skip, or special-case either assertion to reach green. Both are ratchets that exist to catch exactly the drift they are now reporting; retiring an entry means updating it to the new truth, never removing the check.",
+    "Do not touch the builders in effect-test-fixtures.ts. Comment text only. Those builders are load-bearing for the supervisor suites and were QA-approved in task-2580a578.",
+    "Do not fix, edit, or 'help' any of the five BLOCKED tasks. They complete on their own once these gates go green. Staying inside the three owned paths is the whole point of this task existing.",
+    "Commit by explicit per-file pathspec only; the working directory is shared and the harness post-flight auto-commit has been observed sweeping the whole tree. Verify with `git show --stat` and report any foreign path immediately rather than reverting it."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Capture a fresh baseline and add the RED boundary-regression matrix in packages/scheduler/src/package-boundary.test.ts. Record root and scheduler file/test/pass/fail/skip totals before editing and reconcile them with the task snapshot; identify any extra failure by exact path rather than assuming ownership. Extract the boundary decision into a file-local `containsForbiddenSchedulerImport(contents)` helper used by the repository scan. Add hand-written cases that must be detected: static value import-from, `import type`-from, side-effect import, export-from, dynamic `import()`, and CommonJS `require()` using `@moe/scheduler/<internal>` and relative `scheduler/src/<internal>` specifiers with both path separators where meaningful. Add decoys that must remain allowed: the exact offending prose/comment shape, a normal string containing an internal path, the package root `@moe/scheduler`, and unrelated imports. Assert the case arrays are non-empty and assert each named case individually. Run only package-boundary.test.ts and confirm RED is specifically the prose/ordinary-string false-positive under the current raw-content implementation; the genuine-import cases must already demonstrate the guard's intended positive axis.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ],
+      "note": "Fresh baselines at HEAD 3944a9d before edit: root 159 files / 2870 passed / 1 skipped / 0 failed; scheduler 32 files / 567 passed. Extracted file-local detector and added non-empty named matrices: 7 genuine import/export/dynamic/require cases (including POSIX and Windows separators) plus 5 allowed decoys. Focused RED: 27 tests, exactly 3 failed (former fixture prose, ordinary string, commented-out import), 24 passed; all genuine-import cases passed, proving the intended positive axis.",
+      "startedAt": "2026-08-09T08:48:24.529Z",
+      "completedAt": "2026-08-09T08:50:20.230Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the minimum syntax-aware package-boundary detector and update the fixture documentation. Anchor extraction to actual module-specifier positions—static import/from, side-effect import, export-from, dynamic import(), or require()—then apply the existing forbidden scheduler subpath predicate only to the extracted quoted specifier; do not parse or reject arbitrary prose. Preserve recursive scanning, source-extension coverage, scheduler-root exclusion, node_modules exclusion, exact empty violation-list assertion, and exclusive package exports assertion. In packages/runner/src/supervisor/effect-test-fixtures.ts, change only the stale doc-comment lines so they truthfully say the fixture names the scheduler package's test-fixtures module while the boundary guard checks module specifiers; do not touch imports, constants, builders, types, or executable bytes. Make the focused boundary matrix and scheduler package test green without special-casing this file/path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "note": "Implemented a comment/string-aware token scanner that extracts only quoted specifiers from static imports, import type, side-effect imports, export-from, dynamic import(), and require(), then applies the existing forbidden subpath predicate. Updated only the stale runner doc comment. Added multiline/single-quote/comment/empty-string controls. An added `import { require as run }` case first went RED 1/32, revealing a premature scan stop; removed that false stop, then focused 32/32 and full scheduler 32 files / 585 tests passed. Baseline was 567, so +18 permanent cases and none lost.",
+      "startedAt": "2026-08-09T08:52:05.220Z",
+      "completedAt": "2026-08-09T08:56:32.422Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the single adversarial review and both load-bearing proofs. First confirm packages/testkit/src/foundation/foundation-fault-schedule.ts still has the stale-lease schedule as PASS and the unowned J4 executor still calls the production root `fenceAuthority`, asserts `AUTHORITY_STALE_EPOCH`, and checks the authority-layer security record; do not edit either test. Require packages/scheduler/src/index.ts to be clean, snapshot it to a unique OS-temp file, record `git hash-object`, temporarily remove only the `fenceAuthority` root export, and run the named J4 fault test to prove schedule:j4-stale-lease-enforcement goes red; restore exact bytes in a finally path, verify the original hash, and remove the temp file. Then temporarily neutralize `containsForbiddenSchedulerImport` in the owned boundary test and prove the genuine deep-import case goes red, restore exact bytes with the same hash discipline, and rerun the focused test green. Review multiline imports, comments before imports, quote styles, Windows/POSIX separators, empty files, ENOENT handling, and exact violation paths; confirm no test was deleted/skipped/narrowed, no builder changed, and no scratch/generated file remains.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ],
+      "note": "Adversarial review + 4 mutation proofs, all with OS-temp byte snapshots, finally-restore, and git hash-object verification.\n\nPRE-CHECKS: foundation-fault-schedule.ts is byte-clean at HEAD 3944a9d and still declares schedule:j4-stale-lease-enforcement as PASS (lines 156-158). Unowned tests/fault/foundation/j4-replan-stale.test.ts still calls scheduler.fenceAuthority through the package root (harness imports * as scheduler from packages/scheduler/src/index.js), asserts issues == [\"AUTHORITY_STALE_EPOCH\"], asserts the full authority-layer securityRecord (aggregateKind LEASE, commandKind work.dispatch, expectedEpoch 3, observedEpoch 2), and asserts the current-epoch accept path. Neither file edited.\n\nPROOF 1 (Blocker A ratchet, unowned file, transient): packages/scheduler/src/index.ts clean, hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050. Baseline filtered run green (1 passed | 14 skipped). Removed only line 62 `fenceAuthority,` from the root export block. Mutant RED: \"TypeError: scheduler.fenceAuthority is not a function\" at j4-replan-stale.test.ts:198 on schedule:j4-stale-lease-enforcement, exit 1. Restored, hash re-verified a0ab48fb..., temp file removed.\n\nPROOF 2A (positive axis): containsForbiddenSchedulerImport body -> `return false`. All 10 genuine-import cases RED (static value import-from, import type-from, side-effect, export-from, dynamic import, dynamic import in template expression, CommonJS require, comment-before-import, multiline single-quoted, binding named require). 10 failed | 24 passed.\n\nPROOF 2B (negative axis + proves the fix is the fix): body -> the old `forbiddenInternalPath.test(contents)` raw scan. 7 RED: all 6 prose/string decoys (former fixture prose, ordinary string, commented-out import, block comment with import syntax, string containing import syntax, template-literal prose) AND \"detects CommonJS require\" — the old raw regex also MISSED a genuine Windows-separator require(\"..\\scheduler\\src\\authority\\private.js\"), a false negative the syntax-anchored detector now catches.\n\nRAIL-6 GAP FOUND AND CLOSED: the repository sweep asserted only `violations toEqual([])`, so it would pass vacuously if sourceFiles discovered zero files. Added `expect(scanned.length).toBeGreaterThan(0)` and `expect(scanned).toContain(scannedWitness)` where scannedWitness is the runner fixture path this task exists to clear. Both proven load-bearing: MUTANT C1 (sourceFiles -> []) RED \"expected 0 to be greater than 0\"; MUTANT C2 (roots -> [\"packages/scheduler\"] only) RED \"expected [ ...(115) ] to include 'packages\\runner\\src\\supervisor\\effect...'\". Restored, hash 3892d1a19850690b8a971896a0fd72fc18370138 re-verified.\n\nREVIEW SWEEP: multiline import, comment-before-import, single/double/template quote styles, POSIX (../../scheduler/src/) and Windows (..\\scheduler\\src\\) separators, empty file, and the @moe/scheduler package root are each a named case. ENOENT handling and node_modules/schedulerRoot exclusion preserved; violations still record exact repo-relative paths and still assert toEqual([]).\n\nNO COVERAGE LOST: HEAD had 14 tests in this file (1 repo scan + 12 extension cases + 1 exports). Working tree has 34 = the same 14 plus 20 new (10 forbidden + 9 allowed + 1 non-empty-matrix guard). Zero deleted, zero skipped, zero narrowed; no .skip/.todo/.only anywhere in the owned files.\n\nBUILDERS UNTOUCHED: comment-stripped, whitespace-normalized comparison of effect-test-fixtures.ts against HEAD is identical (4644 chars both sides) — the change is doc-comment text only.\n\nHYGIENE: no untracked scratch under packages/tests/adapters/apps; all temp snapshots removed. package-boundary.test.ts is 281 lines — over the 250 target, under the 400 split bar; not split because a helper module would be a new path outside the three owned paths.\n\nOne incident, contained: an early Mutant C attempt used an empty sed line variable, so `sed -i \"s#.*#...#\"` overwrote every line of package-boundary.test.ts. The finally-restore caught it and git hash-object confirmed exact recovery before rerunning; the retry used node exact-string anchoring instead.",
+      "startedAt": "2026-08-09T08:56:36.699Z",
+      "completedAt": "2026-08-09T09:06:42.971Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the one final foreground verification gate exactly: `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test`. Record exit 0 plus before/after file/test/pass/fail/skip totals, accounting for the exact increase from the new permanent boundary cases and showing zero lost pre-existing tests. Reconfirm the fenceAuthority restore hash and that packages/testkit/src/foundation/foundation-fault-schedule.ts remains byte-clean at HEAD; Blocker A is credited to existing commit 3944a9d rather than manufactured as a no-op diff. Inspect `git status --porcelain` and the scoped diff, unstage foreign entries without altering them, stage only the changed owned files, and commit with explicit pathspecs (`git commit -- packages/scheduler/src/package-boundary.test.ts packages/runner/src/supervisor/effect-test-fixtures.ts`; include foundation-fault-schedule.ts only if it has an intentional plan-required diff, which it should not). Verify `git show --stat` contains no path outside the three task-owned paths before calling moe.complete_task.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts",
+        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+      ],
+      "note": "Final gate run fresh post-commit, exactly as named: `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test` -> exit 0.\n\nTOTALS. Root: before 159 files / 2870 passed / 1 skipped / 0 failed (measured at HEAD 3944a9d in step-1); after 159 files / 2890 passed / 1 skipped / 0 failed. Scheduler package: before 32 files / 567 passed; after 32 files / 587 passed. Delta is +20 on both, fully accounted for: 10 forbidden-import cases + 9 allowed-content cases + 1 matrix-non-empty guard, all new and permanent. The two extra assertions added in step-3 live inside the existing repository-sweep test and add no test count. Zero pre-existing tests lost: the file's original 14 (1 repo scan, 12 source-extension cases, 1 package-exports) are all still present and green; no .skip/.todo/.only anywhere.\n\nRESTORES RECONFIRMED. packages/scheduler/src/index.ts hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050, `git status --porcelain` empty for it. packages/testkit/src/foundation/foundation-fault-schedule.ts byte-clean, zero diff — Blocker A is credited to existing commit 3944a9d and was NOT manufactured as a no-op diff, exactly as planned.\n\nCOMMIT. Nothing was staged when the step began. Staged only the two changed owned paths, then committed by explicit pathspec: `git commit -F - -- packages/scheduler/src/package-boundary.test.ts packages/runner/src/supervisor/effect-test-fixtures.ts`. Result d03c42f. `git show --stat` shows exactly two files, 212 insertions / 5 deletions, no path outside the task-owned set. No foreign entry needed unstaging. The 16 modified `.moe/` and `.codex/` board-state files plus 3 untracked `.moe/tasks/*.json` were left untouched and uncommitted. Post-commit `git status --porcelain -- packages adapters apps tests` is empty.\n\nFILE SIZE. package-boundary.test.ts is 281 lines: over the 250 target, well under the 400 split bar. Not split because a helper module would create a fourth path outside the three task-owned paths, which epic rail 3 forbids.",
+      "startedAt": "2026-08-09T09:06:45.435Z",
+      "completedAt": "2026-08-09T09:08:07.293Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-812c17a0",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 0,
+  "comments": [
+    {
+      "id": "comment-dbb01b35da754bceaf86950586258dcb",
+      "author": "architect-0b81de40",
+      "content": "STOP BEFORE PLANNING OR EXECUTING THIS TASK — BOTH BLOCKERS IT NAMES ARE ALREADY FIXED, AND EVERY GATE IT LISTS IS GREEN. Editing these files now means changing correct code against a passing gate.\n\nFrom architect-0b81de40, 2026-08-09. The diagnosis in this description was right and its baseline was accurate when written; it was overtaken between creation and now.\n\nMEASURED IN THE FOREGROUND, not read off a status field:\n  pnpm test                           -> 159 files, 2870 passed, 1 skipped, 0 FAILED\n  pnpm typecheck                      -> Done, every package\n  pnpm --filter @moe/scheduler test    -> 32 files, 567 passed, 0 failed\n  npx vitest run --root . tests/fault  -> 3 files, 43 passed\n\nBLOCKER A (the absence ratchet) was retired by commit 3944a9d, from task-c7c6cf92, which is DONE. It was retired CORRECTLY rather than merely flipped: the commit touches 2 files with +36 lines in the executor, meaning produceAbsenceOutcome was replaced by one that actually drives fenceAuthority from the @moe/scheduler root and asserts the stale-epoch refusal code. This task's own DoD 1 asked for exactly that property, and it is already satisfied.\n\nBLOCKER B (the boundary-test prose match) was fixed earlier. The doc comment in packages/runner/src/supervisor/effect-test-fixtures.ts now NAMES @moe/scheduler instead of path-quoting it, so it documents the hazard rather than tripping it. Verified 14/14 on package-boundary.test.ts, then 567/567 across the whole scheduler package.\n\nRECOMMENDATION: close this task unexecuted. If it is executed as written, a worker will rework a green ratchet entry and a green boundary check, and the most likely outcome is a regression on assertions that currently pass.\n\nONE PART IS STILL WORTH DOING, but as its own small task rather than under this description. The suggestion in BLOCKER B to anchor forbiddenInternalPath to genuine import/from positions is the better long-term fix — the comment reword only relocates the landmine, exactly as this description says. That is now a hardening improvement on a green gate, not a blocker, and it should carry its own DoD: anchor the regex, and prove it still catches a real deep import by adding that case red-first.\n\nSEPARATELY, the blocked tasks: task-8ee125d0 (4/4, committed 239aa4f) and task-2d1f94f9 (11/11, committed 369ea08) were released to WORKING on this evidence; both need only a gate re-run and complete_task. task-97554aa4 remains correctly BLOCKED — its second blocker is real and unrelated to this task: apps/daemon/src/index.ts exports only evaluateGraphPreviewRequestBytes while six directories of committed command surface sit unreachable behind the exclusive exports map. That is the same wall task-8ee125d0 cleared for @moe/scheduler and task-53680e91 for @moe/runner; task-6054520b now owns clearing it for @moe/daemon.",
+      "timestamp": "2026-08-09T08:47:52.911Z"
+    },
+    {
+      "id": "comment-eb437b6293614149aa418414799ffe10",
+      "author": "architect-0b81de40",
+      "content": "RETRACTION OF MY PREVIOUS COMMENT — DO NOT CLOSE THIS TASK. LET IT FINISH.\n\narchitect-0b81de40, 2026-08-09. My earlier comment recommended closing this unexecuted. That recommendation was based on the task DESCRIPTION. Having now read the actual PLAN and the step notes, the plan is materially better than the description it was written from, and the work in flight is genuinely valuable. If a governor acts on my previous comment and halts this at 2/4, good work gets destroyed. Disregard it.\n\nWHAT THE PLAN ACTUALLY DOES, and why it is right:\n\nIt does NOT redo Blocker A. Step 3 only CONFIRMS the stale-lease schedule is already PASS — correctly treating commit 3944a9d (task-c7c6cf92) as done rather than reworking it. That was my whole concern and the plan had already handled it.\n\nIt scopes the real work to the piece I myself flagged as still worth doing: anchoring the boundary detector to genuine module-specifier positions instead of scanning raw file contents. The description called the comment reword a fallback that \"only relocates the landmine\" — the plan took the harder, correct option.\n\nThe execution is better than I would have specified. From the step notes:\n  - Step 1 captured fresh baselines (root 159/2870/0 failed; scheduler 32/567) and built a RED matrix of 7 genuine import cases — static, side-effect, export-from, dynamic import(), require(), with BOTH POSIX and Windows separators — plus 5 allowed decoys. Focused red was 3 failed / 24 passed, with every genuine-import case passing, proving the positive axis rather than only the negative one.\n  - Step 2 replaced the regex with a comment- and string-aware token scanner, and the drill found a REAL defect: an `import { require as run }` case went red and revealed a premature scan stop, which was then removed.\n  - Scheduler is now 32 files / 585 tests, against a 567 baseline. +18 permanent cases, zero lost. That is exactly what this task's DoD 3 demands, and it is the opposite of narrowing a test to reach green.\n\nMY ERROR, recorded so it is not repeated: I judged this task by its description and its stale baseline, and recommended closing it. The description WAS overtaken — both named blockers were fixed before it was claimed — but the plan written from it correctly kept the one part that still had value and dropped the rest. A stale premise does not always mean stale work, and the plan is the thing to read before recommending a close.\n\nWHAT I STILL STAND BEHIND from the earlier comment, none of which conflicts with letting this finish:\n  - Blocker A is already retired by 3944a9d, correctly (+36 executor lines driving fenceAuthority, not a declaration flip). Step 3 should confirm and move on, never rework it.\n  - Every gate was green before this task started; the value here is the hardened detector, not a restored gate. Step 4's totals should show that: scheduler up from 567, root still 0 failed.\n  - task-97554aa4 remains blocked on something unrelated — the daemon exports-map wall, now owned by task-6054520b.\n\nOne thing for step 4: packages/runner/src/supervisor/effect-test-fixtures.ts is currently modified in the working tree and is a foreign path for most purposes — it is in this task's owned list for COMMENT TEXT ONLY. Confirm the diff there touches only the doc comment and none of its builders, which are load-bearing for the supervisor suites and were QA-approved.",
+      "timestamp": "2026-08-09T09:02:35.970Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T08:10:02.010Z",
+  "updatedAt": "2026-08-09T09:09:09.294Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T08:43:28.868Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-da724bb7",
+    "worker-533a53ab",
+    "worker-f2e587cb",
+    "qa-812c17a0"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T08:47:47.814Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the durable package-boundary fix, not another prose-only relocation. Replace the raw-content predicate with a syntax-anchored module-specifier detector that covers static import/from, side-effect import, export-from, dynamic import(), and require(), while ignoring ordinary comments/strings. Do not revert or recreate the obsolete absence declaration: current HEAD 3944a9d has already changed schedule:j4-stale-lease-enforcement to PASS and added a direct public-surface executor that asserts AUTHORITY_STALE_EPOCH. Reintroducing PRODUCTION_BEHAVIOR_ABSENT would be false now; deleting/narrowing the direct executor is forbidden. The task therefore finishes the remaining durable boundary repair and independently mutation-proves the already-landed lease ratchet.",
+    "codebaseInsights": "Current bytes differ from the task's creation snapshot. packages/testkit/src/foundation/foundation-fault-schedule.ts is clean and already declares the stale-lease schedule PASS at commit 3944a9d. The corresponding tests/fault/foundation/j4-replan-stale.test.ts (unowned, do not edit) calls scheduler.fenceAuthority through the package root and pins the refusal code AUTHORITY_STALE_EPOCH plus the rejection security record. The old absence-probe row was removed because foundation-spec.test.ts requires every absence probe to be claimed by a PRODUCTION_BEHAVIOR_ABSENT manifest row; a present surface cannot remain in that absence-only registry. packages/runner/src/supervisor/effect-test-fixtures.ts is also already prose-safe from commit 306546b, but its comment describes the brittle raw scan. The unresolved design defect is package-boundary.test.ts's raw `forbiddenInternalPath.test(contents)`.",
+    "risks": "A regex that merely adds `import` somewhere before the path can still match comments or miss multiline/type/side-effect/dynamic/CommonJS forms. Pin both axes with hand-written syntax cases and explicit prose decoys, including slash and backslash internal paths and the allowed root `@moe/scheduler`. The scheduler scan reads the shared working tree, so baseline counts can drift with foreign untracked files; attribute any violation by exact path and never edit it. The required fenceAuthority mutation touches an unowned committed file only transiently: first require it clean, hash and copy it outside the repo, restore in finally by byte copy, verify git hash-object equality, and stop/report blocked rather than clobbering foreign WIP.",
+    "keyFiles": [
+      "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+      "tests/fault/foundation/j4-replan-stale.test.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/runner/src/supervisor/effect-test-fixtures.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T08:47:49.858Z",
+  "workStartedAt": "2026-08-09T08:48:24.529Z",
+  "reviewStartedAt": "2026-08-09T09:08:41.224Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "packages/review typecheck: Done\npackages/coordination typecheck: Done\napps/daemon typecheck: Done\napps/control-room typecheck: Done\n\n Test Files  159 passed (159)\n      Tests  2890 passed | 1 skipped (2891)\n\n Test Files  32 passed (32)\n      Tests  587 passed (587)\n",
+    "reportedAt": "2026-08-09T09:08:41.224Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/package-boundary.test.ts",
+    "packages/runner/src/supervisor/effect-test-fixtures.ts"
+  ]
+}

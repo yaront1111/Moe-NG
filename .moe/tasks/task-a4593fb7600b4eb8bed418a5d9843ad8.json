@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. This one has a VAGUE dependency clause — \"stable v1 schemas, store migrations, and artifact CAS\" names no task titles, so it cannot be resolved mechanically. I resolved it by inspection instead, on disk: (1) artifact CAS EXISTS — packages/runner/src/artifacts/ ships artifact-contract.ts, artifact-node-fs.ts, artifact-store.ts with a content-digest surface and its own test; (2) store migrations EXIST and are settled — sqlite-schema-bootstrap/conformance/integrity plus the v3 projection-table migration (task-2d9b0a74, DONE) and the schema decomposition (task-9e3faf3b, DONE); (3) v1 schemas are stable — the store is at schema v3 with validateExactSchemaObjects pinning object SQL, and no schema task remains open. Owned paths packages/import/** and tests/migration/import/** are BOTH GREENFIELD — neither directory exists — so this cannot collide with anything in flight. ARCHITECT: verify those three premises on disk before naming symbols; if any turns out to be less settled than I read it, report_blocked and I will move it back rather than have you plan against a guess. That reversal is cheap and expected, not a failure. Explicitly NOT promoted alongside this: task-b937811e (Benchmark telemetry harness), whose clause \"stable daemon/provider/control-room instrumentation\" fails the same inspection — apps/daemon/src/index.ts still exports only advisory graph-preview types and the real command surface is being built right now by task-6054520b.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,5 +36,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-07T12:10:20.704Z"
+  "updatedAt": "2026-08-09T09:03:39.560Z"
 }

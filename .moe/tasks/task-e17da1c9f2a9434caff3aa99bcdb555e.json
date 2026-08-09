@@ -15,13 +15,133 @@
     "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and pin the contract before naming a symbol. Read design lines 218 (NodeInputMaterialization / NodeInputManifest definition), 256 (inputBindingHash composition), 380 (the two-transaction seal and the exact ordering rule), 382 (REVOCABLE witness revalidation and the pre-claim flip), and 799 (stale input quarantines the scratch tree and triggers no worker claim). Then read, in this repo: packages/scheduler/src/dependencies/dependency-contract.ts (the authority shape you will mirror), packages/runner/src/workspace/workspace-contract.ts (WorkspaceInputManifest, inputManifestDigestInput — the manifest-and-digest style to follow), packages/runner/src/evidence/evidence-contract.ts (EVIDENCE_REFUSAL_LAYERS + evidenceFailure — the layered-refusal style to follow), packages/runner/src/artifacts/artifact-contract.ts (ArtifactRef, refMatches), and packages/runner/src/supervisor/lease-mirror.ts (the mirror precedent, whose doc comment states the rule and the failure mode). Confirm the helpers this plan names still exist in packages/runner/src/canonical.ts: canonicalDigest, canonicalJson, deepFreeze, isHex64, isPlainRecord, isNormalizedText. Produce no files in this step.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T09:06:41.655Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "materialization-kernel.ts — frozen vocabulary, no behaviour. Declare: NODE_INPUT_MANIFEST_VERSION = \"moe-node-input-manifest/1\" as const, matching the WORKSPACE_INPUT_MANIFEST_VERSION naming already in this package; RUNNER_MATERIALIZATION_ERROR_CODES as a frozen closed array with its derived union type; MATERIALIZATION_REFUSAL_LAYERS as a frozen array (SELECTION, WITNESS, SEAL, STALENESS) following the EVIDENCE_REFUSAL_LAYERS precedent, because more than one layer can refuse and the epic rail requires tests to pin WHICH one did; bounded-size constants for the predecessor closure and witness list, so an oversized input refuses cheaply before any element read (the budget-contract.ts:137 precedent); and one materializationFailure(code, layer, message, detail) factory plus an isMaterializationFailure guard, mirroring evidenceFailure. Every refusal in this task is constructed here — no module declares a code locally, the vocabulary is closed. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/materialization-kernel.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/materialization-kernel.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "RED — dependency witness mirror tests, before the module exists. THE CENTRAL DESIGN CONSTRAINT: @moe/runner depends only on @moe/contracts, and packages/scheduler/src/dependencies/dependency-contract.ts is neither reachable (not exported from the @moe/scheduler root) nor addable (a dependency edit would need package.json and pnpm-lock.yaml, outside this task's owned paths). So the witness surface is MIRRORED structurally, exactly as packages/runner/src/supervisor/lease-mirror.ts mirrors fenceAuthority. Read that file's doc comment first: the mirror must be a RE-VALIDATION, never a shape cast, because comparing fields on an unparsed object accepts records the authority's own parser refuses. Tests to write: a hostile-shape battery (null prototype violation, extra key, missing key, wrong type, getter-bearing object) each refused with its specific code at layer WITNESS; stability parsed as exactly \"MONOTONIC\" | \"REVOCABLE\" and nothing else; consumptionHorizon parsed against the mirrored DEPENDENCY_GATES list with \"MATERIALIZATION_SEAL\" present; and THE FAIL-CLOSED NORMALIZATION — dependency-contract.ts:248 downgrades a MONOTONIC contract to REVOCABLE when no monotonic-registry proof is supplied, so assert the mirror does the same. A mirror that skipped it would exempt from recheck a witness the authority treats as revocable, which is a divergence in the unsafe direction.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/materialization-properties.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/materialization-properties.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN — dependency-witness-mirror.ts. Structurally mirror the caller-supplied dependency contract's witness surface with pinned literals: the stability union, the DEPENDENCY_GATES list, DependencyWitnessBinding (witnessRef, witnessVersion, witnessDigest, sourceOperationClass) and DependencyFactBinding (sourceFactRef, sourceFactVersion, sourceFactDigest). Parse-then-validate: every parser returns null on a hostile shape and the caller picks the code and layer, the effect-parse.ts convention. Expose the MATERIALIZATION_SEAL recheck used by the seal step: given the mirrored contracts and the caller-supplied current witness facts, return either a satisfied verdict or a refusal naming the first witness that failed and why. Preserve the MONOTONIC-without-proof downgrade. Do NOT import @moe/scheduler under any circumstance — if a needed shape seems unmirrorable, report_blocked rather than adding a package dependency. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/dependency-witness-mirror.ts",
+        "packages/runner/src/materialization/materialization-properties.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/dependency-witness-mirror.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "RED — predecessor selection tests, before the module exists. This is DoD 3, the fail-closed half. Design line 380 fixes the rule: order is the graph base, then transitive accepted predecessor results in topological then stable-nodeKey order, EACH ARTIFACT IDENTITY EXACTLY ONCE. Assert: (a) a deterministic selection over a fixed closure is byte-identical across repeated calls and independent of caller input order — shuffle the input and assert the same output sequence; (b) two distinct producers offering the same artifact identity is AMBIGUOUS and refuses with its own stable code at layer SELECTION, never a silent pick; (c) the same artifact identity reachable twice through different paths is DEDUPED to one entry, which is a different outcome from (b) and must have its own test so the two are not conflated; (d) a predecessor whose result is not ACCEPTED at or above the required qualifying milestone is refused, not skipped; (e) an oversized closure refuses on the bound before any element read. Every case asserts the code AND the layer. The ordering assertion must compare against a hand-written expected sequence, never one computed by calling the function under test.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/predecessor-selection.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/predecessor-selection.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN — predecessor-selection.ts. Pure function over a caller-supplied closure: validate bounds, parse each candidate predecessor record, refuse on ambiguity, dedupe by artifact identity, and emit the deterministic ordered selection (graph base first, then topological, ties broken by stable nodeKey). Carry each selection's producer attempt, epoch, and adoption identity through to the output, because the seal step must digest-bind them per design line 380. Return a frozen result: either the ordered selection or one refusal. No I/O, no filesystem, no Git — this module decides WHAT is selected; the scratch-worktree materialization itself is not in this task's scope. Keep under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/predecessor-selection.ts",
+        "packages/runner/src/materialization/predecessor-selection.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/predecessor-selection.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "RED — manifest seal and staleness tests, before the module exists. This is DoD 1 and DoD 2. Digest binding (design line 256): assert the sealed manifest's binding hash changes when ANY of these changes, one mutation per assertion so a single over-broad digest cannot pass by accident — a selected result identity, a producer adoption identity, an artifact identity, a witness ref, a witness VERSION, a witness digest, an environment-manifest requirement, or the graph/binding epoch. Assert the converse too: re-sealing identical inputs yields an identical digest, so the digest is deterministic and not seeded by anything ambient. Staleness (DoD 2): a manifest sealed against witness version N is NOT dispatchable once the current witness is version N+1 — assert the refusal code and layer STALENESS, and assert the result carries no dispatch affordance at all by checking its key set, not by checking a boolean is false. Same for a changed predecessor digest. Assert a REVOCABLE witness is rechecked at seal and a MONOTONIC one with valid registry proof is exempt — and that the downgraded MONOTONIC-without-proof case IS rechecked.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/input-manifest-seal.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/input-manifest-seal.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GREEN — input-manifest-seal.ts. Seal the NodeInputManifest over the ordered selection: run the MATERIALIZATION_SEAL witness recheck first, then compute inputTreeDigest and the input binding hash via canonicalDigest over an explicit digest-input record, following the inputManifestDigestInput(body) shape already used in workspace-contract.ts — a named body-to-record function, so what is bound is reviewable in one place rather than implicit in a spread. Bind exactly what design line 256 lists: selected predecessor result and adoption identities, artifact identities, witness IDs/versions/digests, environment-manifest requirements, and the source graph/binding epoch. Return a frozen sealed manifest or one refusal; a refused seal produces no manifest and no dispatch affordance, per design line 799 (stale input triggers no worker claim). Expose the staleness check as a separate exported predicate so a caller can revalidate an already-sealed manifest without re-sealing. Keep under 250 lines; split the digest-input builder into a sibling module before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/input-manifest-seal.ts",
+        "packages/runner/src/materialization/input-manifest-seal.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/input-manifest-seal.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Runtime bridges. @moe/runner now carries 45 tracked .js bridges package-wide (task-eb9ff081), so every new non-test module here needs its sibling bridge or the package becomes unloadable by plain Node again. Add one per production module — materialization-kernel.js, dependency-witness-mirror.js, predecessor-selection.js, input-manifest-seal.js — each exactly one line, `export * from \"./<name>.ts\";`, LF, trailing newline. Test files get NO bridge. CRITICAL: the vitest gate is structurally blind to a missing bridge because Vite resolves ./foo.js to foo.ts while Node does not, so a green suite is not evidence here. Prove it with a plain-Node probe from the repo root and record all three controls: POSITIVE — each new bridge imports and its namespace has more than zero non-default exports, none undefined; REGRESSION — an existing bridged module still loads; NEGATIVE — a path with no bridge still raises the literal ERR_MODULE_NOT_FOUND, proving the probe can still detect failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/*.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/materialization/*.js"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verification and mutation drill. Run pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test and record the before/after test counts — the suite must grow, and a run reporting zero new files is the bug, not a pass. Then MUTATION-VERIFY the failure paths, because the epic rail requires demonstration and not assertion: one at a time, break the ambiguity refusal, the dedupe, the ordering tie-break, the MONOTONIC-without-proof downgrade, one witness-version staleness comparison, and one field of the digest-input record; confirm the suite goes RED for each and restore with git checkout -- before the next. Record per-mutation red counts. A mutation that leaves the suite green means that assertion has detached from its subject — fix the test, not the count. Beware: another agent's whole-tree hook can commit a drill edit in this shared worktree, so verify restoration with git diff on the specific file rather than trusting git status (mem:mutation-drills-in-shared-worktree). Finally, assert the closed-vocabulary sweep — every code in RUNNER_MATERIALIZATION_ERROR_CODES is reachable from a real production surface and the observed set EQUALS the declared set, so an unreachable code fails the suite.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/materialization-properties.test.ts",
+        "packages/runner/src/materialization/predecessor-selection.test.ts",
+        "packages/runner/src/materialization/input-manifest-seal.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an attacker. Can a caller get a sealed manifest whose digest omits any field design line 256 requires — check the digest-input record against that list item by item. Can a stale manifest dispatch through any path, including the separately exported staleness predicate? Can an ambiguous producer selection be resolved silently by ordering rather than refused? Does the witness mirror accept any record the scheduler's own parser would refuse — re-read dependency-contract.ts:208 and compare check for check, since a mirror that is more permissive than the authority is a bypass. Is every returned object frozen, including nested ones? Grep the diff for forbidden reach: @moe/scheduler, child_process, spawn, Date.now, Math.random, new Date. Confirm every production file is under 250 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe, scratch, or generated evidence file remains. Then commit by explicit pathspec only — git status --porcelain first, confirm every staged entry is under packages/runner/src/materialization/, unstage anything foreign with git restore --staged, then git commit -- packages/runner/src/materialization and verify with git show --stat. Never a bare git commit; the index is shared with concurrent tasks.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/materialization/materialization-kernel.ts",
+        "packages/runner/src/materialization/dependency-witness-mirror.ts",
+        "packages/runner/src/materialization/predecessor-selection.ts",
+        "packages/runner/src/materialization/input-manifest-seal.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-0b27a5cc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. CLEAN dependency pass, not pipelined: all three named hard dependencies verified DONE — Dependency contract kernel (task-eef1e7f2), Clean workspace foundation (task-6ce92e5d), and Evidence receipt pipeline (task-1e512b95, which reached DONE earlier today). Deliberately chosen from epic-e0c54bdd rather than the foundation epic: epic-bd387eeb is currently jammed (0 WORKING, 5 BLOCKED on two orphaned foreign-file assertions, now owned by task-8d198514). No owned-path overlap with anything blocked there. Note it unblocks Readiness explanation engine (task-fa96b81c), which is the next gate in that epic's chain.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +149,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:09.904Z",
-  "updatedAt": "2026-08-07T11:53:09.904Z"
+  "updatedAt": "2026-08-09T09:06:41.655Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T09:01:54.894Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-8a4a1764",
+    "worker-0b27a5cc"
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T09:06:16.118Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED — import the dependency contract kernel from @moe/scheduler. It is the obvious reading of the task's 'Hard dependencies: Dependency contract kernel', but it fails three ways: @moe/runner depends only on @moe/contracts; packages/scheduler/src/dependencies/ is NOT on the @moe/scheduler root export, and the exports map is exclusive so no deep import resolves (mem:gotcha-workspace-exports-map-is-exclusive); and adding the dependency would need package.json plus pnpm-lock.yaml, both outside this task's owned path of packages/runner/src/materialization/**. 'Hard dependencies' here is prose task-ordering — those tasks must be DONE, not imported (mem:moe-hard-dependencies-are-prose-not-fields).\n\nCHOSEN — structurally mirror the witness surface inside runner, which is this package's established and QA-approved answer to exactly this constraint. packages/runner/src/supervisor/lease-mirror.ts mirrors fenceAuthority for the same reason and its doc comment states the rule and the trap: it must be a RE-VALIDATION, not a shape cast, because comparing fields on an unparsed object accepts records the authority's own parser refuses, and that is a fencing bypass rather than a convenience.\n\nREJECTED — doing the scratch-worktree materialization I/O here. Design line 380 puts real filesystem work in this flow, but the task scope is selection plus sealing, and 'NOT in scope: provider execution or fan-in integration'. Everything in this plan is a pure function over caller-supplied records, matching how every other runner kernel is built and keeping the fault tests deterministic.",
+    "codebaseInsights": "GREENFIELD — packages/runner/src/materialization/ does not exist. No collision with anything in flight.\n\nDESIGN ANCHORS, read these rather than re-deriving: line 218 defines NodeInputMaterialization and NodeInputManifest; line 256 lists exactly what inputBindingHash binds; line 380 fixes the ordering rule (graph base, then transitive accepted predecessor results in topological then stable-nodeKey order, each artifact identity once) and the invalidation triggers; line 382 governs REVOCABLE witness revalidation and states that restored satisfaction ALWAYS requires a new witness-bound materialization — an attempt may never adopt a changed witness in place; line 799 says stale input quarantines the scratch tree and triggers NO worker claim.\n\nTHE GATE ALREADY EXISTS BY NAME — DEPENDENCY_GATES[0] is 'MATERIALIZATION_SEAL' in packages/scheduler/src/dependencies/dependency-contract.ts. This task implements that gate, so mirror the constant rather than inventing a name.\n\nSTYLE PRECEDENTS TO COPY, all in-package: workspace-contract.ts for the versioned-manifest plus named digestInput(body) shape; evidence-contract.ts for EVIDENCE_REFUSAL_LAYERS and the failure factory; effect-parse.ts for parsers that return null and let the caller choose code and layer; budget-contract.ts:137 for applying a length ceiling BEFORE any element read.\n\nTOOLCHAIN — canonical.ts exports canonicalJson, canonicalDigest, sha256Hex, deepFreeze, isPlainRecord, isHex64, isNormalizedText, isSafeByteCount, isCommitIdentity, isCanonicalUtcTimestamp (all verified present). canonicalDigest throws on bigint and non-safe-integer numbers. exactOptionalPropertyTypes is ON, so fields are required-and-nullable, never optional. verbatimModuleSyntax is ON, so type-only imports need the type modifier.",
+    "risks": "THE SUBTLEST TRAP — dependency-contract.ts:248 normalizes a MONOTONIC contract DOWN to REVOCABLE when no monotonic-registry proof is supplied. That is a deliberate fail-closed default. A mirror that copies the stability field verbatim and skips the downgrade will exempt from recheck a witness the authority considers revocable, and it will do so silently, in the unsafe direction, with a green suite. Step 3 pins it with its own test.\n\nMIRROR DRIFT IS UNTESTABLE FROM HERE — a verdict-equality test against the real validateDependencyContract cannot live in @moe/runner, which cannot import @moe/scheduler. Child 1 hit the identical wall with lease-mirror and deferred its drift test to the daemon package, which depends on both. Ship hostile-fixture parity here and flag the drift test as follow-up work for a package that can see both sides; do not fake it with a local re-declaration, which would assert the mirror against itself.\n\nDEDUPE VERSUS AMBIGUITY ARE DIFFERENT OUTCOMES — the same artifact identity reached twice by different paths is deduped to one entry; two DIFFERENT producers offering the same artifact identity is a fail-closed refusal. Folding them into one code would let a genuine conflict pass as a dedupe. They get separate tests for that reason.\n\nDIGEST BINDING IS EASY TO PASS VACUOUSLY — assert one mutated field per assertion. A single test that changes several fields at once cannot distinguish a digest that binds all of them from one that binds only the first.\n\nBRIDGES — the package now has 45 tracked .js bridges and no build step. New modules without them make @moe/runner unloadable by plain Node, and the vitest gate cannot see it (mem:gotcha-vitest-hides-missing-js-bridge). Step 9 probes with all three controls; a probe that only imports the new modules passes vacuously.\n\nSHARED WORKTREE — during the mutation drill another agent's whole-tree hook can commit your drill edit, after which git status looks clean while the edit is still live (mem:mutation-drills-in-shared-worktree). Verify restoration with git diff on the specific file.",
+    "keyFiles": [
+      "packages/scheduler/src/dependencies/dependency-contract.ts",
+      "packages/runner/src/supervisor/lease-mirror.ts",
+      "packages/runner/src/workspace/workspace-contract.ts",
+      "packages/runner/src/evidence/evidence-contract.ts",
+      "packages/runner/src/artifacts/artifact-contract.ts",
+      "packages/runner/src/canonical.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9900000
+  },
+  "planApprovedAt": "2026-08-09T09:06:18.164Z",
+  "workStartedAt": "2026-08-09T09:06:41.655Z"
 }

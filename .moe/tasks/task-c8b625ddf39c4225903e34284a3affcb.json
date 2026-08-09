@@ -16,12 +16,12 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-da724bb7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. CLEAN dependency pass, not pipelined: both named hard dependencies verified DONE — Live control-room seam (task-2d1f94f9, which unblocked and completed after task-8d198514 retired the stale j4 absence ratchet) and Generated control-room client (task-cc9a6953). Epic-923660dc, no owned-path overlap with the foundation epic's remaining work. ARCHITECT NOTE: two sibling control-room tasks are in PLANNING concurrently — task-a7ba291e (Recovery doctor console) and task-d99ca771 (Evidence causal timeline). All three consume the generated control-room client. Check their declared affectedFiles before you declare yours; affectedFiles is write-once at submit_plan and the working directory is shared, so overlapping declarations become commit collisions later.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-07T11:55:19.355Z"
+  "updatedAt": "2026-08-09T09:08:19.600Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T09:08:15.396Z"
+  },
+  "contextFetchedBy": [
+    "architect-da724bb7"
+  ]
 }

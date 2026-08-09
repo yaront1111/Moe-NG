@@ -80,29 +80,39 @@
       "completedAt": "2026-08-08T21:15:31.236Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-f8533806",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by architect-0b81de40 2026-08-09 on measured evidence, not on a report. worker-f8533806 blocked this at 4/4 steps with work complete and committed (239aa4f), refusing to fabricate a pass while packages/scheduler/src/package-boundary.test.ts failed on a FOREIGN file — that refusal was correct and is exactly what epic rail 4 asks for. THE BLOCKER IS GONE. Re-measured just now: `npx vitest run --root . packages/scheduler/src` -> 32 files / 567 tests, ALL PASSED, zero failures. That matches the worker's own predicted arithmetic exactly (it reported 567 = 566 pass + 1 fail; the 1 is now passing). The cause was the prose match in packages/runner/src/supervisor/effect-test-fixtures.ts, whose doc comment has since been reworded to name @moe/scheduler rather than quote an internal path — its comment now documents the hazard instead of tripping it. NO WORK REMAINS on this task: re-run the named gate for fresh evidence and call complete_task. Do not redo the deliverable. Note the separate repo-root red (tests/fault/foundation/j4-replan-stale.test.ts) is NOT this task's gate and is now owned by task-c7c6cf92.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 34,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-af8551a677a14fe29397ad9123eedc9a",
+      "author": "governor-eae4fc53",
+      "content": "GOVERNOR NOTE — governor-eae4fc53, 2026-08-09. Your blocker now has an owner. Do not re-derive it, and do not edit either foreign file.\n\nYou blocked at 4/4 with work complete and committed (239aa4f), refusing to fabricate a pass on a pre-existing foreign red. Correct call, and your zero-regression proof by count (baseline 519 = 518 pass + this same 1 fail; final 567 = 566 pass + the same 1 fail; 566-518 = 48 = exactly your new cases) is exactly the evidence that makes it reviewable. Not asking you to revisit any of it.\n\nYour diagnosis was right and I verified it independently: `packages/scheduler/src/package-boundary.test.ts:10` scans raw file CONTENTS with `/(?:@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/])/u`, so it matches PROSE. The hit is a doc comment in `packages/runner/src/supervisor/effect-test-fixtures.ts` around lines 15-19 that path-quotes `packages/scheduler/src/authority/test-fixtures.ts`. The comment is self-aware — it explains the module is \"named rather than path-quoted on purpose\" and then path-quotes it two lines later. Nothing actually deep-imports scheduler.\n\nBoth files belong to tasks that are DONE and closed (task-2580a578 for the fixture comment; the boundary test has no live owner), which is why epic rail 3 left you with no legal move.\n\nI created **task-8d198514** (CRITICAL, PLANNING) to own both files. I directed it to PREFER anchoring the regex to genuine import/from positions over rewording the comment, since the reword only relocates the landmine — and to prove the anchored regex still catches a real deep import.\n\nWHEN THAT LANDS: re-run `pnpm --filter @moe/scheduler test`, then complete_task. Your deliverable is already verified (root namespace 17 -> 36 keys, plain-Node positive import resolves, negative deep subpaths correctly ERR_PACKAGE_PATH_NOT_EXPORTED, both axes mutation-drilled and hash-restored). Nothing to redo.\n\nLeft BLOCKED deliberately rather than flipped to WORKING: flipping now would get you claimed and immediately re-blocked on the same red gate. Also worth knowing — your commit publishing fenceAuthority is what tripped the OTHER blocker (the j4 absence ratchet), so task-8d198514 fixes both in one pass.",
+      "timestamp": "2026-08-09T08:11:45.441Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T20:44:45.217Z",
-  "updatedAt": "2026-08-08T21:18:21.957Z",
+  "updatedAt": "2026-08-09T09:07:37.065Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:50:42.259Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-09T09:07:37.065Z",
+    "wallClockMs": 44214806
   },
   "contextFetchedBy": [
     "architect-da724bb7",
-    "worker-f8533806"
+    "worker-f8533806",
+    "qa-812c17a0"
   ],
   "stepsCompleted": [
     "step-1",
@@ -128,12 +138,17 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-09T09:02:49.050Z",
+    "escalatedAt": "2026-08-09T09:02:49.050Z"
   },
   "planApprovedAt": "2026-08-08T20:54:29.110Z",
   "workStartedAt": "2026-08-08T21:02:48.940Z",
-  "blockedReason": "WORK COMPLETE AND COMMITTED (239aa4f). All 4 steps COMPLETED. Blocking ONLY because the named gate cannot reach exit 0 on a FOREIGN file; I will not submit a fabricated pass (epic rail 4). One line on a foreign path unblocks it - then re-run the gate and complete_task. No implementation work remains.\n\nBLOCKER, pre-existing, measured before my first edit and unchanged after:\n  scheduler typecheck -> 0 | scheduler test -> 1 | daemon typecheck -> 0\n  FAIL packages/scheduler/src/package-boundary.test.ts > keeps scheduler registrars behind the package-root import boundary\n  + [ \"packages\\\\runner\\\\src\\\\supervisor\\\\effect-test-fixtures.ts\" ]\n\nCAUSE: a DOC COMMENT, not an import. effect-test-fixtures.ts:17 reads\n  * `packages/scheduler/src/authority/test-fixtures.ts`).\npackage-boundary.test.ts:10 scans raw file CONTENTS for /(?:@moe\\/scheduler\\/|scheduler[\\\\/]src[\\\\/])/u, so prose matches like a real deep import. Committed in 72545bb (task-2580a578). Nothing actually deep-imports scheduler.\n\nFIX (either owner): reword that comment to drop the \"scheduler/src/\" segment, OR anchor the regex to import/from positions. Both files are foreign to this task (owned: packages/scheduler/src/index.ts + index-surface.test.ts); epic rail 3 forbids me editing either.\n\nZERO REGRESSION, by count: baseline 519 = 518 pass + this same 1 fail; final 567 = 566 pass + the same 1 fail. 566-518 = 48 = exactly my new cases.\n\nDELIVERABLE VERIFIED: root namespace 17 -> 36 keys, 19 values + 40 types. Plain-Node: POSITIVE import('@moe/scheduler') -> exports=36, reserveProviderSlot + fenceAuthority both function; NEGATIVE deep subpaths -> ERR_PACKAGE_PATH_NOT_EXPORTED. Re-export only; authority/, budget/, package.json, lockfile diffs EMPTY; no .js bridge touched. Mutation-drilled both axes, byte restored and hash-verified.\n\nDOWNSTREAM: task-ba3a45f9 (worker-10c55fbd) waits on this. See #general msg-6604f631 and mem:gotcha-scheduler-boundary-test-matches-prose.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-08T21:18:21.957Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "completedAt": "2026-08-09T09:07:37.065Z",
+  "reviewCompletedAt": "2026-08-09T09:07:37.065Z",
+  "reviewSummary": "APPROVED. Commit 239aa4f; git show --stat = exactly the 2 owned paths (index.ts 81->174, index-surface.test.ts new 259).\n\nGATE re-run by me, exact chain, foreground: scheduler typecheck && scheduler test && daemon typecheck -> EXIT 0. 32 files / 587 tests, 0 fail. Worker's reported blocker is gone.\n\nDoD1: params are `unknown` or root types; every return union is 2-arm and BOTH arms named in-test (AuthorityOutcome, Fenced, ReserveAllResult, BudgetReservationResult) vs lease-fencing.ts:83, resource-model.ts:90, budget-reservation.ts:69. Proved typecheck READS the test file: injected bad annotation -> `index-surface.test.ts(261,7): error TS2322`; restored clean.\n\nDoD2+3 MUTATION-DRILLED BY ME (rail 6), not taken on report. LOSS: deleted `fenceAuthority,` -> 4 failed, names the symbol (\"publishes fenceAuthority on the package root as a function\") = by name not count. ADDITION: appended an alias export -> `expected [ ...(37) ] to deeply equal [ ...(36) ]`. Both axes load-bearing; git diff --quiet clean after each. Cardinality guard test:57 blocks an emptied table. All 5 imports are the bare root specifier.\n\nDoD4 PLAIN-NODE both controls via `pnpm --filter @moe/scheduler exec node --experimental-strip-types`: POSITIVE -> `ROOT_OK exports=36 reserveProviderSlot=function fenceAuthority=function`. NEGATIVE deep subpath -> `code=ERR_PACKAGE_PATH_NOT_EXPORTED`, the literal code per rail 3.\n\nDoD5 zero behaviour change: git show --stat over authority/, budget/, package.json, pnpm-lock = EMPTY; no .js bridge touched. Count drift ATTRIBUTED: 587 - 48 (new file alone) = 539 vs baseline 519; `git log 239aa4f..HEAD -- packages/scheduler/src` EMPTY, so +20 is the uncommitted FOREIGN package-boundary.test.ts (+203), not this task.\n\nDoD6/rails: index.ts 174 lines. Re-export only, explicit names, no `export *`; type block adds 0 runtime keys (Node 36 == test 36). Reason codes pinned with exact toEqual incl. AUTHORITY_STALE_EPOCH + redaction. No scratch files. Unblocks task-ba3a45f9."
 }

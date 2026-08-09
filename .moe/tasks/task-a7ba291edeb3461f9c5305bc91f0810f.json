@@ -16,12 +16,12 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. CLEAN dependency pass, not pipelined: both named hard dependencies verified DONE — Crash reconciliation services (task-52ec1406) and Generated control-room client (task-cc9a6953). Deliberately chosen from epic-923660dc rather than the foundation epic: epic-bd387eeb is currently jammed (0 WORKING, 5 BLOCKED on two orphaned foreign-file assertions, now owned by task-8d198514). This task shares no owned paths with anything blocked there, so it gives an idle agent real work that cannot collide with the unjamming effort.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-07T11:55:21.262Z"
+  "updatedAt": "2026-08-09T08:10:14.881Z"
 }

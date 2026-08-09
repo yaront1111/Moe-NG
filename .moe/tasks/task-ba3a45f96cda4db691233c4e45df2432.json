@@ -21,130 +21,171 @@
     {
       "stepId": "step-1",
       "description": "GATE + DEPENDENCY. Do not start until task-8ee125d0 (scheduler surface) and task-53680e91 (runner supervisor surface) are both DONE — this plan composes symbols they publish. Verify, do not assume: from apps/daemon run a plain-Node probe asserting import('@moe/scheduler') exposes reserveAll, reserveProviderSlot, fenceAuthority and the budget reservation functions, and import('@moe/runner') exposes the effect intent / lifecycle / activation-grant surface. If any symbol is missing, report_blocked naming it rather than deep-importing — the exports map is exclusive and a deep import fails with ERR_PACKAGE_PATH_NOT_EXPORTED. Then add exactly one dependency line to apps/daemon/package.json: \"@moe/runner\": \"workspace:*\", alphabetically ordered with the existing @moe/contracts and @moe/scheduler entries. Run pnpm install and inspect the lockfile diff: it must contain ONLY the apps/daemon importer hunk your edit produced. Never regenerate the lockfile wholesale. If a foreign hunk is already present from a concurrent task, leave the lockfile UNCOMMITTED and record the deviation in the step note — the hard rail to preserve foreign work outranks this plan's file list (mem:gotcha-shared-pnpm-lock-ownership).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "pnpm-lock.yaml"
       ],
-      "startedAt": "2026-08-08T20:54:34.285Z"
+      "note": "Reopen audit verified dependencies and current commit: scheduler root exports reserveAll/reserveProviderSlot/fenceAuthority; runner root exports supervisor intent/lifecycle/activation surfaces. HEAD is the task commit 504b682 and no owned source change was needed in this gate.",
+      "startedAt": "2026-08-09T08:14:04.739Z",
+      "completedAt": "2026-08-09T08:14:57.287Z"
     },
     {
       "stepId": "step-2",
       "description": "work-kernel.ts — the frozen vocabulary, no behaviour. Declare, as frozen arrays and const objects: WORK_COMMANDS (claim, renew, release, resume, cancel, get_context); WORK_ERROR_CODES, the closed stable-reason vocabulary; and CLAIM_LEGS, the ordered four-leg name list (lease, providerSlot, budgetReservation, effectIntent) plus the slot-ceiling leg. Every refusal in this task is constructed here via one WorkFailure factory carrying { code, leg, layer } — layer distinguishes which boundary refused (INGRESS vs AUTHORITY), because more than one layer can refuse and epic rail 6 requires tests to pin which one did. Define the result envelope types and one deepFreeze helper used by every handler. AUTHORITY LABELING — do NOT copy the graph-preview envelope: that surface is advisory (advisoryOnly:true, authority:\"NONE\") because it grants nothing. work.claim genuinely confers authority, so the envelope labels what was actually conferred: a refusal is authority:\"NONE\" with zero successor records, a granted claim names the authority it produced. Per epic rail 4, any leg whose evidence is missing or unverifiable stays UNKNOWN and never gains authority. Keep this file under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-kernel.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-kernel.ts"
-      ]
+      ],
+      "note": "Reopen audit of committed work-kernel.ts: frozen command/error/leg vocabularies, single failure factory, deep-freeze helpers, and explicit authority labels are present; no production change required because QA passed this area.",
+      "startedAt": "2026-08-09T08:15:06.066Z",
+      "completedAt": "2026-08-09T08:15:20.106Z"
     },
     {
       "stepId": "step-3",
       "description": "RED — ingress tests, written before work-ingress.ts exists. Follow the graph-preview precedent (mem:decision-daemon-graph-preview-ingress) with the authority-labeling difference from step 2. Assert: (a) decodeBoundedJsonBytes runs FIRST — oversized, invalid-UTF-8, and malformed-JSON byte inputs return INPUT_REJECTED preserving the decoder's own stable code verbatim, never a code this module invents; (b) a decoded value that is not the exact envelope { schemaVersion: \"moe-work-request/1\", command, payload } returns REQUEST_INVALID — cover a null prototype violation, a missing key, an extra key, a wrong schemaVersion, and a command outside WORK_COMMANDS; (c) every returned result is frozen (Object.isFrozen on the result AND its nested error) and carries explicit authority labeling; (d) THE ORDERING PROOF — a payload that would refuse at the authority layer, wrapped in oversized bytes, must return the decoder's INPUT_REJECTED code, proving no authority path ran before decode. Assert the specific code AND the refusing layer on every case, never merely that it failed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-ingress.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-ingress.test.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed committed ingress tests cover decoder code preservation, exact-envelope refusal, frozen nested results, explicit NONE authority, and decode-before-authority ordering. QA explicitly passed DoD 2; no change.",
+      "startedAt": "2026-08-09T08:15:31.282Z",
+      "completedAt": "2026-08-09T08:15:38.720Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN — work-ingress.ts. Implement the byte boundary in exactly three ordered phases: decodeBoundedJsonBytes, then exact own-key envelope validation (null-prototype check, key-set equality against the frozen key list, schemaVersion literal, command membership), then dispatch to the composition handler. No HTTP, no auth, no transport, no persistence, no approval, no provider execution, no next-command affordance — this is a boundary, not a router. Freeze every result before returning. Keep under 250 lines; if envelope parsing grows, split the parser into a sibling module rather than letting this file sprawl.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-ingress.ts",
         "apps/daemon/src/work/work-ingress.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-ingress.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed work-ingress.ts retains the three-phase bounded decode, exact own-key envelope validation, then composition boundary with frozen results and no out-of-scope transport/effect affordances. QA passed this production surface; no change.",
+      "startedAt": "2026-08-09T08:15:45.001Z",
+      "completedAt": "2026-08-09T08:15:52.982Z"
     },
     {
       "stepId": "step-5",
       "description": "RED — work.claim four-leg atomicity tests, written before work-claim.ts exists. KEY DESIGN POINT the tests must encode: persistence is out of scope, so 'atomic' does not mean rollback — it means the handler returns ONE frozen result that either carries ALL FOUR successor records or carries NONE of them plus a single refusal naming the failing leg. 'Unobservable' is therefore asserted structurally: on refusal, assert Object.keys of the result contains no successor field at all, not merely that a field is null. Write the per-leg failure-injection table with CLAIM_LEGS.length asserted so a silently dropped leg fails the suite: inject a failure at the lease leg (stale token / stale epoch / superseded authority via fenceAuthority), at the provider-slot leg (a declared resource not ACTIVE), at the budget leg (insufficient available / non-protected purpose / stale expectedVersion), and at the effect-intent leg. Each case pins the exact stable code AND the refusing leg AND the layer. Also assert the happy path returns all four records and that the input digest is unchanged before and after the call.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-claim.test.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed per-leg injection table asserts CLAIM_LEGS length and exact code/leg/layer/upstreamCode, refusal successor keys are structurally absent, happy path publishes all four records, and inputs remain unchanged. QA passed DoD 1; no change.",
+      "startedAt": "2026-08-09T08:15:56.588Z",
+      "completedAt": "2026-08-09T08:16:07.558Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN — work-claim.ts. Compose the four legs in fixed order, each gated on the previous succeeding, accumulating successor records in locals and constructing the result only after all four succeed: lease authority via fenceAuthority on the caller-supplied lease record + proof + clock; provider slot via reserveProviderSlot returning state RESERVED (design 427: claim reserves, effect.activate later makes it ACTIVE — activation is NOT in scope here); budget via reserveForAdmission with a PROTECTED admission purpose; effect intent via the runner supervisor surface. On any leg's refusal return immediately with that leg's stable code and zero successor records — a refused claim must leave no authority residue, in the result or in any module-level state. This module holds NO mutable module-level state: the caller supplies the current records and receives successors, which is what keeps it pure and restart-safe. Keep under 250 lines; split a leg into a sibling module before 400.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-claim.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-claim.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed claimWork remains a pure fixed-order composition, returns immediately on each refusal, constructs successors only after all four legs succeed, and holds no module-level mutable authority state. QA explicitly directed no production change.",
+      "startedAt": "2026-08-09T08:16:12.681Z",
+      "completedAt": "2026-08-09T08:16:27.693Z"
     },
     {
       "stepId": "step-7",
       "description": "Slot ceiling — RED then GREEN in this step. VERIFIED FINDING, do not re-derive: reserveProviderSlot does NO counting. It validates one slot's declared resources are ACTIVE and returns RESERVED; there is no ceiling constant anywhere in packages/scheduler. Design line 427 specifies 'at most four RESERVED|ACTIVE provider slots project-wide' in the default dimension, so the COUNTING IS THIS DAEMON'S JOB, over the caller-supplied live claim table. Read DoD 4 accordingly. Implement in work-claim.ts: count existing RESERVED|ACTIVE slots in the default dimension and refuse a fifth with the stable slot-exhausted code BEFORE calling reserveProviderSlot, so the ceiling cannot be bypassed by a scheduler-level accept. Tests: four concurrent claims all succeed; the fifth is REFUSED with the slot-exhausted code and the slot leg named; assert it is refused and NOT queued — the result carries no pending, deferred, or retry affordance of any kind (assert on the result's key set). Also assert the boundary is exactly at four, not three or five, and that a RELEASED slot frees capacity for a subsequent claim.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-claim.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "Added a non-vacuous guard-order case with four held default-dimension claims plus a PENDING_ACQUIRE slot row, asserting WORK_SLOT_EXHAUSTED/slotCeiling/AUTHORITY. Reorder mutant failed exactly 1/52 (received WORK_SLOT_RESOURCE_INACTIVE), restored production unchanged, focused file then passed 52/52. Renamed the old accept-only case so it no longer overclaims ordering proof.",
+      "startedAt": "2026-08-09T08:16:31.594Z",
+      "completedAt": "2026-08-09T08:18:05.429Z"
     },
     {
       "stepId": "step-8",
       "description": "RED — lifecycle handler tests for renew, release, resume, get_context and cancel, before work-lifecycle.ts exists. Every one of the five revalidates the CURRENT token and epoch on every mutation — assert per handler that a stale token and, separately, a stale epoch are each refused with their own distinct stable code, so the two failure modes cannot be conflated. Then the interleaving matrix, which is DoD 3: claim-vs-cancel and release-vs-renew must each end in EXACTLY ONE legal state with the loser receiving a stable reason code. Assert both orderings of each pair, assert the winner's successor state, and assert the loser's result carries the specific code AND names the layer that refused. get_context is read-only: assert it returns a frozen view, grants no authority (authority label NONE), and mutates nothing — call it twice and assert the second result deep-equals the first.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-lifecycle.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-lifecycle.test.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed lifecycle tests distinguish stale token from stale epoch for every mutation, pin both orderings of the claim/cancel and release/renew races, and verify get_context is frozen, authority NONE, repeatable, and does not freeze caller-owned input. QA passed DoD 3; no change.",
+      "startedAt": "2026-08-09T08:18:09.092Z",
+      "completedAt": "2026-08-09T08:18:22.087Z"
     },
     {
       "stepId": "step-9",
       "description": "GREEN — work-lifecycle.ts implementing renew, release, resume, cancel and get_context. Each mutation handler revalidates the current lease token and epoch through the scheduler fencing surface BEFORE composing any successor, and returns a frozen result carrying either the successor records or a single refusal. Reuse the WorkFailure factory and envelope from work-kernel.ts — do not re-declare codes locally, the vocabulary is closed. get_context builds a read-only frozen view labeled authority NONE. Keep under 250 lines; if the five handlers crowd the file, split the read-only get_context into a sibling module before 400 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-lifecycle.ts",
         "apps/daemon/src/work/work-lifecycle.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/work-lifecycle.ts"
-      ]
+      ],
+      "note": "Reopen audit confirmed work-lifecycle.ts revalidates lease authority before mutation, uses the shared failure vocabulary and frozen envelopes, safely dispatches only own lifecycle commands, and publishes a copied read-only context with authority NONE. QA passed this surface; no change.",
+      "startedAt": "2026-08-09T08:18:26.158Z",
+      "completedAt": "2026-08-09T08:18:33.110Z"
     },
     {
       "stepId": "step-10",
       "description": "Verification and mutation drill. Run the focused gate: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test. The daemon test script is `vitest run --root . --config package.json src` — the root vitest config includes only packages/** and tests/**, so a plain --root . would silently hide every app test (mem:gotcha-vitest-app-root-config); if the run reports zero test files, that is the bug, not a pass. Then MUTATION-VERIFY the failure paths, because epic rail 6 requires demonstration not assertion: one at a time, break each of the four claim legs' refusal checks, the slot-ceiling comparison, and one token and one epoch revalidation, confirm the suite goes RED each time, and restore with git checkout -- before the next. Record the per-mutation red counts. A mutation that leaves the suite green means that test has detached from its subject — fix the test, not the count. Also assert the closed-vocabulary sweep: every code in WORK_ERROR_CODES is reachable from a real production surface and the observed set equals the declared set, so an unreachable code fails the suite.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.test.ts",
         "apps/daemon/src/work/work-lifecycle.test.ts",
         "apps/daemon/src/work/work-ingress.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "Fresh focused gate exit 0: 12 test files, 257 tests passed; typecheck passed. Fresh reorder mutant (ceiling moved after slot) was KILLED: 1 failed / 51 passed in work-claim.test.ts, exact mismatch WORK_SLOT_RESOURCE_INACTIVE vs WORK_SLOT_EXHAUSTED; production restored byte-clean and focused file passed 52/52. Per reopen instructions, did not re-run QA-passed M1-M4 or previously passed legs/token/epoch drills. Closed-vocabulary sweep remains in the 257-test gate.",
+      "startedAt": "2026-08-09T08:18:43.614Z",
+      "completedAt": "2026-08-09T08:19:02.576Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an attacker: can any byte input reach an authority path before decodeBoundedJsonBytes? Can a refused claim leave residue anywhere — a mutated input, a module-level counter, an unfrozen nested object? Is any result reachable that is not frozen? Can the slot ceiling be bypassed by a claim that refuses at a later leg but has already consumed slot capacity? Does any handler trust a caller-supplied token or epoch without revalidating it? Grep the diff for forbidden affordances: HTTP, auth, persistence, @moe/store, approval, provider execution, spawn, child_process, Date.now, Math.random. Confirm every production file is under 250 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports (mem:powershell-measure-object-line-undercounts). Confirm no debug, probe, scratch or generated evidence file remains. Then commit by explicit pathspec ONLY: git status --porcelain first and confirm every staged entry is an owned path, unstage any foreign path with git restore --staged, then git commit -- apps/daemon/src/work apps/daemon/package.json [pnpm-lock.yaml only if it holds solely your hunk], and verify with git show --stat that the commit contains exactly the owned paths. Never a bare git commit — the index is shared with concurrent tasks.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-kernel.ts",
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-lifecycle.ts",
         "apps/daemon/src/work/work-ingress.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "Adversarial diff review: fixture uses a deep-cloned valid payload; four held claims and the PENDING_ACQUIRE row make both guards independently refuse; exact code/leg/layer pins precedence, and the fresh reorder mutant proves sensitivity. No production/state/concurrency surface changed. wc -l: all six production files remain <=239. No staged foreign paths. Committed explicit path only as 85ea616; git show confirms exactly apps/daemon/src/work/work-claim.test.ts.",
+      "startedAt": "2026-08-09T08:19:12.671Z",
+      "completedAt": "2026-08-09T08:20:10.848Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-10c55fbd",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Unblocked by architect-8a4a1764 on human instruction 2026-08-08T20:50Z. The surface gap is now owned by two tasks that are BOTH claimable immediately and neither waits on SPIDR child 2: task-8ee125d0 (scheduler claim-composition surface on @moe/scheduler root) and task-53680e91 (child-1 supervisor effect surface on @moe/runner root). The .js bridge sweep (task-eb9ff081) was split out to BACKLOG because it is NOT in this task's critical path - this task's gate is vitest, which resolves .js specifiers to .ts and needs no bridges. Key finding that removed the child-2 dependency: this task's DoD needs only child 1's records (effect intent, lifecycle command, one-use activation gate), which are COMMITTED at 72545bb; child 2's launch-lock/drain/restart modules appear nowhere in this DoD, and child 2's approved plan does not touch packages/runner/src/index.ts, so there is zero file collision. Planning proceeds against the export surfaces those two tasks' DoDs commit to publish. NOTE for the worker: do not start implementing until both surface tasks are DONE - the plan's first step verifies they resolve.",
+  "reopenCount": 1,
+  "reopenReason": "One issue. Production code is CORRECT — do not change work-claim.ts. Fix is one added test case. Full detail in issues[] and mem:task-task-ba3a45f96cda4db691233c4e45df2432-qa-verdict.\n\nQA RE-RAN, did not trust: typecheck + test exit 0, 12 files / 256 tests (12, not zero). wc -l: largest production file 239. git show --stat 504b682: exactly the 12 owned paths, one dependency line, a 3-line daemon-importer lockfile hunk. No forbidden affordance in src/work/.\n\nQA ran its own 5-operand mutation drill. Four killed (ceiling >= to >: 7 red; WORK_STALE_EPOCH conflated: 8 red; Object.hasOwn to true: 7 red; decoder code invented: 7 red). The fifth SURVIVED.\n\nDEFECT (epic rail 6, an assertion detached from its subject). Swapping the two blocks at work-claim.ts:133-138 so checkSlotCeiling runs AFTER claimSlot leaves all 256 tests GREEN — including work-claim.test.ts:450, the one test naming the ordering property.\n\nNot equivalent. QA probe with liveClaims = 4 held (default/RESERVED) AND slot.rows[0].state = \"PENDING_ACQUIRE\":\n  committed -> WORK_SLOT_EXHAUSTED         leg=slotCeiling\n  reordered -> WORK_SLOT_RESOURCE_INACTIVE leg=providerSlot\nTwo different stable codes; nothing observes it. DoD 4's \"refused with the slot-exhausted stable code\" is unpinned whenever a later leg could also refuse.\n\nROOT CAUSE: that fixture uses ACTIVE slot rows, so reserveProviderSlot would ACCEPT — only one guard can refuse, so both orderings agree. A guard-ORDER property is testable only when BOTH guards can answer. Your step-10 drill reported 9/9 killed and was still blind: drills target operators and constants, not statement order.\n\nPASSED, do not revisit: DoD 1, 2, 3, 5; the closed-vocabulary sweep; both adversarial-review fixes (prototype-chain dispatch, get_context freezing caller state) — their tests go red when reverted.",
   "createdBy": "WORKER",
   "parentTaskId": "task-312c1de3c76a4f1dbd8da5c34e629b0e",
   "priority": "CRITICAL",
@@ -152,15 +193,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:12.133Z",
-  "updatedAt": "2026-08-08T20:55:06.564Z",
+  "updatedAt": "2026-08-09T08:24:43.471Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:11:20.498Z",
     "plannedStepCount": 11,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 22,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-09T08:24:43.471Z",
+    "wallClockMs": 44002973
   },
   "contextFetchedBy": [
-    "architect-8a4a1764",
-    "worker-10c55fbd"
+    "qa-812c17a0",
+    "worker-533a53ab"
   ],
   "blockedReason": "Approved step 1 is a hard gate: do not implement until both package-root surface tasks are DONE. Current Moe state shows scheduler surface task-8ee125d0f05f4966abfcc49db37bbbf5 = WORKING (unassigned, 0/4 steps) and runner surface task-53680e91db1c4789a42b7129e61bdd7a = WORKING (unassigned, 0/8 steps). Deep imports are forbidden by the exclusive exports maps, so there is no safe implementation path until both publish and finish.",
   "blockedResourceId": null,
@@ -170,8 +216,26 @@
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
-  "failedDodItems": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
+  ],
+  "failedDodItems": [
+    {
+      "item": "The scheduler slot ceiling is honored: a fifth concurrent RESERVED|ACTIVE claim in the default dimension is refused with the slot-exhausted stable code, never queued silently.",
+      "rejectedAt": "2026-08-09T08:13:20.615Z",
+      "rejectedBy": "qa-812c17a0"
+    }
+  ],
   "planSubmittedAt": "2026-08-08T20:53:25.754Z",
   "planningNotes": {
     "approachesConsidered": "REJECTED — injected ports with daemon-side fakes. It needs no unowned edits and would have unblocked instantly, but it violates epic rail 6 / the project custom rail: 'a property must be asserted against the production surface, not against a test helper that reimplements it.' DoD 4's slot ceiling would then be asserted against a fake slot reserver, exactly the defect class that rail exists to stop. Raised with the human, rejected, confirmed.\n\nREJECTED — extending this task's ownership to packages/scheduler/src/index.ts and packages/runner/src/index.ts. One task, but it writes into two shared packages while child 2 is live in packages/runner/src/supervisor/, and it would push the file count past the 10-affectedFiles hard threshold.\n\nCHOSEN — publish the surfaces in separate small tasks, then compose here. The refinement that removed the wait: this task's DoD needs only CHILD 1's records, which are committed at 72545bb, and child 2's approved plan does not touch runner/src/index.ts. So the runner export task has zero collision with child 2 and is claimable now. Only the .js bridge sweep genuinely needs child 2 finished, and that is not in this task's critical path because this gate is vitest.",
@@ -189,8 +253,86 @@
     ]
   },
   "budget": {
-    "wallClockMs": 9900000
+    "wallClockMs": 9900000,
+    "warnedAt": "2026-08-09T00:01:40.026Z",
+    "escalatedAt": "2026-08-09T00:01:40.026Z"
   },
   "planApprovedAt": "2026-08-08T20:53:27.792Z",
-  "workStartedAt": "2026-08-08T20:54:34.285Z"
+  "workStartedAt": "2026-08-08T20:54:34.285Z",
+  "reviewStartedAt": "2026-08-09T08:21:58.831Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 12 passed (12)\nTests 257 passed (257)\nDuration 864ms\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src",
+    "reportedAt": "2026-08-09T08:21:58.831Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "pnpm-lock.yaml",
+    "apps/daemon/src/work/work-kernel.ts",
+    "apps/daemon/src/work/work-ingress.test.ts",
+    "apps/daemon/src/work/work-ingress.ts",
+    "apps/daemon/src/work/work-claim.test.ts",
+    "apps/daemon/src/work/work-claim.ts",
+    "apps/daemon/src/work/work-lifecycle.test.ts",
+    "apps/daemon/src/work/work-lifecycle.ts"
+  ],
+  "reviewCompletedAt": "2026-08-09T08:24:43.471Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The scheduler slot ceiling is honored: a fifth concurrent RESERVED|ACTIVE claim in the default dimension is refused with the slot-exhausted stable code, never queued silently."
+    ],
+    "issues": [
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/work/work-claim.test.ts",
+        "line": 450,
+        "description": "Surviving non-equivalent mutant. This test claims the ceiling runs BEFORE the slot leg, but its fixture uses ACTIVE slot rows, so reserveProviderSlot would accept and only ONE guard can refuse - the assertion cannot fail on order. Moving checkSlotCeiling below claimSlot (work-claim.ts:133-138) leaves all 256 tests green."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/work/work-claim.ts",
+        "line": 134,
+        "description": "Evidence the mutant is not equivalent: QA probe with 4 held default-dimension claims AND slot.rows[0].state='PENDING_ACQUIRE' returns WORK_SLOT_EXHAUSTED/slotCeiling as committed, but WORK_SLOT_RESOURCE_INACTIVE/providerSlot when reordered. Two different stable codes, unobserved."
+      },
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/work/work-claim.test.ts",
+        "line": 380,
+        "description": "TO PASS: add one case to the ceiling describe block whose payload makes BOTH guards refuse - 4 RESERVED default-dimension liveClaims AND a non-ACTIVE slot row - asserting failure.code==='WORK_SLOT_EXHAUSTED' and failure.leg==='slotCeiling'. Then reorder-mutate, confirm RED, restore with 'git checkout --', record the red count."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "One issue. Production code is CORRECT — do not change work-claim.ts. Fix is one added test case. Full detail in issues[] and mem:task-task-ba3a45f96cda4db691233c4e45df2432-qa-verdict.\n\nQA RE-RAN, did not trust: typecheck + test exit 0, 12 files / 256 tests (12, not zero). wc -l: largest production file 239. git show --stat 504b682: exactly the 12 owned paths, one dependency line, a 3-line daemon-importer lockfile hunk. No forbidden affordance in src/work/.\n\nQA ran its own 5-operand mutation drill. Four killed (ceiling >= to >: 7 red; WORK_STALE_EPOCH conflated: 8 red; Object.hasOwn to true: 7 red; decoder code invented: 7 red). The fifth SURVIVED.\n\nDEFECT (epic rail 6, an assertion detached from its subject). Swapping the two blocks at work-claim.ts:133-138 so checkSlotCeiling runs AFTER claimSlot leaves all 256 tests GREEN — including work-claim.test.ts:450, the one test naming the ordering property.\n\nNot equivalent. QA probe with liveClaims = 4 held (default/RESERVED) AND slot.rows[0].state = \"PENDING_ACQUIRE\":\n  committed -> WORK_SLOT_EXHAUSTED         leg=slotCeiling\n  reordered -> WORK_SLOT_RESOURCE_INACTIVE leg=providerSlot\nTwo different stable codes; nothing observes it. DoD 4's \"refused with the slot-exhausted stable code\" is unpinned whenever a later leg could also refuse.\n\nROOT CAUSE: that fixture uses ACTIVE slot rows, so reserveProviderSlot would ACCEPT — only one guard can refuse, so both orderings agree. A guard-ORDER property is testable only when BOTH guards can answer. Your step-10 drill reported 9/9 killed and was still blind: drills target operators and constants, not statement order.\n\nPASSED, do not revisit: DoD 1, 2, 3, 5; the closed-vocabulary sweep; both adversarial-review fixes (prototype-chain dispatch, get_context freezing caller state) — their tests go red when reverted.",
+      "rejectedAt": "2026-08-09T08:13:20.615Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "The scheduler slot ceiling is honored: a fifth concurrent RESERVED|ACTIVE claim in the default dimension is refused with the slot-exhausted stable code, never queued silently."
+      ],
+      "issues": [
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/work/work-claim.test.ts",
+          "line": 450,
+          "description": "Surviving non-equivalent mutant. This test claims the ceiling runs BEFORE the slot leg, but its fixture uses ACTIVE slot rows, so reserveProviderSlot would accept and only ONE guard can refuse - the assertion cannot fail on order. Moving checkSlotCeiling below claimSlot (work-claim.ts:133-138) leaves all 256 tests green."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/work/work-claim.ts",
+          "line": 134,
+          "description": "Evidence the mutant is not equivalent: QA probe with 4 held default-dimension claims AND slot.rows[0].state='PENDING_ACQUIRE' returns WORK_SLOT_EXHAUSTED/slotCeiling as committed, but WORK_SLOT_RESOURCE_INACTIVE/providerSlot when reordered. Two different stable codes, unobserved."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/work/work-claim.test.ts",
+          "line": 380,
+          "description": "TO PASS: add one case to the ceiling describe block whose payload makes BOTH guards refuse - 4 RESERVED default-dimension liveClaims AND a non-ACTIVE slot row - asserting failure.code==='WORK_SLOT_EXHAUSTED' and failure.leg==='slotCeiling'. Then reorder-mutate, confirm RED, restore with 'git checkout --', record the red count."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-09T08:24:43.471Z",
+  "reviewSummary": "APPROVED. QA re-ran everything on reopen fix 85ea616.\n\nGATE: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test -> exit 0, 12 test files / 257 tests (12, not zero: app-root vitest trap did not fire).\n\nREJECTION ISSUE FIXED. git show --stat 85ea616: one path only, apps/daemon/src/work/work-claim.test.ts, +15/-3. git diff 504b682..85ea616 touches NO production file; work-claim.ts byte-identical, as directed. New case at work-claim.test.ts:460 sets liveClaims=live(4) AND slot.rows[0].state=\"PENDING_ACQUIRE\" so BOTH guards can refuse, pinning WORK_SLOT_EXHAUSTED / leg slotCeiling / layer AUTHORITY / upstreamCode null. Old over-claiming title renamed, not left to mislead. Helpers deep-clone via JSON and throw on a bad fixture path, so a no-op mutation is unreachable.\n\nQA'S OWN FRESH REORDER MUTANT: KILLED. checkSlotCeiling moved below claimSlot (work-claim.ts:133-138) -> 1 failed / 256 passed, \"expected 'WORK_SLOT_RESOURCE_INACTIVE' to be 'WORK_SLOT_EXHAUSTED'\". Restored via git checkout --; gate green again 257/257; git status clean for apps/daemon, packages, pnpm-lock.yaml.\n\nDoD 4 satisfied: boundary exactly four, ACTIVE counted with RESERVED, RELEASED frees capacity, default dimension only, refusal has no queue/retry/defer affordance in key set or serialized form.\n\nDoD 1,2,3,5 passed pass 1, re-confirmed by the green gate: per-leg injection table pins code+leg+layer+upstreamCode with successor keys structurally absent; decode-before-authority proof preserving decoder codes verbatim; stale token vs stale epoch distinctly coded, both orderings of both races pinned.\n\nRAILS: largest production source 239 lines (wc -l), all under 250. No Date.now, Math.random, child_process, spawn, fetch, require, @moe/store in production src/work/. Scope across 504b682+85ea616 is exactly the owned paths."
 }

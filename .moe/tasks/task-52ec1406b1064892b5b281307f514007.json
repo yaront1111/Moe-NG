@@ -181,7 +181,7 @@
       "completedAt": "2026-08-08T22:36:40.911Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -194,12 +194,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:15.830Z",
-  "updatedAt": "2026-08-08T22:39:03.549Z",
+  "updatedAt": "2026-08-08T22:43:54.040Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:28:53.368Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-08T22:43:54.040Z",
+    "wallClockMs": 8100672
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -237,7 +239,8 @@
   },
   "planApprovedAt": "2026-08-08T20:30:25.795Z",
   "contextFetchedBy": [
-    "worker-964ae3f0"
+    "worker-964ae3f0",
+    "qa-cbad3a29"
   ],
   "workStartedAt": "2026-08-08T22:11:53.666Z",
   "reviewStartedAt": "2026-08-08T22:39:03.549Z",
@@ -259,5 +262,8 @@
     "apps/daemon/src/recovery/doctor-commands.ts",
     "packages/runner/src/recovery/crash-authority.test.ts",
     "packages/runner/src/recovery/recovery-test-fixtures.ts"
-  ]
+  ],
+  "completedAt": "2026-08-08T22:43:54.040Z",
+  "reviewCompletedAt": "2026-08-08T22:43:54.040Z",
+  "reviewSummary": "APPROVED. Verified independently, not from step notes.\n\nGATES re-run fresh twice: @moe/runner 25 files/852 passed, @moe/daemon 6 files/98 passed, exit 0. Both typechecks exit 0. DoD4 met.\n\nDIFF cec2b65: 9 files/1809 ins, all under the two owned roots; apps/daemon/package.json and pnpm-lock.yaml untouched by this task (git log). Per-file wc -l 230/229/213/171, under 250.\n\nMY OWN MUTATION DRILL: 11 mutants, 11 KILLED, 0 survivors. Constants substituted for operands, no line deleted; 3/3 files restored byte-identical per git hash-object, HEAD unchanged. Each reddened the test naming its guard:\n- epoch-advance operand -> true: red \"refuses to adopt on an authority whose epoch never advanced\". DoD3 theft protection is demonstrably tested, not just present.\n- token-differs -> true: red \"refuses to adopt on a replayed token even at an advanced epoch\".\n- stale-observation refusal -> never: 2 red incl \"does not silently drop the stale observation into an ordinary outcome\".\n- SUSPECT unestablished operand -> false: 5 red across 2 files. Quarantine gate -> never: 3 red.\n- DoD1 UNKNOWN-admits (the optimistic impl): red \"blocks a successor over a predecessor whose release cannot be established\".\n- drain downgrade, resume boundary, doctor stale-authority, doctor exact-key, doctor confirmationRequired: all killed by their named tests.\n\nDoD1: admits ONLY on equality with PROVEN_RELEASED; ACTIVE and UNKNOWN block under distinct codes, plus a non-collapse test.\nDoD2: frozen five-kind list, no RESUMED arm; set equality both directions vs a hand-transcribed list; 11 cases, count non-zero and exact; per-kind counts pinned.\nDoD3: needs strictly-higher epoch AND a different token; presenceLooksLive read by no decision path. Grep for child_process|spawn(|kill(|Date.now|Math.random|setTimeout|hrtime over both owned dirs: ZERO hits.\n\nRail 6: every negative arm pins code AND layer."
 }

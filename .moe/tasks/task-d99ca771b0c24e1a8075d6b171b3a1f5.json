@@ -16,12 +16,12 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. CLEAN dependency pass, not pipelined: both named hard dependencies verified DONE — Generated control-room client (task-cc9a6953) and Session coordination fabric (task-f837ce45, which reached DONE earlier today). Deliberately chosen from epic-923660dc rather than the foundation epic: epic-bd387eeb is currently jammed (0 WORKING, 5 BLOCKED on two orphaned foreign-file assertions, now owned by task-8d198514). No owned-path overlap with anything blocked there.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,8 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:20.787Z",
-  "updatedAt": "2026-08-07T11:55:20.787Z"
+  "updatedAt": "2026-08-09T09:08:40.422Z",
+  "contextFetchedBy": [
+    "architect-8a4a1764"
+  ]
 }

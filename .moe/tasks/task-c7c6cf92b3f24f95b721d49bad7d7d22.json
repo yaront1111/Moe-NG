@@ -1,0 +1,161 @@
+{
+  "id": "task-c7c6cf92b3f24f95b721d49bad7d7d22",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Retire the scheduler-authority-lease absence entry and drive the real fencing surface",
+  "description": "Objective: retire the one absence-manifest entry whose behaviour has landed, so repo-root `pnpm test` returns to exit 0. Created by architect-0b81de40 2026-08-09 to resolve a cross-task deadlock: this single red is blocking THREE finished tasks and nobody owned the file.\n\nWHY THIS EXISTS. `packages/testkit/src/foundation/foundation-fault-schedule.ts` declares `schedule:j4-stale-lease-enforcement` as `productionBehaviorAbsent(\"exported lease/authority fencing surface\", \"probe:scheduler-authority-lease\")`. That was honest until task-8ee125d0 (commit 239aa4f) published the scheduler root surface. The probe measures the PUBLIC EXPORT SURFACE, so it now resolves and returns PASS_EXPECTED while the manifest still declares ABSENT, and the ratchet fires exactly as designed. The file's own doc comment at lines 56-61 predicted this verbatim: \"Adding the re-export is what flips it: the probe goes red against the declared outcome and forces the manifest entry to be updated to PASS_EXPECTED.\" This task is that update. The ratchet is working correctly - do not disable it, weaken it, or make the probe lie.\n\nMEASURED 2026-08-09: `npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts` -> 1 failed / 14 passed, the sole failure being `schedule:j4-stale-lease-enforcement` expecting PRODUCTION_BEHAVIOR_ABSENT and receiving PASS_EXPECTED. Repo-root `pnpm test` is otherwise green (2866 passing at last measurement). The sibling blocker on `packages/scheduler/src/package-boundary.test.ts` is ALREADY FIXED - that suite passes 14/14 - so this is the last one.\n\nNOT A ONE-LINE EDIT, and this is the part to get right. Flipping the declared outcome to PASS is not sufficient and would be dishonest on its own: the row's claim is \"a command carrying a superseded lease epoch must be refused by the authority surface\", and its executor at `tests/fault/foundation/j4-replan-stale.test.ts:187` is still `(entry) => produceAbsenceOutcome(entry)`, which only probes the export surface and asserts nothing about behaviour. A real executor must replace it, following the pattern every other PASS row in that file already uses: exercise the production surface, assert the specific refusal code, then `return passExpected()`. Per the lease-presence handoff the relevant code is the stale-epoch refusal from `fenceAuthority`, now reachable from the `@moe/scheduler` root.\n\nDeliverable: the manifest entry flipped to PASS, a real behaviour-driving executor for that row, and the now-historical doc comment corrected. Repo-root `pnpm test` back to exit 0.\n\nNOT in scope: changing `fenceAuthority` or anything under `packages/scheduler/src/authority/**`; touching any other manifest entry or probe; retiring `probe:scheduler-authority-lease` itself if any other row still references it; relaxing the ratchet mechanism or the `foundation-spec.test.ts` guards that police the manifest.\n\nHard dependencies: none. task-8ee125d0's commit 239aa4f is already in HEAD and is what triggered this.\n\nOwned paths: packages/testkit/src/foundation/foundation-fault-schedule.ts and tests/fault/foundation/j4-replan-stale.test.ts.\nVerification: pnpm --filter @moe/testkit typecheck &amp;&amp; npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts &amp;&amp; pnpm test",
+  "definitionOfDone": [
+    "The `schedule:j4-stale-lease-enforcement` row in foundation-fault-schedule.ts declares PASS instead of productionBehaviorAbsent, and no other manifest row or probe definition is changed.",
+    "Its executor in j4-replan-stale.test.ts drives the REAL production surface — it obtains fenceAuthority (or the equivalent published entry point) from the @moe/scheduler package root, submits a command carrying a superseded lease epoch, and asserts the specific stable refusal code AND the refusing layer, before returning passExpected(). It must no longer call produceAbsenceOutcome.",
+    "The executor is proven load-bearing by mutation: neutralise the epoch comparison in the assertion (never delete a line) and confirm this row goes red naming that code, then restore and verify the restore against `git rev-parse HEAD:<path>` rather than `git status`.",
+    "The doc comment at foundation-fault-schedule.ts:56-61, which describes this probe as the live ABSENT example, is corrected so it no longer states as current a condition that has been retired.",
+    "Repo-root `pnpm test` exits 0, and `pnpm --filter @moe/testkit typecheck` exits 0, with fresh captured output quoted as evidence.",
+    "Only the two owned paths are staged and committed, verified with `git show --stat`."
+  ],
+  "taskRails": [
+    "The ratchet is working correctly. Do NOT disable it, skip the row, loosen the foundation-spec.test.ts guards that police the manifest, or make a probe report something it did not measure. The only honest fix is to make the declared outcome true and prove it.",
+    "PASS must mean the behaviour was exercised, not that the export exists. An executor that flips to passExpected() without asserting a real refusal is exactly the fabricated pass epic rail 4 forbids, and would convert a working ratchet into a permanent lie.",
+    "Assert the reason code AND the refusing layer, never merely that the command was refused. A second refusal layer answering first would leave this green while no longer testing the authority surface.",
+    "Do not edit packages/scheduler/src/authority/** or any other package to make this pass. If the surface genuinely cannot be driven from the package root, report_blocked rather than reaching into a foreign path.",
+    "Mutation drills run in a SHARED worktree where another agent's completion hook can commit your edit; git status will then report clean because HEAD holds the mutation. Capture `git rev-parse HEAD:<path>` before mutating, verify the restore against that sha, keep the mutated window to one test run, and re-run the full gate afterwards.",
+    "Commit by explicit pathspec only — never a bare git commit, never git add -A. Several agents share this working directory."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Reproduce the failure and pin the surface before changing anything. Run `npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts` and confirm the sole failure is `schedule:j4-stale-lease-enforcement` expecting PRODUCTION_BEHAVIOR_ABSENT and receiving PASS_EXPECTED — if the failure is anything else, the world has moved and the plan needs revisiting. Then confirm on disk that `fenceAuthority`, `parseLeaseRecord`, `parseProof` and `parseClock` are exported from `packages/scheduler/src/index.ts` (they were at commit 239aa4f, lines 62-65), and read `fenceAuthority`'s signature at `packages/scheduler/src/authority/lease-fencing.ts:97` — note that it parses the record and proof BEFORE comparing epochs, which is the nearer refusal layer this test must avoid hitting by accident. Read two or three existing PASS executors in j4-replan-stale.test.ts (around lines 90-130) to copy their exact shape: build a hostile input, `expect` the precise refusal, `return passExpected()`. Finally grep the manifest for other references to `probe:scheduler-authority-lease` so you know whether the probe itself is still needed by another row. Produce no code.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline reproduced exactly: focused Vitest exit 1 with 15 tests (14 passed, sole failure schedule:j4-stale-lease-enforcement), expected PRODUCTION_BEHAVIOR_ABSENT vs received PASS_EXPECTED. Verified scheduler root exports fenceAuthority/parseLeaseRecord/parseProof/parseClock; fenceAuthority parses record+proof before epoch comparison and returns AUTHORITY_STALE_EPOCH for a non-REVOKED lower epoch. Existing PASS executors assert precise outcomes then return passExpected(). The probe ref appears only in its explanatory comment, probe definition, and this manifest row; no other row depends on it.",
+      "startedAt": "2026-08-09T08:12:42.043Z",
+      "completedAt": "2026-08-09T08:14:22.550Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Replace the executor with one that drives the real surface — BEFORE flipping the manifest, deliberately. In `tests/fault/foundation/j4-replan-stale.test.ts`, replace line 187's `\"schedule:j4-stale-lease-enforcement\": (entry) => produceAbsenceOutcome(entry),` with a real executor following the file's established pattern. It must import `fenceAuthority` (and the parsers it needs to build valid inputs) from the `@moe/scheduler` ROOT specifier, never a deep path — `package-boundary.test.ts` scans source contents for internal scheduler paths and a deep import would trip that separate suite. Build a well-formed lease record and authority proof carrying a SUPERSEDED epoch, call `fenceAuthority` with the row's command kind and legal states, and assert the specific stale-epoch refusal code AND the refusing layer, then `return passExpected()`. Include the POSITIVE CONTROL in the same executor: the same fixture with a CURRENT epoch must be ACCEPTED. Without it the test could pass by refusing everything, which is the failure mode this row is most likely to develop. At this point the row still fails — but for a NEW reason (real behaviour returning passExpected against a declared ABSENT), which is the proof your executor actually ran.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "modifiedFiles": [
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "note": "Replaced the absence executor with a real scheduler-root authority test. It builds one well-formed ACTIVE assignment lease/proof, submits epoch 2 against authoritative epoch 3, asserts AUTHORITY_STALE_EPOCH in both the issues and the LEASE security-record layer (including expected/observed epochs), then positively proves the identical current-epoch fixture is accepted before returning passExpected(). The executor consumes the published scheduler index namespace through the existing foundation-harness export; a direct bare @moe/scheduler import from repo-root tests was experimentally proven unresolvable because root has no @moe workspace link, while the harness is the repository's typed, runtime-tested production-package boundary. Updated the file header to remove the now-false enforcement-absent claim. `pnpm exec tsc --project tests/fault/foundation/tsconfig.json --noEmit` exit 0. Focused Vitest remains deliberately red 1/15 only on PASS_EXPECTED vs the still-ABSENT manifest, proving the executor ran.",
+      "startedAt": "2026-08-09T08:14:26.703Z",
+      "completedAt": "2026-08-09T08:17:28.357Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Flip the manifest entry and correct the now-historical doc comment. In `packages/testkit/src/foundation/foundation-fault-schedule.ts`, change the `schedule:j4-stale-lease-enforcement` row in CATALOGUE_ROWS from `productionBehaviorAbsent(\"exported lease/authority fencing surface\", \"probe:scheduler-authority-lease\")` to the bare `PASS` constant the neighbouring rows use. Change NOTHING else in that array and no probe definition. Then correct the doc comment at lines 56-61, which currently presents this probe as the live ABSENT example and states that the lease and fencing modules \"are not re-exported from its index\" — that is no longer true as of commit 239aa4f, and a comment asserting a retired condition as current will mislead the next reader exactly as a stale rail does. Rewrite it to describe the mechanism generically, or to cite this entry as the worked example of a ratchet that FIRED and was retired. If step 1 found no other row referencing `probe:scheduler-authority-lease`, leave the probe definition in place anyway unless a guard requires otherwise — removing it is out of scope and could redden `foundation-spec.test.ts`. The suite should now be green; confirm with the focused run.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "note": "Flipped only schedule:j4-stale-lease-enforcement to PASS and rewrote the catalogue comment generically so it no longer claims the scheduler surface is absent. The first focused run turned the J4 suite green (15/15). The prescribed guard check then failed because foundation-spec enforces a bijection between ABSENT rows and probes, proving the now-unclaimed scheduler-authority-lease probe had to be retired under the plan's `unless a guard requires otherwise` clause; removed only that target probe, no neighbouring row/probe/guard. Fresh combined run: J4 + foundation-spec + scheduler package-boundary, 3 files / 48 tests, exit 0.",
+      "startedAt": "2026-08-09T08:17:31.628Z",
+      "completedAt": "2026-08-09T08:18:44.534Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Prove the new executor is load-bearing — and do it safely, because this worktree is shared. FIRST capture `git rev-parse HEAD:tests/fault/foundation/j4-replan-stale.test.ts` and record the sha; another agent's completion hook commits the WHOLE tree, so a mutation left in place can be swept into someone else's commit, after which `git checkout -- <path>` restores the MUTATED blob and `git status` reports clean because HEAD itself holds the mutation — the only signal would be a failing test (mem:mutation-drills-in-shared-worktree). Then neutralise the epoch comparison in your assertion by replacing the operand with a constant — NEVER delete a line, since a deleted line from a multi-line expression is a syntax error that reddens the suite for the wrong reason and proves nothing. Confirm this row goes red naming the stale-epoch code. Restore, and verify the restore by comparing against the captured sha rather than trusting `git status`. Keep the mutated window to a single test run. Also drill the positive control: force the current-epoch case to a superseded epoch and confirm the acceptance assertion reddens — if it does not, the positive control is decorative.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Killed both required mutants in isolated single-test windows. Reason-code drill changed only the expected code to AUTHORITY_STALE_LEASE and failed with received AUTHORITY_STALE_EPOCH at the executor assertion. Positive-control drill supplied epoch 2 to the current case and failed `expected false to be true` at `expect(current.ok).toBe(true)`. For each drill captured HEAD blob 4b5197fa00a86e304d6a571e6a8fa0bbf16425d0 plus the legitimate pre-mutation working blob 270e59007b328b006476002c1e01c29787115b3e; try/finally byte-restores produced the identical working blob and HEAD was unchanged. (Working hash, not HEAD equality, is the correct restore target because the task edit is intentionally uncommitted until step 6.) Post-drill focused run: 1 file / 15 tests, exit 0.",
+      "startedAt": "2026-08-09T08:19:17.159Z",
+      "completedAt": "2026-08-09T08:20:14.371Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the full gate, which for this task is the repo root because that is the red this task exists to clear. In order, capturing fresh output as evidence: `pnpm --filter @moe/testkit typecheck`, then `npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts`, then `pnpm test`. All three must exit 0. The last one is the point: repo-root `pnpm test` was failing on exactly this row and three finished tasks (task-2d1f94f9 at 11/11, task-49acb856 at 10/11, task-97554aa4) are blocked behind it. Quote the before and after root-test numbers explicitly — the last measurement was 1 failed / 2866 passed / 1 skipped across 158 files, so the after run should show zero failed and a passing count at least as high. If root `pnpm test` is red for some OTHER reason, attribute it by PATH and name the specific failing file rather than assuming it is yours or assuming it is foreign; a second unrelated red is a finding to report, not to absorb into this task.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh foreground named gate exit 0: `pnpm --filter @moe/testkit typecheck && npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts && pnpm test`. Testkit tsc passed; focused J4 1 file / 15 passed; repo root 159 files / 2870 passed / 1 skipped / 0 failed. Baseline was focused 1 failed + 14 passed and prior root measurement 158 files / 2866 passed / 1 skipped / 1 failed, so the target red is cleared and passing coverage has not regressed.",
+      "startedAt": "2026-08-09T08:20:18.689Z",
+      "completedAt": "2026-08-09T08:20:39.071Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review, then commit by explicit pathspec, then tell the blocked tasks. Review: does the executor genuinely `expect` a refusal from the real `fenceAuthority`, or does it merely return `passExpected()`; does it assert the specific stale-epoch code AND the refusing layer rather than just 'it was refused'; could it be passing on the nearer malformed-input layer instead of the epoch comparison — verified by the step-4 drill; is the positive control real, so the row cannot pass by refusing everything; is the import from the `@moe/scheduler` root rather than a deep path; was any other manifest row, probe, or `foundation-spec.test.ts` guard touched; does the rewritten doc comment still assert anything that is no longer true. Then commit by EXPLICIT PATHSPEC — `git commit -- packages/testkit/src/foundation/foundation-fault-schedule.ts tests/fault/foundation/j4-replan-stale.test.ts` — never a bare git commit, never git add -A, since several agents share this working directory. Run `git status --porcelain` first, unstage any foreign path, and verify with `git show --stat` that exactly those two files landed. Finally post in #general naming the commit, so worker-f8533806 (task-8ee125d0), the owner of task-2d1f94f9, worker-d1ecc56a (task-49acb856) and worker-e46fb0dc (task-97554aa4) know the shared gate is clear and can re-run and complete.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+        "tests/fault/foundation/j4-replan-stale.test.ts"
+      ],
+      "note": "Adversarial review found no state, concurrency, hostile-input, or side-effect surface: this is a deterministic test executor over immutable fixtures. Verified it calls the actual scheduler index namespace through the repository's typed foundation harness; exact stale code and LEASE security-record layer are pinned; a valid current proof is accepted; both assertions were mutation-killed; no deep authority import, other row, guard, or foreign path changed. Both files are under limits (201/231 lines), diff --check clean. Pre-commit staged set was empty. Explicit-pathspec commit `3944a9d347a235cc8b846b34fb2d1e7f8caee9ed` contains exactly the two owned paths (36 insertions, 18 deletions). Posted #general msg-b01357f61e5645108b69958870ecf8ac to unblock the four named tasks/workers.",
+      "startedAt": "2026-08-09T08:20:52.003Z",
+      "completedAt": "2026-08-09T08:22:08.733Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 3.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T08:10:23.959Z",
+  "updatedAt": "2026-08-09T08:28:34.075Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T08:10:31.850Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-09T08:28:34.075Z",
+    "wallClockMs": 1082225
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T08:11:49.036Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) FLIP-ONLY WAS REJECTED. The tempting fix is one character: change `productionBehaviorAbsent(...)` to `PASS` and the suite goes green. That would be a fabricated pass. The row's claim is behavioural — 'a command carrying a superseded lease epoch must be refused by the authority surface' — but its executor is `produceAbsenceOutcome`, which only measures whether the export exists. Flipping the declaration without replacing the executor would leave a row that asserts a behaviour nobody tested, permanently, and convert a correctly-working ratchet into a lie. So the executor is replaced FIRST and the declaration flipped second.\n(2) ORDER MATTERS AND IS DELIBERATE. Write the real executor before flipping the manifest. With the executor real and the declaration still ABSENT, the row fails for a NEW and informative reason (it now returns passExpected from real behaviour, versus a declared ABSENT), which proves the executor actually ran. Flipping first would make the suite green immediately and you would never learn whether the executor works.\n(3) DRIVE IT FROM THE PACKAGE ROOT, not a deep import. `fenceAuthority`, `parseLeaseRecord`, `parseProof` and `parseClock` are all exported from `packages/scheduler/src/index.ts` as of commit 239aa4f — that publication is precisely what fired this ratchet. Importing from the root is also what `packages/scheduler/src/package-boundary.test.ts` enforces; a deep import would trip that separate suite.\n(4) SCOPE HELD DELIBERATELY TIGHT: two files, one manifest row, one executor, one stale doc comment. Every other manifest row and every probe definition is left alone.",
+    "codebaseInsights": "MEASURED 2026-08-09, not taken from a report:\n- **The failure**: `npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts` -> 1 failed / 14 passed. Diff is exactly `- PRODUCTION_BEHAVIOR_ABSENT / + PASS_EXPECTED` at `j4-replan-stale.test.ts:201`.\n- **The manifest row** is in `packages/testkit/src/foundation/foundation-fault-schedule.ts`, in the `CATALOGUE_ROWS` array: `[\"schedule:j4-stale-lease-enforcement\", \"J4\", \"a command carrying a superseded lease epoch must be refused by the authority surface\", productionBehaviorAbsent(\"exported lease/authority fencing surface\", \"probe:scheduler-authority-lease\")]`. The other rows in that array use the bare `PASS` constant.\n- **The executor** is `tests/fault/foundation/j4-replan-stale.test.ts:187`: `\"schedule:j4-stale-lease-enforcement\": (entry) => produceAbsenceOutcome(entry),`. Every real row in that file follows a different, consistent pattern: build a hostile input, `expect(...)` the exact refusal shape, then `return passExpected()`. Copy that pattern — examples at lines ~90-130 (`j4-finding-without-evidence-refused`, `j4-round-limit-requires-explicit-escalation`, `j4-stale-envelope-version-rejected`).\n- **The production surface, confirmed exported from the @moe/scheduler ROOT** (`packages/scheduler/src/index.ts:62-65`): `fenceAuthority`, `parseClock`, `parseLeaseRecord`, `parseProof`.\n- **Signature** (`packages/scheduler/src/authority/lease-fencing.ts:97`): `fenceAuthority(record: unknown, authority: unknown, commandKind: string, legalStates: readonly LeaseState[]): Fenced`. It parses the record and the proof first and returns a malformed rejection when either fails — which is the nearer refusal layer this test must NOT accidentally hit.\n- **The refusal codes** come from the lease-presence core (`mem:task-task-967769ea801f4fe09944e4fdcc47663e-handoff`): `AUTHORITY_STALE_EPOCH` is the one this row is about; `AUTHORITY_STALE_LEASE`, `AUTHORITY_SUPERSEDED_AUTHORITY` and `AUTHORITY_MALFORMED_INPUT` are its neighbours. That handoff also records that token redaction is scoped to REJECTIONS while epochs are retained, which is what makes an epoch assertion possible at all.\n- **The sibling blocker is already gone**: `packages/scheduler/src/package-boundary.test.ts` passes 14/14 as of this measurement. The doc comment at `effect-test-fixtures.ts:15-20` now explains the prose-matching hazard instead of tripping it. Do not re-fix it.",
+    "risks": "1. **The nearer refusal layer is the trap.** `fenceAuthority` parses the record and proof BEFORE it compares epochs, so a fixture that is slightly malformed returns `AUTHORITY_MALFORMED_INPUT` and the test passes for entirely the wrong reason while looking correct. Assert the specific stale-epoch code AND the refusing layer, and sanity-check that the same fixture with a CURRENT epoch is ACCEPTED — without that positive control the test could pass by refusing everything.\n2. **`PASS` must mean exercised, not exported.** This is the whole point of the task; an executor returning `passExpected()` without a real `expect` on a refusal is the fabricated pass epic rail 4 forbids.\n3. **MUTATION DRILL IN A SHARED WORKTREE** (`mem:mutation-drills-in-shared-worktree`): another agent's completion hook commits the WHOLE tree, so your in-place mutation can be swept into someone else's commit. After that, `git checkout -- <path>` restores the MUTATED blob and `git status` reports clean, because HEAD now holds the mutation — the only signal is a failing test. Capture `git rev-parse HEAD:<path>` BEFORE mutating, verify the restore against that sha rather than against `git status`, keep the mutated window to a single test run, and re-run the full gate after the last drill.\n4. **Do not touch any other manifest row or probe.** `foundation-spec.test.ts` polices the manifest (it asserts every PRODUCTION_BEHAVIOR_ABSENT entry has a resolvable probe, among others); changing a neighbouring row can redden guards that have nothing to do with this fix.\n5. **Do not retire `probe:scheduler-authority-lease` itself** without checking whether another row still references it — grep first. Removing a probe another entry depends on would break a different guard.\n6. **Do not edit `packages/scheduler/src/authority/**` or any other package** to make this pass (task rail 4). If the surface cannot be driven from the package root, report_blocked.\n7. **Import from `@moe/scheduler` root, never a deep path** — `package-boundary.test.ts` scans source contents for internal scheduler paths and a deep import (or even a path-quoting comment) trips it.\n8. Root `pnpm test` is the real gate here and it is shared: if it is red for some OTHER reason when you run it, attribute by path and name the file rather than assuming it is yours.",
+    "keyFiles": [
+      "packages/testkit/src/foundation/foundation-fault-schedule.ts",
+      "tests/fault/foundation/j4-replan-stale.test.ts",
+      "tests/fault/foundation/foundation-harness.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/authority/lease-fencing.ts",
+      "packages/testkit/src/foundation/foundation-spec.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-09T08:11:51.070Z",
+  "workStartedAt": "2026-08-09T08:12:42.043Z",
+  "reviewStartedAt": "2026-08-09T08:23:14.104Z",
+  "verification": {
+    "command": "pnpm --filter @moe/testkit typecheck && npx vitest run --root . tests/fault/foundation/j4-replan-stale.test.ts && pnpm test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\nTest Files  1 passed (1)\nTests  15 passed (15)\n\n$ vitest run\n\nTest Files  159 passed (159)\nTests  2870 passed | 1 skipped (2871)\nDuration  4.96s",
+    "reportedAt": "2026-08-09T08:23:14.104Z"
+  },
+  "filesModified": [
+    "tests/fault/foundation/j4-replan-stale.test.ts",
+    "packages/testkit/src/foundation/foundation-fault-schedule.ts"
+  ],
+  "contextFetchedBy": [
+    "qa-812c17a0"
+  ],
+  "completedAt": "2026-08-09T08:28:34.075Z",
+  "reviewCompletedAt": "2026-08-09T08:28:34.075Z",
+  "reviewSummary": "APPROVED. Commit 3944a9d; 6/6 DoD verified, all gates re-run by me.\n\nGATES (fresh, foreground): testkit typecheck clean; focused J4 1 file/15 passed; `pnpm test` 159 files / 2870 passed / 1 skipped / 0 failed, EXIT=0. Baseline was 158 files / 1 failed / 2866 passed, so the shared red is cleared and the blocked tasks can re-run.\n\nDoD1: only schedule:j4-stale-lease-enforcement flipped to bare PASS; no other row touched.\nDoD2: produceAbsenceOutcome gone. Executor calls real scheduler.fenceAuthority via the harness namespace, which resolves to the package ROOT index (foundation-harness.ts:22 -> packages/scheduler/src/index.js), not a deep path. Pins exact code [\"AUTHORITY_STALE_EPOCH\"] AND refusing layer via toEqual on the whole securityRecord (aggregateKind LEASE, commandKind, leaseId, sourceState, expected 3 / observed 2). Positive control present.\nDoD3: I ran my own drill, not the worker's. Neutralised the epoch operand (lease.epoch - 1 -> lease.epoch, no line deleted) -> red at :201 \"expected true to be false\". Decisive: with a well-formed fixture the refusal vanishes when the epoch is current, so this row cannot be passing on the nearer AUTHORITY_MALFORMED_INPUT layer nor by refusing everything. Restored from the captured blob, verified by sha 270e5900 not git status per the shared-worktree hazard; post-drill both owned blobs equal HEAD and `git status --porcelain -- tests/ packages/` is empty.\nDoD4: doc comment rewritten generically, no longer claims the lease modules are unexported.\nDoD5/6: `git show --stat 3944a9d` = exactly the two owned paths, 36+/18-.\n\nPROBE REMOVAL checked, not waved through: deleting probe:scheduler-authority-lease looks like scope creep but is forced — foundation-spec.test.ts:150 asserts a bijection between ABSENT rows and probes, so an orphan reddens that guard (step 3's \"unless a guard requires otherwise\"). No other row referenced it. Files 231/201 lines."
+}

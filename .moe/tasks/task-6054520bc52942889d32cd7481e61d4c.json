@@ -1,0 +1,111 @@
+{
+  "id": "task-6054520bc52942889d32cd7481e61d4c",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Publish the daemon command surface on the @moe/daemon root",
+  "description": "Objective: publish the committed daemon command surface on the @moe/daemon package root so the Foundation canary and any external consumer can drive it. Created by architect-0b81de40 2026-08-09. This is the THIRD instance of one recurring defect, and the two prior fixes are the template: task-8ee125d0 did it for @moe/scheduler (commit 239aa4f) and task-53680e91 for @moe/runner.\n\nWHY THIS EXISTS. apps/daemon/package.json pins \"exports\": {\".\": \"./src/index.ts\"} - an EXCLUSIVE map, so no deep subpath import reaches around it at runtime or under moduleResolution NodeNext. But apps/daemon/src/index.ts exports exactly ONE function, evaluateGraphPreviewRequestBytes, explicitly advisoryOnly:true / authority:\"NONE\". Meanwhile six directories of real, committed, tested command surface sit unreachable beneath it: bootstrap/, goals/, planning/, work/, http/, recovery/.\n\nMEASURED ON DISK 2026-08-09: apps/daemon/src/index.ts has 6 export statements, all graph-preview. Unreachable from the root: BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_SCHEMA_VERSION, BOOTSTRAP_REQUEST_KEYS, BOOTSTRAP_REFUSAL_CODES, decodeBootstrapRequestBytes (bootstrap-contracts.ts); GOAL_HANDLERS (goal-services.ts:66); PLANNING_HANDLERS (planning-services.ts:156); claimWork, parseWorkRequest, WORK_SCHEMA_VERSION (work/); EVENT_STREAM_REFUSAL_CODES, MAX_EVENT_PAGE_SIZE (http/); DOCTOR_COMMAND_KINDS, DOCTOR_ERROR_CODES, evaluateDoctorCommandBytes (recovery/).\n\nTHIS IS THE CANARY'S BLOCKER. worker-e46fb0dc blocked task-97554aa4 at step 5 with exactly this diagnosis: \"no daemon command surface to drive ... the three handler tables are unreachable from the package root, the same exports-map wall that blocked task-ba3a45f9\". Against J1's three human actions (design line 1095), goal.create exists but is unreachable. Publishing this surface is what lets the canary's journey half proceed.\n\nDeliverable: a curated named-export block in apps/daemon/src/index.ts in the style that file and packages/runner/src/index.ts already use - named exports grouped per module, types in the same block via the `type` modifier, every specifier written with the .js extension per NodeNext - covering the command kinds, request decoders, handler tables, refusal-code vocabularies and result types a consumer needs to drive bootstrap, goal, planning, work, event-stream and doctor commands and to discriminate every branch of their result unions. Read the modules before naming a single symbol; do not guess.\n\nNOT in scope: changing ANY behaviour in any daemon module; exporting test-only modules (http/event-stream-fixtures.ts is fixtures - do NOT export it); adding a .js bridge (apps/daemon has none and needs none, unlike @moe/store); touching packages/**; any package.json or lockfile edit.\n\nHard dependencies: none. Every surface named above is committed at HEAD.\n\nOwned paths: apps/daemon/src/index.ts and apps/daemon/src/index-surface.test.ts (new).\nVerification: pnpm --filter @moe/daemon typecheck &amp;&amp; pnpm --filter @moe/daemon test &amp;&amp; pnpm typecheck",
+  "definitionOfDone": [
+    "apps/daemon/src/index.ts exports the daemon command surface such that a consumer can, without any deep subpath import, decode a bootstrap request, reach the goal and planning handler tables, parse and claim work, read the event-stream refusal vocabulary, and evaluate a doctor command — naming every parameter type and every union branch of every exported function's return type.",
+    "A new apps/daemon/src/index-surface.test.ts imports the package ROOT specifier @moe/daemon (never a relative or deep path) and asserts per symbol that the export is present and of the expected typeof, so a dropped export fails by name rather than by a vague count.",
+    "The same test asserts set equality between Object.keys of the namespace and a hand-written expected export-name list, so both a removed export AND an unreviewed addition go red. The list is hand-transcribed from the modules, never derived from the namespace under test.",
+    "The advisory envelope discipline survives publication: a test asserts through the published surface that results carrying no authority still report advisoryOnly:true and authority:\"NONE\", so publishing cannot silently promote an advisory result into an authoritative one.",
+    "No test-only module is exported — http/event-stream-fixtures.ts in particular stays internal — asserted by the set-equality list.",
+    "Zero behaviour change: git diff shows apps/daemon/src/index.ts as the only modified non-test file, no .js bridge is added, and the pre-existing daemon suite passes with a test count greater than or equal to the pre-task count, stated as an explicit before/after number.",
+    "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck all exit 0; committed paths are exactly the two owned files."
+  ],
+  "taskRails": [
+    "Re-export only. This task changes what is REACHABLE, never what any function DOES. No .ts file other than index.ts may be edited. If a symbol seems to need a signature change to be exportable, report_blocked rather than editing a daemon service module.",
+    "Read the modules before naming a symbol; do not guess export names and do not copy them from this description without verifying each one on disk (skill: explore-before-assume). Six directories landed from six different tasks within hours of each other and are still settling.",
+    "Never export a test-only module. http/event-stream-fixtures.ts stays internal; exporting fixtures puts test code on the runtime surface.",
+    "Prefer curated named exports over a blanket `export *`, so the published seam stays a reviewed decision rather than whatever the modules happen to export next week.",
+    "Add no .js bridge. apps/daemon has none and needs none — that convention belongs to @moe/store alone, and a partial sweep would be invisible to the vitest gate.",
+    "Assert against the production surface obtained through the @moe/daemon root import, never against a locally re-declared type or a fixture copy.",
+    "Keep the entry point focused: target <=250 lines, split before 400. If the added exports push index.ts past 250 lines, extract a per-area re-export module that index.ts re-exports rather than letting the entry point sprawl.",
+    "Commit by explicit pathspec only — git commit -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts. Several agents share this working directory; verify with git show --stat afterwards."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the pre-task daemon suite file/test/pass/fail/skip count, then create the RED package-root surface contract in apps/daemon/src/index-surface.test.ts. Import `* as daemon` and every tested type only from `@moe/daemon`, never a relative/deep daemon path. Hand-transcribe an alphabetized 31-value `[name, typeof]` table and assert both exact set equality with Object.keys and one named typeof case per value; guard the table with exact cardinality 31 so it cannot silently empty. The approved runtime values are the existing evaluateGraphPreviewRequestBytes plus BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_HANDLERS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS, BOOTSTRAP_SCHEMA_VERSION, SERVICE_REFUSED_BY, PREREQUISITE_REFUSAL_CODES, decodeBootstrapRequestBytes, runBootstrapCommand, GOAL_HANDLERS, PLANNING_HANDLERS, WORK_SCHEMA_VERSION, WORK_COMMANDS, CLAIM_LEGS, SLOT_CEILING_LEG, WORK_LEGS, WORK_LAYERS, WORK_ERROR_CODES, WORK_AUTHORITY_LABELS, parseWorkRequest, claimWork, MAX_EVENT_PAGE_SIZE, EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_LAYER, readEventPage, resumeFromSnapshot, DOCTOR_RECOVERY_SCHEMA_VERSION, DOCTOR_COMMAND_KINDS, DOCTOR_ERROR_CODES, and evaluateDoctorCommandBytes. Add an explicit non-empty forbidden-fixture list (PROJECTION, SUBSCRIBER, SNAPSHOT_CHECKPOINT, STATE_DIGEST, LEDGER_EVENT_IDS, ledgerIdsUpTo, streamPort) and assert none is an own property of the root namespace. Run only this new test and confirm RED names the missing approved exports.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "startedAt": "2026-08-09T09:09:08.588Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Add compile-time root-surface coverage to the same test and implement the curated re-exports in apps/daemon/src/index.ts. Use grouped named blocks with `.js` specifiers and `type` modifiers from each verified module; never export-star. Export the full type closure needed to name every parameter and union arm: from bootstrap contracts—BootstrapCommandKind, BootstrapRefusalCode, BootstrapRefusedBy, BootstrapRequest, BootstrapInputRejected, BootstrapRequestRefused, BootstrapRequestAccepted, BootstrapDecodeRefusal, BootstrapDecodeResult; from bootstrap ledger—ServiceRefusedBy, PrerequisiteRefusalCode, DurableAggregate, DurableLedger, ServiceAccepted, ServiceRefused, ServiceOutcome, HandlerContext, CommandHandler, HandlerTable; from work kernel—WorkCommand, ClaimLeg, WorkLeg, WorkLayer, WorkErrorCode, WorkAuthorityLabel, WorkFailure, ClaimSuccessors, WorkInputRejected, WorkRefused, WorkGranted, WorkApplied, WorkContextView, WorkResult; from work ingress—WorkRequestEnvelope and WorkRequestParse; from event-stream contract—StreamCursor, StreamSnapshot, StreamEvent, StreamPage, StreamGap, StreamRefused, StreamSeated, StreamReadResult, StreamSeatResult, StreamPageRequest, StreamReseatRequest, SubscriptionPort, EventStreamRefusalCode, WireCursor, WireEvent, WireSnapshot, EventPageFrame, EventGapFrame, EventRefusedFrame, EventReseatedFrame, EventReadFrame, EventResumeFrame, EventReadRequest, EventResumeRequest; from doctor—DoctorCommandKind, DoctorErrorCode, DoctorInputRejected, DoctorRequestInvalid, DoctorAuthorityStale, DoctorReported, DoctorProposed, DoctorCommandResult. Use expectTypeOf/type equalities against the root functions/tables to exercise every parameter, return union, and branch type without local redeclarations. Through the root call evaluateGraphPreviewRequestBytes on `{}` bytes and assert the exact REQUEST_INVALID / GRAPH_PREVIEW_REQUEST_INVALID refusal plus advisoryOnly:true and authority:\"NONE\". Make the focused test green, keep index.ts <=250 physical lines, and edit no other production module, package file, or bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the single adversarial review over the two owned files. Verify every exported name against its defining module and every type against the actual signature; ensure general HTTP adapter helpers, bootstrap ledger mutation helpers, work internals, and all `*.test.ts`/fixture modules remain absent. Check that type-only exports add zero runtime keys, all handler tables are defined objects, all approved functions are callable values, and the graph preview advisory test reads the production root rather than a helper. Snapshot index.ts outside the repository and record its git hash; temporarily remove GOAL_HANDLERS to prove the named typeof and set-equality loss axes go red, restore exact bytes, then temporarily add an unapproved safe production export such as HTTP_BOUNDARY_ERROR_CODES to prove the addition axis goes red, restore again. Finally mutate REQUEST_INVALID_RESULT's advisoryOnly or authority field and prove the published advisory-discipline case goes red. Restore in finally paths, verify each original hash, confirm index.ts remains <=250 lines, and leave no scratch/generated files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the one final foreground verification command exactly: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Record exit 0 and explicit before/after daemon file/test/pass/fail/skip counts, showing the final count is at least the baseline and accounting exactly for every new index-surface case. Inspect `git diff -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` to prove re-export-only scope, run `git status --porcelain`, unstage foreign entries without altering them, and stage/commit only the two owned paths with `git commit -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts`. Verify `git show --stat` contains exactly those two paths and no package/bridge/service module before calling moe.complete_task.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-064d1267",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 3.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T08:46:23.406Z",
+  "updatedAt": "2026-08-09T09:09:08.588Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T09:01:44.105Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-da724bb7"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T09:06:49.201Z",
+  "planningNotes": {
+    "approachesConsidered": "Publish one explicit reviewed root seam, following the landed @moe/scheduler and @moe/runner fixes. Deep exports, package.json changes, blanket export-star, behavior edits, and test-fixture exports are rejected. The curated surface includes only the public command-driving seams and their complete type closure: bootstrap decode/run/handlers, goal/planning handler tables, work parse/claim vocabularies, event-stream read/resume contracts, doctor evaluation, and the existing graph-preview advisory operation. General HTTP adapter internals and bootstrap ledger helper functions are not required to drive the named seams and remain internal.",
+    "codebaseInsights": "Current apps/daemon/src/index.ts is 97 physical lines and has exactly one runtime export, evaluateGraphPreviewRequestBytes, plus its graph-preview result types. Verified defining modules and signatures: decodeBootstrapRequestBytes -> BootstrapDecodeResult; runBootstrapCommand(SqliteEventStore, unknown, HandlerTable?) -> ServiceOutcome; GOAL_HANDLERS and PLANNING_HANDLERS are HandlerTable; parseWorkRequest -> WorkRequestParse; claimWork -> WorkResult; readEventPage(SubscriptionPort, EventReadRequest) -> EventReadFrame; resumeFromSnapshot(SubscriptionPort, EventResumeRequest) -> EventResumeFrame; evaluateDoctorCommandBytes -> DoctorCommandResult. apps/daemon's Vitest script deliberately uses `--root . --config package.json src`, because the repository root config does not discover apps/**. This task adds no .js bridge and relies on the existing daemon build/test convention.",
+    "risks": "Keep runtime values and type-only names distinct so Object.keys remains the hand-reviewed 31-value set. Avoid `CommandHandler` collisions by publishing the bootstrap handler type only; the general HTTP adapter stays internal. The type closure must include every discriminated union arm and every function parameter, but need not re-export upstream @moe/contracts/@moe/store types already available from their own roots. Root publication eagerly evaluates the referenced modules under Vitest, so any cycle/undefined value must fail the per-symbol typeof checks. The forbidden fixture runtime names are PROJECTION, SUBSCRIBER, SNAPSHOT_CHECKPOINT, STATE_DIGEST, LEDGER_EVENT_IDS, ledgerIdsUpTo, and streamPort; none may appear.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/package.json",
+      "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+      "apps/daemon/src/bootstrap/bootstrap-services.ts",
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/planning/planning-services.ts",
+      "apps/daemon/src/work/work-kernel.ts",
+      "apps/daemon/src/work/work-ingress.ts",
+      "apps/daemon/src/work/work-claim.ts",
+      "apps/daemon/src/http/event-stream-contract.ts",
+      "apps/daemon/src/http/event-stream.ts",
+      "apps/daemon/src/recovery/doctor-commands.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T09:06:51.236Z",
+  "workStartedAt": "2026-08-09T09:09:08.588Z"
+}
