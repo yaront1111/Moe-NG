@@ -75,6 +75,9 @@ importers:
       '@moe/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@moe/runner':
+        specifier: workspace:*
+        version: link:../../packages/runner
       '@moe/scheduler':
         specifier: workspace:*
         version: link:../../packages/scheduler
