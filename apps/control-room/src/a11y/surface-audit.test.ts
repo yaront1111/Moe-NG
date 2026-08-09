@@ -128,6 +128,16 @@ describe("auditKeyboardReachability", () => {
       { code: "ACTION_UNREACHABLE", testId: "cr.action.visually-first" },
     ]);
   });
+
+  it("ignores informational action metadata when comparing interactive order", () => {
+    const root = fragment(`
+      <li data-testid="cr.action.informational" style="order: 9"></li>
+      <button data-testid="cr.action.allowed" style="order: 0"></button>
+    `);
+    const result = auditKeyboardReachability(root);
+    expect(result.checked).toBeGreaterThan(0);
+    expect(result.violations).toEqual([]);
+  });
 });
 
 describe("auditLiveRegions", () => {

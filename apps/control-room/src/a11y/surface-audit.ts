@@ -111,8 +111,9 @@ function visualOrder(action: Element): number {
 }
 
 function visualOrderMismatches(actions: readonly Element[]): ReadonlySet<Element> {
-  const sorted = [...actions].sort((left, right) => visualOrder(left) - visualOrder(right));
-  return new Set(actions.filter((action, index) => sorted[index] !== action));
+  const interactive = actions.filter((action) => !actionDisabled(action));
+  const sorted = [...interactive].sort((left, right) => visualOrder(left) - visualOrder(right));
+  return new Set(interactive.filter((action, index) => sorted[index] !== action));
 }
 
 export function auditKeyboardReachability(root: ParentNode): AuditResult {

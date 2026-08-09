@@ -1,7 +1,7 @@
 import type { NextAllowedCommand } from "@moe/contracts";
 import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import type { BoardCardProjection } from "../board/board-contract.js";
 import { BoardSurface } from "../board/board-surface.js";
@@ -145,7 +145,9 @@ describe("UI-wide deterministic accessibility bars", () => {
 
   it("records bar 2 as not applicable instead of passing an empty sweep", () => {
     expect(BAR_TWO).toEqual({ applicable: false, reason: expect.stringContaining("CR-J1-002") });
-    const root = mountSurface(SURFACES[0] as SurfaceFixture, 1280);
+    const first = SURFACES[0];
+    if (first === undefined) throw new Error("missing canonical surface fixture");
+    const root = mountSurface(first, 1280);
     expect(root.querySelectorAll("[data-testid^='cr.graph.']")).toHaveLength(0);
   });
 
