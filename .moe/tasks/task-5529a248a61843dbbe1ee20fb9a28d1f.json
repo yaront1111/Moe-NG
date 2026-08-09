@@ -149,8 +149,8 @@
       "completedAt": "2026-08-09T14:38:11.829Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-58b24ffb",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -159,15 +159,24 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 19,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-274ad7a563e1465a978ae5644826c6e4",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD (approval summary capped at 2000 chars).\n\nBOTH LANES RE-RUN BY ME, the DoD's own command:\n- `pnpm test:e2e` -> exit 0, 3 files / 44 tests. The Node lane still passes, unabsorbed.\n- `pnpm test:e2e:browser` -> exit 0, `ok 1 [chromium] control-room-smoke.spec.ts:17 serving the built control-room bundle mounts its shell root element`. A real chromium run, not a stub.\n\nDoD 1 — MET. `@playwright/test` at `1.62.1`, **exact, no range prefix**, so the repo's saveExact discipline holds. Config committed at `tests/e2e/control-room/playwright.config.ts`. The choice and its CI consequence are recorded in the commit message: *\"CI must run `pnpm exec playwright install chromium` before this script; the browser binaries are not in pnpm-lock.yaml.\"* That is rail 5's reproducibility clause answered in the place a future operator will actually hit it.\n\nDoD 2 — MET, and the mechanism is structural rather than conventional, which is what makes it hold. `git show cc68056 -- package.json` is **2 insertions, 0 deletions, 0 modified lines**: the devDependency and the new script. `test:e2e` is byte-identical. Crucially, the two lanes are disjoint **by file naming against the root vitest config**: `include: [\"packages/**/*.test.ts\", \"tests/**/*.test.ts\"]`, and the browser journey is `*.spec.ts`. So `test:e2e` structurally *cannot* pick up a browser spec — it is not a convention someone must remember. Directory holds exactly `control-room-smoke.spec.ts` and `harness.test.ts`; no browser spec named `*.test.ts`, no Node test named `*.spec.ts`.\n\nDoD 3 — MET. Teardown is in a `finally` and runs on every path including a throwing body. Two details worth naming because both are the difference between a real teardown and one that looks right: `closeAllConnections()` is called alongside `close()`, because `close()` alone waits out the keep-alive socket a just-loaded page holds — that is precisely the Windows leak the DoD warns surfaces later as EBUSY rather than the real error; and the port is ephemeral, so parallel runs cannot collide. Covered by the Node-lane case \"stops the server when the body THROWS, and lets the failure propagate\".\n\nDoD 4 — MET, and this is the item most at risk of quiet overreach. Exactly ONE `test()` call in one spec file. It asserts `toHaveCount(1)` on `cr.shell.root` — the element was **found**, with Playwright's retry covering the module script — and then pins the harness outcome to `{ ok: true, value: 1 }`, so a run that never reached the body, or refused with a reason code, cannot read as a pass. Its header explicitly disclaims J1-J6, truth-class and provenance behaviour, contrast, layout and timing, and names task-667b1085 as their owner. The file name, the test name and the commit message all avoid \"journey\", \"gate\" and \"certified\".\n\nDoD 5 — MET. Four frozen codes defined LOCALLY — `E2E_BUNDLE_BUILD_FAILED`, `E2E_SERVER_BIND_FAILED`, `E2E_READINESS_TIMEOUT`, `E2E_CLEANUP_FAILED` — with a vocabulary test asserting exactly those four and `Object.isFrozen`. Every one has a test asserting **that specific code**, not merely that the run failed, including both arms of bind failure (server returns null, and startServer throws). Precedence is explicit and tested: build refuses before the server starts, bind refuses before the probe runs, and a cleanup failure never overwrites an earlier code — \"keeps the body's failure code when cleanup ALSO fails\".\n\nDoD 6 — MET, and tested in BOTH directions, which is what makes it more than a timeout. `awaitReadiness` polls with `POLL_INTERVAL_MS` between attempts and a bounded `READINESS_BUDGET_MS`; \"refuses E2E_READINESS_TIMEOUT rather than polling forever\" covers the failure arm, and \"succeeds as soon as the probe answers, without waiting out the budget\" covers the success arm — without the second, a harness that always slept the full budget would pass. No `page.waitForTimeout` anywhere; the single `setTimeout` is the poll interval, i.e. the loop's yield, not a wait-and-assume.\n\nDoD 7 — MET, with a judgement call I checked rather than accepted. The DoD names a comment on **task-3f503779**; that task is **ARCHIVED as superseded**. The worker posted the disclosure on **task-667b1085** (Control-room journey gate, BLOCKED — the live successor) and stated why in the comment itself: *\"Posting here rather than on task-3f503779, which is ARCHIVED as superseded.\"* I verified both: 3f503779 has zero comments and is archived; 667b1085 carries the disclosure, headed **\"THE NEW BROWSER LANE RUNS AGAINST FIXTURE-BACKED UI WITH NO DAEMON ATTACHED.\"** That serves DoD 7's stated purpose — *\"so nobody later mistakes a green smoke run for a connected-system proof\"* — better than the literal target would, since a warning on an archived task is a warning nobody reads. Substituted openly, not silently.\n\nRAIL 2 — HONOURED. `grep -rn foundation tests/e2e/control-room/` returns exactly two hits, **both inside doc comments** naming the convention being mirrored. Zero import statements, so the fenced real-process termination in `e2e-process.ts` is neither imported nor widened.\n\nRAIL 3 — HONOURED. Every occurrence of daemon/connected/certified in the new files is a disclaimer stating the opposite.\n\nMUTATION DRILL RUN BY ME, on the subtlest guard rather than the loudest: neutralising the cleanup-precedence condition (`if (cleanupFailures.length > 0 && primary.ok)` -> dropping `&& primary.ok`) reddens exactly \"keeps the body's failure code when cleanup ALSO fails\" — 1 failed / 9 passed. That guard is load-bearing, and it is the one whose absence would silently replace the reason a run failed with the reason its teardown was untidy. Restored via `git cat-file blob` and verified `git hash-object` == `e32136e1`.\n\nGENERATED EVIDENCE: `test-results/` and `playwright-report/` are gitignored by a directory-scoped `.gitignore` (deliberately not the root one, which this task does not own), and `git ls-tree -r HEAD -- tests/e2e/control-room/` confirms only the seven source files are committed. Nothing generated reached the commit.",
+      "timestamp": "2026-08-09T14:42:05.409Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:53:35.323Z",
-  "updatedAt": "2026-08-09T14:39:39.266Z",
+  "updatedAt": "2026-08-09T14:42:41.131Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:15:49.703Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-09T14:42:41.131Z",
+    "wallClockMs": 1611428
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -226,5 +235,8 @@
     "tests/e2e/control-room/control-room-smoke.spec.ts",
     "tests/e2e/control-room/static-ports.ts",
     "pnpm-lock.yaml"
-  ]
+  ],
+  "completedAt": "2026-08-09T14:42:41.131Z",
+  "reviewCompletedAt": "2026-08-09T14:42:41.131Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-274ad7a563e1465a978ae5644826c6e4.\n\nBOTH LANES RE-RUN BY ME: `pnpm test:e2e` exit 0, 3 files / 44 tests; `pnpm test:e2e:browser` exit 0, `ok 1 [chromium]` — a real browser run, not a stub.\n\nDoD1 `@playwright/test` at 1.62.1, exact, no range. CI consequence recorded in the commit message: binaries are not in the lockfile, CI must `playwright install chromium`.\n\nDoD2 met structurally, not by convention. `git show cc68056 -- package.json` is 2 insertions / 0 deletions / 0 modified — `test:e2e` byte-identical. The lanes are disjoint because the root vitest `include` is `tests/**/*.test.ts` while the browser journey is `*.spec.ts`, so test:e2e CANNOT pick it up.\n\nDoD3 teardown in `finally` on every path; `closeAllConnections()` alongside `close()`, because `close()` alone waits out the keep-alive socket a just-loaded page holds — the exact Windows leak that surfaces later as EBUSY. Ephemeral port.\n\nDoD4 exactly one `test()`. Asserts `toHaveCount(1)` — element FOUND — then pins the harness outcome to `{ok:true,value:1}`, so a run that never reached the body cannot read as a pass. Header disclaims J1-J6, contrast, layout, timing.\n\nDoD5 four frozen codes defined locally, each with a test asserting THAT code, both bind arms covered. DoD6 polling with a bounded budget, tested BOTH directions — times out, and also returns early rather than sleeping the budget.\n\nDoD7 met via a substitution I verified: the named target task-3f503779 is ARCHIVED with zero comments; the disclosure sits on task-667b1085, the live successor, and the worker said so rather than silently.\n\nRail 2 honoured — two `foundation` hits, both doc comments, zero imports.\n\nDRILL BY ME on the subtlest guard: dropping `&& primary.ok` from the cleanup-precedence condition reddens exactly \"keeps the body's failure code when cleanup ALSO fails\", 1 failed / 9 passed. Restored, `git hash-object` == e32136e1. `test-results/` gitignored, not committed."
 }

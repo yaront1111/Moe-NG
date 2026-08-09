@@ -100,7 +100,7 @@
     {
       "stepId": "step-5",
       "description": "Perform the single adversarial-review pass after implementation. Check concurrent/verbatim retries, malformed/null/extra/oversized JSON, old schema bytes, REFUSED classifications, guard ordering for QUARANTINED+ACTIVE, immutable aliases, and all no-write refusal paths. Mutation-drill the production surface twice with checksum-safe restoration and no retained probe files: (1) make the shared resumable-classification predicate admit one non-ABSENT kind and require the runner public/internal sweep plus daemon classification cases to go red with the subject's exact assertions; (2) replace the continuation service's record-derived release/handoff with manufactured values and require stored-source/no-handoff/binding-byte tests to go red. Assert each drill actually ran and failed for the intended test, restore exact original bytes, and inspect the owned diff for unrelated edits or any production file at/above 400 lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/recovery-contract.ts",
         "packages/runner/src/recovery/crash-classification.ts",
@@ -113,12 +113,18 @@
         "apps/daemon/src/recovery/continuation-service.test.ts",
         "apps/daemon/src/recovery/continuation-binding.test.ts"
       ],
-      "startedAt": "2026-08-09T14:35:25.975Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/continuation-service.ts",
+        "apps/daemon/src/recovery/continuation-service.test.ts"
+      ],
+      "note": "Adversarial pass done. THREE mutation drills, all restored byte-exact by SHA-256, backups held OUTSIDE the repo (%TEMP%) so no probe file could be swept into a commit. `git status --porcelain` matched against drill|probe|scratch|.tmp|.bak returns empty.\n\nDRILL 1 — widen the resumable set to [\"ABSENT\",\"SUSPECT\"] in recovery-contract.ts. PRE=POST=AE22D82F...F3A2, MATCH=True.\nRED, by name, on the exact subjects: runner safe-boundary.test.ts 7 failed (\"closes the resumable classification set to ABSENT alone\", \"partitions the five kinds\", both five-class sweeps, \"blocks overlap for SUSPECT with the exact code and layer\", \"refuses resume for SUSPECT...\", \"answers the classification before the handoff check for SUSPECT + no handoff\"); index-surface.test.ts 2 failed at the public root.\nTHE DAEMON GUARD-ORDER ASSERTION EARNED ITS KEEP: the sweep failed with `Expected: \"RECOVERY_CLASSIFICATION_NOT_RESUMABLE\" Received: \"RECOVERY_PREDECESSOR_ACTIVE\"`. That is the masking case caught by name — with the gate widened, the release lattice answers instead, and a code-only test would have stayed green.\n\nDRILL 2 — manufacture the resume facts in continuation-service.ts (literal \"PROVEN_RELEASED\" / \"manufactured-handoff\"). PRE=POST=06E5F39E...B6EF, MATCH=True. RED on 4 intended tests: \"carries the STORED handoff into the binding, byte for byte\" (`Expected: \"handoff-stored-2\" Received: \"manufactured-handoff\"`), \"moves a reconciled attempt forward... using only stored facts\", \"refuses a proven release carrying no stored handoff, so admitResume is load-bearing\" (it BOUND instead of refusing), and the conflict case's winner-handoff assertion.\n\nDRILL 3 — added because I wrote two new tests AFTER implementation and had to prove they were not vacuous. Deleted the `PREDECESSOR_RELEASES` validation line from decodeRecord. PRE=POST=9AC2E8A6...EB3F, MATCH=True. RED on \"rejects a current-version row whose derived evidence is missing or off-lattice\", exactly as intended.\n\nGAP I FOUND AND CLOSED. DoD 4 and step 4 both claim legacy/incomplete records stay non-authoritative and are never optimistically upgraded — and NO test asserted it. Added two, writing raw rows straight to the store through the exported command kind and aggregate id (bypassing recordOf, so the bytes are genuinely hostile): a `/1` row, a `/2` row with no evidence, and a `/2` row carrying an off-lattice \"PROBABLY_RELEASED\". All three decode to undefined and continuation refuses CONTINUATION_ATTEMPT_UNRECONCILED at CONTINUATION with zero bindings. Daemon now 34 files / 680 tests, exit 0.\n\nHOSTILE-REVIEW FINDING, FIXED. My new local type guard was named `isRecoveryOutcomeKind` — the same name as a predicate `@moe/runner` already defines internally. I checked whether to import it instead: it is NOT on the runner's public root (`rg` over packages/runner/src/surface returns nothing), and a deep import would breach the package boundary the task rails forbid. So the local guard is correct, but the shadowed name invited a reader to assume it was the runner's. Renamed to `isRunnerClassification` and documented why it is local and that it checks against the root-exported vocabulary rather than a copied list.\n\nCHECKLIST ITEMS CONSIDERED, NOT DEFECTS:\n- Empty-string handoff. The daemon's decode accepts any string, looser than the runner's `isRef`. Unreachable through production writes: `parseRestartRecords` already enforces isRef at restart-records.ts:111, so a classification can only ever carry null-or-valid-ref. A hand-corrupted \"\" would produce RECOVERY_BOUNDARY_MALFORMED — coarser than RESUME_BOUNDARY_UNPROVEN but still closed. Not adding a second bound in the daemon, which would restate a runner rule the task rails say to compose, not copy.\n- Concurrency. Two continuations for one successor are adjudicated by expectedVersion on the successor aggregate (tested). Read-then-append against the reconciliation record is a theoretical TOCTOU only if the same attempt were re-reconciled to a DIFFERENT outcome mid-call; records are append-only and the binding targets the successor aggregate, so the worst case is binding on a marginally stale classification. Pre-existing structure, no cross-aggregate transaction available, out of scope.\n- Caller choice of attemptRef is unchanged and by design: any attempt it names must itself be reconciled, ABSENT and carry a stored handoff.\n\nFOREIGN RED, DISCLOSED NOT HIDDEN. `pnpm --filter @moe/runner test` is 11 failed / 1248 passed, ALL outside my owned paths: `runtime-entrypoint.test.ts > has an exact .js bridge for every runtime module` names `providers\\claude\\claude-runtime-pin-closure.ts`, `...-fs.ts`, `...-pin.ts` as missing bridges, and `claude-runtime-pin.test.ts` fails for the same reason. `git status` shows all four as UNTRACKED (`??`) — another agent's in-flight runtime-pin work, absent at my merge-base 749eb46. My recovery and index-surface suites are green. Full path-attributed baseline is recorded in step 6.\n\nAlso saw one transient daemon ru",
+      "startedAt": "2026-08-09T14:35:25.975Z",
+      "completedAt": "2026-08-09T14:40:59.574Z"
     },
     {
       "stepId": "step-6",
       "description": "Run one fresh foreground completion gate exactly: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Record the pre-edit merge-base and HEAD repo-wide failing-path sets and apply the project path-attributed baseline rule; owned package legs must be exit 0, any foreign red must be quoted verbatim, and no owned-path delta failure may be excused. Recheck physical production line counts, verify the diff is limited to these 10 planned paths, run `git status --porcelain`, unstage any foreign staged path, then commit only explicit modified owned pathspecs with `git commit -- <owned paths>` (never a bare commit/add -A). Confirm `git show --stat` contains only owned paths; if a foreign completion hook already swept the bytes, do not amend/reset—report `git diff <merge-base>..HEAD -- <owned paths>` and verify committed bytes equal the gated bytes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery/recovery-contract.ts",
         "packages/runner/src/recovery/crash-classification.ts",
@@ -130,11 +136,27 @@
         "apps/daemon/src/recovery/continuation-service.ts",
         "apps/daemon/src/recovery/continuation-service.test.ts",
         "apps/daemon/src/recovery/continuation-binding.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery/recovery-contract.ts",
+        "packages/runner/src/recovery/crash-classification.ts",
+        "packages/runner/src/recovery/safe-boundary.ts",
+        "packages/runner/src/recovery/safe-boundary.test.ts",
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/platform/platform-observation.test.ts",
+        "apps/daemon/src/recovery/restart-reconciliation.ts",
+        "apps/daemon/src/recovery/continuation-contracts.ts",
+        "apps/daemon/src/recovery/continuation-service.ts",
+        "apps/daemon/src/recovery/continuation-service.test.ts",
+        "apps/daemon/src/recovery/continuation-binding.test.ts"
+      ],
+      "note": "OWNED-SCOPE GATE EXIT 0, fresh and foreground. `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery` -> GATE_EXIT=0. Runner 40 files / 1260 tests. Daemon recovery 8 files / 186 tests. Both typechecks exit 0.\n\nI DID NOT RUN THE PLAN'S FULL CHAIN AS THE COMPLETION EVIDENCE, AND HERE IS EXACTLY WHY. I ran it first; two legs are red and BOTH are foreign, committed, and outside every owned path. Quoted verbatim rather than hidden:\n\n(1) `pnpm --filter @moe/daemon test` -> 1 failed | 679 passed (680).\n  `src/runtime-entrypoint.test.ts > has an exact .js bridge for every runtime module and none for test-tier ones`\n  `+ \"unexpected\": [ \"daemon-entry-fixtures.js\", \"http\\\\event-stream-fixtures.js\", \"http\\\\http-test-fixtures.js\" ]`\n  All three are `.js` bridges for TEST-TIER fixture modules, which that test forbids. All three are ABSENT at merge-base 749eb46 (`git cat-file -e 749eb46:<path>` -> ABSENT x3) and were committed by `462a610 feat(task-1cafc7f9...) Doctor exact runtime and tool version reporting` — a whole-tree sweep. None is under `apps/daemon/src/recovery/**`.\n\n(2) `pnpm typecheck` (root) -> packages/core Failed.\n  `packages/core typecheck: src/identity/authenticate-session.test.ts(14,3): error TS2305: Module '\"./index.js\"' has no exported member 'SessionAuthLayer'` (plus `authenticateSession`, `SESSION_AUTH_LAYERS`, and one TS7006). `git status --porcelain -- packages/core/src/identity/` is EMPTY, so it is committed foreign work. packages/core is not an owned path and my diff does not touch identity.\n\nPATH-ATTRIBUTED BASELINE. HEAD failing-path set = { apps/daemon/src/runtime-entrypoint.test.ts, packages/core/src/identity/authenticate-session.test.ts }. Owned-path set = the 11 files listed. INTERSECTION IS EMPTY. Every owned leg is exit 0. Note the runner's 11 earlier failures (claude-runtime-pin) self-healed when their owner committed the missing bridges — runner is now 1260/1260.\n\nNO COMMIT WAS CREATED BY ME, AND NONE COULD BE. `git status --porcelain` over all 11 owned paths returns EMPTY: the same foreign whole-tree commit `462a610` already swept every one of my files, including `apps/daemon/src/recovery/continuation-service.ts`, into task-1cafc7f9's commit. Per epic rail 3 and the project's hook rail I did NOT amend, reset, stash, or mint an empty commit to claim the work.\n\nCOMMITTED BYTES == GATED BYTES, VERIFIED NOT ASSUMED. `git diff HEAD --stat` over my paths is empty (the only entry is foreign `claude-runtime-pin-closure.ts`). Markers read back out of the COMMITTED blobs with `git show HEAD:<path>`: `isRunnerClassification` x2 and `record.predecessorRelease` x2 and `record.safeHandoff` x1 in continuation-service.ts; `moe-restart-reconciliation/2` and `continuationEvidence.predecessorRelease` in restart-reconciliation.ts; `moe-recovery-continuation-request/2` in continuation-contracts.ts.\n\nDIFF QA SHOULD REVIEW (a commit sha will not show this task's work in isolation):\n`git diff 749eb46..HEAD -- packages/runner/src/recovery/{recovery-contract,crash-classification,safe-boundary,safe-boundary.test}.ts packages/runner/src/index-surface.test.ts packages/runner/src/platform/platform-observation.test.ts apps/daemon/src/recovery/{restart-reconciliation,continuation-contracts,continuation-service,continuation-service.test,continuation-binding.test}.ts`\n-> 11 files changed, 976 insertions(+), 108 deletions(-). Exactly the 10 planned paths plus the governor-authorised one-line fixture. No unrelated edits.\n\nLINE COUNTS, none at or near the 400 bar: restart-reconciliation.ts 250, continuation-contracts.ts 242, continuation-service.ts 190, recovery-contract.ts 216, crash-classification.ts 259, safe-boundary.ts 265.",
+      "startedAt": "2026-08-09T14:41:03.342Z",
+      "completedAt": "2026-08-09T14:44:02.480Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2bc13005",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-58b24ffb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,17 +175,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.631Z",
-  "updatedAt": "2026-08-09T14:35:25.976Z",
+  "updatedAt": "2026-08-09T14:46:29.699Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:39:14.751Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-db2146e3",
     "worker-2bc13005",
-    "worker-b6bbb60c"
+    "worker-b6bbb60c",
+    "qa-58b24ffb"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -176,7 +199,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T13:52:10.022Z",
@@ -202,5 +227,25 @@
     "escalatedAt": "2026-08-09T13:52:15.015Z"
   },
   "planApprovedAt": "2026-08-09T13:52:12.067Z",
-  "workStartedAt": "2026-08-09T13:52:38.329Z"
+  "workStartedAt": "2026-08-09T13:52:38.329Z",
+  "reviewStartedAt": "2026-08-09T14:46:15.668Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/continuation-{service,binding}.test.ts src/recovery/restart-reconciliation.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  40 passed (40)\n      Tests  1260 passed (1260)\n   Start at  17:45:36\n   Duration  3.25s\n\n$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  3 passed (3)\n      Tests  29 passed (29)\n   Start at  17:45:40\n   Duration  952ms\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-09T14:46:15.668Z"
+  },
+  "filesModified": [
+    "packages/runner/src/recovery/safe-boundary.test.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/recovery/recovery-contract.ts",
+    "packages/runner/src/recovery/crash-classification.ts",
+    "packages/runner/src/recovery/safe-boundary.ts",
+    "packages/runner/src/platform/platform-observation.test.ts",
+    "apps/daemon/src/recovery/continuation-service.test.ts",
+    "apps/daemon/src/recovery/continuation-binding.test.ts",
+    "apps/daemon/src/recovery/restart-reconciliation.ts",
+    "apps/daemon/src/recovery/continuation-contracts.ts",
+    "apps/daemon/src/recovery/continuation-service.ts"
+  ]
 }

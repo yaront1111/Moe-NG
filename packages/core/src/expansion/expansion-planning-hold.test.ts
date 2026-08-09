@@ -397,6 +397,35 @@ describe("expansion planning hold terminal lifecycle", () => {
     );
   });
 
+  it("rejects terminal snapshots that no accepted command could produce", () => {
+    const active = accepted().state;
+    const terminal = reduceExpansionPlanningHold(active, transitionCommand(active));
+    expect(terminal.ok).toBe(true);
+    if (!terminal.ok || terminal.state.terminalReceipt === null) {
+      throw new Error("expected terminal state");
+    }
+    const receipt = terminal.state.terminalReceipt.command;
+    const forged = [
+      { ...terminal.state, terminalReceipt: { command: { ...receipt, cause: "GOAL_CANCELLED" as const } } },
+      { ...terminal.state, terminalReceipt: { command: {
+        ...receipt,
+        commandId: terminal.state.creationReceipt.command.commandId,
+      } } },
+    ];
+    expect(forged).toHaveLength(2);
+    expect(forged.length).toBeGreaterThan(0);
+    for (const state of forged) {
+      expectRefusal(
+        reduceExpansionPlanningHold(state, transitionCommand(terminal.state, {
+          commandId: "command:probe",
+          expectedVersion: terminal.state.version,
+        })),
+        "EXPANSION_HOLD_INPUT_INVALID",
+        "INPUT",
+      );
+    }
+  });
+
   it("orders stale version, generation and epoch before binding", () => {
     const active = accepted().state;
     const cases = [
@@ -418,6 +447,11 @@ describe("expansion planning hold terminal lifecycle", () => {
     for (const [command, code] of cases) {
       expectRefusal(reduceExpansionPlanningHold(active, command), code, "CONCURRENCY", active);
     }
+    expectRefusal(
+      reduceExpansionPlanningHold(undefined, transitionCommand(active)),
+      "EXPANSION_HOLD_STALE_VERSION",
+      "CONCURRENCY",
+    );
   });
 
   it("refuses each repeated binding field independently", () => {

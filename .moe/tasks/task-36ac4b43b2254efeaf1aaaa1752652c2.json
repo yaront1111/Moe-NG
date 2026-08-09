@@ -9,9 +9,82 @@
     "pnpm typecheck exit 0 and scheduler suites green with no test edits beyond import paths"
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-21f667ae",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Ground the refactor before editing. Record the current task-base SHA, `git status --porcelain -- packages/scheduler/src`, exact physical line counts for graph-internal.ts/frontier.ts using a CRLF/LF-aware byte splitter, SHA-256 hashes of both sources, the exact 36-name root namespace from index-surface.test.ts, and the byte contents of graph-internal.js/frontier.js. Run the task's pre-diff baseline once and retain every failing path for the path-attributed comparison; the planning baseline already observed scheduler typecheck green and only foreign `apps/daemon/src/daemon-main.ts` red through package-boundary.test.ts. Inventory all imports of graph-internal.js/frontier.js and freeze the rule that no consumer, package index, or test file will be edited. Treat the existing scheduler tests as held-out characterization coverage because there is no behavior change.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T14:46:44.594Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Mechanically extract traversal algorithms from packages/scheduler/src/graph-internal.ts into new graph-traversal.ts plus its exact one-line LF `.js` bridge. Move `compareStrings`, the private traversal-counter bump helper, `TopoResult`, `IndexMinHeap`, `topologicalOrder`, `CycleCore`, and `findCycleCore` without changing branches, counter increments, sort keys, issue facts, or return shapes. graph-traversal.ts may import `HardGraphIndex` only as an erased type and `TraversalCounter` from graph-model; it must not runtime-import graph-internal. In graph-internal.ts, import the moved comparator/counter used by buildHardGraphIndex and explicitly re-export the same previously available moved values/types so all existing intra-package imports remain byte-compatible. Keep GraphStructureView, bit, sortedCopy, makeIssue, sortIssues, deepFreeze, HardArc/HardGraphIndex/buildHardGraphIndex, edgeKeysOf, framing, and computeGraphIdentity in graph-internal. Do not export the new helper from packages/scheduler/src/index.ts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-internal.ts",
+        "packages/scheduler/src/graph-traversal.ts",
+        "packages/scheduler/src/graph-traversal.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/graph-traversal.ts",
+        "packages/scheduler/src/graph-traversal.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Mechanically extract the hostile cursor front half of partitionFrontier into new frontier-cursor.ts plus its exact one-line LF `.js` bridge. The helper owns CURSOR_KEYS/HARD_EDGE_FACT_KEYS, satisfaction validation, exact own-data-property cursor reads, safe array-length reads, absolute ceilings before any indexed read, dense-array shape validation, HARD-edge fact shape/unknown/duplicate/missing checks, and the resulting edge-state map. Return a discriminated internal result that distinguishes fatal schema/count/density issues (frontier.ts must immediately route them through its existing `fail`) from accumulated HARD-edge issues plus the safely admitted node-fact array/count (frontier.ts must continue node parsing so combined issue ordering is unchanged). Keep runtime provenance first, NODE_FACT_KEYS and node fact parsing, issue aggregation, readiness partitioning/counter updates, canonical sort/freeze, and `registerFrontierPartition` in frontier.ts. The helper must not freeze/sort final outcomes, register provenance, infer node readiness, or be exported from the package root.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/frontier.ts",
+        "packages/scheduler/src/frontier-cursor.ts",
+        "packages/scheduler/src/frontier-cursor.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/frontier-cursor.ts",
+        "packages/scheduler/src/frontier-cursor.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Finish the internal composition without widening scope: remove now-unused imports/constants from the two keeper files, retain explanatory hostile-read and zero-authority comments at their owning boundary, and ensure all six production files are focused and <=250 physical lines (split before 400; do not compress logic into unreadable one-liners merely to hit the target). Keep packages/scheduler/src/index.ts, every `*.test.ts`, graph-internal.js, and frontier.js unchanged. Confirm by inspection that existing consumers still import graph-internal.js/frontier.js, the two new helper specifiers appear only in their keeper modules, the helpers never import the keepers at runtime, and no new package-root symbol is introduced.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-internal.ts",
+        "packages/scheduler/src/graph-traversal.ts",
+        "packages/scheduler/src/graph-traversal.js",
+        "packages/scheduler/src/frontier.ts",
+        "packages/scheduler/src/frontier-cursor.ts",
+        "packages/scheduler/src/frontier-cursor.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial self-review the completed diff as a behavior-preserving move. Compare moved graph declarations against the recorded pre-split blob and prove their bodies are byte-contained apart from necessary export/import relocation, absent from graph-internal.ts after the move, and not duplicated. Prove index.ts and all scheduler tests are unchanged, both new bridges are exact LF one-liners, all six production files are <=250 physical lines with a CRLF/LF-aware Node/Python counter, and the import graph has no runtime cycle or root export. Then mutation-drill the held-out production surface: after copying each new/uncommitted helper to an OS-temp backup and recording SHA-256, (a) change the topological acyclic guard or one traversal counter increment in graph-traversal.ts and require an unchanged scheduler suite to go red, and (b) change `FRONTIER_EDGE_FACT_MISSING` or bypass a cursor ceiling in frontier-cursor.ts and require the exact refusal/hostile-input test to go red. Restore from the external backups, verify hashes exactly, delete temp files, and leave no mutation/probe artifact. Review duplicate execution, null/proxy/accessor/huge cursor inputs, issue precedence, UNKNOWN handling, determinism, freezing, counter complexity, and foreign shared-tree changes before proceeding.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-internal.ts",
+        "packages/scheduler/src/graph-traversal.ts",
+        "packages/scheduler/src/frontier.ts",
+        "packages/scheduler/src/frontier-cursor.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single final verification command exactly: `pnpm typecheck && pnpm test`. Record fresh foreground output and exit status. Compare repo-wide failing paths at HEAD with the pre-diff baseline and apply the path-attributed rule: do not claim success if this diff adds any scheduler-owned failure; report any residual foreign failure verbatim with exact file/test lines. Confirm the exact 36-name @moe/scheduler root surface test passes, scheduler suites covering topology, determinism, complexity, immutability, hostile cursor input, frontier reason codes, and runtime bridges are green, and every resulting production file remains <=250 physical lines. Before completion, inspect `git status --porcelain`; unstage any foreign path without touching its bytes, then commit only `packages/scheduler/src/graph-internal.ts packages/scheduler/src/graph-traversal.ts packages/scheduler/src/graph-traversal.js packages/scheduler/src/frontier.ts packages/scheduler/src/frontier-cursor.ts packages/scheduler/src/frontier-cursor.js` by explicit pathspec and verify `git show --stat` contains only those paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-internal.ts",
+        "packages/scheduler/src/graph-traversal.ts",
+        "packages/scheduler/src/graph-traversal.js",
+        "packages/scheduler/src/frontier.ts",
+        "packages/scheduler/src/frontier-cursor.ts",
+        "packages/scheduler/src/frontier-cursor.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-5981deec",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -23,11 +96,41 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:24:26.356Z",
-  "updatedAt": "2026-08-09T14:37:04.937Z",
+  "updatedAt": "2026-08-09T14:46:44.594Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:36:59.881Z"
+    "firstClaimAt": "2026-08-09T14:36:59.881Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 6
   },
   "contextFetchedBy": [
-    "architect-21f667ae"
-  ]
+    "architect-21f667ae",
+    "worker-5981deec"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T14:46:16.466Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: two focused internal extractions while retaining the existing files as the only import facades. `graph-traversal.ts` receives comparator/counter support plus heap-based topological order and Tarjan SCC cycle-core detection; `graph-internal.ts` explicitly imports/re-exports those established internal names, so every current consumer stays unchanged. `frontier-cursor.ts` receives hostile-safe cursor framing, ceiling/dense-shape checks, and HARD-edge fact parsing; `frontier.ts` keeps provenance admission, node-fact parsing, readiness partitioning, final canonical sort/freeze, and `registerFrontierPartition`. Rejected: changing every consumer to import the new graph helper directly (unnecessary churn and a wider review surface); a four-or-more-module split (not required to meet the per-file cap); duplicating validators/comparators; changing public exports or tests. TDD test creation and docs updates are consciously skipped because this is a behavior-neutral decomposition: the existing unchanged scheduler suites and exact root-surface test are held-out oracles, then mutation-drilled after the move.",
+    "codebaseInsights": "Fresh measurement from D:/projexts/moe-next on 2026-08-09 used Python `Path.read_bytes().splitlines()` rather than PowerShell Measure-Object: graph-internal.ts is 415 physical lines, frontier.ts is 412, graph-traversal.ts and frontier-cursor.ts are absent, and `git status --porcelain -- packages/scheduler/src` is empty. Existing graph-internal.js and frontier.js are exact one-line `.ts` bridges. packages/scheduler/src/index.ts publishes partitionFrontier only and index-surface.test.ts pins the exact 36-value @moe/scheduler namespace; neither file needs modification. Measured graph seam: keep GraphStructureView/bit/sortedCopy/issues/freezing/buildHardGraphIndex/edgeKeysOf/identity in graph-internal; move compareStrings, the private traversal-counter bump, TopoResult, IndexMinHeap, topologicalOrder, CycleCore and findCycleCore together. graph-traversal may import HardGraphIndex type-only, avoiding a runtime cycle; graph-internal imports the moved comparator/counter and explicitly re-exports the existing moved names. Measured frontier order: runtime provenance -> exact cursor schema -> safe lengths -> raw ceilings before indexed reads -> dense shape -> HARD-edge facts/missing facts -> node facts/missing facts -> fail once on accumulated issues -> partition -> freeze/register. The helper must return fatal issues separately from accumulated HARD-edge issues so frontier.ts preserves this exact order and remains the only final sort/freeze/provenance owner. Fresh narrow baseline: @moe/scheduler typecheck exited 0; scheduler test had 35 files pass/1 fail and 674 tests pass/1 fail solely because package-boundary.test.ts scanned foreign apps/daemon/src/daemon-main.ts and found an unterminated regular-expression token. That failing path is outside this task and must be recorded in the worker's pre-diff baseline, not hidden.",
+    "risks": "Do not introduce a graph-internal <-> graph-traversal runtime cycle: the helper's HardGraphIndex reference must be `import type`, while graph-internal owns the only runtime import direction. Preserve the comparator and counter increments byte-for-byte; traversal-count complexity tests will expose drift. Frontier extraction is especially order-sensitive: ceiling checks must precede every element/property read, hostile accessors/proxies must still deny without invocation, HARD and node issues must still accumulate before the one canonical sort, and UNKNOWN must not become satisfied. The helper must not deep-freeze, sort final issues, register provenance, or become a package-root export. New bridges must be exactly one LF-terminated export line. Existing tests and index.ts are held out and must not be edited. Shared-tree foreign red from daemon-main.ts is an attributed baseline only; never repair or revert it. During mutation drills, back up new/uncommitted helper bytes outside the repository and verify SHA-256 restoration because a foreign completion hook can sweep live mutations into a commit.",
+    "keyFiles": [
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/scheduler/src/frontier.ts",
+      "packages/scheduler/src/graph-model.ts",
+      "packages/scheduler/src/runtime-shape.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts",
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/scheduler/src/hostile-input.test.ts",
+      "packages/scheduler/src/determinism.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T14:46:18.513Z",
+  "workStartedAt": "2026-08-09T14:46:44.594Z"
 }

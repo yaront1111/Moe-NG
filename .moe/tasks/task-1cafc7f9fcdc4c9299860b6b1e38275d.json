@@ -147,8 +147,8 @@
       "completedAt": "2026-08-09T14:39:10.394Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b2df68b9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,12 +160,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:26:30.419Z",
-  "updatedAt": "2026-08-09T14:40:48.117Z",
+  "updatedAt": "2026-08-09T14:46:48.619Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T13:45:48.502Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T14:46:48.619Z",
+    "wallClockMs": 3660117
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
@@ -227,5 +229,8 @@
     "apps/daemon/src/recovery/doctor-version-components.node.js",
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T14:46:48.619Z",
+  "reviewCompletedAt": "2026-08-09T14:46:48.619Z",
+  "reviewSummary": "APPROVED — verified from disk and in a live plain-Node process.\n\nOWNED SUITES RE-RUN BY QA: doctor-version-contract + doctor-version.node + doctor-commands = 3 files / 83 tests, exit 0. Package typecheck exit 0.\n\nPLAIN-NODE PROBE, mine: all three modules load through their .js bridges; `await collectDoctorVersionReport()` returns a FROZEN report with 16 components (non-zero) and observed read live — node v24.16.0, win32, x64, pnpm 11.0.8 — each matching the host. `declared` and `pins` are separate fields from `observed`, so DoD 2's \"never merged\" holds on the real value, not only in a test.\n\nTHE DRILL THAT DECIDES DoD 1: I replaced `read(process.version)` with `read(\"v24.16.0\")` — a literal exactly correct for this host, so every naive comparison still passes. RED anyway, 2 tests by name: \"re-reads process.version live rather than returning a captured constant\" and \"codes process.version as unreadable when it is not a usable string\". Restore verified by `git hash-object` = ff473200.\n\nSIZES: new production 249 / 174 / 129, all <=250. doctor-commands.ts is exactly 250, up 21 net — rail 3 says don't grow it, but DoD 4 requires the new kind and codes in the frozen vocabularies living there, so the two are not jointly satisfiable. The added lines are imports, the kind, a codes spread, union arms, one frozen refusal and a 3-line dispatch: registration only, zero logic. Accepted.\n\nGATE IS RED AND NOT THIS TASK'S. `runtime-entrypoint.test.ts` fails on three unexpected test-tier bridges: daemon-entry-fixtures.js, http/event-stream-fixtures.js, http/http-test-fixtures.js. None of those fixture .ts modules is this task's (they first appear in 749eb46 and 369ea08), none is in its filesModified, and it did not modify the gate (last touched a6e46f6). They arrived in a sweep titled for this task. Delta over owned paths EMPTY — but someone must delete those three bridges."
 }

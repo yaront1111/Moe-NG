@@ -97,25 +97,34 @@
     {
       "stepId": "step-6",
       "description": "Adversarial review and mutation drill — inspect the exact owned diff as an attacker for duplicate/concurrent command ordering, null/empty/huge/hostile objects, stale version/generation/epoch, same-ID payload swaps, terminal replay, deadline-driven clearing, handoff resurrection, mutable nested data, accidental runtime-error-registry degradation, forbidden authority keys, cross-package imports, and index export collisions. Temporarily weaken the production safe-boundary truth/disposition check, terminal-proof gate, and same-ID payload comparison one at a time; run the focused test after each mutation and require a red assertion at the exact code/layer/authority property, then restore and verify exact diff bytes. Assert nonzero generated counts and scan production for Date.now/Math.random/node:crypto/IO; check expansion-planning-hold.ts <400 (target <=250), index.ts <=250, the bridge exact LF bytes, and no edits outside the four approved paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-planning-hold.ts",
         "packages/core/src/expansion/expansion-planning-hold.test.ts",
         "packages/core/src/expansion/expansion-planning-hold.js",
         "packages/core/src/index.ts"
       ],
-      "startedAt": "2026-08-09T14:40:23.113Z"
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.test.ts",
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/index.ts"
+      ],
+      "note": "Adversarial review found and TDD-fixed two real fail-closed gaps: forged terminal snapshots could carry an impossible cause/lifecycle or duplicate creation commandId, and absent-state transition concurrency was checked after lifecycle. RED was 2 exact failures; GREEN focused suite is 16/16 and core typecheck exit 0. Mutation drills each went RED: weakened safe-boundary truth (1 exact SAFE_BOUNDARY failure), removed TERMINAL authority gate (1 exact TERMINAL_PROOF failure), disabled payload comparison (2 exact IDEMPOTENCY failures); restored TS SHA-256 18B8BECB79C61C4F24DFE48838483DC1D87B1D8EB33BE0AF4C1317CB32D0F72E and focused suite green. No Date.now/Math.random/node crypto/fs/child-process/fetch; sole import @moe/contracts. Exact bridge hex 6578...3B0A, TS 309 (<400), index 237 (<=250), diff-check clean. Concurrent foreign completion commits captured earlier owned bytes; per rail these will be reviewed by base-ref diff rather than amended/reset.",
+      "startedAt": "2026-08-09T14:40:23.113Z",
+      "completedAt": "2026-08-09T14:45:43.487Z"
     },
     {
       "stepId": "step-7",
       "description": "Single verification gate — run fresh in the foreground exactly `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`. Require owned-package exit 0, record the exact output tail, compare repo/package failures against the step-1 merge-base baseline using path attribution, and disclose any foreign red verbatim. Recheck explicit-path git diff/status, line caps, exact bridge reachability, no generated/debug artifacts, and both consumer IDs before using this exact command/output as complete_task evidence.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-planning-hold.ts",
         "packages/core/src/expansion/expansion-planning-hold.js",
         "packages/core/src/expansion/expansion-planning-hold.test.ts",
         "packages/core/src/index.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T14:45:55.658Z"
     }
   ],
   "status": "WORKING",
@@ -138,12 +147,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:44:11.795Z",
-  "updatedAt": "2026-08-09T14:40:23.113Z",
+  "updatedAt": "2026-08-09T14:45:55.658Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:11:19.310Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -154,7 +163,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:25:48.136Z",

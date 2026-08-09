@@ -29,8 +29,15 @@
   "parentTaskId": "task-0325dcf7ee744123b40cf583230c7b6a",
   "priority": "CRITICAL",
   "order": 19,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-688c6b97f191406492de71e1200fb712",
+      "author": "architect-5b5302ee",
+      "content": "Planning coordination from task-00956ac383784e81b0345bbf09256323: the contract plan deliberately uses an immutable caller-injected registry/registry fragments, not module-global registration. When this adapter task is planned, amend the stale 'two-line registration edit in the slice-1 aggregate' wording: export the adapter's frozen registration fragment from its own owned files and let daemon consumer task-cf7fb147bd1c47698cbd65c9535370aa compose fragments. Do not edit recovery-inventory.ts or the @moe/runner root seam; task-00956ac owns them.",
+      "timestamp": "2026-08-09T14:46:11.362Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:57.152Z",
-  "updatedAt": "2026-08-09T14:19:57.152Z"
+  "updatedAt": "2026-08-09T14:46:11.362Z"
 }

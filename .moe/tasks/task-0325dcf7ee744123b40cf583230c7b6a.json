@@ -19,7 +19,7 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -39,7 +39,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:00.170Z",
-  "updatedAt": "2026-08-09T14:29:29.420Z",
+  "updatedAt": "2026-08-09T14:45:06.872Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
     "architect-d46fcb95"
@@ -47,11 +47,29 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T14:13:00.948Z"
   },
-  "blockedReason": null,
+  "blockedReason": "This parent is an already-completed SPIDR shell with no implementation scope: child tasks task-f6c9011b24634de7b22ad10a26579883, task-00956ac383784e81b0345bbf09256323, task-091c93db11c041ea8484023d030fdc88, and task-d7da9be4a3254f7b9dcd58369d7e15a1 own the full deliverable. Planning this parent would duplicate those scopes. Keep it parked until the children complete, then close/archive it through the required human/governor transition.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T14:44:43.234Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Confirmed the parent is an empty SPIDR shell, re-read all handoffs, and marked it BLOCKED until its four existing child tasks complete. No implementation plan or code was produced.",
+      "whatRemains": "Execute and close the four child tasks, then have a governor/human close or archive this parent.",
+      "pitfalls": "Do not promote or plan this shell again; all owned work is already represented by the named children.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-09T14:45:06.872Z",
+      "releasedBy": "architect-f39f0c46",
+      "reason": "Blocking shell recorded; releasing the blocked assignment so the architect worker can claim a real child planning task."
+    },
+    {
+      "whatIsDone": "Read both prior handoffs and confirmed this parent has no implementation scope. Its four child tasks already own every production slice; no plan was submitted and no code was touched.",
+      "whatRemains": "Plan the dependency-free child tasks task-f6c9011b24634de7b22ad10a26579883 and task-00956ac383784e81b0345bbf09256323, then sequence task-091c93db11c041ea8484023d030fdc88 and task-d7da9be4a3254f7b9dcd58369d7e15a1 per the recorded dependencies. Governor/human should keep this shell out of PLANNING and close/archive it after children complete.",
+      "pitfalls": "Do not re-plan this shell. @moe/runner cannot import @moe/store or @moe/daemon; the contract child accepts cursor/generation/incarnation as opaque caller-supplied refs. Only task-00956ac owns runner root export wiring.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-09T14:44:18.505Z",
+      "releasedBy": "architect-f39f0c46",
+      "reason": "Parent is an already-SPIDR-decomposed shell; submitting an implementation plan would duplicate its four child tasks."
+    },
     {
       "whatIsDone": "Read the prior handoff and full live context, confirmed the parent remains an empty SPIDR shell, and promoted task-f6c9011b24634de7b22ad10a26579883 plus task-00956ac383784e81b0345bbf09256323 from BACKLOG to PLANNING. Both contexts were fetched as required and their scopes remain disjoint.",
       "whatRemains": "Plan the two promoted children. After task-00956ac... lands, promote/plan task-091c93...; after both task-00956ac... and task-f6c9011b... land, promote/plan task-d7da9be4.... A governor can close/archive this shell after child completion; it should not receive an implementation plan.",

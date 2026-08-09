@@ -234,7 +234,10 @@ function parseState(value: unknown): ExpansionPlanningHoldState | null {
   if (item["lifecycle"] === "ACTIVE") return item["terminalReceipt"] === null && item["version"] === 1 ? { ...expected } : null;
   const terminalReceipt = record(item["terminalReceipt"], ["command"]);
   const terminal = terminalReceipt && parseCommand(terminalReceipt["command"]);
-  if (!terminal || terminal.kind !== "expansion.transition_hold" || item["version"] !== 2 || terminal.expectedVersion !== 1 || terminal.targetLifecycle !== item["lifecycle"] || !bindingsMatch(expected, terminal) || !terminalProofValid(terminal)) return null;
+  if (!terminal || terminal.kind !== "expansion.transition_hold" || item["version"] !== 2
+    || terminal.expectedVersion !== 1 || terminal.commandId === created.commandId
+    || terminal.targetLifecycle !== item["lifecycle"] || !causeTarget(terminal)
+    || !bindingsMatch(expected, terminal) || !terminalProofValid(terminal)) return null;
   return { ...expected, lifecycle: item["lifecycle"] as ExpansionHoldLifecycle,
     terminalReceipt: { command: terminal }, version: 2 };
 }
@@ -288,8 +291,8 @@ export function reduceExpansionPlanningHold(
     }
   }
   if (!state) {
-    if (command.kind !== "graph.request_expansion") return refuse("EXPANSION_HOLD_ILLEGAL_TRANSITION", null);
     if (command.expectedVersion !== 0) return refuse("EXPANSION_HOLD_STALE_VERSION", null);
+    if (command.kind !== "graph.request_expansion") return refuse("EXPANSION_HOLD_ILLEGAL_TRANSITION", null);
     if (!safeRelease(command)) return refuse("EXPANSION_HOLD_SAFE_BOUNDARY_UNPROVEN", null);
     return created(opening(command));
   }

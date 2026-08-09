@@ -57,17 +57,26 @@
     {
       "stepId": "step-3",
       "description": "Implement private content-addressed staging and publication in the same focused module: derive the aggregate closure digest from the sorted `{kind, canonical source-relative path, sha256}` manifest; canonicalize/create the caller's Moe-private local pin root before using `<pinRoot>/<aggregateDigest>`; stage in a same-parent exclusive temporary directory; create directories/files with restrictive modes and exclusive writes; stream-copy while hashing, flush/close each destination, verify its digest, then rehash every source. Never replace an existing final root: verify an already-published/concurrently-won root byte-for-byte and adopt it only on exact match, otherwise return `CLAUDE_RUNTIME_PIN_COLLISION`. On partial copy, drift, publish, or cleanup failure, close handles, attempt removal, and return the exact copy/drift/cleanup code without a prepared binding; preserve a mismatching existing destination. Keep the production file below 400 physical lines (target <=250) and do not add another authority implementation in tests.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
       ],
-      "startedAt": "2026-08-09T14:34:23.893Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-closure.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-copy.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "note": "Staging + publication landed. Aggregate closure digest derived from the sorted {kind, source-relative path, sha256} manifest (so declaration order and install location cannot change the pin address). Pin root shape-validated, created, realpath-canonicalized, then `<pinRoot>/<aggregateDigest>`. Staging is a same-parent exclusive directory `.staging-<digest16>-<pid>-<seq>` (mkdir non-recursive, mode 0o700); files open `wx` at 0o600. Copy streams source chunks while hashing what is written, closes the handle in a `finally`, then re-reads the destination: the write-side hash catches a source rewritten mid-copy, the re-read catches a destination that did not receive what was written. After all copies every source is re-hashed (CLAUDE_RUNTIME_PIN_SOURCE_DRIFT). An existing final root is NEVER replaced: verified per declared member AND swept for undeclared members, adopted only on exact match, otherwise CLAUDE_RUNTIME_PIN_COLLISION with the existing bytes preserved. Publish preflights the final root, renames, and on a rename throw re-checks the target to distinguish a concurrent winner (verify/adopt or collision) from a genuine copy failure. Cleanup failure outranks the copy failure it could not undo (CLAUDE_RUNTIME_PIN_CLEANUP_FAILED).\nSCOPE DISCLOSURE - owned production paths grew from 1 to 4 modules. claude-runtime-pin.ts hit 458 physical lines with only the step-2 surface in it, and epic rail 5 / task rail 4 cap production files at 400 (target 250). Rather than cross the cap I split along real seams, all in the task's own directory and owned by no other task (task-4d1f8ba5 owns platform/windows/**, confirmed disjoint): claude-runtime-pin-fs.ts (FS port + node adapter + streamDigest, 122), claude-runtime-pin-closure.ts (refusal vocabulary + path/quote/source admissibility, 281), claude-runtime-pin-copy.ts (stage/copy/verify/publish protocol, 178), claude-runtime-pin.ts (facade, re-observation, binding, 301). No file exceeds 301 lines. Capability, behaviour and public surface are unchanged; the governor rail states per-file violations are worker-fixable by splitting the file. Each needs a .js bridge, added in step 4.\nAlso added a real gap found while writing verifyPublished: matching every declared member is not enough, an undeclared neighbour in the pinned root is exactly how a side-by-side DLL load gets in. Added fs.listFiles + an extra-member collision case and its test.\nFresh run: `pnpm --filter @moe/runner exec vitest run --root ../.. packages/runner/src/providers/claude/claude-runtime-pin.test.ts` -> Tests 45 passed (45), exit 0. `pnpm --filter @moe/runner typecheck` -> exit 0.",
+      "startedAt": "2026-08-09T14:34:23.893Z",
+      "completedAt": "2026-08-09T14:40:54.319Z"
     },
     {
       "stepId": "step-4",
       "description": "Complete the post-copy re-observation and immutable binding. Deterministically project each proven source entry to its canonical pinned absolute path, call the existing production `buildProviderRuntimeObservation` with those exact paths/digests, freshly observed OS/arch/osVersion + reported version + adapter capability schema, pinning method `CONTENT_ADDRESSED_COPY`, and injected clock, and reject any quote/source/pinned path, digest, platform, version, capability, or builder-truth mismatch with `CLAUDE_RUNTIME_OBSERVATION_CHANGED` or `CLAUDE_RUNTIME_OBSERVATION_INVALID` at RUNTIME/UNKNOWN. Return a deeply frozen prepared result binding `quotedObservationDigest`, `freshObservationDigest`, aggregate closure digest, the unique EXECUTABLE pinned path, and a canonical pin-root identity digest. Add the exact runtime bridge `export * from \"./claude-runtime-pin.ts\";`; intentionally do not add a package-root export because consumer `task-acf73253a204435aba590894799814f2` imports this internal runner module immediately before grant/lock/spawn.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.js",
@@ -75,30 +84,59 @@
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-runtime-pin.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-fs.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-closure.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-copy.js"
+      ],
+      "note": "Post-copy re-observation and immutable binding complete. rebind() observes the facts port a SECOND time, projects each proven source deterministically to win32.join(finalRoot, relativePath) with its already-verified digest, and calls the production buildProviderRuntimeObservation with those exact paths/digests, the freshly observed os/arch/osVersion + reportedVersion + adapterCapabilitySchemaDigest, pinningMethod CONTENT_ADDRESSED_COPY and the injected clock. Builder failure or a non-PROVEN build => CLAUDE_RUNTIME_OBSERVATION_INVALID; facts that moved between the two observations => CLAUDE_RUNTIME_OBSERVATION_CHANGED; both at RUNTIME/UNKNOWN. Sequencing matters and is deliberate: re-observation runs BEFORE the staging rename, so a runtime that changed mid-copy leaves nothing published (the staged tree is removed and the pin root stays empty). deepFreeze'd PreparedClaudeRuntime binds quotedObservationDigest, freshObservationDigest (= observation.observationDigest), pinnedClosureDigest, pinnedRoot, pinRootIdentity = canonicalDigest({pinRoot, root}), the unique EXECUTABLE pinned path, the observation itself, and a bindingDigest over all of them - so a later launcher cannot substitute bytes or location.\nRuntime bridges added for all four owned modules (claude-runtime-pin{,-fs,-closure,-copy}.js), each exactly `export * from \"./<name>.ts\";`. runtime-entrypoint.test.ts derives that requirement rather than reading an allowlist, and it passes. Deliberately NO package-root export in index.ts: the named consumer task-acf73253a204435aba590894799814f2 imports this internal runner module directly, immediately before grant/lock/spawn.\nFresh full-package run: `pnpm --filter @moe/runner test` -> Test Files 40 passed (40), Tests 1260 passed (1260), exit 0.",
+      "startedAt": "2026-08-09T14:40:56.848Z",
+      "completedAt": "2026-08-09T14:41:34.397Z"
     },
     {
       "stepId": "step-5",
       "description": "Adversarial review and mutation drill: inspect the owned diff for double invocation/concurrent publication, path case folding, UNC/device prefixes, reparse ancestors, large/empty closure handling, file-handle closure, Windows rename-replacement behavior, source mutation during copy, and cleanup failure. Temporarily mutate the production surface twice—remove/bypass the post-copy source rehash, then relax one quote authority-field comparison (version or capability)—and run the focused runtime-pin test each time to prove the exact RUNTIME code/layer tests go red; restore the exact production bytes afterward. Also confirm the generated refusal tables report a positive case count and `claude-runtime-pin.ts` remains under 400 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-closure.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin-copy.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
+      ],
+      "note": "MUTATION DRILLS (3 run, backups kept OUTSIDE the repo tree, all restored byte-identical - verified by diffing pre/post sha256 of all owned .ts files, and `git grep DRILL HEAD` returns nothing):\n1. Bypassed the post-copy source rehash (`failure ??= await confirmSources(...)` -> `failure ??= null`): 3 red - the SOURCE_DRIFT case, the three-bounded-passes streaming assertion (2 source reads instead of 3), and the vocabulary-coverage guard. The rehash is load-bearing for all three.\n2. Relaxed the version field in the quote authority comparison (`delete input[\"reportedVersion\"]` in authorityDigest): exactly 1 red, \"a version that no longer matches the quote\" -> CLAUDE_RUNTIME_OBSERVATION_CHANGED.\n3. Relaxed the capability field the same way: exactly 1 red, the capability-schema case. Version and capability are independently bound; neither rides on the other.\nADVERSARIAL REVIEW - fixed during review: a published root whose declared members all verify could still carry an UNDECLARED neighbour, which is exactly how a side-by-side DLL load gets into a verified directory. Added fs.listFiles + an extra-member COLLISION branch + test.\nVerified sound: concurrent publication (staging is `.staging-<d16>-<pid>-<seq>` so two calls in one process cannot collide; publish preflights, and a rename throw re-checks the target to distinguish a concurrent winner - verify/adopt - from a real failure; an existing root is never replaced). Handles closed in `finally` on every copy path. Cleanup failure outranks the copy failure it could not undo, so an unremovable partial tree is never masked. Cross-drive declared paths cannot reach win32.relative because isInside runs first. The installed root declared as its own member is refused (proper-descendant prefix). Windows filename quirks fail closed: trailing dot/space and 8.3 short names are caught by the realpath fold-equality check (PATH_REPARSE); reserved device names (NUL/CON) lstat as OTHER (PATH_NOT_FILE). walkFiles cannot loop on a directory symlink because readdir Dirent reports it as a symlink, not a directory. A hostile non-canonicalisable quote throws inside observationDigestInput and is caught as QUOTE_INVALID.\nDISCLOSED RESIDUAL RISK (theoretical, not fixable at this layer): the per-segment reparse walk is a check-then-use against the filesystem, so an ancestor could in principle be swapped between the walk and the read. Mitigated in depth by realpath fold-equality, destination verification, the post-copy source rehash and a Moe-private pin root. Closing it fully needs handle-based traversal with FILE_FLAG_OPEN_REPARSE_POINT, which is native Windows handle work owned by task-4d1f8ba54cb6476c930c46b413f882aa, not this pure module.\nFILE HAZARD (epic rail, not a defect I may repair): foreign whole-tree completion commit 7d9efc9 (task-5529a248a61843dbbe1ee20fb9a28d1f) already captured all five of my .ts files. I verified the committed bytes are byte-identical to the gated working-tree bytes (git rev-parse HEAD:<path> == git hash-object <path> for all five) and carry no drill markers. Not amending, resetting, or re-committing them. QA should review by base-ref diff: `git diff 7d9efc9^..HEAD -- packages/runner/src/providers/claude/claude-runtime-pin*`.\nCase-list guards confirmed positive and pinned: 10 quote cases, 12 path cases asserted to cover exactly the 6 path codes, 7 observation cases asserted to cover both observation codes, plus a final test asserting the exercised code set EQUALS CLAUDE_RUNTIME_PIN_ERROR_CODES. Largest production file is 301 physical lines (pin 301, closure 281, copy 178, fs 122) - all under the 400 cap.\nFresh run after restoration: `pnpm --filter @moe/runner typecheck` exit 0; `pnpm --filter @moe/runner test` -> Test Files 40 passed (40), Tests 1260 passed (1260).",
+      "startedAt": "2026-08-09T14:41:37.047Z",
+      "completedAt": "2026-08-09T14:44:32.238Z"
     },
     {
       "stepId": "step-6",
       "description": "Final gate only: from `D:\\projexts\\moe-next`, run exactly `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` in the foreground and record its fresh exit-0 output. Confirm no temp/generated evidence remains, inspect `git status --porcelain`, unstage any foreign path without touching its bytes, then commit only by explicit pathspec: `git commit -- packages/runner/src/providers/claude/claude-runtime-pin.ts packages/runner/src/providers/claude/claude-runtime-pin.js packages/runner/src/providers/claude/claude-runtime-pin.test.ts`; verify `git show --stat` contains only those paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.js",
         "packages/runner/src/providers/claude/claude-runtime-pin.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-pin.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-fs.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-closure.js",
+        "packages/runner/src/providers/claude/claude-runtime-pin-copy.js"
+      ],
+      "note": "Final gate run fresh in the foreground from D:\\projexts\\moe-next: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> tsc clean, Test Files 40 passed (40), Tests 1260 passed (1260), EXIT=0 (re-run post-commit at 17:45:23, same result as 17:44:40).\nNo temp/generated evidence remains: drill backups were kept in D:\\projexts\\_moe_drill_backup (outside the repo) and deleted; the only `drill`/`probe` names in the tree are pre-existing foreign files (claude-probe, codex-probe, projection-crash-drill).\n`git status --porcelain` showed no staged entries and foreign unstaged/untracked work under packages/core and .moe - left untouched, nothing unstaged from another owner. Staged and committed ONLY my four uncommitted owned paths by explicit pathspec: commit 2aa50d0, `git show --stat` contains exactly claude-runtime-pin{,-fs,-closure,-copy}.js and nothing else (4 files, 4 insertions).\nThe five .ts files could not be committed under this task id: foreign whole-tree commit 7d9efc9 (task-5529a248a61843dbbe1ee20fb9a28d1f) had already captured them. Per the epic rail I did not amend, reset, or re-commit. Verified all nine owned paths have committed bytes identical to the gated bytes (git rev-parse HEAD:<path> == git hash-object <path> for every one).\nQA review handle: `git diff 7d9efc9^..HEAD -- packages/runner/src/providers/claude/claude-runtime-pin*`.",
+      "startedAt": "2026-08-09T14:44:35.039Z",
+      "completedAt": "2026-08-09T14:45:40.544Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a0eaa020",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -117,12 +155,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:51:31.590Z",
-  "updatedAt": "2026-08-09T14:34:23.893Z",
+  "updatedAt": "2026-08-09T14:46:44.372Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:13:09.675Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 2
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-db2146e3",
@@ -130,7 +168,11 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:22:14.856Z",
@@ -152,5 +194,23 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-09T14:22:16.909Z",
-  "workStartedAt": "2026-08-09T14:25:45.838Z"
+  "workStartedAt": "2026-08-09T14:25:45.838Z",
+  "reviewStartedAt": "2026-08-09T14:46:44.372Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  40 passed (40)\n      Tests  1260 passed (1260)\n   Start at  17:45:23\n   Duration  3.15s (transform 8.59s, setup 0ms, import 11.79s, tests 6.21s, environment 3ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-09T14:46:44.372Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/claude/claude-runtime-pin.test.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-closure.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-copy.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin.js",
+    "packages/runner/src/providers/claude/claude-runtime-pin-fs.js",
+    "packages/runner/src/providers/claude/claude-runtime-pin-closure.js",
+    "packages/runner/src/providers/claude/claude-runtime-pin-copy.js"
+  ]
 }

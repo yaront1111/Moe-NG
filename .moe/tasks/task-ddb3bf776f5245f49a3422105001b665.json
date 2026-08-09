@@ -178,8 +178,8 @@
       "completedAt": "2026-08-09T14:32:32.062Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5981deec",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -188,15 +188,24 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 17,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-5820fd4127134fec86bec7d81f96e102",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD, with an independence disclosure that belongs at the top rather than in a footnote.\n\nINDEPENDENCE DISCLOSURE. I am not fully arms-length on this task. At 14:17 and 14:35 I gave the QA recommendation on how the tripwire conflict should be dispositioned (minimal flip plus a follow-on task), and at 14:38 I specified an assertion property: that inverting the absence check to a count would be strictly weaker, and that `cr.runs` and `cr.resources` should be asserted **individually by name** so losing either one reddens alone. That property is in the diff. I posted the conflict publicly at 14:43 before reviewing and offered the task to @qa-b2df68b9 or the governor.\n\nTwo things bound the conflict. First, the **governor's authorisation superseded my recommendation with its own binding constraint** — \"convert the clause, do not delete it\", with a parity assertion in the file's existing non-empty-before-compare shape — so the standard I graded against is theirs, not mine. Second, and the part that actually discharges it: **I drilled my own suggested property instead of reading it.** Grading a recommendation you made only means something if you try to break it.\n\nTHE DRILL THAT MATTERS. I renamed `cr.resources` -> `cr.DRILLED` in both `resources-surface.tsx` and `resources-surface.test.tsx`, leaving `cr.runs` untouched, and ran the converted clause:\n```\nAssertionError: expected [ 'cr.resources' ] to deeply equal []\n1 failed | 18 passed (19)\n```\nIt reddens **naming the specific missing id**. The naive `offenders.length > 0` inversion would have stayed GREEN there, because `cr.runs` was still present — which is exactly the weakening the per-id form exists to prevent. So the property is real and load-bearing, proven by mutation rather than accepted because I suggested it. Both files restored via `git cat-file blob` and verified `git hash-object` == `3711bda2` / `6a11fb2c`.\n\nTHE CONVERSION ITSELF SATISFIES THE GOVERNOR'S BINDING CONSTRAINT. The assertion is INVERTED, not deleted, skipped or loosened — all three of which the authorisation named as automatic rejections. It now holds the opposite fact (those surfaces exist) and still reddens if they are removed or renamed. Preserved verbatim: `expect(scanned.length - files.length).toBe(1)` (the self-exclusion guard, so a future rename cannot silently widen it) and `expect(files.length).toBeGreaterThan(0)` (non-vacuity). The test name was updated to match its new meaning rather than left describing the old one. The header records that the ratchet fired as designed, names commit `0fd712b` as the cause, and points at **task-bc0b8f5b** (BACKLOG, \"Section 4.16 table-clause parity coverage for Runs and Resources\") as the owner of the real clause work — which I confirmed exists.\n\nTHE 15-SURFACE SWEEP IS UNTOUCHED. `expect(SURFACES.length).toBe(15)` unchanged, and the whole file diff is confined to the tripwire region. The worker correctly declined to add Runs and Resources to `CORE_SURFACE_FIXTURES`/`OPS_SURFACE_FIXTURES`, which would have meant editing two more foreign `a11y/` files — the transplant I had already withdrawn and the governor's authorisation explicitly did not grant.\n\nGATES RE-RUN BY ME: `pnpm --filter @moe/control-room test` exit 0, **37 files / 547 tests**; `pnpm --filter @moe/control-room typecheck` exit 0.\n\nDoD 3 — MET, and the vacuity trap here was found and closed by the worker rather than by me. Both surfaces consume the committed predicates from `../a11y/surface-audit.js` — imported, not reimplemented, so rail compliance is structural. Every audit asserts `checked > 0` before `violations` is empty. The sharp part is the fixture choice: the suites deliberately audit a **lagging** frame, because `auditLiveRegions` counts only `cr.banner.*` and a non-lagging frame would yield `checked === 0` — a pass over nothing. That is the \"a sweep that produces zero cases passes\" rail caught in the fixture rather than in the assertion, which is where it is much harder to see.\n\nDoD 6 — MET. No `cr.graph.*` id anywhere in `src/runs` or `src/resources`, and the three committed prefix-ban tests pass inside the 547.\n\nDoD 1, 2, 4, 5 — verified against the suite and the sources: surfaces driven only by supplied projections with no derived lease health, circuit-breaker options rendered only from returned commands, facts routed through the `Fact` wrapper so each carries a truth chip, and the section 11.3 skeleton/empty/degraded states present with their exact copy.\n\nCOMMIT ATTRIBUTION: the narrow-parity flip landed physically in `7d9efc9`, a commit titled for **task-5529a248** (the browser harness). That is the completion-hook tree sweep again — the fifth instance today — not a pathspec error by this worker. `0fd712b` is this task's own commit. Not scored against them.\n\nPROCESS NOTE FOR THE RECORD. This task blocked at 10/10 with all work done, because completing would have required either editing an unowned file or fabricating an exit code. The worker refused both, and also refused a third dodge that would have been invisible: building the ids at runtime so the literal never appeared in source, which would have passed the tripwire while defeating it. A green nobody would have questioned was available and was not taken.",
+      "timestamp": "2026-08-09T14:45:14.670Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:31:05.230Z",
-  "updatedAt": "2026-08-09T14:37:43.784Z",
+  "updatedAt": "2026-08-09T14:45:48.495Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:12:44.496Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-09T14:45:48.495Z",
+    "wallClockMs": 1983999
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -235,11 +244,32 @@
   },
   "planApprovedAt": "2026-08-09T14:14:21.377Z",
   "contextFetchedBy": [
-    "worker-5981deec"
+    "worker-5981deec",
+    "qa-58b24ffb"
   ],
   "workStartedAt": "2026-08-09T14:15:02.636Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-09T14:42:05.015Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  37 passed (37)\n      Tests  547 passed (547)\n   Start at  17:40:52\n   Duration  5.73s (transform 8.64s, setup 0ms, import 16.42s, tests 24.00s, environment 37.00s)\n\nEXIT=0\n\n(Prior to the narrow-parity flip this same command was 546 passed / 1 failed. The single failure was task-fdf3e6aa's DoD 5 tripwire, resolved as described in the summary. Package typecheck `pnpm --filter @moe/control-room typecheck` also exits 0.)",
+    "reportedAt": "2026-08-09T14:42:05.015Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/runs/runs-surface.test.tsx",
+    "apps/control-room/src/runs/runs-contract.ts",
+    "apps/control-room/src/runs/runs-surface.tsx",
+    "apps/control-room/src/resources/resources-surface.tsx",
+    "apps/control-room/src/resources/resources-surface.test.tsx",
+    "apps/control-room/src/shell/circuit-breaker-banner.tsx",
+    "apps/control-room/src/shell/circuit-breaker-banner.test.tsx",
+    "apps/control-room/src/shell/frame.tsx"
+  ],
+  "completedAt": "2026-08-09T14:45:48.495Z",
+  "reviewCompletedAt": "2026-08-09T14:45:48.495Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-5820fd4127134fec86bec7d81f96e102.\n\nINDEPENDENCE DISCLOSURE FIRST. I am not arms-length: I gave the disposition recommendation at 14:17/14:35, and at 14:38 specified the assertion property now in the diff (assert each id individually — a count-based inversion is strictly weaker). Posted publicly at 14:43 and offered the task to @qa-b2df68b9 / the governor. Bounded two ways: the governor's authorisation supplied the constraint I graded against, not mine; and I DRILLED my own suggestion rather than reading it.\n\nTHE DRILL: renamed `cr.resources` -> `cr.DRILLED` in both resources-surface files, leaving `cr.runs` intact. Result `AssertionError: expected [ 'cr.resources' ] to deeply equal []`, 1 failed / 18 passed — reddens naming the specific missing id. The naive `offenders.length > 0` form would have stayed GREEN there. Proven by mutation, not accepted because I proposed it. Restored, `git hash-object` == 3711bda2 / 6a11fb2c.\n\nCONVERSION MEETS THE AUTHORISATION: inverted, not deleted, skipped or loosened — the three named auto-rejections. Self-exclusion `toBe(1)` and `files.length > 0` preserved verbatim; test renamed to match its meaning; header names task-bc0b8f5b (confirmed to exist) as owner of the real §4.16 work. The 15-surface sweep is untouched at `SURFACES.length).toBe(15)` — the worker correctly declined to add the new surfaces, which would have meant editing two foreign a11y fixture files nobody granted.\n\nGATES RE-RUN BY ME: control-room test exit 0, 37 files / 547 tests; typecheck exit 0.\n\nDoD3's sharp part is the worker's: both suites audit a LAGGING frame deliberately, because `auditLiveRegions` counts only `cr.banner.*` and a non-lagging frame yields `checked === 0` — a pass over nothing. Zero-case vacuity caught in the fixture, where it is hardest to see. Predicates imported, not reimplemented. DoD6 met — no `cr.graph.*` in either surface."
 }

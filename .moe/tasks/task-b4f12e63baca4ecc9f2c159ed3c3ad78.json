@@ -58,7 +58,7 @@
     {
       "stepId": "step-3",
       "description": "Implement packages/core/src/identity/authenticate-session.ts to turn the tests green. Export: SESSION_AUTH_LAYERS = Object.freeze([\"BINDING\",\"PROOF\",\"REPLAY\",\"GENERATION\",\"SESSION_STATE\",\"EXPIRY\",\"TRANSPORT\"] as const); type SessionAuthLayer; type SessionAuthCode = \"AUTHENTICATION_FAILED\" | \"SESSION_REPLAYED\" | \"SESSION_EXPIRED\" | \"CAPABILITY_DENIED\"; interface AuthenticatedSessionFacts { principalId, principalKind, profileRevisionId, sessionId, clientKeyId, projectId, transportId }; SessionAuthenticationResult = { ok: true; facts: AuthenticatedSessionFacts } | { ok: false; code: SessionAuthCode; layer: SessionAuthLayer } — the refusal arm carries NO facts field at all, so zero authority is a type-level guarantee, not a convention. MOVE PresentedProof, ProofChallenge and ReplayOutcome here verbatim from authenticate-command.ts (they are envelope-independent). Input is SessionAuthenticationInput: principal, session, credential, projectId, transportId, now, requestId, requestDigest, presentedCredentialId, proof, verifyProof, checkReplay. requestId/requestDigest/presentedCredentialId are the three scalars authenticateCommand currently reads off the envelope (commandId, requestDigest, sessionCredential) — this is exactly how a non-command caller authenticates without fabricating a RuntimeCommandEnvelope (task rail 2). Port bindingsHold unchanged except that the three envelope reads become those scalars, and add isNonEmpty checks on requestId/requestDigest/presentedCredentialId since there is no envelope decoder upstream to have validated them. Rebuild the ProofChallenge from records only ({ commandId: requestId, requestDigest, credentialId: credential.credentialId, clientKeyId: session.clientKeyId }) and never read input.proof past bindingsHold, preserving the existing defence against a caller-attached verified flag. Wrap verifyProof and checkReplay in try/catch; a throw or any non-\"FRESH\"/\"REPLAYED\" value denies (UNKNOWN never authorizes, epic rail 4). Import only from ./identity-session.js — no @moe/contracts, no createRuntimeError; the seam returns a code string and the caller maps it (task rail 1: pure and dependency-free). Freeze both result arms. Also create the bridge packages/core/src/identity/authenticate-session.js containing EXACTLY the bytes `export * from \"./authenticate-session.ts\";` plus a single LF — runtime-entrypoint.test.ts compares bridge bytes through utf8 and a CRLF ending fails there while git diff --stat shows nothing. Target under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-session.js"
@@ -66,35 +66,63 @@
       "newFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-session.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/authenticate-session.ts",
+        "packages/core/src/identity/authenticate-session.js"
+      ],
+      "note": "Implemented the pure dependency-free seam and exact LF bridge. The module exports the seven frozen layers, zero-authority refusal union, moved proof/replay types, scalar request bindings, exact proof/replay fail-closed observations, ordered replay/generation/state/expiry/transport refusals, and deeply frozen success facts. Physical evidence: authenticate-session.ts 194 lines, bridge 43 bytes/1 LF/0 CR. Plain Node strip-types probe loaded the module and printed all seven layers. Publication through identity/index is deliberately the next plan step.",
+      "startedAt": "2026-08-09T14:40:53.706Z",
+      "completedAt": "2026-08-09T14:43:05.358Z"
     },
     {
       "stepId": "step-4",
       "description": "Compose the seam into authenticateCommand without changing its public behavior. In packages/core/src/identity/authenticate-command.ts: delete the local bindingsHold, isNonEmpty and STEP_UP-unrelated guards 1-7, and re-export the moved types with `export type { PresentedProof, ProofChallenge, ReplayOutcome } from \"./authenticate-session.js\";` so identity/index.ts's existing export block keeps resolving those three names unchanged. authenticateCommand now computes correlationId as today, calls authenticateSession({ ...records, requestId: envelope.commandId, requestDigest: envelope.requestDigest, presentedCredentialId: envelope.sessionCredential, ... }) — guarding the envelope read itself so a null/non-object envelope still yields AUTHENTICATION_FAILED with correlationId \"\" exactly as now — and on !ok returns deny(result.code, correlationId), discarding the layer. The layer is deliberately NOT surfaced through authenticateCommand: RuntimeError has no layer field and adding one would change its public shape, which DoD item 3 forbids. Then apply the UNCHANGED capability block: matchCapability, then requiresRecentStepUp against STEP_UP_WINDOW, then the same frozen AuthorizationContext. AuthenticateCommandInput, AuthenticateCommandResult and AuthorizationContext keep their exact field sets. Publish the new seam by ADDING to packages/core/src/identity/index.ts: `export { authenticateSession, SESSION_AUTH_LAYERS } from \"./authenticate-session.js\";` and a type block for AuthenticatedSessionFacts, SessionAuthCode, SessionAuthLayer, SessionAuthenticationInput, SessionAuthenticationResult. Do NOT edit packages/core/src/index.ts — it already does `export * from \"./identity/index.js\"` and its own comment records the decision that identity is published through the curated area seam rather than per-module blocks; adding a block there would create the second sync point that comment exists to prevent. Run `pnpm --filter @moe/core test` — authenticate-command.test.ts must pass with ZERO edits to that file. If it needs an edit, the refactor changed behavior: revert and fix the seam, do not adjust the test.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-command.ts",
         "packages/core/src/identity/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/authenticate-command.ts",
+        "packages/core/src/identity/index.ts"
+      ],
+      "note": "Composed authenticateCommand through authenticateSession before the unchanged exact capability/step-up block, retained the null-capabilities structural AUTHENTICATION_FAILED precedence, re-exported moved types, discarded the seam layer at the RuntimeError boundary, and published the seam through identity/index only. Existing authenticate-command.test.ts was not edited. Fresh `pnpm --filter @moe/core test` exit 0: 18 files / 270 tests passed (one foreign core test file has landed since the 16-file baseline; all prior and new tests are green).",
+      "startedAt": "2026-08-09T14:43:13.385Z",
+      "completedAt": "2026-08-09T14:44:52.870Z"
     },
     {
       "stepId": "step-5",
       "description": "Regression sweep. Run `pnpm --filter @moe/core typecheck` then `pnpm --filter @moe/core test` and compare against the step-1 baseline: all 16 prior files still pass, count rises only by the new authenticate-session.test.ts. Confirm runtime-entrypoint.test.ts is green — it walks the reachable module closure from the package entry and asserts every reachable .ts has a byte-exact .js bridge and that no bridge exists without a reachable module, so it is the test that catches a missing, misnamed or CRLF authenticate-session.js. Confirm with `grep -c ''` that authenticate-session.ts and authenticate-command.ts are each under 250 lines (PowerShell Measure-Object -Line undercounts by skipping blank lines). If any pre-existing core test needed modification to pass, stop and treat it as a behavior regression rather than a test that needs updating.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-command.ts",
         "packages/core/src/runtime-entrypoint.test.ts"
-      ]
+      ],
+      "note": "Regression sweep green: `pnpm --filter @moe/core typecheck` exit 0; `pnpm --filter @moe/core test` exit 0 with 18 files / 270 tests. The baseline's 16 files plus this task's authenticate-session test and foreign in-flight expansion-planning-hold test explain the count. runtime-entrypoint passed and the new bridge is byte-exact 43 bytes ending in one LF/zero CR. Production line counts: authenticate-session.ts 194; authenticate-command.ts 126. authenticate-command.test.ts remains unmodified. Shared-hook attribution: foreign commit 462a610 (task-1cafc7f9) swept packages/core/src/identity/authenticate-session.test.ts while this task was in progress; current file bytes equal committed blob 8bbf8614 and were the bytes gated. I did not amend/reset/reclaim that commit.",
+      "startedAt": "2026-08-09T14:44:58.517Z",
+      "completedAt": "2026-08-09T14:45:54.928Z"
     },
     {
       "stepId": "step-6",
       "description": "Mutation-drill every production guard (DoD item 4, epic rail 6 — a failure-path assertion that has quietly detached from its subject is invisible to a green suite). One at a time, in authenticate-session.ts, bypass a guard, run `pnpm --filter @moe/core test`, confirm authenticate-session.test.ts goes RED, then restore the exact original bytes before the next drill. Drill all seven layers: BINDING (make bindingsHold return true unconditionally), PROOF (accept `verified !== false` instead of `verified !== true`), REPLAY-UNKNOWN (drop the neither-FRESH-nor-REPLAYED check), REPLAY-REPLAYED (drop the replay === \"REPLAYED\" arm), GENERATION (drop the !isCurrentGeneration arm), SESSION_STATE (drop the status !== \"ACTIVE\" check), EXPIRY (change isSessionUsableAt to allow now === expiresAt), TRANSPORT (drop the transportIds.includes check). Also drill the layer values themselves: swap one returned layer for another and confirm red, which proves the tests assert the layer and not only the code. Additionally remove one entry from REFUSAL_CASES and confirm the length-9 assertion goes red, proving the sweep guard is live. Beware: in this shared working directory another agent's completion hook can commit a tree containing your drill edit — git status will look clean while the mutation is still live, so trust the red test, not the status output, and verify restoration with `git diff -- packages/core/src/identity/authenticate-session.ts` returning empty. Record each drill's red confirmation; leave no drill edit behind.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.ts",
         "packages/core/src/identity/authenticate-session.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T14:45:59.879Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "Mutation-drill every production guard (DoD item 4, epic rail 6 — a failure-path assertion that has quietly detached from its subject is invisible to a green suite). One at a time, in authenticate-session.ts, bypass a guard, run `pnpm --filter @moe/core test`, confirm authenticate-session.test.ts goes RED, then restore the exact original bytes before the next drill. Drill all seven layers: BINDING (make bindingsHold return true unconditionally), PROOF (accept `verified !== false` instead of `verified !== true`), REPLAY-UNKNOWN (drop the neither-FRESH-nor-REPLAYED check), REPLAY-REPLAYED (drop the replay === \"REPLAYED\" arm), GENERATION (drop the !isCurrentGeneration arm), SESSION_STATE (drop the status !== \"ACTIVE\" check), EXPIRY (change isSessionUsableAt to allow now === expiresAt), TRANSPORT (drop the transportIds.includes check). Also drill the layer values themselves: swap one returned layer for another and confirm red, which proves the tests assert the layer and not only the code. Additionally drill the two sweep guards SEPARATELY, because they catch different failures and neither implies the other: remove one entry from REFUSAL_CASES and confirm the length-10 assertion goes red (this catches a dropped case inside an already-covered layer), then remove every case belonging to one layer and confirm the distinct-layer-set assertion goes red (this catches a whole layer going uncovered). Beware: in this shared working directory another agent's completion hook can commit a tree containing your drill edit — git status will look clean while the mutation is still live, so trust the red test, not the status output, and verify restoration with `git diff -- packages/core/src/identity/authenticate-session.ts` returning empty. Record each drill's red confirmation; leave no drill edit behind.",
+          "reason": "Cleaning up the other half of the 9-vs-10 contradiction you correctly refused to guess at. You resolved step-2 in favour of 10 (your note: \"exactly 10 frozen table cases covering all seven layers\") — that is the right call, and step-3's SESSION_AUTH_LAYERS being exactly 7 with PROOF x2 and REPLAY x3 confirms it. Step-6 was still telling you to drill \"the length-9 assertion\", which no longer exists in your test file; following it literally would send you hunting for a guard that was never written. Only that reference changed, to length-10, plus one added drill for the layer-set assertion which is now a genuinely separate guard from the count. Everything else in this step is byte-identical to the approved text. Steps 2 and 3 were already COMPLETED by the time I reached them, so this is the only amendment applied. Amended by architect-d46fcb95, not the original planning architect.",
+          "amendedBy": "architect-d46fcb95",
+          "amendedAt": "2026-08-09T14:43:46.152Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-7",
@@ -128,12 +156,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:06:18.722Z",
-  "updatedAt": "2026-08-09T14:40:49.686Z",
+  "updatedAt": "2026-08-09T14:45:59.879Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:24.531Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-cb476f76",
@@ -145,7 +173,10 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:23:24.744Z",

@@ -18,9 +18,73 @@
     "Tests assert the exact stable reason code and the INVENTORY_ADAPTER layer, and assert non-zero generated class coverage.",
     "Target <=250 physical lines per production source and split before 400; this cap is per file, not per task."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-5b5302ee",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure the live shared tree before editing and freeze the task basis. Record `git rev-parse HEAD`, the pinned design SHA-256, status/digests for every owned path, the absence of `packages/runner/src/recovery-inventory/**`, and the current definitions of `canonicalDigest`/`deepFreeze`/`isNormalizedText`/`isCanonicalUtcTimestamp`, hostile exact-record/list readers, and the platform COMPLETE-or-UNKNOWN aggregation pattern. Record merge-base repo-wide `pnpm typecheck` and `pnpm test` failures for later path attribution. Ownership is a hard start gate: `packages/runner/src/index-surface.test.ts` currently contains foreign work from task-5855a9c6b8da4a428dd0e75ed9ae36d1, so do not edit, stage, or commit it until that owner has committed/released and the file is clean; likewise preserve task-078af6f181484dd99d1bf9008b4cf731's Claude runtime-pin WIP and never add its missing bridge or weaken its failures. Re-measure rather than pinning the volatile observed HEAD or the stale task-description export count. Record consumers task-091c93db11c041ea8484023d030fdc88, task-d7da9be4a3254f7b9dcd58369d7e15a1, and daemon coordinator task-cf7fb147bd1c47698cbd65c9535370aa for the pure-package consumer edge.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T14:46:43.458Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: add one focused suite that imports the intended production surface only through bare `@moe/runner`. Hand-author, rather than derive from the implementation, the four node-side classes `PROVIDER_PROCESS_LAUNCH_LOCK`, `WORKSPACE`, `GIT_INTEGRATION_ON_DISK`, and `ARTIFACT_OBJECT_STAGING`; the exact error/layer/coverage-reason vocabularies; and a non-zero case table for every configured class. Pin request-validation precedence (exact request/version, project tag, backup ref, incarnation ref, inclusive UTC window, frozen non-empty unique configured classes) and assert the enumerator call count stays zero on each refusal. Cover missing/throwing/unavailable/unsupported/malformed/truncated/over-limit enumerators and missing negative proof as per-class `RECOVERY_INVENTORY_COVERAGE_UNKNOWN` at `INVENTORY_ADAPTER`, truth `UNKNOWN`; explicit COMPLETE enumeration and empty COMPLETE only with a negative-proof digest; partial items that remain UNKNOWN; wrong class/project/window and duplicate normalized identities with their own exact code/layer; unconfigured ports never called; deterministic items/digest under shuffled input, object-key order, locale-hostile text, and PATH separator variants; digest sensitivity to every semantic basis/fact/proof; and deep immutability. Every sweep asserts its literal expected count and exact generated ID set so zero/filtered cases fail.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/recovery-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the bounded contract and its exact one-line Node bridge. Define version `moe-recovery-inventory/1`; frozen class, coverage, layer, error-code, and UNKNOWN-reason vocabularies; maximum counts/text bounds; immutable input/item/proof/report/failure/port types; and accessor-safe exact-key decoders using the verified runner canonical/shape primitives. Opaque upstream bindings are exact `{kind, ref, digest}` projections with kinds `BACKUP_CURSOR_GENERATION` and `RECOVERY_INCARNATION`; validate bounded NFC text and lowercase SHA-256 but never import or interpret `@moe/store`/`@moe/daemon`. Define an inclusive canonical-UTC recovery window. Make stable identities a discriminated `PATH|OPAQUE` value: normalize only PATH separators to `/` before canonical path validation/deduplication, preserve OPAQUE identity bytes apart from NFC validation, and compare strings by code point rather than `localeCompare`. Items bind class, exact project tag, stable identity, canonical observation time, bounded canonical disposition facts, and source-proof digest. Freeze the precedence vocabulary as `REQUEST_INVALID`, `PROJECT_TAG_INVALID`, `BACKUP_REF_INVALID`, `INCARNATION_REF_INVALID`, `WINDOW_INVALID`, `CONFIGURED_CLASSES_INVALID`, `CLASS_MISMATCH`, `PROJECT_MISMATCH`, `WINDOW_MISMATCH`, `EXTERNAL_IDENTITY_DUPLICATE`, then `COVERAGE_UNKNOWN`, all prefixed `RECOVERY_INVENTORY_` and all at `INVENTORY_ADAPTER`.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts",
+        "packages/runner/src/recovery-inventory/recovery-inventory-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement `collectRecoveryInventory` and its one-line bridge as a pure async aggregate over an immutable caller-supplied registry tuple—never a mutable module-global registry. Snapshot and validate the entire request and registry before the first await; derive a domain-separated basis digest from version/project/opaque refs/window/configured classes; invoke each configured class exactly once in frozen class order; and never call unconfigured registrations. A missing registration, rejected/thrown port, unsupported capability, malformed/truncated/over-limit result, unverifiable source proof, or missing completeness/negative proof yields that class's exact UNKNOWN proof and cannot be raised later. Validate every returned item before authority use in the frozen order shape → class → project → window → normalized external-identity duplication; structurally valid partial observations may remain inspectable but never count COMPLETE. Require one proof per configured class and non-empty configured input to avoid vacuous `every()`, compute canonical item/proof/inventory digests with code-point sorting, deep-freeze the result, and set aggregate coverage COMPLETE only when the exact configured proof set is COMPLETE. Export a pure registry constructor/fragment type so sibling adapters can be composed by the daemon without editing this aggregate or registering global state.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/recovery-inventory/recovery-inventory.ts",
+        "packages/runner/src/recovery-inventory/recovery-inventory.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish the reviewed seam after the foreign shared-file owner has landed. Add a compact curated named value/type export block to `packages/runner/src/index.ts` for only the contract, registry constructor, failure guard, and `collectRecoveryInventory` type closure; no blanket export, no adapter, and no new package dependency. Re-read the then-current root namespace, hand-transcribe only these new runtime names into `index-surface.test.ts`, bump its then-current literal count (the task's 116 and the observed 135 are both non-authoritative once HEAD moves), and add a root-only smoke/type-closure assertion. Keep `index.ts` at or below the 250-line target; if a named block would exceed it, use the already-created aggregate module as the curated surface rather than growing a new production file. Existing `runtime-entrypoint.test.ts` must discover both exact `.js` bridges and exercise real Node root loadability without modification. Keep API rationale in focused JSDoc; no user-facing docs change is needed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial review and transient mutation proof. Attack null/accessor/proxy, empty/duplicate/unknown classes, huge lists/text, rejected promises, registry mutation during await, wrong project/window/class, PATH aliasing, duplicate identities after normalization, partial evidence, and concurrent repeated collection; verify no branch turns silence or an empty array into COMPLETE. Temporarily mutate the production missing-registration/missing-negative-proof branch to return COMPLETE and require the named public-root test to fail with the expected assertion (not unrelated red); separately remove one class/case in memory and require the exact-set/non-vacuity guard to fail. Restore byte-identical checksums before proceeding. Confirm both production `.ts` files are <=250 lines and never >=400, there is no store/daemon dependency or adapter implementation, all outputs are frozen, no generated/debug evidence remains, the three named consumer task IDs are recorded, and only the seven explicit owned paths would be staged—never absorb task-5855 or task-078 foreign bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts",
+        "packages/runner/src/recovery-inventory/recovery-inventory.ts",
+        "packages/runner/src/recovery-inventory/recovery-inventory.test.ts",
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the concentrated final gate after all transient mutations are restored and make no edits afterward. Re-run repo-wide `pnpm typecheck` and `pnpm test`, normalize failing paths, and report the HEAD-minus-merge-base delta verbatim; the intersection with these seven owned paths must be empty. Then run the exact completion-evidence command LAST: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`. It must exit 0 with non-zero discovered tests, including the automatic bridge/runtime-loadability test; the current task-078 runner red cannot be waived as a package-local foreign failure, so wait/report blocked if it persists rather than suppressing it. Verify the committed diff/pathspec contains only the seven named files and preserves all shared-tree WIP.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4e85eff4",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,11 +96,40 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:04.245Z",
-  "updatedAt": "2026-08-09T14:29:57.715Z",
+  "updatedAt": "2026-08-09T14:46:43.458Z",
   "contextFetchedBy": [
-    "architect-5b5302ee"
+    "architect-5b5302ee",
+    "worker-4e85eff4"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:29:57.715Z"
-  }
+    "firstClaimAt": "2026-08-09T14:29:57.715Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T14:45:55.846Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: two focused production modules (closed codec/vocabulary and aggregate), their mandatory one-line bridges, one focused test, and the existing root seam. This is seven files—above the preferred five but below the hard ten-file cap—and is the minimum honest shape: omitting a bridge fails the existing runtime sweep; folding codec plus async aggregation into one source risks the per-file 250/400 cap; moving behavior tests into the already-large root surface test is not focused TDD; splitting publication into another task would leave the pure surface unreviewed and create a second collision on the same root files. Upstream backup/incarnation data is represented as exact opaque projections, rejecting both dependency inversion and a local reimplementation of store/daemon authority. The node-side class vocabulary is four combined classes because scheduler resources are explicitly out of scope and the two sibling adapter slices each name exactly two classes. The recovery window is an inclusive canonical-UTC observation interval, while the backup cursor/generation remains opaque. PATH and OPAQUE identity variants avoid blindly rewriting provider IDs. Registration is immutable and caller-injected; mutable global registration was rejected because it is order-dependent, race-prone, and conflicts with this task's injected-port rail. Sibling adapters should export registry fragments and the daemon consumer composes them; they must not edit this aggregate despite stale wording in their descriptions.",
+    "codebaseInsights": "Fresh exploration found no recovery-inventory directory or RECOVERY_INVENTORY/INVENTORY_ADAPTER symbols. `packages/runner/package.json` depends only on `@moe/contracts`, confirming that store backup and daemon incarnation shapes cannot be imported. Verified reusable primitives are `packages/runner/src/canonical.ts` (`canonicalDigest`, `deepFreeze`, NFC/timestamp checks), `packages/runner/src/supervisor/effect-shape.ts` (accessor-safe exact records and bounded dense lists), and `packages/runner/src/platform/{platform-contract,linux-observation}.ts` (frozen vocabularies and one explicit UNKNOWN verdict per configured boundary). The real upstream projections are `packages/store/src/backup-generation-contracts.ts::BackupGenerationManifest` and `apps/daemon/src/recovery/recovery-incarnation-contract.ts::RecoveryIncarnationBinding`; this task binds only caller-supplied `{kind,ref,digest}` projections. The authoritative design hash was reverified as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. `index.ts` was clean at 215 lines during exploration; the root value count was 135, not the stale 116. The shared HEAD moved repeatedly, so all counts/hashes must be remeasured. `index-surface.test.ts` had +54 foreign uncommitted lines from WORKING task-5855a9c6b8da4a428dd0e75ed9ae36d1. Runner typecheck was exit 0; runner tests were red only in active task-078af6f181484dd99d1bf9008b4cf731's untracked Claude runtime-pin work and its missing bridge. Existing runtime-entrypoint coverage automatically requires each new production `.ts` to have the exact sibling `.js` bridge and performs a real Node package-root probe.",
+    "risks": "The main operational risk is shared-file capture: never touch or pathspec-commit `index-surface.test.ts` while task-5855's bytes are uncommitted. The final package gate cannot use repo-wide path attribution to excuse task-078's runner-local red; wait for it to land. The main semantic risks are vacuous COMPLETE from an empty configured set/empty proof, a port throw escaping uncoded, a partial class being upgraded after another port succeeds, locale-dependent order, unsafe blanket backslash normalization of opaque IDs, accessors mutating the registry during await, and duplicate identity aliases after PATH normalization. Validate/snapshot before awaits, distinguish PATH from OPAQUE, require exact proof cardinality, and keep UNKNOWN monotone. The sibling task descriptions mention editing this aggregate to register adapters; later plans must amend that stale wording to compose immutable fragments at the daemon edge, avoiding ownership collisions and module-global authority.",
+    "keyFiles": [
+      "packages/runner/src/canonical.ts",
+      "packages/runner/src/supervisor/effect-shape.ts",
+      "packages/runner/src/platform/platform-contract.ts",
+      "packages/runner/src/platform/linux-observation.ts",
+      "packages/runner/src/index.ts",
+      "packages/runner/src/index-surface.test.ts",
+      "packages/store/src/backup-generation-contracts.ts",
+      "apps/daemon/src/recovery/recovery-incarnation-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-09T14:45:57.905Z",
+  "workStartedAt": "2026-08-09T14:46:43.458Z"
 }

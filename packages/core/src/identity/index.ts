@@ -28,6 +28,15 @@ export type {
 export { canonicalizeCapabilities, matchCapability } from "./identity-capability.js";
 export type { CapabilityGrant, CapabilityQuery } from "./identity-capability.js";
 
+export { authenticateSession, SESSION_AUTH_LAYERS } from "./authenticate-session.js";
+export type {
+  AuthenticatedSessionFacts,
+  SessionAuthCode,
+  SessionAuthLayer,
+  SessionAuthenticationInput,
+  SessionAuthenticationResult,
+} from "./authenticate-session.js";
+
 export { authenticateCommand } from "./authenticate-command.js";
 export type {
   AuthenticateCommandInput,

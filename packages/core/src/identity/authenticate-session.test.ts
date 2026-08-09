@@ -107,6 +107,19 @@ describe("session authentication refusals", () => {
       expect(Object.isFrozen(result)).toBe(true);
     });
   }
+
+  it("rejects a truthy non-boolean verifier result at PROOF", () => {
+    const truthyVerifier = (() => 1) as unknown as
+      SessionAuthenticationInput["verifyProof"];
+    const result = authenticateSession(input({ verifyProof: truthyVerifier }));
+
+    expect(result).toEqual({
+      ok: false,
+      code: "AUTHENTICATION_FAILED",
+      layer: "PROOF",
+    });
+    expect(Object.keys(result)).toEqual(["ok", "code", "layer"]);
+  });
 });
 
 describe("successful session authentication", () => {

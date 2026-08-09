@@ -1,34 +1,27 @@
 import { createRuntimeError } from "@moe/contracts";
 import type { RuntimeCommandEnvelope, RuntimeError } from "@moe/contracts";
 
+import { authenticateSession } from "./authenticate-session.js";
+import type {
+  AuthenticatedSessionFacts,
+  PresentedProof,
+  ProofChallenge,
+  ReplayOutcome,
+} from "./authenticate-session.js";
 import { matchCapability } from "./identity-capability.js";
 import type { CapabilityGrant } from "./identity-capability.js";
-import { isCurrentGeneration, isSessionUsableAt } from "./identity-session.js";
-import type { Credential, Principal, Session } from "./identity-session.js";
 
-/** Proof of possession presented alongside the command. */
-export interface PresentedProof {
-  readonly credentialId: string;
-  readonly commandId: string;
-  readonly requestDigest: string;
-  readonly clientKeyId: string;
-}
-
-/** What the injected verifier is asked to attest. Never self-asserted. */
-export interface ProofChallenge {
-  readonly commandId: string;
-  readonly requestDigest: string;
-  readonly credentialId: string;
-  readonly clientKeyId: string;
-}
-
-export type ReplayOutcome = "FRESH" | "REPLAYED";
+export type {
+  PresentedProof,
+  ProofChallenge,
+  ReplayOutcome,
+} from "./authenticate-session.js";
 
 export interface AuthenticateCommandInput {
   readonly envelope: RuntimeCommandEnvelope;
-  readonly principal: Principal | null;
-  readonly session: Session | null;
-  readonly credential: Credential | null;
+  readonly principal: import("./identity-session.js").Principal | null;
+  readonly session: import("./identity-session.js").Session | null;
+  readonly credential: import("./identity-session.js").Credential | null;
   readonly capabilities: readonly CapabilityGrant[] | null;
   readonly projectId: string;
   readonly transportId: string;
@@ -66,131 +59,68 @@ function deny(code: string, correlationId: string): AuthenticateCommandResult {
   });
 }
 
-function isNonEmpty(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-/**
- * True when every structural and cross-record binding holds.
- *
- * Runs before any freshness or scope check so a forged record that merely
- * looks stale cannot select a softer, more specific error.
- */
-function bindingsHold(input: AuthenticateCommandInput): boolean {
-  const { envelope, principal, session, credential, proof } = input;
-  if (principal === null || session === null || credential === null) return false;
-  if (proof === null || typeof proof !== "object") return false;
-  if (input.capabilities === null) return false;
-  if (!Number.isSafeInteger(input.now)) return false;
-  if (!isNonEmpty(input.projectId) || !isNonEmpty(input.transportId)) return false;
-  if (credential.sessionId !== session.sessionId) return false;
-  if (principal.principalId !== session.principalId) return false;
-  if (principal.profileRevisionId !== session.profileRevisionId) return false;
-  if (envelope.sessionCredential !== credential.credentialId) return false;
-  if (proof.credentialId !== credential.credentialId) return false;
-  if (proof.commandId !== envelope.commandId) return false;
-  if (proof.requestDigest !== envelope.requestDigest) return false;
-  if (proof.clientKeyId !== session.clientKeyId) return false;
-  return true;
-}
-
-/**
- * Authenticates a decoded command envelope against daemon-owned records.
- *
- * Failure precedence is total and deliberate:
- * AUTHENTICATION_FAILED -> SESSION_REPLAYED -> SESSION_EXPIRED ->
- * CAPABILITY_DENIED. Nothing partial is ever returned, and an unknown or
- * throwing seam always fails closed.
- */
-export function authenticateCommand(
+function authorizeCapability(
   input: AuthenticateCommandInput,
+  facts: AuthenticatedSessionFacts,
+  capabilities: readonly CapabilityGrant[],
+  correlationId: string,
 ): AuthenticateCommandResult {
-  const correlationId = input.envelope?.correlationId ?? "";
-  if (!bindingsHold(input)) {
-    return deny("AUTHENTICATION_FAILED", correlationId);
-  }
-  // Non-null after bindingsHold.
-  const principal = input.principal!;
-  const session = input.session!;
-  const credential = input.credential!;
-  const capabilities = input.capabilities!;
-
-  // `input.proof` is deliberately NOT read past bindingsHold: the challenge is
-  // rebuilt from the envelope and daemon records, so any extra field a caller
-  // attaches to the proof (such as `verified: true`) cannot reach the verifier.
-  const challenge: ProofChallenge = Object.freeze({
-    commandId: input.envelope.commandId,
-    requestDigest: input.envelope.requestDigest,
-    credentialId: credential.credentialId,
-    clientKeyId: session.clientKeyId,
-  });
-
-  // The verifier's answer is the only proof authority. A caller-supplied
-  // `verified` flag on the proof object is ignored by construction, since it
-  // is never read.
-  let verified: unknown;
-  try {
-    verified = input.verifyProof(challenge);
-  } catch {
-    return deny("AUTHENTICATION_FAILED", correlationId);
-  }
-  if (verified !== true) {
-    return deny("AUTHENTICATION_FAILED", correlationId);
-  }
-
-  let replay: unknown;
-  try {
-    replay = input.checkReplay(challenge);
-  } catch {
-    return deny("AUTHENTICATION_FAILED", correlationId);
-  }
-  if (replay !== "FRESH" && replay !== "REPLAYED") {
-    // UNKNOWN never authorizes.
-    return deny("AUTHENTICATION_FAILED", correlationId);
-  }
-
-  if (replay === "REPLAYED" || !isCurrentGeneration(session, credential)) {
-    return deny("SESSION_REPLAYED", correlationId);
-  }
-  if (session.status !== "ACTIVE") {
-    return deny("SESSION_REPLAYED", correlationId);
-  }
-  if (!isSessionUsableAt(session, input.now)) {
-    return deny("SESSION_EXPIRED", correlationId);
-  }
-  if (!session.transportIds.includes(input.transportId)) {
-    return deny("CAPABILITY_DENIED", correlationId);
-  }
-
   const grant = matchCapability(capabilities, {
-    principalId: principal.principalId,
-    projectId: input.projectId,
+    principalId: facts.principalId,
+    projectId: facts.projectId,
     commandKind: input.envelope.commandKind,
     targetAggregateId: input.envelope.targetAggregateId,
-    transportId: input.transportId,
+    transportId: facts.transportId,
   });
-  if (grant === null) {
-    return deny("CAPABILITY_DENIED", correlationId);
-  }
+  if (grant === null) return deny("CAPABILITY_DENIED", correlationId);
   if (grant.requiresRecentStepUp) {
     const at = input.recentStepUpAt;
     if (at === null || !Number.isSafeInteger(at) || at <= input.now - STEP_UP_WINDOW) {
       return deny("CAPABILITY_DENIED", correlationId);
     }
   }
-
   return Object.freeze({
     ok: true as const,
     context: Object.freeze({
-      principalId: principal.principalId,
-      principalKind: principal.kind,
-      profileRevisionId: principal.profileRevisionId,
-      sessionId: session.sessionId,
-      projectId: input.projectId,
+      principalId: facts.principalId,
+      principalKind: facts.principalKind,
+      profileRevisionId: facts.profileRevisionId,
+      sessionId: facts.sessionId,
+      projectId: facts.projectId,
       commandKind: input.envelope.commandKind,
       targetAggregateId: input.envelope.targetAggregateId,
-      transportId: input.transportId,
+      transportId: facts.transportId,
       capabilityId: grant.capabilityId,
     }),
   });
+}
+
+/**
+ * Authenticates a decoded command, then applies its exact capability grant.
+ * Session authentication never grants command or business authority.
+ */
+export function authenticateCommand(
+  input: AuthenticateCommandInput,
+): AuthenticateCommandResult {
+  const correlationId = input.envelope?.correlationId ?? "";
+  const envelope = input.envelope;
+  if (typeof envelope !== "object" || envelope === null || input.capabilities === null) {
+    return deny("AUTHENTICATION_FAILED", correlationId);
+  }
+  const authentication = authenticateSession({
+    principal: input.principal,
+    session: input.session,
+    credential: input.credential,
+    projectId: input.projectId,
+    transportId: input.transportId,
+    now: input.now,
+    requestId: envelope.commandId,
+    requestDigest: envelope.requestDigest,
+    presentedCredentialId: envelope.sessionCredential,
+    proof: input.proof,
+    verifyProof: input.verifyProof,
+    checkReplay: input.checkReplay,
+  });
+  if (!authentication.ok) return deny(authentication.code, correlationId);
+  return authorizeCapability(input, authentication.facts, input.capabilities, correlationId);
 }
