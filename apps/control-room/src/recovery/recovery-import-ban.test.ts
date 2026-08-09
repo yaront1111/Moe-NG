@@ -38,12 +38,18 @@ const EXPECTED_RECOVERY_FILES = Object.freeze([
   "recovery-import-ban.test.ts", "recovery-status.test.tsx", "recovery-status.tsx",
 ]);
 
+/**
+ * Each anchor carries its opening parenthesis on purpose: without it a bare
+ * `export function RecoveryExternalInventory` still matches a renamed
+ * `RecoveryExternalInventoryRenamed`, and a mutation drill proved the prefix form
+ * survives exactly that rename.
+ */
 const SCANNED_MODULES = Object.freeze([
-  [DOCTOR_DIR, "doctor-console.tsx", "export function DoctorConsole"],
-  [RECOVERY_DIR, "reconciliation-inventory.tsx", "export function ReconciliationInventory"],
-  [RECOVERY_DIR, "recovery-actions.tsx", "export function RecoveryActions"],
-  [RECOVERY_DIR, "recovery-external.tsx", "export function RecoveryExternalInventory"],
-  [RECOVERY_DIR, "recovery-status.tsx", "export function RecoveryStatus"],
+  [DOCTOR_DIR, "doctor-console.tsx", "export function DoctorConsole("],
+  [RECOVERY_DIR, "reconciliation-inventory.tsx", "export function ReconciliationInventory("],
+  [RECOVERY_DIR, "recovery-actions.tsx", "export function RecoveryActions("],
+  [RECOVERY_DIR, "recovery-external.tsx", "export function RecoveryExternalInventory("],
+  [RECOVERY_DIR, "recovery-status.tsx", "export function RecoveryStatus("],
 ] as const);
 
 const ALLOWED_IMPORTS = Object.freeze([

@@ -79,25 +79,24 @@ export interface RecoveryActionsProps {
   readonly testId: string;
 }
 
+function identified(value: string | undefined): boolean {
+  return value !== undefined && value.trim() !== "";
+}
+
 function stated(value: string | undefined): string {
-  return value !== undefined && value.trim() !== "" ? value : UNKNOWN_FACT_VALUE;
+  return identified(value) && value !== undefined ? value : UNKNOWN_FACT_VALUE;
 }
 
 function slug(commandKind: string, qualifier: string | undefined): string {
   const dashed = commandKind.replace(/[._]/gu, "-");
-  return qualifier === undefined || qualifier.trim() === "" ? dashed : `${dashed}.${qualifier}`;
-}
-
-function identified(value: string): boolean {
-  return typeof value === "string" && value.trim() !== "";
+  return identified(qualifier) ? `${dashed}.${qualifier ?? ""}` : dashed;
 }
 
 /**
  * Exactly one current command, or none. Two matches are ambiguity, not a menu: acting
  * on a guess about which one the operator meant is the failure this returns null for.
- *
- * A blank command ID or target is not an identity, so it can never match — otherwise
- * two records the payload failed to name would join each other.
+ * A blank ID or target is not an identity, so it never matches — otherwise two records
+ * the payload failed to name would join each other.
  */
 function resolve(
   commands: readonly NextAllowedCommand[],
@@ -189,9 +188,7 @@ function Feedback(props: { readonly feedback: RecoveryFeedback }): JSX.Element {
     >
       <span data-testid="cr.recovery.feedback.message">{stated(feedback.message)}</span>
       {feedback.state === "PENDING" && feedback.overTwoSeconds === true ? (
-        <span data-testid="cr.recovery.feedback.stillworking">
-          {RECOVERY_STILL_WORKING_COPY}
-        </span>
+        <span data-testid="cr.recovery.feedback.stillworking">{RECOVERY_STILL_WORKING_COPY}</span>
       ) : null}
       {refused ? (
         <>
@@ -203,21 +200,18 @@ function Feedback(props: { readonly feedback: RecoveryFeedback }): JSX.Element {
   );
 }
 
-interface ResolvedAction {
-  readonly command: NextAllowedCommand;
-  readonly presentation: RecoveryCommandPresentation;
-}
+type ResolvedAction = {
+  command: NextAllowedCommand; presentation: RecoveryCommandPresentation;
+};
 
 export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
   const {
     authorityMode, disabledCopy, feedback, onRequestConfirmation, presentations, testId,
   } = props;
   const { actionsEnabled, commands } = useGating();
-  /*
-   * `stale` is deliberately not read. A lagging view still shows commands the daemon
-   * returned, and those validate against current state on the daemon (§8.6); blanket-
-   * blocking on lag would refuse work the daemon just authorised.
-   */
+  // `stale` is deliberately not read: a lagging view still shows commands the daemon
+  // returned, and those revalidate on the daemon (§8.6); blanket-blocking on lag would
+  // refuse work the daemon just authorised.
   const enabled = actionsEnabled && authorityMode === LIVE_AUTHORITY;
 
   const resolved: ResolvedAction[] = [];
@@ -237,19 +231,13 @@ export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
   return (
     <div data-authority-mode={authorityMode} data-recovery-actions={testId} data-testid={testId}>
       {resolved.map((entry, index) => (
-        <CommandAction
-          command={entry.command}
-          enabled={enabled}
-          key={`${entry.command.commandId}#${index}`}
-          onRequestConfirmation={onRequestConfirmation}
-          presentation={entry.presentation}
-        />
+        <CommandAction command={entry.command} enabled={enabled}
+          key={`${entry.command.commandId}#${index}`} presentation={entry.presentation}
+          onRequestConfirmation={onRequestConfirmation} />
       ))}
       {unavailable.map((presentation, index) => (
-        <UnavailableAction
-          key={`${slug(presentation.commandKind, presentation.qualifier)}#${index}`}
-          presentation={presentation}
-        />
+        <UnavailableAction presentation={presentation}
+          key={`${slug(presentation.commandKind, presentation.qualifier)}#${index}`} />
       ))}
       {!enabled && resolved.length > 0 ? (
         <p data-testid="cr.recovery.disabledcopy">{stated(disabledCopy)}</p>
