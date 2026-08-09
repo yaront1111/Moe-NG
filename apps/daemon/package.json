@@ -9,6 +9,7 @@
   "dependencies": {
     "@moe/contracts": "workspace:*",
     "@moe/core": "workspace:*",
+    "@moe/review": "workspace:*",
     "@moe/runner": "workspace:*",
     "@moe/scheduler": "workspace:*",
     "@moe/store": "workspace:*"
