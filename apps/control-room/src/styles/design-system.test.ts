@@ -111,6 +111,8 @@ describe("Quiet Orchestration Ledger design system", () => {
     expect(dossier).toContain(".cr-dossier-source-list summary::after");
     expect(dossier).toMatch(/\.cr-dossier-decomposition\s*\{[^}]*grid-column:\s*1;/su);
     expect(dossier).toMatch(/\.cr-dossier-sources\s*\{[^}]*grid-column:\s*2;/su);
+    expect(dossier).toContain("repeat(auto-fit, minmax(min(100%, 11.75rem), 1fr))");
+    expect(dossier).toMatch(/\.cr-dossier-candidate dd\s*\{[^}]*overflow-wrap:\s*anywhere;/su);
     expect(dossier).toContain("@media (max-width: 959px)");
     expect(dossier).not.toMatch(/display\s*:\s*none|text-overflow\s*:\s*ellipsis/u);
   });

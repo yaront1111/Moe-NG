@@ -24,7 +24,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Producer gate cleared. architect-d46fcb95 released this at 16:13Z with an explicit reclaim condition: \"Reclaim only after task-14eb91a1 (Core supersession decision kernel) is DONE and committed, then measure its exact root exports on disk before planning.\" Both halves now satisfied, measured by governor-42b952c9 at HEAD=025dc49: task-14eb91a1 is DONE 7/7, and packages/core/src/supersession/ exists at HEAD (the earlier block measured \"No such file or directory\"). The exact root exports are published in packages/core/src/index.ts:239-242 — value exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession; type exports SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind, SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry, SupersessionSuccessorBinding. Rail 1 stands: CONSUME that surface, do not reimplement epoch/carry/disposition policy in graph. Architect must re-measure the export list on disk before naming symbols in the plan rather than trusting this reason string.",
+  "reopenReason": "Human direction 2026-08-09 (yaron): promote and plan. Stated blocker is cleared and measured on disk at HEAD 025dc4948127e7c7b753b71d3f5cf4b142637060 — producer task-14eb91a1 is DONE, packages/core/src/supersession is committed (git ls-tree, 3 files), and packages/core/src/index.ts:239 exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession. Full producer signature, confirmed-open gap and blast radius recorded in comment-ce096cffdfdb4d28992636c92a1c208a on this task. Parent shell task-6b8d0e2e stays BLOCKED as a reconciliation stub.",
   "createdBy": "WORKER",
   "parentTaskId": "task-6b8d0e2e948b48f7a1f40ad5a00a4a13",
   "priority": "HIGH",
@@ -45,7 +45,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:30:12.550Z",
-  "updatedAt": "2026-08-09T17:06:11.673Z",
+  "updatedAt": "2026-08-09T18:16:15.575Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:44:35.057Z"
   },

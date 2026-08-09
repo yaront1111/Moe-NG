@@ -83,7 +83,17 @@
         "scripts/release/supply-chain.mjs",
         "tests/integration/release-supply-chain.test.mjs"
       ],
-      "startedAt": "2026-08-09T15:47:29.312Z"
+      "startedAt": "2026-08-09T15:47:29.312Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "Wire the reproducible command without creating a registry publication surface, and VERIFY the wiring statically. Do not run the actual release CLI in this step.\n\nMEASURE BEFORE YOU WRITE. Most of this step already landed and was swept into foreign commit 71af97c (\"chore(workspace): release gate scripts, fault/security lanes, manifest hygiene\"). Confirm each item at HEAD yourself with `git show HEAD:<path>` before touching bytes; re-doing landed work is a silent duplicate. As measured by governor-42b952c9 at HEAD 025dc49: package.json line 32 has devDependency @cyclonedx/cdxgen 12.8.2; pnpm-lock.yaml carries 57 matching cdxgen entries, so package+lock are COHERENT at HEAD; scripts test:integration, typecheck:release, typecheck:packaging, release:evidence and verify:release all exist; both .mjs production modules are checked with --allowJs --checkJs by typecheck:release; test:integration runs the .mjs suite through a `node --test` leg, which resolves comment-295ee5 without editing the unowned vitest.config.ts — do NOT add the .mjs glob to vitest.config.ts, that config is not an owned path.\n\nREQUIRED THIS STEP:\n1. Confirm the five owned paths exist at HEAD and their working-tree bytes match. `git status --porcelain` over them was EMPTY at amendment time.\n2. `pnpm typecheck:release` exit 0.\n3. Focused/static tests only: the .mjs suite via `node --test`, plus the --head config and argument-shape cases. These were 30/31 with the single failure being the actual-script case now moved out of this step.\n4. Confirm cdxgen is invoked from the locked local package via Node, never `pnpm dlx` and never a Windows .cmd/.exe shim. Already satisfied at HEAD: supply-chain.mjs resolves corepack `pnpm.js` under the Node installation, rejects any entry escaping the Node root or not named pnpm.js, and spawns through `process.execPath`. This is the comment-86cea606 fix; verify it, do not re-apply it.\n5. Do not change private:true, and do not add files/publishConfig/bin.\n\nMOVED OUT OF THIS STEP — the amendment's whole point. The positive run of the actual `pnpm release:evidence` package script, and its assertions on positive container/report count, exact source SHA, RECORDED operation, UNKNOWN release verdict and no publish action, now run ONLY at step 7 against the frozen implementation SHA. Step 7 already requires exactly that, so nothing is lost. Rationale: the CLI archives exact reachable HEAD by design, so a positive run demanded before the step-5 freeze can only be made green by faking provenance — committing early outside the freeze step, mixing uncommitted bytes into HEAD evidence, substituting a non-HEAD tree while claiming HEAD, or a test-only pipeline. All four are forbidden by task rail 3 and epic rail 4. Asserting a HEAD-archiving script in a shared worktree where HEAD moves under you is fragile even when it happens to pass.\n\nSHARED-TREE RAIL, BINDING. Your bytes were captured by a foreign whole-tree commit. That is a known hazard, not a defect you caused and not one you may repair. Never amend 71af97c, never reset, never stash, never create an empty commit to claim the work. If step 5 finds nothing left to freeze, satisfy it the way its own text already provides for: record the merge-base-to-HEAD diff over the five owned paths and the committed blob hashes, and state that the commit carrying your bytes belongs to another task.",
+          "reason": "Human-approved amendment (governor-42b952c9, 2026-08-09) resolving the step-4/step-5 ordering defect worker-b6bbb60c reported in comment-81c563fe. The defect was real: step 4 demanded a positive run of the actual release CLI, but step 5 was the first commit the plan permitted, and the CLI archives exact HEAD — so the run refused at the frozen-install layer with RELEASE_SUPPLY_CHAIN_REFUSED / FROZEN_INSTALL_FAILED, root cause ERR_PNPM_OUTDATED_LOCKFILE. The worker was right to block rather than fake it. Fix is the narrower of the two options they themselves proposed: the positive actual-script assertion moves to step 7, which already requires that exact run at the frozen SHA. Steps 1-3 are COMPLETE and untouched. SEPARATELY, the original trigger has since dissolved and the step is now largely satisfied on disk: foreign sweep commit 71af97c captured this task's package.json and pnpm-lock.yaml, and both now carry cdxgen 12.8.2 coherently at HEAD 025dc49, so the OUTDATED_LOCKFILE cause is gone. The step text now says measure-before-writing so the next claimer verifies rather than rebuilds.",
+          "amendedBy": "governor-42b952c9",
+          "amendedAt": "2026-08-09T18:17:37.796Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-5",
@@ -114,12 +124,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-97d6df26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:34Z carrying an explicit HUMAN RULING that resolves both of this task's blockers. worker-5981deec's block was correct on the facts; the ruling changes what the task certifies, it does not wave the facts away.\n\nRULING 1 — WHAT IS RELEASED. This gate certifies the DISTRIBUTION CONTAINER produced by tools/packaging/distribution-build.ts. It does NOT certify an npm-registry publish. All 16 workspace packages remain private:true and that is now a DECISION, not a gap. worker-5981deec's measurement stands and was the right thing to block on: \"every workspace package is private:true and no publish configuration exists\", so a verifier authored against a registry publish would have had no subject.\n\nTHE SUBJECT IS REAL, verified by me on disk at 14:33Z rather than assumed:\n- packages/contracts/src/distribution/: distribution-contract.ts, distribution-parser.ts, distribution-verifier.ts, all with .js bridges, plus distribution-manifest.test.ts\n- tools/packaging/distribution-build.ts and distribution-startup.ts\n- tests/integration/distribution/distribution-packaging.test.ts\nAll landed by task-739879d0 (DONE, QA-approved by base-ref diff with three mutation drills independently re-run). So there IS an artifact to reproduce, sign, verify and gate — it is a signed distribution container, not a published package.\n\nRULING 2 — SUPPORTED-OS SCOPE. \"Supported OS conformance\" for this gate means WINDOWS ONLY for now. task-e87a7353 (Linux) and task-e94b2055 (macOS) were deferred to BACKLOG at 14:32Z by human direction because process.platform is win32 x64 and their DoD 4 requires live off-host observation that Clause 2 forbids substituting. They are not blockers of this task any more. Do NOT plan Linux or macOS evidence here; record those platforms as typed UNKNOWN with the deferred task ids named, per epic rail 4, rather than asserting or omitting them.\n\nCLAUSE 2 STILL BINDS. Certify only what exists. If a DoD item names a capability absent from the list above, it stays UNKNOWN with the missing symbol named — do not narrow the DoD and do not certify a fixture.\n\nONE MEASURED GAP THE ARCHITECT SHOULD CHECK FIRST: packages/contracts/src/index.ts does NOT export the distribution surface. tools/packaging consumes it by direct path today. If this gate needs to drive the verifier through the package root, that is a Clause 1 consumer-edge gap and it belongs in a narrow follow-on publish task — the same pattern as task-6054520bc and task-f5d1dae629 — not silently inside this one.\n\nSteps 1 of 7 are already complete from the prior attempt, and worker-5981deec recorded a full prerequisite/freeze audit in the step-1 note plus comment-81bfe196. Read the handoff before restarting; do not redo that audit.",
+  "reopenReason": "Unblocked by governor-42b952c9 with the human's explicit approval, after amending step-4 (amend-1) to resolve the ordering defect worker-b6bbb60c reported in comment-81c563fe. Two independent reasons, both measured at HEAD 025dc49, not assumed. (1) PLAN DEFECT FIXED: step 4 demanded a positive run of the actual release CLI before step 5 was allowed to commit; since the CLI archives exact reachable HEAD, that run could only be made green by faking provenance. The positive actual-script assertion now runs at step 7 only, against the frozen SHA — step 7 already required exactly that, so no coverage is lost. (2) THE ORIGINAL TRIGGER IS ALSO GONE: the ERR_PNPM_OUTDATED_LOCKFILE cause was HEAD package.json carrying cdxgen while HEAD pnpm-lock.yaml did not. HEAD has advanced five commits since the worker measured; foreign whole-tree sweep 71af97c captured this task's bytes, and package.json line 32 plus 57 lockfile entries are now COHERENT. Steps 1-3 stay COMPLETE. Do not redo them and do not redo the step-1 prerequisite audit. All five owned paths verified present at HEAD by git rev-parse, and the comment-86cea606 Corepack fix is committed. Read moe.get_handoff_history and the amended step-4 text before writing any bytes.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -154,11 +164,17 @@
       "author": "worker-b6bbb60c",
       "content": "Post-block WIP disclosure before stopping: the direct pnpm.exe violation noted in comment-7c5e228e was corrected TDD-first before I observed the BLOCKED transition. Added a focused source-boundary case (RED on direct executable, GREEN after fix); supply-chain now validates Corepack pnpm.js under the Node installation and invokes it via process.execPath. `pnpm typecheck:release` exit 0; supply-chain.mjs exactly 250 physical lines. No commit/freeze or further step progression was attempted after learning the task was BLOCKED. Current correct partial bytes are preserved for the amended resumption.",
       "timestamp": "2026-08-09T16:08:55.847Z"
+    },
+    {
+      "id": "comment-fe1462f8c18e45f0b6512118db905120",
+      "author": "governor-42b952c9",
+      "content": "GOVERNOR MEASUREMENT at HEAD 025dc49, taken 2026-08-09T17:0xZ. This supersedes the disk facts in comment-81c563fe and comment-7c5e228e — those were correct at HEAD 3ec53d7, which is now five commits behind. Verify it yourself; do not trust this paste.\n\nFOREIGN SWEEP. Commit 71af97c \"chore(workspace): release gate scripts, fault/security lanes, manifest hygiene\" captured this task's bytes in a whole-tree commit. Known hazard under the global rail, not your defect and not yours to repair. Do not amend it, reset, stash, or file an empty claiming commit.\n\nALL FIVE OWNED PATHS ARE AT HEAD (git rev-parse --verify HEAD:<path>, all resolved):\n  package.json, pnpm-lock.yaml, scripts/release/release-subject.mjs,\n  scripts/release/supply-chain.mjs, tests/integration/release-supply-chain.test.mjs\n`git status --porcelain` over all five: EMPTY. Note the trap — an empty owned-path diff means \"swept elsewhere\" OR \"never committed\". I resolved it the only way that distinguishes them, by rev-parsing each path at HEAD, and every one exists.\n\nTHE BLOCK CAUSE IS DEAD. package.json:32 has @cyclonedx/cdxgen 12.8.2 and pnpm-lock.yaml carries 57 matching cdxgen entries. Package and lock are COHERENT at HEAD, so the ERR_PNPM_OUTDATED_LOCKFILE that produced RELEASE_SUPPLY_CHAIN_REFUSED / FROZEN_INSTALL_FAILED no longer has its cause.\n\nYOUR CORePACK FIX LANDED. supply-chain.mjs at HEAD resolves corepack pnpm.js under the Node installation, rejects any entry escaping the Node root or not named pnpm.js, and spawns via process.execPath. No pnpm.exe call survives. The file is exactly 250 physical lines — at the per-file target, compliant. Verify, do not re-apply.\n\ncomment-295ee5 IS RESOLVED and needs no scope amendment. test:integration reaches your .mjs suite through a `node --test tests/integration/release-supply-chain.test.mjs` leg. vitest.config.ts was never edited and must not be — it is not an owned path, and its include is still only packages/**/*.test.ts and tests/**/*.test.ts.\n\nWHAT I DID NOT DO: I did not run `pnpm release:evidence`. Task rail 3 forbids generating a confirmatory corpus before the implementation commit is frozen as specified, and that run is step 7's job at the frozen SHA. Coherent package+lock at HEAD is a necessary condition for it, not proof that it passes. Expect to do real work at step 7.",
+      "timestamp": "2026-08-09T18:18:07.459Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.170Z",
-  "updatedAt": "2026-08-09T17:07:05.768Z",
+  "updatedAt": "2026-08-09T18:18:07.459Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-f39f0c46",
@@ -166,7 +182,8 @@
     "architect-db2146e3",
     "worker-4addc779",
     "worker-b6bbb60c",
-    "governor-42b952c9"
+    "governor-42b952c9",
+    "worker-97d6df26"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T11:40:28.540Z",
@@ -205,10 +222,10 @@
   },
   "planApprovedAt": "2026-08-09T15:08:19.814Z",
   "workStartedAt": "2026-08-09T11:52:00.552Z",
-  "blockedReason": "Approved step order conflicts with exact-HEAD provenance. Step 4 requires a positive actual package-script run, but step 5 is the first permitted implementation commit. The real CLI archives HEAD; current HEAD lacks the new cdxgen package/lock bytes, so frozen install correctly refuses with FROZEN_INSTALL_FAILED / ERR_PNPM_OUTDATED_LOCKFILE. Pre-freeze green would require false provenance, a test knob, temporary non-HEAD subject, or an early commit outside the freeze step. See comment-81c563fefdfa42099f366ac2088492d2.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-09T15:56:35.813Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Steps 1-3 completed. Step 4 partial WIP is preserved in package.json, pnpm-lock.yaml, scripts/release/release-subject.mjs, scripts/release/supply-chain.mjs, and tests/integration/release-supply-chain.test.mjs. Focused release typecheck passes; validated Corepack pnpm.js invocation was added TDD-first; supply-chain.mjs is 250 physical lines. Full details are in task comments and Serena memory task-task-9449ce65fae544ef9809691ec079f599-handoff.",

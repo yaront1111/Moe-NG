@@ -20,9 +20,86 @@
     "Do not assert a global test COUNT as a completion signal. This is a shared worktree with other agents adding tests; a total-count assertion is not a property of this task and will drift.",
     "Keep each file below 400 lines, target 250. Explicit owned paths only; no git add -A."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-705f0380",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE BEFORE WRITING ANYTHING. The description and the governor's unblock note are BOTH stale; treat every count in them as unverified. Run these and record the output — if any number differs from the plan, STOP and report_blocked rather than adapting silently.\n\n  grep -rn -E '@keyframes|transition:|animation:|scroll-behavior:' apps/control-room/src --include='*.css'\n  grep -rn 'prefers-reduced-motion' apps/control-room/src --include='*.css'\n  grep -rn -E 'requestAnimationFrame|\\.animate\\(|framer-motion|react-spring' apps/control-room/src --include='*.ts' --include='*.tsx' | grep -v '\\.test\\.'\n\nEXPECTED (measured 2026-08-09): 13 .css files under src. FIVE real motion sites: styles/chrome.css:213 (@keyframes cr-shell-enter) and :219 (animation), styles/shell.css:76 and :110 (transition), styles/surfaces.css:13 (transition), shell/shell-layout.css:35 and :58 (transition). FOUR same-file reduced-motion blocks: approvals/approval-layout.css:34, board/board-layout.css:68, shell/shell-layout.css:131, styles/responsive.css:155. ZERO requestAnimationFrame / .animate( / motion-library imports.\n\nchrome.css, shell.css and surfaces.css carry motion with NO same-file gate. That is CORRECT, not a defect: styles/responsive.css:155 holds a global `*, *::before, *::after` reduced-motion reset using !important, and it is @imported at styles/control-room.css:9. Do NOT add per-file reduced-motion blocks — taskRail 2 forbids production edits and the global reset already neutralises them.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/styles/responsive.css",
+        "apps/control-room/src/styles/control-room.css"
+      ],
+      "startedAt": "2026-08-09T18:19:06.696Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DoD 1 + 2 — create the motion guard as a SOURCE-TEXT PIN (taskRail 5: jsdom 30 has no matchMedia and document.styleSheets.length is 0, so no assertion may be driven by a real media-query match; label the file as a source-text pin in a header comment).\n\nDiscover .css files by walking apps/control-room/src with node:fs readdirSync recursive, resolved from fileURLToPath(import.meta.url) — NOT a hand-written file list, which rots as stylesheets are added. Guard against the scan root narrowing: assert the discovered set contains the six named stylesheets (responsive, control-room, chrome, shell, surfaces, shell-layout) AND that the count is >= 13.\n\nAssert, in this order:\n1. Discovered .css set is NON-EMPTY and contains those six names.\n2. The motion sweep found a NON-ZERO number of motion declarations (epic rail 6 — a sweep matching nothing must not pass). Count declarations matching /@keyframes|(^|[;{\\s])(transition|animation)\\s*:/ whose value is not `none`; assert >= 5.\n3. styles/responsive.css contains '@media (prefers-reduced-motion: reduce)', a universal selector matching /\\*,\\s*\\*::before,\\s*\\*::after/u, and ALL FOUR neutralising declarations verbatim: 'animation-duration: 0.01ms !important', 'animation-iteration-count: 1 !important', 'transition-duration: 0.01ms !important', 'scroll-behavior: auto !important'.\n4. The reset is actually LOADED, not dead code: styles/control-room.css contains '@import \"./responsive.css\"'.\n5. No stylesheet anywhere contains 'scroll-behavior: smooth'.\n6. Pin the three EXISTING same-file blocks so they cannot be hollowed out: board/board-layout.css:68 block still contains 'scroll-behavior: auto', 'animation: none', 'transition: none'; same for approvals/approval-layout.css and shell/shell-layout.css.\n\nMUST NOT ban scroll-snap-type or scroll-snap-align — board-layout.css uses both for spec section 4.16 and banning them fights the narrow-mode tasks. MUST NOT ban motion outright: the governor's note is explicit that a diff satisfying this by BANNING motion is a rejection. The property is that motion is GATED, not absent.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/motion-inventory.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/motion-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "DoD 1, JS half — extend motion-inventory.test.ts to ban JS-driven motion, which the CSS global reset provably CANNOT neutralise (a reset on animation-duration/transition-duration does not reach requestAnimationFrame loops or Web Animations API calls). This is the arm that makes the guard load-bearing rather than decorative.\n\nSweep .ts/.tsx under apps/control-room/src EXCLUDING *.test.* and *fixtures*, and assert ZERO matches for: requestAnimationFrame, .animate(, 'framer-motion', 'react-spring'.\n\nDO NOT ban setTimeout or setInterval. Measured: live/live-board-feed.ts:98 and live/live-event-feed.ts:100 both use setTimeout, and they are feed reconnect/poll BACKOFF timers, not animation. A blanket timer ban would go red on correct production code and would have to be weakened — the exact guard-rot failure epic rail 6 exists to prevent. Record that exclusion and its reason in a comment.\n\nAssert the scanned .ts/.tsx file set is NON-EMPTY before asserting zero matches, so a broken scan root cannot pass as a clean sweep.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/motion-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DoD 3 — assert the non-chip half of spec section 11.1 bullet 1 against REAL renders, not fragments. Follow the established pattern in a11y/ui-wide-acceptance.test.tsx exactly: import CORE_SURFACE_FIXTURES from './ui-wide-core-fixtures.js' and OPS_SURFACE_FIXTURES from './ui-wide-ops-fixtures.js' (15 surfaces total), render each via its .render() with @testing-library/react, set IS_REACT_ACT_ENVIRONMENT in beforeAll and cleanup in afterEach.\n\nFor every rendered surface, sweep board card overlays, badges and indicators — elements whose data-testid starts with 'cr.board.', plus 'cr.fact.' and 'cr.chip.' descendants — and assert each conveys meaning in TEXT or GLYPH: non-empty trimmed textContent, or a non-empty aria-label / title. An element whose only differentiator is a data-tone / data-truth-class attribute with no text is a violation.\n\nEpic rail 6 compliance: assert the swept element COUNT is greater than zero BEFORE asserting zero violations — a sweep that silently matches nothing must not pass. Do not assert a global or total test count (taskRail 6: shared worktree, counts drift).\n\nReport each violation as a frozen { code, testId } object mirroring the AuditViolation shape in surface-audit.ts, with the stable code 'INDICATOR_COLOUR_ONLY', and assert on the full violation array so the failure message names the offending test id.\n\nTaskRail 4: CONSUME auditTruthClassMonochrome from './surface-audit.js' for the truth-chip half rather than reimplementing it; this new sweep covers only the NON-chip half. Locate every imported symbol by NAME, never by line number. surface-audit.ts has no barrel/index — import relative with the .js extension, matching the existing files.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/colour-independence.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/a11y/colour-independence.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD 4 — tighten the banner live-region assertion. apps/control-room/src/shell/gating-keyboard.test.tsx:102 currently reads `expect([\"status\", \"alert\"]).toContain(banner.getAttribute(\"role\"))`, which accepts an ASSERTIVE role where spec section 11.1 line 687 requires banners to announce POLITELY.\n\nReplace it with a polite-only assertion: the banner resolves to role=\"status\" OR aria-live=\"polite\", and explicitly NOT role=\"alert\" and NOT aria-live=\"assertive\".\n\nCORRECTION TO THE TASK DESCRIPTION — there are FOUR banner ids on disk, not three. cr.banner.circuitbreaker EXISTS as a production component at shell/circuit-breaker-banner.tsx:66 (already aria-live=\"polite\" role=\"status\"); the description and taskRail 3 both claim it does not exist and are stale. The full measured set, all already polite, all requiring ZERO production change:\n  cr.banner.disconnected  shell/shell-chrome.tsx:16   role=\"status\"\n  cr.banner.lag           shell/shell-chrome.tsx:23   role=\"status\"\n  cr.banner.invalidated   approvals/approval-detail-plan.tsx:188  aria-live=\"polite\"\n  cr.banner.circuitbreaker shell/circuit-breaker-banner.tsx:66  aria-live=\"polite\" role=\"status\"\n\nOnly cr.banner.disconnected and cr.banner.lag are reachable from gating-keyboard.test.tsx's own render; assert those two there. Cover invalidated and circuitbreaker in the new colour-independence/a11y test file via their own surfaces rather than widening gating-keyboard.test.tsx's scope. taskRail 3 still binds absolutely: cr.banner.revision and cr.graph.refusal do NOT exist — never create a stub to give a sweep something to find.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD 5 — record the not-applicable items WITH their reasons, as comments in motion-inventory.test.ts. Never as a passing assertion over zero cases, and never as it.skip (a skipped test reads as green while proving nothing).\n\nTWO OF THE THREE STATED REASONS ARE STALE. Record the measured truth, not the description's claim:\n\n(a) WCAG AA CONTRAST — the description says 'no colour value exists anywhere to measure'. FALSE. Measured: 63 hex/rgb/hsl/oklch literals across six stylesheets (tokens.css 39, chrome.css 8, shell.css 6, surfaces.css 5, inspector.css 4, responsive.css 1). The correct record is ALREADY COVERED ELSEWHERE: styles/design-system.test.ts:70 already asserts contrast(\"#ffffff\", tone) >= 4.5 over the tone set. Do NOT write a duplicate contrast test, and do NOT edit design-system.test.ts — styles/ is not an owned path.\n\n(b) The graph half of bullet 1 (edges use pattern + arrowheads, critical path uses weight + pattern) — genuinely not applicable: no graph surface exists. Note that criticalPath already renders as a text-labelled fact via board/board-card.tsx (CARD_FACTS entry [\"criticalpath\", \"Critical path\", ...] through FactRow), so it is not colour-only today.\n\n(c) cr.banner.revision and cr.graph.refusal do not exist — correct, keep as N/A. cr.banner.circuitbreaker DOES exist and moves to DoD 4 coverage (see step 5).\n\nSo the N/A record cannot silently rot, add ONE real assertion: sweep the production .tsx sources and assert 'cr.banner.revision' and 'cr.graph.refusal' still appear ZERO times. If someone later ships them, this record goes red instead of quietly becoming false.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/motion-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 6, mutation verification — a failure-path guard is not proven until it has been seen RED. Epic rail 6 requires verifying by mutating the production surface. Perform all four drills, one at a time, reverting fully after each, and record the exact failing assertion message for each:\n\n1. Append 'transition: opacity 200ms ease;' to a rule in styles/base.css (a stylesheet with no motion today) — the non-zero motion sweep still passes, so confirm instead that DELETING the 'transition-duration: 0.01ms !important' line from styles/responsive.css turns the motion guard RED.\n2. Delete the '@import \"./responsive.css\"' line from styles/control-room.css — the loaded-not-dead-code arm must go RED.\n3. Add 'const id = requestAnimationFrame(() => {});' to a production .tsx — the JS-motion arm must go RED.\n4. Strip the text label from one board card fact (blank the label string on a CARD_FACTS entry in board/board-card.tsx) — colour-independence must go RED naming that test id via INDICATOR_COLOUR_ONLY.\n\nWARNING (known hazard on this board): another agent's task-completion hook can whole-tree commit your mutation while it is on disk. After each revert verify with `git diff -- <mutated file>` AND `git status --porcelain <mutated file>`; a clean diff alone is not proof the mutation is gone if a foreign commit captured it. Confirm the guard is GREEN again before starting the next drill. Never leave a mutation in the tree.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/styles/responsive.css",
+        "apps/control-room/src/styles/control-room.css",
+        "apps/control-room/src/board/board-card.tsx"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification and adversarial self-review. Run the single named gate and use its FRESH output as complete_task evidence:\n\n  pnpm --filter @moe/control-room test\n\nFor fast TDD iteration on one file only, use: pnpm --filter @moe/control-room exec vitest run --root . --config package.json src/a11y/motion-inventory.test.ts — and confirm the Test Files count actually shrank, so you know the narrowing worked.\n\nPath-attributed baseline (project rail): record repo-wide gate failures at the merge-base and at HEAD; completion needs the (HEAD minus merge-base) failing-path set, intersected with this task's owned paths, to be EMPTY. This is a shared worktree — foreign red in packages this task does not own is disclosed verbatim with exact failing lines, never hidden and never fabricated green. Foreign red inside @moe/control-room itself is a BLOCK, not a disclosure.\n\nAdversarial review before complete_task:\n- Does any guard pass when it matches nothing? Re-check every non-empty/non-zero precondition actually fires.\n- Did the file-discovery walk silently narrow (a moved file, a changed scan root)? The named-stylesheet assertion should catch it — confirm it would.\n- Did I add production code? I must not have. `git diff --stat` over the owned paths should show ONLY: a11y/motion-inventory.test.ts (new), a11y/colour-independence.test.tsx (new), shell/gating-keyboard.test.tsx (modified). Any .css or non-test .tsx in that diff means a mutation drill was not reverted.\n- Keep each new file under 400 lines, target 250 — measure with `grep -c ''` (PowerShell Measure-Object -Line undercounts by skipping blank lines).\n- Stage and commit by EXPLICIT pathspec over owned paths only. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/a11y/motion-inventory.test.ts",
+        "apps/control-room/src/a11y/colour-independence.test.tsx",
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a87e980a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -34,9 +111,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:00:58.203Z",
-  "updatedAt": "2026-08-09T17:03:42.776Z",
+  "updatedAt": "2026-08-09T18:19:06.696Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T15:10:58.683Z"
+    "firstClaimAt": "2026-08-09T15:10:58.683Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -54,6 +133,37 @@
     }
   ],
   "contextFetchedBy": [
-    "architect-705f0380"
-  ]
+    "architect-705f0380",
+    "worker-a87e980a"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T18:18:31.814Z",
+  "planningNotes": {
+    "approachesConsidered": "THE CENTRAL DECISION — how to express 'motion is gated'. The governor's unblock note corrected DoD item 1 to require every motion declaration be overridden to none within a @media (prefers-reduced-motion: reduce) block IN THE SAME STYLESHEET. That correction is itself stale: it accounts for shell-layout.css but not for styles/chrome.css, styles/shell.css or styles/surfaces.css, which carry motion with no same-file gate, nor for the global reset that covers them.\n\nThree options were put to the human operator, who chose the global-reset reading:\n(A) CHOSEN — assert the global reset at styles/responsive.css:155 exists, uses a universal selector, carries all four neutralising !important declarations, and is actually @imported at control-room.css:9; assert the motion sweep is non-zero; and separately ban JS-driven motion, which the CSS reset cannot reach. Zero production edits. Honours taskRail 2 and the governor's stated intent ('the guard must prove motion is gated, not absent').\n(B) REJECTED — literal per-stylesheet gating. Requires adding redundant reduced-motion blocks to chrome.css, shell.css and surfaces.css. Those are production CSS edits that taskRail 2 flatly forbids, and they would duplicate a reset that already wins on !important.\n(C) REJECTED — block and return to the governor for a second correction. The task was already blocked once and unblocked; a further round-trip buys nothing the measurement has not already settled, and the human resolved the conflict directly.\n\nFOR QA: the governor's note says a diff satisfying item 1 by BANNING motion, or by deleting/weakening the guard, is a rejection. This plan bans neither — it proves gating. It departs from the governor's literal 'same stylesheet' wording ONLY because that wording cannot be satisfied without the production edits taskRail 2 prohibits. Departure was authorised by the human operator in the planning REPL.",
+    "codebaseInsights": "ALL COUNTS MEASURED ON DISK 2026-08-09; every one of them contradicts the task description, which is a pre-split snapshot.\n\nSTYLESHEETS — `find apps/control-room/src -name '*.css'` returns THIRTEEN files, not the one 77-line file the description claims: approvals/approval-layout.css, board/board-layout.css, shell/shell-layout.css, and styles/{base,chrome,control-room,inspector,preview-board,responsive,shell,surfaces,tokens,workspace}.css.\n\nMOTION EXISTS — the description's 'zero @keyframes, zero transform, zero motion' inventory is FALSE. `grep -rn -E '@keyframes|transition:|animation:|scroll-behavior:'` finds: styles/chrome.css:213 @keyframes cr-shell-enter and :219 animation: cr-shell-enter 240ms; styles/shell.css:76 and :110 transition; styles/surfaces.css:13 transition; shell/shell-layout.css:35 and :58 transition.\n\nTHE GATE IS GLOBAL, NOT PER-FILE — styles/responsive.css:155 opens @media (prefers-reduced-motion: reduce) over `*, *::before, *::after` with animation-duration: 0.01ms !important, animation-iteration-count: 1 !important, scroll-behavior: auto !important, transition-duration: 0.01ms !important. styles/control-room.css @imports shell.css (3), chrome.css (4), surfaces.css (6) and responsive.css (9), so the reset is live and !important beats cascade order. Four same-file blocks also exist at approval-layout.css:34, board-layout.css:68, shell-layout.css:131, responsive.css:155.\n\nEXISTING WEAK GUARD — styles/design-system.test.ts:82 JOINS every stylesheet into one string then asserts the blob contains '@media (prefers-reduced-motion: reduce)'. That passes if ANY single file has it, which is why this task's guard is worth landing. design-system.test.ts is NOT an owned path; do not edit it.\n\nBANNERS — FOUR exist, not three, and all four are ALREADY POLITE, so DoD 4 needs zero production change: cr.banner.disconnected shell/shell-chrome.tsx:16 role=status; cr.banner.lag shell/shell-chrome.tsx:23 role=status; cr.banner.invalidated approvals/approval-detail-plan.tsx:188 aria-live=polite; cr.banner.circuitbreaker shell/circuit-breaker-banner.tsx:66 aria-live=polite role=status. The description places the first two in frame.tsx — they have MOVED to shell-chrome.tsx. cr.banner.revision and cr.graph.refusal genuinely do not exist.\n\nDEPENDENCY SATISFIED — src/a11y/ holds keyboard-map.ts, surface-audit.ts, ui-wide-acceptance.test.tsx, ui-wide-core-fixtures.tsx, ui-wide-ops-fixtures.tsx. surface-audit.ts exports auditFactChips, auditActionLegality, auditKeyboardReachability, auditLiveRegions, auditActionParity, auditTruthClassMonochrome, plus the AuditViolationCode and MonochromeViolationCode unions and the { code, testId } AuditViolation shape. No barrel — import relative with the .js extension.\n\nRENDER PATTERN TO COPY — a11y/ui-wide-acceptance.test.tsx composes CORE_SURFACE_FIXTURES + OPS_SURFACE_FIXTURES (15 surfaces, SurfaceFixture = { id, commands, render, renderDegraded?, renderLoading? }), sets IS_REACT_ACT_ENVIRONMENT in beforeAll, cleanup in afterEach, and runs the audit predicates over the rendered roots. DoD 3 should reuse this wholesale.\n\nCOLOUR INDEPENDENCE IS TRUE TODAY — board/board-card.tsx renders all 23 CARD_FACTS through FactRow with a text label each, including the overlays the DoD names: ['suspect','SUSPECT'], ['held','Held'], ['disposition','Supersession disposition'], ['qualification','Acceptance qualification'], ['criticalpath','Critical path']. FactRow (nodes/node-authority.tsx:71) forwards label and value into Fact, so meaning is textual, never colour-only.\n\nCOLOUR LITERALS EXIST — DoD 5(a)'s 'zero hex/rgb/hsl/oklch literals' is FALSE: 63 across six stylesheets (tokens.css 39, chrome.css 8, shell.css 6, surfaces.css 5, inspector.css 4, responsive.css 1). WCAG AA contrast is already asserted at styles/design-system.test.ts:70 via contrast('#ffffff', tone) >= 4.5.",
+    "risks": "1. GUARD-ROT, the primary risk. Any arm that can match nothing and still pass is worthless. Every sweep in this plan asserts its input set is non-empty and its match count non-zero BEFORE asserting the property. Reviewers should check that specifically.\n\n2. BANNING setTimeout WOULD BE WRONG. live/live-board-feed.ts:98 and live/live-event-feed.ts:100 use setTimeout for feed reconnect/poll backoff, not animation. The description's 'setTimeout/setInterval 0' claim is false. Ban only requestAnimationFrame, .animate(, framer-motion and react-spring — those are genuinely zero.\n\n3. BANNING MOTION OUTRIGHT IS AN EXPLICIT REJECTION per the governor. So is deleting or weakening the guard when someone next adds a transition. The property must be 'gated', never 'absent'.\n\n4. SCAN-ROOT NARROWING. A discovery walk rooted via import.meta.url silently shrinks if the file moves, and every assertion over the smaller set still passes. Mitigated by asserting the six named stylesheets are present and count >= 13.\n\n5. MUTATION DRILLS IN A SHARED WORKTREE. Another agent's completion hook can whole-tree commit your drill edit; git status then reads clean while the mutation is committed. After each revert check BOTH `git diff --` and `git status --porcelain` on the mutated file, and confirm green before the next drill.\n\n6. NO PRODUCTION CODE. taskRail 2 is absolute for this task. The final owned-path diff must contain exactly two new test files and one modified test file. A .css or non-test .tsx appearing there means a drill was left unreverted.\n\n7. DO NOT STUB A SURFACE. cr.banner.revision and cr.graph.refusal do not exist; creating a placeholder carrying a real cr.banner.* id is fabricated evidence and precisely what the frame already refuses to do for cr.graph.*.\n\n8. NO GLOBAL TEST-COUNT ASSERTIONS. Shared worktree, other agents are adding tests concurrently; a total-count assertion is not a property of this task and will drift.\n\n9. LINE COUNTS. Measure with `grep -c ''`, not PowerShell Measure-Object -Line, which skips blank lines and reports a falsely comfortable number.",
+    "keyFiles": [
+      "apps/control-room/src/styles/responsive.css",
+      "apps/control-room/src/styles/control-room.css",
+      "apps/control-room/src/a11y/surface-audit.ts",
+      "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx",
+      "apps/control-room/src/a11y/ui-wide-core-fixtures.tsx",
+      "apps/control-room/src/board/board-card.tsx",
+      "apps/control-room/src/shell/gating-keyboard.test.tsx",
+      "apps/control-room/src/shell/circuit-breaker-banner.tsx",
+      "apps/control-room/src/shell/shell-chrome.tsx",
+      "apps/control-room/src/styles/design-system.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-09T18:18:54.724Z",
+    "escalatedAt": "2026-08-09T18:18:54.724Z"
+  },
+  "planApprovedAt": "2026-08-09T18:18:33.871Z",
+  "workStartedAt": "2026-08-09T18:19:06.696Z"
 }
