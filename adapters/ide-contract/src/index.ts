@@ -140,6 +140,14 @@ const unknown = (
 const malformed = (detail: string): IdeAdapterFailure =>
   refused("EVIDENCE_MALFORMED", detail, IDE_ADAPTER_LAYER);
 
+/**
+ * null and undefined are the only inputs that would THROW on a discriminant read
+ * rather than fall through to a refusal, and a thrown TypeError is not a stable
+ * reason code. Every operation passes through here before touching its evidence.
+ */
+const isEvidence = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null;
+
 const detailOf = (value: unknown): string =>
   typeof value === "string" && value.trim().length > 0 ? value : NO_DETAIL;
 
@@ -159,6 +167,7 @@ const readBrowser = (value: unknown): BrowserFallbackEvidence | null => {
  * licenses a start. Only an established, addressable daemon is DAEMON_RUNNING.
  */
 export function decideDaemonDiscovery(evidence: DaemonDiscoveryEvidence): IdeAdapterResult {
+  if (!isEvidence(evidence)) return malformed("unrecognised daemon discovery evidence");
   if (evidence.status === "LISTENING") {
     const endpoint = endpointOf(evidence.endpoint);
     return endpoint === null
@@ -180,6 +189,7 @@ export function decideDaemonDiscovery(evidence: DaemonDiscoveryEvidence): IdeAda
  * the outcome is UNKNOWN, so a caller cannot mistake a spawn for a service.
  */
 export function decideDaemonStart(evidence: DaemonStartEvidence): IdeAdapterResult {
+  if (!isEvidence(evidence)) return malformed("unrecognised daemon start evidence");
   if (evidence.status === "LISTENING_CONFIRMED") {
     const endpoint = endpointOf(evidence.endpoint);
     return endpoint === null
@@ -200,6 +210,7 @@ export function decideDaemonStart(evidence: DaemonStartEvidence): IdeAdapterResu
  * fallback, and that fallback succeeding is a success outcome of its own.
  */
 export function decideControlRoomOpen(evidence: ControlRoomOpenEvidence): IdeAdapterResult {
+  if (!isEvidence(evidence)) return malformed("unrecognised control room open evidence");
   if (evidence.assets === "ABSENT") {
     return refused(
       "CONTROL_ROOM_ASSETS_MISSING",

@@ -28,7 +28,7 @@ const MINIMUM_CASES = 17;
  * The cast is the point: it reproduces the untyped value a real adapter can hand
  * across the boundary, which is the only way to exercise the total-refusal path.
  */
-const foreign = <T>(value: Readonly<Record<string, unknown>>): T => value as unknown as T;
+const foreign = <T>(value: unknown): T => value as T;
 
 interface ContractCase {
   readonly actual: IdeAdapterResult;
@@ -205,6 +205,37 @@ const CASES: readonly ContractCase[] = [
   },
 ];
 
+/**
+ * null and undefined are the only inputs that read a discriminant off nothing, so
+ * they are the only ones that would THROW instead of refusing. A thrown TypeError
+ * carries no stable reason code, which is a fail-OPEN gap the typed cases above
+ * cannot reach. Kept separate from CASES because these must not throw at module
+ * scope while the sweep is being built.
+ */
+const ABSENT_EVIDENCE = Object.freeze([null, undefined] as const);
+
+it.each(ABSENT_EVIDENCE.map((value) => [String(value)] as const))(
+  "refuses %s evidence with a stable code on every operation, rather than throwing",
+  (label) => {
+    const value = ABSENT_EVIDENCE.find((item) => String(item) === label);
+    const operations = [
+      { detail: "unrecognised daemon discovery evidence", run: () => decideDaemonDiscovery(foreign(value)) },
+      { detail: "unrecognised daemon start evidence", run: () => decideDaemonStart(foreign(value)) },
+      { detail: "unrecognised control room open evidence", run: () => decideControlRoomOpen(foreign(value)) },
+    ];
+
+    expect(operations.length).toBe(3);
+    for (const operation of operations) {
+      expect(operation.run()).toEqual({
+        code: "EVIDENCE_MALFORMED",
+        detail: operation.detail,
+        layer: "IDE_ADAPTER",
+        outcome: "REFUSED",
+      });
+    }
+  },
+);
+
 it("sweeps a non-zero, pinned number of contract cases", () => {
   expect(CASES.length).toBeGreaterThan(0);
   expect(CASES.length).toBe(MINIMUM_CASES);
@@ -307,6 +338,18 @@ it("contains no editor-specific identifier anywhere in the owned deliverable", (
   });
 
   expect(offenders).toEqual([]);
+});
+
+it("names both consumer tasks in the contract module, per Clause 1", () => {
+  // A pure package with no named consumer cannot complete, so the edge is pinned
+  // here rather than left in prose that can be deleted without anything reddening.
+  const header = readFileSync(resolve(OWNED_ROOT, "src/index.ts"), "utf8");
+
+  expect(header).toContain("task-9fd52b41");
+  expect(header).toContain("task-05ce9b8f");
+  // The consumers are named by task id precisely because naming the editor would
+  // violate the neutrality guard above — the two requirements are asserted together.
+  expect(header).toContain("CERTIFIES NOTHING");
 });
 
 it("proves the neutrality sweep can actually detect an identifier", () => {
