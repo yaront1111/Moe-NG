@@ -146,7 +146,14 @@ function readTemplate(contents: string, startIndex: number): TemplateValue {
 
 function sourceTokens(contents: string): SourceToken[] {
   const tokens: SourceToken[] = [];
-  let index = 0;
+  // A leading `#!` shebang is not JavaScript and must be skipped before tokenizing:
+  // `#!/usr/bin/env node` otherwise opens a regex literal at the first `/` that never
+  // terminates, and the scan throws instead of reading the file. A bin entry point is
+  // exactly the kind of file this boundary must cover, so skipping the line widens
+  // coverage rather than narrowing it.
+  let index = contents.startsWith("#!")
+    ? (contents.indexOf("\n") < 0 ? contents.length : contents.indexOf("\n") + 1)
+    : 0;
   while (index < contents.length) {
     const character = contents[index] ?? "";
     const next = contents[index + 1];
