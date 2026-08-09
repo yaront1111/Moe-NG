@@ -97,6 +97,15 @@ it("still refuses an unbridged test-only module with ERR_MODULE_NOT_FOUND", asyn
   });
 });
 
+const existsOnDisk = (path: string): boolean => {
+  try {
+    statSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const walk = (dir: string): readonly string[] =>
   readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
@@ -201,12 +210,3 @@ it("keeps the four test-only planning modules off the runtime surface", () => {
   // The subjects must still exist; a renamed module would empty this guard.
   expect(named(paths.filter((file) => !existsOnDisk(file)))).toEqual([]);
 });
-
-const existsOnDisk = (path: string): boolean => {
-  try {
-    statSync(path);
-    return true;
-  } catch {
-    return false;
-  }
-};
