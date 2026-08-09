@@ -15,6 +15,20 @@
  *
  * `receiptDigestInput` is published alongside `recipeSealMatches` so a stored
  * receipt can be re-verified without reconstructing its bound field list by hand.
+ *
+ * The verifier process wrapper is the one name here that performs an external
+ * effect, so its seam is wider on purpose. `runVerifierProcess` needs a
+ * `ProcessLauncher`, and `createNodeProcessLauncher` is the only production one,
+ * so publishing the function without the factory would publish something no
+ * consumer could call. `hermeticVerifierEnvironment` is exported because the
+ * daemon owns the base environment and must be able to see exactly what its
+ * child will inherit before handing it over. The code and layer lists ship as
+ * values because a consumer routing on a refusal needs the closed vocabulary,
+ * not a type it can only read at compile time, and `MAX_VERIFIER_OUTPUT_BYTES`
+ * because a truncated capture is only interpretable against its bound. The type
+ * closure — down to `VerifierStreamCapture`, `VerifierClock` and
+ * `LaunchedProcess` — is complete so a consumer can narrow a result and supply
+ * a launcher and clock without redeclaring a single shape.
  */
 export {
   rematerializeCandidate,
@@ -68,3 +82,31 @@ export {
   type ObservedOutput,
   type ObservedVerifierExecution,
 } from "../evidence/verifier-execution.js";
+export {
+  MAX_VERIFIER_OUTPUT_BYTES,
+  MAX_VERIFIER_RUN_MS,
+  VERIFIER_PROCESS_ERROR_CODES,
+  VERIFIER_PROCESS_LAYERS,
+  VERIFIER_REAP_GRACE_MS,
+  hermeticVerifierEnvironment,
+  type VerifierActivation,
+  type VerifierCapture,
+  type VerifierClock,
+  type VerifierProcessErrorCode,
+  type VerifierProcessFailure,
+  type VerifierProcessLayer,
+  type VerifierProcessRefusal,
+  type VerifierStreamCapture,
+} from "../evidence/verifier-process-contract.js";
+export {
+  createNodeProcessLauncher,
+  runVerifierProcess,
+  type LaunchedProcess,
+  type ProcessLauncher,
+  type RunVerifierProcessInput,
+  type RunVerifierProcessOk,
+  type RunVerifierProcessRefused,
+  type RunVerifierProcessResult,
+  type VerifierExitObservation,
+  type VerifierLaunchSpec,
+} from "../evidence/verifier-process.js";

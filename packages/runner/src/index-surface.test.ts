@@ -48,10 +48,11 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
 
 type ExportKind = "array" | "function" | "number" | "regexp" | "string";
 /**
- * Hand-transcribed: 26 pre-existing runner values, 40 supervisor values, and the
- * 50 recovery / evidence / Claude observation values this task publishes. Read
- * off the module sources, never off the namespace under test — a list derived
- * from what it checks asserts only that the namespace equals itself.
+ * Hand-transcribed: 26 pre-existing runner values, 40 supervisor values, 50
+ * recovery / evidence / Claude observation values, and the 8 values the verifier
+ * process wrapper publishes. Read off the module sources, never off the
+ * namespace under test — a list derived from what it checks asserts only that
+ * the namespace equals itself.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ADMITTED_EFFECT_TRANSITIONS", "array"], ["ARTIFACT_ADDRESS_PATTERN", "regexp"],
@@ -106,6 +107,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["canonicalObligations", "function"], ["isEvidenceFailure", "function"],
   ["observedExecutionRejection", "function"], ["receiptDigestInput", "function"],
   ["recipeSealMatches", "function"], ["rematerializeCandidate", "function"],
+  // evidence/: the verifier process wrapper — the one seam here that spawns.
+  ["MAX_VERIFIER_OUTPUT_BYTES", "number"], ["MAX_VERIFIER_RUN_MS", "number"],
+  ["VERIFIER_PROCESS_ERROR_CODES", "array"], ["VERIFIER_PROCESS_LAYERS", "array"],
+  ["VERIFIER_REAP_GRACE_MS", "number"], ["createNodeProcessLauncher", "function"],
+  ["hermeticVerifierEnvironment", "function"], ["runVerifierProcess", "function"],
   // providers/claude/: reconciliation, capability profile, runtime observation, stream vocabulary.
   ["CLAUDE_CAPABILITIES", "array"], ["CLAUDE_CAPABILITY_PROFILE_VERSION", "string"],
   ["CLAUDE_CAPABILITY_STATUSES", "array"], ["CLAUDE_CONTEXT_POLICIES", "array"],
@@ -121,7 +127,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(116);
+  expect(EXPECTED_EXPORTS.length).toBe(124);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
