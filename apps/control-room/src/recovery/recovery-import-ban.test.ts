@@ -52,9 +52,15 @@ const SCANNED_MODULES = Object.freeze([
   [RECOVERY_DIR, "recovery-status.tsx", "export function RecoveryStatus("],
 ] as const);
 
+/**
+ * `../performance/command-latency.js` is the shared spec §11.4 feedback component. It is
+ * presentation only — it renders the daemon's own state, code and layer unchanged and
+ * measures elapsed time against an injected clock — so it grants this slice no authority.
+ * Recovery consumes it rather than keeping a second copy of the line-711 sentence.
+ */
 const ALLOWED_IMPORTS = Object.freeze([
-  "@moe/contracts", "../nodes/node-authority.js", "../shell/frame.js",
-  "./recovery-actions.js", "./recovery-external.js", "react",
+  "@moe/contracts", "../nodes/node-authority.js", "../performance/command-latency.js",
+  "../shell/frame.js", "./recovery-actions.js", "./recovery-external.js", "react",
 ]);
 
 /**

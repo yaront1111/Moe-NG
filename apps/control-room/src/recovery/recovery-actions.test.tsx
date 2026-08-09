@@ -346,10 +346,28 @@ describe("command feedback renders the daemon's own outcome", () => {
     expect(within(shown).queryByTestId("cr.recovery.feedback.stillworking")).toBeNull();
   });
 
-  it("adds the verbatim still-working line once the wait passes two seconds", () => {
-    renderActions({ feedback: [{ ...pending, overTwoSeconds: true }] });
+  it("adds the verbatim still-working line once the MEASURED wait passes two seconds", () => {
+    // No flag and no waiting: the line appears because an injected clock says 2001 ms
+    // elapsed since the command was sent. At exactly 2000 the spec's "> 2 s" is not met.
+    renderActions({
+      clock: { now: () => 3_000 }, feedback: [{ ...pending, startedAt: 1_000 }],
+    });
+    expect(screen.queryByTestId("cr.recovery.feedback.stillworking"), "2000ms is not > 2 s")
+      .toBeNull();
+    cleanup();
+
+    renderActions({
+      clock: { now: () => 3_001 }, feedback: [{ ...pending, startedAt: 1_000 }],
+    });
     expect(screen.getByTestId("cr.recovery.feedback.stillworking").textContent)
       .toBe(STILL_WORKING);
+  });
+
+  it("says it cannot measure rather than assuming a short wait when no clock is given", () => {
+    renderActions({ feedback: [{ ...pending, startedAt: 1_000 }] });
+    const shown = screen.getByTestId("cr.recovery.feedback.cmd-recovery-complete");
+    expect(shown.dataset["elapsedUnknown"]).toBe("TIMING_CLOCK_UNAVAILABLE");
+    expect(screen.queryByTestId("cr.recovery.feedback.stillworking")).toBeNull();
   });
 
   it("announces a confirmed command with role status", () => {

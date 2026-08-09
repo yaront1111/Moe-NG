@@ -2,6 +2,8 @@ import type { NextAllowedCommand } from "@moe/contracts";
 import type { JSX } from "react";
 
 import { UNKNOWN_FACT_VALUE } from "../nodes/node-authority.js";
+import { COMMAND_STILL_WORKING_COPY, CommandLatency } from "../performance/command-latency.js";
+import type { Clock } from "../performance/command-latency.js";
 import { useGating } from "../shell/frame.js";
 
 /**
@@ -19,9 +21,13 @@ export type RecoveryAuthorityMode = "LIVE" | "OFFLINE_READ_ONLY" | "HISTORICAL" 
 
 const LIVE_AUTHORITY: RecoveryAuthorityMode = "LIVE";
 
-/** §12 line 711: a slow command is still accepted; it is never reported as failed. */
-export const RECOVERY_STILL_WORKING_COPY =
-  "still working — the daemon accepted the command (event pending)";
+/**
+ * §12 line 711: a slow command is still accepted; it is never reported as failed.
+ *
+ * An alias, not a second copy. The sentence lives once, in the shared latency module, so
+ * a surface adopting that module can never drift from the wording recovery renders.
+ */
+export const RECOVERY_STILL_WORKING_COPY = COMMAND_STILL_WORKING_COPY;
 
 /** A refusal names both the stable code and the layer that produced it. */
 export interface RecoveryUnavailableReason {
@@ -65,13 +71,20 @@ export type RecoveryFeedbackState = "PENDING" | "CONFIRMED" | "REFUSED";
 export interface RecoveryFeedback {
   readonly commandId: string;
   readonly message: string;
-  readonly overTwoSeconds?: boolean | undefined;
   readonly reason?: RecoveryUnavailableReason | undefined;
+  /**
+   * When the command was sent, on the injected clock's own scale. The still-working line
+   * is measured from this; there is deliberately no boolean saying the wait was long,
+   * because a caller-supplied flag can claim a threshold nothing ever timed.
+   */
+  readonly startedAt?: number | undefined;
   readonly state: RecoveryFeedbackState;
 }
 
 export interface RecoveryActionsProps {
   readonly authorityMode: RecoveryAuthorityMode;
+  /** Absent means this surface cannot measure elapsed time, not that none passed. */
+  readonly clock?: Clock | null | undefined;
   readonly disabledCopy?: string | undefined;
   readonly feedback?: readonly RecoveryFeedback[] | undefined;
   readonly onRequestConfirmation?: RecoveryConfirmationHandler | undefined;
@@ -179,26 +192,8 @@ function CommandAction(props: {
   );
 }
 
-function Feedback(props: { readonly feedback: RecoveryFeedback }): JSX.Element {
-  const { feedback } = props;
-  const refused = feedback.state === "REFUSED";
-  return (
-    <div data-state={feedback.state} role={refused ? "alert" : "status"}
-      data-testid={`cr.recovery.feedback.${feedback.commandId}`}
-    >
-      <span data-testid="cr.recovery.feedback.message">{stated(feedback.message)}</span>
-      {feedback.state === "PENDING" && feedback.overTwoSeconds === true ? (
-        <span data-testid="cr.recovery.feedback.stillworking">{RECOVERY_STILL_WORKING_COPY}</span>
-      ) : null}
-      {refused ? (
-        <>
-          <span data-testid="cr.recovery.feedback.code">{stated(feedback.reason?.reasonCode)}</span>
-          <span data-testid="cr.recovery.feedback.layer">{stated(feedback.reason?.layer)}</span>
-        </>
-      ) : null}
-    </div>
-  );
-}
+/** Recovery's namespace for the shared §11.4 feedback; the ids it produces are unchanged. */
+const FEEDBACK_PREFIX = "cr.recovery.feedback";
 
 type ResolvedAction = {
   command: NextAllowedCommand; presentation: RecoveryCommandPresentation;
@@ -206,7 +201,7 @@ type ResolvedAction = {
 
 export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
   const {
-    authorityMode, disabledCopy, feedback, onRequestConfirmation, presentations, testId,
+    authorityMode, clock, disabledCopy, feedback, onRequestConfirmation, presentations, testId,
   } = props;
   const { actionsEnabled, commands } = useGating();
   // `stale` is deliberately not read: a lagging view still shows commands the daemon
@@ -243,7 +238,8 @@ export function RecoveryActions(props: RecoveryActionsProps): JSX.Element {
         <p data-testid="cr.recovery.disabledcopy">{stated(disabledCopy)}</p>
       ) : null}
       {shown.map((entry, index) => (
-        <Feedback feedback={entry} key={`${entry.commandId}#${index}`} />
+        <CommandLatency clock={clock} feedback={entry} key={`${entry.commandId}#${index}`}
+          testIdPrefix={FEEDBACK_PREFIX} />
       ))}
     </div>
   );
