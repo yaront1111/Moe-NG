@@ -11,6 +11,10 @@ import type {
   DistributionComponentKind,
   DistributionRefusalReason,
 } from "../../../packages/contracts/src/distribution/distribution-contract.js";
+import { createCompatGate } from "../../../packages/control-room-client/src/index.js";
+import {
+  GENERATED_CONTRACT_PINS,
+} from "../../../packages/control-room-client/src/generated/generated-client.js";
 import {
   SKILL_MANIFEST_VERSION,
   validateSkillManifestBytes,
@@ -25,13 +29,19 @@ import type { StartupDistributionExpectation } from "../../../packages/contracts
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
+/**
+ * The LIVE pins, read from the generated client rather than transcribed. A literal here
+ * would still let every test below pass while packaging a distribution the control room
+ * refuses to run; the `createCompatGate` block at the bottom is what proves these are the
+ * values that authority actually accepts.
+ */
 const PINS = Object.freeze({
-  commandEnvelopeVersion: "1.4.0",
-  errorRegistryVersion: "2.0.1",
-  queryEnvelopeVersion: "1.1.0",
+  commandEnvelopeVersion: GENERATED_CONTRACT_PINS.commandEnvelopeVersion,
+  errorRegistryVersion: GENERATED_CONTRACT_PINS.errorRegistryVersion,
+  queryEnvelopeVersion: GENERATED_CONTRACT_PINS.queryEnvelopeVersion,
 });
 const BUILD_TOOLS = Object.freeze({ node: "24.16.0", pnpm: "11.0.8" });
-const SCHEMA_HASH = "9".repeat(64);
+const SCHEMA_HASH = GENERATED_CONTRACT_PINS.contractDigest;
 const SOURCE_SHA = "7".repeat(64);
 const KEY_ID = "release-key-1";
 
@@ -514,6 +524,71 @@ describe("production startup admission", () => {
     });
   }
 
+  test("a signature lifted from another component does not admit this one", () => {
+    // The signature covers componentId, so a valid signature over a DIFFERENT manifest
+    // must not carry. Without this the set gate would accept any reshuffling of a
+    // genuinely signed release.
+    const containers = [...allContainers()];
+    const donor = JSON.parse(new TextDecoder().decode(containers[1]!)) as { signature: string };
+    const victim = JSON.parse(new TextDecoder().decode(containers[0]!)) as { signature: string };
+    expect(donor.signature).not.toBe(victim.signature);
+    victim.signature = donor.signature;
+    containers[0] = new TextEncoder().encode(JSON.stringify(victim));
+    const launched: string[] = [];
+    const result = startDistribution(
+      { containers, expectation: expectation(), trustedPublicKeys: trustedKeys() },
+      (componentId) => launched.push(componentId),
+    );
+    expectRefusal(result, "SIGNATURE_INVALID");
+    expect(launched).toEqual([]);
+  });
+
+  test("an asset path that shadows Object.prototype still packages and admits", () => {
+    // `payload["__proto__"] = x` on an object literal creates NO own property, so a naive
+    // packager emits a container missing a declared asset that can never be admitted.
+    const built = buildDistributionContainer(
+      buildInput({
+        assets: [
+          { bytes: new TextEncoder().encode("a"), path: "__proto__" },
+          { bytes: new TextEncoder().encode("b"), path: "src/real.ts" },
+        ],
+        componentId: "proto-edge-fixture",
+        componentKind: "DAEMON",
+      }),
+      privateKey,
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    const carried = JSON.parse(new TextDecoder().decode(built.containerBytes)) as {
+      assets: Record<string, string>;
+    };
+    expect(Object.keys(carried.assets).sort()).toEqual(["__proto__", "src/real.ts"]);
+    const launched: string[] = [];
+    const result = startDistribution(
+      {
+        containers: [built.containerBytes],
+        expectation: expectation({ componentKinds: { "proto-edge-fixture": "DAEMON" } }),
+        trustedPublicKeys: trustedKeys(),
+      },
+      (componentId) => launched.push(componentId),
+    );
+    expect(result.ok).toBe(true);
+    expect(launched).toEqual(["proto-edge-fixture"]);
+  });
+
+  test("admission grants identifiers only, never a capability", () => {
+    const result = startDistribution(
+      { containers: allContainers(), expectation: expectation(), trustedPublicKeys: trustedKeys() },
+      () => undefined,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.keys(result).sort()).toEqual(["launched", "ok"]);
+    expect(result.launched.every((id) => typeof id === "string")).toBe(true);
+    expect(Object.values(result).some((value) => typeof value === "function")).toBe(false);
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
   test("a throwing launch port fails closed with a stable startup reason", () => {
     const result = startDistribution(
       { containers: allContainers(), expectation: expectation(), trustedPublicKeys: trustedKeys() },
@@ -551,6 +626,49 @@ describe("IDE_ADAPTER packaging contract", () => {
     );
     expect(result.ok).toBe(true);
     expect(launched).toEqual(["ide-adapter-contract-fixture"]);
+  });
+});
+
+describe("composition with the landed control-room compatibility authority", () => {
+  const reportFor = (manifest: {
+    readonly apiCompatibilityRange: unknown;
+    readonly buildToolVersions: unknown;
+    readonly contractSchemaHash: unknown;
+  }): unknown => ({
+    apiCompatibilityRange: manifest.apiCompatibilityRange,
+    buildToolVersions: manifest.buildToolVersions,
+    contractSchemaHash: manifest.contractSchemaHash,
+  });
+
+  const built = (overrides: Partial<DistributionBuildInput> = {}) => {
+    const result = buildDistributionContainer(buildInput(overrides), privateKey);
+    if (!result.ok) throw new Error(`build refused: ${result.reason}`);
+    return result.manifest;
+  };
+
+  test("a packaged manifest carries the live pins, not transcribed literals", () => {
+    // If PINS or SCHEMA_HASH were hand-written constants that had drifted, this gate —
+    // the control room's own authority, which we do not reimplement — would refuse.
+    const manifest = built();
+    expect(manifest.contractSchemaHash).toBe(GENERATED_CONTRACT_PINS.contractDigest);
+    expect(createCompatGate(reportFor(manifest))).toMatchObject({ ok: true });
+  });
+
+  test("a packaged manifest with a drifted pin is refused by that same authority", () => {
+    const manifest = built({
+      apiCompatibilityRange: { ...PINS, commandEnvelopeVersion: "moe-runtime-command/9" },
+    });
+    const gate = createCompatGate(reportFor(manifest));
+    expect(gate.ok).toBe(false);
+    if (gate.ok) return;
+    // truthClass OBSERVED is that layer's own marker: the control room compared the pins,
+    // so this refusal is attributable to it rather than to the distribution gate.
+    expect(gate.error).toMatchObject({ code: "DISTRIBUTION_MISMATCH", truthClass: "OBSERVED" });
+  });
+
+  test("a drifted schema hash is refused by that same authority", () => {
+    const gate = createCompatGate(reportFor(built({ contractSchemaHash: "0".repeat(64) })));
+    expect(gate).toMatchObject({ ok: false });
   });
 });
 

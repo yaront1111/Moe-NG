@@ -16,8 +16,9 @@
     "test:meta": "vitest run packages/contracts/src packages/testkit/src",
     "test:property": "vitest run tests/property",
     "test:e2e": "tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e",
-    "test:integration": "vitest run tests/integration",
+    "test:integration": "pnpm typecheck:packaging && vitest run tests/integration",
     "test:store": "vitest run packages/store/src",
+    "typecheck:packaging": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts",
     "verify:foundation": "pnpm typecheck && pnpm test:meta",
     "verify:store": "pnpm typecheck && pnpm test:store"
   },
