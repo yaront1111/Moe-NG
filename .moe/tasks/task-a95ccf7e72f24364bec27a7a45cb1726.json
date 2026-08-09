@@ -1,0 +1,36 @@
+{
+  "id": "task-a95ccf7e72f24364bec27a7a45cb1726",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Colour token layer for WCAG contrast certification",
+  "description": "Objective: give the control room resolvable colour values, so the spec's \"Contrast >= WCAG AA\" clause becomes measurable instead of unmeasurable.\n\nWHY THIS EXISTS (project rail 4, Clause 2 gap measurement). Spec section 11.1 line 686 requires \"Contrast >= WCAG AA\". A contrast ratio needs two RESOLVED colours. At planning time the architect probed for any colour value on disk and found NONE:\n- TruthSemanticTone is a PROSE union, not colour: packages/control-room-model/src/index.ts carries \"neutral slate\", \"amber\", \"green\", \"blue\", \"high-contrast magenta\" as semanticTone strings. Those name a colour; they are not one.\n- Zero hex, rgb(), hsl() or oklch() literals exist in apps/control-room/src or in any packages/*/src.\n- The repo contains exactly ONE stylesheet, apps/control-room/src/board/board-layout.css (77 lines), and it uses only the CSS system keywords canvas and highlight. className count across the app is 0 and there is no CSS-in-JS dependency.\n\nTwo tasks have already had to record contrast as explicitly NOT mechanically checkable because of this:\n- task-4b274fad (Motion and colour-independence regression guards) excludes it in its DoD with this reason.\n- task-667b1085 (Control-room journey gate) inherited real-browser contrast certification from task-ab8c9489 via governor comment comment-5dd36b5b, and cannot discharge it while no colour resolves.\n\nThis task closes that hole once, for both.\n\nIMPORTANT — this is NOT a visual redesign, and epic scope forbids one. The app renders essentially unstyled today. The deliverable is a token layer that makes the EXISTING semantic tones resolve to concrete, AA-compliant values against a named background, in light and dark. Do not restyle surfaces, do not introduce a component library, and do not change any layout.\n\nOwned paths: the token stylesheet and its test, plus the semanticTone-to-token mapping. Do NOT edit describeTruthClass's five descriptors: their glyph, shortLabel and borderStyle are pinned by CR-A11Y-001, which asserts the classes stay distinguishable with colour EXCLUDED.\n\nHard dependencies: none blocking.\n\nVerification: pnpm --filter @moe/control-room test",
+  "definitionOfDone": [
+    "Every TruthSemanticTone prose value maps to a concrete foreground colour token and a named background token, in both light and dark. The mapping is exhaustive over the union and a test asserts exhaustiveness — adding a sixth tone without a token must fail the build or the test, never default silently.",
+    "A test computes the actual WCAG contrast ratio for every foreground/background token pair and asserts it meets AA (4.5:1 for normal text, 3:1 for large text and non-text indicators). It must assert the number of pairs checked is greater than zero and equals the number of declared tones, so a sweep over an empty or partial token set cannot pass.",
+    "The contrast computation is asserted against the production token values, not against a table restated inside the test. A test that recomputes its own expected colours proves only that the test is self-consistent.",
+    "A tone with no token, or a token that fails AA, produces a stable reason code naming the offending tone and ratio — the test asserts that specific code, not merely that something failed.",
+    "describeTruthClass's five descriptors are unchanged: glyph, shortLabel and borderStyle are untouched, and the committed CR-A11Y-001 monochrome check still passes, proving the classes remain distinguishable with colour excluded. Colour is added as a fourth channel, never as a replacement for the other three.",
+    "No layout, spacing or component structure changes. The only stylesheet edits are token declarations, every stylesheet carrying tokens also carries a @media (prefers-reduced-motion: reduce) block per the existing board-layout.css:68 pattern, and pnpm --filter @moe/control-room test passes."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F. Contrast is section 11.1 line 686; the truth-class tones are section 3.1; section 13.1 limits theming to light/dark plus monochrome survival and forbids visual tokens beyond section 3's semantics.",
+    "Colour is never the only carrier. Spec section 3.1 requires triple encoding — glyph, short label, colour — surviving monochrome, colour-vision deficiency and screen readers. This task adds the third channel; it must not weaken the first two. CR-A11Y-001 asserts the five classes stay distinguishable by glyph + label + border with colour EXCLUDED, and that test must still pass unchanged.",
+    "jsdom evaluates no CSS and document.styleSheets.length is 0 because Vitest stubs the CSS import (measured). Contrast must therefore be computed from the TOKEN VALUES as data — exported constants the stylesheet is generated from or pinned against — not by reading computed style from a rendered element. If the tokens live only as CSS text, the test must parse the real file and assert it parsed a non-zero number of declarations.",
+    "This is not a redesign. The app is deliberately near-unstyled and epic scope excludes visual redesign outside the pinned spec. Adding component styling, a design system, or a dependency is out of scope and will be rejected.",
+    "Split before 400 lines, target 250. Explicit owned paths only; no git add -A."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:31:41.439Z",
+  "updatedAt": "2026-08-09T12:31:41.439Z"
+}

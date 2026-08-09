@@ -1,0 +1,67 @@
+{
+  "id": "task-4afcb06422ed4adb89430b7ea9758d7f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Daemon coordination authority adapter",
+  "description": "Objective: provide the missing production consumer edge for @moe/coordination so typed session/terminal traffic is mediated by real identity, recipient, effect, and durable-store facts rather than test-supplied callbacks. Deliverable: a focused daemon adapter that constructs createCoordinationService/createDurableMailbox over SqliteEventStore, authenticates through committed core session authority, resolves registered recipients/effect-session bindings from durable daemon records, and exposes bounded send/read/ack operations. NOT in scope: MCP framing, free-form chat, remote shell, lifecycle commands, or canary tests. Owned paths: apps/daemon/src/coordination/coordination-adapter.ts/.js, coordination-adapter.test.ts, plus apps/daemon/package.json and pnpm-lock.yaml only for the @moe/coordination workspace dependency. Verification: pnpm --filter @moe/coordination test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The adapter uses real SqliteEventStore and committed session/recipient/effect records; no caller can inject a positive auth, recipient, or terminal-binding answer.",
+    "Authenticated addressed REQUEST/RESPONSE/EVENT/CONTROL/HANDOFF messages sequence, replay, and acknowledge durably across adapter recreation, with exact receipt/digest identity.",
+    "Forged/expired session, missing capability, unknown recipient, stale cursor, mailbox pressure, and unbound terminal effect each assert the exact @moe/coordination reason code and layer and leave lifecycle authority unchanged.",
+    "Advisory text and CONTROL/HANDOFF envelopes can never call a command/lifecycle service; a before/after authoritative-store assertion proves non-mutation.",
+    "The @moe/coordination dependency is the only manifest change; coordination, daemon, and repo gates exit 0 with explicit-path attribution."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 12:33Z. Dependency-checked before promoting: no \"Depends on\" clause naming an unbuilt task, unlike its siblings task-6cbff010 (needs the Windows Claude launch wrapper), task-44d4873e (needs the Verification process wrapper and Durable Claude attempt dispatch) and task-8f9305b9 (needs Durable verification receipt dispatch), all of which stay BACKLOG.\n\nWHY IT MATTERS: it is one of the five capabilities task-5e43a9e2 (Foundation daemon ingress surface) explicitly depends on, and that ingress task is what finally exports runReviewCommand and readReviewLedger from the @moe/daemon root — the precise gap that re-blocked the Foundation canary at 12:29Z. The canary needs a consumer to be able to DRIVE a review command through production authority, not merely reach REVIEW_HANDLERS. This is one of the five stones on that path and it is the only one of them currently unblocked.\n\nFOR THE ARCHITECT: re-measure its dependencies on disk before planning rather than trusting this reason or the description — several tasks on this board have described dependencies that turned out absent, and the reverse. If you find an unbuilt dependency I missed, report blocked and I will return it to BACKLOG without argument; promoting it was my call and the cost of being wrong is mine to carry, not yours.\n\nProduction capability task. Builds a subject, does not certify one.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 42.1,
+  "comments": [
+    {
+      "id": "comment-7220f36efa9b493783f0ff82a1736390",
+      "author": "architect-8c9073cd",
+      "content": "Downstream publication: Foundation daemon ingress surface `task-5e43a9e294ef48fdab23817c8c6cfc45`; runtime consumer: Foundation MCP dispatch host `task-49ed1e6d73544fc6ae09b3951a573848`; final certifier: canary `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:45.864Z"
+    },
+    {
+      "id": "comment-2e344724b8f04e98b7c23afa6df176dd",
+      "author": "architect-8c9073cd",
+      "content": "Fresh committed-byte audit at HEAD 7183c045 disproves the reopened-task premise. SqliteEventStore can back createDurableMailbox, but daemon has no production session/proof/replay authority, no recipient registry, and no effect-session resolver. @moe/core.authenticateCommand cannot authenticate coordination endpoints: it requires RuntimeCommandEnvelope/RuntimeCommandKind, while coordination uses SEND/READ/REPLAY/ACK plus colon-delimited capability strings that core CapabilityGrant cannot represent. Created prerequisites task-b4f12e63baca4ecc9f2c159ed3c3ad78 (reusable core session auth), task-21713cf152c047c597da9765d8d95510 (durable daemon session authority; proof protocol choice required), and task-04e4367443214a588ed6277b92969a33 (recipient registry); linked existing task-6cbff01023b14b26a78fc5e3eb1dd8a9 for effect/session binding. Separate acceptance conflict needs human/governor correction: @moe/coordination deliberately returns typed CURSOR_GAP with durableCursor/mailboxSequence and has no cursor reason code/layer; historical behind-ack cursors are valid replay. Amend DoD 3 to assert the exact CURSOR_GAP fields, or explicitly authorize a coordination contract task—never invent adapter-local refusal vocabulary.",
+      "timestamp": "2026-08-09T13:07:42.025Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:11.261Z",
+  "updatedAt": "2026-08-09T13:08:23.244Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:55:41.435Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ],
+  "blockedReason": "Committed-byte audit shows the adapter can compose only the mailbox today. Daemon has no durable session/proof/replay authority, recipient registry, or effect-session reader, and core authenticateCommand cannot represent coordination endpoints/capabilities without fabricating a RuntimeCommandEnvelope. Prerequisites were created/linked in the task comment. Independently, DoD 3 is mechanically impossible as written: @moe/coordination models an ahead cursor as typed CURSOR_GAP with durableCursor/mailboxSequence and defines no cursor reason code/layer; behind-ack replay is valid. Amend that clause to assert the typed outcome or authorize a separately owned contract change. Submitting the five-file adapter plan now would require test-owned positive authority or an invented refusal.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T13:07:50.247Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Audited committed coordination/core/store/daemon surfaces; proved the authority and cursor-contract gaps; created task-b4f12e63baca4ecc9f2c159ed3c3ad78, task-21713cf152c047c597da9765d8d95510, and task-04e4367443214a588ed6277b92969a33; linked task-6cbff01023b14b26a78fc5e3eb1dd8a9; reported the parent BLOCKED; wrote Serena handoff and decision memories.",
+      "whatRemains": "Land all four production prerequisites, obtain the session proof protocol decision, and have human/governor amend DoD 3 to assert typed CURSOR_GAP fields (or authorize a coordination contract task). Then reclaim and submit the five-file adapter plan.",
+      "pitfalls": "Do not fake RuntimeCommandEnvelope for coordination, inject positive auth/recipient/effect answers, seed raw authority events in tests, invent adapter-local cursor codes, or treat historical behind-ack replay as stale refusal.",
+      "openQuestions": "Which proof algorithm/canonical challenge/key encoding/TTL-skew/renewal-rotation/replay-key contract is approved? Should DoD 3 be corrected to typed CURSOR_GAP, or should the coordination contract gain a new refusal code/layer?",
+      "releasedAt": "2026-08-09T13:08:23.242Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Explicit architect handoff after evidence-backed block; free this worker for the remaining PLANNING queue."
+    }
+  ]
+}

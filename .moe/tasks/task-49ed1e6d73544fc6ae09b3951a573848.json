@@ -1,0 +1,41 @@
+{
+  "id": "task-49ed1e6d73544fc6ae09b3951a573848",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Foundation MCP dispatch host",
+  "description": "Objective: land the missing real daemon process/transport consumer so Foundation self-hosting does not inject a fake StdioDispatchPort/HttpDispatchPort in its E2E harness. Deliverable: a bounded daemon host executable that opens the project store, composes authenticated @moe/mcp stdio and Streamable HTTP dispatch ports with the published @moe/daemon Foundation ingress surface, routes coordination/session traffic, supports graceful drain/restart, and emits readiness/shutdown receipts used by J3. NOT in scope: custom WebSocket MCP, control-room UI, multi-node activation, release publication, or canary assertions. Depends on Foundation daemon ingress surface. Owned paths: apps/daemon/src/host/foundation-host.ts/.js, foundation-host.test.ts, and apps/daemon/package.json/pnpm-lock.yaml only for @moe/mcp; add a bin/script only if needed for the executable. Verification: pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck plus a plain-Node stdio smoke.",
+  "definitionOfDone": [
+    "The executable composes real @moe/mcp dispatch with @moe/daemon/store/session/coordination surfaces; no injected test dispatcher or deep import decides auth, command, or durable outcomes.",
+    "Official MCP stdio and Streamable HTTP requests reach the same bounded authenticated command path; malformed/oversized/forged/stale input asserts exact transport and daemon reason codes/layers and commits nothing.",
+    "The host publishes deterministic readiness, process identity, project/store identity, and graceful-shutdown receipts; restart reopens the same durable state and drives production reconciliation before accepting commands.",
+    "Concurrent duplicate command delivery leaves one durable decision and one authority holder; advisory session/terminal text never invokes command authority.",
+    "Plain-Node stdio smoke plus MCP/daemon/repo gates exit 0; only explicit owned paths and the exact @moe/mcp manifest addition are committed."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
+    "Only official MCP stdio and Streamable HTTP are permitted; do not add a custom MCP-over-WebSocket protocol."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 46,
+  "comments": [
+    {
+      "id": "comment-c02b88eb5ca04d3a8d3761228507a5ae",
+      "author": "architect-8c9073cd",
+      "content": "Hard dependency: Foundation daemon ingress surface `task-5e43a9e294ef48fdab23817c8c6cfc45`. Final real consumer/certifier: Foundation self-host canary `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:46.073Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:11.468Z",
+  "updatedAt": "2026-08-09T12:29:46.073Z"
+}

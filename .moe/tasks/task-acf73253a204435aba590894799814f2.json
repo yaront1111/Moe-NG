@@ -1,0 +1,75 @@
+{
+  "id": "task-acf73253a204435aba590894799814f2",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Windows Claude launch wrapper",
+  "description": "Objective: provide the missing physical Claude execution boundary required by Foundation Preview. Deliverable: a real Node/Windows runner wrapper that resolves and content-address-pins the installed Claude runtime closure, re-observes path/digest/version/capability/platform immediately before activation, consumes a one-use supervisor activation grant, acquires the OS-exclusive launch lock, starts Claude without a shell, registers/observes the process, captures bounded raw stdout/stderr/exit evidence, and cleans the whole process tree on cancel/failure. NOT in scope: daemon/store orchestration, verification commands, review, or canary fixtures. Depends on the committed supervisor/Claude observation surfaces; its real production consumer is the Durable Claude attempt dispatch task created in this breakdown. Owned paths: packages/runner/src/providers/claude/claude-launcher.ts, claude-launcher.js, claude-launcher.test.ts, and packages/runner/src/surface/claude-surface.ts. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && a plain-Node @moe/runner root import/launch smoke.",
+  "definitionOfDone": [
+    "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable.",
+    "No child process starts before runtime re-observation, activation-grant validation/consumption, and OS-exclusive launch-lock acquisition all succeed; each refusal asserts the exact production code and layer and proves zero spawn calls.",
+    "Launch uses an argument array with shell disabled and a bounded environment/cwd; Windows process-tree cleanup is awaited on success, cancellation, timeout, and thrown-error paths so no handle or child leaks.",
+    "Duplicate delivery either adopts the registered process or refuses before provider launch; a consumed/forged/wrong-wrapper grant pins GRANT_ALREADY_CONSUMED or GRANT_WRAPPER_MISMATCH at the GRANT layer and never spawns twice.",
+    "The returned immutable observation binds effect/grant/runtime digests plus exact stdout, stderr, and exit evidence digests; truncation or process uncertainty remains UNKNOWN.",
+    "@moe/runner root exports the launcher and full type closure, its plain-Node smoke succeeds, the focused runner gates exit 0, and task-task-97554aa4293e40eab56c0b642e18513a is recorded as the eventual canary consumer through the daemon dispatch task."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
+    "Primary support target is Windows; any non-Windows path must return typed UNSUPPORTED rather than emulate Windows locking or process-tree guarantees."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 12:33Z. Dependency-checked before promoting, not assumed.\n\nWHY PROMOTABLE NOW: its only stated dependency is \"the committed supervisor/Claude observation surfaces\", which are landed — task-4a3b5ec0 (launch lock, process adoption, drain and restart reconciliation) and task-7d0abdcd (runner recovery, evidence and Claude observation surfaces on the @moe/runner root) are both DONE. No unbuilt dependency remains.\n\nWHY IT MATTERS: architect-8c9073cd's 12:29Z canary block named exactly this absence — \"production has no Claude/verifier child-process launcher\". This task IS that launcher. It is the physical execution boundary Foundation Preview needs and nothing on the board substitutes for it.\n\nSCOPE GUARD, from the task's own description: NOT in scope are daemon/store orchestration, verification commands, review, or canary fixtures. Owned paths are packages/runner/src/providers/claude/**. Its real production consumer is task-6cbff010 (Durable Claude attempt dispatch), which stays BACKLOG until this lands — per Clause 1, name that consumer id in the plan so the edge is explicit rather than implied.\n\nThis is a production capability task, not an acceptance task. It builds a subject; it does not certify one. An architect that finds itself planning evidence or conformance work here has drifted out of scope.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 41,
+  "comments": [
+    {
+      "id": "comment-c2b435565122451a950871af24a10a34",
+      "author": "architect-8c9073cd",
+      "content": "Required real consumer: Durable Claude attempt dispatch `task-6cbff01023b14b26a78fc5e3eb1dd8a9` composes this runner wrapper into daemon/store authority; Foundation canary `task-97554aa4293e40eab56c0b642e18513a` certifies that composed edge.",
+      "timestamp": "2026-08-09T12:29:45.342Z"
+    },
+    {
+      "id": "comment-43d26cf8fc1c44d29a795be0503971b4",
+      "author": "architect-8c9073cd",
+      "content": "Planning audit (current bytes): @moe/runner loads with exactly 116 values; packages/runner/src/index-surface.test.ts hard-pins that exact namespace/count, so publishing launchClaude through the owned claude-surface necessarily fails the runner gate unless that test becomes an owned fifth path. The existing Claude observation/probe and supervisor lock/process modules are pure and perform zero runtime resolution/hash/copy/spawn/OS locking. Node core exposes no Windows Job Object API and the workspace has no tree-kill dependency; taskkill.exe /PID /T /F is available shell-free but cannot prove descendants dead after the root exits. Human decision needed: widen ownership and either require a native Job Object boundary (recommended) or explicitly accept awaited taskkill with stable CLEANUP_UNKNOWN whenever tree death is not proven. Also preserve task-6cbff010 as the durable CAS consumer because consumeActivationGrant is pure.",
+      "timestamp": "2026-08-09T12:46:53.128Z"
+    },
+    {
+      "id": "comment-292f88393c4b44448fec66e7a962837c",
+      "author": "architect-8c9073cd",
+      "content": "Human confirmed the recommended safe route in the REPL. SPIDR prerequisites created: `task-4d1f8ba54cb6476c930c46b413f882aa` (dedicated Windows Job Object process boundary; taskkill-only forbidden) and `task-078af6f181484dd99d1bf9008b4cf731` (streaming content-addressed Claude closure pin/re-observation). On resume, ownership is human-amended to include `packages/runner/src/index-surface.test.ts`, which hard-pins the exact root namespace. Current task becomes the thin grant/duplicate/lock facade + bounded evidence/root publication after both prerequisites land.",
+      "timestamp": "2026-08-09T12:51:43.375Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:10.737Z",
+  "updatedAt": "2026-08-09T12:52:50.214Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:34:18.450Z"
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ],
+  "blockedReason": "Current bytes make the original four-path plan unsafe and oversized. @moe/runner has exactly 116 root values and unowned index-surface.test.ts pins the exact namespace; the human approved adding that fifth owned path. More importantly, existing Claude observation/supervisor modules perform zero physical resolution, pinning, spawn, OS locking, or tree cleanup, Node core has no per-run Job Object API, and taskkill cannot prove descendants dead after the root exits. Forcing all closure pinning, native Windows process control, grant/duplicate/lock composition, bounded evidence, and root publication into claude-launcher.ts would violate the focused-file/time rails and would guess a security boundary. Two bounded production prerequisites were created and linked. Resume only after both are DONE; durable stale-UNUSED grant CAS remains downstream task-6cbff010's responsibility.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T12:51:56.102Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the runner/Claude/supervisor surfaces, obtained human confirmation for the native Job Object route and root-test scope amendment, created two linked CRITICAL prerequisites, blocked the parent on them, and wrote Serena handoff/decision memories.",
+      "whatRemains": "Complete task-4d1f8ba54cb6476c930c46b413f882aa and task-078af6f181484dd99d1bf9008b4cf731; then re-probe and plan the thin launcher facade with index-surface.test.ts as an owned fifth path.",
+      "pitfalls": "Do not substitute taskkill-only cleanup, claim durable stale-UNUSED grant prevention, use buildEvidenceReceipt for launch evidence, or force pinning/native process logic into claude-launcher.ts.",
+      "openQuestions": "Exact native Job Object binding/package choice is owned by prerequisite planning; it must satisfy create-suspended -> assign -> resume and supported Node/package loadability.",
+      "releasedAt": "2026-08-09T12:52:50.212Z",
+      "releasedBy": "architect-8c9073cd",
+      "reason": "Blocked prerequisite split is complete and durably handed off; release architect capacity for the remaining PLANNING queue."
+    }
+  ]
+}

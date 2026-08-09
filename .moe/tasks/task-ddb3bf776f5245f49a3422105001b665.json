@@ -1,0 +1,37 @@
+{
+  "id": "task-ddb3bf776f5245f49a3422105001b665",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Runs, resources and circuit-breaker operator surfaces",
+  "description": "Objective: ship the three canonical control-room surfaces that were never built, so the scenarios depending on them have something real to drive.\n\nWHY THIS EXISTS (project rail 4, Clause 2 gap measurement). task-667b1085 \"Control-room journey gate\" must pass all twenty spec section 12 scenarios. At planning time the architect probed each scenario's asserted test ids against production source (excluding *.test.*) and found three surfaces with ZERO implementations:\n- cr.runs — 0 files. Spec section 4.11 Runs/leases does not exist. CR-J5-002 asserts cr.runs.suspect.\n- cr.resources — 0 files. Spec section 4.12 Resources does not exist.\n- cr.banner.circuitbreaker — 0 files. CR-S10-001 asserts it and requires the banner to name the correlated check.\nIndependently confirmed by an adversarial refutation pass that searched wider vocabulary, all file types, both workspaces, the compiled bundle and the dependency manifest.\n\nSection 11.3 also names Runs and Resources in its loading/empty/degraded table, and section 4.16 implies both as the app's only table-shaped surfaces — which is why task-fdf3e6aaa (Narrow-mode surface reflow) records the table clause as not-applicable today.\n\nNOT IN SCOPE and explicitly excluded, because other tasks own them:\n- Every cr.graph.* surface (ghost, refusal, disposition, revisiondiff, minimap) and cr.banner.revision. Those belong to task-779d6804 Graph operator journeys and task-dddfaf83 Graph supersession engine, both BACKLOG. Do not build them here, and do not add any cr.graph.* test id: three committed tests ban that prefix from mounting (shell/j1-flow.test.tsx:133, shell/gating-keyboard.test.tsx:172, board/board-surface.test.tsx:234).\n- The journey scenarios themselves.\n\nOwned paths: apps/control-room/src/runs/**, apps/control-room/src/resources/**, and the circuit-breaker banner in apps/control-room/src/shell/**.\n\nHard dependencies: none blocking. The shell frame, gating context, Fact/TruthChip kernel and the a11y audit predicates are all committed and DONE.\n\nVerification: pnpm --filter @moe/control-room test",
+  "definitionOfDone": [
+    "A Runs/leases surface renders cr.runs.* including cr.runs.suspect, and a Resources surface renders cr.resources.*, both driven only by supplied daemon projections. Neither derives lease health, suspicion, or readiness — a SUSPECT row is SUSPECT because the payload said so, never because the surface compared timestamps.",
+    "A cr.banner.circuitbreaker renders as a polite live region and names the correlated check from the daemon's own payload. Per spec section 7.2 and 8.1 its options are rendered ONLY from returned commands; when the daemon supplies no reason the control is absent, never disabled with invented text.",
+    "Both new surfaces pass the committed a11y audits from apps/control-room/src/a11y/surface-audit.ts — auditFactChips, auditActionLegality, auditKeyboardReachability and auditLiveRegions — each asserting checked > 0 before violations is empty, so a surface that rendered nothing cannot pass. Consume those predicates; do not reimplement or weaken them.",
+    "Every fact on both surfaces renders through the Fact wrapper from kernel.tsx so it carries a truth chip, and a payload omitting a class renders UNKNOWN with provenance rather than defaulting upward. Assert the specific reason, not merely that something rendered.",
+    "Each surface renders its spec section 11.3 states: skeleton rows while loading, the exact empty copy (\"No active sessions. Agents appear here when they open a session.\" for Runs, \"No shared resources declared. They appear on first acquisition or via policy.\" for Resources), and rows flagged stale plus a lag banner when degraded.",
+    "No cr.graph.* test id is introduced anywhere — verified by running the three committed prefix-ban tests and confirming they still pass.",
+    "pnpm --filter @moe/control-room test passes, and each failure-path test is verified by mutating the production surface and confirming it goes red."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F. Runs is section 4.11, Resources section 4.12, their degraded states are in the section 11.3 table, and the circuit breaker is CR-S10-001.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength. This binds hardest on Runs: lease SUSPECT, silence datums and revoke affordances are daemon-supplied facts. Spec section 5 keeps renewal silence and activity silence as SEPARATE labeled datums and CR-J5-001 requires no warning and no revoke affordance while a lease is ACTIVE — conflating them is the defect that scenario exists to catch.",
+    "Do not create a placeholder or stub carrying a real cr.* test id to satisfy a future sweep. A stub with an authentic id is exactly the dishonesty the shell already refuses for cr.graph.*, and it would make task-667b1085's audits pass over fiction.",
+    "Do not build any cr.graph.* surface or cr.banner.revision — task-779d6804 and task-dddfaf83 own those. Three committed tests ban the cr.graph. prefix from mounting and must stay green.",
+    "Split before 400 lines, target 250 per file. Runs and Resources are separate directories; do not merge them into one module to save a file. Explicit owned paths only; no git add -A."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 17,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:31:05.230Z",
+  "updatedAt": "2026-08-09T12:31:05.230Z"
+}

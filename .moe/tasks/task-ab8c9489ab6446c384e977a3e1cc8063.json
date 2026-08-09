@@ -170,13 +170,15 @@
     {
       "stepId": "step-10",
       "description": "Adversarial self-review before complete_task. Read the diff as an attacker, not the author. Check specifically: does any audit pass when it swept zero elements, on any surface, including one that renders empty or degraded (the vacuous-sweep defect project rail 1 names); does the global keydown listener double-handle after a remount, or survive unmount; can the g-chord be left armed so a later unrelated keypress navigates; does any new element use a cr.fact. or cr.chip. prefix and thereby corrupt bar 3 app-wide; does auditActionLegality derive any authority instead of comparing against the supplied nextAllowedCommands; does the monochrome predicate still call describeTruthClass rather than a local copy; does any test assert only that something was refused rather than naming the specific reason code and, where two layers can refuse, which layer did; is every production file under 250 lines; and are there any debug, probe, scratch or generated evidence files left in the commit. Confirm the plan's own stated non-coverage is reported honestly at completion rather than implied as done: the section 4.16 layout reflow, prefers-reduced-motion, and the four-phase timing clause of DoD item 2 (carved out to task-a62e3c2d58404bd7bc2fc2ca09930f1d) are NOT delivered by this task.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T12:08:51.077Z"
+      "note": "Adversarial review complete over git diff 7afa17d..0075790 plus exact working-tree blob checks. All 15 canonical surfaces assert checked>0 before zero violations, including loading/degraded paths; display-only cr.action.* metadata is excluded from interactive visual-order comparison by a focused regression test. Router cleanup prevents post-unmount/double-remount handling, and invalid/text-entry/surface-local second keys clear the pending g chord with exact stable refusal codes. No new production cr.fact./cr.chip. marker corrupts reserved prefix counts. Command legality compares only caller-supplied NextAllowedCommand ids; monochrome calls production describeTruthClass and excludes semanticTone. Production sizes: keyboard-map 188, surface-audit 199, frame 245, approval-inbox 250 lines. No debug/probe/scratch/evidence artifacts are in owned commits. Fresh post-commit gates: control-room 28 files/421 tests and typecheck exit 0; repo 189 files/3425 passed/1 skipped and typecheck exit 0. Explicit non-coverage remains section 4.16 reflow, prefers-reduced-motion, and four-phase timing/latency (task-a62e3c2d58404bd7bc2fc2ca09930f1d). Foreign broad commit 588a0f6 captured earlier task bytes; final owned cleanup is explicit-path commit 0075790, and every owned working blob matched HEAD after gating.",
+      "startedAt": "2026-08-09T12:08:51.077Z",
+      "completedAt": "2026-08-09T12:18:59.125Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b6bbb60c",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,21 +193,30 @@
       "author": "architect-da724bb7",
       "content": "Human said “plan more,” taken as confirmation to pursue the recommended deterministic harness groundwork. Planning audit found full DoD cannot be certified under current ownership/jsdom: central ShellFrame/TruthChip production fixes and a formal separation between deterministic receipt evaluation and later Playwright/reference-environment execution are required. Governance amendment requested in #general; no speculative plan will be submitted until ruled.",
       "timestamp": "2026-08-09T10:42:35.886Z"
+    },
+    {
+      "id": "comment-0a11ed16677a471e97397696eab18045",
+      "author": "qa-58b24ffb",
+      "content": "QA FULL VERIFICATION RECORD (approval summary capped at 2000 chars; long form here).\n\nGATES RE-RUN BY QA, twice — once on arrival, once after my own mutation drill:\n- `pnpm --filter @moe/control-room test` -> exit 0, 28 files / 421 tests (both runs)\n- `pnpm typecheck` -> exit 0, all 16 workspace projects Done\n\nNote on the repo-wide leg: step 9 recorded FOREIGN RED on untracked distribution WIP (`distribution-manifest.test.ts`, `distribution-packaging.test.ts`), and @worker-4e85eff4 independently disclosed the same at 12:09Z. It has since cleared — `pnpm typecheck` is exit 0 at HEAD with no path attribution needed. The disclosure was honest when made; the condition simply resolved.\n\namend-1 SCOPE — HONOURED EXACTLY, AND I CHECKED THE BOUNDARY THE GOVERNOR DREW, NOT JUST THE FIX.\nThe whole of `approval-inbox.tsx`'s change is one added line plus a stray blank-line removal:\n`data-command-id={control.commandId ?? undefined}` at line 80.\nNo call site outside `approval-inbox.tsx`. No shared type touched. `git diff` over the amendment window shows the approvals directory otherwise untouched.\n\nPROVENANCE OF THE ID — the governor's specific concern, and it holds. The value comes from `control.commandId`, the caller's supplied command. Nothing invents, derives, or defaults one. The `enabled` guard at line 76 is `control.state === \"ENABLED\" && control.commandId !== null`, so a control with no command renders DISABLED rather than acquiring a fabricated id — which is the correct shape, since `auditActionLegality` only inspects non-disabled actions. Both directions are pinned in `approval-inbox.test.tsx`: line 226 asserts the rendered button's `data-command-id` equals the exact caller-supplied id; lines 231-237 assert a `commandId: null` control renders with the attribute ABSENT. A fabricated-id implementation fails the second test.\n\n`auditActionLegality` IS BYTE-UNCHANGED. `git diff 588a0f6 0075790 -- surface-audit.ts` returns exactly one hunk, and it is not in that function. The four ACTION_WITHOUT_COMMAND cases went green because production was fixed, never because the predicate moved. That was the governor's stated rejection condition and it is not met.\n\nTHE ONE AUDIT CHANGE, INVESTIGATED RATHER THAN WAVED THROUGH. `visualOrderMismatches` now filters to non-disabled actions before comparing DOM order to visual order. I treated this as a possible relaxation and checked it three ways:\n1. It is in `auditKeyboardReachability`, not `auditActionLegality`, so it is not the mechanism for the amendment's green.\n2. It is a CONSISTENCY fix, not a weakening: `isUnreachable` already returns false for disabled actions (surface-audit.ts:99), so the audit had already declared them out of scope for reachability while the order path contradicted that. The change makes the two agree.\n3. MY OWN MUTATION DRILL, not the worker's. I reverted the filter to `const interactive = actions;` and ran the focused suite: RED, 1 failed / 10 passed, failing exactly `surface-audit.test.ts:139` — \"ignores informational action metadata when comparing interactive order\". The new test is load-bearing. Restored from the captured blob and verified `git hash-object` == `b97e8b982fd1758be87d92a9e7f4a4f9a8f07a10`, the pre-drill value — NOT `git status`, and NOT `git checkout HEAD --`, per the practice established on this board an hour ago.\n\nDoD 1 — MET. Keyboard: CR-A11Y-002 completes J1's three human actions via `userEvent.keyboard` only, including board h/l column traversal, with the human-action count asserted <= 3. Colour: five truth chips proven distinct by (glyph, shortlabel, border) tuple — `classes.size === 5` and `tuples.size === 5` — plus production `auditTruthClassMonochrome()` returning `{checked: 5, violations: []}`. `auditKeyboardReachability` and `auditActionParity` run over every canonical surface at 1280 and 640.\n\nDoD 2 — FIRST HALF MET, SECOND HALF DELIBERATELY OUT OF SCOPE. Loading/degraded: parameterised per-surface sweeps assert degraded truth stays stale (`[data-testid$='.asof']` present) and that both degraded and loading states keep every enabled action command-authorised; a fixture missing its renderer THROWS rather than silently skipping. Timing (server/stream/render/human): see the escalation note below.\n\nDoD 3 — MET, against the bars the spec actually specifies. Section 12 line 742 of the pinned spec names four global bars: (1) J1 <= 3 human actions; (2) one fan-out proposal <= 1 approval; (3) every `cr.fact.*` has a `cr.chip.*` descendant; (4) every enabled `cr.action.*` originates from `nextAllowedCommands`. Bar 1 asserted in CR-A11Y-002. Bar 2 recorded as explicitly NOT APPLICABLE with its reason (CR-J1-002 forbids mounting `cr.graph.*` in this slice) plus a positive assertion that zero `cr.graph.*` elements mount — recorded as N/A rather than passed as an empty sweep, which is what the plan required. Bar 3 via `auditFactChips`. Bar 4 via `auditActionLegality` — the bar that caught the real defect. `prefers-reduced-motion` (spec line 686) and table reflow (line 432) are section 4/10 styling requirements, NOT section 12 bars; step 10 disclosed them as adjacent non-coverage and I do not score them against DoD 3.\n\nDoD 4 — MET. 28 files / 421 tests, exit 0, re-run twice.\n\nNON-VACUITY, checked structurally rather than by counting greens. Every audit call goes through `expectCleanAudit`, which asserts `checked > 0` BEFORE `violations: []`, so a sweep that inspected nothing cannot pass. The surface list is asserted non-empty, set-equal to a hand-written `EXPECTED_SURFACES`, and duplicate-free.\n\nRAILS: every production file under the 400 cap — approval-inbox 250, frame 245, surface-audit 199, keyboard-map 188. Fixtures split 173/77. No debug/probe/scratch artifacts in the owned commit.\n\nCOMMIT ATTRIBUTION: the `data-command-id` fix physically landed in `588a0f6` — the completion-hook tree sweep titled for task-f5d1dae629 — because a foreign hook swept this worker's in-flight edit. Same infra fault the board escalated today. `0075790` is this worker's own explicit-pathspec commit. Not scored against them.\n\nESCALATION, and it is the reason this record exists rather than a one-line approval: DoD 2's timing clause is NOT delivered and was never in this task's power to deliver. The architect probed at planning time and found the capability absent symbol by symbol — a grep for `latency|elapsedMs|durationMs|serverTime|streamTime|renderTime|humanTime|observedAt|receivedAt|emittedAt` across apps/ and packages/ returned ZERO matches, no clock abstraction and no injected time source anywhere. They carved it into task-a62e3c2d (\"Four-phase timing separation and shared latency feedback\", 6 DoD items, owned path `apps/control-room/src/performance/**`) as a PRODUCTION task rather than narrowing the DoD or mocking a journey. That is exactly what global rail clause 2 requires. `src/performance/**` is not this task's owned path, so the only ways to have satisfied DoD 2 here were an ownership violation or the mock-backed journey the rail forbids — rejecting would have compelled the drift the rail exists to prevent.\n\nSo: approved on the work's own merits, and task-ab8c9489 going DONE must NOT be read as \"M3 timing is done.\" task-a62e3c2d is in BACKLOG at HIGH priority and is the live remainder of DoD 2. Anything downstream that depends on four-phase timing separation depends on that task, not this one.",
+      "timestamp": "2026-08-09T12:24:45.900Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.717Z",
-  "updatedAt": "2026-08-09T12:08:51.077Z",
+  "updatedAt": "2026-08-09T12:25:53.111Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-1721c07f",
-    "worker-b6bbb60c"
+    "worker-b6bbb60c",
+    "qa-58b24ffb"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:27:40.723Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 9
+    "executedStepCount": 10,
+    "doneAt": "2026-08-09T12:25:53.111Z",
+    "wallClockMs": 7092388
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -220,7 +231,8 @@
     "step-6",
     "step-7",
     "step-8",
-    "step-9"
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T11:32:35.490Z",
@@ -249,5 +261,28 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-09T12:20:00.845Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\nTest Files  28 passed (28)\nTests  421 passed (421)\nStart at  15:19:33\nDuration  5.28s (transform 5.62s, setup 0ms, import 11.30s, tests 19.00s, environment 26.53s)\n\n$ vitest run",
+    "reportedAt": "2026-08-09T12:20:00.845Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/a11y/keyboard-map.test.ts",
+    "apps/control-room/src/a11y/keyboard-map.ts",
+    "apps/control-room/src/a11y/surface-audit.test.ts",
+    "apps/control-room/src/a11y/surface-audit.ts",
+    "apps/control-room/src/shell/frame.tsx",
+    "apps/control-room/src/shell/gating-keyboard.test.tsx",
+    "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx",
+    "apps/control-room/src/a11y/ui-wide-core-fixtures.tsx",
+    "apps/control-room/src/a11y/ui-wide-ops-fixtures.tsx",
+    "apps/control-room/src/approvals/approval-inbox.tsx",
+    "apps/control-room/src/approvals/approval-inbox.test.tsx"
+  ],
+  "completedAt": "2026-08-09T12:25:53.111Z",
+  "reviewCompletedAt": "2026-08-09T12:25:53.111Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-0a11ed16677a471e97397696eab18045.\n\nGATES RE-RUN BY QA twice (on arrival, and after my own drill): `pnpm --filter @moe/control-room test` exit 0, 28 files / 421 tests; `pnpm typecheck` exit 0, 16 projects. The distribution-WIP foreign red disclosed at step 9 has cleared.\n\namend-1 HONOURED AND BOUNDED: the whole approval-inbox.tsx change is one line, `data-command-id={control.commandId ?? undefined}`. No call site outside it, no shared type. The id is caller-supplied — `enabled` requires `commandId !== null`, so a control without a command renders DISABLED rather than acquiring a fabricated id. Both directions pinned: test:226 asserts the exact caller id, :231-237 assert a null-command control has NO attribute, so a fabricated-id implementation fails.\n\n`auditActionLegality` is BYTE-UNCHANGED across the amendment window — the four ACTION_WITHOUT_COMMAND cases went green by fixing production, which was the stated rejection condition.\n\nTHE ONE AUDIT CHANGE, DRILLED NOT READ: `visualOrderMismatches` now excludes disabled actions. It sits in auditKeyboardReachability, not the legality audit, and is a consistency fix — isUnreachable already exempted disabled actions at :99 while the order path contradicted it. I reverted the filter: RED, 1 failed/10 passed, failing exactly surface-audit.test.ts:139. Restored from the captured blob, verified `git hash-object` == b97e8b98, not `git status`.\n\nDoD1 met (keyboard-only J1 <=3 actions incl. h/l traversal; 5 truth classes distinct by glyph/label/border). DoD3 met against spec section 12's four global bars — bar 2 recorded N/A with reason plus a positive zero-cr.graph assertion, not an empty sweep. DoD4 met. Every audit runs through expectCleanAudit (checked>0 before violations==[]). Files under cap: 250/245/199/188.\n\nDoD2: first half met per surface. TIMING HALF NOT DELIVERABLE HERE — capability absent at planning, carved to task-a62e3c2d per rail clause 2. THIS DONE IS NOT \"M3 TIMING DONE\"."
 }

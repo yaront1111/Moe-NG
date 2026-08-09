@@ -1,0 +1,51 @@
+{
+  "id": "task-5855a9c6b8da4a428dd0e75ed9ae36d1",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Recovery continuation evidence binding",
+  "description": "Objective: close the J3 authority hole where caller-supplied release/handoff facts currently let ADOPTED, SUSPECT, QUARANTINED, and RECONCILIATION_COMMAND records gain successor authority. Deliverable: runner and daemon recovery contracts that derive and persist the exact predecessor-release fact and committed safe handoff from durable restart records, admit continuation only for the closed resumable classification set (ABSENT), and never trust those facts from the continuation request. NOT in scope: process killing, new crash classifications, doctor behavior, or canary tests. This is a shared runner/daemon wire-contract migration and must land producer and consumer together. Owned paths: packages/runner/src/recovery/{recovery-contract.ts,crash-classification.ts,safe-boundary.ts,safe-boundary.test.ts}; apps/daemon/src/recovery/{restart-reconciliation.ts,restart-reconciliation.test.ts,continuation-contracts.ts,continuation-service.ts,continuation-service.test.ts,continuation-binding.test.ts}. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The runner derives release/handoff evidence from parsed restart records and exposes a frozen closed resumable-classification set containing only ABSENT; no caller field can manufacture either fact.",
+    "admitSuccessorOverlap/admitResume receive the durable classification/evidence and refuse each non-resumable classification with one stable recovery code at SAFE_BOUNDARY; an exhaustive five-class production-surface sweep asserts all five cases were generated.",
+    "ReconciliationRecord persists the exact derived predecessor release and safe handoff, and continuation reads those stored bytes instead of accepting predecessorRelease/safeHandoff authority from its request schema.",
+    "ABSENT with PROVEN_RELEASED plus a committed handoff appends one successor binding; ABSENT without that handoff and every other classification refuse with exact code/layer and leave the durable store byte-identical.",
+    "A hostile request carrying legacy or extra release/handoff assertions is rejected at the daemon ingress/continuation layer and cannot override the stored record.",
+    "The runner, daemon, and repo typecheck/test verification chain exits 0; the worker mutation-drills classification admission and stored-evidence sourcing, then commits only the owned paths."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-db2146e3",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Unblocked by governor-f70d1157 at 12:49Z on explicit human authorisation. architect-db2146e3's block was correct and is answered by widening scope, not by weakening the fix.\n\nSCOPE WIDENED. packages/runner/src/index-surface.test.ts is ADDED to this task's owned paths, alongside its existing set. This is authorised co-change, not scope creep, and QA must not reject on the widened path.\n\nTHE CONFLICT, as measured by architect-db2146e3: closing the recovery hole requires admitResume and admitSuccessorOverlap to take a durable recovery classification. index-surface.test.ts:521-557 calls both public functions WITHOUT classification and asserts ADMITTED for PROVEN_RELEASED, so `pnpm --filter @moe/runner test` cannot pass while touching only the original owned paths. That landed test asserts the defect.\n\nTHE DEFECT IT ASSERTS is proven, not suspected. architect-8c9073cd's live probe at 12:29Z: caller-supplied PROVEN_RELEASED/handoff returns BOUND for ALL FIVE durable recovery classifications, including SUSPECT and QUARANTINED with held resources. qa-b2df68b9 raised it as a design observation on task-39fe2da5 and correctly declined to reject — no DoD required it, and a daemon-side gate would have been the daemon deciding rather than composing. The fix belongs here, in the @moe/runner contract, as a classification argument.\n\nBINDING GUARD ON THE TEST UPDATE. index-surface.test.ts:521-557 must be updated to assert the NEW correct behaviour: classification is required, and QUARANTINED and SUSPECT are REFUSED with their stable reason codes and refusing layer per epic rail 6. It must NOT be deleted, skipped, or loosened to keep the gate green. A test removed to make a breaking change pass is the same false-evidence failure the audit exists to prevent, and it is an automatic QA rejection.\n\nTHIS IS A BREAKING @moe/runner CONTRACT CHANGE. Plan it as one: every call site of admitResume and admitSuccessorOverlap must be found and updated, not just the ones the type checker happens to surface. Per Clause 1, name the consumer edges in the plan.\n\nAuthority note: I promoted this task at 12:33 and told the fleet that if I promoted something with a problem I missed, the cost was mine. This is that case. architect-db2146e3 reported it at planning with no plan submitted and no code written — the cheapest possible place to find it — and refused to retain the permissive shape to keep a gate green. That refusal was right.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 40,
+  "comments": [
+    {
+      "id": "comment-af9f8a98a7fc4e669087b7aafd7304f6",
+      "author": "architect-8c9073cd",
+      "content": "Consumer edge: Foundation self-host canary `task-97554aa4293e40eab56c0b642e18513a` will certify this durable recovery boundary after it is DONE. The canary must not deep-import or duplicate the rule.",
+      "timestamp": "2026-08-09T12:29:45.234Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:10.631Z",
+  "updatedAt": "2026-08-09T12:56:31.731Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:39:14.751Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
+}

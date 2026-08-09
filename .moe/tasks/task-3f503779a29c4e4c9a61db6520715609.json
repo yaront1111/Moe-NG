@@ -1,0 +1,52 @@
+{
+  "id": "task-3f503779a29c4e4c9a61db6520715609",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Real-browser journey harness for the control room",
+  "description": "Objective: stand up the browser driver, config, script and app-serving path that a real-browser journey gate needs. Nothing in this repo can drive a browser today.\n\nWHY THIS EXISTS (project rail 4, Clause 2 gap measurement). task-667b1085 \"Control-room journey gate\" is an acceptance task whose DoD 4 reads \"Playwright gate exits 0 at one exact commit\". At planning time the architect probed for that capability and found it ABSENT:\n- grep for playwright|puppeteer|cypress|selenium|webdriver across EVERY package.json in the repo (root, apps/*, packages/*) returns ZERO matches. No browser driver is installed or declared.\n- No playwright config file exists at any depth (searched playwright*.ts and playwright*.js outside node_modules).\n- The existing \"pnpm test:e2e\" is NOT a browser gate. It is `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` — Vitest under Node, scoped to tests/e2e/foundation only.\n- tests/e2e/control-room/ — the journey gate's declared owned path — does not exist. tests/e2e contains only foundation/.\n- tests/e2e/foundation/e2e-harness.ts states in its own header: \"This module is NOT part of the system under certification and must never stand in for one.\" It is the Foundation Preview canary's scaffolding and must not be repurposed as the control-room journey driver.\n\nThe journey gate therefore had no browser to run in. This task supplies one.\n\nSCOPE: choose and declare the driver, add its config, add a distinct script (do NOT overload the existing test:e2e, which owns the Node foundation lane), and make the built control-room app servable and drivable against a real daemon so a journey can actually navigate it. One trivial smoke journey proves the harness works end to end.\n\nNOT IN SCOPE: the J1-J6 scenarios themselves, the twenty-case matrix, contrast certification, and the p95/p99 performance run. Those belong to task-667b1085 and its other prerequisites. This task ships the harness and exactly one smoke journey — nothing that reads like a product certification.\n\nOwned paths: tests/e2e/control-room/**, the browser driver config, and the root package.json script entry.\n\nHard dependencies: none. apps/control-room builds today (vite build) and its committed surfaces are DONE.\n\nVerification: the new browser script exits 0, and pnpm test:e2e still exits 0 unchanged.",
+  "definitionOfDone": [
+    "A browser driver is declared as a devDependency with an exact pinned version and a committed config, and the choice is recorded in the task with one sentence on why. The repo currently declares none — grep for playwright|puppeteer|cypress|selenium|webdriver across every package.json returns zero.",
+    "A NEW script drives the browser and is separate from the existing test:e2e. test:e2e must keep its current definition (tsc over tests/e2e/foundation/tsconfig.json then vitest run tests/e2e) and must still exit 0 — the Node foundation lane is not to be absorbed, retargeted, or widened by this task.",
+    "The harness serves the real built control-room app and drives it against a real daemon process: it builds or reuses the app bundle, starts the daemon, waits for a readiness signal rather than a fixed sleep, and tears both down on EVERY exit path including failure. A leaked process or port is a defect — on Windows a surviving child holds file handles and surfaces later as EBUSY rather than the real error.",
+    "Exactly ONE smoke journey ships: load the app, assert one committed test id renders (for example cr.shell.root), and exit. It asserts the element was actually found rather than that no error was thrown. It must NOT assert any J1-J6 acceptance criterion, contrast, layout, or timing — those are task-667b1085's, and a smoke test wearing a journey's name would retire that obligation without discharging it.",
+    "Startup, readiness and teardown failures each return a distinct stable reason code, and a test asserts the specific code rather than merely that the run failed. Follow the existing E2E_* convention in tests/e2e/foundation/e2e-harness.ts (E2E_CLEANUP_FAILED, E2E_PROCESS_ALREADY_KILLED, E2E_UNDECLARED_BOUNDARY, E2E_UNKNOWN_KILL_TARGET) without importing that module.",
+    "The harness reads no wall clock and no random source, matching the determinism property the foundation harness already enforces by text scan, so a failing journey reproduces.",
+    "Both gates pass: the new browser script exits 0 and pnpm test:e2e exits 0, with fresh output recorded as completion evidence."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "Do NOT reuse or extend tests/e2e/foundation/**. That subtree is the Foundation Preview canary and its own header forbids standing in for the system under certification. Its e2e-process.ts real-process termination is deliberately fenced to that directory; do not import it and do not widen the fence.",
+    "Ship the harness and one smoke journey only. Any scenario that looks like a J1-J6 acceptance case belongs to task-667b1085. A harness task that quietly certifies journeys retires a proof obligation it did not discharge — the exact failure Clause 2 names.",
+    "Adding a browser driver adds a large dependency tree and a binary download step. Pin the version exactly (the repo sets saveExact: true) and state in the task whether CI must download browsers, so the gate is reproducible rather than machine-dependent.",
+    "Preserve foreign work; stage and commit only explicit owned paths. Never git add -A. Keep each production file below 400 lines, target 250."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Transit hop to BACKLOG so the task can be archived — moe.archive_task accepts only BACKLOG, REVIEW or DONE, not BLOCKED. This is NOT an unblock: the four unblock probes recorded in the block reason all still fail. Human approved archiving as superseded on 2026-08-09. Its two halves are now owned by task-5529a248a61843dbbe1ee20fb9a28d1f (Static browser journey harness) and task-318379eac8b54e688eadf7130b88f78e (Control-room daemon transport seam), and its remaining daemon-connected composition duplicates task-667b1085b3e04915a88336c7424045a1 (Control-room journey gate), which is already the acceptance surface for connected journeys.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 16,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:30:31.737Z",
+  "updatedAt": "2026-08-09T12:57:02.475Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Planning audit complete; no plan submitted and no code written. Established that this task's DoD 3 was authored on a false premise (mine): apps/control-room building is not the same as being drivable against a daemon. Measured four absences — no HTTP listener anywhere in the repo, apps/daemon has no main/bin so it is not a startable process, packages/control-room-client has zero transport (exports only createCompatGate plus types), and apps/control-room imports that client with 'import type' only. Confirmed no existing task closes it: task-6c732e00 (Streamable HTTP adapter, DONE) is packages/mcp/src/http/** for MCP hosts and excludes browser UI APIs, and task-5e43a9e2 (Foundation daemon ingress surface, BACKLOG) explicitly excludes transport listeners. Split by readiness into two created tasks: task-5529a248a61843dbbe1ee20fb9a28d1f (Static browser journey harness, HIGH, buildable today, no dependency) and task-318379eac8b54e688eadf7130b88f78e (Control-room daemon transport seam, HIGH).",
+      "whatRemains": "This task now holds ONLY the daemon-connected composition: point the browser harness at a real started daemon instead of the static fixture bundle, and assert a journey against production authority. Do not plan it until all four unblock probes pass: (1) a browser driver appears in a package.json with a committed config; (2) ls tests/e2e/control-room succeeds; (3) grep for .listen( or createServer( in apps/daemon returns a real listener; (4) an integration test constructs the runtime client against a started daemon and matches the in-process handler's payload for the same input.",
+      "pitfalls": "1. Do NOT let the static harness (task-5529a248) quietly satisfy this task. It runs against FIXTURE-BACKED UI with no daemon attached; a green smoke run there is not a connected-system proof, and its DoD requires it to say so in a comment here. 2. Do NOT repurpose tests/e2e/foundation/** — its header states it must never stand in for the system under certification, and its real-process kill capability is fenced to that directory. 3. The transport seam task deliberately excludes the resumable cursor stream, auth hardening, and wiring the app's data adapter to construct a live client. Those are separate and were NOT created, because their shape depends on the seam that does not exist yet — creating them now would have been guessing.",
+      "openQuestions": "FOR A HUMAN OR GOVERNOR: once both prerequisites land, is this task still wanted as the daemon-connected composition, or should it be ARCHIVED as superseded? Its two halves are now owned elsewhere, and the remaining content overlaps task-667b1085 (Control-room journey gate), which is itself the acceptance surface for exactly this. My recommendation is to archive it and let task-667b1085 own the connected journeys, but that is a scope call, not mine to make unilaterally.",
+      "releasedAt": "2026-08-09T12:55:40.483Z",
+      "releasedBy": "architect-1721c07f",
+      "reason": "Explicit architect handoff after completing the Clause 2 decomposition. Keep BLOCKED. Holding the assignment would only park my slot; this task needs its two prerequisites built, not an architect sitting on it."
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable Claude attempt dispatch",
+  "description": "Objective: compose the real Claude launcher into a daemon/store-backed single-node work path so the canary does not orchestrate authority in test code. Deliverable: a daemon service and focused tests that durably claim exactly one low-risk execution-bearing node, commit attempt/effect/grant activation together, invoke the Windows Claude launch wrapper only after that commit, persist process registration/observations/result manifest, and recover duplicate/restart delivery without overlapping authority. NOT in scope: verification/review/final acceptance, multi-node/fan-out, MCP transport, or E2E fixtures. Depends on the Windows Claude launch wrapper task. Owned paths: apps/daemon/src/work/foundation-attempt-contracts.ts/.js, foundation-attempt-service.ts/.js, and foundation-attempt-service.test.ts. Verification: pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "A single authenticated request against a real SqliteEventStore claims one node and commits attempt/effect/grant activation atomically before the first physical launch; injected commit failure proves zero launch.",
+    "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity.",
+    "Duplicate/replayed delivery leaves exactly one authoritative claim, one activation, and one process registration; it adopts or refuses before launch, asserted by raw durable row counts and launcher invocation count.",
+    "Unsupported graphs with more than one execution-bearing node refuse with a stable daemon code/layer and no claim/effect/resource/budget residue.",
+    "Crash/cancel/unknown launch outcomes persist honest SUSPECT/UNKNOWN or release facts and never silently relaunch; terminal/session events remain advisory and bind the current effect/session identity.",
+    "Runner, daemon, and repo-wide gates exit 0, and all production modules stay below 250 physical lines."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 42,
+  "comments": [
+    {
+      "id": "comment-48fb50df99a946f698c86e59925b0f13",
+      "author": "architect-8c9073cd",
+      "content": "Hard dependency: Windows Claude launch wrapper `task-acf73253a204435aba590894799814f2` must be DONE. Downstream consumers are Durable verification receipt dispatch `task-44d4873eb9f746b1a978e97ff9743dc4` and Foundation canary `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:45.550Z"
+    },
+    {
+      "id": "comment-98e6fc6130304d7cb2af203f308107d6",
+      "author": "architect-8c9073cd",
+      "content": "Dependency link from task-4afcb06422ed4adb89430b7ea9758d7f: the daemon coordination adapter needs this task's committed effect/session ownership records exposed through a frozen production reader such as readCurrentEffectSessionBinding(effectId, sessionId, now). It must derive current binding from persisted attempt/effect/lease facts and return UNKNOWN/unbound on absent, stale, terminal, cross-project, or unverifiable evidence; no caller-supplied positive binding. If the planned five paths cannot expose that reader, amend this task before approval rather than reimplementing it in the adapter or its tests.",
+      "timestamp": "2026-08-09T13:07:29.871Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:10.949Z",
+  "updatedAt": "2026-08-09T13:07:29.872Z",
+  "contextFetchedBy": [
+    "architect-8c9073cd"
+  ]
+}

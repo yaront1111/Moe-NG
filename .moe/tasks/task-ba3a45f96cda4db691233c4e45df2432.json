@@ -193,7 +193,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-08T16:20:12.133Z",
-  "updatedAt": "2026-08-09T08:24:43.471Z",
+  "updatedAt": "2026-08-09T13:00:56.381Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:11:20.498Z",
     "plannedStepCount": 11,
@@ -206,7 +206,8 @@
   },
   "contextFetchedBy": [
     "qa-812c17a0",
-    "worker-533a53ab"
+    "worker-533a53ab",
+    "architect-8c9073cd"
   ],
   "blockedReason": "Approved step 1 is a hard gate: do not implement until both package-root surface tasks are DONE. Current Moe state shows scheduler surface task-8ee125d0f05f4966abfcc49db37bbbf5 = WORKING (unassigned, 0/4 steps) and runner surface task-53680e91db1c4789a42b7129e61bdd7a = WORKING (unassigned, 0/8 steps). Deep imports are forbidden by the exclusive exports maps, so there is no safe implementation path until both publish and finish.",
   "blockedResourceId": null,

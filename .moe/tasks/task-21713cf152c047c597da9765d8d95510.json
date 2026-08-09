@@ -1,0 +1,33 @@
+{
+  "id": "task-21713cf152c047c597da9765d8d95510",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable daemon session authority",
+  "description": "Objective: land a production SqliteEventStore-backed principal/session/credential/capability authority, concrete proof-of-possession verifier, and durable replay guard for non-command transports. Depends on task-b4f12e63baca4ecc9f2c159ed3c3ad78. Before planning, obtain an explicit product decision for proof algorithm, canonical signed challenge bytes, key encoding, clock skew/TTL, renewal/rotation, and replay-key semantics; the pinned design leaves these open, so do not guess. NOT in scope: recipient/effect registries, coordination mailbox operations, MCP/HTTP listeners, or lifecycle command dispatch. Owned paths: apps/daemon/src/identity/session-authority-contracts.ts, session-authority-contracts.js, session-authority.ts, session-authority.js, session-authority.test.ts. Production consumers: the coordination-recipient registry prerequisite and task-4afcb06422ed4adb89430b7ea9758d7f. Verification: pnpm --filter @moe/core test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The approved versioned proof protocol freezes algorithm, canonical challenge bytes, key encoding, TTL/skew, renewal, rotation, and replay-key semantics; unsupported, malformed, missing, or unverifiable protocol facts refuse with exact stable core code and layer.",
+    "Production create/open/renew/rotate/close operations commit and read exact principal, session, credential generation/client key, transport scope/capability, and replay facts through SqliteEventStore with idempotent receipt/digest preservation across store recreation.",
+    "Authentication calls the reusable core session seam with the concrete verifier and durable replay evidence; callers cannot inject positive verifier, replay, session, or capability answers, and private keys, plaintext credentials, and presented proofs are never persisted or logged.",
+    "Focused real-file tests create authority only through production writers and prove valid recreation plus forged, expired, replayed, rotated, revoked, unknown-session, and missing-capability refusals with exact code and layer, zero authority, unchanged durable state where required, and nonzero generated-case counts.",
+    "The exact verification command exits 0, every production file remains below 400 lines, and a frozen read/auth surface supplies authenticated active-session facts to the two named consumers without command, recipient, effect, or mailbox authority."
+  ],
+  "taskRails": [
+    "Planning is blocked until the proof protocol choices are explicitly confirmed; do not invent cryptographic or clock semantics.",
+    "Persist durable evidence and public-key material only; never persist plaintext credentials, private keys, or presented proofs.",
+    "Coordination capabilities remain explicit transport scopes; never synthesize RuntimeCommandKinds or colon-containing core capability IDs."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
+  "priority": "CRITICAL",
+  "order": 50,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:07:03.226Z",
+  "updatedAt": "2026-08-09T13:07:03.226Z"
+}

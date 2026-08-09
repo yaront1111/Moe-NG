@@ -17,9 +17,81 @@
     "Tests for refusals assert exact stable reason code and `RECOVERY_INCARNATION` layer.",
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Before writing, recheck that dependency task-5606947a9d7d4f228dc63e6ce4dea69a remains DONE and that the committed @moe/store root still exports `BackupGenerationManifest['generationDigest']`; do not use foreign uncommitted contract bytes. Record the task merge-base plus fresh repo-wide `pnpm typecheck` and `pnpm test` failing-path sets for the required path-attributed comparison, recompute the design hash, repeat the zero-hit recovery-incarnation/key-epoch search, and inventory all dirty paths without touching them. Freeze the surface and precedence: exact unknown request `{restoreCommandId, backupGenerationDigest}`, `MINTED` success with `authority:'NONE'`, three closed codes (`RECOVERY_INCARNATION_INPUT_INVALID`, `RECOVERY_ENTROPY_UNAVAILABLE`, `RECOVERY_KEY_EPOCH_UNAVAILABLE`), layer `RECOVERY_INCARNATION`, truth `UNKNOWN` and no binding/handle on refusal; input/backup-shape refusal precedes entropy, which precedes key generation.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Grounding + baseline. No files modified.\n\nDEPENDENCY: task-5606947a still DONE (list_tasks on epic-bf111658). @moe/store root re-exports type `BackupGenerationManifest` (packages/store/src/index.ts:54) declared at backup-generation-contracts.ts:73 with `readonly generationDigest: string` (:77). Those bytes are COMMITTED — `git status` shows no modification under packages/store — so I am not building on foreign uncommitted contract bytes.\n\nDESIGN HASH: recomputed 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191 — matches the pinned rail exactly.\n\nBASELINE (run BEFORE any edit, so HEAD 7183c045 == the merge-base state for attribution; merge-base with main is 73804e0a):\n- repo-wide `pnpm typecheck` exit 0.\n- repo-wide `pnpm test` exit 1. Sole failure: `packages/runner/src/index-surface.test.ts > publishes exactly the reviewed root namespace, with no loss and no addition` (missing `isEvidenceFailure`, `supervisorFailure`). 1 failed file / 190 passed (191); 1 failed test / 3480 passed / 1 skipped.\n  FOREIGN, not mine: that is worker-2bc13005's in-flight Verification process wrapper — 12 untracked `packages/runner/src/evidence/verifier-process-*.{ts,js}` files plus a modified `packages/runner/src/surface/evidence-surface.ts`. Zero intersection with my seven owned paths. This is the step-7 baseline set.\n\nGAP RE-MEASURED, still open: no recovery-incarnation mint, no `keyEpoch`, no entropy gate, no key-rotation service anywhere under apps/ or packages/. The only hits are witness fields and validators — packages/core/src/project/project-contract.ts:41,49 and project-validation.ts:26,29,168,175 — plus a control-room test reason code `RECOVERY_INCARNATION_UNVERIFIED`. Nothing mints.\n\nFOREIGN DIRTY PATHS (inventoried, untouched): apps/control-room/src/shell/* (worker-b6bbb60c narrow-mode), packages/runner/src/evidence/* + surface/evidence-surface.ts (worker-2bc13005), .moe/**, .codex/agent-instructions.md.\n\nFROZEN SURFACE + PRECEDENCE\n- Request: exactly `{restoreCommandId, backupGenerationDigest}`, data properties only, snapshotted synchronously before the first await.\n- Success: `MINTED` with `authority:'NONE'`.\n- Closed code set, layer `RECOVERY_INCARNATION`, truth `UNKNOWN`, no binding and no handle on refusal:\n  1. RECOVERY_INCARNATION_INPUT_INVALID (shape/ID/digest) — checked first, before any crypto call;\n  2. RECOVERY_ENTROPY_UNAVAILABLE (throw / wrong type / not exactly 32 bytes / repeated block);\n  3. RECOVERY_KEY_EPOCH_UNAVAILABLE (generate/algorithm/usages/extractability/SPKI/import/sign/verify/repeated fingerprint).\n  Precedence is strictly 1 -> 2 -> 3, so a request that is simultaneously malformed and entropy-starved reports INPUT_INVALID.\n\nLINE-BUDGET FINDING, decided now rather than at step 5 (per mem:gotcha-line-cap-is-a-design-constraint-not-a-cleanup — this is a design constraint, not a cleanup):\n`apps/daemon/src/index.ts` is 249 physical lines with 15 blank lines (at 5, 143, 146, 151, 156, 162, 168, 174, 179, 184, 192, 203, 208, 215, 234). Every plausible export block overshoots 250, so the architect's \"remove separator blank lines\" is load-bearing arithmetic, not tidying: 249 - 15 + 15-line block = 249. I will therefore export 13 names (4 values incl. `createNodeRecoveryCryptoPort` re-exported through the barrel, 9 types) and NOT export `RECOVERY_INCARNATION_LAYER` — tests assert the layer as a literal, which is a stronger assertion than comparing against the production constant that could itself be wrong. That buys one line of slack. Considered and rejected: extracting the inline graph-preview implementation (lines 144-249) into its own module — it is the cleaner \"split\", but it creates two files outside step 7's explicit seven-path commit pathspec, so it is a plan deviation with commit-scope consequences rather than a free win.\n\nCONVENTIONS CONFIRMED ON DISK (not assumed):\n- `index-surface.test.ts` pins `EXPECTED_EXPORTS.length === 32` (:162) AND the exact sorted namespace (:166), so both the count and the list must move together.\n- `runtime-entrypoint.test.ts` computes the runtime tier as a forward CLOSURE seeded by the entry plus any module with its own `.test.ts` sibling (:117-135). `recovery-incarnation.ts` enters the tier via its test sibling and `recovery-incarnation.node.ts` via the barrel re-export, so BOTH need an exact one-line bridge `export * from \"./<name>.ts\";` with a trailing newline (:139-140) — and a wrong-content bridge fails just as loudly as a missing one (:163-167). See mem:gotcha-vitest-hides-missing-js-bridge.\n- House refusal style from the sibling `doctor-commands.ts`: frozen module-level constant refusals, validators taking `unknown` so an absent key is refused by the same guard as a wrong-typed one, null-prototype exact-key checks.\n- Runtime cycle avoided by construction: `recovery-incarnation.node.ts` imports from `recovery-incarnation.ts` TYPE-ONLY (erased), while the barrel re-exports the node factory as a value. Cycles resolve per entry point and yield ",
+      "startedAt": "2026-08-09T13:01:03.714Z",
+      "completedAt": "2026-08-09T13:04:20.352Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: add a focused suite importing the planned values/types through `@moe/daemon`. Specify exact data-property-only request snapshotting (reject missing/extra/accessor/proxy values and any caller nonce, key epoch, counter, timestamp, malformed ID, or non-lowercase-hex64 digest before crypto); a deeply frozen versioned binding over restore command, backup digest, raw-nonce digest/incarnation ref, key-epoch ref, full-SPKI fingerprint/public metadata and proof; and a non-enumerable opaque signing handle outside serialized binding bytes. Exercise the real default Node adapter for two distinct command IDs over one backup digest, require distinct incarnation refs, key refs and public-key fingerprints, and prove an exact same-command/digest in-process retry does not remint. Add an exact nonzero fault matrix for entropy throw/wrong type/31-or-33-byte/repeated output and key generate/algorithm/usages/extractability/SPKI/import/sign/verify/repeated-fingerprint failures; each row asserts exact code, diagnostic reason, layer, truth, authority and handle/binding absence, plus call ordering. Add combined input+entropy+key precedence cases, failed-attempt fingerprint burning, simultaneous repeated-output calls, and a recursive result-graph leak check forbidding CryptoKey/KeyObject, Buffer/views, functions, Error/caught sentinel text, raw nonce and private-key-shaped fields. Run the focused test once and retain the expected missing-public-symbol failure.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "note": "TDD RED landed and verified red for the RIGHT reason.\n\n`pnpm --filter @moe/daemon exec vitest run ... src/recovery/recovery-incarnation.test.ts` -> exit 1, **63 failed / 2 passed (65)**. Every failure is `createRecoveryIncarnationService is not a function` / `createNodeRecoveryCryptoPort is not a function` — the expected missing-public-symbol failure, not a broken test file.\n\nThe 2 passing cases are deliberate and are the rail's anti-vacuity guards: they assert the generated matrices actually generated cases (`INVALID_REQUESTS.length === 21`, `ENTROPY_FAULTS.length === 7`, `KEY_FAULTS.length === 12`) and touch no missing symbol. A sweep that silently produced zero rows would fail these BEFORE any behaviour is asserted.\n\nWHAT IS SPECIFIED (65 cases)\n- Vocabulary: exactly three closed codes in precedence order, frozen; schema version literal; `RecoveryIncarnationErrorCode` and the result union pinned with `expectTypeOf` against the production constants.\n- Request admission (21 rows + 2): every row asserts `calls.order` is EMPTY — the ordering claim is that nothing reached the CSPRNG, not merely that it refused. Covers missing/extra keys, the four forbidden caller-supplied identity fields (nonce, keyEpoch, counter, timestamp) plus incarnationRef, non-string/empty/over-long/control-char/non-NFC command IDs, and uppercase/63/65/non-hex/non-string digests. Accessor-backed request refused outright; a separate case mutates the request object AFTER `mint()` returns its promise and proves the binding still carries the pre-await snapshot.\n- Real Node adapter path: full binding shape, every reference `^[0-9a-f]{64}$`, 128-hex Ed25519 signature, 88-hex (44-byte) SPKI, deep freeze; exactly 32 bytes requested from the CSPRNG; two commands over ONE generation get distinct incarnation ref, incarnation digest, key-epoch ref, key fingerprint and binding digest; identical retry does not remint (randomBytes called once); rebinding one command to a second generation refuses; two concurrent identical mints collapse to one minting.\n- Fault matrix (19 rows): 7 entropy (throw, reject, non-Uint8Array, string, 31 bytes, 33 bytes, null) each asserting `generated === 0` so entropy is proven before a key exists; 12 key (throw, reject, null, wrong algorithm, non-Uint8Array SPKI, empty SPKI, non-object handle, sign throw, sign non-Uint8Array, verify throw, verify false, verify truthy-non-boolean) each asserting the CSPRNG was still asked for exactly 32. Every row goes through `expectRefusal`, which pins code AND layer `RECOVERY_INCARNATION` AND `truth: \"UNKNOWN\"` AND `authority: \"NONE\"` AND the absence of `binding`/`keyHandle`.\n- Freshness proven on RAW material: a repeated CSPRNG block is refused even when BOTH the command and the generation differ — the derived reference would differ, so only a comparison on the raw block can catch it. Same shape for a repeated public key. Plus burning (a block reserved on an attempt that later died at the key leg is still refused later) and a simultaneous-claim case where exactly one of two concurrent commands may take a repeated block.\n- Precedence: malformed + dead CSPRNG -> INPUT_INVALID with an empty call order; short entropy + dead key generation -> ENTROPY_UNAVAILABLE with `generated === 0`.\n- Leak checks: a `SENTINEL` string is thrown from every one of the 19 fault legs and asserted absent from the serialized refusal. A recursive walker over `Reflect.ownKeys` (so NON-enumerable properties are included) forbids functions, Error, ArrayBuffer, any ArrayBuffer view, `CryptoKey`, the raw nonce hex, and any string matching /private|secret|pkcs8|seed/i. `keyHandle` is asserted non-enumerable and absent from `JSON.stringify`.\n- Adapter-level protection: a fabricated `{}` handle and a `structuredClone` of a real handle both fail to sign, a destroyed handle stops signing, the handle serializes as `{}`, and the exported SPKI round-trips through `importKey`.\n\nDELIBERATE TEST-DESIGN CHOICES WORTH REVIEWING\n1. The stub port's DEFAULT legs are real WebCrypto Ed25519, not fakes; only the named fault row replaces a leg. A green row therefore cannot pass by never having touched real crypto.\n2. Two cases recompute `sha256(domain || bytes)` independently and compare to the published digest. That is deliberate duplication of a one-line derivation, used as an oracle for \"the raw block was hashed, not published\" — it is not a reimplementation of the service's logic.\n3. `expect(node instanceof webcrypto.CryptoKey)` rather than a name check, so a renamed class cannot slip through.\n\nNode facts measured on THIS machine (v24.16.0), not assumed: `subtle.generateKey({name:'Ed25519'}, false, ['sign','verify'])` gives a private key with `extractable:false`, `type:'private'`, `usages:['sign']`; SPKI is 44 bytes; signatures are 64 bytes; verify succeeds. `@moe/store` is already a declared `@moe/daemon` dependency, so importing the digest TYPE adds no manifest change.",
+      "startedAt": "2026-08-09T13:05:35.671Z",
+      "completedAt": "2026-08-09T13:07:53.917Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the recovery-incarnation contract and stateful mint service. Import only the type `BackupGenerationManifest['generationDigest']` from @moe/store; defensively snapshot the exact request synchronously before the first await and validate canonical NFC bounded command ID plus lowercase hex64 digest. Define immutable request/binding/proof/success/refusal/opaque-handle/crypto-port types, schema and error constants, fixed no-secret refusal factories, and domain-separated canonical hashing. Maintain per-service in-flight/success bindings by restore command so concurrent or repeated identical command+digest calls reuse one mint while rebinding the command to another generation refuses. Request exactly 32 entropy bytes, hash and reserve the raw block before any key await, refuse repeats independently of command context, then derive the context-bound incarnation reference; after key generation, fingerprint and reserve the complete canonical SPKI before self-proof, derive the key-epoch/binding digests, sign and verify the exact canonical challenge through the port, and return only a deep-frozen `MINTED`/authority-NONE result whose protected handle is frozen and non-enumerable. Burn seen values on later failure, best-effort destroy candidate handles, never return caught diagnostics, and preserve the primary stable code if cleanup also fails.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.js"
+      ],
+      "startedAt": "2026-08-09T13:09:12.264Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the production Node crypto adapter in a separate focused module. Use Node 24 WebCrypto/getRandomValues or randomBytes for the requested 32 bytes and `subtle.generateKey({name:'Ed25519'}, false, ['sign','verify'])`; require a private CryptoKey with type private, extractable false and signing usage, retain it only in a module-private WeakMap keyed by a frozen empty opaque handle, and export only the public key's canonical full SPKI DER. Re-import/round-trip the SPKI, require Ed25519 public metadata, implement Ed25519 sign and public verify for the service's challenge, and delete the handle on destroy; a structured clone or fabricated handle must not resolve to a key. Re-export only the reviewed `createNodeRecoveryCryptoPort` value from the public recovery-incarnation barrel, and add exact one-line bridges so the existing raw-Node bridge/loadability gate covers both modules.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.node.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.node.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish the minimal reviewed surface and drive tests GREEN. Add compact explicit value/type exports for the schema, error vocabulary, service factory, Node port factory and associated immutable types to the daemon root, removing only adjacent separator blank lines so `apps/daemon/src/index.ts` remains <=250 physical lines. Update `index-surface.test.ts`'s hand-reviewed runtime catalogue/count and type assertions for exactly those exports; do not expose internal canonicalizers, freshness sets, private port state or test fixtures. Complete/refactor the focused suite against the production root and real Node adapter, verify the binding/proof is deterministic for fixed injected fresh material but that changing caller context cannot mask raw entropy/key repetition, and keep inline comments explicit that `MINTED` is non-authoritative/process-local until a later daemon controller persists it through RecoveryAnchor. Record task-8a01c025b65246aca09e69d82e009587 and task-6f786c58cabf4f85be8ed4135e68a752 as downstream daemon consumers; do not claim @moe/store directly imports this app surface.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.node.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Perform one adversarial review over only the seven owned paths: attack null/huge/ill-formed Unicode and hostile proxy/accessor input, request mutation across awaits, same-command conflicts, simultaneous different-command mints, repeated raw entropy/key with changed context, fingerprint/canonical framing collisions, malformed/noncanonical SPKI, wrong key type/usages/extractability, fake/cloned/disposed handles, sign/verify false or throw, cleanup failure, deep-freeze gaps, error/sentinel leakage and accidental PREPARED authority. Count physical lines and refactor so each production source and the daemon root target <=250 and none reaches 400. Mutation-drill the production freshness surface by temporarily deleting/inverting the raw-entropy repeat comparison, require the named repeated-output test to turn red while the exact generated-case-count assertion remains nonzero, then restore the exact source bytes and remove all probe/generated evidence; fix any defect only in owned files.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the concentrated final verification in the foreground. Re-run repo-wide `pnpm typecheck` and `pnpm test`, compare exact HEAD failing paths with the step-1 merge-base sets, require an empty new-failure intersection with the seven owned paths, and report any foreign red verbatim. Then run the single completion-evidence command exactly and require exit 0: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Record fresh stdout/stderr/exit status, confirm task-560 remains DONE, no private/debug/probe/generated evidence exists, and stage/commit only `apps/daemon/src/recovery/recovery-incarnation.ts`, `.js`, `.node.ts`, `.node.js`, `.test.ts`, `apps/daemon/src/index.ts`, and `apps/daemon/src/index-surface.test.ts` by explicit pathspec—never add the whole tree, reset, stash, merge, or push.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4addc779",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -38,5 +110,48 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:05:04.423Z",
-  "updatedAt": "2026-08-09T12:09:34.179Z"
+  "updatedAt": "2026-08-09T13:09:12.264Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:31:28.217Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-f39f0c46",
+    "worker-4addc779"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T13:00:48.706Z",
+  "planningNotes": {
+    "approachesConsidered": "Use a stateful daemon mint service plus an injected protected-key crypto port. The default Node 24 adapter uses WebCrypto Ed25519 with a non-extractable private CryptoKey retained only in an adapter-private WeakMap; it returns a frozen empty opaque handle, canonical public SPKI metadata, and a self-verified binding proof. Rejected classic KeyObject because it is structured-cloneable and its private PKCS8 bytes remain exportable even though JSON.stringify misleadingly yields {}; rejected raw/private key bytes, PEM/PKCS8 outcomes, counter/time/restored-state derivation, caller nonce/key-epoch fields, and hashing only the backup/command. Raw 32-byte entropy fingerprints and full canonical SPKI fingerprints are compared and reserved independently before context-bound references are derived, so changing restoreCommandId or backupGenerationDigest cannot mask a repeated CSPRNG block or key. Add a distinct RECOVERY_INCARNATION_INPUT_INVALID code rather than mislabel malformed/hostile input as entropy or key failure. The service accepts the committed @moe/store BackupGenerationManifest['generationDigest'] type and validates lowercase hex64, but returns MINTED with authority NONE; it does not reimplement or claim BackupGeneration verification. RecoveryAnchor alone owns PREPARED/INSTALLED.",
+    "codebaseInsights": "Re-measurement at committed HEAD c5c46bb7f10ecf3e72f5bcd4b9869858a0fdaeda found no recovery-incarnation mint, keyEpoch, entropy gate, protected-key port, or recovery key rotation under apps/packages; existing recoveryIncarnationRef occurrences are witness fields/validators only. The pinned design hash was recomputed as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. Hard dependency task-5606947a9d7d4f228dc63e6ce4dea69a is DONE with exit-zero store evidence (32 files/357 tests), and @moe/store now exports BackupGenerationManifest with generationDigest:string plus the real creation/verifier surfaces. Node 24.16 local probes proved subtle.generateKey({name:'Ed25519'}, false, ['sign','verify']) yields private extractable:false/public extractable:true, 44-byte SPKI, 64-byte signatures, successful Ed25519 verify, and InvalidAccessException on private PKCS8 export. apps/daemon/src/index.ts is 249 physical lines; add only compact reviewed exports and remove separator blank lines as needed to remain <=250. index-surface.test.ts pins the exact 32-value namespace and runtime-entrypoint.test.ts automatically requires an exact one-line .js bridge for every production .ts module. The task's downstream daemon consumers remain task-8a01c025b65246aca09e69d82e009587 and task-6f786c58cabf4f85be8ed4135e68a752. @moe/store task-b6e3dd2af916490fb2bc4d375a530683 cannot import upward from apps/daemon; a later daemon restore controller must pass this structural binding/handle to the anchor rather than create a store->daemon dependency.",
+    "risks": "A non-extractable WebCrypto CryptoKey hidden behind a WeakMap handle is protected against caller export but is process-volatile, not an OS-durable keystore reference. This task must state that limitation and must not claim crash-resume persistence or PREPARED authority; RecoveryAnchor/controller must later supply an OS-protected durable key provider before CORE-S14 can pass. Snapshot the exact request before the first await; reject proxies/accessors/extras and caller nonce/key/counter/time. Async simultaneous mints require atomic in-flight command binding plus synchronous reservation of raw entropy fingerprints before key generation and key fingerprints before proof verification; same command+digest reuses the in-process mint, while the same command rebound to another generation refuses. Burn suspect fingerprints even when later stages fail. Full SPKI DER, not a tail slice, is fingerprinted and round-tripped; sign/verify the canonical domain-separated binding challenge before returning. Every port throw/false/malformed value maps to a frozen constant refusal, cleanup failure never replaces the primary code, and no caught message/Error, Buffer/view, CryptoKey/KeyObject, function, raw nonce, or private-shaped field may escape. Keep both production sources <=250 and the root index <=250, preserve foreign work, and stage only the seven named paths.",
+    "keyFiles": [
+      "apps/daemon/src/recovery/doctor-commands.ts",
+      "apps/daemon/src/recovery/continuation-contracts.ts",
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts",
+      "apps/daemon/package.json",
+      "packages/store/src/backup-generation-contracts.ts",
+      "packages/store/src/backup-generation.ts",
+      "packages/store/src/index.ts",
+      "packages/core/src/project/project-contract.ts",
+      "packages/contracts/src/distribution/distribution-contract.ts",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-09T13:00:50.762Z",
+  "workStartedAt": "2026-08-09T13:01:03.714Z"
 }

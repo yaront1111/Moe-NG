@@ -1,0 +1,33 @@
+{
+  "id": "task-04e4367443214a588ed6277b92969a33",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable coordination recipient registry",
+  "description": "Objective: provide the production writer/reader for coordination recipient addresses and closed roles, bound to authenticated active daemon sessions and persisted through SqliteEventStore. Depends on task-21713cf152c047c597da9765d8d95510. Deliverable is a nominal registry surface that the coordination adapter can consume without caller-injected positive recipient answers. NOT in scope: proof verification, effect-session binding, mailbox send/read/ack, MCP/HTTP transport, or lifecycle commands. Owned paths: apps/daemon/src/coordination/recipient-registry.ts, recipient-registry.js, recipient-registry.test.ts. Production consumer: task-4afcb06422ed4adb89430b7ea9758d7f. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "Production register/replace/revoke operations accept only an authenticated active-session result from the durable session authority, validate the closed coordination role/address grammar, and commit idempotent versioned registry events and receipts through SqliteEventStore.",
+    "A frozen resolver derives known role/session facts only from committed registry and current session-authority records; unknown, revoked, expired, rotated, malformed, or cross-project records remain unknown and gain no coordination authority.",
+    "Real-file tests create sessions and recipients only through production writers, recreate the store and registry, and prove exact receipt/digest/replay behavior plus unknown/revoked/expired/cross-project outcomes and unchanged durable state on every refusal.",
+    "Every refusal path asserts its exact stable code and refusing layer at the writer boundary; generated role/address cases assert a nonzero case count, and mutating each production authority guard turns the focused test red.",
+    "The exact verification command exits 0, production files remain below 400 lines, and task-4afcb06422ed4adb89430b7ea9758d7f is recorded as the real consumer."
+  ],
+  "taskRails": [
+    "The resolver reports durable evidence; it does not infer recipients from caller presentation or mailbox contents.",
+    "Recipient roles use the closed @moe/coordination vocabulary and are scoped to one project and active session.",
+    "No command, lifecycle, effect, or mailbox authority may be added."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
+  "priority": "CRITICAL",
+  "order": 51,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:07:22.408Z",
+  "updatedAt": "2026-08-09T13:07:22.408Z"
+}

@@ -1,0 +1,38 @@
+{
+  "id": "task-5529a248a61843dbbe1ee20fb9a28d1f",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Static browser journey harness",
+  "description": "Objective: stand up the browser driver, its config, a distinct script, and a served static bundle, with one smoke journey proving the harness works. This is the half of the journey-gate harness that is buildable TODAY, with no daemon.\n\nWHY THIS EXISTS. task-3f503779a29c4e4c9a61db6520715609 was authored as a single harness task whose DoD bundled the browser driver together with \"drives it against a real daemon process\". A planning probe found the daemon half unbuildable: there is NO HTTP listener anywhere in the repo (grep for createServer(, .listen(, Deno.serve, Bun.serve across apps, packages and adapters returns ZERO), apps/daemon/package.json declares no main and no bin so it is not a startable process, packages/control-room-client exports only createCompatGate plus types with zero transport, and apps/control-room imports that client with \"import type\" only. That task is now BLOCKED and holds the daemon-connected composition; this task holds the part that works.\n\nWHAT IS BUILDABLE TODAY, verified: apps/control-room builds with vite build and dist/ already contains index.html plus assets. index.html mounts /src/main.tsx, and main.tsx mounts ControlRoomScaffold, which renders committed fixture surfaces. So the app is fully renderable standalone — it simply is not daemon-connected.\n\nWHAT IS ABSENT, verified: grep for playwright|puppeteer|cypress|selenium|webdriver across EVERY package.json (root, apps/*, packages/*) returns ZERO. No browser config exists at any depth. tests/e2e/control-room/ does not exist; tests/e2e contains only foundation/. The existing \"pnpm test:e2e\" is Vitest under Node — package.json:18 is `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` — and must not be absorbed or retargeted.\n\nNOT IN SCOPE: anything requiring a daemon; the J1-J6 scenarios; the twenty-case matrix; contrast certification; the p95/p99 run. Those belong to task-667b1085 and task-3f503779. Ship the harness and exactly one smoke journey — nothing that reads like a product certification.\n\nOwned paths: tests/e2e/control-room/**, the browser driver config, and the root package.json script entry.\n\nHard dependencies: none.\n\nVerification: the new browser script exits 0, and pnpm test:e2e still exits 0 unchanged.",
+  "definitionOfDone": [
+    "A browser driver is declared as a devDependency with an exact pinned version (the repo sets saveExact: true) plus a committed config, and the task records in one sentence which driver was chosen and why. The repo declares none today — grep for playwright|puppeteer|cypress|selenium|webdriver across every package.json returns zero.",
+    "A NEW script drives the browser, separate from test:e2e. test:e2e must keep its exact current definition and still exit 0 — the Node foundation lane is not absorbed, retargeted or widened.",
+    "The harness serves the real built static bundle from apps/control-room (vite build output, or vite preview) and tears the server down on EVERY exit path including failure. A leaked process or port is a defect: on Windows a surviving child holds file handles and surfaces later as EBUSY rather than the real error.",
+    "Exactly ONE smoke journey ships: load the served page, assert the committed test id cr.shell.root is present, exit. It asserts the element was actually found rather than that no error was thrown. It must NOT assert any J1-J6 acceptance criterion, contrast, layout, or timing — a smoke test wearing a journey's name would retire an obligation it did not discharge.",
+    "Build, serve, readiness and teardown failures each return a distinct stable reason code and a test asserts the specific code, not merely that the run failed. Follow the existing E2E_* convention in tests/e2e/foundation/e2e-harness.ts (E2E_CLEANUP_FAILED, E2E_PROCESS_ALREADY_KILLED, E2E_UNDECLARED_BOUNDARY, E2E_UNKNOWN_KILL_TARGET) WITHOUT importing that module.",
+    "Readiness is awaited by polling the served URL until it answers, never by a fixed sleep, and the wait has a bounded timeout that fails with its own reason code.",
+    "The harness records honestly, in the task and in a comment on task-3f503779, that this journey runs against FIXTURE-BACKED UI with no daemon attached, so nobody later mistakes a green smoke run for a connected-system proof."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F.",
+    "Do NOT reuse or extend tests/e2e/foundation/**. Its own header states: 'This module is NOT part of the system under certification and must never stand in for one.' Its real-process termination in e2e-process.ts is deliberately fenced to that directory — do not import it and do not widen the fence.",
+    "Never imply a daemon was involved. The served app renders committed fixtures via ControlRoomScaffold; there is no transport in the repo. Any artifact, log line, or test name suggesting a connected system is a fabricated certification and is forbidden by epic rail 4.",
+    "Ship the harness and one smoke journey only. Any scenario resembling a J1-J6 acceptance case belongs to task-667b1085.",
+    "A browser driver pulls a large dependency tree and a binary download. Pin the version exactly and state whether CI must download browsers, so the gate is reproducible rather than machine-dependent.",
+    "Preserve foreign work; stage and commit only explicit owned paths. Never git add -A. Keep each file below 400 lines, target 250."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 19,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:53:35.323Z",
+  "updatedAt": "2026-08-09T12:53:35.323Z"
+}

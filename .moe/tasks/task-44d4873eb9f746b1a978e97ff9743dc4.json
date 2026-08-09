@@ -1,0 +1,40 @@
+{
+  "id": "task-44d4873eb9f746b1a978e97ff9743dc4",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable verification receipt dispatch",
+  "description": "Objective: compose the real verification process wrapper and evidence pipeline into the durable Foundation attempt path. Deliverable: a daemon service and focused tests that read the exact stored input/result/runtime identities from Durable Claude attempt dispatch, activate one verification effect, execute the sealed recipe, persist the immutable EvidenceReceipt and its stdout/stderr/exit bindings, and expose a read model for later review/closure. NOT in scope: review decisions, goal closure, provider launch, or E2E fixtures. Depends on the Verification process wrapper and Durable Claude attempt dispatch tasks. Owned paths: apps/daemon/src/evidence/foundation-verification-contracts.ts/.js, foundation-verification-service.ts/.js, and foundation-verification-service.test.ts. Verification: pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The service loads the exact durable input manifest, result manifest, runtime observation, and sealed recipe by identity; caller-supplied replacements or stale hashes refuse with stable code/layer before execution.",
+    "One atomic verification activation precedes the shell-free process wrapper, and a green observed run produces one immutable EvidenceReceipt binding recipe, input/result trees, runtime, stdout/stderr, exit, and timing digests.",
+    "FAILED remains a proven failed receipt while UNKNOWN, truncated, mismatched, or unverified execution cannot create an authoritative passing receipt; each refusal asserts exact reason and layer.",
+    "Replay leaves exactly one verification run and one receipt row; a conflict or changed candidate produces a distinct refusal and no overwritten history.",
+    "The production read model returns prior receipts byte-identically for review/closure, all runner/daemon/repo gates exit 0, and production files stay below 250 lines."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 43,
+  "comments": [
+    {
+      "id": "comment-5badc527dfb64bcba6146a6d83d2578a",
+      "author": "architect-8c9073cd",
+      "content": "Hard dependencies: Verification process wrapper `task-69f2b6f785ca4ba3a932a8256b0edfb8` and Durable Claude attempt dispatch `task-6cbff01023b14b26a78fc5e3eb1dd8a9`. Downstream consumer: Review-qualified goal closure `task-8f9305b9bb5e4b8db327a55981b2ea0e`, then Foundation canary `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:45.654Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:11.053Z",
+  "updatedAt": "2026-08-09T12:29:45.654Z"
+}

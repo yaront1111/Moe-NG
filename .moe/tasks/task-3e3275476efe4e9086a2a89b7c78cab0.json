@@ -21,13 +21,168 @@
     "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength. Narrow mode is a presentation state only: it may never change which commands exist, which actions are enabled, or any truth class.",
     "Keep each production file below 400 lines, target 250. Explicit owned paths only; no git add -A."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish what already exists before writing anything, because this task's own description predates task-ab8c9489 and understates the shipped surface. Read shell/frame.tsx in full and confirm on disk: the skip-link at :213 with mainRef and #cr-shell-main at :223; HelpOverlay at :160-171 rendering cr.shell.help with role=\"dialog\", wired at :222; the inspector at :224-230 using hidden={!keyboard.inspectorExpanded}. Read a11y/keyboard-map.ts and note useKeyboardRouter (:123), useShellKeyboardController (:160), the ? binding (:54) and the collapse-inspector / expand-inspector actions. Read a11y/surface-audit.ts:140 auditActionParity and note its selector only matches cr.action.*. Then confirm the gap is still open with one grep over production .ts/.tsx/.css for innerWidth|matchMedia|ResizeObserver|breakpoint|isNarrow|data-narrow|960|1200 — only prose comments and ACTION_MISSING_AT_NARROW should match. Finally, verify the drive technique in this harness before depending on it: assign window.innerWidth and dispatch a resize Event; if direct assignment does not stick, use Object.defineProperty(window, \"innerWidth\", { configurable: true, value, writable: true }). Do NOT use matchMedia or ResizeObserver — both are undefined here. No files are modified in this step.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Re-measured current HEAD 174c07b without edits. frame.tsx still has the first-focusable skip link/mainRef, existing cr.shell.help role=dialog, and inspector hidden from keyboard.inspectorExpanded; keyboard-map.ts still owns ? plus [/] actions and the single document router; auditActionParity still selects only cr.action.*. Production grep over .ts/.tsx/.css for innerWidth|matchMedia|ResizeObserver|breakpoint|isNarrow|data-narrow|960|1200 returned only the existing goals-board test comment, confirming no JS width state or marker. A real jsdom probe run from apps/control-room proved direct window.innerWidth=800 sticks, resize dispatch invokes one listener, and matchMedia/ResizeObserver are both undefined. The same import from repo root failed because jsdom resolves only from the app workspace, so future probes run from apps/control-room. No files modified.",
+      "startedAt": "2026-08-09T12:44:33.275Z",
+      "completedAt": "2026-08-09T12:45:16.048Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: write the failing spec for the width ladder and the width-derived hook. Cover the spec line-44 ladder as a TOTAL classifier over three rungs (comfortable at 1200 and above, functional from 960 to 1199, narrow below 960) and assert its BEHAVIOUR at the exclusive boundaries — 1199, 1200, 959, 960 — plus totality over a swept range of widths, asserting the sweep generated a non-zero number of cases. Do not assert a constant against its own literal; that is a tautology and proves nothing. Then cover the hook: set window.innerWidth to 800, dispatch a resize Event, assert the classification flips to narrow; set 1280, dispatch, assert it flips back. Assert the resize listener is REMOVED on unmount, so a remounted shell cannot double-subscribe. Add the fail-closed case: a non-finite or negative width resolves to a stable reason code rather than silently classifying as narrow, and the test asserts that specific code. No real waiting and no timers. Tests fail because the module does not exist.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/viewport.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/viewport.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/viewport.test.ts"
+      ],
+      "note": "TDD RED recorded in the new viewport.test.ts. The suite specifies behavioral boundaries 959/960 and 1199/1200, a non-empty 0..2000 totality sweep with exact rung counts, exact INVALID_VIEWPORT_WIDTH refusals for negative/NaN/infinities, resize-driven FUNCTIONAL→NARROW→COMFORTABLE hook updates, and removal of the exact registered listener on unmount. Fresh focused run exited 1 for the intended reason: Failed to resolve import './viewport.js'; 0 tests collected because production does not exist yet.",
+      "startedAt": "2026-08-09T12:45:31.510Z",
+      "completedAt": "2026-08-09T12:46:32.715Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Make step 2 green with the minimum implementation. Export the three-rung ladder as named frozen constants, a total classifier, and a hook that reads window.innerWidth, subscribes to the window resize event, and unsubscribes on unmount. It MUST NOT use matchMedia or ResizeObserver — both are undefined in this harness. Guard the initial read for a non-DOM context so the module cannot throw during import. Keep it well under 250 lines; this is a small module and should stay one.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/viewport.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/viewport.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/viewport.ts",
+        "apps/control-room/src/shell/viewport.test.ts"
+      ],
+      "note": "GREEN with a focused 52-line production module. VIEWPORT_WIDTH_LADDER is a deeply frozen, descending three-rung source of truth; classifyViewportWidth consumes it and returns frozen discriminated results, refusing negative/non-finite input with INVALID_VIEWPORT_WIDTH. useViewportMode performs a non-DOM-safe initial read, subscribes only to window resize, and removes the same listener on cleanup; it contains no matchMedia/ResizeObserver/timers. Fresh focused result: 1 file / 11 tests passed; control-room typecheck exit 0; diff check clean.",
+      "startedAt": "2026-08-09T12:46:37.677Z",
+      "completedAt": "2026-08-09T12:47:38.495Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red: write the failing spec for narrow shell behaviour, driven by innerWidth plus a dispatched resize. Cover: cr.shell.root carries a narrow marker attribute at 800 and not at 1280; every cr.nav.* button keeps an accessible name IDENTICAL to its wide name once the rail collapses to icons (assert the names are equal, not merely present); the ? help overlay contains every CONTROL_ROOM_NAV_ITEMS label — it currently renders only one generic sentence, so assert each label individually and assert the label count equals the nav-item count so an added nav item cannot silently go unlisted; the inspector gains role=\"dialog\" in narrow mode ONLY and an Escape keydown closes it. Because HelpOverlay is also role=\"dialog\", assert Escape closes exactly the intended one and name which — not merely that something closed. Assert the operator's [ / ] inspectorExpanded choice is not silently undone by a resize, and that Esc closing the narrow sheet does not permanently clear it. Then the parity block required by DoD 4: consume auditActionParity(wide, narrow) from a11y/surface-audit.ts AND assert explicit id-set equality for cr.nav.*, cr.shell.tab.*, cr.shell.skiplink and cr.fact.*, asserting each set non-empty first — that audit's selector only matches cr.action.* and would pass a narrow mode that deleted the whole rail. Finally assert the section 11.3 states survive narrow: the empty-state copy, cr.banner.* and cr.shell.stalelabel still render. Tests fail because narrow mode does not exist.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/shell-narrow.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/shell-narrow.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/shell-narrow.test.tsx"
+      ],
+      "note": "TDD RED recorded with a real ShellFrame/BoardSurface/Fact fixture. The six-test spec drives innerWidth+resize; pins absent-wide/present-narrow root marker; exact accessible nav-name equality and complete help labels; narrow-only inspector dialog plus two-dialog Escape targeting, retained inspector identity, and persistent [ / ] choice; non-vacuous auditActionParity plus explicit non-empty id-set equality for nav, tabs, skip link, inspector, facts and board cards; and narrow loading/skeleton, empty, degraded/as-of, lag banner and stale label survival. Fresh focused run: 3 expected failures (missing data-narrow, missing help labels, missing narrow dialog role) and 3 existing-parity/state tests passed.",
+      "startedAt": "2026-08-09T12:47:45.821Z",
+      "completedAt": "2026-08-09T12:50:47.941Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Extract and implement the collapsible nav rail as a sibling module, keeping frame.tsx thin — it is at 245 lines against a 250 target, so the component cannot live there. Move the existing NavRail body out of frame.tsx and add the narrow presentation: icons with the label still exposed as the accessible name, so the name is identical wide and narrow. Every cr.nav.* test id and its DOM order are preserved exactly, because gating-keyboard.test.tsx asserts tab order reaches actions in DOM order. The visual icon-for-text swap itself is a CSS concern and is NOT asserted — jsdom renders no CSS; what is asserted is the accessible name and the id set.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/nav-rail.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/nav-rail.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/nav-rail.tsx"
+      ],
+      "note": "Added a focused 38-line NavRail sibling ready for frame composition in step 7. The frozen canonical label array preserves existing order/ids; each button has an aria-label exactly equal to its wide label, plus an aria-hidden icon and CSS-addressable text span. The nav carries a narrow marker without removing any button. No frame edit was made early. Fresh control-room typecheck exit 0 and diff check clean; the existing shell-narrow red remains intentionally pending composition/help/inspector steps.",
+      "startedAt": "2026-08-09T12:50:59.190Z",
+      "completedAt": "2026-08-09T12:51:48.933Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement the narrow inspector overlay sheet as a sibling module. In narrow mode the inspector renders as a dialog (role=\"dialog\", labelled) that Escape closes; at wide width it stays the docked aside it is today. Layer this on top of the existing inspectorExpanded state rather than replacing it: sheet-vs-docked and expanded-vs-collapsed are two different concerns and collapsing them into one boolean would let a resize silently undo the operator's [ or ] choice. Preserve the cr.shell.inspector test id and keep whatever identity props the frame was given unchanged across open and close — spec 4.16 says URL semantics are unchanged, and since this app has no router that is asserted against the props the frame carries. Do not assert 'full-height'; that is a pixel property this harness cannot see.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/inspector-sheet.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/inspector-sheet.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/inspector-sheet.tsx"
+      ],
+      "note": "Added a focused 42-line InspectorSheet sibling for step-7 composition. It keeps expanded/collapsed authority external, tracks narrow Escape dismissal separately, preserves children/identity while hidden, renders role=dialog only for a visible narrow sheet, and resets a narrow dismissal when returning wide or when the operator explicitly collapses then re-expands. Its Escape listener exists only while the narrow expanded sheet is visible and removes the exact listener on every cleanup. No pixel/full-height claim. Fresh control-room typecheck exit 0 and diff check clean.",
+      "startedAt": "2026-08-09T12:51:53.090Z",
+      "completedAt": "2026-08-09T12:52:30.613Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Compose the pieces in shell/frame.tsx and keep it a thin composer. Call the viewport hook, stamp the narrow marker on cr.shell.root, swap in the extracted nav rail and the inspector sheet, and FILL the existing HelpOverlay with the nav labels it currently lacks — it renders one generic sentence today and spec 4.16 requires the collapsed rail's labels to be reachable there. Do not create a second overlay; extend the one at :160. Watch the line budget: the extractions in steps 5 and 6 should leave frame.tsx at or below its current 245 lines, and it must not cross 250. Update shell/gating-keyboard.test.tsx only where the new DOM genuinely changes it, and preserve rather than weaken its properties — the skip-link stays the first focusable element and tab order still reaches every action in DOM order.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/frame.tsx",
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/frame.tsx",
+        "apps/control-room/src/shell/nav-rail.tsx",
+        "apps/control-room/src/shell/inspector-sheet.tsx",
+        "apps/control-room/src/shell/viewport.ts",
+        "apps/control-room/src/shell/shell-narrow.test.tsx"
+      ],
+      "note": "Composed the landed siblings without weakening existing assertions. ShellFrame now reads useViewportMode, emits data-narrow only for a successful NARROW classification, uses NavRail with identical accessible names and preserved ids/order, extends the existing single help dialog with all frozen nav labels, and delegates inspector visibility/Escape behavior to InspectorSheet. The red shell-narrow suite is green: marker flips, help labels, two-dialog Escape target, retained identity, [/] persistence, explicit parity and loading/degraded states. Existing skip-link/action tab order and J1 flow stay green. Fresh focused result: 3 files / 30 tests passed; typecheck exit 0. frame.tsx is 234 lines and ShellFrame 49 lines; all new modules remain <=52 lines; diff check clean.",
+      "startedAt": "2026-08-09T12:52:35.022Z",
+      "completedAt": "2026-08-09T12:53:43.300Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Add the shell narrow stylesheet and pin it as source text, since jsdom evaluates no CSS. Follow the established pattern in board/goals-board-ban.test.ts:134-156: read the real file, assert a non-trivial length and one known selector FIRST so the pins cannot pass vacuously, then assert the required rules are present. The stylesheet must carry a @media (max-width: 959px) block for the collapsed rail and the inspector sheet, and MUST carry its own @media (prefers-reduced-motion: reduce) block — board-layout.css:68 has one today, and a second stylesheet without one silently degrades that guarantee. Assert the file contains no display:none, visibility:hidden, overflow:hidden or text-overflow:ellipsis, since 4.16 forbids removing anything narrow. Any motion guard must target animation, transition, @keyframes and scroll-behavior:smooth only — never scroll-snap, which board-layout.css uses legitimately for 4.16 column behaviour. Label these assertions in the test as source-text pins, not behaviour.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/shell/shell-layout.css"
+      ],
+      "newFiles": [
+        "apps/control-room/src/shell/shell-layout.css"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/shell-layout.css",
+        "apps/control-room/src/shell/shell-narrow.test.tsx",
+        "apps/control-room/src/shell/frame.tsx"
+      ],
+      "note": "TDD red first: source pins saw a zero-length missing stylesheet and failed the nontrivial-length/narrow-rule assertions. Added a 113-line imported shell stylesheet with wide grid, <=959px icon rail and fixed inspector sheet rules, no content-removal/clipping declarations, and its own reduced-motion block limited to animation/transition/scroll-behavior (no scroll-snap rule). The step's affectedFiles listed only CSS, but the plan itself requires source-text assertions and real delivery requires an import; therefore the already-owned shell-narrow test and frame.tsx received only those necessary edits. Fresh focused result: 4 files / 39 tests passed including existing board CSS pins, gating and J1; typecheck exit 0. frame.tsx 235 lines, shell-narrow.test.tsx 233; diff check clean.",
+      "startedAt": "2026-08-09T12:54:04.452Z",
+      "completedAt": "2026-08-09T12:55:44.243Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "Verification. Run the single gating command: pnpm --filter @moe/control-room test. Capture fresh output verbatim as completion evidence; do not reuse an earlier run. Confirm the previously green committed suites are still green — in particular shell/gating-keyboard.test.tsx, shell/j1-flow.test.tsx, board/goals-board-ban.test.ts and the a11y ui-wide acceptance tests. Then satisfy epic rail 6's mutation requirement, which a green suite cannot show by itself: mutate the production surface, confirm red, revert. At minimum mutate the ladder's narrow boundary comparison (flip exclusive to inclusive and confirm the 959/960 pair goes red), the resize listener removal on unmount, the narrow-only condition on the inspector's dialog role, one nav label in the help overlay, and one cr.nav.* id so the explicit id-set equality goes red where auditActionParity alone would not. Record which mutations ran and that each produced red. Attribute any repo-wide red by path: this task owns apps/control-room/src/shell/** only.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh post-restore named gate: pnpm --filter @moe/control-room test => exit 0, 32 files / 478 tests passed, including gating-keyboard, j1-flow, goals-board-ban and UI-wide acceptance. Five out-of-repo-byte-backed mutation drills visibly changed bytes, failed the intended named test, and hash-restored: FUNCTIONAL rung 960→959 killed the 959 boundary; removed resize cleanup killed exact listener removal; widened inspector role killed narrow-only dialog; omitted Goals from help killed complete label listing; and narrow-only cr.nav id mutation killed explicit id-set parity while auditActionParity remained blind. All four production hashes were independently rechecked after a concurrent duplicate drill finished, then the full named gate was rerun green. pnpm typecheck is green repo-wide. pnpm test is FOREIGN RED only in untracked packages/runner WIP: runtime-entrypoint.test.ts reports missing evidence/verifier-process-run.ts .js bridge, and evidence/verifier-process.test.ts reports createNodeProcessLauncher is not a function; no failing path intersects owned apps/control-room/src/shell/**.",
+      "startedAt": "2026-08-09T12:55:49.769Z",
+      "completedAt": "2026-08-09T13:02:21.857Z"
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review before complete_task. Read the diff as an attacker. Check: does any assertion claim something jsdom cannot see — that a media query evaluated, a rail shrank, a sheet covered the viewport, a header stuck; is any parity check relying on auditActionParity alone, which is blind to cr.nav.*, cr.shell.tab.* and cr.shell.skiplink; does any id-set comparison pass when both sides are empty; can a resize silently undo the operator's [ or ] inspector choice; with two role=\"dialog\" elements possible at once, does Escape provably close the intended one and does the test name which; is the skip-link still the first focusable element and does tab order still reach every action in DOM order; does the help overlay's label assertion fail when a nav item is added but not listed; does the new stylesheet carry its own prefers-reduced-motion block, and does any motion guard wrongly forbid scroll-snap; is frame.tsx still at or below 250 lines and every new module under 250; and are there any debug, probe, scratch or generated evidence files left in the commit. Confirm honestly what this task does NOT deliver: actual pixel reflow, the section 4.16 surface-level work owned by task-fdf3e6aaa, and the graph and table clauses, which remain not-applicable for the reasons recorded in the DoD.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/control-room/src/shell/shell-narrow.test.tsx"
+      ],
+      "note": "Adversarial review complete over the tracked frame diff plus every new file. No test claims media-query/pixel evaluation; CSS checks are explicitly source-text pins. Parity consumes auditActionParity but also compares six explicit non-empty identity sets. Listener cleanup, [/] choice persistence, Escape dismissal and two-dialog targeting are exercised; I strengthened the Escape assertion to prove the help dialog remains the sole visible dialog, made CSS removal bans whitespace/case robust, scoped the scroll-snap ban to the reduced-motion block rather than over-banning legitimate future layout, and replaced an implicit React.JSX namespace with explicit JSX typing. Current focused test and typecheck are green. frame.tsx is 235 lines; new production modules are 38/42/52/113 lines, all functions <=50; no scratch/debug/evidence files. Fresh probes still find no table/thead/tbody/role=grid and no production cr.graph.* prefix, so graph and table clauses remain explicit N/A. Honest non-coverage: jsdom cannot certify actual pixels; surface-level 4.16 work remains task-fdf3e6aaaa4a4b7c86a08d9d8fc4f919.",
+      "startedAt": "2026-08-09T13:02:32.558Z",
+      "completedAt": "2026-08-09T13:05:00.210Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-58b24ffb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoting from BACKLOG: its one stated hard dependency is now satisfied. The description reads \"Accessibility latency hardening (task-ab8c9489ab6446c384e977a3e1cc8063) must reach DONE first. It is WORKING now and is actively editing shell/frame.tsx and src/a11y/**.\" That task reached DONE at 12:25Z (10/10, QA-approved by qa-58b24ffb), so shell/frame.tsx and src/a11y/** are no longer being edited concurrently and the ownership conflict the dependency guarded against is gone. Its sibling task-fdf3e6aaaa4a4b7c86a08d9d8fc4f919 (Narrow-mode surface reflow) stays in BACKLOG: it depends on THIS task, which is not yet done.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -35,5 +190,68 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T11:59:38.290Z",
-  "updatedAt": "2026-08-09T11:59:38.290Z"
+  "updatedAt": "2026-08-09T13:07:49.854Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:41:15.598Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 10
+  },
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T12:43:59.406Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) matchMedia + a media-query listener, the conventional responsive hook. REJECTED: window.matchMedia is UNDEFINED in this jsdom and there is no vitest setupFiles entry anywhere in the repo to shim it (both measured). A matchMedia-based hook cannot be tested here at all. window.innerWidth plus a dispatched resize Event is the technique that works.\n(2) ResizeObserver. REJECTED for the same reason: undefined in jsdom, and it observes elements whose measured size is always 0 here.\n(3) Pure CSS, no JS, extending board-layout.css. REJECTED: it would repeat the exact gap this task exists to close. CSS-only narrow mode already exists at board-layout.css:50 and is invisible to the harness — jsdom evaluates no media queries and document.styleSheets.length is 0. Without a rendered narrow STATE, auditActionParity has no narrow root to compare and DoD 4 cannot be satisfied by anything.\n(4) Put the new components directly in frame.tsx. REJECTED on the per-file cap: frame.tsx is 245 lines against a 250 target. src/shell/ has no frozen directory listing, so sibling modules are free; frame.tsx stays a thin composer.\n(5) Re-derive action parity inside this task. REJECTED: auditActionParity already exists at a11y/surface-audit.ts:140. Consume it — but do not rely on it alone, see risks.",
+    "codebaseInsights": "RE-MEASURED AT CLAIM TIME. task-ab8c9489 landed after this task's description was written, and it shipped MORE than that description assumes. Do not rebuild any of it:\n- cr.shell.skiplink already exists, frame.tsx:213, href=\"#cr-shell-main\", with mainRef and tabIndex={-1} on cr.shell.main at :223.\n- The global keyboard router exists: useKeyboardRouter (a11y/keyboard-map.ts:123) and useShellKeyboardController (:160), already mounted by the frame. CONTROL_ROOM_KEYBOARD_MAP is at :47 and the ? binding at :54.\n- A help overlay ALREADY RENDERS: HelpOverlay at frame.tsx:160-171, data-testid cr.shell.help, role=\"dialog\", aria-label=\"Keyboard shortcuts\", wired at :222 via keyboard.helpOpen / keyboard.closeHelp.\n- Inspector collapse/expand already works: inspectorExpanded state in the controller, consumed as hidden={!keyboard.inspectorExpanded} on cr.shell.inspector at frame.tsx:224-230. The [ and ] actions are collapse-inspector / expand-inspector.\n- auditActionParity(wide, narrow) exists at a11y/surface-audit.ts:140 and emits ACTION_MISSING_AT_NARROW.\n\nWHAT IS STILL GENUINELY ABSENT — grep over .ts/.tsx/.css production sources for innerWidth|matchMedia|ResizeObserver|breakpoint|isNarrow|data-narrow|960|1200|viewport returns only prose comments and the ACTION_MISSING_AT_NARROW identifier. No width value, no constant, no hook, no marker.\n\nTWO PLACES THE EXISTING WORK IS INCOMPLETE RATHER THAN MISSING, which is the subtlety of this task:\n1. HelpOverlay renders exactly one generic sentence (\"Global keyboard shortcuts are available throughout the control room.\") plus a close button. It carries NO nav labels and NO shortcut list. Spec 4.16 requires the collapsed rail's labels to be reachable via the ? overlay, so this is FILLING an existing overlay, not building one.\n2. The inspector collapses via the `hidden` attribute. That is not 4.16's \"full-height overlay sheet (Esc closes)\" — it has no dialog role and no Esc handling. Narrow mode needs the sheet treatment layered on top of the existing expand/collapse state, not replacing it.\n\nSTRUCTURAL FACTS: src/shell/ has NO frozen directory listing (only board, goals, data, evidence, doctor, recovery do), so new sibling modules are free. frame.tsx is 245 lines. board-layout.css is the repo's only stylesheet and is imported by board-surface.tsx:9.",
+    "risks": "1. THE HARNESS CANNOT SEE LAYOUT, and every DoD item is written to survive that. Measured in this exact jsdom: window.matchMedia undefined, ResizeObserver undefined, offsetWidth / clientWidth / getBoundingClientRect().width all 0 even with an inline width, document.styleSheets.length 0 because Vitest stubs the CSS import. No assertion may claim a media query evaluated, a rail actually shrank, a sheet covered the viewport, or a header stuck. Those are source-text pins or nothing.\n\n2. auditActionParity IS NOT SUFFICIENT ON ITS OWN and DoD 4 says so. Its selector is ACTION_SELECTOR = [data-testid^='cr.action.'] (surface-audit.ts, used at :141-142). It is BLIND to cr.nav.*, cr.shell.tab.*, cr.shell.skiplink, cr.goals.create and cr.board.columnjump. A narrow mode that deleted the entire nav rail would return checked > 0 and zero violations. Explicit id-set equality is mandatory, and each set must be asserted non-empty first.\n\n3. DO NOT REGRESS WHAT ALREADY PASSES. gating-keyboard.test.tsx asserts tab order reaches every action in DOM order, and the skip-link is the first focusable element. An overlay-sheet inspector that reorders the DOM, or a collapsed rail that drops buttons from the tab order, breaks committed tests. If those tests need updating, the update must preserve the property, not weaken the assertion.\n\n4. THE INSPECTOR ALREADY HAS TWO STATES. inspectorExpanded is driven by the [ and ] keys. Narrow mode adds a third concern (sheet vs docked). Do not collapse these into one boolean — an operator who pressed [ at wide width should not have that silently undone by a resize, and Esc closing the sheet must not permanently clear inspectorExpanded.\n\n5. THE HELP OVERLAY IS ALREADY role=\"dialog\". Giving the narrow inspector the same role means two dialogs can be open at once. Decide and test the interaction: Esc must close exactly one, and the test must assert WHICH one, not merely that something closed.\n\n6. A CONSTANT ASSERTED AGAINST ITS OWN LITERAL IS A TAUTOLOGY. expect(NARROW_MAX).toBe(959) proves nothing. Assert the classifier's behaviour at the boundary (1199/1200 and 959/960) and its totality over a swept range, and assert the sweep generated a non-zero number of cases.\n\n7. ANY NEW STYLESHEET MUST CARRY ITS OWN @media (prefers-reduced-motion: reduce) BLOCK. board-layout.css:68 has one today; the moment a second stylesheet exists without one, the reduced-motion guarantee silently degrades. Do not add a motion ban that forbids scroll-snap — board-layout.css legitimately uses scroll-snap-type and scroll-snap-align for 4.16 column behaviour.",
+    "keyFiles": [
+      "apps/control-room/src/shell/frame.tsx",
+      "apps/control-room/src/a11y/keyboard-map.ts",
+      "apps/control-room/src/a11y/surface-audit.ts",
+      "apps/control-room/src/shell/gating-keyboard.test.tsx",
+      "apps/control-room/src/board/board-layout.css",
+      "apps/control-room/src/board/goals-board-ban.test.ts",
+      "apps/control-room/vite.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-09T12:44:01.459Z",
+  "contextFetchedBy": [
+    "worker-b6bbb60c",
+    "qa-58b24ffb"
+  ],
+  "workStartedAt": "2026-08-09T12:44:33.275Z",
+  "reviewStartedAt": "2026-08-09T13:07:40.892Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\nTest Files  32 passed (32)\nTests  478 passed (478)\nStart at  16:05:28\nDuration  5.67s (transform 7.53s, setup 0ms, import 14.43s, tests 20.15s, environment 36.68s)\n\n$ vitest run",
+    "reportedAt": "2026-08-09T13:07:40.892Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/shell/viewport.test.ts",
+    "apps/control-room/src/shell/viewport.ts",
+    "apps/control-room/src/shell/shell-narrow.test.tsx",
+    "apps/control-room/src/shell/nav-rail.tsx",
+    "apps/control-room/src/shell/inspector-sheet.tsx",
+    "apps/control-room/src/shell/frame.tsx",
+    "apps/control-room/src/shell/shell-layout.css"
+  ]
 }

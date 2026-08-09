@@ -1,0 +1,42 @@
+{
+  "id": "task-4d1f8ba54cb6476c930c46b413f882aa",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Windows Job Object provider process boundary",
+  "description": "Objective: provide the real per-run Windows process primitive required by the Claude launcher. Deliverable: an internal @moe/runner Node/Windows binding that creates the provider child suspended, attaches it to a dedicated Job Object configured with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and no breakaway, then resumes it; exposes shell-free argv launch, bounded cwd/environment/stdio, proven process identity, awaited exit, terminate, and handle closure. A taskkill-only implementation is not sufficient because it cannot prove descendants dead after the root exits. NOT in scope: Claude runtime discovery/pinning, activation grants, daemon/store orchestration, evidence receipts, or public @moe/runner launcher export. Real consumer: Windows Claude launch wrapper task task-acf73253a204435aba590894799814f2. Owned paths: a focused packages/runner/src/platform/windows/** binding/test seam plus the minimal runner manifest/lockfile/native-build paths selected during planning. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test plus a Windows parent+grandchild termination smoke.",
+  "definitionOfDone": [
+    "On Windows, the provider process is created suspended and cannot execute before a dedicated Job Object is created, configured kill-on-close without breakaway, and successfully receives the child; only then is the child resumed.",
+    "Every create/configure/assign/resume/query/terminate/close failure returns an immutable UNKNOWN result with an exact stable PROCESS_BOUNDARY code and refusing layer; partial children are terminated and every native/process/stream handle is awaited and closed.",
+    "Launch accepts an executable plus argv array with shell disabled and validates a bounded absolute cwd and allowlisted bounded environment; malformed, oversized, UNC/device, or unverifiable inputs produce exact refusal codes before process creation.",
+    "Closing/cancelling/timing out the boundary kills the controlled parent and a deliberately detached grandchild; tests prove both PIDs terminate and assert a positive generated case count plus the exact code/layer for every refusal arm.",
+    "Non-Windows import is safe and invocation returns typed UNSUPPORTED with zero native/process calls; the chosen native dependency/helper is version-pinned and runtime-loadable on the supported Windows Node version.",
+    "The focused runner gates and a foreground Windows process-tree smoke exit 0, with no generated addon/build/debug artifacts committed."
+  ],
+  "taskRails": [
+    "Use Microsoft Job Object semantics; taskkill-only or PID-enumeration-only cleanup cannot satisfy proven whole-tree termination.",
+    "TDD; failure tests assert exact stable code and layer and zero process execution where refusal precedes creation.",
+    "Keep every production source focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
+    "This is an internal process boundary. Do not add daemon/store authority or claim durable activation-grant consumption."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-acf73253a204435aba590894799814f2",
+  "priority": "CRITICAL",
+  "order": 47,
+  "comments": [
+    {
+      "id": "comment-d4c6758c14854c64a17024cc665f2d6c",
+      "author": "architect-8c9073cd",
+      "content": "Consumer edge: Windows Claude launch wrapper `task-acf73253a204435aba590894799814f2` will import this internal process boundary and use it as the only physical spawn/cleanup path; durable Claude attempt dispatch `task-6cbff01023b14b26a78fc5e3eb1dd8a9` later composes that launcher.",
+      "timestamp": "2026-08-09T12:51:43.128Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:51:07.418Z",
+  "updatedAt": "2026-08-09T12:51:43.128Z"
+}

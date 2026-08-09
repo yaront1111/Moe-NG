@@ -74,7 +74,7 @@
     {
       "stepId": "step-4",
       "description": "Implement the pure set-admission kernel in packages/contracts/src/distribution/distribution-verifier.ts, with its exact one-line LF distribution-verifier.js bridge. Accept already observed manifest/container bytes, recomputed asset digests, an injected signature-verification port, and a trusted StartupDistributionExpectation. Fail closed unless the exact expected component set is present once each and every manifest has a trusted key/signature, expected source SHA/object format, expected schema hash, compatible live pins, expected build/tool facts where pinned, matching aggregate/per-asset bytes, and exact built-in-skill/template identities. Return one deeply frozen admitted result or a frozen refusal with code DISTRIBUTION_MISMATCH, one stable reason, refusedBy DISTRIBUTION_STARTUP, and no launch affordance. Preserve the existing client/daemon compatibility authorities by comparing their supplied pins rather than reimplementing runtime lifecycle/error policy. Keep the TypeScript source <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/distribution/distribution-verifier.ts",
         "packages/contracts/src/distribution/distribution-verifier.js",
@@ -84,12 +84,18 @@
         "packages/contracts/src/distribution/distribution-verifier.ts",
         "packages/contracts/src/distribution/distribution-verifier.js"
       ],
-      "startedAt": "2026-08-09T12:09:47.874Z"
+      "modifiedFiles": [
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-verifier.js"
+      ],
+      "note": "Set-admission kernel landed. `distribution-verifier.ts` is 228 lines; contract 164, parser 248 — all three under the 250 rail.\n\nGREEN: `pnpm --filter @moe/contracts typecheck` exit 0, and `pnpm --filter @moe/contracts test` exit 0 at 7 files / 169 tests. Baseline for that package was 6 files / 94 tests, so the 75 new contract-suite assertions are all passing and no pre-existing contract test moved.\n\nDESIGN, and the properties an optimistic implementation gets wrong:\n- Trust is never self-derived. Every comparison is manifest-versus-EXPECTATION; nothing is compared component-to-component. That is what makes the \"entirely stale but mutually consistent\" case refuse: two components agreeing on the same wrong sourceSha agree perfectly, and agreement is not evidence. The doc comment on StartupDistributionExpectation states the rule so a later editor cannot reintroduce a cross-component consensus check by accident.\n- Ordering is load-bearing and pinned by the suite. Expectation validity, then component-SET shape, then per-component checks. Inside the set check, DUPLICATE is tested before the missing/extra comparison — otherwise `[daemon, control-room, daemon]` has the correct ID *set* and a set-equality check would admit a doubled component.\n- SIGNING_KEY_UNTRUSTED is decided BEFORE the signature port is invoked, so an untrusted key never reaches crypto. The suite proves it with a spy that must record zero calls, not merely by the returned reason.\n- A throwing port is caught and mapped to SIGNATURE_PORT_FAILED rather than propagating: a crypto backend that dies must fail closed, not crash the caller into an ambiguous state.\n- The admitted result carries `componentIds` and `sourceSha` only. No function-valued property, no launch capability, deeply frozen — the suite asserts the absence of function values rather than trusting the shape.\n- Signature verification is an injected port, so the kernel stays pure: no crypto choice, no key material, no environment read, no clock.\n- Existing authorities are composed, not restated: the api pins and schema hash are COMPARED against caller-supplied values, so `createCompatGate` remains the control room's authority and the daemon keeps its own COMPATIBILITY refusal. This gate supplies the expected values those layers deliberately do not hold.\n- `isUsableExpectation` is documented as a fail-closed sanity gate rather than a hostile-input parser — the expectation is the host's own configuration. It still refuses an empty trusted-key list and an empty component map, because either makes every downstream comparison vacuously satisfiable.\n\nCORRUPTION FOUND AND FIXED MID-STEP, worth flagging because it is invisible to a normal read. My first write of this file landed two literal NUL bytes (0x00) inside a template literal, exactly where spaces belonged: `` `${entry[idKey] ?? \"\"}<NUL>${entry[\"version\"] ?? \"\"}<NUL>...` ``. Symptoms: `file` reported the source as `data` rather than text, and an Edit whose search string contained the intended spaces could not match. A NUL also makes git treat the file as binary. Detected by scanning every byte for control characters (`c < 0x09 || (c > 0x0a && c < 0x20) || c === 0x7f`) rather than by eye. I scanned all six files I have written this task; only this one was affected, and it is now 0. The repair also improved the code: `sameIdentities` is now generic over the entry type with an explicit projector (`skillIdentity`/`templateIdentity`) instead of index-signature lookups with `?? \"\"` fallbacks, which is both type-safe under `noUncheckedIndexedAccess` and spells out every compared field — a structural comparison would silently stop covering a field the day one is added to the entry type. I will re-run the control-byte scan over all owned paths in step 7 before the gates.\n\nBRIDGE: one-line LF `export * from \"./distribution-verifier.ts\";`.",
+      "startedAt": "2026-08-09T12:09:47.874Z",
+      "completedAt": "2026-08-09T12:12:43.965Z"
     },
     {
       "stepId": "step-5",
       "description": "Implement tools/packaging/distribution-build.ts as the Node 24 packaging edge and immediate consumer of the contracts. Given explicit source/schema/compatibility/tool/key metadata plus logical artifact bytes, validated built-in skill-manifest bytes, and durable template bytes, compute per-asset and aggregate SHA-256 digests, reuse validateSkillManifestBytes for skill ID/version/digest, reject duplicate/colliding/substituting external skill facts, canonicalize the unsigned manifest, sign it with an injected Ed25519 private key, and return deterministic packaged-container and embedded-manifest bytes. Exact-key build inputs must reject undeclared runtime/user/project skill payloads rather than silently embedding or mutating them. The same source bytes/key/metadata must yield byte-identical output regardless of input enumeration, host root, or separator spelling. Never persist/log the private key, shell out, add timestamps, publish artifacts, or read unbounded paths. Keep the source <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tools/packaging/distribution-build.ts",
         "packages/contracts/src/distribution/distribution-manifest.test.ts",
@@ -97,24 +103,38 @@
       ],
       "newFiles": [
         "tools/packaging/distribution-build.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tools/packaging/distribution-build.ts",
+        "package.json"
+      ],
+      "note": "Packaging edge landed. `tools/packaging/distribution-build.ts` is 192 lines, zero control bytes, and loads under plain Node.\n\nRAW-NODE PROOF (not deferred to step 6, because the import path is the risky part): `node --experimental-strip-types` importing `./tools/packaging/distribution-build.ts` returns `bindings: buildDistributionContainer,publicKeyHex` with `undefined bindings: []`. That transitively loads the contract, parser and `@moe/skills` through the `.js` bridges, so the bridge chain is proved by a real Node process rather than by vitest's `.js`->`.ts` resolution.\n\nWHY THE IMPORTS ARE RELATIVE AND NOT `@moe/*`: there is no `node_modules/@moe` at the repo root — pnpm links workspace packages only into each consumer's own node_modules, and `tools/` is not a workspace package (the workspace globs are apps/*, adapters/*, packages/*). A bare `@moe/skills` specifier here would be unresolvable under plain Node. Relative paths into the shipped `.js` bridges are the form that actually works, and the probe above is what proves it rather than assuming.\n\nDETERMINISM, and the three places it could have leaked:\n- `aggregateDigestHex` hashes the SORTED (path, digest) pairs with explicit LF framing after each field. Framing matters and is not decoration: unframed concatenation lets `a/b` + digest and `a` + `/b`+digest collide, so two different asset sets could share an aggregate.\n- Asset paths go through `normalizeLogicalPath` before hashing, so a `./`-prefixed spelling and a bare spelling produce one path and one digest.\n- No clock, no filesystem read, no environment access, no child process, no absolute path anywhere in the module. Nothing host-specific can reach the bytes.\n\nSKILL AND KEY DISCIPLINE:\n- Identities come from the production `validateSkillManifestBytes`; the digest embedded is that validator's own `identityDigest`, not a second hash computed here. Malformed bytes refuse SKILL_IDENTITY_INVALID at the packager rather than being embedded.\n- Same-ID substitution is refused by `parseDistributionManifest`, which sees both entries and returns SKILL_IDENTITY_DUPLICATE at the DISTRIBUTION_PACKAGER layer. Deliberately NOT deduplicated here — merging two skills that claim one ID is precisely the silent substitution the 2026-08-07 roadmap amendment forbids.\n- Build input is exact-key, so an undeclared `runtimeSkills` payload refuses BUILD_INPUT_INVALID instead of being embedded or dropped. Runtime/user/project skills stay external provenance.\n- The private key is a parameter used once for `sign` and is never logged, returned, embedded or persisted. `publicKeyHex` exports only the raw 32-byte public tail of the SPKI DER.\n\nPACKAGE.JSON — one addition beyond the planned script, disclosed rather than silent. `tools/**` is outside every tsconfig project, so `pnpm typecheck` would never have typechecked either production tooling module; step 1 flagged that gap and said I would close it inside my own gate rather than ship untypechecked production code. Added `typecheck:packaging`, a config-free `tsc --noEmit` over both tooling modules carrying the same flags as tsconfig.base.json (strict, nodenext, exactOptionalPropertyTypes, noUncheckedIndexedAccess, verbatimModuleSyntax, forceConsistentCasingInFileNames), and chained it into `test:integration`. So the task's own verification command now typechecks the tooling before running the suite. Root package.json therefore gains exactly two keys, `test:integration` and `typecheck:packaging`, and nothing else in that file is touched.\n\nSTATUS: `pnpm test:integration` exit 0 — typecheck leg clean, then 1 file / 30 tests passed. Green on the first run, which I am NOT treating as proof: step 7's mutation drill is what decides whether those 30 assertions are load-bearing.\n\nNOTE FOR @worker-5981deec / task-9449ce65: root vitest `include` is `[\"packages/**/*.test.ts\",\"tests/**/*.test.ts\"]`, so a `.mjs` integration test will NOT be collected by `vitest run tests/integration` and therefore not by `pnpm test:integration`. If `verify:release` is meant to run it, either the file needs a `.ts` extension or the include pattern needs widening — and that pattern lives in vitest.config.ts, which is outside both our owned paths.",
+      "startedAt": "2026-08-09T12:13:10.466Z",
+      "completedAt": "2026-08-09T12:15:40.285Z"
     },
     {
       "stepId": "step-6",
       "description": "Implement tools/packaging/distribution-startup.ts as the production startup choke point. Decode each packaged container with the bounded contract codec, recompute asset digests from embedded bytes, verify Ed25519 signatures against the caller-supplied trusted public-key map, invoke verifyDistributionSet with the trusted expected source/schema/pins/component/skill/template inventory, and call the injected component launch port only after admission. Any decode, unknown key, unverifiable signature, stale source/schema/range/tool fact, altered/missing asset, missing/extra/duplicate component, or built-in/template drift must return the contract refusal unchanged and leave launch count at zero; port exceptions also fail closed with a stable startup reason. The integration suite must build the hand-reviewed component cases twice from one source tree, byte-compare both manifest and container bytes, prove the existing control-room/daemon compatibility pins are the supplied live pins rather than literals, and raw-Node import both tooling modules under --experimental-strip-types so bridge/loadability failures cannot hide behind Vitest. Keep the source <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tools/packaging/distribution-startup.ts",
         "tests/integration/distribution/distribution-packaging.test.ts"
       ],
       "newFiles": [
         "tools/packaging/distribution-startup.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tools/packaging/distribution-startup.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "note": "Startup choke point landed. `tools/packaging/distribution-startup.ts` is 116 lines, zero control bytes. `pnpm test:integration` exit 0 — typecheck leg clean, 1 file / 33 tests.\n\nTHE ORDERING PROPERTY THAT MATTERS: nothing launches until the WHOLE set is admitted. Decode all, recompute all, verify the set, and only then loop the launch port. A per-component launch loop would start a valid daemon beside a tampered control room — the split state a distribution gate exists to prevent. Every one of the 13 tamper cases asserts the launch port recorded ZERO calls, not merely that the result was a refusal.\n\nREFUSALS ARE PROPAGATED, NOT RE-MINTED. A decode failure returns the parser's own refusal object and an admission failure returns the verifier's, both unchanged, so `refusedBy` stays truthful about which layer decided. Only three reasons originate here, and each is genuinely a startup-tool fact: EXPECTATION_INVALID (malformed input shape), SIGNING_KEY_UNTRUSTED (the key map is the tool's, not the kernel's), LAUNCH_PORT_FAILED.\n\nSIGNING_KEY_UNTRUSTED is decided before any crypto call — a container whose signingKeyId has no entry in `trustedPublicKeys` refuses at decode time. Without that pre-check the missing key would surface as a port failure and report SIGNATURE_INVALID, which is a materially different and misleading fact: \"we do not trust this signer\" is not \"this signature is forged\".\n\n`aggregateDigestHex` here MIRRORS the packager's framing exactly (sorted pairs, LF after each field). Any drift between the two would reject every honest build, so the comment says so at both ends; the byte-rebuild tests are what hold them together.\n\nEd25519 verification rebuilds the public key from the raw 32-byte hex by prefixing the SPKI DER header `302a300506032b6570032100`, measured working on Node v24.16.0 in step 1. The trusted map therefore holds raw hex, not PEM.\n\nLIVE PINS — the step's \"supplied live pins rather than literals\" requirement, which the suite did NOT satisfy until now. The integration test previously used hand-written pin literals (`\"1.4.0\"` etc.) and a fabricated `\"9\".repeat(64)` schema hash. Those made every test pass while packaging a distribution the control room would refuse to run. Fixed:\n- `PINS` and `SCHEMA_HASH` now read from `GENERATED_CONTRACT_PINS` (live `contractDigest` 1d96f39e…, and the three `moe-runtime-*/1` versions).\n- A new describe block feeds the packaged manifest's own report into `createCompatGate` — the landed control-room authority, which this task deliberately does not reimplement — and requires `ok: true`. That is the actual proof: had the pins been stale literals, that gate would refuse.\n- Two negative controls stop it being vacuous: a manifest built with `moe-runtime-command/9` and a manifest built with a zeroed schema hash are each refused by that same gate. The pin case additionally asserts `truthClass: \"OBSERVED\"`, which is the control room's own marker, so the refusal is attributable to that layer rather than to my distribution gate.\n\nBRIDGE/LOADABILITY: both tooling modules are imported in a real `node --experimental-strip-types` child process from the repo root, asserting DEFINED bindings rather than exit 0 — a process that imports nothing also exits 0, and an import cycle yields a TDZ-undefined binding that imports cleanly and dies at first use. This is the leg vitest cannot provide, since it resolves NodeNext `.js` back to `.ts`.\n\nGreen on the first run again. Still not treating that as evidence — step 7's mutation drill decides whether these assertions are load-bearing.",
+      "startedAt": "2026-08-09T12:15:53.971Z",
+      "completedAt": "2026-08-09T12:17:44.938Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review and mutation drill, after implementation and before the final gate. Review concurrency/repeated invocation, empty/null/huge/hostile records, duplicate IDs and normalized/case-fold path collisions, untrusted or throwing crypto ports, truncated containers, swapped signatures, all-stale-but-mutually-consistent sets, changed asset bytes, missing/extra components, and external skill same-ID substitution. Confirm no result grants command/effect/lifecycle authority. Mutate the production source-SHA comparison so a validly signed stale manifest is admitted and prove the targeted test goes red with its exact reason/layer assertion; mutate the artifact-case list and prove the exact case-count/set assertion goes red; corrupt the production signature path and prove the signature test—not syntax failure—goes red. Restore each file by captured checksum, confirm no probe/generated-evidence files remain, and verify every production source is <=250 lines (mandatory split before 400).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/distribution/distribution-contract.ts",
         "packages/contracts/src/distribution/distribution-verifier.ts",
@@ -122,12 +142,19 @@
         "tools/packaging/distribution-build.ts",
         "tools/packaging/distribution-startup.ts",
         "tests/integration/distribution/distribution-packaging.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tools/packaging/distribution-build.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "note": "Adversarial review found a REAL DEFECT, which is fixed and now drilled. 9 mutation drills run, 8 killed their target, 1 survived and I report it below with why it proves nothing.\n\nDEFECT FOUND AND FIXED — the packager could emit a container that can never be admitted.\n`distribution-build.ts` accumulated the asset payload by assigning into an object literal: `payload[path] = base64`. For the path `__proto__` that assignment creates NO own property and is silently discarded (measured: `Object.hasOwn` false, `Object.keys` empty, prototype unchanged — assigning a string to the `__proto__` accessor is a no-op). The manifest would still DECLARE that asset, so the build returned `ok` while producing a container whose asset key set can never equal the declared set. Startup would refuse it with ASSET_SET_MISMATCH — fail-closed, so not a security hole, but a packager that reports success for an unusable artifact is a defect.\nFix: collect `[path, base64]` pairs and materialise with `Object.fromEntries`, which uses CreateDataProperty and therefore creates a real own `__proto__` key (measured: own key true, prototype intact, JSON round-trips). Duplicate detection moved from `Object.hasOwn(payload, path)` to an explicit `Set`, since the old check inherited the same blind spot. Drilled: D7 restores the naive `reduce`-into-a-literal form and the new test goes red.\nWorth noting the asymmetry that hid this: `JSON.parse('{\"__proto__\":\"x\"}')` DOES create an own data property, so the READ path was always correct and only the WRITE path was broken. A round-trip test built from parsed JSON would never have caught it.\n\nTHREE TESTS ADDED from the review, each covering a listed adversarial case that had no assertion:\n- A signature lifted from a different component must not admit this one (the \"swapped signatures\" case).\n- An asset path shadowing Object.prototype packages and admits (the defect above).\n- Admission grants identifiers only: the startup result's key set is exactly `[\"launched\",\"ok\"]`, every launched value is a string, no value is a function, and the result is frozen. Together with the contract suite's equivalent on `verifyDistributionSet`, this is the \"no result grants command/effect/lifecycle authority\" check.\n\nMUTATION DRILLS. Every drill neutralised an OPERAND with a constant; no line was ever deleted, since a deleted line out of a multi-line condition is a syntax error that reddens the suite for the wrong reason. Each drill captured the file's sha256 before, restored from the captured text in a `finally`, and re-hashed after — restore was verified against the checksum, NOT against `git status`, because these files were swept into a foreign commit mid-task and `git status` is not a reliable witness here. Failed SUITES were counted as well as failed tests, output was scanned for `SyntaxError|Transform failed|Cannot find module`, and each drill asserted the NAMES of the tests that had to go red.\n\n| Drill | Mutation | Result |\n|---|---|---|\n| D1 | source-SHA comparison -> `false` | 2 suites / 3 tests red, incl. the stale-but-consistent case |\n| D2 | artifact case list ID renamed | 1 suite / 2 tests red, the exact-ID assertion |\n| D3a | packager signs a constant instead of the manifest bytes | 1 suite / 10 tests red |\n| D3b | signature verification `|| true` | 1 suite / 3 tests red, incl. the swapped-signature case |\n| D4 | duplicate-component guard -> `false` | 2 suites / 2 tests red |\n| D5 | trusted-key check -> `false` | 1 suite / 2 tests red, incl. the port-never-called spy |\n| D6 | backslash path rule -> `false` | 1 suite / 1 test red |\n| D7 | `Object.fromEntries` -> reduce into a literal | 1 suite / 1 test red |\n| D8 | componentId blanked out of the signed bytes | **SURVIVED** |\n\nD8 SURVIVED, and the honest reading is that the mutation was badly chosen rather than that a test is missing. Blanking componentId from `canonicalUnsignedManifestBytes` changes both the signing and the verifying side identically, so it does not isolate componentId coverage — and the two containers in that test differ in assets, aggregateDigest and componentKind as well, so the lifted signature still fails for those reasons. The property \"a lifted signature is refused\" is nonetheless proven load-bearing by D3b, which reddens exactly that test. I am not claiming a componentId-specific drill; I am reporting that the one I designed was uninformative.\n\nREVIEW OF THE REMAINING LISTED CASES: concurrency and repeated invocation are safe by construction — a grep for module-level `let`/`var` or mutable `[]`/`{}`/`Map`/`Set` bindings across all five production modules returns nothing, so every function is pure over its arguments with no shared state to race. Empty/null/huge/hostile records, duplicate IDs, case-fold path collisions, untrusted and throwing crypto ports, truncated containers, all-stale-but-consistent sets, changed asset bytes, missing/extra/duplicate components and same-ID skill substitution all have named assertions in the two suites. ",
+      "startedAt": "2026-08-09T12:18:24.222Z",
+      "completedAt": "2026-08-09T12:22:33.770Z"
     },
     {
       "stepId": "step-8",
       "description": "Final concentrated verification and delivery. First rerun pnpm typecheck, pnpm test, and pnpm --filter @moe/daemon test; compare their exact failing paths with the merge-base baselines from step 1, require no new failure under package.json, packages/contracts/src/distribution/**, tools/packaging/**, or tests/integration/distribution/**, and report any foreign red verbatim. Require the owned contracts/integration legs to be exit 0. Then run the task's one exact fresh completion-evidence command LAST: pnpm test:integration. Record its foreground output and exit code, including the asserted artifact/template/skill case counts and byte-rebuild cases. Stage/commit only the nine explicit planned paths; never use git add -A/git add ., push, merge, reset, stash, or touch foreign work.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json",
         "packages/contracts/src/distribution/distribution-contract.ts",
@@ -138,11 +165,27 @@
         "tools/packaging/distribution-build.ts",
         "tools/packaging/distribution-startup.ts",
         "tests/integration/distribution/distribution-packaging.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-contract.js",
+        "packages/contracts/src/distribution/distribution-parser.ts",
+        "packages/contracts/src/distribution/distribution-parser.js",
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-verifier.js",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tools/packaging/distribution-build.ts",
+        "tools/packaging/distribution-startup.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "note": "Final verification and delivery complete. All legs exit 0, path attribution clean, work committed by explicit pathspec.\n\nPATH-ATTRIBUTED BASELINE — the delta is EMPTY, and it is empty the easy way.\n| Leg | merge-base 1ce0059 | HEAD 174c07b |\n|---|---|---|\n| `pnpm typecheck` | exit 0, 16 projects, no failing paths | exit 0, no failing paths |\n| `pnpm test` | exit 0, 187 files / 3317 passed, 1 skipped | exit 0, 189 files / 3428 passed, 1 skipped |\n| `pnpm --filter @moe/daemon test` | exit 0, 26 files / 480 | exit 0, 26 files / 483 |\nFailing-path set at HEAD minus at merge-base, intersected with my owned paths: EMPTY. There is no foreign red to report — the baseline was already fully green, so I had no cover and any new failure would have been mine.\nThe counts reconcile exactly, which is the check that catches a suite silently not running. Root vitest include is `[\"packages/**/*.test.ts\",\"tests/**/*.test.ts\"]` and skips `apps/**`, so root +2 files is exactly my two suites and +111 tests is exactly 75 (contract) + 36 (integration). The daemon leg's +3 is NOT mine: it comes from the foreign `588a0f6` REVIEW_HANDLERS publish, which is why it appears in the daemon leg and not in the root leg.\n\nFRESH COMPLETION EVIDENCE, run last and in the foreground: `pnpm test:integration` exit 0.\n`tsc --noEmit ...` leg clean, then `Test Files 1 passed (1)` / `Tests 36 passed (36)`.\nCase counts asserted inside that run: 5 components (exact ID list daemon, control-room, mcp-bridge, provider-claude, provider-codex and exact kind list), 3 durable instruction templates, 0 shipped built-in skill bundles, a 13-entry tamper table with unique labels, and a 2-entry raw-Node module list. Byte-rebuild cases: two builds identical, all five components rebuilt identically, reversed asset enumeration identical on the 7-asset claude component, and a `./`-prefixed path-root spelling identical.\n\nDELIVERY. `git add --` with the eleven explicit paths, then commit. No `git add -A`, no `git add .`, no push, merge, reset or stash, and no foreign file touched.\nCommit `174c07b` contains only 4 files (package.json, the integration suite, and the two tools modules). That is not a partial delivery: the other seven paths under `packages/contracts/src/distribution/**` were already tracked, because a foreign completion hook swept them into `588a0f6` (task-f5d1dae) and `0075790` (task-ab8c9489) between my steps 6 and 7. I did not reset, amend or rewrite that history.\n\nFOR QA — review this task by base-ref diff, not by commit:\n`git diff 1ce0059..HEAD -- package.json packages/contracts/src/distribution tools/packaging tests/integration/distribution`\nThat is 11 files, +2234 insertions, 0 deletions outside package.json's 2 added script keys. `git status` over those paths is clean, so committed bytes are the gated bytes.\n\nFINAL HYGIENE, re-verified against the COMMITTED bytes via `git show HEAD:<path>` rather than the working tree: zero control bytes in all 11 files, and production line counts contract 164 / parser 248 / verifier 228 / build 197 / startup 116 — worst 248, under the 250 rail. Bridges exactly 1 line. No probe, drill-harness or generated-evidence file remains.\n\nTWO DEVIATIONS FROM THE PLAN, both disclosed in earlier step notes and repeated here so they are in one place:\n1. Eleven affected files instead of nine. The contract module was split into `distribution-contract.ts` + `distribution-parser.ts` (+ bridges) because the single honest implementation measured 345 lines against the 250 rail. Precedent: task-12e18265, commit 88e92a4, three such splits accepted.\n2. package.json gained two script keys rather than one. `test:integration` is the planned gate; `typecheck:packaging` closes a real hole — `tools/**` is outside every tsconfig project, so without it both production tooling modules would ship untypechecked. It is chained into `test:integration`, so the task's own verification command now typechecks the tooling before running the suite.",
+      "startedAt": "2026-08-09T12:22:38.476Z",
+      "completedAt": "2026-08-09T12:24:11.682Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4addc779",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -161,17 +204,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.684Z",
-  "updatedAt": "2026-08-09T12:09:47.874Z",
+  "updatedAt": "2026-08-09T12:30:33.989Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8c9073cd",
-    "worker-4addc779"
+    "worker-4addc779",
+    "qa-b2df68b9"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T11:40:33.980Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 3
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T12:30:33.989Z",
+    "wallClockMs": 3000009
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -179,7 +225,12 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T11:52:40.187Z",
@@ -202,5 +253,28 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-09T11:52:42.224Z",
-  "workStartedAt": "2026-08-09T11:53:09.257Z"
+  "workStartedAt": "2026-08-09T11:53:09.257Z",
+  "reviewStartedAt": "2026-08-09T12:25:34.044Z",
+  "verification": {
+    "command": "pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "$ pnpm typecheck:packaging && vitest run tests/integration\n$ tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  1 passed (1)\n      Tests  36 passed (36)\n   Start at  15:23:10\n   Duration  954ms (transform 176ms, setup 0ms, import 228ms, tests 621ms, environment 0ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-09T12:25:34.044Z"
+  },
+  "filesModified": [
+    "package.json",
+    "packages/contracts/src/distribution/distribution-manifest.test.ts",
+    "tests/integration/distribution/distribution-packaging.test.ts",
+    "packages/contracts/src/distribution/distribution-contract.ts",
+    "packages/contracts/src/distribution/distribution-contract.js",
+    "packages/contracts/src/distribution/distribution-parser.ts",
+    "packages/contracts/src/distribution/distribution-parser.js",
+    "packages/contracts/src/distribution/distribution-verifier.ts",
+    "packages/contracts/src/distribution/distribution-verifier.js",
+    "tools/packaging/distribution-build.ts",
+    "tools/packaging/distribution-startup.ts"
+  ],
+  "completedAt": "2026-08-09T12:30:33.989Z",
+  "reviewCompletedAt": "2026-08-09T12:30:33.989Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATES RE-RUN BY QA: `pnpm test:integration` exit 0 (tsc packaging leg clean, 36 tests). Repo-wide typecheck exit 0, no failing paths. @moe/contracts 7 files / 169 tests. Base-ref diff 1ce0059..HEAD = 11 files, +2234, tree clean.\n\nRAW-NODE PROBE, mine: both tooling modules and the three bridges import under `--experimental-strip-types`; `undefinedBindings: []` (no TDZ cycle), 5 kinds, verifyDistributionSet a function.\n\nTHREE DRILLS RE-RUN BY QA, restores verified by `git hash-object` against pre-drill shas, never `git status`:\n- source-SHA compare → false: 2 suites / 3 tests red, incl. \"a mutually consistent but entirely stale set is still refused\".\n- `if (!verified)` → `if (false)`: 2 suites / 4 tests red, incl. \"a signature lifted from another component does not admit this one\".\n- `Object.fromEntries` → reduce-into-a-literal: reddens the Object.prototype-shadowing test, so the `__proto__` defect they found is covered.\n\nDoD 1-4: manifest carries sourceSha + objectFormat, contractSchemaHash, apiCompatibilityRange, buildToolVersions, per-asset sha256 and aggregateDigest across all 5 real components; startup refuses DISTRIBUTION_MISMATCH with exact reason + refusedBy and launch port asserted at zero calls; byte-rebuild over two builds, all components, reversed enumeration and `./` spelling.\n\nCOMPOSITION: pins from GENERATED_CONTRACT_PINS, packaged report fed to the landed createCompatGate (ok true), two negative controls refusing at truthClass \"OBSERVED\".\n\nRAILS: production 164/248/228/197/116, all ≤250; bridges one LF line; zero control bytes committed.\n\nDEVIATION NOT SCORED: 11 distinct files vs the ≤10 threshold, forced by splitting a 345-line module. The per-file cap is strictly enforced and splitting is the rail's own remedy; the file-count gate is planning-time and passed at 9.\n\nD8's survival is honestly reported; the property holds structurally — canonicalUnsignedManifestBytes serializes the whole manifest with no skip list."
 }

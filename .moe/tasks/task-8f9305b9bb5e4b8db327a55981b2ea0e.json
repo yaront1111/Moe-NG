@@ -1,0 +1,40 @@
+{
+  "id": "task-8f9305b9bb5e4b8db327a55981b2ea0e",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Review-qualified goal closure",
+  "description": "Objective: close J1's remaining evidence-authority gap: goal.close currently trusts opaque caller-supplied verification/review witness refs. Deliverable: a daemon prerequisite composer that reads the exact durable EvidenceReceipt and ReviewOutputAccepted records for the candidate/result, binds their hashes and zero-authority proof into the core closure witness, and only then invokes the existing goal reducer/commit path. NOT in scope: new core rules, review-round persistence, verifier execution, UI, or canary tests. Depends on Durable verification receipt dispatch and the landed review persistence task task-9011e3b32c414e9ca0d49f49fdfaaf08. Owned paths: apps/daemon/src/goals/goal-services.ts, goal-services.test.ts, a focused goal-qualification.ts module, and apps/daemon/src/bootstrap/bootstrap-ledger.ts refusal vocabulary if required. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "goal.close derives its verification, review, result, and zero-authority witnesses from matching durable production records; request payload refs/truth labels alone cannot satisfy closure.",
+    "Missing receipt, non-passing/UNKNOWN receipt, mismatched result hash, absent ReviewOutputAccepted, stale review package, or remaining authority each refuse with a distinct stable daemon-prerequisite code/layer and commit nothing.",
+    "A fully matching verified/reviewed result closes the goal through the existing core reducer in the third J1 human action; no extra human command is introduced.",
+    "Replay is idempotent with one durable closure row, and earlier review/evidence records remain readable and byte-identical.",
+    "Focused daemon and repo typecheck gates exit 0; the worker mutation-drills the durable read rather than a request-field check."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 44,
+  "comments": [
+    {
+      "id": "comment-a9cac9739bdb499887b172a75b43afc5",
+      "author": "architect-8c9073cd",
+      "content": "Hard dependency: Durable verification receipt dispatch `task-44d4873eb9f746b1a978e97ff9743dc4`. Downstream publication is Foundation daemon ingress surface `task-5e43a9e294ef48fdab23817c8c6cfc45`; final consumer/certifier is `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:45.759Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:11.157Z",
+  "updatedAt": "2026-08-09T12:29:45.759Z"
+}

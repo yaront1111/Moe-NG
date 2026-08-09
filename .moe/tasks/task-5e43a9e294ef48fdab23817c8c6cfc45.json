@@ -1,0 +1,41 @@
+{
+  "id": "task-5e43a9e294ef48fdab23817c8c6cfc45",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Foundation daemon ingress surface",
+  "description": "Objective: publish the committed Foundation command/read surfaces so an external canary or MCP host can drive production authority without deep imports or reimplementing ingress. Deliverable: a focused curated area surface plus @moe/daemon root exports for review schema/kinds/refusal vocabularies and runReviewCommand/readReviewLedger; durable restart reconciliation/continuation; Foundation attempt/verification services and read models; review-qualified closure; and coordination adapter operations, with full type closure. NOT in scope: behavior changes, fixtures, transport listeners, or new authority. Depends on Recovery continuation evidence binding, Durable Claude attempt dispatch, Durable verification receipt dispatch, Review-qualified goal closure, and Daemon coordination authority adapter. apps/daemon/src/index.ts is already 249 lines: extract a focused `apps/daemon/src/foundation/foundation-surface.ts` with explicit named exports and keep every production file <=250 rather than growing index.ts past target. Owned paths: apps/daemon/src/index.ts, index-surface.test.ts, runtime-entrypoint.test.ts, and apps/daemon/src/foundation/foundation-surface.ts/.js. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck plus a plain-Node root probe from apps/daemon.",
+  "definitionOfDone": [
+    "@moe/daemon root exposes executable review, recovery, attempt, verification, closure, and coordination entrypoints plus their runtime schema/kind/reason vocabularies and complete type-only closure; no test fixture or export-star leak appears in the curated area surface.",
+    "Package-root tests use @moe/daemon and exact namespace set equality to catch both missing and unreviewed runtime exports, while type assertions distinguish every public result branch.",
+    "A plain Node import from apps/daemon resolves every entrypoint and invokes safe decode/read probes without Vitest's .js-to-.ts remapping.",
+    "apps/daemon/src/index.ts and the new focused production surface each remain <=250 physical lines; no behavior module or package manifest changes.",
+    "Daemon focused tests/typecheck and repo typecheck exit 0 with test count at least baseline, and only the five owned paths are committed."
+  ],
+  "taskRails": [
+    "TDD every behavior change; every refusal test pins the exact stable reason code and refusing layer, and generated sweeps assert a positive case count.",
+    "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
+    "Curate explicit named exports in the area module; package-root runtime set equality must prevent fixtures or incidental helpers from leaking."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
+  "priority": "CRITICAL",
+  "order": 45,
+  "comments": [
+    {
+      "id": "comment-877c871bf17446dc9a65753bd4301dd1",
+      "author": "architect-8c9073cd",
+      "content": "Hard dependencies: recovery binding `task-5855a9c6b8da4a428dd0e75ed9ae36d1`, attempt dispatch `task-6cbff01023b14b26a78fc5e3eb1dd8a9`, verification dispatch `task-44d4873eb9f746b1a978e97ff9743dc4`, goal closure `task-8f9305b9bb5e4b8db327a55981b2ea0e`, coordination adapter `task-4afcb06422ed4adb89430b7ea9758d7f`. Runtime consumer: MCP host `task-49ed1e6d73544fc6ae09b3951a573848`; certifier: canary `task-97554aa4293e40eab56c0b642e18513a`.",
+      "timestamp": "2026-08-09T12:29:45.969Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:29:11.364Z",
+  "updatedAt": "2026-08-09T12:29:45.969Z"
+}

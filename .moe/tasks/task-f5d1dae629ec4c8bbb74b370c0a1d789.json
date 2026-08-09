@@ -85,8 +85,8 @@
       "completedAt": "2026-08-09T12:09:02.892Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b2df68b9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,12 +98,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T11:55:52.374Z",
-  "updatedAt": "2026-08-09T12:10:52.490Z",
+  "updatedAt": "2026-08-09T12:15:01.981Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T11:57:25.008Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-08-09T12:15:01.981Z",
+    "wallClockMs": 1056973
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -146,5 +148,8 @@
   "filesModified": [
     "apps/daemon/src/index-surface.test.ts",
     "apps/daemon/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T12:15:01.981Z",
+  "reviewCompletedAt": "2026-08-09T12:15:01.981Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATES RE-RUN BY QA: daemon typecheck exit 0; daemon test 26 files / 483 tests (baseline 480). Repo-wide typecheck exit 1 on FOREIGN paths only — packages/contracts distribution-verifier.ts (TS2345 x2), apps/control-room a11y/ui-wide-acceptance.test.tsx (TS6133). apps/daemon clean; delta ∩ owned = EMPTY, global rail 3.\n\nPLAIN-NODE ROOT PROBE, run independently from apps/daemon: keys [\"escalation.decide\",\"integration.accept_output\",\"qualification.replan\",\"review.submit\"], allFunctions true, frozen true, rootExportCount 32, exit 0. Reachable via exports[\".\"] under real Node, not just vitest.\n\nTWO DRILLS RE-RUN BY QA:\n- GOAL_HANDLERS aliased as REVIEW_HANDLERS — name set stays 32 and typeof stays object, so only identity catches it: RED, \"expected ['goal.close','goal.create'] to deeply equal ['escalation.decide',…(3)]\".\n- Unapproved runtime export runReviewCommand: RED on set equality 32 vs 31 — the mechanism keeping fixtures off the surface (DoD 5).\n\nDoD 1-7: curated named + `export type`, .js specifiers, no export-star, three aliases for the bootstrap collision; hasOwn by NAME via the @moe/daemon root; EXPECTED_EXPORTS gains the literal REVIEW_HANDLERS AND the guard reads toBe(32) — both, no bare bump; fixtures unreferenced and unbridged; only index.ts non-test changed, no bridge added, no service module edited; index.ts 249 lines.\n\nINCIDENT, MINE NOT THE WORKER'S: a completion hook swept my drill-C mutation into 588a0f6, then `git checkout HEAD --` restored the MUTATED bytes while `git status` read clean. Repaired in 1d95a02 (one owned path) back to blob 89cd8505 = f1a494e's gated bytes; 588a0f6 not amended. Post-repair gate exit 0, 483 tests, probe back to 32.\n\nLIMIT, so this is not read as a green canary: at 32, a consumer can name every review type and dispatch the table but cannot build a ReviewHandlerContext through production authority — runReviewCommand stays internal by the approved plan."
 }

@@ -1,0 +1,33 @@
+{
+  "id": "task-b4f12e63baca4ecc9f2c159ed3c3ad78",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Reusable core session authentication seam",
+  "description": "Objective: expose one reusable, fail-closed core decision for session, credential, proof-of-possession, replay, expiry, and transport authentication, then have authenticateCommand compose it before command capability admission. This is the prerequisite that lets daemon coordination authenticate a session without fabricating a RuntimeCommandEnvelope or forking core precedence. NOT in scope: choosing a cryptographic proof algorithm, persistence, daemon wiring, recipient/effect registries, or coordination mailbox behavior. Owned paths: packages/core/src/identity/authenticate-session.ts, packages/core/src/identity/authenticate-session.js, packages/core/src/identity/authenticate-session.test.ts, packages/core/src/identity/authenticate-command.ts, packages/core/src/index.ts. Production consumer: Durable daemon session and coordination-recipient authority, then task-4afcb06422ed4adb89430b7ea9758d7f. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm typecheck.",
+  "definitionOfDone": [
+    "A frozen reusable session-authentication result validates the committed principal, session, credential, presented proof, verifier result, replay result, expiry, generation, client key, and transport facts without accepting caller-supplied positive booleans as authority.",
+    "Every refusal preserves the exact stable core code and refusing layer with AUTHENTICATION_FAILED before SESSION_REPLAYED before SESSION_EXPIRED, returns zero principal/session authority, and UNKNOWN or malformed verifier/replay evidence denies.",
+    "authenticateCommand delegates session authentication to the new production seam and only then applies its existing exact RuntimeCommand capability check; its public behavior and existing tests remain byte-for-byte compatible.",
+    "Focused tests cover success and every refusal/precedence branch, assert code plus layer and zero-authority output, assert generated-case counts, and mutation-drill each production guard so bypassing it turns the focused test red.",
+    "The exact verification command exits 0 and the daemon authority prerequisite is named as the real consumer; no proof algorithm, persistence, or coordination capability mapping is introduced here."
+  ],
+  "taskRails": [
+    "Keep the core decision pure and dependency-free; injected proof/replay observations are evidence inputs, never inferred truth.",
+    "Do not add coordination endpoint strings to RuntimeCommandKind or synthesize fake runtime commands.",
+    "Preserve all existing identity authentication reason codes, layers, and precedence."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-4afcb06422ed4adb89430b7ea9758d7f",
+  "priority": "CRITICAL",
+  "order": 49,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T13:06:18.722Z",
+  "updatedAt": "2026-08-09T13:06:18.722Z"
+}

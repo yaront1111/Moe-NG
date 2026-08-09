@@ -1,0 +1,42 @@
+{
+  "id": "task-078af6f181484dd99d1bf9008b4cf731",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Claude runtime closure pin and re-observation",
+  "description": "Objective: provide the real pre-activation Windows Claude runtime preparation seam. Deliverable: an internal @moe/runner module that resolves the quote-declared installed runtime closure without a shell, canonicalizes and streams SHA-256 for every entry, creates a private content-addressed copy, verifies the copied bytes and re-hashes the source to close copy-time drift, re-observes current platform and the quote-bound version/capability facts, and returns an immutable prepared-runtime binding. The later launcher consumes this binding; this task performs no grant consumption or provider launch. NOT in scope: Job Objects/process execution, daemon/store orchestration, review/evidence receipts, or public launcher export. Real consumer: Windows Claude launch wrapper task task-acf73253a204435aba590894799814f2. Owned paths: packages/runner/src/providers/claude/claude-runtime-pin.ts, claude-runtime-pin.js, and claude-runtime-pin.test.ts. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "The production surface resolves every declared closure path on Windows, rejects missing/non-file/duplicate/reparse/UNC/device or containment-escaping entries, and streams each file digest without whole-file buffering; each refusal returns exact stable RUNTIME code and layer with truth UNKNOWN.",
+    "Pinning writes only to a private digest-addressed root, never overwrites mismatching existing bytes, verifies every destination digest, and re-hashes every source after copy; drift, partial copy, cleanup failure, or unverifiable metadata remains UNKNOWN and grants no prepared runtime.",
+    "A fresh ProviderRuntimeObservation records the current OS/architecture/version, CONTENT_ADDRESSED_COPY, exact canonical pinned paths/digests, and capability-schema binding; comparison ignores freshness only and rejects any authoritative path/digest/version/capability/platform mismatch with the exact production code/layer.",
+    "Non-Windows invocation returns typed UNSUPPORTED before filesystem mutation; empty/UNKNOWN/UNSUPPORTED observations cannot be upgraded, and generated refusal sweeps assert a positive case count plus exact code and layer.",
+    "The immutable prepared-runtime result binds the quoted observation digest, fresh observation digest, aggregate pinned-closure digest, executable path, and pin-root identity so a later launcher cannot substitute bytes or location.",
+    "Focused runner typecheck/tests exit 0, including a large streaming fixture, copy-time mutation, destination collision, path attack, and byte-level deterministic rebuild cases; no probe, pin, or generated evidence files remain committed."
+  ],
+  "taskRails": [
+    "Preparation is inert: it may read/hash/copy runtime bytes but must not execute Claude, consume an activation grant, acquire provider authority, or call daemon/store services.",
+    "Use the existing production ProviderRuntimeObservation builder; do not reimplement its canonical digest rules in a test helper.",
+    "TDD; exact stable reason code and layer for every failure, positive generated case counts, and production-surface mutation checks.",
+    "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-acf73253a204435aba590894799814f2",
+  "priority": "CRITICAL",
+  "order": 48,
+  "comments": [
+    {
+      "id": "comment-c1be939e5dad4c9e8b54266bcc305d49",
+      "author": "architect-8c9073cd",
+      "content": "Consumer edge: Windows Claude launch wrapper `task-acf73253a204435aba590894799814f2` will import the prepared-runtime result and revalidate its binding immediately before grant/lock/spawn; no public root export is required in this prerequisite.",
+      "timestamp": "2026-08-09T12:51:43.246Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:51:31.590Z",
+  "updatedAt": "2026-08-09T12:51:43.247Z"
+}
