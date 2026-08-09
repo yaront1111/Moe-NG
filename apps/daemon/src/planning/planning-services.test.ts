@@ -318,6 +318,27 @@ describe("approval activates the initial graph atomically (design 299)", () => {
     expect(goalRow(store)?.lifecycle).toBe("DRAFT");
   });
 
+  it("refuses a second approval of an already activated goal, by the core's transitions", () => {
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    expect(send(store, envelope("approval.decide", 0, approvalPayload())).ok).toBe(true);
+    const before = decisionCount(store);
+
+    // A distinct commandId so the replay path cannot answer, and a version matching the goal's
+    // current one so the transition table — not the version check — is what must refuse.
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
+      activation: planningActivation({ expectedGoalVersion: 2 }),
+    }), "cmd-approval.decide-again"));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.refusedBy).toBe("CORE_REDUCER");
+    expect(outcome.code).toBe("ILLEGAL_TRANSITION");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.version).toBe(2);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+  });
+
   it("refuses to activate a graph on a decision that is not an approval", () => {
     const store = openStore();
     driveThrough(store, "approval.decide");
