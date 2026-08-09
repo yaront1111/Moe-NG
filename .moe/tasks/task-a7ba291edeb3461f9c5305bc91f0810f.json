@@ -127,7 +127,7 @@
     {
       "stepId": "step-7",
       "description": "Adversarially review the complete eight-file slice, then perform hash-restored one-at-a-time mutation drills from an OS temp location (leave no repo evidence). Required mutants must each turn a named focused test red: coerce UNKNOWN_TRUTH to HEALTHY; drop a supplied check's evidence/affected ID; turn an offline suggestion into a button; remove commandId uniqueness or target matching; ignore actionsEnabled or the non-live authority-mode guard; incorrectly use stale/lag as a blanket command block; synthesize reconciliation choices from prose; treat an empty orphan list as complete; compute SQLite compatibility/outbox lag/backup completeness client-side; remove the post-cursor RPO warning; or suppress the supplied refusal layer while retaining its code. Assert every mutant anchor and generated corpus is nonzero/exact, restore identical hashes after each, and rerun focused green tests. Review hostile empty/duplicate/large arrays, duplicate React/test IDs, immutable input order, provenance identity, keyboard focus at list edges, fact/chip equality excluding no non-truth badge, and verify the structural scan truly reads all four canonical production files from process.cwd().",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/doctor/doctor-console.tsx",
         "apps/control-room/src/doctor/doctor-console.test.tsx",
@@ -138,12 +138,21 @@
         "apps/control-room/src/recovery/recovery-status.tsx",
         "apps/control-room/src/recovery/recovery-status.test.tsx"
       ],
-      "startedAt": "2026-08-09T10:12:37.129Z"
+      "modifiedFiles": [
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+        "apps/control-room/src/recovery/recovery-import-ban.test.ts",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx"
+      ],
+      "note": "Adversarial review + 20 mutation drills, all from an OS temp location, all hash-restored, zero repo evidence.\n\nADVERSARIAL FINDINGS FIXED (three, none of which any mutant could have surfaced — they are missing cases, not wrong ones):\n1. Blank identity join. resolve() compared presentation.commandId to command.commandId with no identity guard, so a payload that failed to name a command and a command whose ID failed to parse would have JOINED each other (\"\" === \"\"), granting a control from two absences. Fixed with identified() guards on both commandId and targetAggregateId; new test \"never joins two unnamed identities, even if both sides are blank\" builds a blank-ID command object bypassing the parser and asserts zero controls. This is `mem:gotcha-blank-string-renders-as-a-confident-empty-cell` applied to identity rather than display.\n2. Nameless control. A blank supplied label rendered an empty button with an empty accessible name. The command arm now falls back to the daemon's own commandKind (the only other name in evidence, same choice frame.tsx makes) and the unavailable arm falls to UNKNOWN; new test pins textContent and aria-label become \"recovery.complete\".\n3. Blank record in the canonical sentence. reconciliation narrative opened with a raw recordId, so a blank record produced \" failed integrity checks during import: ...\". Now uses node-authority's readIdentity(); new test pins \"UNKNOWN failed integrity checks during import: ...\".\nAlso hardened React keys: duplicate presentations or duplicate feedback entries previously collided on key (commandId); keys are now index-qualified. A new test pins that two identical presentations render TWO controls — the module must never deduplicate what the daemon returned.\n\nCHECKLIST SWEEP: no production module sorts, reverses, splices or otherwise mutates an input array (grep-verified; the only .push calls are into module-local arrays). Empty arrays are covered in every position (checks, affected, presentations, feedback, rows, items, blindSpots, inventory) and each renders an explicit UNKNOWN or an explicit not-a-proof line rather than a confident empty. Keyboard clamps at both edges and returns early on an empty list, so no index can go out of range. No hand-written cr.chip.* anywhere (all chips come from the kernel via FactRow) and no cr.chip.policy-approved, so the fact==chip equality audits count only truth chips (`mem:gotcha-pol-chip-is-not-a-truth-chip`). No IO, timers, subscriptions or side effects on any path, so there is no error-path cleanup to miss. Duplicate daemon-supplied IDs produce duplicate DOM test IDs; that is deliberate — deduplicating would hide a daemon defect — and every test scopes its queries with within().\n\nMUTATION DRILLS — 20 mutants, one at a time, each restored and sha256-verified identical before the next; final run KILLED=19 PROBLEM=0 plus one separate new-file drill: (1) coerce UNKNOWN_TRUTH to HEALTHY; (2) drop a check's evidence row; (3) render only the first affected ID; (4) turn an offline suggestion into a button; (5) drop target matching; (6) accept an ambiguous match; (7) ignore actionsEnabled; (8) ignore the non-live authority-mode guard; (9) blanket-block on useGating().stale; (10) blank the refusal layer while keeping the code; (11) hard-code a third reconciliation repair button; (12) render an empty orphan list as \"No orphans remain\"; (13) compute SQLite compatibility client-side; (14) compute outbox lag from the two cursors; (15) delete the post-cursor RPO sentence; (16) default backup byte verification to \"complete\"; (17) plant a `fetch(` token in a production module; (18) rename an exported anchor; (19) import ../fixtures.js; (20) add a new file to src/recovery. Each turned exactly one NAMED focused test red, and the harness independently failed any mutant whose anchor did not match or that left the file hash unchanged, so no drill could pass vacuously.\n\nDEFECT FOUND BY DRILL 18 AND FIXED: the scan's anchors were bare prefixes (\"export function RecoveryExternalInventory\"), which still match a renamed \"RecoveryExternalInventoryRenamed\" — the mutant SURVIVED. Anchors now carry their opening parenthesis and the rename is killed. That is the plan's \"verify the structural scan truly reads all four canonical production files from process.cwd()\" catching a real hole rather than confirming a hope; drill 20 separately proves the exact-file-set assertion reddens when any new file appears in an owned directory.\n\nState after the step: `npx vitest run src/doctor src/recovery` -> Test Files 5 passed (5), Tests 94 passed (94), exit 0. `npx tsc --project tsconfig.json` exit 0. Physical lines (grep -c \"\"): doctor-console.tsx 249, recovery-actions.tsx 250, reconciliation-inventory.tsx 192, recovery-external.tsx 134, recovery-status.tsx 149 — all at or under the 250 target.\n\nATTRIBUTION FOR STEP 8 (not a defect of this task): a foreign whole-tree commit landed while this task was mid-flight — ae6a79d/82f4a35 \"feat(task-c8b625ddf39c422590",
+      "startedAt": "2026-08-09T10:12:37.129Z",
+      "completedAt": "2026-08-09T10:21:32.501Z"
     },
     {
       "stepId": "step-8",
       "description": "Run the single final verification command fresh in the foreground: pnpm --filter @moe/control-room test. Record exact test-file/test counts and exit 0, including the untouched shell J1 compatibility suite; if a foreign in-flight suite is still red, attribute it and wait/report it rather than changing unowned paths or claiming success. Then run git status --porcelain, unstage any foreign staged entry, stage only the eight explicit owned paths, commit with those exact pathspecs (never a bare commit), and use git show --stat --name-only to prove the commit contains only this task's files and no generated/debug evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/doctor/doctor-console.tsx",
         "apps/control-room/src/doctor/doctor-console.test.tsx",
@@ -153,11 +162,26 @@
         "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
         "apps/control-room/src/recovery/recovery-status.tsx",
         "apps/control-room/src/recovery/recovery-status.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/doctor/doctor-console.tsx",
+        "apps/control-room/src/doctor/doctor-console.test.tsx",
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+        "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+        "apps/control-room/src/recovery/recovery-status.tsx",
+        "apps/control-room/src/recovery/recovery-status.test.tsx",
+        "apps/control-room/src/recovery/recovery-external.tsx",
+        "apps/control-room/src/recovery/recovery-import-ban.test.ts"
+      ],
+      "note": "Final verification fresh in the foreground, post-commit: `pnpm --filter @moe/control-room test` -> EXIT=0, \"Test Files 25 passed (25)\", \"Tests 369 passed (369)\". 25 test files on disk (ls src/**/*.test.ts{,x}) equals 25 executed, so nothing was skipped; that set includes the untouched shell/j1-flow.test.tsx compatibility suite, which imports doctor-j1.tsx unchanged. The foreign board-surface RED recorded at step-1 baseline is gone — that agent landed its work in ae6a79d — so no suite needed attribution or waiting at the gate; the package went from 265/269 with 1 failed file to 369/369 with 0.\n\nCOMMIT: index was empty beforehand (git diff --cached --name-only returned nothing), so no foreign entry needed unstaging. Staged and committed with the ten explicit owned pathspecs only — never a bare commit, never git add -A. Commit 5b06596 \"feat(task-a7ba291edeb3461f9c5305bc91f0810f): Recovery doctor console\". git show --stat --name-only lists exactly two files: apps/control-room/src/recovery/recovery-actions.tsx and apps/control-room/src/recovery/recovery-import-ban.test.ts. No generated, debug, probe, or scratch file — the mutation-drill harness lived entirely in the OS temp directory and was deleted, and the one probe file created for the new-file-escape drill was removed in the same command that created it.\n\nWHY ONLY TWO FILES: the other eight owned files were already in HEAD. A foreign whole-tree commit landed mid-task — ae6a79d/82f4a35 \"feat(task-c8b625ddf39c4225903e34284a3affcb): Canonical goals board\" — and swept every file in the working tree, including all of mine, into that task's commit. My subsequent step-7 edits are what remained to commit. All ten files are verifiably present and current: `git status --porcelain --untracked-files=all -- apps/control-room/src/doctor apps/control-room/src/recovery` is empty, i.e. both owned directories match HEAD byte for byte. This is `mem:gotcha-foreign-whole-tree-commit-preempts-your-pathspec-commit`; the content is intact and attributed here rather than silently mis-credited.\n\nDELIVERABLE against DoD: (1) HEALTHY/DEGRADED/UNKNOWN_TRUTH are distinct three-channel outcomes with no roll-up in either direction, and every check carries a stable ID, severity, evidence and every affected record/effect ID in supplied order. (2) Only a current daemon-supplied NextAllowedCommand yields an actionable control — exact ID+target join, blank identity never matches, ambiguity omitted, original frozen object handed back — and uncertainty disables: actionsEnabled verbatim plus OFFLINE_READ_ONLY/HISTORICAL/UNKNOWN fail closed, with refusals naming the stable code and refusing layer. (3) Backup cursor/RPO is explicit and the post-cursor sentence renders even when every proof is missing; the export-is-not-a-backup note, the reconciliation empty-list limitation, and the per-class orphan-inventory limitation are all stated, and an empty list is never a completeness proof. (4) Focused control-room tests pass, and so does the whole package.",
+      "startedAt": "2026-08-09T10:21:36.142Z",
+      "completedAt": "2026-08-09T10:23:11.325Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0b27a5cc",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -169,7 +193,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T10:12:37.129Z",
+  "updatedAt": "2026-08-09T10:24:26.989Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-0b27a5cc"
@@ -178,7 +202,7 @@
     "firstClaimAt": "2026-08-09T09:29:04.600Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -189,7 +213,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:44:48.304Z",
@@ -212,5 +238,24 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-09T09:44:50.331Z",
-  "workStartedAt": "2026-08-09T09:53:25.011Z"
+  "workStartedAt": "2026-08-09T09:53:25.011Z",
+  "reviewStartedAt": "2026-08-09T10:24:26.989Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n\n Test Files  25 passed (25)\n      Tests  369 passed (369)\n   Start at  13:22:37\n   Duration  5.18s (transform 4.59s, setup 0ms, import 9.00s, tests 17.56s, environment 23.37s)",
+    "reportedAt": "2026-08-09T10:24:26.989Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/doctor/doctor-console.test.tsx",
+    "apps/control-room/src/recovery/recovery-actions.test.tsx",
+    "apps/control-room/src/recovery/reconciliation-inventory.test.tsx",
+    "apps/control-room/src/recovery/recovery-status.test.tsx",
+    "apps/control-room/src/doctor/doctor-console.tsx",
+    "apps/control-room/src/recovery/recovery-actions.tsx",
+    "apps/control-room/src/recovery/reconciliation-inventory.tsx",
+    "apps/control-room/src/recovery/recovery-status.tsx",
+    "apps/control-room/src/recovery/recovery-external.tsx",
+    "apps/control-room/src/recovery/recovery-import-ban.test.ts"
+  ]
 }

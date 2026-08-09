@@ -1,0 +1,39 @@
+{
+  "id": "task-671578e5c0f649b0a3c80567ad0677a6",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Complete the J1 command path: graph activation and final acceptance",
+  "description": "Objective: expose the goal and graph commands the core already implements as authenticated durable daemon handlers, so J1's three human actions are drivable end to end. Created by architect-0b81de40 2026-08-09 from the Foundation canary's block report, verified symbol by symbol on disk. THIS IS THE M1 EXIT BLOCKER: the epic's exit condition is that J1, J3 and J4 pass, and J1 currently cannot complete.\n\nTHE GAP, MEASURED 2026-08-09. Design line 1095 defines J1's per-goal happy path as exactly three human actions: (1) goal.create, (2) exact plan/initial-graph approval, (3) final acceptance of the verified/reviewed result. On disk:\n  apps/daemon/src/goals/goal-services.ts:66   GOAL_HANDLERS = { \"goal.create\": createGoal }        <- action 1 only\n  apps/daemon/src/planning/planning-services.ts:156  PLANNING_HANDLERS = { \"approval.decide\", \"plan.propose\" }\n  BOOTSTRAP_COMMAND_KINDS (9 total): approval.decide, goal.create, plan.propose, policy.install, policy.validate, project.activate, project.bind_repository, project.register, provider.probe\nThere is NO final-acceptance command and NO goal.close anywhere in the daemon, and approval.decide records a generic approval without activating the graph. So action 3 is entirely absent and action 2 is incomplete.\n\nTHIS IS COMPOSITION, NOT NEW DOMAIN LOGIC - which is what makes it a bounded task. @moe/core ALREADY implements everything needed, verified on disk:\n  packages/core/src/goal/goal-contract.ts - GoalActivateInitialGraphCommand (:71), GoalCloseCommand (:76), GoalCancelCommand (:87), GoalQualificationInvalidatedCommand (:82), GoalReopenAsRevisionCommand (:92), GoalPauseCommand, GoalResumeCommand, and the GoalCommand union (:111)\n  packages/core/src/goal/goal-reducer.ts - reduceGoal, GOAL_COMMAND_KINDS, GOAL_TRANSITIONS, plus validators validActivation, validClosure, validCancellation, validInvalidation, validExpectedVersion, validProjectReady\n  packages/core/src/planning/planning-command-contract.ts - PlanApprovalWitness (:112), PlanningActivationWitness (:117), PlanRevisionSeal (:102), SubmissionFinalizeWitness (:86)\nThe daemon exposes handlers for two of the goal commands' worth of surface while the core implements eight. The witnesses for activation and approval exist and are unused.\n\nDESIGN CONSTRAINT ON ACTION 2, do not simplify it away. Design line 299 states that J1's one approval action commits plan and graph decisions PLUS activation atomically - one human click, one transaction. Recording an approval and activating the graph in two separate commands would break J1's three-action contract and is not what the design describes.\n\nDeliverable: daemon handlers for initial-graph activation (composed into the existing approval command so it stays ONE action) and for final acceptance plus goal closure, each following the daemon's established shape - bounded decode, exact-shape gate against a frozen key list with a pinned schemaVersion, reduce through the core, commit the verdict durably through the store, return a frozen discriminated result. The services compose; they never decide.\n\nNOT in scope: new domain rules in @moe/core (it is frozen contract per M4-style rails and already complete); J3 launcher/restart composition; J4 review persistence; the review flow itself; any HTTP or transport change.\n\nHard dependencies: none - every consumed symbol is committed at HEAD.\n\nOwned paths: apps/daemon/src/goals/**, apps/daemon/src/planning/**, and apps/daemon/src/bootstrap/bootstrap-contracts.ts (command-kind vocabulary only).\nVerification: pnpm --filter @moe/daemon typecheck &amp;&amp; pnpm --filter @moe/daemon test &amp;&amp; pnpm typecheck",
+  "definitionOfDone": [
+    "J1's three human actions are each drivable through the published @moe/daemon root with no deep subpath import: goal.create, ONE approval action that atomically commits the plan/graph decision AND activates the initial graph (design line 299 - not two separate commands), and a final acceptance of the verified reviewed result. A test drives all three in sequence against the real store and asserts the goal reaches its accepted terminal state.",
+    "Every new handler composes rather than decides: it reduces through @moe/core's reduceGoal or the planning contract and commits the reducer's verdict, and a rejected reducer result is surfaced with the CORE's own reason code rather than a locally invented one, so which layer refused survives. Asserted by feeding a command the core rejects and pinning that exact code.",
+    "Final acceptance is evidence-bound and cannot be forged: acceptance requires the verification and review witnesses the core's validators demand, and an acceptance attempted without them refuses with its specific stable code and commits NOTHING - proven by reading the store back, not by the returned value, since a service that mutates then refuses would pass a return-value-only assertion.",
+    "Activation is atomic with approval: an approval whose activation half fails leaves NEITHER committed, proven by fault injection rather than by inspection. A partially-applied approval is the defect this DoD exists to catch.",
+    "Each command is idempotent on replay: issuing it twice returns the same terminal decision and leaves exactly one durable row, asserted by reading the row count back rather than by the second call not throwing.",
+    "The command-kind vocabulary is extended, not forked: the new kinds are appended to BOOTSTRAP_COMMAND_KINDS and the handler tables, and a set-equality assertion pins the full kind list so an unreviewed command cannot appear unnoticed.",
+    "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck all exit 0, and only owned paths are staged and committed by explicit pathspec."
+  ],
+  "taskRails": [
+    "Compose, never decide. Every rule lives in @moe/core already; a daemon handler that re-implements a validation the core owns creates a second source of truth that will drift. If a needed rule seems missing from the core, report_blocked rather than inventing it here.",
+    "Design line 299 is binding: J1's approval is ONE human action that commits plan and graph decisions plus activation atomically. Do not split it into approve-then-activate to make implementation easier - that changes the product contract the epic's exit condition is written against.",
+    "Assert the reason code AND the refusing layer. Both the daemon's shape gate and a core validator can refuse the same command; a test asserting only 'refused' would stay green if the shape gate started answering first.",
+    "Prove non-mutation by reading the store back, never by trusting a returned value. A service that mutates and then refuses passes a return-value-only assertion.",
+    "Extend the frozen vocabularies by APPENDING; never reorder or remove an entry, since existing suites assert against those arrays.",
+    "No new .js bridge convention decisions here - apps/daemon now has bridges, so any new module needs its sibling bridge in the same commit, one line, LF, trailing newline.",
+    "Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only; several agents share this working directory."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 10,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T10:23:40.544Z",
+  "updatedAt": "2026-08-09T10:23:40.544Z"
+}

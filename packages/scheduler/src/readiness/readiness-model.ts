@@ -11,7 +11,7 @@
  * owned path and are never edited from here.
  */
 import type { DependencyFactBinding } from "../dependencies/dependency-contract.js";
-import type { BlockedReasonCode, GraphKey } from "../graph-model.js";
+import type { BlockedReasonCode, GraphIssueCode, GraphKey } from "../graph-model.js";
 
 /**
  * Design 8.2's explanation classes. Only a DISPATCHABLE node is `READY_NOW`.
@@ -166,12 +166,16 @@ export const READINESS_ISSUE_CODES = Object.freeze([
   "READINESS_NODE_FACTS_MISSING",
   "READINESS_NODE_FACTS_DUPLICATE",
   "READINESS_NODE_FACTS_UNKNOWN_NODE",
-  "READINESS_FRONTIER_REFUSED",
 ] as const);
 export type ReadinessIssueCode = (typeof READINESS_ISSUE_CODES)[number];
 
 export interface ReadinessIssue {
-  readonly code: ReadinessIssueCode;
+  /**
+   * A readiness-local code, or a landed `GRAPH_*`/`FRONTIER_*` code passed
+   * through unchanged. A structural refusal is NEVER re-coded under a
+   * readiness synonym, following the admission-model precedent.
+   */
+  readonly code: ReadinessIssueCode | GraphIssueCode;
   readonly message: string;
   readonly nodeKeys: readonly GraphKey[];
 }

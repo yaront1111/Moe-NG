@@ -115,6 +115,8 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/import: {}
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':

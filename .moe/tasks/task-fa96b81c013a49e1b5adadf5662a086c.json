@@ -45,49 +45,70 @@
     {
       "stepId": "step-3",
       "description": "RED — fact-parsing tests before readiness-facts.ts exists. @moe/scheduler declares NO dependencies at all (verified: its package.json has no dependencies field), so it cannot import @moe/runner's materialization or anything else. Every input — dependency truth, NodeInputManifest binding, policy, budget, lease, hold, resource confirmation, wait record — arrives as caller-supplied DATA and is structurally validated here. Tests: each fact parser returns CONFIRMED_TRUE, CONFIRMED_FALSE or UNKNOWN and NEVER coerces a malformed or absent fact to false — assert UNKNOWN explicitly for absent, malformed, wrong-typed, stale-versioned and null cases, with the specific reason code and the layer that refused; a hostile shape battery (null prototype violation, extra key, getter-bearing object, oversized list) refuses on the bound before any element read, following the budget-contract.ts:137 precedent; and a wait record that is not CURRENT does not yield INTENTIONAL_WAIT, because design 8.2 requires a current record and an expired one is UNKNOWN, not an intention.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
       ],
-      "startedAt": "2026-08-09T10:14:36.808Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.test.ts",
+        "packages/scheduler/src/readiness/readiness-model.ts"
+      ],
+      "note": "RED confirmed for the right reason: \"Cannot find module './readiness-facts.js'\" — readiness-facts.ts does not exist yet. Test Files 1 failed, Tests: no tests. 27 test cases written across 4 describes. Classification: confirmed-true carries provenance through byte-identical; confirmed-false stays CONFIRMED_FALSE with provenance; absent fact => UNKNOWN with provenance null (parameterised over one ADMISSION and one DISPATCH code, asserting code AND layer, so the layer that refused is pinned); a 4-case battery (malformed provenance ref, wrong-typed confidence \"MAYBE\", null confidence, non-hex digest) asserts UNKNOWN and explicitly never CONFIRMED_FALSE; fact consumed past its declared horizonGate => UNKNOWN with provenance retained; source-fact version behind AND ahead of the caller's declared current version => UNKNOWN (both directions, since a fact newer than current is incoherent, not fresher), equal version stays CONFIRMED_TRUE. Fold: empty list => UNKNOWN on both layers and never false; CONFIRMED_FALSE wins over UNKNOWN (not-eligible is itself confirmed); predicates cover CALLER_FACT_CODES exactly once. Hostile battery: oversized list (MAX_ADMISSION_ITEMS+1) with a THROWING accessor at index 0 must return null with elementWasRead===false — that is the bound-before-element-read proof, not just a null return; non-record/array/null bundle; extra own key; getter-bearing key; class prototype refused while explicit null prototype is accepted (isPlainRecord deliberately permits null prototype, so asserting refusal there would have been wrong); null fact entry, entry with no code, structural code a caller may not assert, unknown code, duplicate code; malformed nodeKey/currentGate/currentFactVersions. Wait currency: current record accepted, expired record dropped (waitCurrent false, wait null), malformed record dropped without refusing the bundle, absent wait is no intention. Also amended readiness-model.ts: dropped MAX_READINESS_ITEMS in favour of reusing admission-model's dense()/MAX_ADMISSION_ITEMS bound (one ceiling, not two) and added CALLER_FACT_CODES = admission+dispatch, excluding structural codes so a caller cannot assert one.",
+      "startedAt": "2026-08-09T10:14:36.808Z",
+      "completedAt": "2026-08-09T10:17:28.529Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN — readiness-facts.ts. Parse and classify every caller-supplied fact bundle into FactConfidence, one parser per input class named in design 8.2. Parse-then-validate with parsers returning null on hostile shapes so the caller picks code and layer, the convention this repo already uses. Absent, malformed, stale or unresolvable is UNKNOWN — never CONFIRMED_FALSE, which is a positive claim the caller did not make. Carry each fact's provenance (source ref, version, digest) through unchanged so the explanation layer can cite it. No derivation of readiness here; this module only says what is known. Keep under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-facts.ts",
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-facts.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-facts.ts",
+        "packages/scheduler/src/readiness/readiness-fact-shapes.ts"
+      ],
+      "note": "GREEN. pnpm exec vitest run packages/scheduler/src/readiness: Test Files 1 passed (1), Tests 34 passed (34). typecheck exit 0. Line counts by wc -l: readiness-facts.ts 175, readiness-fact-shapes.ts 114, readiness-model.ts 191 — all under 250. PLAN DEVIATION (declared): the single readiness-facts.ts first landed at 261 lines, over the step's 250 cap, so the byte-level hostile-shape parsers were split into a sibling readiness-fact-shapes.ts (parseProvenance, parseCurrentVersions, parseRawFact, BUNDLE_KEYS/BUNDLE_REQUIRED, RawReadinessFact). Step 9 anticipates this: that split file needs its own .js bridge and will get one. classify() collapses every failure mode to UNKNOWN — null provenance, gate past the fact's declared horizonGate, a source-fact version differing from the caller's declared current version, and any confidence string that is not literally CONFIRMED_TRUE/CONFIRMED_FALSE. The caller's own CONFIRMED_FALSE is the only route to CONFIRMED_FALSE. fold() is a three-valued AND where CONFIRMED_FALSE outranks UNKNOWN, because a confirmed-false predicate settles the layer and reporting UNKNOWN there would be weaker than the truth supplied. Provenance is carried through byte-identical (asserted by toEqual on the whole triple) and stays null when no fact was supplied. Reused rather than reimplemented: admission-model's record/dense/oneOf/isRef/isDigest/isVersion/deepFreeze (dense applies the MAX_ADMISSION_ITEMS ceiling before any element read), admission-wait's validateIntentionalWait, dependency-witness's isWithinHorizon for both horizon staleness and wait currency, graph-key's isGraphKey. No readiness is derived in this module.",
+      "startedAt": "2026-08-09T10:17:31.137Z",
+      "completedAt": "2026-08-09T10:19:18.274Z"
     },
     {
       "stepId": "step-5",
       "description": "RED — three-layer projection tests, and THE CENTRAL TENSION OF THIS TASK is here. partitionFrontier already computes logicalReady / admissionReady / dispatchable, but it deliberately REFUSES to derive the two booleans it needs: NodeAvailabilityFact.admissionEligible and .dispatchAvailable are documented as 'supplied by the caller (never derived here)'. THIS ENGINE IS THAT CALLER — compose partitionFrontier, never reimplement it. Now the tension: graph-model.ts:255 instructs that if either availability value is unknown for ANY node the caller must withhold the ENTIRE partition so widths stay null, yet DoD 3 forbids unknown facts from hiding structurally ready work. Resolution to encode in tests: logicalReady derives from hard-edge satisfaction facts ALONE and does not depend on either availability boolean, so withholding the partition withholds only the admission and dispatch layers. THE DECIDING TEST: one node whose budget fact is UNKNOWN must NOT suppress the reported logical readiness of unrelated nodes — assert the unrelated nodes are still reported logically ready AND that the unknown node is absent from admissionReady and dispatchable AND that no availability boolean was fabricated. Also assert: a non-execution-bearing node is never dispatchable (frontier.ts already gates on executionBearing — reuse the flag, do not invent a second one); a resource wait changes dispatchable only and never logicalReady; and the three layers are proper subsets, dispatchable ⊆ admissionReady ⊆ logicalReady, asserted as set containment on a fixture where all three genuinely differ, since a fixture where they coincide proves nothing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts",
+        "packages/scheduler/src/readiness/test-fixtures.ts"
+      ],
+      "note": "RED confirmed for the right reason: \"Cannot find module './readiness-projection.js'\". Suite state: Test Files 1 failed | 1 passed (2), Tests 34 passed (the facts suite; the projection suite contributes 0 until GREEN). Added test-fixtures.ts (named to match the package's existing bridge-exempt fixture name so the step-9 audit keeps one uniform exception) building a graph where the three layers GENUINELY DIFFER — logicalReady [dev-capability, dev-ready, dev-resource], admissionReady [dev-ready, dev-resource], dispatchable [dev-ready] — because a fixture where they coincide makes the subset assertion trivially true. dev-advisory is non-execution-bearing with EVERY fact confirmed true, so the only thing that can keep it out of the sets is the executionBearing flag; dev-done is blocked by its three incoming HARD edges. THE DECIDING TEST asserts all four arms at once: dropping dev-capability's budget fact leaves logicalReady unchanged and still containing the unknown node itself, keeps that node out of admissionReady and dispatchable, reports its admission AND dispatch confidence as UNKNOWN rather than a fabricated false, and sets partition null with withheld \"AVAILABILITY_UNKNOWN\" so analysis widths stay UNKNOWN. Also asserted: partition agreement with partitionFrontier's own three sets when nothing is unknown (pins the derived lower-bound lists to the landed partitioner); a resource confirmed unavailable changes ONLY dispatch, with logicalReady byte-identical to the all-confirmed run; an advisory node's unknown facts do NOT withhold, since it counts no width; an UNKNOWN hard edge yields UNKNOWN logical (never confirmed-false) while an all-unsatisfied block yields CONFIRMED_FALSE on all three layers; refusals for missing/duplicate/unknown-node bundles and malformed input, and a frontier refusal passing through under FRONTIER_EDGE_FACT_MISSING with no READINESS_ synonym; deep freeze including nested reason arrays and elements; blocked reasons naming the exact edge keys and producers; and a caller-fact reason carrying the full sourceFactRef/Version/Digest triple.",
+      "startedAt": "2026-08-09T10:19:20.763Z",
+      "completedAt": "2026-08-09T10:22:20.698Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN — readiness-projection.ts. Derive admissionEligible and dispatchAvailable per node from the classified facts, then call partitionFrontier with a cursor built ONLY from confirmed values. If any required fact is UNKNOWN for a node, do not fabricate a boolean for it: withhold the partition per the graph-model contract and report the admission and dispatch layers as UNKNOWN for that node, while still reporting the structural logical layer, which does not depend on availability. Return a frozen projection carrying all three layers plus the per-node confidence, so a consumer can tell 'not ready' from 'not known'. Compose the existing partitionFrontier and the existing BlockedNode output rather than recomputing hard-edge satisfaction. Keep under 250 lines; split the cursor builder into a sibling module before 400.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.ts",
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-projection.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:22:23.333Z"
     },
     {
       "stepId": "step-7",
@@ -158,12 +179,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.026Z",
-  "updatedAt": "2026-08-09T10:14:36.808Z",
+  "updatedAt": "2026-08-09T10:22:23.333Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T10:04:33.189Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
@@ -175,7 +196,10 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:43.282Z",

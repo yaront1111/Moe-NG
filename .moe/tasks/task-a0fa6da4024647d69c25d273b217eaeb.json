@@ -19,25 +19,34 @@
     {
       "stepId": "step-1",
       "description": "Explore and pin. Read every module under packages/runner/src/providers/claude/ — claude-observation, claude-capabilities, claude-probe, claude-stream-anomalies, claude-stream, claude-render, claude-cancel-reconcile — and mem:task-task-5ff2b39df70c4451ae07a44c92935b42-handoff, which records the decisions that must not be re-litigated. Read packages/testkit/src/providers/claude/claude-golden-streams.ts for the cross-package corpus protocol. Read packages/runner/src/supervisor/ (effect-kernel, effect-shape, effect-activation, effect-lifecycle, drain-reconciliation, restart-reconstruction) to confirm the seam this adapter must NOT cross: cancellation is an INPUT and process death is a caller-supplied observation. Verify every symbol you intend to name actually exists — the governor's promotion note is explicit that the parent shell's description never described code. Confirm the shape of ClaudeProcessExit (EXITED{code} | SIGNALLED{signal} | UNOBSERVED) and CLAUDE_RECONCILED_OUTCOMES, which the parity step will compare against. Produce no files.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T10:14:20.497Z"
+      "note": "No files produced. Read the seven Claude production modules and golden corpus protocol, plus supervisor effect-kernel/effect-shape/effect-activation/effect-lifecycle/drain-reconciliation/restart-reconstruction. Verified exact production seams: probeClaudeRuntime, recordClaudeStream, renderClaudeContext, reconcileClaudeRun; ClaudeProcessExit is EXITED{code}|SIGNALLED{signal}|UNOBSERVED; CLAUDE_RECONCILED_OUTCOMES has six frozen values. Confirmed supervisor remains pure and imports the Claude exit/outcome strings structurally; Codex parity must preserve those strings and must not import/cross the supervisor. Confirmed Claude adapter has zero child_process/spawn/.kill/clock/random hits and bridges are exact LF one-liners. Golden corpus is marker-delimited JSON, raw-byte sha256, DEVELOPMENT_ONLY/NOT_CONFIRMATORY, CRLF retained in base64, no testkit bridge. Owned Codex directories were absent/clean at HEAD 82f4a354. Baselines: runner 30 files/980 tests; testkit 18 files/234 tests. Design §11.5 confirms Codex JSONL is only an adapter fact and capability claims require observation. For the plan-required provider difference, Codex will add a narrowly observed CWD_OBSERVATION record/status (requestedCwd must equal observedCwd); all unproven fields remain required-null and UNSUPPORTED.",
+      "startedAt": "2026-08-09T10:14:20.497Z",
+      "completedAt": "2026-08-09T10:16:56.573Z"
     },
     {
       "stepId": "step-2",
       "description": "codex-observation.ts — ProviderRuntimeObservation plus the shared failure shape, mirroring claude-observation.ts. Declare CODEX_RUNTIME_OBSERVATION_VERSION = \"moe-codex-runtime-observation/1\", the closure/pinning/truth vocabularies, bounded constants, and CodexFailure<Code> / codexFailure as the ONE rejection shape for this whole adapter. DO NOT import claudeFailure: adapters are per-provider and independently replaceable, and importing one provider's module into another couples two things that must be able to diverge. Mirror it structurally instead; step 9 proves the two stay congruent. Carry forward two decisions from the Claude handoff, both load-bearing: the runtime closure is SORTED BY PATH BEFORE HASHING, because discovery order is not a fact about the runtime and letting it into the observation digest would make the wrapper's pre-activate comparison report drift that never happened — and duplicate paths are REFUSED, never deduped. And truthClass is INDEPENDENT of pinningMethod: an honestly observed runtime that cannot be pinned is still honestly observed, so keep the launch question a separate predicate. Guard a lying probe port: a non-array closure or non-record entry returns a typed failure rather than crashing on .length. Keep under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-observation.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/codex-observation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-observation.ts",
+        "packages/runner/src/providers/codex/codex-observation.test.ts"
+      ],
+      "note": "TDD scope sequencing: created the owned observation test one step early so production did not precede RED. RED was an assertion failure (`existsSync=false`) before the module existed; GREEN after minimal module; then implemented the full 200-line observation surface and 6 focused tests. It mirrors Claude structurally without imports, sorts closure paths before digesting, refuses duplicates, guards non-array/non-record probe claims, keeps truth independent of pinning, deep-freezes output, exports a digest-input record excluding the digest itself, and has one frozen CodexFailure shape. Focused suite 1 file/6 tests and runner typecheck both exit 0. No supervisor or Claude path touched.",
+      "startedAt": "2026-08-09T10:17:18.069Z",
+      "completedAt": "2026-08-09T10:19:47.922Z"
     },
     {
       "stepId": "step-3",
       "description": "codex-capabilities.ts — the closed capability vocabulary and proof rules. This is DoD 1: every unproven capability is typed UNSUPPORTED, never guessed, which is also task rail 3. Mirror claude-capabilities.ts: a frozen capability list, statuses SUPPORTED | UNSUPPORTED with no third arm, proof methods, and an UNPROVEN_PROBE_REPORT constant that is the safe default. THE CENTRAL RULE, carried from Claude: PROOF IS OBSERVATION, NOT CLAIM. The probe port returns observation records, and a record that contradicts its own claim proves the OPPOSITE — childrenAfter > 0 makes PROCESS_TREE_TERMINATION UNSUPPORTED regardless of what the CLI advertises. Help text is carried for diagnostics and proves nothing. Pin RESUME to UNSUPPORTED in v1 as Claude does. Probe-report fields are REQUIRED AND NULLABLE, never optional: with exactOptionalPropertyTypes an omitted field reads as a deliberate absence, so a port that forgot to observe something would be indistinguishable from one that proved it absent. Tests assert the specific capability code AND the status, never merely that something was unsupported. Keep under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-capabilities.ts",
         "packages/runner/src/providers/codex/*.test.ts"
@@ -45,31 +54,46 @@
       "newFiles": [
         "packages/runner/src/providers/codex/codex-capabilities.ts",
         "packages/runner/src/providers/codex/*.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-capabilities.ts",
+        "packages/runner/src/providers/codex/codex-capabilities.test.ts"
+      ],
+      "note": "TDD RED asserted the missing capability module (`existsSync=false`), then GREEN and expanded to 6 behavioral tests. The 216-line module publishes a frozen 12-capability Codex vocabulary, exact SUPPORTED|UNSUPPORTED statuses, closed proof methods, required-nullable CodexProbeReport, and fully explicit UNPROVEN_PROBE_REPORT. CWD_OBSERVATION is the one provider-specific addition demanded by the objective; only requestedCwd===observedCwd proves it. Help/resume claims prove nothing; RESUME is pinned UNSUPPORTED. Contradicting cwd and childrenAfter>0 records explicitly produce their named capability with UNSUPPORTED/NONE. Focused Codex suites 2 files/12 tests and runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:19:53.351Z",
+      "completedAt": "2026-08-09T10:22:12.559Z"
     },
     {
       "stepId": "step-4",
       "description": "codex-probe.ts — probeCodexRuntime, binding the capability profile to the runtime observation, mirroring claude-probe.ts (the smallest module at 120 lines, so this should stay compact). The profile and the observation must be bound to each other so a capability claim cannot be read against a different runtime than the one observed. The result is immutable — DoD 1 requires probe and runtime closure be immutable, so freeze deeply and assert it. A probe that cannot observe returns UNPROVEN_PROBE_REPORT rather than a partially filled one.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-probe.ts",
         "packages/runner/src/providers/codex/*.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/codex-probe.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-probe.ts",
+        "packages/runner/src/providers/codex/codex-probe.test.ts"
+      ],
+      "note": "TDD RED asserted the missing codex-probe.ts module, then GREEN and expanded to 6 probe tests. The compact 114-line probe binds profile.capabilitySchemaDigest into the runtime observation, deeply freezes profile/closure/result, maps thrown, partial, and hostile nested probe reports to the complete UNPROVEN report, and preserves a lying non-array closure as the stable CODEX_OBSERVATION_CLOSURE_INVALID refusal rather than a crash. Missing capability lookup returns UNSUPPORTED. Focused Codex suites: 3 files/18 tests; runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:22:18.677Z",
+      "completedAt": "2026-08-09T10:24:01.616Z"
     },
     {
       "stepId": "step-5",
       "description": "codex-stream.ts — structured/raw dual record with bounded retention, mirroring claude-stream.ts and claude-stream-anomalies.ts. Split framing and the anomaly vocabulary into a sibling module if the file approaches 250 lines. FOUR DECISIONS FROM CLAUDE THAT MUST NOT BE SIMPLIFIED, each of which was a real bug: GAP is computed over the SET of sequences, not delivery order, or out-of-order delivery (1,3,2) falsely raises GAP; a malformed record COUNTS as occupying a slot, or (1, unreadable, 3) invents a gap; COUNTER_REGRESSION suppresses gap analysis entirely, because contiguity is undefined across a restart; and the first record establishes the origin and is never gap-checked, so RESUME_DISCONTINUITY keys on an explicit resumedFrom and never on 'first seq != 1'. Retention is bounded but digest coverage is not: past the size cap the record flips to an artifact reference while sha256 and byteLength still span every byte, and per-event line bytes are suppressed too — omitting that reintroduces the unbounded buffer through the back door. Bound the event COUNT as well as the byte size; Claude needed a separate event-limit refusal because the events array was unbounded even when raw retention was capped. Keep UNKNOWN_SCHEMA distinct from any pre-activation refusal code.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-stream.ts",
         "packages/runner/src/providers/codex/*.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/codex-stream.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:24:13.471Z"
     },
     {
       "stepId": "step-6",
@@ -158,11 +182,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-09T10:14:20.497Z",
+  "updatedAt": "2026-08-09T10:24:13.471Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:02:08.922Z",
     "plannedStepCount": 11,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -177,7 +202,12 @@
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:12:36.679Z",
   "planningNotes": {

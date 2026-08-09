@@ -149,8 +149,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-da724bb7",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-09T10:04:29.821Z",
+  "updatedAt": "2026-08-09T10:22:33.657Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -211,8 +211,19 @@
     "architect-da724bb7"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
-  "blockedReason": "Harness half BUILT and COMMITTED (69663dc, 9 files, +1387, zero foreign paths). Journey half BLOCKED, exactly as approved step 1 instructed. I did NOT stub, mock or narrow a journey to make it pass. FULL REPORT: #governors msg-028dcf3d.\n\nSteps 1-4 done. Fresh foreground evidence: pnpm test:e2e exit 0 (34 tests); tsc -p tests/e2e/foundation/tsconfig.json exit 0; pnpm typecheck exit 0. Eight mutation drills each red on the intended test, restore verified.\n\nBLOCKED AT STEP 5: no daemon command surface to drive. Measured on disk, not read off status fields. apps/daemon exports map is \".\" : \"./src/index.ts\" only, and index.ts exports one function, evaluateGraphPreviewRequestBytes, explicitly advisoryOnly:true authority:\"NONE\". The three handler tables (BOOTSTRAP_HANDLERS; GOAL_HANDLERS goal-services.ts:66; PLANNING_HANDLERS planning-services.ts:158) are unreachable from the package root, the same exports-map wall that blocked task-ba3a45f9. Against J1's three human actions (design 1095): goal.create handler exists but unreachable; plan.approve exists only as a core contract kind (planning-command-contract.ts:18) with NO daemon handler; final acceptance has no command, no handler, no review flow.\n\nMISSING, named: task-2f6ac0d1 2/11; task-ba3a45f9 BLOCKED 0/11; task-2d1f94f9 0/11; task-58029c26 0/11 (blocks J4); task-52ec1406 0/10 (blocks J3); task-1e512b95 11/11 steps not DONE; task-f837ce45 REVIEW not DONE; task-312c1de3 BLOCKED. Cleanup lane, an explicit hard dependency, zero of three done: task-8ee125d0, task-53680e91, task-eb9ff081.\n\nSECOND BLOCKER ON DoD 1, foreign: pnpm test is RED at HEAD. tests/fault/foundation/j4-replan-stale.test.ts (task-18c7921f) declares PRODUCTION_BEHAVIOR_ABSENT for probe:scheduler-authority-lease while fenceAuthority IS exported from packages/scheduler/src/index.ts at HEAD. Ratchet firing as designed; its owner must update the entry.",
+  "blockedReason": "The existing E2E harness/manifest slice is green, but the required journeys are not reachable through production authority. The published @moe/daemon root exposes GOAL_HANDLERS with only goal.create; there is no authenticated durable handler/composition for final reviewed-result acceptance or goal.close. PLANNING_HANDLERS only proposes plans and records a generic approval; it does not activate the graph, accept output, or close the goal. @moe/review has pure helpers but no daemon/store persistence for finding lineage, changed-hash invalidation/carry-forward, successor replan, or retained review records. Production fault schedules still declare core-to-store dispatch, durable restart adoption/outbox acknowledgement, terminal release, atomic release+handoff, and review assignment absent. Runner/Claude observation and recovery helpers are likewise not composed into a real launcher/restart boundary. Implementing these under tests/e2e would recreate authority in tests and falsely certify a partial system, violating the fail-closed rails and DoD. The J3 isolated *.e2e.ts lane amendment has been granted, so lane isolation is no longer the structural blocker.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-08T21:22:44.595Z"
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T10:18:45.363Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Existing harness/manifest slice at commit 69663dc audited; fresh pnpm test:e2e passed 2 files/34 tests; production reachability block reported; isolated *.e2e.ts Vitest lane amendment granted; comprehensive Serena handoff written.",
+      "whatRemains": "Create production prerequisite tasks for durable final acceptance/goal closure, review/replan persistence, restart/release-handoff composition, and live Claude launcher/receipt binding; then resume the canary journeys and manifest hardening.",
+      "pitfalls": "Do not treat daemon root export reachability as journey completion or implement missing authority in tests. Existing synthetic Claude fixture is input only. Preserve explicit-path ownership.",
+      "openQuestions": "Which new production prerequisite task IDs will own the missing orchestration surfaces?",
+      "releasedAt": "2026-08-09T10:22:33.655Z",
+      "releasedBy": "architect-da724bb7",
+      "reason": "Human asked to move on to other unblocked planning work; the task remains truthfully BLOCKED and has a durable Serena handoff."
+    }
+  ]
 }

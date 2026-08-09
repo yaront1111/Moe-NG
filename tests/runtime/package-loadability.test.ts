@@ -1,4 +1,6 @@
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, it } from "vitest";
@@ -37,6 +39,29 @@ it("tolerates a workspace glob whose base directory is absent", async () => {
 
   expect(patterns).toContain("adapters/*");
   await expect(expandWorkspacePattern(repositoryRoot, "adapters/*")).resolves.toEqual([]);
+});
+
+it("classifies a declared missing entry with a stable actionable code", async () => {
+  const root = await mkdtemp(join(tmpdir(), "moe-runtime-loadability-"));
+  try {
+    const packageDirectory = resolve(root, "packages/missing");
+    await mkdir(packageDirectory, { recursive: true });
+    await writeFile(resolve(root, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n", "utf8");
+    await writeFile(resolve(packageDirectory, "package.json"), JSON.stringify({
+      exports: { ".": "./src/index.ts" },
+      name: "@fixture/missing",
+    }), "utf8");
+
+    const discovered = await discoverWorkspacePackages(root);
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]).toMatchObject({
+      entryState: "MISSING_ENTRY",
+      name: "@fixture/missing",
+      runtimeEntry: resolve(packageDirectory, "src/index.ts"),
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 });
 
 it("partitions every manifest into a probed or justified no-entry bucket", async () => {

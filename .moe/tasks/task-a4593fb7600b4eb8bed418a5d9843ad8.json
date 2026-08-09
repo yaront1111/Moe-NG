@@ -28,7 +28,7 @@
     {
       "stepId": "step-2",
       "description": "OWNERSHIP AMENDMENT plus package scaffold. The task's stated verification is `pnpm test:migration`, which does not exist in root package.json — and root package.json is outside this task's owned paths (packages/import/**, tests/migration/import/**). Request the amendment naming the exact one-line script addition, following the existing `test:property` precedent (`vitest run tests/property`), and WAIT for confirmation; do not self-approve. Verify before and after that the existing `pnpm test` covers the same suite set, since silently widening or narrowing the repo-wide gate would affect every other task's evidence. Then scaffold packages/import from the @moe/scheduler template: private ESM package @moe/import, `exports: {\".\": \"./src/index.ts\"}`, typecheck and test scripts, and a tsconfig extending ../../tsconfig.base.json with rootDir src, types [\"node\"], include [\"src/**/*.ts\"] and its own tsBuildInfoFile. pnpm-workspace.yaml globs packages/* so it needs no edit; confirm `git diff --stat pnpm-lock.yaml` shows only the single new importer entry, since that file is shared with every in-flight task. Confirm the empty package typechecks before writing logic.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/package.json",
         "pnpm-lock.yaml",
@@ -37,40 +37,66 @@
       "newFiles": [
         "packages/import/package.json"
       ],
-      "startedAt": "2026-08-09T10:15:57.436Z"
+      "modifiedFiles": [
+        "packages/import/package.json",
+        "packages/import/tsconfig.json",
+        "packages/import/src/index.ts",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Scaffold done; amendment REQUESTED AND STILL OUTSTANDING. Root package.json is UNTOUCHED — `git status --porcelain -- package.json` is clean. I did not self-approve.\n\nAmendment posted to #general (msg-6c40027d0f854ac18eab417772e02e1c) and recorded as task comment-aa476c218c904ccc93056764f5e7026f. Ask: one line, \"test:migration\": \"vitest run tests/migration\", mirroring the test:property precedent.\n\nWHY I DID NOT BLOCK THE WHOLE TASK ON IT. The amendment gates exactly two things: running the named gate in step 10, and committing a root package.json hunk in step 11. Steps 3-9 are entirely inside packages/import/** and tests/migration/import/**, both owned and both greenfield. Blocking all of them on a one-line script decision would stall a HIGH task for no safety gain, so I am building the deliverable and will resolve the amendment before step 10 needs it. If it is refused, the fallback needs no shared-file edit at all: root vitest already globs tests/**, so `pnpm test` or a direct `vitest run tests/migration` both work.\n\nSCAFFOLD, from the @moe/scheduler template:\n- packages/import/package.json — private ESM @moe/import, exports {\".\": \"./src/index.ts\"}, typecheck + test scripts (test rooted at the repo, matching scheduler).\n- packages/import/tsconfig.json — extends ../../tsconfig.base.json, rootDir src, types [\"node\"], include [\"src/**/*.ts\"], own tsBuildInfoFile (import.tsbuildinfo).\n- packages/import/src/index.ts — minimal placeholder so the exports map resolves and the package typechecks; tsconfig's include would otherwise error with no inputs. The curated surface lands in step 7.\n`pnpm --filter @moe/import typecheck` exits 0.\n\npnpm-workspace.yaml NOT edited — confirmed on disk that it globs packages/*, so the new package is picked up without it.\n\nPNPM-LOCK: verified attributable and minimal, which matters because the lock is shared with every in-flight task. `git diff --stat pnpm-lock.yaml` = 1 file changed, 2 insertions, 0 deletions, and the entire content of the diff is:\n  +  packages/import: {}\nThat is the single new importer entry the plan predicted. I never ran `pnpm install`; pnpm rewrote the lock itself when the filtered typecheck discovered the new workspace package. No dependency was added or resolved.\n\nCARRIED FORWARD FROM STEP 1: root `pnpm test` WILL widen automatically once the test files exist, because the root vitest config globs both packages/**/*.test.ts and tests/**/*.test.ts. I will report the exact before/after root-suite delta rather than describe the suite as unchanged. Root package.json collision with task-535e773b is still open and untouched by me.",
+      "startedAt": "2026-08-09T10:15:57.436Z",
+      "completedAt": "2026-08-09T10:18:07.142Z"
     },
     {
       "stepId": "step-3",
       "description": "Define the closed vocabulary as exported frozen data. Create packages/import/src/import-contract.ts holding: pinned version literals for the source manifest and the canonical import record; the SEVEN ambiguity classes from design 21.6 as a frozen list — UNKNOWN_FIELD, DANGLING_REF, CYCLE, SPLIT_OWNERSHIP, CORRUPT_BYTES, CASE_PATH_CONFLICT and the counts reconciliation — each mapping to the single outcome NEEDS_RECONCILIATION; the closed refusal-code list; the provenance record shape (source digest, source path, source-declared time or the manifest's deterministic sentinel, and the manifest digest that binds them); and the imported-status vocabulary where legacy claims land as HISTORICAL or SUSPENDED with NO active arm expressible, so design 21.4's 'never activate' is enforced by the type rather than by a check. Also define the legacy-link kinds as exactly CONTAINS and RELATED, both marked historical evidence, with no arm that could express a hard edge, blocker or hold. Data and types only.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-contract.ts"
       ],
       "newFiles": [
         "packages/import/src/import-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-contract.ts",
+        "packages/import/src/import-contract.js"
+      ],
+      "note": "import-contract.ts created, 189 lines (<=250 rail). Data and types only — no clock, no randomness, no I/O, no logic beyond a frozen refuse() constructor. `pnpm --filter @moe/import typecheck` exit 0. Its one-line .js bridge shipped with it, byte-matching the established format (`export * from \"./import-contract.ts\";`, LF, trailing newline) verified with cat -A against packages/runner/src/artifacts/artifact-contract.js.\n\nTWO GUARANTEES MOVED FROM RUNTIME CHECKS INTO THE TYPES, which is the substance of this step:\n- §21.4 never activate: IMPORTED_CLAIM_STATUSES is exactly [\"HISTORICAL\",\"SUSPENDED\"]. There is no ACTIVE arm, so an active imported claim is not something the package forgets to reject — it is unconstructable.\n- §21.5 links are evidence: LegacyLink.evidenceOnly is the LITERAL `true`, not `boolean`, and LEGACY_LINK_KINDS is exactly [\"CONTAINS\",\"RELATED\"]. No arm can express a hard edge, blocker, or hold.\n\nAMBIGUITY VOCABULARY SPLIT IN TWO, deliberately, and this is a deviation from the plan's \"SEVEN ambiguity classes\" wording. The plan named only design §21.6's seven. But this task also carries a HUMAN roadmap amendment (2026-08-07, task comment): copied legacy .moe/skills content must classify \"malformed, ambiguous, missing-license, unsupported-script, or escaping assets without blessing or executing them\". Those are five more classes from a different authority, and the plan does not mention them. Folding them into one list would have made the design-seven assertion unfalsifiable — a later edit could drop a design class and the count would still look right. So:\n- DESIGN_AMBIGUITY_CLASSES = the 7 from §21.6, in the design's own order (COUNT_MISMATCH, UNKNOWN_FIELD, DANGLING_REF, CYCLE, SPLIT_OWNERSHIP, CORRUPT_BYTES, CASE_PATH_CONFLICT).\n- SKILL_ASSET_AMBIGUITY_CLASSES = the 5 from the roadmap amendment (SKILL_MALFORMED, SKILL_AMBIGUOUS, SKILL_MISSING_LICENSE, SKILL_UNSUPPORTED_SCRIPT, SKILL_ESCAPING_ASSET).\n- AMBIGUITY_CLASSES = the union.\nStep 6 will assert coverage of each list independently, so neither can absorb the other's coverage. \"Without blessing or executing\" is structural here: the importer only ever reads bytes and digests, and nothing in this package can execute anything.\n\nSingle outcome AMBIGUITY_OUTCOME = \"NEEDS_RECONCILIATION\", declared once — a second arm would be somewhere for a guess to hide.\n\nREFUSAL VOCABULARY: 6 codes over 4 layers (INPUT / MANIFEST / CANONICAL / APPLY), each with a planned emitter — IMPORT_ROOT_INVALID (INPUT), IMPORT_SOURCE_UNREADABLE / IMPORT_SOURCE_MUTATED / IMPORT_MANIFEST_EMPTY (MANIFEST), IMPORT_RECORD_UNCANONICAL (CANONICAL), IMPORT_COMMIT_FAILED (APPLY). Following task-f837ce45's rule that an unreachable stable code gets removed rather than kept; I will delete any that turns out to have no emitter by step 9 rather than leave it as decoration.\n\nDETERMINISTIC_TIME_SENTINEL is the fixed literal \"1970-01-01T00:00:00.000Z\", and ImportProvenance carries an explicit timeBasis discriminator (SOURCE_DECLARED | MANIFEST_SENTINEL) so a reader can always tell whether a rendered time is a real source fact or the sentinel. §21.7 allows either but conflating them would let a sentinel read as evidence.\n\nDEPENDENCY FINDING FOR STEP 5. The plan's codebaseInsights points at packages/runner/src/canonical.ts for canonicalJson/canonicalDigest/deepFreeze. Those are NOT reachable: @moe/runner's root index.ts exports none of them, and its exports map is exclusive ({\".\": \"./src/index.ts\"}), so a deep import cannot reach around it. Same shape as the control-room CURSOR_GAP case. I will implement the small canonical helpers locally in packages/import rather than add an unauthorized @moe/runner dependency or deep-import past an exclusive map, and will keep the same semantics the runner pins: safe integers only, sorted keys, throw rather than serialise to undefined. @moe/store's root DOES export SqliteEventStore, CommitInput and CommitResult, so step 7's transactional seam is reachable as planned.",
+      "startedAt": "2026-08-09T10:18:12.988Z",
+      "completedAt": "2026-08-09T10:20:50.762Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red, then implement the read-only source manifest — design 21.2. Create packages/import/src/source-manifest.ts which walks a frozen source tree, hashes every file, and emits a manifest binding each path to its digest and size. TWO PROPERTIES DECIDE THIS MODULE. First, DETERMINISTIC ORDER: `readdir` order varies by filesystem, platform and inode reuse, so sort every listing by an explicit total order over a stable key before hashing — this is the single most likely cause of a DoD-1 failure and it will not reproduce on the machine that wrote the code. Second, READ-ONLY PROVEN BY MEASUREMENT: snapshot every source file's digest AND mtime before and after, and assert both unchanged, because a tool that rewrites a file with identical bytes still bumps mtime and violates design 21.2. Assert the manifest is byte-identical across two runs over the same tree, and that a manifest over a tree differing by one byte differs. No clock and no randomness anywhere.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/source-manifest.ts"
       ],
       "newFiles": [
         "packages/import/src/source-manifest.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/source-manifest.ts",
+        "packages/import/src/source-manifest.test.ts",
+        "packages/import/src/canonical-bytes.ts",
+        "packages/import/src/source-manifest.js",
+        "packages/import/src/canonical-bytes.js"
+      ],
+      "note": "RED then GREEN. RED was \"1 file failed / no tests\" (module absent) — counted at suite level since a 0-test suite is invisible in the test number. GREEN: `pnpm --filter @moe/import test` exit 0, 1 file / 9 tests; `pnpm --filter @moe/import typecheck` exit 0.\n\nLines: source-manifest.ts 104, canonical-bytes.ts 71 — both well under the 250 rail. .js bridges shipped for both.\n\nONE FILE BEYOND THE PLAN: canonical-bytes.ts. Step 3's note recorded that packages/runner/src/canonical.ts is UNREACHABLE — @moe/runner's root exports none of canonicalJson/canonicalDigest/sha256Hex and its exports map is exclusive, so no specifier reaches them. Both this step and step 5 need a digest, so the helpers went into their own focused 71-line module rather than into source-manifest.ts, which would have made step 5 import its digest helper from a filesystem walker. Semantics kept identical to the runner's on purpose (sorted keys, safe integers only, throw rather than serialise to undefined) so a value cannot digest one way here and another way there.\n\nTHE COMPARATOR IS THE WHOLE STEP. canonical-bytes exports byCodeUnit as the ONLY string comparator this package may use, and it is used in three places: sorting each directory listing, sorting the final entry array, and sorting object keys in canonicalJson. localeCompare is banned in writing there because it is not a stable total order — its result depends on host ICU data, so two machines can order the same two paths differently and derive different digests from identical bytes, and that failure never reproduces locally. A bare .sort() would also be wrong for the entry array (it stringifies objects); the entry sort passes an explicit comparator over .path.\n\nSorting the LISTING as well as the final array is deliberate: it makes the walk order itself deterministic, so an early refusal stops at the same file on every machine rather than at whatever readdir happened to yield first.\n\nDETERMINISM PROVEN BY CONSTRUCTION, NOT BY INSPECTION. The \"identical digest\" test builds TWO SEPARATE temp trees in DIFFERENT directories with the files created in REVERSED order, and asserts the digests match. A single-tree \"run it twice\" test would pass even if readdir order leaked into the output, because one tree yields one readdir order. The negative control builds a third tree differing by exactly one byte (\"z\" -> \"Z\") and asserts the digest DIFFERS, so the digest cannot be ignoring content.\n\nREAD-ONLY PROVEN BY MEASUREMENT on both paths: mtimeMs and size are snapshotted per file before and after, and asserted unchanged after a successful build AND after a refused build. A rollback that corrupts the source is still a failure, so the refusal path gets its own assertion.\n\nPaths are relative, forward-slash, and NFC-normalized — asserted no entry contains a backslash. NFC matters concretely for this task: a legacy tree copied from macOS carries NFD filenames that render identically to Windows NFC ones and would otherwise hash differently.\n\nSymlinks: the walk re-stats each child with statSync rather than trusting the Dirent, and only recurses into real directories and hashes real files. Following a symlink could read bytes from outside the frozen tree, which would break both determinism and the read-only promise.\n\nRefusals pin code AND layer: IMPORT_ROOT_INVALID/INPUT for a non-directory root, IMPORT_MANIFEST_EMPTY/MANIFEST for a tree with no files (refused rather than reported as a successful import of nothing), IMPORT_SOURCE_UNREADABLE/MANIFEST for a read failure mid-walk.\n\nNOTE FOR STEP 9's SWEEP: grepping the package for Date.now/localeCompare already returns 2 hits, and BOTH are in comments that explain why those constructs are banned. A raw-text sweep will fail on its own documentation — the same trap I hit on task-d99ca771's import ban (mem:pattern-import-ban-scans-specifiers-not-text). Step 9 must scan code rather than prose, or accept and justify comment hits explicitly.",
+      "startedAt": "2026-08-09T10:21:02.275Z",
+      "completedAt": "2026-08-09T10:23:44.400Z"
     },
     {
       "stepId": "step-5",
       "description": "Implement canonical derivation — design 21.7, the heart of DoD 1. Create packages/import/src/import-canonical.ts deriving imported IDs, record ordering, provenance times and canonical event payloads FROM THE SOURCE DIGESTS AND MANIFEST, never from wall-clock import time. Imported IDs are a pure function of source identity plus the manifest digest, so the same source always yields the same id and two different sources cannot collide. Provenance time is the source record's own declared time, or the manifest-defined deterministic sentinel when the source has none — never `Date.now()`. Ordering is an explicit total order over a stable key, never insertion or filesystem order. Counters are safe-integer numbers and bytes are base64 or content-addressed refs, because the canonical digest helpers throw on bigint and non-safe integers and mishandle Uint8Array. Give this module and every other production module in this package its one-line `.js` bridge as you go — five packages shipped this epic without them and were unloadable under plain Node; a repo-wide loadability gate now probes every package, and this one should not be the sixth instance.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/import/src/import-canonical.ts"
       ],
       "newFiles": [
         "packages/import/src/import-canonical.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:24:25.160Z"
     },
     {
       "stepId": "step-6",
@@ -148,17 +174,26 @@
       "author": "human",
       "content": "Roadmap amendment 2026-08-07: copied legacy .moe/skills content may be imported only through the new versioned skill contract. Preserve source paths and exact bytes/digests; classify malformed, ambiguous, missing-license, unsupported-script, or escaping assets without blessing or executing them.",
       "timestamp": "2026-08-07T12:10:20.704Z"
+    },
+    {
+      "id": "comment-aa476c218c904ccc93056764f5e7026f",
+      "author": "worker-f2e587cb",
+      "content": "OWNERSHIP AMENDMENT REQUESTED (step 2), posted to #general msg-6c40027d0f854ac18eab417772e02e1c. Not self-approved; proceeding with the owned-path scaffold meanwhile.\n\nASK: add one line to root package.json scripts, mirroring the existing test:property precedent —\n  \"test:migration\": \"vitest run tests/migration\"\nRoot package.json is outside my owned paths (packages/import/**, tests/migration/import/**), and the task's stated Verification `pnpm test:migration` does not exist today.\n\nCORRECTION TO PLAN STEP 2, load-bearing. The step says to verify that `pnpm test` \"covers the same suite set\" before and after. That is not achievable and the plan assumed otherwise: the root vitest config globs BOTH \"packages/**/*.test.ts\" and \"tests/**/*.test.ts\", so creating this package and its migration lane widens root `pnpm test` automatically, with or without any package.json edit. Widening is inherent to the deliverable. I will report the exact before/after root-suite delta instead of claiming it is unchanged.\n\nThat also means `test:migration` is a convenience lane rather than new coverage, so there is a no-shared-file-edit alternative: amend the task's Verification to `pnpm test`, or to `vitest run tests/migration` invoked directly. Either is fine by me; I need one named so my completion evidence quotes a command that actually exists.\n\nCOLLISION: the daemon flagged root package.json shared with task-535e773b (repo-wide loadability gate, currently BLOCKED). I will not touch root package.json until this is answered, so there is no race at present.",
+      "timestamp": "2026-08-09T10:16:45.867Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.916Z",
-  "updatedAt": "2026-08-09T10:15:57.436Z",
+  "updatedAt": "2026-08-09T10:24:25.160Z",
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:39.151Z",
@@ -166,7 +201,7 @@
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 10,
     "firstClaimAt": "2026-08-09T10:14:28.760Z",
-    "executedStepCount": 1
+    "executedStepCount": 4
   },
   "planningNotes": {
     "approachesConsidered": "(1) DETERMINISM COMES FROM DIGESTS, NOT FROM CARE. Design 21.7 is explicit: imported IDs, ordering, provenance times and canonical event payloads derive from source digests and the manifest, NEVER from wall-clock import time. So the design is a pure function from (frozen source bytes) to (canonical import), with the clock and the filesystem pushed to the edges. That is what makes DoD 1 provable rather than merely likely: the same bytes imported twice on two machines must produce byte-identical output, and the test asserts it by importing the SAME fixture twice and comparing canonical hashes, not by inspecting the code for `Date.now`.\n(2) READ-ONLY IS A PROPERTY OF THE SOURCE, AND MUST BE PROVEN, NOT PROMISED. Design 21.2 says never change source content or mtime. The proof is a before/after digest AND mtime snapshot of every source file, asserted unchanged after a full import, an interrupted import, and a failed import. A code review saying 'we only call readFile' is not that proof.\n(3) AMBIGUITY IS A FIRST-CLASS OUTCOME, NOT AN ERROR. Design 21.6 enumerates SEVEN classes (unknown fields, dangling refs, cycles, split ownership, corrupt bytes, case/path conflicts, plus exact counts) and says ambiguity becomes NEEDS_RECONCILIATION, never a guess. So the reconciler returns a typed classification per record and the import still completes; it does not throw. Each of the seven gets its own fixture, because a single 'bad input' case would let six of them regress unseen.\n(4) ATOMICITY REUSES THE STORE, IT DOES NOT REIMPLEMENT IT. @moe/store already commits all-or-nothing under BEGIN IMMEDIATE with proven crash behaviour (the projection crash/rebuild work drilled exactly this). The importer composes that seam rather than inventing a second transaction discipline.\n(5) WHY A NEW PACKAGE RATHER THAN A DAEMON SERVICE: owned paths say packages/import/**, the importer must be drivable offline with no daemon running, and M4 rail 1 says portability consumes frozen contracts rather than forking them.",
