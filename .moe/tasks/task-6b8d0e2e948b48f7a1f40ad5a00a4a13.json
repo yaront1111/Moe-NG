@@ -1,0 +1,54 @@
+{
+  "id": "task-6b8d0e2e948b48f7a1f40ad5a00a4a13",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Core revision supersession, epochs and carry binding",
+  "description": "Objective: land the pure core half of the graph supersession engine - immutable new revisions, graph epochs, the explicit safe carry binding, and the atomic activation decision - AND make `graph.supersede` a real transition instead of a declared refusal. Slice 1 of 2 from task-dddfaf83f9c644099b5b263e485c58c7, split by architect-d46fcb95 on human direction 2026-08-09 because the whole task needs 13 distinct files against a 10-file hard cap.\n\n*** THE MEASUREMENT THAT DEFINES THIS SLICE. `graph.supersede` is DECLARED BUT DELIBERATELY UNIMPLEMENTED today. packages/core/src/planning/graph-revision-reducer.ts:59 lists it in GRAPH_REVISION_COMMAND_KINDS; :68 gives it an EMPTY admitted-from list in GRAPH_REVISION_TRANSITIONS; :170 routes it to `illegal(state, command.kind)` unconditionally. Separately :196 already refuses every further command once a revision is SUPERSEDED, via supersededAuthority() in graph-revision-results.ts:42. So the vocabulary and the fail-closed guard exist; the transition itself does not. `GraphRevisionSupersedeCommand` exists at graph-revision-contract.ts:77 but carries only a GraphRevisionRefusalWitness - it has no successor/epoch binding, which is exactly what a real supersede needs. ***\n\nHuman decision 2026-08-09: this slice owns that transition. Without it the engine would compute dispositions nothing applies, and per global rail Clause 1 a pure package with no consumer edge cannot complete.\n\nMEASURED PRESENT, so nothing here needs a prerequisite:\n- packages/core/src/policy/approval-invalidation.ts (task \"Policy approval core\", DONE) - the carry-invalidation substrate for DoD 3.\n- @moe/contracts already ships the vocabulary: SUPERSESSION_CONSEQUENCE_CHANGED, SUPERSEDED_AUTHORITY and REVISION_REBOUND in runtime-error-registry.ts:14; `graph.supersede` in runtime-vocabulary.ts:94; APPROVAL_VALIDITY carries CURRENT/INVALIDATED/SUPERSEDED and GRAPH_REVISION carries SUPERSEDED. Do NOT mint a parallel vocabulary - compose these.\n- packages/core/src/planning/graph-revision-{contract,reducer,validation,results}.ts, the lifecycle this slice extends.\n\nMEASURED ABSENT: packages/core/src/supersession/ does not exist.\n\nDeliverable: packages/core/src/supersession/supersession-engine.ts (+ .js bridge) holding the epoch/carry/disposition-kind vocabulary and the pure decision, its focused test, the real `graph.supersede` transition across graph-revision-{contract,reducer,validation}.ts, the updated graph-revision-reducer.test.ts, and curated publication from packages/core/src/index.ts.\n\nNOT in scope: attempt/effect/resource/budget disposition wiring (slice 2), rewriting history, implicit approval carry, daemon persistence, UI.\n\nOwned paths: packages/core/src/supersession/**, packages/core/src/planning/graph-revision-contract.ts, graph-revision-reducer.ts, graph-revision-validation.ts, graph-revision-reducer.test.ts, packages/core/src/index.ts.\n\nConsumers (Clause 1): slice 2 task, and packages/scheduler/src/admission/admission-wait.ts:10 already defers to this by name - \"supersession carry of wait/blocker projections -> graph supersession engine\".\n\nVerification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+  "definitionOfDone": [
+    "`graph.supersede` is a real transition: GRAPH_REVISION_TRANSITIONS admits it from the exact lifecycles a supersede may act on instead of an empty list, the reducer routes it to a handler instead of `illegal`, and the command carries an explicit successor/epoch binding rather than only a refusal witness.",
+    "Old and new revisions never hold overlapping authority outside an explicit safe carry binding: a superseded revision still refuses every further command through the existing supersededAuthority() guard, and the successor's authority is bound by hash to the predecessor it replaced.",
+    "Graph epochs are monotonic and a stale epoch cannot mutate current state; a changed or UNKNOWN authority or input fact invalidates carry rather than silently carrying it, composing packages/core/src/policy/approval-invalidation.ts rather than reimplementing invalidation.",
+    "Every refusal pins an existing @moe/contracts code - SUPERSESSION_CONSEQUENCE_CHANGED, SUPERSEDED_AUTHORITY or REVISION_REBOUND - and the refusing layer; no parallel vocabulary is minted, and a generated sweep asserts a non-zero case count.",
+    "graph-revision-reducer.test.ts is updated deliberately: the assertion that graph.supersede is illegal is replaced by assertions of the new transition, and every OTHER pre-existing assertion in that file passes unchanged; a mutation drill proves each new guard is reddenable.",
+    "The supersession surface is published from the core root by a curated named block, and fresh pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test exits 0 with every production file at or below 250 physical lines."
+  ],
+  "taskRails": [
+    "This slice changes a landed, QA-passed reducer. graph-revision-reducer.test.ts (222 lines) pins today's behaviour including that graph.supersede is illegal. Update ONLY the assertions that the new transition genuinely invalidates; if any other assertion needs touching, that is a behaviour regression, not a test to adjust.",
+    "Compose the @moe/contracts supersession vocabulary and core's approval-invalidation; do not mint a second set of codes or reimplement invalidation inside this module or inside a test helper.",
+    "A dependency, readiness or authority claim without verifiable evidence is UNKNOWN or refused; an UNKNOWN fact invalidates carry and never upgrades to a safe carry.",
+    "Tests assert the exact stable reason code and the refusing layer, and any generated sweep asserts it produced a non-zero number of cases.",
+    "Target <=250 physical lines per production source, split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-8ee37119",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-dddfaf83f9c644099b5b263e485c58c7",
+  "priority": "HIGH",
+  "order": 75,
+  "comments": [
+    {
+      "id": "comment-1f8e4e024059401894ceeb463ea0ccc5",
+      "author": "architect-db2146e3",
+      "content": "Fresh scope audit found the stated 8-file slice is not implementable within its owned paths. A required durable graphEpoch makes graph-revision-test-fixtures.ts a compile-time consumer; planning-invariant-drivers.ts constructs malformed graph.supersede commands and planning-invariants.test.ts asserts ACTIVE refuses every command; graph-revision-results.ts must expose the refusing layer because RuntimeError discards its input source. Those four unowned but behavior-coupled files make the complete plan 12 distinct files, above the 10-file hard cap. Re-sliced by existing interfaces into task-14eb91a1f25240d08123b9f4db8ebead (4-file kernel producer, order 57) and task-1df0622e87cf42beae2cd82280e9ff99 (8-file graph reducer consumer, order 58).",
+      "timestamp": "2026-08-09T15:31:24.292Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T15:17:30.942Z",
+  "updatedAt": "2026-08-09T17:05:31.470Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:18:49.680Z"
+  },
+  "contextFetchedBy": [
+    "architect-db2146e3",
+    "architect-8ee37119"
+  ],
+  "blockedReason": "Not planning: this is a SHELL whose whole deliverable is already owned by its two children. Planning it is the silent duplicate the global staleness rail forbids. All measured on disk at HEAD 025dc4948127e7c7b753b71d3f5cf4b142637060, not read from the description.\n\nGAP CLAIMED PRESENT, ACTUALLY CLOSED (half the deliverable):\n1. Description says \"MEASURED ABSENT: packages/core/src/supersession/ does not exist\". FALSE. `git ls-tree -r HEAD --name-only -- packages/core/src/supersession` returns supersession-engine.ts/.js/.test.ts. Committed, not just on disk.\n2. Its \"curated publication from packages/core/src/index.ts\" is LANDED: index.ts:239 exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession.\nOwner: child task-14eb91a1f25240d08123b9f4db8ebead, DONE.\n\nREMAINING HALF IS A LIVE SIBLING'S:\n3. `graph.supersede` is still unimplemented - reducer.ts:68 `\"graph.supersede\": Object.freeze([])`, reducer.ts:170 routes to `illegal(state, command.kind)`. Real gap, but owned by child task-1df0622e87cf42beae2cd82280e9ff99 (BLOCKED), overlapping this shell on 4 of 6 owned paths: graph-revision-{contract,validation,reducer}.ts + graph-revision-reducer.test.ts. Two plans on those files collide in the shared worktree.\n\nTHIS SHELL'S PATH LIST IS ALSO UNDER-SCOPED FOR THAT WORK:\n4. graphEpoch has ZERO hits under packages/core/src/planning (only expansion-planning-hold.ts, a different aggregate). Making it required reaches 8 files; `grep -rln \"GraphRevisionState|graph.supersede|GraphRevisionSupersedeCommand\" packages/core/src` also names graph-revision-results.ts, graph-revision-test-fixtures.ts, planning-invariant-drivers.ts - none owned here. Planning here forces writing unowned paths (epic rail 3) or a non-compiling package.\n\nASK: keep this shell BLOCKED as a reconciliation stub; promote child task-1df0622e. Its stated blocker is cleared - producer root exports measured on disk, recorded in a comment on that task.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T17:05:31.470Z"
+}

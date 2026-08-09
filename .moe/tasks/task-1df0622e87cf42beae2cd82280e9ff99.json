@@ -1,0 +1,70 @@
+{
+  "id": "task-1df0622e87cf42beae2cd82280e9ff99",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Graph revision supersession transition",
+  "description": "Objective: compose the sibling core supersession decision kernel into the graph-revision aggregate so `graph.supersede` becomes the only authority-moving transition from ACTIVE, with durable graph epochs and an atomic predecessor/successor binding. Deliverable: update graph-revision contract, validation, result shaping, reducer, deterministic fixtures, reducer tests, invariant command drivers, and the active-revision invariant test. The command must carry predecessor epoch plus explicit successor identity/content/epoch/carry evidence; ACTIVE state persists the current epoch; the accepted result atomically marks the predecessor SUPERSEDED and emits the hash-bound successor activation decision. Exact dependency on the kernel child created in this split will be recorded in a task comment. NOT in scope: implementing carry policy/disposition hashing itself, scheduler attempt/effect/resource/budget application, daemon persistence, UI, or changing unrelated lifecycle assertions. Owned paths: packages/core/src/planning/graph-revision-contract.ts, graph-revision-validation.ts, graph-revision-results.ts, graph-revision-reducer.ts, graph-revision-test-fixtures.ts, graph-revision-reducer.test.ts, planning-invariant-drivers.ts, planning-invariants.test.ts. Verification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test.",
+  "definitionOfDone": [
+    "`GraphRevisionState` carries a required validated graph epoch, initial activation establishes epoch 1, and `GraphRevisionSupersedeCommand` carries an explicit predecessor/successor epoch and kernel decision input rather than a refusal witness.",
+    "`GRAPH_REVISION_TRANSITIONS` admits `graph.supersede` from ACTIVE only; a valid current-epoch command invokes the production kernel, marks the predecessor SUPERSEDED, and emits one frozen atomic event/result binding the successor ACTIVE at exactly predecessor epoch + 1.",
+    "Stale/rebound epoch or successor identity refuses with exact `REVISION_REBOUND` at `GRAPH_REVISION`; changed or UNKNOWN carry evidence refuses with exact `SUPERSESSION_CONSEQUENCE_CHANGED` at `GRAPH_REVISION`; every further command against SUPERSEDED refuses with exact `SUPERSEDED_AUTHORITY` at `GRAPH_REVISION`, leaving input state byte-identical.",
+    "`graph-revision-reducer.test.ts` replaces only assertions invalidated by the real supersede transition, while fixtures and the planning invariant test stop treating a well-formed supersede as universally illegal; generated lifecycle/command sweeps assert a positive case count and exact code/layer.",
+    "Mutation drills make the epoch equality, +1 successor epoch, predecessor hash binding, UNKNOWN/changed carry invalidation, and superseded guard tests fail when each production guard is weakened.",
+    "Fresh `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` exits 0, all eight owned files are the only committed paths, and every production source remains at or below 250 physical lines."
+  ],
+  "taskRails": [
+    "Depends on the sibling core supersession decision-kernel child from this split; consume that production surface rather than reimplementing epoch/carry/disposition policy in reducer code or test helpers.",
+    "TDD every changed transition. Refusal assertions pin exact stable code and `GRAPH_REVISION` layer; generated sweeps assert non-zero case counts and exercise the production reducer.",
+    "Keep graphEpoch required and durable rather than optional or inferred from per-revision version; missing/UNKNOWN authority or input evidence fails closed.",
+    "Change only supersession-invalidated assertions in existing reducer/invariant suites; unrelated lifecycle and concurrency assertions must pass unchanged.",
+    "Target <=250 physical lines per production source and split before 400; stage/commit only the eight owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Producer gate cleared. architect-d46fcb95 released this at 16:13Z with an explicit reclaim condition: \"Reclaim only after task-14eb91a1 (Core supersession decision kernel) is DONE and committed, then measure its exact root exports on disk before planning.\" Both halves now satisfied, measured by governor-42b952c9 at HEAD=025dc49: task-14eb91a1 is DONE 7/7, and packages/core/src/supersession/ exists at HEAD (the earlier block measured \"No such file or directory\"). The exact root exports are published in packages/core/src/index.ts:239-242 — value exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession; type exports SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind, SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry, SupersessionSuccessorBinding. Rail 1 stands: CONSUME that surface, do not reimplement epoch/carry/disposition policy in graph. Architect must re-measure the export list on disk before naming symbols in the plan rather than trusting this reason string.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6b8d0e2e948b48f7a1f40ad5a00a4a13",
+  "priority": "HIGH",
+  "order": 76,
+  "comments": [
+    {
+      "id": "comment-46885c9394e64689ba7cf4bdd8f761bb",
+      "author": "architect-db2146e3",
+      "content": "Exact producer dependency from the 2026-08-09 re-slice: task-14eb91a1f25240d08123b9f4db8ebead (Core supersession decision kernel). Do not promote or plan this transition task until that producer is DONE and its root exports are measured on disk.",
+      "timestamp": "2026-08-09T15:31:10.539Z"
+    },
+    {
+      "id": "comment-ce096cffdfdb4d28992636c92a1c208a",
+      "author": "architect-8ee37119",
+      "content": "BLOCKER CLEARED — producer root exports measured on disk 2026-08-09 by architect-8ee37119 at HEAD `025dc4948127e7c7b753b71d3f5cf4b142637060`. This satisfies architect-db2146e3's promotion condition verbatim (\"until that producer is DONE and its root exports are measured on disk\"). Do not re-probe; do not create a second producer.\n\nPRODUCER STATE\n- `task-14eb91a1f25240d08123b9f4db8ebead` is DONE. Commit `025dc49` (`feat(core): add supersession kernel`) is HEAD.\n- `git ls-tree -r HEAD --name-only -- packages/core/src/supersession` -> `supersession-engine.js`, `supersession-engine.test.ts`, `supersession-engine.ts`. Committed, not merely on disk.\n- Root surface, `packages/core/src/index.ts:239`:\n  `export { SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession } from \"./supersession/supersession-engine.js\";`\n  Exactly three runtime values. This is the surface task rail 1 tells you to consume.\n\nKERNEL PUBLIC SIGNATURE (measured, `supersession-engine.ts`)\n- `:234 export function decideSupersession(currentValue: unknown, inputValue: unknown): SupersessionResult` — both params are `unknown`; the kernel validates. Arg 1 is the CURRENT predecessor, arg 2 the request.\n- `:12 SUPERSESSION_KERNEL_LAYER = \"SUPERSESSION_KERNEL\"`. Note: this is the KERNEL's layer. Your DoD 3 requires `GRAPH_REVISION` as the refusing layer, so the reducer must re-shape kernel refusals into its own layer rather than pass `SUPERSESSION_KERNEL` through — that is the exact \"which layer refused\" distinction epic rail 6 asks you to pin.\n- Types available for composition: `SupersessionPredecessorBinding` (:14), `SupersessionSuccessorBinding` (:19, extends predecessor), `SupersessionSafeCarry` (:23), `SupersessionDisposition` (:27), `SupersessionInput` (:34), `SupersessionDecision` (:40), `SupersessionAcceptedResult` (:47), `SupersessionRefusal` (:51), `SupersessionResult` (:56), `SupersessionDispositionKind` (:11).\n- Kernel already emits frozen exact `REVISION_REBOUND` / `SUPERSESSION_CONSEQUENCE_CHANGED` at `SUPERSESSION_KERNEL`, enforces the +1 epoch binding, and composes production `evaluateCarryForward` for authority and inputBinding. Do NOT reimplement any of that in the reducer or in a test helper.\n\nGAP CONFIRMED STILL OPEN (your work is not already landed)\n- `graph-revision-reducer.ts:68` — `\"graph.supersede\": Object.freeze([])`.\n- `graph-revision-reducer.ts:170` — `case \"graph_revision.create\": case \"graph.supersede\": return illegal(state, command.kind);`\n- `graph-revision-reducer.ts:196` — `if (current.lifecycle === \"SUPERSEDED\") return supersededAuthority(current);` already exists; keep it.\n- `graph-revision-contract.ts:77` — `GraphRevisionSupersedeCommand` still carries only a refusal witness.\n- `grep -rn graphEpoch packages/core/src` -> ZERO hits under `planning/`. Only `expansion/expansion-planning-hold.ts` has one, a DIFFERENT aggregate. Useful precedent, not a substitute: it validates with `!uint(item[\"graphEpoch\"])` (:179/:186), carries the field in `STATE_KEYS` (:192), and refuses stale epochs at `:292` with `refuse(\"EXPANSION_HOLD_STALE_EPOCH\", state)`. Mirror the shape, mint no vocabulary.\n\nBLAST RADIUS RE-CONFIRMED — your 8 owned paths are right\n`grep -rln \"GraphRevisionState|graph.supersede|GraphRevisionSupersedeCommand\" packages/core/src` returns exactly: index.ts, graph-revision-contract.ts, graph-revision-reducer.ts, graph-revision-reducer.test.ts, graph-revision-results.ts, graph-revision-test-fixtures.ts, graph-revision-validation.ts, planning-invariant-drivers.ts. Only `index.ts` is outside your list, and it needs no edit (the kernel export is already there) — so your owned set is sufficient and no path is missing.\n\nLINE HEADROOM (physical, `grep -c ''`), all clean in git:\ncontract 156 | reducer 206 | validation 115 | results 73 | test-fixtures 96 | invariant-drivers 235 | invariants.test 129 | reducer.test 222. Reducer at 206 and invariant-drivers at 235 are the tight ones against the 250 target — plan a split rather than an overflow.\n\nPARENT SHELL: `task-6b8d0e2e948b48f7a1f40ad5a00a4a13` was flipped back to PLANNING and I re-BLOCKED it. It duplicates this task on 4 of its 6 paths and its own path list omits results/fixtures/invariant-drivers. It is a reconciliation stub only — this task is where the transition lands.",
+      "timestamp": "2026-08-09T17:06:02.017Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T15:30:12.550Z",
+  "updatedAt": "2026-08-09T17:06:11.673Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:44:35.057Z"
+  },
+  "contextFetchedBy": [
+    "architect-d46fcb95"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified the block independently on disk rather than trusting architect-db2146e3's comment: packages/core/src/supersession/ does not exist, grep for supersession in packages/core/src/index.ts returns NOT EXPORTED, and grep for supersessionDecision|SupersessionDecision|decideSupersession over packages/core/src returns ZERO. Producer task-14eb91a1 is PLANNING with 0 steps, assigned to architect-5b5302ee.",
+      "whatRemains": "Reclaim only after task-14eb91a1 (Core supersession decision kernel) is DONE and committed, then measure its exact root exports on disk before drafting - the kernel signature is what DoD 1's 'kernel decision input' and DoD 2's 'invokes the production kernel' both bind to.",
+      "pitfalls": "Do NOT mint a carry vocabulary. CARRY_FORWARD_REASON_CODES already exists at packages/core/src/policy/approval-contract.ts:22-28 and is root-exported at core/src/index.ts:192; the kernel composes it. Do NOT create a prerequisite task - the producer already exists as task-14eb91a1 and a second would be a silent duplicate. Also note the four files that make this an 8-file task rather than the 4 it looks like: graph-revision-test-fixtures.ts (a durable graphEpoch changes every fixture), planning-invariant-drivers.ts (still manufactures a refusal-only graph.supersede command), planning-invariants.test.ts (asserts ACTIVE rejects every command, which a real supersede falsifies), and graph-revision-results.ts (must surface the refusing layer because @moe/contracts RuntimeError drops its validated source). That last set is architect-db2146e3's measurement and it corrected my own under-estimate.",
+      "openQuestions": "None blocking. The kernel's exact signature is the only unknown and it is answerable by probing task-14eb91a1's output once it lands.",
+      "releasedAt": "2026-08-09T16:13:52.748Z",
+      "releasedBy": "architect-d46fcb95",
+      "reason": "Producer gate, not a plan defect. Releasing so the architect slot is free; this needs task-14eb91a1 to land, not another architect."
+    }
+  ]
+}

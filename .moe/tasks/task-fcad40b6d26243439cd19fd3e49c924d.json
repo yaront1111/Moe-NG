@@ -135,7 +135,7 @@
     {
       "stepId": "step-8",
       "description": "Single final gate, no edits afterward — first rerun repo-wide `pnpm typecheck` and `pnpm test`, compare failing paths with the step-1 merge-base baseline, report foreign red verbatim, and require the HEAD-minus-baseline failing-path delta intersected with the six owned paths to be empty. Recheck <=250 physical lines for command/event/new-validation/index, exact LF bridge bytes, explicit-path status/diff, positive test discovery, and absence of debug/probe/generated artifacts. Then run the exact completion-evidence command LAST in the foreground: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`; it must exit 0. If committing manually, first unstage every foreign entry and use only `git commit -- packages/core/src/planning/planning-command-contract.ts packages/core/src/planning/planning-event-contract.ts packages/core/src/planning/planning-expansion-validation.ts packages/core/src/planning/planning-expansion-validation.js packages/core/src/index.ts packages/core/src/expansion/planning-expansion-contract.test.ts`, then verify the commit contains only those paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/planning-command-contract.ts",
         "packages/core/src/planning/planning-event-contract.ts",
@@ -144,7 +144,9 @@
         "packages/core/src/index.ts",
         "packages/core/src/expansion/planning-expansion-contract.test.ts"
       ],
-      "startedAt": "2026-08-09T16:29:27.888Z"
+      "note": "Final gate PASSED at HEAD c903a6e. Zero bytes written this session — verification only, no edits before or after the gate.\n\nCOMMITTED-BYTE PROOF (git hash-object working tree vs git rev-parse HEAD:<path>) — all six owned paths MATCH, and `git status --porcelain -- <six paths>` is EMPTY:\n- planning-command-contract.ts 21a24d99, 249 lines\n- planning-event-contract.ts 597cc5a5, 194 lines\n- planning-expansion-validation.ts 674ea245, 243 lines\n- planning-expansion-validation.js c0635b6d, 1 line\n- index.ts 08dce2a1, 249 lines\n- expansion/planning-expansion-contract.test.ts 62c1fdf1, 705 lines\nAll four production .ts files are <=250 physical lines ([System.IO.File]::ReadAllLines). Sibling commits 025dc49 and 501030b landed after this task's commit a646660 and did NOT alter any owned byte.\n\nBRIDGE: planning-expansion-validation.js is 52 bytes, CR count 0, LF count 1, content exactly `export * from \"./planning-expansion-validation.ts\";` — exact one-line LF as planned.\n\nCLEANLINESS: `git status --porcelain -- packages/core/src` is EMPTY. No debug, probe, scratch or generated evidence artifacts anywhere under the owned tree.\n\nREPO-WIDE PATH-ATTRIBUTED BASELINE (epic path-attribution rail):\n- `pnpm typecheck` exit 1. HEAD failing path: apps/daemon/src/identity/session-authority.test.ts(35,8) TS2307 Cannot find module './session-authority-protocol.js'; (36,40) TS2307 Cannot find module './session-authority.js'. `packages/core typecheck: Done` — this task's package is green. Step-1 merge-base baseline red was apps/daemon/src/recovery/recovery-succession.ts. Delta (HEAD minus baseline) = {apps/daemon/src/identity/session-authority.test.ts}, foreign, from the in-flight session-authority WIP in commit 501030b. Intersection with the six owned paths: EMPTY.\n- `pnpm test` exit 1, exactly one failing file: packages/scheduler/src/package-boundary.test.ts > \"keeps scheduler registrars behind the package-root import boundary\" — `Error: boundary scan failed for apps\\daemon\\src\\daemon-main.ts: Error: unterminated regular expression source token` (the known shebang tokenizer defect). That file is IN the step-1 baseline, so the HEAD-minus-baseline delta is EMPTY. 203 of 204 files and 3870 tests pass.\n- Foreign red disclosed verbatim above; nothing hidden, nothing fabricated green.\n\nPOSITIVE TEST DISCOVERY: focused run of src/expansion/planning-expansion-contract.test.ts = 1 file / 42 tests passed, exit 0 (not a silently-zero sweep).\n\nEXACT COMPLETION-EVIDENCE COMMAND, run LAST in the foreground, no edits afterward: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test` — EXIT 0, `Test Files 20 passed (20)`, `Tests 332 passed (332)`. The +1 file / +13 tests over the prior 19/319 owned baseline is sibling task-14eb91a1's now-committed supersession spec, not drift in this task's surface.\n\nNo manual commit needed: a646660 already holds exactly the six owned paths and hash-matches HEAD.",
+      "startedAt": "2026-08-09T16:29:27.888Z",
+      "completedAt": "2026-08-09T17:08:22.826Z"
     }
   ],
   "status": "WORKING",
@@ -167,12 +169,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:24.731Z",
-  "updatedAt": "2026-08-09T17:06:36.764Z",
+  "updatedAt": "2026-08-09T17:08:22.826Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:27:05.232Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -223,7 +225,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T15:33:51.430Z",

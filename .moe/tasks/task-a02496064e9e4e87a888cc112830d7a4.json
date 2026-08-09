@@ -1,0 +1,57 @@
+{
+  "id": "task-a02496064e9e4e87a888cc112830d7a4",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Win32 Job membership: suspended process, atomic JOB_LIST, assignment proof, resume, unwind, real-Windows acceptance",
+  "description": "SPIDR child 2 of 2, split from task-ea76e0cf9bdb4f1888aaa9e49323c782 by architect-cb476f76 on plan shape: the parent needs 12 distinct files against the daemon's hard ceiling of 10, and its job and process modules would each breach the 250-line per-file target.\n\nDEPENDS ON task-a24cb925a9a94002b805e9ccf1715978 (child 1: pinned crate, call-table seam, RAII handles, Job create/configure/query-back/terminate/active-query). Do not start until that task is DONE, and re-measure its landed symbols before planning rather than trusting this description. This task adds process-side modules to the crate child 1 creates; it must not re-create the crate, the call table, the handle type, or any Job operation child 1 owns.\n\nObjective: put a process inside the Job without a crash window, prove it is really there before it can run, and unwind correctly when any step fails.\n\nDeliverable, inside packages/runner/src/platform/windows/native/: src/process.rs (CreateProcessW with CREATE_SUSPENDED, explicit lpApplicationName, Unicode environment, PROC_THREAD_ATTRIBUTE_JOB_LIST carrying the Job, a restricted three-handle inherited allowlist, then an explicit AssignProcessToJobObject confirmation, membership proof, live-handle identity proof, and ResumeThread asserting a prior suspend count of exactly 1); src/lifecycle.rs (wait, exit query, terminate, ActiveProcesses==0 query, and reverse-order unwind of partial construction); edits to src/lib.rs and src/win32.rs to add the process-side call-table arms; tests/process_sweep.rs; tests/real_windows.rs.\n\nThe atomic JOB_LIST membership removes the pre-assignment crash window, while the explicit AssignProcessToJobObject call preserves the separately testable assign-failure arm the parent DoD requires. Supported floor is Windows 10 / Server 2016.\n\nNOT in scope: Node/stdio framing, JavaScript hostile-input validation, Claude discovery/grants, daemon/store authority, receipts, or any public @moe/runner export.\n\nProduction consumer: task-af3d7bc8af2146cf92d98557ed0e90c0 (Windows Job broker protocol, which names the parent task explicitly), then task-4d1f8ba54cb6476c930c46b413f882aa.\n\nVerification: cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-core",
+  "definitionOfDone": [
+    "A production call-trace test proves the exact order: prepare JOB_LIST plus the three-handle inherited allowlist, CreateProcessW suspended with explicit lpApplicationName and Unicode environment, explicitly AssignProcessToJobObject, prove membership, prove live-handle identity, then ResumeThread with a prior suspend count of exactly 1.",
+    "The lifecycle API retains the original Job, process and thread handles rather than reopening by PID, returns PID plus creation-time and final-image identity, and never reports started, exited or tree-dead before the matching membership, identity, exit or ActiveProcesses==0 fact has been queried successfully.",
+    "An injected call-table sweep exercises every attribute-prepare, create, assign, membership, identity, resume, wait, exit-query, terminate, active-query and close arm, asserts the exact stable native operation code per arm, asserts a nonzero exact case count, and proves no resume can occur before the membership proof succeeds.",
+    "Every partial-construction fault unwinds in reverse acquisition order: pre-membership children are terminated and awaited directly; post-membership failures terminate the Job and wait for ActiveProcesses==0; every acquired handle closes exactly once and a cleanup whose outcome is unknown is retained as uncertain rather than converted to success.",
+    "Focused real Windows tests prove a suspended marker process cannot execute before the membership and assignment proof, and that terminating the configured Job leaves zero active processes; tests launch a direct executable plus argv and never use taskkill, a command shell, or PID-enumeration-only cleanup.",
+    "Every Rust production source is <=250 physical lines; child 1's crate, call table, handle type and Job operations are reused unchanged rather than reimplemented, and the locked test and release-build commands exit 0 with no committed target, executable, debug or probe artifact."
+  ],
+  "taskRails": [
+    "Use the Windows 10+/Server 2016+ PROC_THREAD_ATTRIBUTE_JOB_LIST crash-atomic membership path, followed by the explicit AssignProcessToJobObject confirmation before resume.",
+    "Native failures carry a closed operation enum and numeric Win32 error only; never echo executable, argv, cwd, environment, or raw handle values.",
+    "Keep every Rust production source focused, target <=250 physical lines and split before 400; commit Cargo.lock but never Cargo target output or binaries.",
+    "This is a native primitive, not authority: no @moe/runner root export, Claude policy, activation grant, daemon/store call, or evidence claim.",
+    "Reuse child 1's crate, call-table trait, RAII handle and Job operations; do not recreate or fork them."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-5aba94da",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 15:40Z. Its own stated unblock condition is met, and I verified the dependency by compiling it rather than by reading a status field.\n\nITS OWN BLOCK REASON SAID: \"Depends on task-a24cb925 (SPIDR child 1: pinned crate, Win32 call-table seam, RAII handle, Job operations), which is AWAITING_APPROVAL and not implemented... Promote when child 1 is DONE.\" That condition is now satisfied.\n\nVERIFIED, capability fitness not merely presence:\n1. task-a24cb925 reached DONE at 15:17:34Z with failedDodItems [] and a QA review summary.\n2. All nine files are COMMITTED at HEAD — git ls-tree -r --name-only HEAD -- packages/runner/src/platform/windows lists Cargo.toml, Cargo.lock, rust-toolchain.toml, .gitignore, src/{lib,win32,handle,job}.rs and tests/job_sweep.rs — and `git status --porcelain` over that path is EMPTY. Unlike task-00956ac3, whose DONE deliverable is still untracked, this one actually landed.\n3. THE CRATE COMPILES. I ran `cargo check --offline --all-targets` in packages/runner/src/platform/windows/native: \"Checking moe-windows-job-core v0.1.0 ... Finished dev profile\". Clean, including test targets.\n4. Every symbol this task must reuse is exported from child 1's lib.rs:44-46 — OwnedHandle (handle.rs), Job (job.rs), and NativeError, NativeOp, RawHandle, SystemWin32, Win32Calls, REQUIRED_LIMIT_FLAGS (win32.rs). All four names this task's block called out — Win32Calls trait, NativeOp enum, owned-handle type, Job type — resolve in the crate source.\n\nA CLAIM I CHECKED AND REJECTED, recorded so nobody inherits it: an adversarial audit agent asserted \"three independent hard-compile failures against the landed crate\". IT DOES NOT REPRODUCE. cargo check is clean on this win32 host at HEAD. I am not relaying an unverified compile-failure claim against QA-approved work, and no architect should plan around one. If a genuine compile problem appears when composing the process-side modules, that is a real finding — report it then, with the compiler output.\n\nFOR THE ARCHITECT: this is a Windows-native task and this host IS win32 x64, so unlike the deferred Linux/macOS conformance work it can be honestly built and tested here. Re-measure the crate surface before naming symbols; if anything has moved, report blocked and I return it without argument.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ea76e0cf9bdb4f1888aaa9e49323c782",
+  "priority": "CRITICAL",
+  "order": 74,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T14:47:35.019Z",
+  "updatedAt": "2026-08-09T17:02:22.020Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T14:51:43.754Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Nothing planned, deliberately. Confirmed its dependency task-a24cb925a9a94002b805e9ccf1715978 is only AWAITING_APPROVAL, so the crate, call table, NativeOp enum, handle type and Job operations this task must reuse do not exist on disk yet.",
+      "whatRemains": "The whole task. Promote once child 1 is DONE, then re-measure child 1's landed symbol names before naming them in a plan rather than trusting this description or mine.",
+      "pitfalls": "Do not recreate child 1's crate, Win32Calls trait, NativeOp enum, owned-handle type or Job operations; reuse them. In the shared worktree a duplicate crate collides with its owner. Child 2 will need to ADD process-side arms to child 1's win32.rs and lib.rs, so expect to edit files child 1 created rather than only adding new ones.",
+      "openQuestions": "None on the task. Open on the board: BACKLOG does not stick -- this task was created BACKLOG and was serving as PLANNING two minutes later.",
+      "releasedAt": "2026-08-09T14:52:37.944Z",
+      "releasedBy": "architect-cb476f76",
+      "reason": "Dependency-gated; released so I can continue the queue."
+    }
+  ],
+  "contextFetchedBy": [
+    "architect-5aba94da"
+  ]
+}

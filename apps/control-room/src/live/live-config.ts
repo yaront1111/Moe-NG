@@ -1,5 +1,5 @@
 import { createCompatGate, createControlRoomTransport } from "@moe/control-room-client";
-import type { ControlRoomTransport } from "@moe/control-room-client";
+import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
 /**
  * Resolves the DEVELOPMENT-ONLY live attachment from build-time configuration.
@@ -23,8 +23,13 @@ export const LIVE_CONFIG_REFUSAL_CODES = Object.freeze([
 export type LiveConfigRefusalCode = (typeof LIVE_CONFIG_REFUSAL_CODES)[number];
 
 export interface LiveSetup {
+  /** The gated surface: generated builders + wire protocol; the gate admitted it. */
+  readonly client: ControlRoomClientSurface;
+  /** Header values for the one route the transport does not carry (/affordances/read). */
+  readonly headers: Readonly<Record<string, string>>;
   readonly ok: true;
   readonly projection: typeof LIVE_PROJECTION;
+  readonly sessionCredential: string;
   readonly subscriberId: typeof LIVE_SUBSCRIBER;
   readonly transport: ControlRoomTransport;
 }
@@ -61,7 +66,7 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
     } as const);
   }
   // Origin is empty on purpose: requests stay same-origin and the dev server
-  // proxies /command and /events/read to the daemon (vite.config.ts).
+  // proxies /command, /events/read and /affordances/read to the daemon.
   const transport = createControlRoomTransport({
     csrfToken: csrf,
     origin: "",
@@ -69,8 +74,16 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
     wireProtocolVersion: gate.client.wireProtocolVersion,
   });
   return Object.freeze({
+    client: gate.client,
+    headers: Object.freeze({
+      "content-type": "application/json",
+      "x-moe-csrf": csrf,
+      "x-moe-protocol-version": gate.client.wireProtocolVersion,
+      "x-moe-session-credential": credential,
+    }),
     ok: true,
     projection: LIVE_PROJECTION,
+    sessionCredential: credential,
     subscriberId: LIVE_SUBSCRIBER,
     transport,
   } as const);

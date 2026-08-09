@@ -1,0 +1,71 @@
+{
+  "id": "task-069853689ed643988cfec2d689f7edb7",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Scheduler supersession dispositions",
+  "description": "Objective: land the scheduler half of the graph supersession engine - the complete, deterministic, hash-bound attempt/effect/resource/budget disposition set for a supersession, composing the landed authority and budget primitives. Slice 2 of 2 from task-dddfaf83f9c644099b5b263e485c58c7, split by architect-d46fcb95 on human direction 2026-08-09 because the whole task needs 13 distinct files against a 10-file hard cap.\n\nHard dependency: task-6b8d0e2e948b48f7a1f40ad5a00a4a13 (Core revision supersession, epochs and carry binding) must land first - it owns the epoch, carry-binding and disposition-kind vocabulary this slice consumes. Do not restate or re-derive any of it here, and do not mint a second vocabulary.\n\nMEASURED PRESENT at 2026-08-09 - every primitive this slice composes already exists, so nothing here needs a prerequisite:\n- DRAIN is already built. packages/scheduler/src/authority/lease-drain.ts exports DrainDisposition (:31), DrainTerminalTarget (:29), parseDisposition (:118), applyDrainReason (:142) and releaseWork (:194). Compose it; do NOT reimplement drain.\n- RESOURCE: packages/scheduler/src/authority/lease-resource.ts and resource-model.ts (SLOT_STATES, published from the scheduler root at index.ts:67,151), plus lease-fencing.ts and lease-state.ts. From task \"Lease presence core\", DONE.\n- BUDGET: packages/scheduler/src/budget/{budget-account,budget-contract,budget-measurement,budget-reservation,budget-settlement}.ts, with budget-reservation published at index.ts:78,168.\n- EFFECT/ATTEMPT vocabulary lives in @moe/contracts runtime-vocabulary.ts - the attempt lifecycle already carries SUCCEEDED/FAILED/CANCELLED/SUPERSEDED/RELEASED/UNKNOWN. Compose it.\n\nMEASURED ABSENT: packages/scheduler/src/supersession/ does not exist, and nothing in packages/scheduler/src consumes a supersession disposition today.\n\n*** WARNING measured by the architect: packages/scheduler/src/index-surface.test.ts pins the EXACT root namespace with `expect(EXPECTED_EXPORTS.length).toBe(36)` (:57) and a `toEqual` deep-compare (:61). Any new root value export reddens it until transcribed by hand and the count literal bumped. Transcribe from your module source, never from the namespace under test. ***\n\nREAL CONSUMER ALREADY WAITING (Clause 1): packages/scheduler/src/admission/admission-wait.ts:10 documents the handoff by name - \"supersession carry of wait/blocker projections -> graph supersession engine\". Wiring that carry is this slice's consumer edge.\n\nDeliverable: packages/scheduler/src/supersession/supersession-dispositions.ts (+ .js bridge), its focused test, and curated publication from packages/scheduler/src/index.ts with index-surface.test.ts updated.\n\nNOT in scope: the revision lifecycle, epochs or carry binding (slice 1); the graph.supersede transition (slice 1); rewriting history; implicit approval carry; daemon persistence; UI.\n\nOwned paths: packages/scheduler/src/supersession/**, packages/scheduler/src/index.ts, packages/scheduler/src/index-surface.test.ts.\n\nVerification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+  "definitionOfDone": [
+    "Every attempt, effect, resource and budget disposition produced for a supersession is COMPLETE over the declared kind set - a kind with no disposition is a refusal, never an omission - and a generated sweep asserts the case count is non-zero and equals the declared kind count.",
+    "Dispositions are deterministic and hash bound: the same inputs produce a byte-identical disposition set and digest, ordering is canonical rather than discovery-ordered, and the digest covers exactly the bound field list through one shared function.",
+    "The drain disposition composes packages/scheduler/src/authority/lease-drain.ts (parseDisposition/applyDrainReason/releaseWork) and the resource and budget dispositions compose lease-resource/resource-model and budget-reservation/budget-settlement; none of that authority is reimplemented in this module or in a test helper.",
+    "A changed or UNKNOWN authority, resource or budget fact refuses carry with an existing @moe/contracts code and the refusing layer rather than silently disposing; UNKNOWN never upgrades to a safe carry and partial dispositions never make a set complete.",
+    "The consumer edge is landed, not merely exported: the wait/blocker carry that packages/scheduler/src/admission/admission-wait.ts:10 defers to the supersession engine is wired to this surface with one durable call site.",
+    "The scheduler root publishes the surface by a curated named block with index-surface.test.ts's hand-written list and count literal updated, and fresh pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test exits 0 with every production file at or below 250 physical lines."
+  ],
+  "taskRails": [
+    "Do not start until task-6b8d0e2e948b48f7a1f40ad5a00a4a13 has landed the epoch, carry-binding and disposition-kind vocabulary. Re-deriving it here forks the vocabulary and is exactly what the rails forbid.",
+    "Compose the landed drain, lease-resource, resource-model and budget primitives. A property must be asserted against the production surface, never against a test helper that reimplements it.",
+    "A dependency, readiness, fairness or semantic claim without verifiable evidence is UNKNOWN or refused; an incomplete disposition set is a refusal, not a partial success.",
+    "Tests assert the exact stable reason code and the refusing layer, and any generated sweep asserts it produced a non-zero number of cases.",
+    "Target <=250 physical lines per production source, split before 400; this cap is per file, not per task."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-dddfaf83f9c644099b5b263e485c58c7",
+  "priority": "HIGH",
+  "order": 58,
+  "comments": [
+    {
+      "id": "comment-cd3f356265d54b76a5425b99e892ae65",
+      "author": "architect-21f667ae",
+      "content": "Fresh prerequisite audit enforces task rail 1: task-6b8d0e2e948b48f7a1f40ad5a00a4a13 is PLANNING and currently owned by architect-db2146e3; no implementation plan or committed surface exists yet. Disk confirms packages/core/src/supersession and packages/scheduler/src/supersession are absent. The only committed supersession symbols are the declared-but-illegal graph.supersede command: empty transition list, unconditional illegal route, refusal-only command witness. There is no epoch, carry-binding, or disposition-kind vocabulary to import. Planning this scheduler slice now would necessarily fork the exact vocabulary its hard rail reserves to slice 1. Reclaim only after task-6b8d0e2e is DONE, then probe its curated @moe/core root types/values and durable graph.supersede behavior before naming scheduler fields.",
+      "timestamp": "2026-08-09T15:19:21.866Z"
+    },
+    {
+      "id": "comment-af44fd6da4c24e5cb112e13e117c33bd",
+      "author": "architect-db2146e3",
+      "content": "Dependency refinement from fresh planning remeasurement: task-6b8d0e2e948b48f7a1f40ad5a00a4a13 was still oversized and under-owned. It is now a blocked shell over producer task-14eb91a1f25240d08123b9f4db8ebead and reducer-consumer task-1df0622e87cf42beae2cd82280e9ff99. Keep this scheduler slice blocked until both children are DONE and the shell is reconciled.",
+      "timestamp": "2026-08-09T15:31:16.292Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T15:18:09.347Z",
+  "updatedAt": "2026-08-09T15:31:16.292Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T15:18:51.806Z"
+  },
+  "contextFetchedBy": [
+    "architect-21f667ae",
+    "architect-db2146e3"
+  ],
+  "blockedReason": "Hard rail requires core revision supersession slice to land first. It is only PLANNING, and the epoch/carry-binding/disposition-kind vocabulary plus real graph.supersede transition are absent on disk; this slice cannot plan without forking them.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T15:19:21.955Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning guidance; verified slice-1 status and disk; proved epoch/carry/disposition vocabulary and real transition absent; commented, reported BLOCKED, and wrote Serena handoff.",
+      "whatRemains": "After task-6b8d0e2e is DONE, probe its exact core root surface and plan scheduler composition.",
+      "pitfalls": "Never fork core disposition vocabulary or plan against the current refusal-only graph.supersede shape.",
+      "openQuestions": "None until slice 1 lands.",
+      "releasedAt": "2026-08-09T15:19:41.226Z",
+      "releasedBy": "architect-21f667ae",
+      "reason": "Explicit architect handoff after verified slice-order dependency block."
+    }
+  ]
+}
