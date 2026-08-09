@@ -15,9 +15,116 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-da724bb7",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Baseline and freeze the contract before edits. Recompute both pinned document SHA-256 values; read design §§18.1–18.4 plus spec §§1.4, 2.1–2.2, 4.1–4.3, 4.16, 5, and 11; verify the actual FactRow/SuppliedFact/ProvenanceHandler and useGating/NextAllowedCommand signatures; rerun `pnpm --filter @moe/control-room test` and record the fresh baseline. Confirm sibling declared scopes remain evidence/timeline and recovery/doctor. Preserve apps/control-room/src/goals/goals-j1.tsx and apps/control-room/src/board/board-j1.tsx byte-for-byte, and make no data/client/shell/package/lockfile changes.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline frozen. Both pinned SHA-256 verified byte-exact: design 1D9D1EC9...383191, spec C55AF8A9...0BEF1F. Read design 18.1-18.4 and spec 1.4, 2.1-2.2, 4.1-4.3, 4.16, 5, 11. Verified real signatures: FactRow(FactRowProps{absentValue?,fact,factId,label,onProvenance?}), SuppliedFact = PresentedFact|null|undefined, PresentedFact{truthClass?:unknown,value:string|null}, ProvenanceHandler=(factId,ShellTruthPresentation)=>void, UNKNOWN_FACT_VALUE=\"UNKNOWN\", NONE_SUPPLIED, Panel/FactList in nodes/node-authority.tsx; useGating():{actionsEnabled,commands:readonly NextAllowedCommand[],stale} and actionTestId (dot/underscore -> dash, approval.decide suffixed .approve) in shell/frame.tsx; NextAllowedCommand{commandEnvelopeVersion,commandId,commandKind:RuntimeCommandKind,expectedVersion,graphRevisionHash?,inputSchemaVersion,leaseAuthority?,policyRevisionHash?,targetAggregateId} in @moe/contracts (no reason/audience field, confirming absence-not-guessed-refusal). Fresh baseline `pnpm --filter @moe/control-room test` exit 0: 16 files / 221 tests (higher than the architect's 13/175 because sibling evidence/ and timeline/ files are present-uncommitted in the shared worktree; known drift). Sibling scopes confirmed non-overlapping on disk: evidence/ + timeline/ (task-d99ca771, WORKING) and doctor/runs (task-a7ba291e, still PLANNING); neither declares goals/ or board/. J1 files pinned for later untouched proof: goals-j1.tsx 37590E48A9B389E1399E758B03948DF652482F8C6D44FBD709D0A822C6F34580, board-j1.tsx 49DC3A418397119689EF2DBD40A4B8DED3C84CE586B002E835F3AA68D7472170. No data/client/shell/package/lockfile change made.",
+      "startedAt": "2026-08-09T09:34:29.226Z",
+      "completedAt": "2026-08-09T09:36:05.091Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED for the Goals home in goals-home.test.tsx. Hand-write nonempty, fixed-cardinality active/completed/CLOSING/quarantined projections (never generate expectations from production) and assert server order, `cr.goals.row.{goalId}`, exact supplied goal state and phase distribution, provider capacity, ready width/frontier status, budget spent/reserved/quarantined/unknown plus basis, approvals/held/SUSPECT/reconciliation, last-event age, and completion. Pin one FactRow truth chip per fact, UNKNOWN for blank/missing facts, entity-qualified provenance callback IDs, default links to `/goal/{encodedId}/board`, controlled filter/search and j/k/Enter row keyboard callbacks, exactly three loading skeletons, the exact empty copy, and degraded/as-of labeling. Add goal-create cases using a real supplied `goal.create` affordance: supplied policy defaults/risk options are preserved, activation returns the identical command plus draft, foreign-target/absent commands render no mutation control, and actionsEnabled=false cannot call back. Confirm the focused new test fails because the production modules do not exist.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/goals/goals-home.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/goals/goals-home.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN the Goals slice with supplied-actions.tsx and goals-home.tsx. SuppliedActions must read useGating() once, use daemon-supplied actionsEnabled verbatim, retain only exact targetAggregateId plus an optional caller-requested command kind, render one `cr.action.<dot-to-dash-kind>` control with command id/kind/target attributes, and pass the original frozen affordance to onActivate; it constructs no envelope and invents no disabled reason. GoalsHome accepts readonly preclassified projection props, preserves input order, renders all named facts through FactRow, exposes controlled filter/search/open callbacks, and uses only supplied creation defaults/options and the matching project-scoped command—no $50/normal default, phase count, budget math, state sorting, authority, fetch, or fixture import. Keep each production file <=250 physical lines and make the RED suite green without modifying either J1 slice.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/goals/supplied-actions.tsx",
+        "apps/control-room/src/goals/goals-home.tsx",
+        "apps/control-room/src/goals/goals-home.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/goals/supplied-actions.tsx",
+        "apps/control-room/src/goals/goals-home.tsx"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED for the canonical board in board-surface.test.tsx. Build an independent exact-length corpus carrying sourceAggregate, exact phase fact, and separately supplied placement; include same-spelled aggregate states and deliberately contradictory phase/placement so a phase-folding implementation fails. Assert all five declared columns, exact phase/source preservation, Ready visible while loading but collapsed only after an authoritative loaded-empty lane, terminated hidden by default then shown only by the controlled filter, unknown placement retained in `cr.board.unmapped`, first ShellFrame render showing Board with zero `cr.graph.*`, and caller order without sorting/dedupe. For cards pin owner/lease state/epoch/expiry, renewal and activity silence as distinct facts, progress, latest claim, typed blocker and intentional wait owner/reason/recheck, per-card budget/basis, critical-path/slack, SUSPECT/held/disposition/qualification overlays exactly as supplied, one chip per fact, provenance callback IDs, duplicate/blank identities not dropping records, and hostile extra secret fields absent from DOM. Pin supplied frontier lanes READY_NOW/UNBLOCK_NEXT/INTENTIONAL_WAIT/UNSAFE_OR_UNKNOWN with cursor/graph epoch/idle capacity/readiness explanation, and the polite live join strip. Assert rendered action `(commandId, kind, target)` tuples exactly equal matching supplied context commands; empty/foreign-target contexts render none and disabled actions never activate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/board/board-surface.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/board/board-surface.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN the board presentation in board-contract.ts, board-card.tsx, and board-surface.tsx. Define local presentation contracts (not wire DTOs) with SuppliedFact fields, opaque source aggregate/exact phase, daemon-supplied placement `plan|ready|executing|review|accepted|terminated|null`, controlled loading/degraded/terminated state, and readonly frontier/join/card arrays. BoardCard renders only named properties through FactRow, keeps renewal/activity silence and overlays orthogonal, composes shared target-scoped SuppliedActions, and uses index-qualified keys so malformed duplicate identities remain visible. BoardSurface renders column-major supplied order, five columns plus explicit unmapped/terminated regions, authoritative loaded-empty Ready collapse, per-column loading/empty hints, last-known degraded data, verbatim frontier/join summaries, and no phase mapping, readiness/frontier/budget/truth calculation, lifecycle rule, sorting, dedupe, optimistic transition, transport, or graph surface. Keep every production TS/TSX <=250 lines and turn the board RED suite green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/board/board-contract.ts",
+        "apps/control-room/src/board/board-card.tsx",
+        "apps/control-room/src/board/board-surface.tsx",
+        "apps/control-room/src/board/board-surface.test.tsx"
+      ],
+      "newFiles": [
+        "apps/control-room/src/board/board-contract.ts",
+        "apps/control-room/src/board/board-card.tsx",
+        "apps/control-room/src/board/board-surface.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "TDD RED→GREEN for keyboard/narrow behavior and the authority boundary. Extend board-surface.test.tsx to assert exact focused node after j/k within a column, h/l and Left/Right across visible columns preserving/clamping row index, Enter opening that exact node, column-jump focusing its first card, and column-major DOM order with unequal/empty lanes. Add board-layout.css with horizontal overflow, sticky column headings, 2px-or-greater focus-visible rings, a column-jump control enabled below 960px, no hidden card/action content, and reduced-motion handling. Because jsdom does not apply viewport media queries, read the CSS from `process.cwd()` with a positive file anchor and pin `max-width: 959px`, overflow, and sticky declarations. Add goals-board-ban.test.ts with a nonzero exact canonical-production file set/import allow-list and bans on fixtures/data-adapter plus @moe/core/store/scheduler, lifecycle tables, and transition/authority derivation imports; assert the guard case count itself. Keep all tests/modules <400 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/board/board-layout.css",
+        "apps/control-room/src/board/board-surface.test.tsx",
+        "apps/control-room/src/board/goals-board-ban.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/board/board-layout.css",
+        "apps/control-room/src/board/goals-board-ban.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review and mutation proof. Load adversarial-self-review, then use OS-temp backups plus SHA-256 restoration for one-at-a-time production mutants: remove target filtering so a foreign affordance renders; relocate a card instead of honoring supplied placement; upgrade a missing fact to DAEMON_VERIFIED/zero; merge renewal with activity silence; invert terminated-default or loaded-empty Ready behavior; and force horizontal keyboard navigation to row 0. Each must make its named focused test red; assert every exercised corpus/sweep count is >0, restore exact bytes after every mutant, and leave no probe/scratch/generated evidence. Red-team null/blank/huge arrays, duplicate IDs, extra secret-shaped fields, disabled double activation, empty/nonuniform columns, absent provenance, and contradictory overlays; confirm no computed authority/readiness/evidence strength and that J1 files/dist/package/lockfile remain untouched. Use a cross-platform Node physical-line count and split before any production file reaches 400 (target <=250).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/goals/supplied-actions.tsx",
+        "apps/control-room/src/goals/goals-home.tsx",
+        "apps/control-room/src/board/board-contract.ts",
+        "apps/control-room/src/board/board-card.tsx",
+        "apps/control-room/src/board/board-surface.tsx",
+        "apps/control-room/src/board/board-surface.test.tsx",
+        "apps/control-room/src/goals/goals-home.test.tsx",
+        "apps/control-room/src/board/goals-board-ban.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Run the single final verification gate in the foreground: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test`; record fresh file/test counts and exit 0 as completion evidence (the app-scoped test is mandatory because root Vitest skips apps). Then inspect `git status --porcelain`, unstage any foreign staged path without altering its worktree bytes, explicitly stage only the nine owned new paths, and commit only by explicit pathspec—never bare commit/add -A. Verify `git show --stat --oneline HEAD` contains exactly those paths and that both J1 files are absent from the diff.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/goals/supplied-actions.tsx",
+        "apps/control-room/src/goals/goals-home.tsx",
+        "apps/control-room/src/goals/goals-home.test.tsx",
+        "apps/control-room/src/board/board-contract.ts",
+        "apps/control-room/src/board/board-card.tsx",
+        "apps/control-room/src/board/board-surface.tsx",
+        "apps/control-room/src/board/board-layout.css",
+        "apps/control-room/src/board/board-surface.test.tsx",
+        "apps/control-room/src/board/goals-board-ban.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-023d39fd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,11 +136,43 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T09:08:19.600Z",
+  "updatedAt": "2026-08-09T09:36:05.091Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T09:08:15.396Z"
+    "firstClaimAt": "2026-08-09T09:08:15.396Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "worker-023d39fd"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T09:26:51.791Z",
+  "planningNotes": {
+    "approachesConsidered": "Confirmed the user's requested Canonical goals board approach against both pinned documents. Rejected rewriting goals-j1.tsx/board-j1.tsx: committed shell/j1-flow.test.tsx imports their current names and sibling surface tasks extend beside J1 slices. Rejected decoding/fetching here: the generated client exposes compat-gated request builders but no rich response DTOs, and the live data adapter deliberately narrows payloads to generic ViewRecord; these modules therefore accept closed, preclassified presentation props like the node/approval surfaces. Rejected a client phase-to-column table, lifecycle/action reconstruction, computed phase/frontier/budget summaries, and inferred SUSPECT/held/readiness because design 18 makes those daemon projections. The board carries sourceAggregate + exact phase + separately supplied display placement and visibly retains unmapped records. Rejected fixture imports and generic Shell ActionButton reuse; a small shared SuppliedActions component consumes useGating() verbatim, target-filters the already supplied NextAllowedCommand objects, and returns the original object to the caller.",
+    "codebaseInsights": "Pinned hashes were freshly verified. Rebuild design 18.1/18.4 overrides stale Fable C3/C4/C6-C9 assumptions: durable EXECUTION_READY, daemon-assigned aggregate truth, SYSTEM_POLICY/DAEMON_VERIFIED, historical ACCEPTED plus separate qualification, and immutable rejection routing. Existing reusable primitives are FactRow/SuppliedFact/ProvenanceHandler in nodes/node-authority.tsx and useGating/action test-id grammar in shell/frame.tsx. Current focused baseline is 13 test files / 175 tests green. Canonical modules remain new siblings; goals-j1.tsx and board-j1.tsx stay byte-untouched. Sibling planning scopes are evidence/timeline and recovery/doctor, so the nine declared files do not overlap.",
+    "risks": "Rich goal/board wire DTOs do not yet exist, so comments and tests must call these presentation contracts—not daemon response schemas—and no unknown JSON parser may be invented. The exact phase and source aggregate must never be flattened; supplied placement may contradict phase and must still be shown exactly, while null/unknown placement goes to an explicit unmapped region rather than disappearing. NextAllowedCommand has no human/agent audience field, so the UI may target-filter only; it must not classify work.* or step.* itself. Missing command with no daemon reason is ABSENT, not a guessed refusal. CSS media behavior needs non-vacuous source assertions because jsdom does not evaluate viewport media queries. Use index-qualified React keys so duplicate/missing identities do not silently drop records. Nine files are deliberate responsibility splits under the ten-file hard cap; keep every production TS/TSX <=250 lines and every module <400.",
+    "keyFiles": [
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md",
+      "D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md",
+      "apps/control-room/src/shell/frame.tsx",
+      "apps/control-room/src/nodes/node-authority.tsx",
+      "apps/control-room/src/goals/goals-j1.tsx",
+      "apps/control-room/src/board/board-j1.tsx",
+      "apps/control-room/src/data/data-contract.ts",
+      "packages/control-room-client/src/client-compat.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T09:26:53.829Z",
+  "workStartedAt": "2026-08-09T09:34:29.226Z"
 }

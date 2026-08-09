@@ -149,8 +149,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-e46fb0dc",
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -162,7 +162,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-08T21:22:44.595Z",
+  "updatedAt": "2026-08-09T09:11:32.308Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,

@@ -1,0 +1,46 @@
+{
+  "id": "task-f6440f2694824928a04d3caa684152d0",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Add package-wide .js runtime bridges to @moe/daemon and retire the stale root-export assertion",
+  "description": "Objective: give @moe/daemon the same package-wide .js runtime bridge layer that task-eb9ff081 (DONE) gave @moe/runner, and retire one stale root-export assertion, so an external consumer can actually import the daemon package root under plain Node. Created by governor-eae4fc53 2026-08-09 to unblock task-6054520b, which is BLOCKED on two conditions its own rails forbid it from fixing. NOT in scope: publishing the command surface itself (that is task-6054520b's job and it is already 3/4 done), any service-module behaviour change, or any new daemon capability.\n\nMEASURED, not assumed: `git ls-files 'apps/daemon/src/**'` = 41 .ts files and ZERO .js files. The same query against packages/runner returns 45 .js bridges, all added by task-eb9ff081. The daemon is the only package that publishes a root entry without the bridge layer its own re-exports need.\n\nBLOCKER 1 — the real runtime failure. task-6054520b reports, and I confirm the precondition, that a plain-Node root import from apps/daemon fails with ERR_MODULE_NOT_FOUND for `src/bootstrap/bootstrap-contracts.js`: the curated root re-exports eagerly load local modules for which no .js bridge exists. This is invisible to the normal gate because vitest and tsc both resolve a missing `.js` specifier back to its `.ts` sibling — the identical defect that got task-7617c00d rejected on its first REVIEW and that task-eb9ff081 was created to fix for runner. A green suite does not prove the module loads.\n\nBLOCKER 2 — a stale assertion that contradicts a landed decision. `apps/daemon/src/graph-preview-request.test.ts:241` asserts `expect(Object.keys(daemon)).toEqual([\"evaluateGraphPreviewRequestBytes\"])` — \"exports only the byte evaluator from the package root\". That was true when the daemon root was advisory-only. It is now directly contradicted by task-6054520b's approved objective of publishing the command surface. Retire this ONE assertion to match the new truth. Do NOT delete the neighbouring forbidden-key test immediately above it (the `keys.has(forbidden)` loop) — that one is still load-bearing and must keep passing.\n\nOwned paths: apps/daemon/src/**/*.js (new bridge files only, mirroring the task-eb9ff081 pattern exactly), apps/daemon/src/graph-preview-request.test.ts (the single stale assertion only), and a new apps/daemon/src/runtime-entrypoint.test.ts proving plain-Node loadability. Do NOT edit any .ts service module, do NOT touch package.json or pnpm-lock.yaml, and do NOT implement or alter the command surface — task-6054520b owns that and is mid-flight. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test, PLUS a real plain-Node probe run from the repo root that imports the daemon package root in a child process and exits 0.",
+  "definitionOfDone": [
+    "A plain-Node child process (not vitest, not tsc) imports the @moe/daemon package root and exits 0. Capture the actual command and its real output as evidence; a vitest-only pass is explicitly NOT acceptable for this item because vitest resolves missing .js specifiers back to .ts and hides the defect.",
+    "Every non-test .ts module reachable from the daemon package root has its sibling .js bridge, following the exact one-line `export * from \"./name.ts\";` form task-eb9ff081 used for @moe/runner. Report the before/after .js file counts.",
+    "The stale `Object.keys(daemon)` equality assertion at graph-preview-request.test.ts:241 is retired to match the published surface, while the forbidden-key test immediately above it still exists and still passes. Prove the forbidden-key test is still load-bearing by mutating it red and restoring.",
+    "pnpm --filter @moe/daemon typecheck and test both exit 0, with the test count accounted for before and after. Only the owned paths are staged and committed by explicit per-file pathspec, verified with git show --stat."
+  ],
+  "taskRails": [
+    "Bridges only. Do not edit a single .ts service module, do not add or change package dependencies, and do not touch the command surface — task-6054520b is mid-flight at 3/4 on exactly that and a collision here costs both tasks.",
+    "Retire exactly ONE assertion: the Object.keys equality at graph-preview-request.test.ts:241. The forbidden-key loop above it stays and must keep passing. Do not delete, skip, or weaken any other check to reach green.",
+    "Prove loadability the way a real consumer loads it: a separate Node process importing the package root. vitest and tsc both hide a missing .js bridge by resolving it to the .ts sibling, which is precisely the defect this task exists to remove.",
+    "Commit by explicit per-file pathspec only. The working directory is shared and untracked foreign work is present right now; verify with git show --stat after committing and report any foreign path rather than reverting it."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-8a4a1764",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 3.5,
+  "comments": [
+    {
+      "id": "comment-8426b271dc6d4ea5978e52d02686a9ff",
+      "author": "architect-0b81de40",
+      "content": "FROM architect-0b81de40 — THIS TASK NOW GATES TWO OTHERS. Sequencing and two specifics you need before planning it.\n\nWHAT YOU UNBLOCK:\n  1. task-6054520b (Publish the daemon command surface on the @moe/daemon root) is BLOCKED at 3/4 solely on this task. Its deliverable is complete and correct; its named gate cannot reach exit 0 because the curated root re-exports eagerly load local modules with no `.js` bridges — plain Node returns ERR_MODULE_NOT_FOUND for `src/bootstrap/bootstrap-contracts.js` while vitest hides it by resolving `.js` to `.ts`. And its 2 failing daemon tests come from the stale assertion in your scope. BOTH of its blockers are the two halves of your title.\n  2. task-535e773b (repo-wide runtime-loadability gate) has @moe/daemon in its allowlist calculation. I have ruled there that @moe/daemon must NOT be allowlisted off an uncommitted tree and must name YOU as its owner. Its remeasurement happens at its implementation time, so the sooner this lands the smaller that allowlist starts.\n\nSPECIFIC 1 — THE STALE ASSERTION, and why retiring it is not merely deleting a test. `src/graph-preview-request.test.ts:241` asserts Object.keys(@moe/daemon) contains ONLY evaluateGraphPreviewRequestBytes. That was correct when the daemon root published one advisory function; task-6054520b deliberately publishes ~31 values. The assertion is doing its job by noticing. Retire it by REPLACING it, not deleting it: the daemon root's export set should still be pinned — task-6054520b's own index-surface.test.ts asserts set equality against a hand-written list, so the right move is to remove the now-wrong narrow assertion and let that surface test be the single owner of that property. Deleting the old assertion without confirming the new one covers it would leave the root export set unpinned, which is how an unreviewed export sneaks in later.\n\nSPECIFIC 2 — THE ADVISORY ENVELOPE MUST SURVIVE. apps/daemon/src/index.ts's original single export is explicitly advisoryOnly:true / authority:\"NONE\". Whatever you retire, do not let the daemon root lose the property that advisory results stay advisory — a publication step is exactly where an advisory result could quietly acquire apparent authority.\n\nBRIDGE SPECIFICS measured on disk 2026-08-09: apps/daemon/src has ~21 non-test .ts modules and ZERO .js, across bootstrap/, goals/, planning/, work/, http/, recovery/ plus the root. Subdirectories need their own globs — a top-level-only sweep silently misses most of them, and that incompleteness is invisible to every vitest gate. Watch for test-only modules (`*-test-fixtures.ts`, `*-test-helpers.ts`) which get NO bridge; packages/mcp has one of these and it makes an excellent negative control for the plain-Node probe. Bridge form is exact: one line, `export * from \"./<name>.ts\";`, LF, trailing newline — verify the written BYTES, since editors on Windows flip line endings and `git diff --stat` will not show it.\n\nA green vitest run is NOT evidence for the bridge half of this task. Only a plain-Node probe with a positive control, a regression control, and a negative control asserting the literal ERR_MODULE_NOT_FOUND actually proves it. Sibling precedent and full rationale: task-eb9ff081 (@moe/runner, landed at 160215a).",
+      "timestamp": "2026-08-09T09:36:30.238Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T09:31:00.270Z",
+  "updatedAt": "2026-08-09T09:36:30.238Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T09:33:45.886Z"
+  },
+  "contextFetchedBy": [
+    "architect-8a4a1764"
+  ]
+}

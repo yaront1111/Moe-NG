@@ -3,6 +3,117 @@ import { previewGraphSnapshot } from "@moe/scheduler";
 import type { BoundedJsonDecodeError, JsonObject, JsonValue } from "@moe/contracts";
 import type { GraphPreviewOptions, GraphPreviewResult } from "@moe/scheduler";
 
+export {
+  BOOTSTRAP_COMMAND_KINDS,
+  BOOTSTRAP_REFUSAL_CODES,
+  BOOTSTRAP_REQUEST_KEYS,
+  BOOTSTRAP_SCHEMA_VERSION,
+  decodeBootstrapRequestBytes,
+  type BootstrapCommandKind,
+  type BootstrapDecodeRefusal,
+  type BootstrapDecodeResult,
+  type BootstrapInputRejected,
+  type BootstrapRefusalCode,
+  type BootstrapRefusedBy,
+  type BootstrapRequest,
+  type BootstrapRequestAccepted,
+  type BootstrapRequestRefused,
+} from "./bootstrap/bootstrap-contracts.js";
+export {
+  PREREQUISITE_REFUSAL_CODES,
+  SERVICE_REFUSED_BY,
+  type CommandHandler,
+  type DurableAggregate,
+  type DurableLedger,
+  type HandlerContext,
+  type HandlerTable,
+  type PrerequisiteRefusalCode,
+  type ServiceAccepted,
+  type ServiceOutcome,
+  type ServiceRefused,
+  type ServiceRefusedBy,
+} from "./bootstrap/bootstrap-ledger.js";
+export {
+  BOOTSTRAP_HANDLERS,
+  runBootstrapCommand,
+} from "./bootstrap/bootstrap-services.js";
+export { GOAL_HANDLERS } from "./goals/goal-services.js";
+export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+export {
+  CLAIM_LEGS,
+  SLOT_CEILING_LEG,
+  WORK_AUTHORITY_LABELS,
+  WORK_COMMANDS,
+  WORK_ERROR_CODES,
+  WORK_LAYERS,
+  WORK_LEGS,
+  WORK_SCHEMA_VERSION,
+  type ClaimLeg,
+  type ClaimSuccessors,
+  type WorkApplied,
+  type WorkAuthorityLabel,
+  type WorkCommand,
+  type WorkContextView,
+  type WorkErrorCode,
+  type WorkFailure,
+  type WorkGranted,
+  type WorkInputRejected,
+  type WorkLayer,
+  type WorkLeg,
+  type WorkRefused,
+  type WorkResult,
+} from "./work/work-kernel.js";
+export {
+  parseWorkRequest,
+  type WorkRequestEnvelope,
+  type WorkRequestParse,
+} from "./work/work-ingress.js";
+export { claimWork } from "./work/work-claim.js";
+export {
+  EVENT_STREAM_LAYER,
+  EVENT_STREAM_REFUSAL_CODES,
+  MAX_EVENT_PAGE_SIZE,
+  type EventGapFrame,
+  type EventPageFrame,
+  type EventReadFrame,
+  type EventReadRequest,
+  type EventRefusedFrame,
+  type EventReseatedFrame,
+  type EventResumeFrame,
+  type EventResumeRequest,
+  type EventStreamRefusalCode,
+  type StreamCursor,
+  type StreamEvent,
+  type StreamGap,
+  type StreamPage,
+  type StreamPageRequest,
+  type StreamReadResult,
+  type StreamRefused,
+  type StreamReseatRequest,
+  type StreamSeatResult,
+  type StreamSeated,
+  type StreamSnapshot,
+  type SubscriptionPort,
+  type WireCursor,
+  type WireEvent,
+  type WireSnapshot,
+} from "./http/event-stream-contract.js";
+export { readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
+export {
+  DOCTOR_COMMAND_KINDS,
+  DOCTOR_ERROR_CODES,
+  DOCTOR_RECOVERY_SCHEMA_VERSION,
+  evaluateDoctorCommandBytes,
+  type DoctorAuthorityStale,
+  type DoctorCommandKind,
+  type DoctorCommandResult,
+  type DoctorErrorCode,
+  type DoctorInputRejected,
+  type DoctorProposed,
+  type DoctorReported,
+  type DoctorRequestInvalid,
+} from "./recovery/doctor-commands.js";
+
 const SCHEMA_VERSION = "moe-graph-preview-request/1";
 const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);
 

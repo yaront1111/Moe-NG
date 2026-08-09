@@ -26,39 +26,55 @@
     {
       "stepId": "step-1",
       "description": "Record the pre-task daemon suite file/test/pass/fail/skip count, then create the RED package-root surface contract in apps/daemon/src/index-surface.test.ts. Import `* as daemon` and every tested type only from `@moe/daemon`, never a relative/deep daemon path. Hand-transcribe an alphabetized 31-value `[name, typeof]` table and assert both exact set equality with Object.keys and one named typeof case per value; guard the table with exact cardinality 31 so it cannot silently empty. The approved runtime values are the existing evaluateGraphPreviewRequestBytes plus BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_HANDLERS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS, BOOTSTRAP_SCHEMA_VERSION, SERVICE_REFUSED_BY, PREREQUISITE_REFUSAL_CODES, decodeBootstrapRequestBytes, runBootstrapCommand, GOAL_HANDLERS, PLANNING_HANDLERS, WORK_SCHEMA_VERSION, WORK_COMMANDS, CLAIM_LEGS, SLOT_CEILING_LEG, WORK_LEGS, WORK_LAYERS, WORK_ERROR_CODES, WORK_AUTHORITY_LABELS, parseWorkRequest, claimWork, MAX_EVENT_PAGE_SIZE, EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_LAYER, readEventPage, resumeFromSnapshot, DOCTOR_RECOVERY_SCHEMA_VERSION, DOCTOR_COMMAND_KINDS, DOCTOR_ERROR_CODES, and evaluateDoctorCommandBytes. Add an explicit non-empty forbidden-fixture list (PROJECTION, SUBSCRIBER, SNAPSHOT_CHECKPOINT, STATE_DIGEST, LEDGER_EVENT_IDS, ledgerIdsUpTo, streamPort) and assert none is an own property of the root namespace. Run only this new test and confirm RED names the missing approved exports.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/index-surface.test.ts"
       ],
-      "startedAt": "2026-08-09T09:09:08.588Z"
+      "modifiedFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Baseline daemon suite: 13 files / 300 tests, all passed, 0 failed, 0 skipped. Verified every approved runtime name on disk in its defining module before writing the root contract. Added a hand-transcribed alphabetized 31-value [name, typeof] table, exact Object.keys set equality, exact cardinality guard, per-symbol named typeof cases, and a guarded 7-name forbidden fixture list. Focused root-specifier test is RED as intended: 1 file / 41 cases, 31 failed + 10 passed. The set diff names all 30 command exports absent from the current one-key root; all 30 per-symbol cases fail by name, while the existing evaluateGraphPreviewRequestBytes case and all fixture-denial cases pass.",
+      "startedAt": "2026-08-09T09:09:08.588Z",
+      "completedAt": "2026-08-09T09:10:46.531Z"
     },
     {
       "stepId": "step-2",
       "description": "Add compile-time root-surface coverage to the same test and implement the curated re-exports in apps/daemon/src/index.ts. Use grouped named blocks with `.js` specifiers and `type` modifiers from each verified module; never export-star. Export the full type closure needed to name every parameter and union arm: from bootstrap contracts—BootstrapCommandKind, BootstrapRefusalCode, BootstrapRefusedBy, BootstrapRequest, BootstrapInputRejected, BootstrapRequestRefused, BootstrapRequestAccepted, BootstrapDecodeRefusal, BootstrapDecodeResult; from bootstrap ledger—ServiceRefusedBy, PrerequisiteRefusalCode, DurableAggregate, DurableLedger, ServiceAccepted, ServiceRefused, ServiceOutcome, HandlerContext, CommandHandler, HandlerTable; from work kernel—WorkCommand, ClaimLeg, WorkLeg, WorkLayer, WorkErrorCode, WorkAuthorityLabel, WorkFailure, ClaimSuccessors, WorkInputRejected, WorkRefused, WorkGranted, WorkApplied, WorkContextView, WorkResult; from work ingress—WorkRequestEnvelope and WorkRequestParse; from event-stream contract—StreamCursor, StreamSnapshot, StreamEvent, StreamPage, StreamGap, StreamRefused, StreamSeated, StreamReadResult, StreamSeatResult, StreamPageRequest, StreamReseatRequest, SubscriptionPort, EventStreamRefusalCode, WireCursor, WireEvent, WireSnapshot, EventPageFrame, EventGapFrame, EventRefusedFrame, EventReseatedFrame, EventReadFrame, EventResumeFrame, EventReadRequest, EventResumeRequest; from doctor—DoctorCommandKind, DoctorErrorCode, DoctorInputRejected, DoctorRequestInvalid, DoctorAuthorityStale, DoctorReported, DoctorProposed, DoctorCommandResult. Use expectTypeOf/type equalities against the root functions/tables to exercise every parameter, return union, and branch type without local redeclarations. Through the root call evaluateGraphPreviewRequestBytes on `{}` bytes and assert the exact REQUEST_INVALID / GRAPH_PREVIEW_REQUEST_INVALID refusal plus advisoryOnly:true and authority:\"NONE\". Make the focused test green, keep index.ts <=250 physical lines, and edit no other production module, package file, or bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Implemented curated named `.js` re-exports only: 31 reviewed runtime values and the complete bootstrap/service, work, event-stream, doctor, and existing graph-preview type closure. No export-star, fixture, adapter helper, package file, bridge, or service behavior edit. The root-only test imports both values and types exclusively from `@moe/daemon`, proves function/table signatures and every result-union arm, and calls published graph preview on `{}` bytes to assert exact REQUEST_INVALID / GRAPH_PREVIEW_REQUEST_INVALID plus advisoryOnly:true and authority:NONE. Focused root surface GREEN: 1 file / 46 tests. Strict isolated tsc over index.ts + index-surface.test.ts and their imports exited 0. Full daemon typecheck is temporarily red only on a foreign untracked `work/work-race-world.ts` (12 TS7006s); pinged likely owner in #general msg-3bde87a8585641958e96e596f04a59dc. Production index is 222 physical lines (<=250); test 265; diff --check clean.",
+      "startedAt": "2026-08-09T09:10:50.662Z",
+      "completedAt": "2026-08-09T09:15:42.736Z"
     },
     {
       "stepId": "step-3",
       "description": "Perform the single adversarial review over the two owned files. Verify every exported name against its defining module and every type against the actual signature; ensure general HTTP adapter helpers, bootstrap ledger mutation helpers, work internals, and all `*.test.ts`/fixture modules remain absent. Check that type-only exports add zero runtime keys, all handler tables are defined objects, all approved functions are callable values, and the graph preview advisory test reads the production root rather than a helper. Snapshot index.ts outside the repository and record its git hash; temporarily remove GOAL_HANDLERS to prove the named typeof and set-equality loss axes go red, restore exact bytes, then temporarily add an unapproved safe production export such as HTTP_BOUNDARY_ERROR_CODES to prove the addition axis goes red, restore again. Finally mutate REQUEST_INVALID_RESULT's advisoryOnly or authority field and prove the published advisory-discipline case goes red. Restore in finally paths, verify each original hash, confirm index.ts remains <=250 lines, and leave no scratch/generated files.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "note": "Adversarial review verified each runtime/type export against its defining module and actual signatures; only curated command-driving seams are public. No export-star, test/fixture module, general HTTP helper, bootstrap mutation helper, work internal, package edit, or bridge is present. Runtime test confirms all 31 values are defined with reviewed typeof; type-only names add zero Object.keys entries. Mutation drills used external temp snapshots with byte-exact finally restore. Removing GOAL_HANDLERS killed both named typeof and set-equality loss axes (2 targeted failures). Adding verified-safe but unapproved HTTP_BOUNDARY_ERROR_CODES killed the addition axis and named the extra key. Flipping REQUEST_INVALID_RESULT.advisoryOnly to false killed the published advisory-discipline case with an exact field diff. For all drills HEAD stayed at blob 376e449b747ebc65df7e564a9db479c1ba175bc7 and restored working blob matched 2bf258ffff0466f0205fdaa307566a2046c22fb5. Post-drill surface run 46/46, index 222 lines, zero temp snapshots left.",
+      "startedAt": "2026-08-09T09:15:49.077Z",
+      "completedAt": "2026-08-09T09:18:22.912Z"
     },
     {
       "stepId": "step-4",
       "description": "Run the one final foreground verification command exactly: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Record exit 0 and explicit before/after daemon file/test/pass/fail/skip counts, showing the final count is at least the baseline and accounting exactly for every new index-surface case. Inspect `git diff -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` to prove re-export-only scope, run `git status --porcelain`, unstage foreign entries without altering them, and stage/commit only the two owned paths with `git commit -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts`. Verify `git show --stat` contains exactly those two paths and no package/bridge/service module before calling moe.complete_task.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T09:18:32.252Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-064d1267",
   "branch": null,
   "prLink": null,
@@ -68,19 +84,31 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 3.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-017e2ad7735440ea9a24e1cc34cbeaa2",
+      "author": "architect-0b81de40",
+      "content": "ARCHITECT RULING — your analysis is correct, the task cannot complete under its own rails, and the faulty rail is mine. Do NOT weaken the gate and do NOT rework the deliverable.\n\nWHAT I GOT WRONG. I wrote task rail 5 as \"Add no .js bridge. apps/daemon has none and needs none — that convention belongs to @moe/store alone.\" The first clause was right for the wrong reason and the second was simply false. apps/daemon genuinely DOES need bridges the moment its root re-exports local modules, which is exactly what this task's deliverable does. Your reproduction is the proof: the curated `.js` re-exports eagerly load `src/bootstrap/bootstrap-contracts.js`, which does not exist on disk, so plain Node returns ERR_MODULE_NOT_FOUND while vitest resolves `.js` to `.ts` and stays 46/46 green. I predicted this interaction in another task's description and then failed to carry it into your rails.\n\nRULING: YOUR WORK IS CORRECT AND COMPLETE AT 3/4. The curated export block is the right deliverable and must not be trimmed to dodge the failure. Two distinct blockers remain, BOTH owned by task-f6440f26 (\"Add package-wide .js runtime bridges to @moe/daemon and retire the stale root-export assertion\"), currently in PLANNING:\n  1. Missing daemon `.js` bridges — the real runtime failure. Fixing it here would be a partial sweep of exactly the kind that is invisible to the vitest gate, which is why it belongs to a package-wide sweep task, not to yours.\n  2. `src/graph-preview-request.test.ts:241`, which asserts Object.keys(@moe/daemon) contains ONLY evaluateGraphPreviewRequestBytes. That assertion was true when written and is now stale by design — this task's whole purpose is to publish more. It lies outside your two owned paths and f6440f26's title says it owns retiring it.\n\nSO THIS TASK IS BLOCKED ON A NAMED TASK, not on an unknown. That is a legitimate state and better than any workaround available to you:\n  - Do NOT add bridges here (partial sweep, invisible incompleteness).\n  - Do NOT edit graph-preview-request.test.ts (foreign path, and a test edited to accommodate a change it was written to catch needs its owner's judgement, not yours).\n  - Do NOT narrow the published surface to keep the stale assertion true — that would delete the deliverable to satisfy a test that exists to notice the deliverable.\n  - Do NOT declare the gate passed on the focused/typecheck evidence alone. Your 46/46 focused green and clean isolated tsc are real and worth quoting, but they are not the named gate, and reporting them as if they were is the fabricated pass epic rail 4 forbids.\n\nWHAT TO DO: stay blocked, with f6440f26 named as the blocker. When it lands, re-run your named gate unchanged and complete. Expect both failures to clear together — the bridges fix the runtime import, the retired assertion fixes the 2 failing daemon tests. If either persists after f6440f26 lands, that is a new finding worth reporting rather than absorbing.\n\nRecord in your completion evidence that steps 1-3 landed the deliverable and that step 4 was gated on f6440f26, so a reviewer does not read the delay as incomplete work. I have commented on f6440f26 so its planner knows it now gates this task.",
+      "timestamp": "2026-08-09T09:36:13.163Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T08:46:23.406Z",
-  "updatedAt": "2026-08-09T09:09:08.588Z",
+  "updatedAt": "2026-08-09T09:36:13.163Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:01:44.105Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T09:06:49.201Z",
   "planningNotes": {
@@ -107,5 +135,9 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-09T09:06:51.236Z",
-  "workStartedAt": "2026-08-09T09:09:08.588Z"
+  "workStartedAt": "2026-08-09T09:09:08.588Z",
+  "blockedReason": "Named final gate cannot reach exit 0 under the approved rails. `pnpm --filter @moe/daemon typecheck` passes, then daemon tests report 363 passed / 2 failed. Existing `src/graph-preview-request.test.ts:241` requires Object.keys(@moe/daemon) to contain only evaluateGraphPreviewRequestBytes, directly contradicting this task's 31-value publication and lying outside the two owned paths. More importantly, its real plain-Node root-import case exits 1: direct Node 24 reproduction from apps/daemon returns ERR_MODULE_NOT_FOUND for `src/bootstrap/bootstrap-contracts.js`, because the curated `.js` re-exports eagerly load local modules for which daemon has no `.js` bridges. Vitest hides this by resolving `.js` to `.ts`; the focused root test is 46/46 green and isolated strict tsc is green. Task rails explicitly forbid service-module edits, package changes, and any `.js` bridge, while the objective requires an external consumer to drive the root. Updating only the stale key assertion cannot fix the real runtime failure. Safe completion therefore requires an architect-approved scope/design amendment; weakening the existing Node gate or deep-importing would violate fail-closed truth.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-09T09:20:52.323Z"
 }

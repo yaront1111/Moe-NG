@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-da724bb7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,5 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T08:10:14.881Z"
+  "updatedAt": "2026-08-09T09:29:04.600Z",
+  "contextFetchedBy": [
+    "architect-da724bb7"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T09:29:04.600Z"
+  }
 }

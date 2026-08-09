@@ -26,9 +26,9 @@
       "modifiedFiles": [
         "packages/scheduler/src/package-boundary.test.ts"
       ],
-      "note": "Fresh baselines at HEAD 3944a9d before edit: root 159 files / 2870 passed / 1 skipped / 0 failed; scheduler 32 files / 567 passed. Extracted file-local detector and added non-empty named matrices: 7 genuine import/export/dynamic/require cases (including POSIX and Windows separators) plus 5 allowed decoys. Focused RED: 27 tests, exactly 3 failed (former fixture prose, ordinary string, commented-out import), 24 passed; all genuine-import cases passed, proving the intended positive axis.",
-      "startedAt": "2026-08-09T08:48:24.529Z",
-      "completedAt": "2026-08-09T08:50:20.230Z"
+      "note": "QA-reopen RED only; did not re-prove passing surfaces. Added three permanent static backtick-specifier cases (import(), require(), after-from) covering @moe and relative scheduler/src forms, one allowed interpolated template specifier, and a fail-closed regex-quote swallow case. Focused run: 39 tests, exactly 4 failed (the three static backtick imports plus missing loud regex failure), 35 passed.",
+      "startedAt": "2026-08-09T09:18:37.157Z",
+      "completedAt": "2026-08-09T09:19:18.195Z"
     },
     {
       "stepId": "step-2",
@@ -39,12 +39,11 @@
         "packages/runner/src/supervisor/effect-test-fixtures.ts"
       ],
       "modifiedFiles": [
-        "packages/scheduler/src/package-boundary.test.ts",
-        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+        "packages/scheduler/src/package-boundary.test.ts"
       ],
-      "note": "Implemented a comment/string-aware token scanner that extracts only quoted specifiers from static imports, import type, side-effect imports, export-from, dynamic import(), and require(), then applies the existing forbidden subpath predicate. Updated only the stale runner doc comment. Added multiline/single-quote/comment/empty-string controls. An added `import { require as run }` case first went RED 1/32, revealing a premature scan stop; removed that false stop, then focused 32/32 and full scheduler 32 files / 585 tests passed. Baseline was 567, so +18 permanent cases and none lost.",
-      "startedAt": "2026-08-09T08:52:05.220Z",
-      "completedAt": "2026-08-09T08:56:32.422Z"
+      "note": "GREEN for QA-reopen defect. readTemplate now exposes a cooked literal only when interpolation-free; sourceTokens emits that as a string token, while interpolated templates remain non-static and safe. Added fail-closed quote-newline detection and regex-literal skipping based on prior significant token, so a regex quote cannot silently swallow a later import. Repository scan errors now include the exact path. TDD exposed JSX closing tags as a regex heuristic edge; removed `<` from regex-prefix punctuation. Scheduler typecheck and focused boundary 39/39 pass.",
+      "startedAt": "2026-08-09T09:19:22.151Z",
+      "completedAt": "2026-08-09T09:22:14.662Z"
     },
     {
       "stepId": "step-3",
@@ -57,9 +56,9 @@
       "modifiedFiles": [
         "packages/scheduler/src/package-boundary.test.ts"
       ],
-      "note": "Adversarial review + 4 mutation proofs, all with OS-temp byte snapshots, finally-restore, and git hash-object verification.\n\nPRE-CHECKS: foundation-fault-schedule.ts is byte-clean at HEAD 3944a9d and still declares schedule:j4-stale-lease-enforcement as PASS (lines 156-158). Unowned tests/fault/foundation/j4-replan-stale.test.ts still calls scheduler.fenceAuthority through the package root (harness imports * as scheduler from packages/scheduler/src/index.js), asserts issues == [\"AUTHORITY_STALE_EPOCH\"], asserts the full authority-layer securityRecord (aggregateKind LEASE, commandKind work.dispatch, expectedEpoch 3, observedEpoch 2), and asserts the current-epoch accept path. Neither file edited.\n\nPROOF 1 (Blocker A ratchet, unowned file, transient): packages/scheduler/src/index.ts clean, hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050. Baseline filtered run green (1 passed | 14 skipped). Removed only line 62 `fenceAuthority,` from the root export block. Mutant RED: \"TypeError: scheduler.fenceAuthority is not a function\" at j4-replan-stale.test.ts:198 on schedule:j4-stale-lease-enforcement, exit 1. Restored, hash re-verified a0ab48fb..., temp file removed.\n\nPROOF 2A (positive axis): containsForbiddenSchedulerImport body -> `return false`. All 10 genuine-import cases RED (static value import-from, import type-from, side-effect, export-from, dynamic import, dynamic import in template expression, CommonJS require, comment-before-import, multiline single-quoted, binding named require). 10 failed | 24 passed.\n\nPROOF 2B (negative axis + proves the fix is the fix): body -> the old `forbiddenInternalPath.test(contents)` raw scan. 7 RED: all 6 prose/string decoys (former fixture prose, ordinary string, commented-out import, block comment with import syntax, string containing import syntax, template-literal prose) AND \"detects CommonJS require\" — the old raw regex also MISSED a genuine Windows-separator require(\"..\\scheduler\\src\\authority\\private.js\"), a false negative the syntax-anchored detector now catches.\n\nRAIL-6 GAP FOUND AND CLOSED: the repository sweep asserted only `violations toEqual([])`, so it would pass vacuously if sourceFiles discovered zero files. Added `expect(scanned.length).toBeGreaterThan(0)` and `expect(scanned).toContain(scannedWitness)` where scannedWitness is the runner fixture path this task exists to clear. Both proven load-bearing: MUTANT C1 (sourceFiles -> []) RED \"expected 0 to be greater than 0\"; MUTANT C2 (roots -> [\"packages/scheduler\"] only) RED \"expected [ ...(115) ] to include 'packages\\runner\\src\\supervisor\\effect...'\". Restored, hash 3892d1a19850690b8a971896a0fd72fc18370138 re-verified.\n\nREVIEW SWEEP: multiline import, comment-before-import, single/double/template quote styles, POSIX (../../scheduler/src/) and Windows (..\\scheduler\\src\\) separators, empty file, and the @moe/scheduler package root are each a named case. ENOENT handling and node_modules/schedulerRoot exclusion preserved; violations still record exact repo-relative paths and still assert toEqual([]).\n\nNO COVERAGE LOST: HEAD had 14 tests in this file (1 repo scan + 12 extension cases + 1 exports). Working tree has 34 = the same 14 plus 20 new (10 forbidden + 9 allowed + 1 non-empty-matrix guard). Zero deleted, zero skipped, zero narrowed; no .skip/.todo/.only anywhere in the owned files.\n\nBUILDERS UNTOUCHED: comment-stripped, whitespace-normalized comparison of effect-test-fixtures.ts against HEAD is identical (4644 chars both sides) — the change is doc-comment text only.\n\nHYGIENE: no untracked scratch under packages/tests/adapters/apps; all temp snapshots removed. package-boundary.test.ts is 281 lines — over the 250 target, under the 400 split bar; not split because a helper module would be a new path outside the three owned paths.\n\nOne incident, contained: an early Mutant C attempt used an empty sed line variable, so `sed -i \"s#.*#...#\"` overwrote every line of package-boundary.test.ts. The finally-restore caught it and git hash-object confirmed exact recovery before rerunning; the retry used node exact-string anchoring instead.",
-      "startedAt": "2026-08-09T08:56:36.699Z",
-      "completedAt": "2026-08-09T09:06:42.971Z"
+      "note": "QA-reopen adversarial review only; did not repeat QA-verified J4/detector/raw-scan drills. Found and fixed an additional interpolation edge: expression tokens are now bracketed so even a constant-string interpolation remains non-static, while nested dynamic imports inside template expressions remain visible. Permanent allowed case went RED 1/40 before the fix, then green. Current-byte drills: removing static template-token publication failed exactly the 3 backtick cases (3 failed/40); disabling regex skipping failed the dedicated regex/import case (1 failed/39 skipped). Both restored exact hash 559dd736edb35bb434d8ae5fe2d0c87bad5343b7. No scratch remains; scheduler index and foundation schedule are untouched.",
+      "startedAt": "2026-08-09T09:22:28.697Z",
+      "completedAt": "2026-08-09T09:25:02.195Z"
     },
     {
       "stepId": "step-4",
@@ -67,20 +66,19 @@
       "status": "COMPLETED",
       "affectedFiles": [],
       "modifiedFiles": [
-        "packages/scheduler/src/package-boundary.test.ts",
-        "packages/runner/src/supervisor/effect-test-fixtures.ts"
+        "packages/scheduler/src/package-boundary.test.ts"
       ],
-      "note": "Final gate run fresh post-commit, exactly as named: `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test` -> exit 0.\n\nTOTALS. Root: before 159 files / 2870 passed / 1 skipped / 0 failed (measured at HEAD 3944a9d in step-1); after 159 files / 2890 passed / 1 skipped / 0 failed. Scheduler package: before 32 files / 567 passed; after 32 files / 587 passed. Delta is +20 on both, fully accounted for: 10 forbidden-import cases + 9 allowed-content cases + 1 matrix-non-empty guard, all new and permanent. The two extra assertions added in step-3 live inside the existing repository-sweep test and add no test count. Zero pre-existing tests lost: the file's original 14 (1 repo scan, 12 source-extension cases, 1 package-exports) are all still present and green; no .skip/.todo/.only anywhere.\n\nRESTORES RECONFIRMED. packages/scheduler/src/index.ts hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050, `git status --porcelain` empty for it. packages/testkit/src/foundation/foundation-fault-schedule.ts byte-clean, zero diff — Blocker A is credited to existing commit 3944a9d and was NOT manufactured as a no-op diff, exactly as planned.\n\nCOMMIT. Nothing was staged when the step began. Staged only the two changed owned paths, then committed by explicit pathspec: `git commit -F - -- packages/scheduler/src/package-boundary.test.ts packages/runner/src/supervisor/effect-test-fixtures.ts`. Result d03c42f. `git show --stat` shows exactly two files, 212 insertions / 5 deletions, no path outside the task-owned set. No foreign entry needed unstaging. The 16 modified `.moe/` and `.codex/` board-state files plus 3 untracked `.moe/tasks/*.json` were left untouched and uncommitted. Post-commit `git status --porcelain -- packages adapters apps tests` is empty.\n\nFILE SIZE. package-boundary.test.ts is 281 lines: over the 250 target, well under the 400 split bar. Not split because a helper module would create a fourth path outside the three task-owned paths, which epic rail 3 forbids.",
-      "startedAt": "2026-08-09T09:06:45.435Z",
-      "completedAt": "2026-08-09T09:08:07.293Z"
+      "note": "Final adversarial review found no remaining task-scope defect: static zero-interpolation template specifiers are tokenized; interpolated templates stay non-static while nested imports remain scanned; regex literals no longer swallow later imports; parse errors fail loud with the repository-relative path. Fresh post-commit exact gate `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test` exited 0: root 163 files / 3016 passed / 1 skipped; scheduler 32 files / 593 passed. Relative to QA's reopen baseline at HEAD 9e0f123, scheduler rose 587->593 exactly from the 6 permanent cases added here; root rose 2890->3016, comprising those 6 plus 120 tests in concurrent foreign work, with no lost tests. fenceAuthority index hash remains exact a0ab48fbdd5ccf85838dbb024c9efe74ce79c050; foundation schedule working/HEAD hash remains exact b741559711913d8da2214b4351ed341834e7f3f9. Commit de1298a contains only packages/scheduler/src/package-boundary.test.ts (74 insertions, 6 deletions); all three task-owned paths are clean. Foreign shared-tree WIP remains untouched.",
+      "startedAt": "2026-08-09T09:25:07.737Z",
+      "completedAt": "2026-08-09T09:30:40.202Z"
     }
   ],
   "status": "REVIEW",
   "assignedWorkerId": "qa-812c17a0",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "Rejecting on ONE defect. Nearly all of this task is verified good — do not redo it.\n\nVERIFIED PASSING, do not re-prove: `pnpm typecheck` exit 0; `pnpm test` exit 0 (159 files / 2890 passed / 1 skipped); `pnpm --filter @moe/scheduler test` exit 0 (32 files / 587 passed) — all re-run by me at HEAD 9e0f123. Counts close exactly: old file had 3 `it` blocks = 14 tests, now 34; +20 = 10 forbidden + 9 allowed + 1 non-empty guard. Nothing deleted, skipped or narrowed; the sweep was strengthened. All three drills reproduce: dropping `fenceAuthority,` from scheduler/src/index.ts:62 fails `schedule:j4-stale-lease-enforcement` with `TypeError: scheduler.fenceAuthority is not a function` at j4-replan-stale.test.ts:198 (restored, hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050, tree clean); detector to `return false` reddens all 10 genuine-import cases; detector to old raw scan reddens 7 — the 6 prose decoys AND `detects CommonJS require`, a real strengthening the old scan missed. `foundation-fault-schedule.ts` is byte-identical to 3944a9d; crediting Blocker A to the existing commit was correct. Commit d03c42f holds exactly the two owned paths. 281 lines is over the 250 target but under the 400 bar — NOT a rejection reason.\n\nTHE DEFECT: the detector fails OPEN on a template-literal module specifier, and an added assertion pins that blind spot as intended. `readTemplate` discards literal text, so a backtick `import()` specifier is invisible; the relative form resolves at runtime, so it is a live bypass. Proved against the production surface with a temporary in-file probe. The old raw scan caught it, so this narrows past the intended \"module specifiers only\" target: a template literal IS a specifier. Epic rail 4 requires failing closed; task rail 1 forbids weakening.\n\nIncidence in the tree is zero today, so gates stay green and the five BLOCKED tasks do not re-jam while you fix. See issues for exact shapes and the bar to pass.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -97,21 +95,33 @@
       "author": "architect-0b81de40",
       "content": "RETRACTION OF MY PREVIOUS COMMENT — DO NOT CLOSE THIS TASK. LET IT FINISH.\n\narchitect-0b81de40, 2026-08-09. My earlier comment recommended closing this unexecuted. That recommendation was based on the task DESCRIPTION. Having now read the actual PLAN and the step notes, the plan is materially better than the description it was written from, and the work in flight is genuinely valuable. If a governor acts on my previous comment and halts this at 2/4, good work gets destroyed. Disregard it.\n\nWHAT THE PLAN ACTUALLY DOES, and why it is right:\n\nIt does NOT redo Blocker A. Step 3 only CONFIRMS the stale-lease schedule is already PASS — correctly treating commit 3944a9d (task-c7c6cf92) as done rather than reworking it. That was my whole concern and the plan had already handled it.\n\nIt scopes the real work to the piece I myself flagged as still worth doing: anchoring the boundary detector to genuine module-specifier positions instead of scanning raw file contents. The description called the comment reword a fallback that \"only relocates the landmine\" — the plan took the harder, correct option.\n\nThe execution is better than I would have specified. From the step notes:\n  - Step 1 captured fresh baselines (root 159/2870/0 failed; scheduler 32/567) and built a RED matrix of 7 genuine import cases — static, side-effect, export-from, dynamic import(), require(), with BOTH POSIX and Windows separators — plus 5 allowed decoys. Focused red was 3 failed / 24 passed, with every genuine-import case passing, proving the positive axis rather than only the negative one.\n  - Step 2 replaced the regex with a comment- and string-aware token scanner, and the drill found a REAL defect: an `import { require as run }` case went red and revealed a premature scan stop, which was then removed.\n  - Scheduler is now 32 files / 585 tests, against a 567 baseline. +18 permanent cases, zero lost. That is exactly what this task's DoD 3 demands, and it is the opposite of narrowing a test to reach green.\n\nMY ERROR, recorded so it is not repeated: I judged this task by its description and its stale baseline, and recommended closing it. The description WAS overtaken — both named blockers were fixed before it was claimed — but the plan written from it correctly kept the one part that still had value and dropped the rest. A stale premise does not always mean stale work, and the plan is the thing to read before recommending a close.\n\nWHAT I STILL STAND BEHIND from the earlier comment, none of which conflicts with letting this finish:\n  - Blocker A is already retired by 3944a9d, correctly (+36 executor lines driving fenceAuthority, not a declaration flip). Step 3 should confirm and move on, never rework it.\n  - Every gate was green before this task started; the value here is the hardened detector, not a restored gate. Step 4's totals should show that: scheduler up from 567, root still 0 failed.\n  - task-97554aa4 remains blocked on something unrelated — the daemon exports-map wall, now owned by task-6054520b.\n\nOne thing for step 4: packages/runner/src/supervisor/effect-test-fixtures.ts is currently modified in the working tree and is a foreign path for most purposes — it is in this task's owned list for COMMENT TEXT ONLY. Confirm the diff there touches only the doc comment and none of its builders, which are load-bearing for the supervisor suites and were QA-approved.",
       "timestamp": "2026-08-09T09:02:35.970Z"
+    },
+    {
+      "id": "comment-cef02edcbe58464c98192e0abe96a3f8",
+      "author": "governor-eae4fc53",
+      "content": "GOVERNOR VERIFICATION — governor-eae4fc53, 2026-08-09. I wrote this task's DoD. One clause of it is WRONG and would cause a false reject. Read this before reviewing.\n\nMY DoD SAID: \"the probe still exists, still asserts, and a mutation that removes fenceAuthority from the scheduler root export makes it go red again.\"\n\nTHE PROBE DOES NOT STILL EXIST. `grep -rn \"scheduler-authority-lease\"` across the repo returns nothing — commit 3944a9d deleted it from CATALOGUE_PROBES and flipped the schedule row `schedule:j4-stale-lease-enforcement` from `productionBehaviorAbsent(...)` to `PASS`. On my literal wording that is a rail violation.\n\nIT IS NOT ONE. I checked the diff rather than the grep, and the worker did the stronger thing. The old executor was `produceAbsenceOutcome(entry)` — a placeholder asserting only \"this surface is not reachable.\" It was replaced by a real executable test that drives the published surface:\n- calls `scheduler.fenceAuthority(lease, {...authority, epoch: epoch-1}, \"work.dispatch\", [\"ACTIVE\"])`, asserts `ok === false`\n- pins the exact reason code `[\"AUTHORITY_STALE_EPOCH\"]`\n- pins the full securityRecord including the REFUSING LAYER (`aggregateKind: \"LEASE\"`), commandKind, sourceState, and expectedEpoch vs observedEpoch\n- then asserts the POSITIVE arm: the current epoch is accepted and `[lease.epoch, proof.epoch]` match\n\nThat satisfies the intent of my DoD and the epic's \"assert the reason code AND which layer refused\" rail far better than the probe did. It is also still load-bearing on the export exactly as I asked: the test calls `scheduler.fenceAuthority` directly, so removing that re-export breaks it at the call site. The mutation I demanded would still go red — via the new test instead of the deleted probe.\n\nWHY THE DELETION WAS RIGHT, not a loss: an absence probe whose surface now exists is dead scaffolding. It can never fail again for the reason it was written. Keeping it would have meant keeping an assertion that no longer asserts anything — the exact \"assertion quietly detached from the thing it was written for\" failure the global rail warns about. Retiring the row to PASS and backing it with a real enforcement test IS \"updating the entry to the new truth.\"\n\nBLOCKER B, separately: commit d03c42f took the harder option I asked for — anchored `forbiddenInternalPath` to genuine import/from specifier positions rather than rewording the doc comment, so prose can never trip it again. Gate verified green by me: `packages/scheduler/src/package-boundary.test.ts` = 1 file / 34 tests pass. j4-replan-stale = 1 file / 15 tests pass.\n\nQA: judge this against the intent above, not my literal DoD clause. If you reject, reject on something other than \"the probe was deleted\" — that specific concern is resolved and I am the one who raised it.",
+      "timestamp": "2026-08-09T09:10:06.169Z"
+    },
+    {
+      "id": "comment-5fe9339175884d26bcd8308954d3e5c2",
+      "author": "governor-eae4fc53",
+      "content": "GOVERNOR — governor-eae4fc53, 2026-08-09. QA's reject is correct, and the defect traces to MY instruction. Owning that here so the fix aims at the right thing.\n\nQA found a FAIL-OPEN BYPASS at package-boundary.test.ts:78 — `readTemplate` returns only `expressions` and drops the template's literal text, so `moduleSpecifiers` never sees a backtick specifier. Probed against the production detector: a dynamic import whose specifier is a backtick literal for `@moe/scheduler/authority/private.js` returns false. That form resolves at runtime, so it is a live bypass. The old raw content scan caught it.\n\nTHAT IS MY FAULT, not the worker's. This task's description told you: \"PREFER the regex fix over the comment fix: anchor `forbiddenInternalPath` to genuine import/from positions so prose can never trip it again.\" I optimised for stopping false positives on prose and did not think about what anchoring would cost on the positive axis. Specifier-position parsing is strictly narrower than a raw scan, and I asked for the narrowing without asking what it would stop catching. The worker implemented exactly what I specified.\n\nDIRECTION FOR THE FIX — you need both properties, and they are not in tension:\n- Prose must not trip the check (the original problem: a doc comment path-quoting `packages/scheduler/src/...`).\n- Every real specifier form must still be caught: static import, `export ... from`, `require`, dynamic `import()`, and specifiers written as single-quoted, double-quoted, OR BACKTICK template literals — including a template with no expressions, which is just a string.\n\nThe cheapest correct shape is to make `readTemplate` return the literal `quasis`/cooked text joined with its expressions, so a no-expression backtick literal reads as a plain specifier. If a template has interpolated expressions its full specifier is not statically knowable — treat that conservatively as a hit rather than a miss, and say so in a comment.\n\nWHAT NOT TO DO: do not revert to the raw content scan. That reintroduces the prose false-positive that blocked task-8ee125d0 for hours and is the reason this task exists. Keep the anchoring; widen it to cover backticks.\n\nALSO STILL REQUIRED, unchanged from the original DoD: show the positive case red before your fix makes it green — a genuine deep import that MUST be caught, in each quoting form. QA's probe (backtick dynamic import of `@moe/scheduler/authority/private.js`) is the obvious first case; add the relative `scheduler/src/` backtick form too, since QA notes that one resolves at runtime.\n\nEverything else in this task remains verified good — I independently confirmed both gates green earlier (package-boundary 34 tests, j4-replan-stale 15 tests) and the BLOCKER A retirement was done correctly, replacing a dead absence probe with a real fenceAuthority enforcement test that pins code and refusing layer. Do not redo any of that.",
+      "timestamp": "2026-08-09T09:31:27.068Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T08:10:02.010Z",
-  "updatedAt": "2026-08-09T09:09:09.294Z",
+  "updatedAt": "2026-08-09T09:31:27.068Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T08:43:28.868Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
   "contextFetchedBy": [
-    "architect-da724bb7",
     "worker-533a53ab",
-    "worker-f2e587cb",
     "qa-812c17a0"
   ],
   "stepsCompleted": [
@@ -120,7 +130,13 @@
     "step-3",
     "step-4"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "`pnpm --filter @moe/scheduler test` exits 0 and the package-boundary check still fails on a genuine deep import — add that positive case and show it red before your fix makes the prose case green.",
+      "rejectedAt": "2026-08-09T09:16:47.792Z",
+      "rejectedBy": "qa-812c17a0"
+    }
+  ],
   "planSubmittedAt": "2026-08-09T08:47:47.814Z",
   "planningNotes": {
     "approachesConsidered": "Use the durable package-boundary fix, not another prose-only relocation. Replace the raw-content predicate with a syntax-anchored module-specifier detector that covers static import/from, side-effect import, export-from, dynamic import(), and require(), while ignoring ordinary comments/strings. Do not revert or recreate the obsolete absence declaration: current HEAD 3944a9d has already changed schedule:j4-stale-lease-enforcement to PASS and added a direct public-surface executor that asserts AUTHORITY_STALE_EPOCH. Reintroducing PRODUCTION_BEHAVIOR_ABSENT would be false now; deleting/narrowing the direct executor is forbidden. The task therefore finishes the remaining durable boundary repair and independently mutation-proves the already-landed lease ratchet.",
@@ -139,15 +155,118 @@
   },
   "planApprovedAt": "2026-08-09T08:47:49.858Z",
   "workStartedAt": "2026-08-09T08:48:24.529Z",
-  "reviewStartedAt": "2026-08-09T09:08:41.224Z",
+  "reviewStartedAt": "2026-08-09T09:31:24.067Z",
   "verification": {
     "command": "pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "packages/review typecheck: Done\npackages/coordination typecheck: Done\napps/daemon typecheck: Done\napps/control-room typecheck: Done\n\n Test Files  159 passed (159)\n      Tests  2890 passed | 1 skipped (2891)\n\n Test Files  32 passed (32)\n      Tests  587 passed (587)\n",
-    "reportedAt": "2026-08-09T09:08:41.224Z"
+    "outputTail": "apps/daemon typecheck: Done\napps/control-room typecheck: Done\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  163 passed (163)\n      Tests  3016 passed | 1 skipped (3017)\n   Duration  6.51s\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  32 passed (32)\n      Tests  593 passed (593)\n   Duration  639ms\n\n$ pnpm --recursive typecheck\n$ vitest run\n$ vitest run --root ../.. packages/scheduler/src",
+    "reportedAt": "2026-08-09T09:31:24.067Z"
   },
   "filesModified": [
-    "packages/scheduler/src/package-boundary.test.ts",
-    "packages/runner/src/supervisor/effect-test-fixtures.ts"
+    "packages/scheduler/src/package-boundary.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-09T09:16:47.792Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "`pnpm --filter @moe/scheduler test` exits 0 and the package-boundary check still fails on a genuine deep import — add that positive case and show it red before your fix makes the prose case green."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 78,
+        "description": "FAIL-OPEN BYPASS (must fix). `readTemplate` returns only `expressions` and drops the template's literal text, so `moduleSpecifiers` never sees a backtick specifier. Probed against the production detector: a dynamic import whose specifier is a backtick literal for `@moe/scheduler/authority/private.js` returns false. The relative backtick form resolves at runtime, so it is a live bypass. The old raw scan caught it; positive-axis regression."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 148,
+        "description": "Bar to pass: surface the cooked literal text from `readTemplate` when the template has zero interpolation expressions, and let `moduleSpecifiers` accept it as a string token in the `import(`, `require(`, and after-`from` positions. A template WITH interpolation stays undetected (not a static specifier) but must not crash. Add permanent forbidden cases for backtick `import()`, `require()`, and `from`, using both `@moe/scheduler/<internal>` and relative `scheduler/src/<internal>`."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 195,
+        "description": "The allowed case `[\"template-literal prose\", ...]` pins the bypass as INTENDED, so a future reader concludes template literals are out of scope for the guard. After fixing the detector, narrow it to something genuinely not a specifier (a template assigned to a variable, or one with an interpolation expression) so it no longer asserts a static backtick specifier is allowed. Do not delete it; it still guards a real false-positive axis."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 99,
+        "description": "SILENT SWALLOW (fix or make loud, your call, but pin it with a permanent case either way). `sourceTokens` has no regex-literal handling, so a regex with an odd number of quote chars opens a string that eats everything to the next quote, including a following `import ... from \"`. Probed: a regex literal with a quote char followed by a genuine static import of `@moe/scheduler/authority/private.js` returns false. Incidence today is zero, so future-facing."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 107,
+        "description": "Acceptable fixes for the regex-literal swallow: (a) skip regex literals by tracking whether the previous significant token permits a regex start, or (b) detect the unterminated-string condition and make the scan throw instead of returning a quiet `false`. Silent is not acceptable under epic rail 4. Either way, add a permanent case pinning the chosen behaviour."
+      },
+      {
+        "type": "other",
+        "file": "packages/scheduler/src/package-boundary.test.ts",
+        "line": 251,
+        "description": "FYI, no action needed. I probed six further shapes against the production detector and all six are correctly caught: TS `import x = require(...)`, `export * from`, `export type { } from`, default import, namespace import, and a bare `require()` statement. The positive axis is genuinely broad; only the two shapes above escape it."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/work/work-race-fixtures.ts",
+        "line": 1,
+        "description": "REPORTED, NOT YOUR FAULT, do not revert (task rail 4). Harness post-flight auto-commit 9e0f123 swept the whole tree, capturing this 271-line foreign file plus `.codex/agent-instructions.md` and 14 `.moe/**` files under this task's message. Your own commit d03c42f is clean by pathspec, so DoD 4 holds for everything under your control. Flagged so the owner of `apps/daemon/src/work/` knows. Re-commit your fix by explicit pathspec again."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejecting on ONE defect. Nearly all of this task is verified good — do not redo it.\n\nVERIFIED PASSING, do not re-prove: `pnpm typecheck` exit 0; `pnpm test` exit 0 (159 files / 2890 passed / 1 skipped); `pnpm --filter @moe/scheduler test` exit 0 (32 files / 587 passed) — all re-run by me at HEAD 9e0f123. Counts close exactly: old file had 3 `it` blocks = 14 tests, now 34; +20 = 10 forbidden + 9 allowed + 1 non-empty guard. Nothing deleted, skipped or narrowed; the sweep was strengthened. All three drills reproduce: dropping `fenceAuthority,` from scheduler/src/index.ts:62 fails `schedule:j4-stale-lease-enforcement` with `TypeError: scheduler.fenceAuthority is not a function` at j4-replan-stale.test.ts:198 (restored, hash a0ab48fbdd5ccf85838dbb024c9efe74ce79c050, tree clean); detector to `return false` reddens all 10 genuine-import cases; detector to old raw scan reddens 7 — the 6 prose decoys AND `detects CommonJS require`, a real strengthening the old scan missed. `foundation-fault-schedule.ts` is byte-identical to 3944a9d; crediting Blocker A to the existing commit was correct. Commit d03c42f holds exactly the two owned paths. 281 lines is over the 250 target but under the 400 bar — NOT a rejection reason.\n\nTHE DEFECT: the detector fails OPEN on a template-literal module specifier, and an added assertion pins that blind spot as intended. `readTemplate` discards literal text, so a backtick `import()` specifier is invisible; the relative form resolves at runtime, so it is a live bypass. Proved against the production surface with a temporary in-file probe. The old raw scan caught it, so this narrows past the intended \"module specifiers only\" target: a template literal IS a specifier. Epic rail 4 requires failing closed; task rail 1 forbids weakening.\n\nIncidence in the tree is zero today, so gates stay green and the five BLOCKED tasks do not re-jam while you fix. See issues for exact shapes and the bar to pass.",
+      "rejectedAt": "2026-08-09T09:16:47.792Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "`pnpm --filter @moe/scheduler test` exits 0 and the package-boundary check still fails on a genuine deep import — add that positive case and show it red before your fix makes the prose case green."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 78,
+          "description": "FAIL-OPEN BYPASS (must fix). `readTemplate` returns only `expressions` and drops the template's literal text, so `moduleSpecifiers` never sees a backtick specifier. Probed against the production detector: a dynamic import whose specifier is a backtick literal for `@moe/scheduler/authority/private.js` returns false. The relative backtick form resolves at runtime, so it is a live bypass. The old raw scan caught it; positive-axis regression."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 148,
+          "description": "Bar to pass: surface the cooked literal text from `readTemplate` when the template has zero interpolation expressions, and let `moduleSpecifiers` accept it as a string token in the `import(`, `require(`, and after-`from` positions. A template WITH interpolation stays undetected (not a static specifier) but must not crash. Add permanent forbidden cases for backtick `import()`, `require()`, and `from`, using both `@moe/scheduler/<internal>` and relative `scheduler/src/<internal>`."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 195,
+          "description": "The allowed case `[\"template-literal prose\", ...]` pins the bypass as INTENDED, so a future reader concludes template literals are out of scope for the guard. After fixing the detector, narrow it to something genuinely not a specifier (a template assigned to a variable, or one with an interpolation expression) so it no longer asserts a static backtick specifier is allowed. Do not delete it; it still guards a real false-positive axis."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 99,
+          "description": "SILENT SWALLOW (fix or make loud, your call, but pin it with a permanent case either way). `sourceTokens` has no regex-literal handling, so a regex with an odd number of quote chars opens a string that eats everything to the next quote, including a following `import ... from \"`. Probed: a regex literal with a quote char followed by a genuine static import of `@moe/scheduler/authority/private.js` returns false. Incidence today is zero, so future-facing."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 107,
+          "description": "Acceptable fixes for the regex-literal swallow: (a) skip regex literals by tracking whether the previous significant token permits a regex start, or (b) detect the unterminated-string condition and make the scan throw instead of returning a quiet `false`. Silent is not acceptable under epic rail 4. Either way, add a permanent case pinning the chosen behaviour."
+        },
+        {
+          "type": "other",
+          "file": "packages/scheduler/src/package-boundary.test.ts",
+          "line": 251,
+          "description": "FYI, no action needed. I probed six further shapes against the production detector and all six are correctly caught: TS `import x = require(...)`, `export * from`, `export type { } from`, default import, namespace import, and a bare `require()` statement. The positive axis is genuinely broad; only the two shapes above escape it."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/work/work-race-fixtures.ts",
+          "line": 1,
+          "description": "REPORTED, NOT YOUR FAULT, do not revert (task rail 4). Harness post-flight auto-commit 9e0f123 swept the whole tree, capturing this 271-line foreign file plus `.codex/agent-instructions.md` and 14 `.moe/**` files under this task's message. Your own commit d03c42f is clean by pathspec, so DoD 4 holds for everything under your control. Flagged so the owner of `apps/daemon/src/work/` knows. Re-commit your fix by explicit pathspec again."
+        }
+      ]
+    }
   ]
 }
