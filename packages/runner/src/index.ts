@@ -190,6 +190,52 @@ export {
   type ObserveLinuxPlatformInput,
 } from "./platform/linux-observation.js";
 
+/**
+ * The recovery-window inventory seam. The frozen class set, refusal codes and
+ * UNKNOWN reasons are the vocabulary the two sibling adapter slices and the
+ * daemon coordinator schedule against; `createRecoveryInventoryRegistry` is how
+ * they compose per-class enumerator ports without either editing this aggregate
+ * or registering into module-global state. The readers stay internal: an adapter
+ * returns a port result and this seam decides whether it is one. Named
+ * explicitly rather than `export *` — this surface is a reviewed decision.
+ */
+export {
+  MAX_RECOVERY_INVENTORY_ITEMS,
+  RECOVERY_INVENTORY_CLASSES,
+  RECOVERY_INVENTORY_ERROR_CODES,
+  RECOVERY_INVENTORY_LAYERS,
+  RECOVERY_INVENTORY_REF_KINDS,
+  RECOVERY_INVENTORY_TRUTH_CLASSES,
+  RECOVERY_INVENTORY_UNKNOWN_REASONS,
+  RECOVERY_INVENTORY_VERSION,
+  isRecoveryInventoryFailure,
+  recoveryInventoryFailure,
+  type RecoveryInventoryClass,
+  type RecoveryInventoryCoverageProof,
+  type RecoveryInventoryEnumerationContext,
+  type RecoveryInventoryEnumerator,
+  type RecoveryInventoryErrorCode,
+  type RecoveryInventoryFactValue,
+  type RecoveryInventoryFailure,
+  type RecoveryInventoryIdentity,
+  type RecoveryInventoryItem,
+  type RecoveryInventoryLayer,
+  type RecoveryInventoryOpaqueRef,
+  type RecoveryInventoryPortReading,
+  type RecoveryInventoryRefKind,
+  type RecoveryInventoryRegistration,
+  type RecoveryInventoryRegistry,
+  type RecoveryInventoryReport,
+  type RecoveryInventoryResult,
+  type RecoveryInventoryTruth,
+  type RecoveryInventoryUnknownReason,
+  type RecoveryInventoryWindow,
+} from "./recovery-inventory/recovery-inventory-contract.js";
+export {
+  collectRecoveryInventory,
+  createRecoveryInventoryRegistry,
+} from "./recovery-inventory/recovery-inventory.js";
+
 export {
   MAX_WORKSPACE_ENTRIES,
   RUNNER_WORKSPACE_ERROR_CODES,

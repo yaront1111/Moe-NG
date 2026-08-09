@@ -23,6 +23,12 @@ import type {
   SupervisorErrorCode, SupervisorFailure, SupervisorFailureDetail, SupervisorLayer,
   TerminalEffectState, UncertaintyEvidence,
 } from "@moe/runner";
+/** The recovery-inventory seam's type closure, named through the same root. */
+import type {
+  RecoveryInventoryClass, RecoveryInventoryCoverageProof, RecoveryInventoryEnumerationContext,
+  RecoveryInventoryOpaqueRef, RecoveryInventoryRegistration, RecoveryInventoryReport,
+  RecoveryInventoryResult, RecoveryInventoryWindow,
+} from "@moe/runner";
 /** The recovery, evidence and Claude observation seams, through the same root. */
 import type {
   ArtifactFsPort, ArtifactRef, ArtifactStore, BuildEvidenceReceiptInput, BuildEvidenceReceiptResult,
@@ -137,11 +143,18 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PLATFORM_TRUTH_CLASSES", "array"], ["classifyLinuxBoundary", "function"],
   ["isPlatformFailure", "function"], ["observeLinuxPlatform", "function"],
   ["platformFailure", "function"],
+  // recovery-inventory/: the coverage vocabulary plus the port-composing aggregate.
+  ["MAX_RECOVERY_INVENTORY_ITEMS", "number"], ["RECOVERY_INVENTORY_CLASSES", "array"],
+  ["RECOVERY_INVENTORY_ERROR_CODES", "array"], ["RECOVERY_INVENTORY_LAYERS", "array"],
+  ["RECOVERY_INVENTORY_REF_KINDS", "array"], ["RECOVERY_INVENTORY_TRUTH_CLASSES", "array"],
+  ["RECOVERY_INVENTORY_UNKNOWN_REASONS", "array"], ["RECOVERY_INVENTORY_VERSION", "string"],
+  ["collectRecoveryInventory", "function"], ["createRecoveryInventoryRegistry", "function"],
+  ["isRecoveryInventoryFailure", "function"], ["recoveryInventoryFailure", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(135);
+  expect(EXPECTED_EXPORTS.length).toBe(147);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1052,4 +1065,52 @@ it("lets a consumer drive the Linux platform seam using root exports alone", () 
     "PLATFORM_BOUNDARY_UNKNOWN", "PLATFORM_CONTRACT", null,
   ]);
   expect(runner.PLATFORM_ERROR_CODES).toContain(refused.code);
+});
+
+it("composes the recovery-inventory seam through the root, naming every closure type", async () => {
+  // Every annotation below is a root-exported type. If the seam published a
+  // function whose signature reaches a type it did not publish, this file stops
+  // compiling — which is the only way a "type closure" claim can be checked.
+  const backup: RecoveryInventoryOpaqueRef = {
+    kind: "BACKUP_CURSOR_GENERATION", ref: "gen-1", digest: "a".repeat(64),
+  };
+  const incarnation: RecoveryInventoryOpaqueRef = {
+    kind: "RECOVERY_INCARNATION", ref: "inc-1", digest: "b".repeat(64),
+  };
+  const window: RecoveryInventoryWindow = {
+    startInclusive: "2026-08-01T00:00:00Z", endInclusive: "2026-08-09T23:59:59Z",
+  };
+  const configured: readonly RecoveryInventoryClass[] = ["WORKSPACE", "GIT_INTEGRATION_ON_DISK"];
+
+  const seen: RecoveryInventoryEnumerationContext[] = [];
+  const registration: RecoveryInventoryRegistration = {
+    class: "WORKSPACE",
+    enumerate: (context: RecoveryInventoryEnumerationContext) => {
+      seen.push(context);
+      return Promise.resolve({
+        status: "ENUMERATED", items: [], complete: true, negativeProofDigest: "c".repeat(64),
+      });
+    },
+  };
+
+  const result: RecoveryInventoryResult = await runner.collectRecoveryInventory(
+    { projectTag: "moe-next", backup, incarnation, window, configuredClasses: configured },
+    runner.createRecoveryInventoryRegistry([registration]),
+  );
+  if (runner.isRecoveryInventoryFailure(result)) {
+    throw new Error(`a well-formed request must report, got ${result.code}`);
+  }
+  const report: RecoveryInventoryReport = result;
+
+  // The registered class proves COMPLETE off a negative proof; the CONFIGURED
+  // class nobody registered still gets a proof, and it is UNKNOWN rather than
+  // absent. That pair is the coverage protocol in one assertion.
+  const proofs: readonly RecoveryInventoryCoverageProof[] = report.proofs;
+  expect(proofs.map((proof) => [proof.class, proof.truth, proof.reason])).toEqual([
+    ["WORKSPACE", "COMPLETE", null],
+    ["GIT_INTEGRATION_ON_DISK", "UNKNOWN", "ENUMERATOR_UNREGISTERED"],
+  ]);
+  expect(report.coverage).toBe("UNKNOWN");
+  expect(seen.map((context) => context.class)).toEqual(["WORKSPACE"]);
+  expect(runner.RECOVERY_INVENTORY_ERROR_CODES).toContain("RECOVERY_INVENTORY_COVERAGE_UNKNOWN");
 });
