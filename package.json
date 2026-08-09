@@ -16,6 +16,7 @@
     "test:meta": "vitest run packages/contracts/src packages/testkit/src",
     "test:property": "vitest run tests/property",
     "test:e2e": "tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e",
+    "test:e2e:browser": "tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts",
     "test:integration": "pnpm typecheck:packaging && vitest run tests/integration",
     "test:store": "vitest run packages/store/src",
     "typecheck:packaging": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts",
@@ -23,6 +24,7 @@
     "verify:store": "pnpm typecheck && pnpm test:store"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
     "typescript": "7.0.2",
     "vitest": "4.1.10"

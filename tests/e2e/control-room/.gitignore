@@ -1,0 +1,6 @@
+# Playwright writes run artifacts here (see outputDir in playwright.config.ts).
+# They are regenerable evidence, never durable source, and must not reach a
+# commit. Scoped to this directory rather than the root .gitignore, which this
+# task does not own.
+test-results/
+playwright-report/
