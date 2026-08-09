@@ -6,23 +6,19 @@
  */
 import { RUNTIME_LIFECYCLES, type RuntimeTruthClass } from "@moe/contracts";
 
-export const EXPANSION_HOLD_COMMAND_KINDS = Object.freeze([
-  "graph.request_expansion", "expansion.transition_hold",
-] as const);
+export const EXPANSION_HOLD_COMMAND_KINDS = Object.freeze(["graph.request_expansion", "expansion.transition_hold"] as const);
 export const EXPANSION_HOLD_CAUSES = Object.freeze([
   "EXPANSION_REFUSED", "GRAPH_ACTIVATED", "REVISE_PLAN", "GRAPH_SUPERSEDED",
   "EXPANSION_DECLINED", "PLANNING_CANCELLED", "GOAL_CANCELLED",
 ] as const);
 export const EXPANSION_HOLD_ERROR_CODES = Object.freeze([
   "EXPANSION_HOLD_INPUT_INVALID", "EXPANSION_HOLD_SAFE_BOUNDARY_UNPROVEN",
-  "EXPANSION_HOLD_STALE_VERSION", "EXPANSION_HOLD_STALE_GENERATION",
-  "EXPANSION_HOLD_STALE_EPOCH", "EXPANSION_HOLD_BINDING_MISMATCH",
-  "EXPANSION_HOLD_IDEMPOTENCY_CONFLICT", "EXPANSION_HOLD_ILLEGAL_TRANSITION",
-  "EXPANSION_HOLD_TERMINAL_PROOF_REQUIRED",
+  "EXPANSION_HOLD_STALE_VERSION", "EXPANSION_HOLD_STALE_GENERATION", "EXPANSION_HOLD_STALE_EPOCH",
+  "EXPANSION_HOLD_BINDING_MISMATCH", "EXPANSION_HOLD_IDEMPOTENCY_CONFLICT",
+  "EXPANSION_HOLD_ILLEGAL_TRANSITION", "EXPANSION_HOLD_TERMINAL_PROOF_REQUIRED",
 ] as const);
 export const EXPANSION_HOLD_LAYERS = Object.freeze([
-  "INPUT", "SAFE_BOUNDARY", "CONCURRENCY", "BINDING", "IDEMPOTENCY",
-  "LIFECYCLE", "TERMINAL_PROOF",
+  "INPUT", "SAFE_BOUNDARY", "CONCURRENCY", "BINDING", "IDEMPOTENCY", "LIFECYCLE", "TERMINAL_PROOF",
 ] as const);
 
 export type ExpansionHoldCause = (typeof EXPANSION_HOLD_CAUSES)[number];
@@ -84,11 +80,9 @@ export type ExpansionPlanningHoldResult =
   | { readonly code: ExpansionHoldErrorCode; readonly layer: ExpansionHoldLayer; readonly ok: false; readonly state: ExpansionPlanningHoldState | null };
 
 const INVALID = Symbol("invalid");
-const MAX_TEXT = 256;
-const MAX_REFS = 32;
+const MAX_TEXT = 256; const MAX_REFS = 32;
 const HEX64 = /^[0-9a-f]{64}$/u;
-const TRUTHS: readonly string[] = RUNTIME_LIFECYCLES.TRUTH_CLASS;
-const LIFECYCLES: readonly string[] = RUNTIME_LIFECYCLES.PLANNING_HOLD;
+const TRUTHS: readonly string[] = RUNTIME_LIFECYCLES.TRUTH_CLASS; const LIFECYCLES: readonly string[] = RUNTIME_LIFECYCLES.PLANNING_HOLD;
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
@@ -119,7 +113,7 @@ function snapshot(value: unknown, seen = new WeakSet<object>()): unknown | typeo
       return copy;
     }
     if (prototype !== Object.prototype && prototype !== null) return INVALID;
-    const copy: Record<string, unknown> = {};
+    const copy = Object.create(null) as Record<string, unknown>;
     for (const key of Reflect.ownKeys(value)) {
       if (typeof key !== "string") return INVALID;
       const property = Object.getOwnPropertyDescriptor(value, key);

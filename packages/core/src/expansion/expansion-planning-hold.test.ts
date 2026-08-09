@@ -291,6 +291,11 @@ describe("expansion planning hold creation", () => {
     const proxy = new Proxy(createCommand(), { ownKeys: () => { throw new Error("secret"); } });
     const cycle = createCommand() as unknown as Record<string, unknown>;
     cycle["cycle"] = cycle;
+    const protoKey = createCommand() as unknown as Record<string, unknown>;
+    Object.defineProperty(protoKey, "__proto__", {
+      enumerable: true,
+      value: { smuggled: true },
+    });
     const indexed = ["effect:terminal"];
     Object.defineProperty(indexed, "0", { enumerable: true, get: () => "effect:getter" });
     const inherited = Object.setPrototypeOf(["resource:terminal"], Object.create(Array.prototype));
@@ -307,10 +312,11 @@ describe("expansion planning hold creation", () => {
       accessor,
       proxy,
       cycle,
+      protoKey,
       { ...createCommand(), release: { ...createCommand().release, terminalEffectRefs: indexed } },
       { ...createCommand(), release: { ...createCommand().release, terminalResourceRefs: inherited } },
     ];
-    expect(hostile).toHaveLength(14);
+    expect(hostile).toHaveLength(15);
     expect(hostile.length).toBeGreaterThan(0);
     for (const input of hostile) {
       expectRefusal(
