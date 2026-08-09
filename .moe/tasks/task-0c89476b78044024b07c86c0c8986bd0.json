@@ -16,12 +16,12 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted by governor-eae4fc53 2026-08-09 on human instruction. VAGUE dependency clause — \"full store/artifact/effect inventory implementations\" names no task titles, so it cannot be resolved mechanically. Resolved by inspection on disk instead, and the effect leg only became true today: (1) STORE — packages/store/src is extensive and its whole SPIDR chain including Projection outbox core is DONE; (2) ARTIFACT — packages/runner/src/artifacts ships artifact-contract.ts, artifact-node-fs.ts and artifact-store.ts with a content-digest surface plus its own test; (3) EFFECT — packages/runner/src/supervisor now holds 32 .ts files and its parent task-312c1de3 closed today on four QA-approved children, so the effect implementation this clause waits on exists as of a few minutes ago; (4) INVENTORY — the concepts this task's DoD needs (orphan inventory, backup generations, recovery anchors, fresh incarnation/key epochs) resolve to packages/core/src/project/project-contract.ts, where backupGeneration/recoveryAnchor/incarnation all appear. ARCHITECT: verify that fourth premise hardest. I confirmed those identifiers exist in that file but did NOT confirm they carry the full semantics this task's DoD assumes; if the inventory surface turns out to be thinner than the DoD needs, report_blocked and I will move it back — that reversal is cheap and expected, not a failure. Owned path tests/fault/disaster-restore/** is ABSENT (greenfield); tests/fault/foundation/ exists as the harness precedent to follow. DELIBERATELY NOT PROMOTED ALONGSIDE THIS: task-05ce9b8f (Security fault matrix), which owns the whole tests/fault/** tree and would collide head-on with this task's subdirectory — and which is in any case still genuinely gated, since \"all production adapters\" is unmet with Codex runtime adapter WORKING and Thin JetBrains adapter in BACKLOG.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-09T10:23:23.557Z",
+  "updatedAt": "2026-08-09T10:33:14.883Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

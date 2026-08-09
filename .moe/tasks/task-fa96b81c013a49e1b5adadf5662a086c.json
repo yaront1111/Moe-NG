@@ -100,7 +100,7 @@
     {
       "stepId": "step-6",
       "description": "GREEN — readiness-projection.ts. Derive admissionEligible and dispatchAvailable per node from the classified facts, then call partitionFrontier with a cursor built ONLY from confirmed values. If any required fact is UNKNOWN for a node, do not fabricate a boolean for it: withhold the partition per the graph-model contract and report the admission and dispatch layers as UNKNOWN for that node, while still reporting the structural logical layer, which does not depend on availability. Return a frozen projection carrying all three layers plus the per-node confidence, so a consumer can tell 'not ready' from 'not known'. Compose the existing partitionFrontier and the existing BlockedNode output rather than recomputing hard-edge satisfaction. Keep under 250 lines; split the cursor builder into a sibling module before 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.ts",
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
@@ -108,66 +108,115 @@
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-projection.ts"
       ],
-      "startedAt": "2026-08-09T10:22:23.333Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-cursor.ts",
+        "packages/scheduler/src/readiness/readiness-model.ts"
+      ],
+      "note": "GREEN. Test Files 2 passed (2), Tests 54 passed (54); typecheck exit 0. wc -l: readiness-projection.ts 228, readiness-cursor.ts 168 — both under 250 (the cursor builder was split into a sibling exactly as the step directs). THE FABRICATION QUESTION, answered structurally rather than by convention: the cursor has two modes. When every execution-bearing node has both folds CONFIRMED (either arm), `admissionEligible: fold === \"CONFIRMED_TRUE\"` is a faithful encoding of a confirmed caller fact — CONFIRMED_FALSE maps to false correctly — and the partition is publishable. When any fold is UNKNOWN, the cursor switches to a UNIFORM structural sentinel, false for every node alike, which encodes no per-node claim at all; only logicalReady and blocked are then consumed (frontier.ts derives both from hard-edge facts before reading any availability value) and `partition` is published as null with withheld \"AVAILABILITY_UNKNOWN\" so analysis widths stay UNKNOWN. There is no code path that writes a per-node availability boolean from a non-CONFIRMED fold. Subset discipline is by construction, not convention: weaken(inner, outer) forces CONFIRMED_FALSE if either arm is confirmed-false and UNKNOWN if either is unknown, applied as admission = weaken(factAdmission, logical) and dispatch = weaken(factDispatch, admission), so dispatch subset admission subset logical cannot be violated without editing weaken. A non-execution-bearing node gets logical CONFIRMED_FALSE, which propagates to both weaker layers automatically, plus a READINESS_NOT_EXECUTION_BEARING reason. logicalConfidence reads the landed partition's own logicalReady/blocked output and inspects blocked reasons for HARD_DEPENDENCY_UNKNOWN to return UNKNOWN rather than CONFIRMED_FALSE; hard-edge satisfaction is never recomputed. Frontier and graph refusals pass through under their own landed codes (asserted: no READINESS_ prefix appears in that refusal), so readiness-model.ts's ReadinessIssue.code was widened to ReadinessIssueCode | GraphIssueCode and the would-be-dead READINESS_FRONTIER_REFUSED code was removed rather than left unreachable.",
+      "startedAt": "2026-08-09T10:22:23.333Z",
+      "completedAt": "2026-08-09T10:25:00.748Z"
     },
     {
       "stepId": "step-7",
       "description": "RED — explanation and classification tests before readiness-explanation.ts exists. This is DoD 2. Assert per class: READY_NOW is reachable ONLY by a dispatchable node — sweep every non-dispatchable state and assert none classifies READY_NOW; UNBLOCK_NEXT requires BOTH that exactly one typed confirmation remains AND that its producer or recovery command is known — write the two negative cases separately (one remaining but producer unknown, and two remaining with both producers known) so the conjunction cannot pass on one arm; INTENTIONAL_WAIT requires a CURRENT wait record; UNSAFE_OR_UNKNOWN absorbs missing, stale, incompatible and unresolvable truth. Ordering: a multi-predicate node is fully enumerated but sorts AFTER every one-step item — assert on a fixture containing both, and assert an UNSAFE_OR_UNKNOWN node is never ordered nearer to ready than a genuinely one-step node, which is design 8.2's 'UI optimism cannot place it nearer to ready'. Every blocked or idle node exposes typed reasons AND provenance — assert the provenance names the source ref, version and digest, not merely that a reason array is non-empty. A failed predecessor names the exact failed contract, the affected descendants, and the legal choices, while unrelated work stays eligible — assert the unrelated set explicitly.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-explanation.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-explanation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts",
+        "packages/scheduler/src/readiness/test-fixtures.ts"
+      ],
+      "note": "RED confirmed for the right reason: \"Cannot find module './readiness-explanation.js'\". Test Files 1 failed | 2 passed (3), Tests 54 passed (the two landed suites). Added to test-fixtures.ts: devWait(deadlineGate) and a SECOND graph with real descendants (dev-producer HARD-> dev-consumer HARD-> dev-done, plus dev-free HARD-> dev-done SATISFIED) because the base fixture's blocked node is the completion node and therefore has an empty descendant set — asserting emptiness would have proved nothing about the descendant closure. Assertions written: READY_NOW swept across four non-dispatchable states (confirmed-false admission fact, unknown fact, current wait, blocked hard dependency) asserting both directions — every READY_NOW entry is in projection.dispatchable AND no non-dispatchable entry classifies READY_NOW. UNBLOCK_NEXT's conjunction has its two negatives written SEPARATELY so it cannot pass on one arm: exactly-one-remaining with recoveryRef null gives UNSAFE_OR_UNKNOWN, and two-remaining with BOTH recoveryRefs non-null also gives UNSAFE_OR_UNKNOWN with remainingCount 2 and both reasons still fully enumerated. INTENTIONAL_WAIT: a current record classifies INTENTIONAL_WAIT; an expired record falls back to UNBLOCK_NEXT rather than granting an intention. UNSAFE_OR_UNKNOWN absorbs missing, stale (horizon behind the current gate) and incompatible (\"PROBABLY\") truth. Ordering asserts the whole entry order explicitly and, separately, that every UNBLOCK_NEXT node sorts strictly before an UNSAFE_OR_UNKNOWN one on a fixture where the unsafe node would otherwise be the dispatchable one. Provenance asserts the full sourceFactRef/Version/Digest triple on the reason that refused, not merely a non-empty array, plus \"no blocked or idle node has zero reasons\". Failed predecessor asserts the exact failed contract {edgeKey, producerNodeKey}, affectedDescendants [dev-done], all four LEGAL_CHOICES, and explicitly that the unrelated set (dev-free, dev-producer) stays READY_NOW with empty failedContracts and legalChoices. Anti-second-source-of-truth: the explanation's reasons must deep-equal the projection's own reasons for the same node.",
+      "startedAt": "2026-08-09T10:25:03.512Z",
+      "completedAt": "2026-08-09T10:27:09.855Z"
     },
     {
       "stepId": "step-8",
       "description": "GREEN — readiness-explanation.ts. Classify each node into exactly one READINESS_CLASSES member and attach its typed reasons with provenance. Enumerate remaining predicates in full even when there is more than one; order one-step items ahead of multi-step, and never order an UNSAFE_OR_UNKNOWN node ahead of either. For a failed predecessor emit the exact failed contract, the affected descendant set, and the LEGAL_CHOICES list. Return frozen results. This module explains; it does not decide readiness — the projection already did that, and recomputing here would create a second source of truth that could disagree with the first. Keep under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-explanation.ts",
         "packages/scheduler/src/readiness/readiness-explanation.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/readiness-explanation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-explanation.ts",
+        "packages/scheduler/src/readiness/test-fixtures.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts"
+      ],
+      "note": "GREEN. Test Files 3 passed (3), Tests 76 passed (76); typecheck exit 0. readiness-explanation.ts is 153 lines, every production file under 250. classify() reads only the projection's already-decided logical/admission/dispatch/reasons/waitCurrent and re-derives nothing; the anti-second-source-of-truth test asserts the explanation's reasons deep-equal the projection's own. Conservative arm order, earlier wins: no execution authority, then ANY unknown reason, then a current wait, then dispatchable, then exactly-one-remaining-with-known-producer, else UNSAFE_OR_UNKNOWN — so a multi-predicate node is fully enumerated (reasons and remainingCount are unmodified) but lands in the conservative bucket at rank 3 and can never sort ahead of a rank-1 one-step item. Sort key is (READINESS_CLASS_RANK, remainingCount, nodeKey). affectedDescendants uses the landed buildHardGraphIndex.hardOut closure, so ADVISORY overlay edges never widen the affected set. ONE RED TEST CAUGHT A REAL FIXTURE BUG rather than a production bug: the \"expired wait\" case used deadlineGate EFFECT_ACTIVATE against currentGate EXECUTOR_CLAIM, and since EXECUTOR_CLAIM precedes EFFECT_ACTIVATE the record was still CURRENT — the assertion was right and the fixture was wrong. Fixed by moving BOTH gates behind the current gate (validateIntentionalWait rejects recheckAtGate past deadlineGate, so an expired fixture that only moves the deadline becomes malformed instead of expired, which would have passed for the wrong reason); devWait now takes recheckAtGate and documents why. Also tightened failedContractsOf: it now requires a non-null recoveryRef instead of falling back to an empty-string producer, so no path can report a failed contract whose producer is a fabricated blank.",
+      "startedAt": "2026-08-09T10:27:12.723Z",
+      "completedAt": "2026-08-09T10:28:37.526Z"
     },
     {
       "stepId": "step-9",
       "description": "Runtime bridges. Every non-test module in packages/scheduler/src has a tracked sibling .js bridge and the package has no build step, so each new readiness module needs one: readiness-model.js, readiness-facts.js, readiness-projection.js, readiness-explanation.js, plus one for any module split out along the way. Content is EXACTLY one line, `export * from \"./<name>.ts\";`, LF, trailing newline — copy an existing scheduler bridge rather than typing it fresh. Test files get NO bridge. Then verify: the audit loop over packages/scheduler/src/readiness reports zero MISSING and zero UNEXPECTED, and a plain-Node probe from the repo root imports @moe/scheduler and still resolves — vitest resolves ./foo.js back to foo.ts and is structurally blind to a missing bridge, so the package gate is not evidence here (mem:gotcha-scheduler-js-shims, mem:gotcha-vitest-hides-missing-js-bridge). Check the written bytes too: final byte 0x0A, no 0x0D anywhere.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/*.js"
       ],
       "newFiles": [
         "packages/scheduler/src/readiness/*.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-model.js",
+        "packages/scheduler/src/readiness/readiness-fact-shapes.js",
+        "packages/scheduler/src/readiness/readiness-facts.js",
+        "packages/scheduler/src/readiness/readiness-cursor.js",
+        "packages/scheduler/src/readiness/readiness-projection.js",
+        "packages/scheduler/src/readiness/readiness-explanation.js"
+      ],
+      "note": "Six bridges written, one per production module including the two split out mid-task (readiness-fact-shapes, readiness-cursor). test-fixtures.ts correctly gets none, matching the package's existing bridge-exempt fixture. Audit loop over packages/scheduler/src/readiness: zero MISSING and zero UNEXPECTED (the loop checks both directions — every non-test .ts has a .js, and every .js has a .ts and is not a test/fixture). Bytes verified programmatically per file, not by eyeball: readiness-cursor.js 39 bytes, readiness-explanation.js 44, readiness-fact-shapes.js 44, readiness-facts.js 38, readiness-model.js 38, readiness-projection.js 43 — every one CR=false, lastByte=0x0a, content exactly `export * from \"./<name>.ts\";` + LF. PLAIN-NODE PROBE, which is the only gate that can see a missing bridge (vitest resolves ./foo.js back to foo.ts and is structurally blind to it): run with --experimental-strip-types from apps/daemon, the one package that actually depends on @moe/scheduler, because a bare specifier resolves from the importing module's path and neither the repo root nor packages/scheduler itself has the workspace link (mem:gotcha-bare-specifier-probe-needs-an-in-repo-referrer — a probe whose own path appears in the \"imported from\" clause is a harness bug, not a finding). Results: ROOT @moe/scheduler 36 exports / 0 undefined, readiness-model 12/0, readiness-fact-shapes 5/0, readiness-facts 1/0, readiness-cursor 3/0, readiness-projection 1/0, readiness-explanation 1/0. Non-empty namespaces plus zero undefined exports means the bridges both resolve AND re-export, and no ESM cycle leaves a binding in TDZ.",
+      "startedAt": "2026-08-09T10:28:40.033Z",
+      "completedAt": "2026-08-09T10:29:38.963Z"
     },
     {
       "stepId": "step-10",
       "description": "Verification and mutation drill. Run pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test and state before/after test AND suite counts as explicit numbers — count suites too, because a file that fails to parse reports zero tests and reads as a pass (mem:gotcha-mutation-drill-blind-to-broken-syntax). Then mutation-verify the load-bearing assertions one at a time, restoring between each: (a) coerce an UNKNOWN fact to CONFIRMED_FALSE — the deciding DoD-3 test must go red; (b) drop the withhold branch so an unknown availability fabricates a boolean into the cursor; (c) let a non-execution-bearing node reach dispatchable; (d) drop the 'producer known' arm of UNBLOCK_NEXT; (e) drop the CURRENT check on the wait record; (f) sort a multi-predicate node ahead of a one-step node; (g) collapse admissionReady into logicalReady. Every one must go red. A green mutation means that assertion has detached from its subject — fix the test, not the count. Verify each restore with git diff on the specific file rather than git status, since in this shared working directory another agent's whole-tree hook can commit a drill edit and leave status looking clean (mem:mutation-drills-in-shared-worktree). Finally assert the closed-vocabulary sweep: every READINESS_REASON_CODES member is reachable from a real production surface and the observed set EQUALS the declared set, so an unreachable code fails the suite.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.test.ts",
         "packages/scheduler/src/readiness/readiness-explanation.test.ts",
         "packages/scheduler/src/readiness/readiness-facts.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-vocabulary.test.ts"
+      ],
+      "note": "COUNTS, explicit, suites included. BEFORE (same command with --exclude '**/readiness/**'): 32 suites / 593 tests passed. AFTER (pnpm --filter @moe/scheduler test): 36 suites / 672 tests passed. Delta +4 suites / +79 tests, and the suite count moving proves all four new files parsed — a file that fails to parse reports zero tests and reads as a pass. typecheck exit 0. MUTATION DRILL: all seven went RED, one at a time, with the file restored between each. (a) coerce an absent fact to CONFIRMED_FALSE -> 2 suites / 6 tests failed; (b) drop the withhold branch -> 1 suite / 2 tests failed; (c) let a non-execution-bearing node reach dispatchable -> 2 suites / 5 tests failed; (d) drop the producer-known arm of UNBLOCK_NEXT -> 1 suite / 1 test failed; (e) drop the CURRENT check on the wait record -> 2 suites / 2 tests failed; (f) sort a multi-predicate node ahead of a one-step node -> 1 suite / 2 tests failed; (g) collapse admissionReady into logicalReady -> 1 suite / 4 tests failed. Every run still reported 4 suites, so no mutation silently broke a file into zero tests. RESTORE VERIFICATION used sha256 per file, not git diff and not git status: these files are still UNTRACKED, so git diff would print nothing whether restored or not, and in this shared working directory another agent's whole-tree hook can commit a drill edit and leave status looking clean (mem:mutation-drills-in-shared-worktree). Final line: ALL FILES RESTORED (sha256 match): True, and the post-drill run is 4 suites / 79 tests passed. ONE HONEST NOTE: the first drill attempt crashed mid-run on a cp1252 decode of vitest's output and left mutation (a) applied on disk; it was restored by hand before the rerun, and the rerun's baseline (79 passed) plus the closing sha256 comparison prove the tree is clean. Also added readiness-vocabulary.test.ts: the closed-vocabulary sweep drives each CALLER_FACT_CODES member to CONFIRMED_FALSE through projectReadiness + explainReadiness, asserts per iteration that the case actually produced its own code (a sweep that silently yields zero cases would otherwise pass), asserts generated === CALLER_FACT_CODES.length and > 0, adds the advisory node's structural code, and asserts the OBSERVED READINESS_ set EQUALS the declared READINESS_REASON_CODES set — so an unreachable code fails the suite. Plus READINESS_REASON_LAYERS keys must equal the code union exactly, and every emitted class must be a declared READINESS_CLASSES member.",
+      "startedAt": "2026-08-09T10:29:41.672Z",
+      "completedAt": "2026-08-09T10:32:20.466Z"
     },
     {
       "stepId": "step-11",
       "description": "Adversarial self-review, then commit. Load the adversarial-self-review skill and read the diff as an operator who will be misled by it. Can any path collapse two readiness layers — trace every return that sets dispatchable and confirm it also required admission and logical. Can an UNKNOWN fact ever produce a STRONGER readiness than the same fact confirmed false? Can a node reach READY_NOW without being dispatchable? Is any availability boolean written from a value that was not CONFIRMED? Does the explanation layer recompute any readiness decision the projection already made, creating a second source of truth? Is every returned object frozen, including nested reason arrays? Does anything here edit graph-model.ts or frontier.ts — `git diff --stat` must show changes ONLY under packages/scheduler/src/readiness/. Confirm each production file is under 250 lines with wc -l, not PowerShell Measure-Object, which skips blank lines and only ever under-reports. Confirm no debug, probe or scratch file remains. Then commit by explicit pathspec only — `git status --porcelain` first, confirm every staged entry is under packages/scheduler/src/readiness/, unstage anything foreign with `git restore --staged --`, then `git commit -- packages/scheduler/src/readiness` and verify with `git show --stat`. Never a bare git commit; several agents share this index.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-model.ts",
         "packages/scheduler/src/readiness/readiness-facts.ts",
         "packages/scheduler/src/readiness/readiness-projection.ts",
         "packages/scheduler/src/readiness/readiness-explanation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.ts",
+        "packages/scheduler/src/readiness/readiness-cursor.ts",
+        "packages/scheduler/src/readiness/readiness-projection.test.ts",
+        "packages/scheduler/src/readiness/readiness-explanation.test.ts"
+      ],
+      "note": "Adversarial review found and fixed THREE real gaps, each RED-first. (1) projectReadiness read graph.nodes inside buildReadinessCursor BEFORE anything checked graph provenance, so a hand-built object cast past validateGraphSnapshot was read rather than refused. Now guarded at the top, passing through the landed GRAPH_VALIDATION_PROVENANCE_INVALID rather than a readiness synonym. (2) explainReadiness accepted a projection computed over a DIFFERENT graph; its descendant closure would come back silently empty — the misleading-but-plausible answer, not an obvious one. graph-model.ts:292 explicitly requires consumers to reject an identity mismatch, so it now throws GraphAnalysisError FRONTIER_GRAPH_IDENTITY_MISMATCH, the same class and code analyze-graph.ts:72 already uses, plus the provenance guard. (3) The cursor wrote admissionEligible from `fold === \"CONFIRMED_TRUE\"` for NON-execution-bearing nodes even when their fold was UNKNOWN — unobservable, since frontier.ts:361 skips them, but it was still a boolean derived from a non-confirmed value. Split into an explicit branch where false is the design-8.3-rule-5 truth about a node with no execution authority, so no path writes availability from a non-CONFIRMED fold. Answers to the step's questions, traced: dispatchable is appended at exactly one site under dispatch === CONFIRMED_TRUE, and dispatch = weaken(factDispatch, admission), admission = weaken(factAdmission, logical), where weaken returns CONFIRMED_TRUE only if both arms are — so no path collapses two layers. An UNKNOWN fact is never stronger than the same fact confirmed false: weaken never turns UNKNOWN into CONFIRMED_TRUE, and classify() routes any unknown reason to UNSAFE_OR_UNKNOWN (rank 3) while a single confirmed-false with a known producer reaches UNBLOCK_NEXT (rank 1). READY_NOW is returned only on node.dispatch === CONFIRMED_TRUE, the same field that drives dispatchable membership. The explanation layer reads only already-decided fields. Both returned objects are deepFrozen and tests assert nested reason arrays and elements. SCOPE: git status shows graph-model.ts and frontier.ts untouched; git diff --stat over packages/scheduler shows only readiness/ paths. wc -l (not Measure-Object): cursor 173, explanation 170, fact-shapes 114, facts 175, model 195, projection 240 — all under 250. 17 files in the directory, no debug/probe/scratch. FINAL GATE: pnpm --filter @moe/scheduler typecheck exit 0; pnpm --filter @moe/scheduler test 36 suites / 675 tests passed. COMMIT bf6bc818, by explicit pathspec after verifying the staged set contained nothing outside packages/scheduler/src/readiness/. Note for QA: four of my files were already tracked when I got here — a foreign whole-tree commit had swept them mid-task (mem:gotcha-foreign-whole-tree-commit-preempts-your-pathspec-commit), so this commit shows 13 files with 9 creates and 4 modifications rather than 17 creates. The working tree under readiness/ is now clean. One deliberate design note: while `withheld` is set, projection.admissionReady and .dispatchable are CONFIRMED lower bounds, not complete ready sets — membership still requires every predicate confirmed true, so acting on them is safe, and the authoritative `partition` is null so analysis widths stay UNKNOWN.",
+      "startedAt": "2026-08-09T10:32:24.981Z",
+      "completedAt": "2026-08-09T10:35:58.572Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-29cc6667",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-812c17a0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -179,12 +228,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.026Z",
-  "updatedAt": "2026-08-09T10:22:23.333Z",
+  "updatedAt": "2026-08-09T10:37:31.043Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T10:04:33.189Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 11
   },
   "contextFetchedBy": [
     "architect-8a4a1764",
@@ -199,7 +248,13 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:07:43.282Z",
@@ -212,5 +267,31 @@
     "wallClockMs": 9900000
   },
   "planApprovedAt": "2026-08-09T10:07:45.348Z",
-  "workStartedAt": "2026-08-09T10:09:38.249Z"
+  "workStartedAt": "2026-08-09T10:09:38.249Z",
+  "reviewStartedAt": "2026-08-09T10:37:26.799Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  36 passed (36)\n      Tests  675 passed (675)\n   Start at  13:36:09\n   Duration  787ms (transform 8.28s, setup 0ms, import 10.86s, tests 1.13s, environment 3ms)\n\nEXIT_CODE=0",
+    "reportedAt": "2026-08-09T10:37:26.799Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/readiness/readiness-model.ts",
+    "packages/scheduler/src/readiness/readiness-facts.test.ts",
+    "packages/scheduler/src/readiness/readiness-facts.ts",
+    "packages/scheduler/src/readiness/readiness-fact-shapes.ts",
+    "packages/scheduler/src/readiness/readiness-projection.test.ts",
+    "packages/scheduler/src/readiness/test-fixtures.ts",
+    "packages/scheduler/src/readiness/readiness-projection.ts",
+    "packages/scheduler/src/readiness/readiness-cursor.ts",
+    "packages/scheduler/src/readiness/readiness-explanation.test.ts",
+    "packages/scheduler/src/readiness/readiness-explanation.ts",
+    "packages/scheduler/src/readiness/readiness-model.js",
+    "packages/scheduler/src/readiness/readiness-fact-shapes.js",
+    "packages/scheduler/src/readiness/readiness-facts.js",
+    "packages/scheduler/src/readiness/readiness-cursor.js",
+    "packages/scheduler/src/readiness/readiness-projection.js",
+    "packages/scheduler/src/readiness/readiness-explanation.js",
+    "packages/scheduler/src/readiness/readiness-vocabulary.test.ts"
+  ]
 }

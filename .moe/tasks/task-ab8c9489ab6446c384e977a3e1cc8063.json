@@ -16,12 +16,12 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human requested advancing genuinely unblocked work. All canonical control-room surfaces are committed; orders 1-5 are DONE, Canonical goals board is DONE, and Recovery doctor is 8/8 in REVIEW with committed green focused gates. Planning is read-only and can proceed against those committed surfaces without inventing dependencies.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,8 +29,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.717Z",
-  "updatedAt": "2026-08-09T10:23:23.918Z",
+  "updatedAt": "2026-08-09T10:33:09.741Z",
   "contextFetchedBy": [
     "architect-da724bb7"
-  ]
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-09T10:27:40.723Z"
+  }
 }

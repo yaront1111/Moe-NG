@@ -10,12 +10,13 @@ import {
   discoverWorkspacePackages,
   expandWorkspacePattern,
   formatObservation,
+  hasRuntimeEntry,
   mapWithConcurrency,
+  observeWorkspacePackage,
   observationIssues,
   probeRuntimeEntry,
   readWorkspacePatterns,
   runtimeProbeMarker,
-  type WorkspacePackage,
   workspacePackageDirectoriesOnDisk,
 } from "./package-loadability-support.ts";
 
@@ -44,21 +45,50 @@ it("tolerates a workspace glob whose base directory is absent", async () => {
 it("classifies a declared missing entry with a stable actionable code", async () => {
   const root = await mkdtemp(join(tmpdir(), "moe-runtime-loadability-"));
   try {
-    const packageDirectory = resolve(root, "packages/missing");
-    await mkdir(packageDirectory, { recursive: true });
+    const goodDirectory = resolve(root, "packages/good");
+    const missingDirectory = resolve(root, "packages/missing");
+    await Promise.all([
+      mkdir(resolve(goodDirectory, "src"), { recursive: true }),
+      mkdir(missingDirectory, { recursive: true }),
+    ]);
     await writeFile(resolve(root, "pnpm-workspace.yaml"), "packages:\n  - packages/*\n", "utf8");
-    await writeFile(resolve(packageDirectory, "package.json"), JSON.stringify({
-      exports: { ".": "./src/index.ts" },
-      name: "@fixture/missing",
-    }), "utf8");
+    await Promise.all([
+      writeFile(resolve(goodDirectory, "package.json"), JSON.stringify({
+        exports: { ".": "./src/index.ts" }, name: "@fixture/good",
+      }), "utf8"),
+      writeFile(resolve(goodDirectory, "src/index.ts"), "export const ready = true;\n", "utf8"),
+      writeFile(resolve(missingDirectory, "package.json"), JSON.stringify({
+        exports: { ".": "./src/index.ts" }, name: "@fixture/missing",
+      }), "utf8"),
+    ]);
 
     const discovered = await discoverWorkspacePackages(root);
-    expect(discovered).toHaveLength(1);
-    expect(discovered[0]).toMatchObject({
+    expect(discovered).toHaveLength(2);
+    const declaredEntries = discovered.filter(hasRuntimeEntry);
+    const observations = await mapWithConcurrency(
+      declaredEntries, 2, (item) => observeWorkspacePackage(root, item),
+    );
+    const missing = discovered.find(({ name }) => name === "@fixture/missing");
+    const missingObservation = observations.find(({ packageName }) => packageName === "@fixture/missing");
+    expect(missing).toMatchObject({
       entryState: "MISSING_ENTRY",
       name: "@fixture/missing",
-      runtimeEntry: resolve(packageDirectory, "src/index.ts"),
+      runtimeEntry: resolve(missingDirectory, "src/index.ts"),
     });
+    expect(observations.find(({ packageName }) => packageName === "@fixture/good")?.result)
+      .toMatchObject({ outcome: "IMPORTED", undefinedExports: [] });
+    expect(missingObservation?.result).toEqual({
+      code: "MISSING_ENTRY",
+      outcome: "MISSING_ENTRY",
+      specifier: resolve(missingDirectory, "src/index.ts"),
+    });
+    expect(missingObservation).toBeDefined();
+    if (missingObservation !== undefined) {
+      const report = formatObservation(missingObservation);
+      expect(report).toContain("@fixture/missing: MISSING_ENTRY");
+      expect(report).toContain(resolve(missingDirectory, "src/index.ts"));
+      expect(observationIssues(missingObservation, {})).toEqual([report]);
+    }
   } finally {
     await rm(root, { force: true, recursive: true });
   }
@@ -66,8 +96,8 @@ it("classifies a declared missing entry with a stable actionable code", async ()
 
 it("partitions every manifest into a probed or justified no-entry bucket", async () => {
   const discovered = await discoverWorkspacePackages(repositoryRoot);
-  const withEntry = discovered.filter(({ runtimeEntry }) => runtimeEntry !== null);
-  const withoutEntry = discovered.filter(({ runtimeEntry }) => runtimeEntry === null);
+  const withEntry = discovered.filter(hasRuntimeEntry);
+  const withoutEntry = discovered.filter(({ entryState }) => entryState === "NO_RUNTIME_ENTRY");
 
   expect(withEntry.length + withoutEntry.length).toBe(discovered.length);
   expect(withoutEntry.map(({ name }) => name)).toEqual(Object.keys(noRuntimeEntryReasons));
@@ -112,9 +142,7 @@ it("reports a child-process timeout as its own outcome", async () => {
 
 it("loads every Node-entry workspace package or pins its temporary bridge owner", async () => {
   const packages = await discoverWorkspacePackages(repositoryRoot);
-  const runtimePackages = packages.filter(
-    (item): item is WorkspacePackage & { readonly runtimeEntry: string } => item.runtimeEntry !== null,
-  );
+  const runtimePackages = packages.filter(hasRuntimeEntry);
   expect(runtimePackages.length).toBeGreaterThan(0);
   const runtimePackageNames = runtimePackages.map(({ name }) => name);
   for (const [packageName, allowance] of Object.entries(allowedPackageFailures)) {
@@ -124,10 +152,9 @@ it("loads every Node-entry workspace package or pins its temporary bridge owner"
     expect(allowance.ownerTaskId).toMatch(/^task-[a-f0-9]+$/u);
     expect(allowance.reason).toBeTruthy();
   }
-  const observations = await mapWithConcurrency(runtimePackages, 4, async (item) => ({
-    packageName: item.name,
-    result: await probeRuntimeEntry(repositoryRoot, item.runtimeEntry),
-  }));
+  const observations = await mapWithConcurrency(
+    runtimePackages, 4, (item) => observeWorkspacePackage(repositoryRoot, item),
+  );
   const issues = observations.flatMap(
     (observation) => observationIssues(observation, allowedPackageFailures),
   );

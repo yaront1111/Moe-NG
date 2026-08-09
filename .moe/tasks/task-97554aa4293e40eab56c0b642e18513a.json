@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-09T10:22:33.657Z",
+  "updatedAt": "2026-08-09T10:32:35.393Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -208,7 +208,8 @@
   "planApprovedAt": "2026-08-08T20:58:43.710Z",
   "contextFetchedBy": [
     "worker-e46fb0dc",
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "architect-8a4a1764"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
   "blockedReason": "The existing E2E harness/manifest slice is green, but the required journeys are not reachable through production authority. The published @moe/daemon root exposes GOAL_HANDLERS with only goal.create; there is no authenticated durable handler/composition for final reviewed-result acceptance or goal.close. PLANNING_HANDLERS only proposes plans and records a generic approval; it does not activate the graph, accept output, or close the goal. @moe/review has pure helpers but no daemon/store persistence for finding lineage, changed-hash invalidation/carry-forward, successor replan, or retained review records. Production fault schedules still declare core-to-store dispatch, durable restart adoption/outbox acknowledgement, terminal release, atomic release+handoff, and review assignment absent. Runner/Claude observation and recovery helpers are likewise not composed into a real launcher/restart boundary. Implementing these under tests/e2e would recreate authority in tests and falsely certify a partial system, violating the fail-closed rails and DoD. The J3 isolated *.e2e.ts lane amendment has been granted, so lane isolation is no longer the structural blocker.",

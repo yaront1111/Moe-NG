@@ -180,7 +180,7 @@
       "completedAt": "2026-08-09T10:23:11.325Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -193,16 +193,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.262Z",
-  "updatedAt": "2026-08-09T10:24:26.989Z",
+  "updatedAt": "2026-08-09T10:27:46.990Z",
   "contextFetchedBy": [
     "architect-da724bb7",
-    "worker-0b27a5cc"
+    "worker-0b27a5cc",
+    "qa-812c17a0"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T09:29:04.600Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T10:27:46.990Z",
+    "wallClockMs": 3522390
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -257,5 +260,8 @@
     "apps/control-room/src/recovery/recovery-status.tsx",
     "apps/control-room/src/recovery/recovery-external.tsx",
     "apps/control-room/src/recovery/recovery-import-ban.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T10:27:46.990Z",
+  "reviewCompletedAt": "2026-08-09T10:27:46.990Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: control-room typecheck 0, full app 25 files / 369 passed, owned dirs alone 5 files / 94 passed.\n\nFour independent mutation drills, one per DoD axis plus the structural ban. All restored SHA-identical, owned paths clean afterwards.\n\nDoD1, three health states distinct — changed UNKNOWN_TRUTH's glyph to DEGRADED's so the two collide. Reddens \"keeps HEALTHY, DEGRADED, and UNKNOWN_TRUTH distinct in text, glyph, and data\". Restored 965fd97b.\n\nDoD2, uncertainty disables mutation, the safety-critical one — dropped the `&& authorityMode === LIVE_AUTHORITY` conjunct so only actionsEnabled gated the controls. Reddens \"disables every control in each non-live authority mode\". Restored 76d5528c. I also checked why `stale` is deliberately NOT in that conjunct: a lagging view still shows commands the daemon returned and they revalidate daemon-side, so blocking on lag would refuse just-authorised work. Correct, and documented in place.\n\nDoD3, limitations explicit — emptied RPO_LIMIT. Reddens TWO tests including \"states the RPO limit even when every backup proof is missing\", so the disclosure holds in the proof-absent direction, not just the happy path. Restored f667e1fb.\n\nRail 2, never derives authority — smuggled an @moe/scheduler import into recovery-status.tsx. Reddens \"restricts every production import to react, contracts, and owned siblings\" by name, so the ban fires rather than merely counting its own cases.\n\nSIZES: production 134 / 149 / 192 / 249 / 250. recovery-actions.tsx sits exactly on the 250 target — compliant, but zero headroom; split it before adding anything. Tests max 398, under 400.\n\nCOMMIT: 5b06596 is a clean explicit-pathspec commit holding exactly recovery-actions.tsx and recovery-import-ban.test.ts. 20c41a4 carries this task's title but is a 63-file harness sweep containing scheduler readiness work, pnpm-lock and tests/runtime — foreign, reported, not reverted. Audit by path, not by commit message."
 }

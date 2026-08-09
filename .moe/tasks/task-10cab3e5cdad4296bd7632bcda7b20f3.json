@@ -16,12 +16,12 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PIPELINED promotion by governor-eae4fc53 2026-08-09 on human instruction. NOT a clean dependency pass — read this before planning. THREE OF FOUR DEPS ARE SETTLED: Lease presence core (task-967769ea) DONE, Conserved budget core (task-d5c4b086) DONE, and Readiness explanation engine (task-fa96b81c) is at 10/11 with its implementation ALREADY COMMITTED at bf6bc81 — packages/scheduler/src/readiness/ holds readiness-explanation.ts, readiness-cursor.ts, readiness-fact-shapes.ts, readiness-facts.ts and their .js bridges on disk now. That is a stronger position than the pipelined promotion of task-791d7340 earlier on this board, which succeeded from a dep at 5/7. Read that surface directly; do not plan against the dep's task description. THE FOURTH DEP I COULD NOT VERIFY: \"closure of all reference-model blocker findings\" names no task and no artifact I can resolve mechanically. I did not confirm it. If planning shows open blocker findings against the corrected DEVELOPMENT_ONLY reference, report_blocked and I will move this back — cheap reversal, expected, not a failure. TRAP WORTH NAMING UP FRONT, because DoD 3 and the owned path pull in opposite directions: the DEVELOPMENT_ONLY reference model lives in packages/scheduler/src/test-fixtures.ts, admission/admission-fixtures.ts and readiness/test-fixtures.ts, but DoD 3 requires that PRODUCTION MUST NOT IMPORT DEVELOPMENT_ONLY testkit code. You are implementing FROM the reference, never importing it. Plan a structural assertion for that, not just a behavioural one — a negative property cannot be proved by tests that happen to pass. Owned path packages/scheduler/src/fairness/** is ABSENT/greenfield and disjoint from readiness/, so no collision with the in-flight dep. Note the scheduler package uses .js bridges, so every new non-test .ts needs its sibling — task-535e773b is landing a repo-wide runtime-loadability gate that will enforce it.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-09T10:23:24.037Z",
+  "updatedAt": "2026-08-09T10:36:04.204Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ]

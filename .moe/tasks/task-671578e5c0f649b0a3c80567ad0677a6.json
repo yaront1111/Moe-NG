@@ -21,9 +21,82 @@
     "No new .js bridge convention decisions here - apps/daemon now has bridges, so any new module needs its sibling bridge in the same commit, one line, LF, trailing newline.",
     "Keep each production source focused, target <=250 lines, split before 400. Commit by explicit pathspec only; several agents share this working directory."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Pin both surfaces and decide the exact command set before writing code. On the daemon side confirm the gap is still as measured: GOAL_HANDLERS holds only goal.create (goal-services.ts:66), PLANNING_HANDLERS holds only approval.decide and plan.propose (planning-services.ts:156), and BOOTSTRAP_COMMAND_KINDS holds the nine kinds with no acceptance and no goal.close. On the core side confirm the symbols this task composes: GoalActivateInitialGraphCommand, GoalCloseCommand and the GoalCommand union in goal-contract.ts; reduceGoal, GOAL_COMMAND_KINDS, GOAL_TRANSITIONS and the validators validActivation, validClosure, validExpectedVersion, validProjectReady in goal-reducer.ts; and PlanApprovalWitness, PlanningActivationWitness, PlanRevisionSeal in planning-command-contract.ts. Then WRITE DOWN, by hand from design lines 1095 and 299, the exact mapping from J1's three human actions to the command set you will implement — in particular which single command carries both the plan/graph decision and activation. Read `bootstrap-services.ts:48` for the established handler shape ('reduce, then commit only on acceptance') and copy it rather than inventing a second idiom. If a core validator you expect is missing, report_blocked rather than planning to write the rule in the daemon. Produce no code.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Both surfaces re-verified on disk at HEAD; gap is exactly as measured. GOAL_HANDLERS = {\"goal.create\"} (goal-services.ts:66); PLANNING_HANDLERS = {\"approval.decide\",\"plan.propose\"} (planning-services.ts:156); BOOTSTRAP_COMMAND_KINDS = 9 kinds, no acceptance/close (bootstrap-contracts.ts:26). Core symbols all present: GoalActivateInitialGraphCommand (goal-contract.ts:71), GoalCloseCommand (:76), reduceGoal + GOAL_TRANSITIONS (goal-reducer.ts:38,224), validActivation/validClosure/validZeroAuthority/validExpectedVersion (goal-validation.ts:154,159,167,192), PlanApprovalWitness/PlanningActivationWitness/PlanRevisionSeal (planning-command-contract.ts:112,117,102). No blocker.\n\nJ1 ACTION -> COMMAND BINDING, written from design 1095 + 299 (records the binding spec-foundation-journeys-hand-transcribed J1-C asks for):\n  action 1 goal.create             -> kind \"goal.create\"     (exists) -> reduceGoal/create      -> goal DRAFT v1\n  action 2 exact plan/initial-graph approval -> kind \"approval.decide\" (EXTENDED, still ONE action) -> applyApprovalCommand + reduceGoal/\"goal.activate_initial_graph\" in ONE commit -> approval DECIDED + goal EXECUTION_ENABLED v2\n  action 3 final acceptance        -> kind \"goal.close\"      (NEW)    -> reduceGoal/close with BOTH closureWitness and zeroAuthorityWitness -> GoalClosing+GoalCompleted in one command -> goal COMPLETED v4 (terminal)\n\nVocabulary delta is exactly ONE appended kind: \"goal.close\" (member of RUNTIME_COMMAND_KINDS, runtime-vocabulary.ts:92). \"goal.activate_initial_graph\" is deliberately NOT added - it is not a RuntimeCommandKind and composing it inside approval.decide is what keeps J1 at three human actions (design 299).\n\nKEY CONSTRAINT FOUND, drives the design: the store's decision seam commits ONE targetAggregateId per decision (store-contracts.ts:74-84), so \"atomic\" here means one commitExpectedVersionDecision call. The approval+activation pair therefore targets the GOAL aggregate with result = exact GoalState (snapshotGoalState/validGoalState require exactly the 12 state keys, so the result cannot be a wrapper), and the decided approval record rides in the committed EVENT payload - durable and readable via store.readEvents(goalId). Handler shape copied from bootstrap-services.ts:48 \"reduce, then commit only on acceptance\".\n\nFILES THIS FORCES BEYOND THE DECLARED OWNED PATHS (all inside apps/daemon, all consequences of appending one kind; will be committed by explicit per-file pathspec and called out in the completion evidence):\n- bootstrap/bootstrap-sequence.ts: COMMAND_PREREQUISITES is `satisfies Readonly<Record<BootstrapCommandKind, ...>>`, i.e. exhaustive - a new kind without an entry is a typecheck error. Adding \"goal.close\": [\"approval.decide\"].\n- bootstrap/bootstrap-services.test.ts:50-52 pins the kind list by set equality AND toHaveLength(9); bootstrap/bootstrap-durability.test.ts:110 pins bootstrapSequence() at 9. DoD 6 requires the set-equality pin, so both literals move 9 -> 10.\n- bootstrap/bootstrap-test-fixtures.ts: shared fixture module; needs the approval payload's new keys plus a goal.close entry, and bootstrap-durability.test.ts:176,281 build approval payloads inline.",
+      "startedAt": "2026-08-09T10:25:49.087Z",
+      "completedAt": "2026-08-09T10:32:59.402Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red for the atomic approval-plus-activation action — J1's second human action and design line 299. Extend the planning suite before touching the handler. Assert: a single approval command commits the plan/graph decision AND activates the initial graph, leaving the goal in its activated state after ONE call, not two; the activation is reduced through the core's GoalActivateInitialGraphCommand path and its verdict is what gets committed, with the core's own reason code surfaced verbatim on rejection rather than a locally invented one; and THE ATOMICITY CASE, which is the defect most likely to ship silently — force the activation half to fail and assert NEITHER the approval nor the activation is durable, read back from the store rather than inferred from the return value. An approval that lands without its activation leaves the goal in a state J1 has no action to escape, so this assertion is the point of the step. Also assert the refusing LAYER wherever both the daemon's shape gate and a core validator could answer. Red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/planning-services.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ],
+      "note": "RED confirmed: `pnpm exec vitest run --root . --config package.json src/planning` -> \"Tests 7 failed | 8 passed (15)\", 1 file failed. The 7 reds are exactly the new atomic approval-plus-activation arms.\n\nNew describe block \"approval activates the initial graph atomically (design 299)\" carries seven arms, each reading the store back rather than trusting the returned value:\n1. ONE call leaves the goal EXECUTION_ENABLED with activeGraphRevisionRef/graphEpoch 1/version 2 AND decisionCount +1 exactly - the \"+1\" is what proves it was not two commands.\n2. The committed activation's graphApprovalRef equals the core's own decided approvalRef, read out of the durable event ledger - an activation cannot name an approval that was not the one just decided.\n3. ATOMICITY, activation half fails (activation.truthClass SELF_REPORTED so the core's validActivation is the layer that answers): CORE_REDUCER/ILLEGAL_TRANSITION, decisionCount unchanged, goal still DRAFT, no approval evidence in the goal's events, ledger.kinds has no approval.decide.\n4. ATOMICITY, stale expectedGoalVersion: CORE_REDUCER/EXPECTED_VERSION_CONFLICT, neither half durable.\n5. ATOMICITY, approval half fails (stepUpAuthRef null) while the activation evidence is valid: goal still DRAFT with activeGraphRevisionRef null - the activation must not land on its own.\n6. Missing activation half: DAEMON_INGRESS/BOOTSTRAP_PAYLOAD_INVALID (the shape gate, distinct from the core arms above).\n7. A REJECT decision cannot activate a graph: DAEMON_PREREQUISITE/BOOTSTRAP_PAYLOAD_INVALID, nothing durable.\n\nLayer is asserted on every refusal arm, since the shape gate, the daemon revision gate and the core reducer can all answer here.\n\nTest helper `durableApprovalRefs` decodes the goal aggregate's stored event payloads via store.readEvents - the non-mutation assertions therefore read durable bytes, not the response.\n\nFixtures added to bootstrap-test-fixtures.ts: GRAPH_REVISION_REF, planningActivation() (core PlanningActivationWitness), approvalPayload(), closureWitness(), zeroAuthorityWitness(), acceptancePayload(); bootstrapSequence() now carries the approval via approvalPayload() and appends the tenth entry envelope(\"goal.close\", 2, acceptancePayload()).",
+      "startedAt": "2026-08-09T10:33:01.919Z",
+      "completedAt": "2026-08-09T10:36:13.067Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the atomic approval-plus-activation handler to green in apps/daemon/src/planning/planning-services.ts. Compose the existing approval decision with the core's initial-graph activation inside ONE store transaction, so the pair is all-or-nothing. Do NOT introduce a separate `graph.activate` command to make this easier: design line 299 makes this one human action and design 1095 counts exactly three actions per goal, so splitting it would change the journey the epic's exit condition is measured against — if it proves genuinely hard, report that as a finding rather than splitting. The handler composes and never decides: it hands the parsed command to reduceGoal and the planning contract, commits the reducer's verdict through the store's expected-version decision seam, and surfaces a rejection with the core's reason code. Bind the approval and activation witnesses (PlanApprovalWitness, PlanningActivationWitness) that the core already defines rather than inventing new evidence shapes. Keep the file under 250 lines; split before 400, and give any new module its sibling `.js` bridge in the same commit, since apps/daemon is now covered by the repo-wide runtime-loadability gate.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts"
+      ],
+      "startedAt": "2026-08-09T10:36:17.404Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD red for final acceptance and goal closure — J1's third human action, which is entirely absent today and is the highest-risk handler in this task. Extend the goals suite. Assert the happy path: a verified and reviewed result can be accepted, driving the goal to its accepted terminal state through the core's validClosure path. Then the assertions that matter more, because acceptance is what turns work into an accepted terminal state and a forged acceptance is the worst defect available here: an acceptance attempted WITHOUT the verification and review witnesses the core's validators demand must refuse with its specific stable code AND commit nothing — prove the non-mutation by reading the store back, since a handler that mutates and then refuses passes a return-value-only assertion; an acceptance against a goal in a state the core's transition table does not admit refuses with the core's own code; and an acceptance carrying a stale expected version is refused by validExpectedVersion rather than silently overwriting. Assert the refusing layer on each, since the daemon's shape gate and a core validator can both answer. Red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement final acceptance and goal closure to green in apps/daemon/src/goals/goal-services.ts, extending GOAL_HANDLERS. Follow the same shape as createGoal and the bootstrap services: bounded decode, exact-shape gate against a frozen key list with a pinned schemaVersion, reduce through reduceGoal using the core's GoalCloseCommand and its neighbours, commit only on acceptance, return a frozen discriminated result. The acceptance path is evidence-bound BY CONSTRUCTION where possible — require the witness fields the core's validators consume, so an acceptance without evidence is not merely rejected but hard to express — with the stable refusal code as the backstop. Surface the core's reason code verbatim on rejection; a locally invented code would erase which layer refused and would drift from the core's rules. Append the new kinds to BOOTSTRAP_COMMAND_KINDS and to GOAL_HANDLERS rather than reordering either, since existing suites assert against those arrays.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Drive J1 end to end and prove replay idempotence — DoD 1 and DoD 5. Add a test that runs all three human actions in sequence against the REAL store through the published @moe/daemon root, with no deep subpath import: goal.create, then the single approval-plus-activation action, then final acceptance of the verified reviewed result — asserting the goal reaches its accepted terminal state and that exactly three human actions were required, since a fourth would mean J1's contract was broken by the implementation. Then idempotence for EACH command: issue it twice with the identical request and assert the second returns the same terminal decision AND that the durable row count is still one, read back from the store. The row-count assertion is the load-bearing half — 'it did not throw the second time' is exactly what a double write also looks like. Finally assert the command-kind vocabulary by SET EQUALITY against a hand-written list so an unreviewed command kind cannot appear unnoticed, and assert the generated case count is non-zero.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/planning/planning-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Prove the guards are load-bearing, then run the gates. MUTATION DRILL at each mechanism's single source: the acceptance evidence requirement, the expected-version check pass-through, the transaction boundary that makes approval and activation atomic, and the exact-shape key list. Neutralise each operand with a constant — NEVER delete a line, since a deleted line from a multi-line condition is a syntax error that reddens the suite for the wrong reason. Count failed SUITES as well as failed tests, and confirm the red test is the one naming that guard's code. The transaction-boundary mutation is the one to watch: if removing the shared transaction leaves the suite green, DoD 4's atomicity is untested regardless of how the suite looks. This worktree is shared and another agent's completion hook can commit your mutation, so capture `git rev-parse HEAD:<path>` before each drill and verify the restore against that sha rather than `git status`. Then run fresh: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck, all exiting 0. Confirm every touched production file is under 400 lines with wc -l, and that any new module has its `.js` bridge — apps/daemon is now covered by the runtime-loadability gate and an unbridged module will fail it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-8",
+      "description": "Adversarial self-review, then commit by explicit pathspec, and state clearly what this does NOT unblock. Review: can an acceptance be obtained without the verification and review evidence, by any route including a differently-shaped request; can an approval land without its activation, or an activation without its approval; does any handler restate a rule @moe/core already owns, creating a second source of truth; does any refusal surface a locally invented code where the core's should have survived; can a replay write a second durable row; did any frozen vocabulary get reordered rather than appended; does J1 still require exactly three human actions, or did the implementation quietly add a fourth. Then stage and commit by EXPLICIT PER-FILE pathspec — never a bare git commit, never git add -A, never a directory pathspec under apps/daemon/src/, since sibling tasks own bootstrap/, work/, http/ and recovery/ in the same tree. Run `git status --porcelain` first and unstage foreign paths. FINALLY, record in the completion evidence that this task completes J1's command path ONLY: the Foundation canary also needs J3 (runner/recovery composed into a real launcher and restart boundary) and J4 (review persistence for finding lineage, changed-hash invalidation and carry-forward, successor replan, retained review records), both still missing and separately owned. A green J1 must not be read as a green canary.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-0b27a5cc",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -35,5 +108,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T10:23:40.544Z",
-  "updatedAt": "2026-08-09T10:23:40.544Z"
+  "updatedAt": "2026-08-09T10:36:17.404Z",
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T10:24:57.211Z",
+  "metrics": {
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 3,
+    "firstClaimAt": "2026-08-09T10:25:04.825Z",
+    "executedStepCount": 2
+  },
+  "planningNotes": {
+    "approachesConsidered": "(1) ONE APPROVAL ACTION, NOT TWO. The easy implementation is `approval.decide` records the decision and a new `graph.activate` follows. I am ruling that out and the rail says so: design line 299 states J1's one approval action commits plan and graph decisions PLUS activation atomically, and design 1095 counts exactly three human actions per goal. Splitting it would make J1 a four-action journey and quietly change the product contract the epic's exit condition is written against. Activation composes INTO the existing approval handler, in one transaction.\n(2) THE SCOPE IS COMPOSITION, WHICH IS WHY THIS FITS ONE TASK. @moe/core already implements every rule: eight goal commands with their validators, and the planning approval/activation witnesses. The daemon exposes handlers covering two of them. Nothing here needs new domain logic, which is what keeps a task touching the epic's exit gate down to a handful of files.\n(3) ACCEPTANCE IS THE RISKIEST HANDLER and gets the most assertion weight. It is the one command that turns work into an accepted terminal state, so a forged or evidence-free acceptance is the worst possible defect in this task. It must be evidence-bound through the core's validators, and the test must read the store back rather than trusting a return value.\n(4) I did NOT bundle J3 (launcher/restart composition) or J4 (review persistence), which the canary also names as missing. They are separate journeys with separate surfaces, and bundling them would blow both the step and file caps and make the exit gate depend on one oversized task.",
+    "codebaseInsights": "VERIFIED SYMBOL BY SYMBOL ON DISK 2026-08-09.\n**The gap:** `apps/daemon/src/goals/goal-services.ts:66` — `GOAL_HANDLERS = Object.freeze({ \"goal.create\": createGoal })`. `apps/daemon/src/planning/planning-services.ts:156` — `PLANNING_HANDLERS = Object.freeze({ \"approval.decide\": decideApproval, \"plan.propose\": proposePlan })`. `BOOTSTRAP_COMMAND_KINDS` (bootstrap-contracts.ts:26) holds nine kinds: approval.decide, goal.create, plan.propose, policy.install, policy.validate, project.activate, project.bind_repository, project.register, provider.probe. No acceptance, no goal.close, no activation.\n**What the core already gives you** — `packages/core/src/goal/goal-contract.ts`: GoalCommandKind (:6), GoalCreateCommand (:62), GoalActivateInitialGraphCommand (:71), GoalCloseCommand (:76), GoalQualificationInvalidatedCommand (:82), GoalCancelCommand (:87), GoalReopenAsRevisionCommand (:92), GoalPauseCommand (:102), GoalResumeCommand (:107), GoalCommand union (:111). `goal/goal-reducer.ts` re-exports GOAL_COMMAND_KINDS and GOAL_TRANSITIONS with reduceGoal, plus validators validActivation, validClosure, validCancellation, validInvalidation, validExpectedVersion, validProjectReady, validPause, validRef, snapshotGoalCommand, snapshotGoalState.\n**Planning witnesses, unused today** — `packages/core/src/planning/planning-command-contract.ts`: PlanApprovalWitness (:112), PlanningActivationWitness (:117), PlanRevisionSeal (:102), PlanRevisionHashes (:95), SubmissionFinalizeWitness (:86), PlanningRefusalWitness (:106).\n**The handler shape to copy** is already in this package: bounded decode via `decodeBootstrapRequestBytes` / `decodeBoundedJsonBytes`, an exact-shape gate against a frozen key list with a pinned schemaVersion literal, reduce through the core, commit through the store, return a frozen discriminated union. `bootstrap-services.ts:48` states the invariant in a comment: 'One shape for every project command: reduce, then commit only on acceptance.'\n**Durability seam**: @moe/store's `commitExpectedVersionDecision` gives one durable terminal decision with REPLAYED on replay — that is what DoD 5's idempotence rides on.\n**Bridges**: apps/daemon now HAS `.js` bridges (27 non-test .ts / 19 .js) and loads under plain Node with 31 exports. Any NEW module you add needs its sibling bridge in the same commit — this package is now covered by the repo-wide loadability gate.",
+    "risks": "1. **The atomicity of approval+activation is the defect most likely to ship silently.** If the two writes are not in one transaction, an approval whose activation half fails leaves the goal approved-but-not-activated — a state J1 has no action to escape. Prove it by fault injection, not by reading the code: force the activation write to fail and assert NEITHER half is durable.\n2. **A forged acceptance is the worst outcome in this task.** Acceptance turns work into an accepted terminal state, so it must be evidence-bound through the core's validators and must refuse without them. Assert the refusal code AND read the store back — a handler that mutates then refuses passes a return-value-only assertion.\n3. **Do not let the daemon re-implement a core rule.** Both layers can refuse the same command; if a handler restates a validation the core owns, the two drift and epic rail 6's 'assert against the production surface' is violated by construction. Surface the CORE's reason code verbatim.\n4. **Extend the frozen vocabularies by appending only.** Existing suites assert against BOOTSTRAP_COMMAND_KINDS and the handler tables; a reorder or removal breaks a foreign green suite and reads as your regression.\n5. **Resist the four-action shortcut.** If activation inside approval proves genuinely hard, that is a finding to report, not a licence to split the command — splitting changes the journey the epic's exit is measured against.\n6. **`apps/daemon` is now covered by the runtime-loadability gate**, so a new module without its `.js` bridge will fail that gate rather than passing quietly as it would have last week.\n7. This task does NOT unblock the canary by itself — J3 (launcher/restart composition) and J4 (review persistence) remain missing and are separately owned. Say so in the completion evidence so nobody reads a green J1 as a green canary.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/planning/planning-services.ts",
+      "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+      "apps/daemon/src/bootstrap/bootstrap-services.ts",
+      "packages/core/src/goal/goal-contract.ts",
+      "packages/core/src/goal/goal-reducer.ts",
+      "packages/core/src/planning/planning-command-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 21600000
+  },
+  "planApprovedAt": "2026-08-09T10:24:59.234Z",
+  "contextFetchedBy": [
+    "worker-0b27a5cc"
+  ],
+  "workStartedAt": "2026-08-09T10:25:49.087Z"
 }

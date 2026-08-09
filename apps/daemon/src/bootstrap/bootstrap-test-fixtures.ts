@@ -207,6 +207,82 @@ export function approvalCommand(): Record<string, unknown> {
   };
 }
 
+export const GRAPH_REVISION_REF = "graph-revision-1";
+
+/**
+ * The core's `PlanningActivationWitness` (planning-command-contract.ts:117). The daemon consumes
+ * `expectedGoalVersion` and hands it to `reduceGoal`; every other field is the caller's evidence.
+ * `expectedGoalVersion` is 1 because the approval follows `goal.create`, which leaves the goal at
+ * domain version 1.
+ */
+export function planningActivation(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    activationRef: "activation-1",
+    budgetHash: hex64("b0"),
+    expectedGoalVersion: 1,
+    goalDraftNoActiveRevision: true,
+    graphHash: hex64("6a"),
+    policyHash: hex64("b1"),
+    qualityHash: hex64("dd"),
+    truthClass: "HUMAN_APPROVED",
+    ...overrides,
+  };
+}
+
+/** J1's second human action: one approval that also activates the initial graph (design 299). */
+export function approvalPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    activation: planningActivation(),
+    command: approvalCommand(),
+    graphRevisionRef: GRAPH_REVISION_REF,
+    record: approvalRecord(SUBMISSION_HASH),
+    runId: RUN_ID,
+    ...overrides,
+  };
+}
+
+/** The core's `AcceptanceClosureWitness`: the verified result and the obligations that hold. */
+export function closureWitness(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    acceptanceClosureRef: "acceptance-1",
+    completionNodeAcceptedRef: "completion-node-1",
+    noCurrentPreparationGeneration: true,
+    noPendingDraftOrSupersession: true,
+    obligationsHoldRef: "obligations-1",
+    truthClass: "HUMAN_APPROVED",
+    ...overrides,
+  };
+}
+
+/** The core's `ZeroAuthorityWitness`: no authority outlives the accepted goal. */
+export function zeroAuthorityWitness(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    truthClass: "DAEMON_VERIFIED",
+    zeroAuthorityProofRef: "zero-authority-1",
+    ...overrides,
+  };
+}
+
+/** J1's third human action: final acceptance of the verified, reviewed result. */
+export function acceptancePayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    closureWitness: closureWitness(),
+    goalId: GOAL_ID,
+    zeroAuthorityWitness: zeroAuthorityWitness(),
+    ...overrides,
+  };
+}
+
 export function approvalRecord(exactRevisionHash: string): Record<string, unknown> {
   return {
     actor: "human-1",
@@ -230,7 +306,7 @@ export function approvalRecord(exactRevisionHash: string): Record<string, unknow
   };
 }
 
-/** The nine owned commands in durable order; every other fixture is derived from this list. */
+/** The ten owned commands in durable order; every other fixture is derived from this list. */
 export function bootstrapSequence(): readonly Envelope[] {
   return [
     envelope("project.register", 0, { owner: "owner-1" }),
@@ -246,11 +322,10 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
     envelope("goal.create", 0, goalPayload()),
     envelope("plan.propose", 0, { commands: planningChain(), runId: RUN_ID }),
-    envelope("approval.decide", 0, {
-      command: approvalCommand(),
-      record: approvalRecord(SUBMISSION_HASH),
-      runId: RUN_ID,
-    }),
+    envelope("approval.decide", 0, approvalPayload()),
+    // The goal is at domain version 2 here: `goal.create` left it at 1 and the approval's
+    // activation half advanced it to 2 in the same decision.
+    envelope("goal.close", 2, acceptancePayload()),
   ];
 }
 

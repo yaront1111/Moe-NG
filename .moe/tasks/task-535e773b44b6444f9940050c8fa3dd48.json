@@ -35,44 +35,72 @@
     {
       "stepId": "step-2",
       "description": "Build the discovery half and prove it cannot miss a package. Create the suite under tests/runtime/ (the root vitest config already includes `tests/**/*.test.ts`, so this needs no config change). Discovery reads pnpm-workspace.yaml, expands each glob, and for every matched directory containing a package.json resolves the declared entry from its `exports` map. It must NEVER use a hand-maintained package list: @moe/context and @moe/review shipped with zero bridges days after being created, and a static list would have silently omitted both — which is the exact failure mode this gate exists to prevent. Assert that property directly: the discovered package set equals the set of workspace directories on disk that contain a package.json, so adding a package automatically enrols it. Assert the discovered count is non-zero (a discovery that silently finds nothing would make the whole suite pass vacuously), and assert a glob matching no directories is tolerated rather than throwing.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
       ],
       "newFiles": [
         "tests/runtime/package-loadability.test.ts"
       ],
-      "startedAt": "2026-08-09T10:24:05.217Z"
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts",
+        "tests/runtime/package-loadability-support.ts"
+      ],
+      "note": "Reopen TDD RED: permanent temp-root fixture declaring ./src/index.ts without that file reproduced raw ENOENT at support.ts:142; focused suite was 2 failed/5 passed (the second failure was the honest foreign @moe/import zero-export signal). Implemented declared-entry substate PRESENT|MISSING_ENTRY without changing the declared-entry vs NO_RUNTIME_ENTRY partition. Missing entry now becomes stable `{outcome/code: MISSING_ENTRY, specifier}` and stays in discovery. Permanent fixture includes one valid sibling package and one missing-entry package, runs both through the production observation pipeline, asserts the valid import still succeeds, and pins missing package name, code, and exact specifier in the report. Targeted regression+both controls+timeout run: 3 passed/4 skipped; strict ad-hoc tsc over both files exits 0. Support/test are 299/163 lines. The full workspace case remains intentionally red only on foreign in-flight @moe/import importing with zero exports; no foreign bytes touched.",
+      "startedAt": "2026-08-09T10:24:05.217Z",
+      "completedAt": "2026-08-09T10:27:05.202Z"
     },
     {
       "stepId": "step-3",
       "description": "Build the probe half — real child processes, with the controls that make its output trustworthy. For each discovered package, spawn `process.execPath` (never a bare `node`) with `--experimental-strip-types`, import the resolved entry, and report a structured result. An in-process `import()` is forbidden here: vitest rewrites a `./foo.js` specifier back to `foo.ts`, which is precisely the blindness this gate exists to defeat, so an in-process probe would reproduce it and the gate would be worthless. Assert the child actually ran by capturing a stdout marker rather than trusting an exit code alone. THE TWO CONTROLS ARE MANDATORY and belong inside the suite: a POSITIVE control (a known-good bridged package must load with more than zero exports) and a NEGATIVE control (a deliberately unresolvable specifier must fail with the literal `ERR_MODULE_NOT_FOUND`, asserted on the error CODE and not on message text, which varies by platform and Node version). Without them a harness bug reports a repo-wide catastrophe that is not real — which is exactly what happened while this task's evidence was being gathered, when a bare-package-name probe reported all ten packages failing including correctly-bridged @moe/scheduler. Spawning ~13 children is slow: run them through a bounded concurrent pool with an explicit per-child timeout, and report a timeout as its own distinct outcome, never as a pass.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts",
+        "tests/runtime/package-loadability-support.ts"
+      ],
+      "note": "No probe redesign: QA explicitly verified the real-child harness, controls, marker, and timeout. Reopen fix integrates missing declared entries into that same structured result pipeline via observeWorkspacePackage; it does not spawn a child for a nonexistent file and therefore cannot collapse discovery. In one targeted run the permanent missing-entry fixture passed together with the real-Node positive/negative control and timeout cases (3 pass, 4 skipped), demonstrating the bad package no longer prevents controls from executing. Missing-entry report is package-named and carries stable code MISSING_ENTRY plus exact specifier.",
+      "startedAt": "2026-08-09T10:27:10.447Z",
+      "completedAt": "2026-08-09T10:27:17.875Z"
     },
     {
       "stepId": "step-4",
       "description": "Add the self-retiring allowlist — the scope decision, made explicitly. Six packages fail today, so a bare gate would land permanently red; in a fleet where `pnpm test` is the final gate on several tasks, a standing red would block all of them and be routed around within the hour. Land it GREEN and HONEST instead: an allowlist of exactly the six known-failing packages, each entry carrying its owning sweep task id and the date it was added — @moe/core (task-386fcb4c), @moe/context and @moe/review (task-b7049554), @moe/skills, @moe/mcp and @moe/control-room-client (task-17b03331). The structural anti-rot rule is the important half and must be implemented, not just documented: THE SUITE FAILS WHEN AN ALLOWLISTED PACKAGE STARTS LOADING, so a landed sweep forces its entry to be removed rather than leaving it to decay. That is the same ratchet discipline this repo already runs for absence probes. Assert that every allowlist entry names a non-empty task id, and that the allowlist contains no package that currently passes. Do NOT weaken the underlying assertion for allowlisted packages — they are still probed and still reported; they simply do not fail the suite yet.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/runtime/package-loadability.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability.test.ts",
+        "tests/runtime/package-loadability-support.ts"
+      ],
+      "note": "No allowlist change. QA verified the empty self-retiring allowlist is correct after all bridge sweeps landed. MISSING_ENTRY is deliberately not allowlist-compatible: observationIssues only permits an allowlisted IMPORT_FAILED with the pinned code/path; a missing declared entry always becomes a gate issue. Current foreign @moe/import has progressed past missing entry and now fails honestly for zero exports, so no new allowlist entry is warranted.",
+      "startedAt": "2026-08-09T10:27:23.556Z",
+      "completedAt": "2026-08-09T10:27:31.783Z"
     },
     {
       "stepId": "step-5",
       "description": "Prove the gate is load-bearing by mutation, and do it safely in a shared worktree. Pick a package that currently PASSES (@moe/scheduler or @moe/store) and temporarily delete ONE of its .js bridges, then confirm the gate goes red naming that package AND that specific unresolvable specifier — a gate that fails without naming what broke is not actionable. Also confirm the reverse direction: temporarily add a passing package to the allowlist and confirm the suite fails on the anti-rot rule from step 4, proving that rule is real rather than aspirational. BEFORE mutating anything, capture `git rev-parse HEAD:<path>` for the bridge you delete; this worktree is shared and another agent's whole-tree completion hook can commit your deletion, after which `git checkout -- <path>` restores the DELETED state and `git status` reports clean because HEAD now holds it, leaving a failing test as the only signal (mem:mutation-drills-in-shared-worktree). Verify the restore against that captured sha, keep the mutated window to a single run, and re-run the gate afterwards. Do NOT fix any package's bridges in this task — six packages fail today, each has an owning sweep task, and fixing one here would hide this gate's first real signal and steal another task's deliverable.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "tests/runtime/package-loadability-support.ts",
+        "tests/runtime/package-loadability.test.ts"
+      ],
+      "note": "Reopen-only load-bearing drill completed. Prior bridge-removal and anti-rot allowlist mutations were already independently QA-verified and were not repeated. For the new classified behavior, captured support-file hash 88a47e6335916abb171007b769d348d796a7d15d, temporarily mutated ENOENT handling so the declared-missing fixture was misclassified PRESENT, and the permanent regression failed exactly on expected MISSING_ENTRY vs PRESENT (exit 1; 1 failed, 6 skipped). Restored exact hash 88a47e6335916abb171007b769d348d796a7d15d and reran `pnpm exec vitest run tests/runtime/package-loadability.test.ts -t \"classifies a declared missing entry\"`: exit 0, 1 passed, 6 skipped.",
+      "startedAt": "2026-08-09T10:27:43.530Z",
+      "completedAt": "2026-08-09T10:29:19.927Z"
     },
     {
       "stepId": "step-6",
       "description": "Decide the lane, request the amendment if needed, and run the gates. The suite lives under tests/ and the root vitest config already includes `tests/**/*.test.ts`, so it runs under `pnpm test` with NO config change — confirm that is true rather than assuming it. If a dedicated script (e.g. `test:runtime`, following the existing `test:property` precedent) is genuinely wanted, that edits root package.json which is outside this task's owned paths: request the ownership amendment and WAIT for confirmation; do not self-approve, and note the suite is fully functional without it. Then run, capturing fresh output: `pnpm typecheck` and `pnpm test`, both of which must exit 0 — the gate must land green thanks to the allowlist, not red. Record the probe's full per-package report in the completion evidence, including the six allowlisted failures with their owning task ids, so the next reader sees exactly what is outstanding and who owns it. Attribute any unrelated red by path rather than by a remembered count.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "package.json"
-      ]
+      ],
+      "startedAt": "2026-08-09T10:29:30.313Z"
     },
     {
       "stepId": "step-7",
@@ -101,9 +129,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T09:11:33.693Z",
-  "updatedAt": "2026-08-09T10:24:05.217Z",
+  "updatedAt": "2026-08-09T10:29:30.313Z",
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {
@@ -122,7 +154,7 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 2,
     "firstClaimAt": "2026-08-09T09:31:37.646Z",
-    "executedStepCount": 8,
+    "executedStepCount": 12,
     "rejectCount": 1,
     "reopenCount": 1
   },

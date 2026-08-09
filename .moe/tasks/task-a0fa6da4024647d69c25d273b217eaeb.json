@@ -85,7 +85,7 @@
     {
       "stepId": "step-5",
       "description": "codex-stream.ts — structured/raw dual record with bounded retention, mirroring claude-stream.ts and claude-stream-anomalies.ts. Split framing and the anomaly vocabulary into a sibling module if the file approaches 250 lines. FOUR DECISIONS FROM CLAUDE THAT MUST NOT BE SIMPLIFIED, each of which was a real bug: GAP is computed over the SET of sequences, not delivery order, or out-of-order delivery (1,3,2) falsely raises GAP; a malformed record COUNTS as occupying a slot, or (1, unreadable, 3) invents a gap; COUNTER_REGRESSION suppresses gap analysis entirely, because contiguity is undefined across a restart; and the first record establishes the origin and is never gap-checked, so RESUME_DISCONTINUITY keys on an explicit resumedFrom and never on 'first seq != 1'. Retention is bounded but digest coverage is not: past the size cap the record flips to an artifact reference while sha256 and byteLength still span every byte, and per-event line bytes are suppressed too — omitting that reintroduces the unbounded buffer through the back door. Bound the event COUNT as well as the byte size; Claude needed a separate event-limit refusal because the events array was unbounded even when raw retention was capped. Keep UNKNOWN_SCHEMA distinct from any pre-activation refusal code.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-stream.ts",
         "packages/runner/src/providers/codex/*.test.ts"
@@ -93,50 +93,86 @@
       "newFiles": [
         "packages/runner/src/providers/codex/codex-stream.ts"
       ],
-      "startedAt": "2026-08-09T10:24:13.471Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-stream-anomalies.ts",
+        "packages/runner/src/providers/codex/codex-stream.ts",
+        "packages/runner/src/providers/codex/codex-stream.test.ts"
+      ],
+      "note": "TDD RED asserted the missing stream module, then GREEN and expanded to 11 stream tests. Split framing/anomalies (156 lines) from retention/recording (170 lines). Tests pin: out-of-order set analysis without false GAP; real GAP; malformed occupying a slot; counter regression suppressing gap; explicit resumedFrom only; UNKNOWN_SCHEMA separate from PROVIDER_CAPABILITY_CHANGED; exact raw digest across CRLF; frozen effect-bound events; >16MiB artifact-ref with 64KiB tail and suppressed lineBase64; event-count refusal; stable invalid bytes/effect/allowlist codes. Focused stream suite 1 file/11 tests and runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:24:13.471Z",
+      "completedAt": "2026-08-09T10:27:18.307Z"
     },
     {
       "stepId": "step-6",
       "description": "testkit codex golden streams. Create packages/testkit/src/providers/codex/codex-golden-streams.ts using the EXACT cross-package protocol claude-golden-streams.ts established, because runner tests CANNOT import testkit TypeScript (rootDir \"src\" plus composite puts the file outside the project). The corpus is ONE JSON document inside a template literal between two marker comments, both exported as string constants; runner tests readFileSync the module, lastIndexOf both markers, slice and JSON.parse. CRITICAL AND COUNTERINTUITIVE: each case's sha256 is over the RAW DECODED BYTES, not canonical JSON. That is deliberate — it means the reader needs only a sha256 implementation, so runner's canonicalJson and testkit's canonicalize never have to agree byte-for-byte, and a cross-package gate that depended on two independent canonicalizers agreeing would be a latent trap. Keep corpus-level stability in-package by pinning a corpus digest constant. Mark the corpus DEVELOPMENT_ONLY. Do NOT add a .js bridge for this file and do NOT touch packages/testkit/src/index.ts — claude-golden-streams.ts has neither, because the corpus is not on the testkit entrypoint and nothing loads it from the Node runtime path. Include at least one CRLF case; Claude's round-trips byte-exact and proved the framing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/testkit/src/providers/codex/*.ts"
       ],
       "newFiles": [
         "packages/testkit/src/providers/codex/*.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/testkit/src/providers/codex/codex-golden-streams.ts",
+        "packages/testkit/src/providers/codex/codex-golden-streams.test.ts",
+        "packages/runner/src/providers/codex/codex-stream.test.ts"
+      ],
+      "note": "TDD RED asserted the missing corpus module, then GREEN and expanded coverage. Added the exact marker-delimited, single-JSON cross-package corpus protocol with 9 DEVELOPMENT_ONLY/NOT_CONFIRMATORY cases. Each sha256 is recomputed over decoded raw bytes; corpus identity pinned to 2b006bc964f353f77e5e1f1d433657bbe29b8ea2827b9fef91e3b28350ab5fc2. Complete carries exactly 3 literal CRLF pairs. Runner reads source via lastIndexOf markers, independently re-verifies byte length/hash, asserts GOLDEN.size=9, and pins all typed outcomes. Testkit corpus gets no bridge and testkit index stayed clean. Focused two suites/17 tests plus testkit and runner typechecks exit 0.",
+      "startedAt": "2026-08-09T10:27:41.757Z",
+      "completedAt": "2026-08-09T10:30:00.805Z"
     },
     {
       "stepId": "step-7",
       "description": "codex-render.ts — the deterministic provider-input render, and the module the human's roadmap amendment of 2026-08-07 speaks to directly: the Codex adapter must consume the SAME provider-neutral validated skill snapshot and canonical AGENTS.md contract as Claude, record exact rendered bytes and digest, respect scoped instruction precedence, and never let skill or prompt text grant command or effect authority. Mirror SkillRendererInput structurally with the version literal \"moe-skill-renderer-input/1\" pinned rather than taking a @moe/skills dependency — that would touch packages/runner/package.json, outside owned paths, and drift is caught by the version-literal refusal. TWO TRAPS: use renderedBase64, NEVER a Uint8Array, because Object.freeze throws on a non-empty typed array AND runner's deepFreeze treats one as a plain record, so a bytes field inside a frozen record crashes at construction. And the render output must have NO command, effect, or lease field to set — assert the EXACT sorted key list so a future field that could carry authority breaks the test rather than slipping in. That assertion is DoD 3. Bound the mirrored skill count and file count, and check the mandatory size BEFORE framing since framing only grows the payload. Wrap any tokenizer port in try/catch and return a typed refusal; a caller exception escaping a function whose contract is typed refusal is a defect. Split before 400 lines — claude-render.ts is 372.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-render.ts",
         "packages/runner/src/providers/codex/*.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/codex-render.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-render-skills.ts",
+        "packages/runner/src/providers/codex/codex-render.ts",
+        "packages/runner/src/providers/codex/codex-render.test.ts"
+      ],
+      "note": "TDD RED asserted the missing renderer, then GREEN and expanded to 9 tests. Split validated skill decoding (117 lines) from deterministic envelope/budget logic (214 lines). Renderer consumes canonical AGENTS.md bytes, task context, and the same pinned provider-neutral skill snapshot version; sorts skills/files by identity; records exact base64 bytes/digest; freezes all returned records; and exposes only the exact 9-key top-level plus exact 7-key layer shape, with authority NONE/advisoryOnly true and no command/effect/lease affordance. Tests pin version/authority/task/digest/count/size/tokenizer reason codes, pre-frame mandatory bound, advisory-only omission, aggregate skill/file limits, deterministic ordering, and throwing tokenizer fail-closed behavior. Focused 1 file/9 tests and runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:30:17.501Z",
+      "completedAt": "2026-08-09T10:33:56.528Z"
     },
     {
       "stepId": "step-8",
       "description": "codex-cancel-reconcile.ts — typed reconciliation outcomes, mirroring claude-cancel-reconcile.ts (131 lines, the shape to match). Declare CODEX_RECONCILIATION_VERSION, the frozen reconciled-outcome vocabulary, the process-exit union (EXITED with code | SIGNALLED with signal | UNOBSERVED) and reconcileCodexRun. THE SUPERVISOR FENCE IS ABSOLUTE HERE: zero child_process, zero spawn, zero .kill, zero Date.now, zero Math.random anywhere in this adapter. Cancellation is an INPUT and process death is a caller-supplied observation — UNOBSERVED is a first-class arm and must never be collapsed into a guess. Launch locks, job-object death proof, ARMED/SUSPECT and relaunch belong to packages/runner/src/supervisor/, which this adapter feeds and must not reimplement (task rail 1: adapters cannot fork lifecycle or authority semantics). Every reconciliation test asserts the specific outcome code, not merely that reconciliation returned something.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
         "packages/runner/src/providers/codex/*.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/codex/codex-cancel-reconcile.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
+        "packages/runner/src/providers/codex/codex-reconcile.test.ts"
+      ],
+      "note": "TDD RED asserted the missing reconciliation module, then GREEN and expanded to 16 tests. The 97-line pure reconciler mirrors the six Claude outcome strings and the exact EXITED|SIGNALLED|UNOBSERVED union, treating cancellation and process death strictly as caller-supplied facts. Tests pin every table arm by exact outcome code, distinguish UNOBSERVED from clean exit, ensure gaps/unknown schema/resume stay HONEST_UNKNOWN, reach the full non-empty outcome vocabulary, and verify deep freeze/digest binding. Full Codex tree fence grep reports ZERO child_process/spawn/.kill/clock/random hits. Focused 1 file/16 tests and runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:34:02.212Z",
+      "completedAt": "2026-08-09T10:36:09.636Z"
     },
     {
       "stepId": "step-9",
       "description": "PARITY TEST — the step that gives 'reconciliation parity' from the objective real teeth, and the reason mirroring is safe rather than merely duplicative. Both adapters live in @moe/runner, so a single test file CAN import both and compare them directly. Assert, against the PRODUCTION surfaces of both providers and never against a local re-declaration: the reconciled-outcome vocabularies are SET-EQUAL; the process-exit unions admit the same three arms including UNOBSERVED; the capability STATUS vocabulary is set-equal (SUPPORTED | UNSUPPORTED, no third arm on either side); the observation truth classes are set-equal; and the failure record shape is structurally congruent. Assert the compared sets are NON-EMPTY first — a parity test over two empty arrays passes while proving nothing, which is the sweep-generated-zero-cases failure the epic rail names. Where the two providers legitimately DIFFER — the capability lists themselves, since the providers genuinely have different capabilities — assert the difference explicitly with a hand-written expected list rather than leaving it unasserted, so a capability silently vanishing from either side fails here.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/codex/*.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/codex/codex-parity.test.ts"
+      ],
+      "note": "Added a 5-test parity suite comparing production Claude and Codex surfaces. It asserts both reconciled vocabularies non-empty before set equality; drives EXITED/SIGNALLED/UNOBSERVED through both production reconcilers; compares actual outcomes for the shared cancel/exit table; pins SUPPORTED|UNSUPPORTED and PROVEN|UNKNOWN set equality; compares frozen failure record keys/value types; and hand-pins both capability lists with the intentional Codex-only difference exactly [CWD_OBSERVATION]. Focused parity suite 1 file/5 tests and runner typecheck exit 0.",
+      "startedAt": "2026-08-09T10:36:28.630Z",
+      "completedAt": "2026-08-09T10:37:21.632Z"
     },
     {
       "stepId": "step-10",
@@ -182,12 +218,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:14.439Z",
-  "updatedAt": "2026-08-09T10:24:13.471Z",
+  "updatedAt": "2026-08-09T10:37:21.632Z",
   "metrics": {
     "firstClaimAt": "2026-08-07T19:02:08.922Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
     "architect-d89636d1",
@@ -206,7 +242,12 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T10:12:36.679Z",

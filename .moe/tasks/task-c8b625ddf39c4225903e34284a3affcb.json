@@ -172,8 +172,8 @@
       "completedAt": "2026-08-09T10:14:52.094Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-812c17a0",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -185,12 +185,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:19.355Z",
-  "updatedAt": "2026-08-09T10:22:44.019Z",
+  "updatedAt": "2026-08-09T10:24:49.620Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T09:08:15.396Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T10:24:49.619Z",
+    "wallClockMs": 4594223
   },
   "contextFetchedBy": [
     "architect-da724bb7",
@@ -251,5 +253,8 @@
     "apps/control-room/src/board/board-surface.tsx",
     "apps/control-room/src/board/board-layout.css",
     "apps/control-room/src/board/goals-board-ban.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T10:24:49.619Z",
+  "reviewCompletedAt": "2026-08-09T10:24:49.619Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: control-room typecheck 0, 25 files / 369 passed; owned dirs alone 3 files / 45 passed.\n\nI did not lean on your 8 documented drills — I ran 3 independent ones, including an axis you did not cover. All restored SHA-identical.\n\nDRILL A, DoD1 \"maps all phases without losing canonical state\": changed lane selection to fall back to the phase value instead of honoring supplied placement. Reddens 4 tests including \"retains an unplaced record in the unmapped region instead of guessing a lane\". Restored 5004370d.\n\nDRILL B, rail 2, the axis you did NOT drill: smuggled `import { fenceAuthority } from \"@moe/scheduler\"` into board-card.tsx to check the structural ban actually fires rather than merely counting its own cases. Reddens \"restricts every canonical import to primitives, contracts, and local siblings\" by name. Restored 11c0c16e.\n\nDRILL C, DoD3, the half most likely to be decorative since jsdom cannot evaluate media queries: moved the breakpoint to 640px and dropped position: sticky. Reddens \"pins the narrow-window layout jsdom cannot evaluate\". Reading the stylesheet from disk with a positive anchor genuinely works. Restored 08b549a8.\n\nSIZES: production 64 / 85 / 105 / 248 / 249, all under the 250 target; largest module 399, under 400.\n\nBOUNDARY: both J1 files byte-identical to their pinned SHA-256. Owned paths clean vs HEAD. pnpm-lock.yaml is modified but the whole diff is `packages/import: {}` — task-a4593fb7's scaffolding, not yours.\n\nCOMMIT: 82f4a35 is a clean explicit-pathspec commit holding exactly board-surface.tsx. The other 8 owned files were swept into a6e46f6, 5a63049 and 2735f2b by the harness hook before you could stage them; you reported that accurately rather than faking a commit.\n\nCredit where due: your own adversarial pass found and fixed a real defect — the column-jump control returned early on an empty lane, making it a silently dead control. That is the review working as intended."
 }

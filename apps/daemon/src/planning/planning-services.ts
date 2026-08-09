@@ -17,6 +17,7 @@ import type {
   HandlerTable,
   ServiceOutcome,
 } from "../bootstrap/bootstrap-ledger.js";
+import { activateInitialGraph } from "./approval-activation.js";
 
 /**
  * Plan proposal and approval — the two authority-bearing commands in this task.
@@ -110,16 +111,32 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   });
 };
 
-function durableSubmissionHash(context: HandlerContext, runId: string): string | null {
+interface DurableRun {
+  readonly goalRef: string;
+  readonly submissionHash: string;
+}
+
+/**
+ * The durably proposed run. `goalRef` is read from the run rather than from the request so the
+ * activation cannot be redirected at a goal this plan was never proposed for.
+ */
+function durableRun(context: HandlerContext, runId: string): DurableRun | null {
   const run = stateOf(context.ledger, runId);
   if (run === undefined || run === null || typeof run !== "object" || Array.isArray(run)) {
     return null;
   }
-  return payloadRef(run as JsonObject, "submissionHash");
+  const submissionHash = payloadRef(run as JsonObject, "submissionHash");
+  const state = payloadObject(run as JsonObject, "state");
+  const goalRef = state === null ? null : payloadRef(state, "goalRef");
+  if (submissionHash === null || goalRef === null) return null;
+  return { goalRef, submissionHash };
 }
 
 /**
- * Approval decision.
+ * Approval decision — J1's SECOND human action, which design 299 makes one click and one
+ * transaction: the plan/graph decision and the initial-graph activation commit together or not
+ * at all. `activateInitialGraph` therefore performs the single durable commit for both halves;
+ * returning early from any gate above it is what makes a partial approval unrepresentable.
  *
  * Eligibility, step-up authority and the decision-reason floor all belong to the core's
  * `applyApprovalCommand`, whose reason code is surfaced unchanged. The daemon owns exactly one
@@ -127,29 +144,36 @@ function durableSubmissionHash(context: HandlerContext, runId: string): string |
  * revision — because design 265 makes the revision diff the daemon's job, not core's.
  */
 const decideApproval: CommandHandler = (context): ServiceOutcome => {
-  const { ledger, request, store } = context;
+  const { request } = context;
   const runId = payloadRef(request.payload, "runId");
   const record = payloadObject(request.payload, "record");
   const command = payloadObject(request.payload, "command");
-  if (runId === null || record === null || command === null) {
+  const activation = payloadObject(request.payload, "activation");
+  const graphRevisionRef = payloadRef(request.payload, "graphRevisionRef");
+  if (runId === null || record === null || command === null || activation === null
+    || graphRevisionRef === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
 
-  const proposed = durableSubmissionHash(context, runId);
-  if (proposed === null || payloadRef(record, "exactRevisionHash") !== proposed) {
+  const run = durableRun(context, runId);
+  if (run === null || payloadRef(record, "exactRevisionHash") !== run.submissionHash) {
     return refuse(request.kind, "BOOTSTRAP_REVISION_HASH_MISMATCH", "DAEMON_PREREQUISITE");
   }
 
   const verdict = applyApprovalCommand(record, command);
   if (!verdict.ok) return refuseFromCore(request.kind, verdict.error);
+  // This surface composes J1's approve-and-activate action, so an activation may only ride an
+  // APPROVE. A typed decline is J4's journey and is not expressible here; letting a non-approval
+  // through would activate a graph the human refused.
+  if (verdict.value.decision !== "APPROVE") {
+    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_PREREQUISITE");
+  }
 
-  const approvalId = `${runId}-approval`;
-  return commitAccepted(store, request, {
-    aggregateId: approvalId,
-    eventPayload: { approvalRef: verdict.value.approvalRef, decision: verdict.value.decision },
-    eventType: "ApprovalDecided",
-    expectedVersion: versionOf(ledger, approvalId),
-    result: verdict.value as unknown as JsonValue,
+  return activateInitialGraph(context, {
+    activation,
+    approval: verdict.value,
+    goalId: run.goalRef,
+    graphRevisionRef,
   });
 };
 

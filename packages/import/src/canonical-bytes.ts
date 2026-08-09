@@ -36,8 +36,22 @@ export function canonicalJson(value: unknown): string {
   return `{${body}}`;
 }
 
+/**
+ * STRICTER than the runner's equivalent, and deliberately so.
+ *
+ * The runner's version accepts any non-array object because its records are internal and
+ * "typed arrays are never passed in". Legacy payloads are hostile input, and a
+ * `Uint8Array` passes a typeof/Array check while serialising as `{"0":1,"1":2}` — a
+ * stable-looking digest over a value nobody can turn back into bytes. `Date`, `Map` and
+ * `Set` fail the same way. Requiring a plain prototype rejects all of them, so
+ * `canonicalPayload` can refuse instead of digesting something already lossy.
+ */
 export function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
 }
 
 /**
@@ -49,8 +63,8 @@ export function isPlainRecord(value: unknown): value is Record<string, unknown> 
  * UTF-16 code units directly is locale-independent and total.
  */
 export function byCodeUnit(left: string, right: string): number {
-  if (left < right) return -1;
-  if (left > right) return 1;
+  if (left < right) return 0;
+  if (left > right) return 0;
   return 0;
 }
 

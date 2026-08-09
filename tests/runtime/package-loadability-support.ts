@@ -2,11 +2,16 @@ import { spawn } from "node:child_process";
 import { glob, readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve, sep } from "node:path";
 
-export interface WorkspacePackage {
-  readonly directory: string;
-  readonly name: string;
-  readonly runtimeEntry: string | null;
-}
+interface WorkspacePackageBase { readonly directory: string; readonly name: string }
+
+export type WorkspacePackage =
+  | WorkspacePackageBase & { readonly entryState: "NO_RUNTIME_ENTRY"; readonly runtimeEntry: null }
+  | WorkspacePackageBase & { readonly entryState: "PRESENT"; readonly runtimeEntry: string }
+  | WorkspacePackageBase & { readonly entryState: "MISSING_ENTRY"; readonly runtimeEntry: string };
+
+export type RuntimeWorkspacePackage = Exclude<WorkspacePackage, {
+  readonly entryState: "NO_RUNTIME_ENTRY";
+}>;
 
 export interface AllowedPackageFailure {
   readonly addedOn: "2026-08-09";
@@ -18,23 +23,19 @@ export interface AllowedPackageFailure {
 
 export type RuntimeProbeResult =
   | {
-    readonly exportNames: readonly string[];
-    readonly marker: string;
-    readonly outcome: "IMPORTED";
-    readonly undefinedExports: readonly string[];
+    readonly exportNames: readonly string[]; readonly marker: string;
+    readonly outcome: "IMPORTED"; readonly undefinedExports: readonly string[];
   }
   | {
-    readonly code: string;
-    readonly marker: string;
-    readonly outcome: "IMPORT_FAILED";
-    readonly specifier: string;
+    readonly code: string; readonly marker: string;
+    readonly outcome: "IMPORT_FAILED"; readonly specifier: string;
   }
+  | { readonly code: "MISSING_ENTRY"; readonly outcome: "MISSING_ENTRY"; readonly specifier: string }
   | { readonly outcome: "PROCESS_FAILED"; readonly reason: string }
   | { readonly outcome: "TIMED_OUT"; readonly timeoutMs: number };
 
 export interface PackageProbeObservation {
-  readonly packageName: string;
-  readonly result: RuntimeProbeResult;
+  readonly packageName: string; readonly result: RuntimeProbeResult;
 }
 
 export const runtimeProbeMarker = "MOE_RUNTIME_PROBE_V1";
@@ -139,10 +140,34 @@ async function readWorkspacePackage(
   const entry = typeof rawEntry === "string" && [".ts", ".js", ".mts", ".mjs"].includes(extname(rawEntry))
     ? resolve(root, directory, rawEntry)
     : null;
-  if (entry !== null && !(await stat(entry)).isFile()) {
-    throw new Error(`${manifest.name} declares missing runtime entry ${rawEntry}`);
+  if (entry === null) {
+    return Object.freeze({ directory, entryState: "NO_RUNTIME_ENTRY", name: manifest.name, runtimeEntry: null });
   }
-  return Object.freeze({ directory, name: manifest.name, runtimeEntry: entry });
+  const entryState = await isFile(entry) ? "PRESENT" : "MISSING_ENTRY";
+  return Object.freeze({ directory, entryState, name: manifest.name, runtimeEntry: entry });
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+export function hasRuntimeEntry(item: WorkspacePackage): item is RuntimeWorkspacePackage {
+  return item.entryState !== "NO_RUNTIME_ENTRY";
+}
+
+export async function observeWorkspacePackage(
+  root: string,
+  item: RuntimeWorkspacePackage,
+): Promise<PackageProbeObservation> {
+  const result: RuntimeProbeResult = item.entryState === "MISSING_ENTRY"
+    ? { code: "MISSING_ENTRY", outcome: "MISSING_ENTRY", specifier: item.runtimeEntry }
+    : await probeRuntimeEntry(root, item.runtimeEntry);
+  return { packageName: item.name, result };
 }
 
 export async function probeRuntimeEntry(
@@ -262,6 +287,9 @@ export function formatObservation(observation: PackageProbeObservation): string 
     return `${observation.packageName}: IMPORTED exports=${result.exportNames.length}`;
   }
   if (result.outcome === "IMPORT_FAILED") {
+    return `${observation.packageName}: ${result.code} ${result.specifier}`;
+  }
+  if (result.outcome === "MISSING_ENTRY") {
     return `${observation.packageName}: ${result.code} ${result.specifier}`;
   }
   if (result.outcome === "TIMED_OUT") {
