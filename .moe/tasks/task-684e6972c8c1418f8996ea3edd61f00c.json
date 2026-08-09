@@ -137,8 +137,8 @@
       "completedAt": "2026-08-09T13:31:56.252Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4addc779",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-58b24ffb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,7 +157,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:05:04.423Z",
-  "updatedAt": "2026-08-09T13:31:56.252Z",
+  "updatedAt": "2026-08-09T13:32:31.397Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:31:28.217Z",
     "plannedStepCount": 7,
@@ -166,7 +166,8 @@
   },
   "contextFetchedBy": [
     "architect-f39f0c46",
-    "worker-4addc779"
+    "worker-4addc779",
+    "qa-58b24ffb"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -205,5 +206,23 @@
     "wallClockMs": 6300000
   },
   "planApprovedAt": "2026-08-09T13:00:50.762Z",
-  "workStartedAt": "2026-08-09T13:01:03.714Z"
+  "workStartedAt": "2026-08-09T13:01:03.714Z",
+  "reviewStartedAt": "2026-08-09T13:32:21.758Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  30 passed (30)\n      Tests  595 passed (595)\n   Start at  16:30:06\n   Duration  1.49s (transform 15.89s, setup 0ms, import 22.43s, tests 3.06s, environment 2ms)\n\nGATE_EXIT_AFTER_COMMIT=0",
+    "reportedAt": "2026-08-09T13:32:21.758Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/recovery-incarnation.test.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.node.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.node.js",
+    "apps/daemon/src/recovery/recovery-incarnation.js",
+    "apps/daemon/src/recovery/recovery-incarnation-contract.js",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts"
+  ]
 }

@@ -149,8 +149,8 @@
       "completedAt": "2026-08-09T13:30:12.371Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b2df68b9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -162,12 +162,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T11:56:15.881Z",
-  "updatedAt": "2026-08-09T13:31:11.338Z",
+  "updatedAt": "2026-08-09T13:34:10.834Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:59:46.892Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-09T13:34:10.834Z",
+    "wallClockMs": 2063942
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
@@ -232,5 +234,8 @@
     "packages/runner/src/platform/platform-instant.ts",
     "packages/runner/src/platform/platform-instant.js",
     "packages/runner/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T13:34:10.834Z",
+  "reviewCompletedAt": "2026-08-09T13:34:10.834Z",
+  "reviewSummary": "APPROVED — verified from disk.\n\nGATE RE-RUN BY QA: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0, 39 files / 1184 tests. Runner tree clean.\n\nPLAIN-NODE ROOT PROBE, mine: 135 root exports, all 11 new names present, 7 boundaries, truth [PROVEN, UNKNOWN], arch [x64, arm64], layer PLATFORM_LINUX.\n\nROOT GUARD CO-CHANGE: exactly 11 names ADDED as literals, 0 removed, cardinality 124 -> 135 = +11. No bare bump, no loosening.\n\nPROHIBITIONS (rail 3), grep over platform production: no child_process, spawn, kill, Date.now, new Date, Math.random, process.platform or process.env. The sole `exec(` hit is `CANONICAL_INSTANT.exec` — a RegExp, not a process.\n\nTWO DRILLS RED, restores verified by `git hash-object` against f6cc227:\n- AND aggregation weakened to OR: 2 red incl. \"lets a single UNKNOWN verdict force the aggregate to UNKNOWN\". Epic rail 4's no-upgrade property is load-bearing.\n- off-host short-circuit disabled: 2 red — the darwin case AND the win32 case. win32 is this repo's own host, so a careless implementation would look correct locally.\n\nONE DRILL SURVIVED, reported as uninformative rather than as a gap. Removing `verdicts.length === PLATFORM_BOUNDARIES.length` leaves 33/33 green. `observation()` is module-private with exactly two call sites, and BOTH build their list with `PLATFORM_BOUNDARIES.map(...)`, so no reachable path can hand it a short list. Unreachable defensive depth — no test could redden it through the public API, and deleting it to satisfy a drill would be worse than keeping it.\n\nSIZES: 250/244/179/166/44 — platform-contract.ts sits exactly on the 250 target, none over.\n\nMETADATA NOTE, not a defect: task.filesModified lists claude-observation.ts, crash-classification.ts and canonical.ts, none owned; the commit contains none.\n\nSCOPE HELD: platform/linux/ not created, no conformance claim, module observes nothing itself."
 }

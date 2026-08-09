@@ -164,13 +164,20 @@
     {
       "stepId": "step-9",
       "description": "Adversarial self-review before complete_task, with a security emphasis because this task opens a network surface. Check: can the listener EVER bind a non-loopback interface, including via a config default, an environment variable, or a hostname that resolves off-loopback; does any log line, error message, or URL contain a credential; does the listener duplicate any check already committed in handleCommandRequest — authentication, capability, decode, or error mapping; does it flatten a PortRefusal's own code or layer into a generic boundary code, which that type's contract forbids; is a leaked listener or port possible on any exit path including a thrown handler; does any test assert merely that something was refused without naming the specific code and which of the two layers refused; does the client re-code a daemon refusal or hand-roll an envelope instead of using the generated builders; did apps/daemon/src/index.ts grow beyond one added line and collide with task-5e43a9e2's restructuring; is every new file under 250 lines; and are there debug, probe, scratch or generated evidence files left in the commit. Finally, state honestly in the completion note that DoD 3 was mis-specified — ControlRoomClientSurface is a builder registry, not a transport — and how its intent was met, and that the resumable cursor stream was NOT built here because event-stream.ts already implements it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-09T13:30:25.372Z"
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener.test.ts"
+      ],
+      "note": "Adversarial review done. Two REAL defects found in my own work and fixed; everything else clean. Final: daemon 597 passed (30 files), control-room-client 39 passed, integration 40 passed; both owned packages typecheck with an empty distinct-error-path set.\n\nDEFECT FOUND AND FIXED 1 — A HOSTNAME IS NOT A LOOPBACK ADDRESS. The guard only ever compared against [\"127.0.0.1\",\"::1\"], which is correct, but nothing TESTED that a name is refused. \"localhost\" looks loopback and is not: its resolution is controlled by the hosts file and by DNS, so admitting it would move the security decision off this guard and onto the resolver. Added a case sweeping \"localhost\", \"::\" and \"192.168.1.10\", each asserted to refuse with LISTENER_NON_LOOPBACK_BIND naming this layer. Drilled: adding \"localhost\" to LOOPBACK_HOSTS turns it red (1 failed | 13 passed).\n\nDEFECT FOUND AND FIXED 2 — A ::1 BIND WAS BOUND BUT UNREACHABLE. The expected Host authority was built as `${host}:${port}`, giving \"::1:port\" for an IPv6 loopback bind. No real client sends that; RFC 3986 requires the literal bracketed. Every request to a ::1 listener would have refused with LISTENER_HOST_INVALID while the listener reported itself healthy. authorityOf/originOf now bracket IPv6 literals, and a new case starts on ::1, asserts origin is http://[::1]:PORT and drives a real request over ::1. Drilled: removing the bracket turns it red (1 failed | 13 passed).\n\nCHECKLIST, each answered against the source rather than from memory.\n- Can it EVER bind non-loopback? No. grep over the four owned modules for process.env, 0.0.0.0, localhost and listen( returns exactly one hit: bound.listen(options.port ?? 0, host, resolve). There is no environment variable, no config file, no default other than 127.0.0.1, and the only caller-supplied host passes isLoopbackHost against a literal allow-list. --host on the bin goes through the same guard.\n- Credential in any log line, error or URL? No. The only log statements are `${method} ${path}` with the query string stripped, `listening on ${origin}`, and `${code} ${layer}`. The 500 body carries only { layer }. The client puts the credential in x-moe-session-credential and the URL is asserted to equal `${origin}${path}` exactly; a drill moving it to a query string reddens 2 client cases.\n- Duplicated adapter checks? No. grep for authenticate/capabilit/decodeRuntime/createRuntimeError/INPUT_INVALID/AUTHENTICATION_FAILED across the listener, guards and client transport matches only prose in comments. The one parse the listener owns is the event-page request, and it is structural (types and presence) because no committed byte decoder exists for EventReadRequest; the event-stream seam still owns limit bounds and cursor semantics.\n- PortRefusal flattening? No. The command result and the event frame are both serialized verbatim, the frame always at 200 precisely so no per-frame status is minted, and daemon-entry returns a ListenerRefused unchanged — asserted by a case that also checks LISTENER_NON_LOOPBACK_BIND is NOT a member of DAEMON_ENTRY_REFUSAL_CODES.\n- Leaked listener or port? Closed on the refused-start path, on the thrown-handler path (tested by rebinding the same port afterwards) and in a finally in every suite. Second shutdown refuses with DAEMON_ENTRY_ALREADY_STOPPED instead of double-closing.\n- Any test asserting merely \"refused\"? No. Every refusal case names the specific code AND which of the now-three layers answered, and expectListenerRefusal additionally asserts the code is a member of the frozen vocabulary. The integration suite deliberately has one case refusing at the LISTENER (unknown route) and one at the ADAPTER (stage DECODE) so a test that stopped distinguishing them would fail.\n- Client re-coding or hand-rolling? No. Envelopes come from gate.client.commands, the daemon's answer is returned verbatim, and the transport imports no generated module at all.\n- index.ts: exactly ONE line added by me (export * from \"./daemon-entry.js\"). The file is now 262 lines, but it was 249 at step 1 and the remaining growth is another agent's recovery-incarnation export block; task-5e43a9e2's restructuring is untouched.\n- File sizes, all under the 250 target: http-listener.ts 195, http-listener-guards.ts 145, daemon-entry.ts 161, daemon-main.ts 93, daemon-entry-fixtures.ts 34, client-transport.ts 134, integration test 176.\n- Debug/probe/scratch/generated evidence files: none. git status over the owned paths lists only sources, .js bridges and tests.\n\nDoD 3 WAS MIS-SPECIFIED, stated plainly. It asks for \"a runtime implementation satisfying the EXISTING ControlRoomClientSurface\". That type is a generated BUILDER REGISTRY (client-compat.ts:58 — commands, errors, pins, queries, telemetryKinds, wireProtocolVersion), already fully implemented and already returned by createCompatGate. There was nothing to implement and a parallel interface was forbidden. Its INTENT is met: the new send path CONSUMES that surface, is fed exclusively from gate.clien",
+      "startedAt": "2026-08-09T13:30:25.372Z",
+      "completedAt": "2026-08-09T13:32:44.543Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5981deec",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -182,7 +189,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:54:17.908Z",
-  "updatedAt": "2026-08-09T13:30:25.372Z",
+  "updatedAt": "2026-08-09T13:34:31.665Z",
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -195,7 +202,8 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T13:03:06.656Z",
@@ -203,7 +211,7 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
     "firstClaimAt": "2026-08-09T13:03:12.901Z",
-    "executedStepCount": 8
+    "executedStepCount": 9
   },
   "planningNotes": {
     "approachesConsidered": "(1) Write a fresh HTTP boundary with its own auth, validation and error mapping. REJECTED and it would be a serious defect: apps/daemon/src/http/http-adapter.ts:150 already exports handleCommandRequest, which performs authenticate, protocol-version, decode, registry lookup, capability and payload-shape checks in that exact order, each with committed stable codes and refusal stages, and it is already covered by http-adapter.test.ts. A second boundary would duplicate authority and drift.\n(2) Add an HTTP framework (express/fastify). REJECTED: the repo has zero HTTP dependencies and the adapter already owns everything above the socket. node:http is sufficient and adds no supply-chain surface, which matters because release policy forbids unwaived HIGH dependency findings.\n(3) Implement a new client interface for sending. PARTIALLY REJECTED — see the DoD-3 correction below. The send path is new, but it must consume the EXISTING generated builders rather than hand-rolling envelopes.\n(4) Build the resumable cursor stream here. UNNECESSARY: apps/daemon/src/http/event-stream.ts already implements it (StreamCursor, StreamPage, StreamGap, WireCursor, EventPageFrame, readEventPage, resumeFromSnapshot, EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_LAYER=\"SEAM\"), and index.ts:101 already exports readEventPage and resumeFromSnapshot. The listener routes to it; it does not reimplement it. My own task description wrongly listed this as out of scope and unowned — it is neither; it is DONE.",
@@ -227,5 +235,36 @@
   "contextFetchedBy": [
     "worker-5981deec"
   ],
-  "workStartedAt": "2026-08-09T13:03:33.207Z"
+  "workStartedAt": "2026-08-09T13:03:33.207Z",
+  "reviewStartedAt": "2026-08-09T13:34:31.665Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "@moe/daemon: Test Files 30 passed (30) / Tests 597 passed (597)\n@moe/control-room-client: Test Files 5 passed (5) / Tests 39 passed (39)\ntest:integration (typecheck:packaging + vitest run tests/integration): Test Files 2 passed (2) / Tests 40 passed (40)\nCOMPOSITE_EXIT=0",
+    "reportedAt": "2026-08-09T13:34:31.665Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/http-listener.test.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/http/http-listener.js",
+    "apps/daemon/package.json",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/daemon-entry.js",
+    "apps/daemon/src/daemon-entry.test.ts",
+    "apps/daemon/src/daemon-main.ts",
+    "apps/daemon/src/daemon-main.js",
+    "apps/daemon/src/daemon-main.test.ts",
+    "apps/daemon/src/daemon-entry-fixtures.ts",
+    "packages/control-room-client/src/client-transport.test.ts",
+    "packages/control-room-client/src/client-transport.ts",
+    "packages/control-room-client/src/client-transport.js",
+    "packages/control-room-client/src/index.ts",
+    "packages/control-room-client/src/client-compat.test.ts",
+    "packages/control-room-client/src/control-room-client-runtime-entrypoint.test.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/http/http-listener-guards.js",
+    "tests/integration/control-room/control-room-transport.test.ts"
+  ]
 }
