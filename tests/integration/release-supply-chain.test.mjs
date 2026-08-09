@@ -203,7 +203,7 @@ describe("release supply-chain evidence", () => {
     assert.ok(result.evidence.licenses.packageCount > 0);
     assert.deepEqual(result.evidence.builds[0].containers, result.evidence.builds[1].containers);
     assert.deepEqual(result.evidence.sbom.normalizedPointers,
-      ["/metadata/timestamp", "/serialNumber"]);
+      ["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]);
     assert.deepEqual(result.evidence.builds[0].subjectReceipt,
       result.evidence.builds[1].subjectReceipt);
     assert.equal(result.evidence.builds[0].verificationKeyUse,
@@ -378,6 +378,49 @@ describe("release supply-chain evidence", () => {
           metadata: { timestamp: `2026-08-09T00:00:0${call}Z` },
           serialNumber: `urn:uuid:0000000${call}`,
         }),
+      })),
+    }), "REPRODUCIBILITY_MISMATCH");
+  });
+
+  const sbomWithPath = (path, tick, note = "generated") => JSON.stringify({
+    annotations: [{ text: note, timestamp: `2026-08-09T00:00:0${tick}Z` }],
+    bomFormat: "CycloneDX",
+    components: [{ name: "fixture", properties: [{ name: "SrcFile", value: `${path}/package.json` }] }],
+    metadata: { timestamp: `2026-08-09T01:00:0${tick}Z` },
+    serialNumber: `urn:uuid:0000000${tick}`,
+  });
+
+  test("normalizes only the build source root and reviewed volatile pointers", async () => {
+    let tick = 0;
+    const result = await runSupply({}, {
+      generateSbom: spy(async ({ sourceRoot }) => ({
+        exitCode: 0, stderr: "", stdout: sbomWithPath(sourceRoot, tick += 1),
+      })),
+    });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(result.evidence.sbom.normalizedSourceRootToken, "<SOURCE_ROOT>");
+    assert.deepEqual(result.evidence.sbom.normalizedPointers,
+      ["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]);
+    assert.notEqual(result.evidence.builds[0].sbomRawDigest, result.evidence.builds[1].sbomRawDigest);
+    assert.equal(result.evidence.builds[0].sbomNormalizedDigest,
+      result.evidence.builds[1].sbomNormalizedDigest);
+  });
+
+  test("refuses SBOM path drift outside the build source root", async () => {
+    let tick = 0;
+    expectReleaseRefusal(await runSupply({}, {
+      generateSbom: spy(async () => ({
+        exitCode: 0, stderr: "", stdout: sbomWithPath(`D:/foreign-${tick += 1}`, tick),
+      })),
+    }), "REPRODUCIBILITY_MISMATCH");
+  });
+
+  test("refuses annotation content drift that is not a reviewed pointer", async () => {
+    let tick = 0;
+    expectReleaseRefusal(await runSupply({}, {
+      generateSbom: spy(async ({ sourceRoot }) => ({
+        exitCode: 0, stderr: "", stdout: sbomWithPath(sourceRoot, tick += 1, `note-${tick}`),
       })),
     }), "REPRODUCIBILITY_MISMATCH");
   });

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
 const exec = promisify(execFile); const PNPM_ENTRY = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
-const SBOM_IGNORES = Object.freeze(["/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]);
+const SBOM_IGNORES = Object.freeze(["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]); const SBOM_ROOT_TOKEN = "<SOURCE_ROOT>";
 const sha256 = (/** @type {string | Uint8Array} */ value) => createHash("sha256").update(value).digest("hex");
 /** @returns {string} */ function canonical(/** @type {unknown} */ value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -75,9 +75,10 @@ const generateAudit = (/** @type {{sourceRoot: string}} */ request) =>
 const generateLicenses = (/** @type {{sourceRoot: string}} */ request) =>
   pnpmCommand(["licenses", "list", "--prod", "--json"], request.sourceRoot);
 async function generateSbom(/** @type {{sourceRoot: string}} */ request) {
-  const executable = join(request.sourceRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js");
+  const executable = join(request.sourceRoot, "node_modules", "@cyclonedx", "cdxgen", "bin", "cdxgen.js"); const output = join(request.sourceRoot, "node_modules", ".release-bom.json");
   if (!existsSync(executable)) return { exitCode: 1, stderr: "cdxgen missing", stdout: "" };
-  return command(process.execPath, [executable, "-t", "js", "-o", "-", request.sourceRoot], request.sourceRoot);
+  const run = await command(process.execPath, [executable, "-t", "js", "-o", output, request.sourceRoot], request.sourceRoot);
+  return run.exitCode !== 0 ? run : existsSync(output) ? { exitCode: 0, stderr: run.stderr, stdout: readFileSync(output, "utf8") } : { exitCode: 1, stderr: "sbom output missing", stdout: "" };
 }
 async function resolveSource(/** @type {{repositoryRoot: string}} */ request) {
   const sha = await command("git", ["rev-parse", "HEAD"], request.repositoryRoot);
@@ -158,22 +159,24 @@ function reports(/** @type {unknown} */ sbom, /** @type {unknown} */ audit, /** 
   if (licenseGroups.length === 0 || packageCount === 0) return releaseRefusal("LICENSE_REPORT_INVALID");
   return { audit: { advisoryCount: 0, dependencyCount: dependencies }, licenses: { licenseGroupCount: licenseGroups.length, packageCount }, sbom: { componentCount: components } };
 }
-function normalizedSbom(/** @type {unknown} */ sbom) {
+function normalizedSbom(/** @type {unknown} */ sbom, /** @type {string} */ sourceRoot) {
   const value = /** @type {Record<string, unknown>} */ (structuredClone(sbom));
   delete value.serialNumber;
   const metadata = /** @type {Record<string, unknown>} */ (value.metadata);
   if (metadata && typeof metadata === "object") delete metadata.timestamp;
-  return canonical(value);
+  for (const entry of Array.isArray(value.annotations) ? value.annotations : []) delete entry.timestamp;
+  return [JSON.stringify(sourceRoot).slice(1, -1), sourceRoot.split("\\").join("/")]
+    .reduce((text, path) => text.split(path).join(SBOM_ROOT_TOKEN), canonical(value));
 }
 function buildReceipt(/** @type {Record<string, unknown>} */ subject, /** @type {number} */ buildIndex,
-  /** @type {Record<string, string>} */ sourceDigests, /** @type {string} */ sbomRaw, /** @type {unknown} */ sbom) {
+  /** @type {Record<string, string>} */ sourceDigests, /** @type {string} */ sbomRaw, /** @type {unknown} */ sbom, /** @type {string} */ sourceRoot) {
   const containers = /** @type {Array<Record<string, unknown>>} */ (subject.containers).map((entry) => ({
     assetDigests: entry.assetDigests, componentId: entry.componentId,
     containerDigest: sha256(/** @type {Uint8Array} */ (entry.containerBytes)),
     manifestDigest: sha256(/** @type {Uint8Array} */ (entry.manifestBytes)),
   })).sort((left, right) => String(left.componentId).localeCompare(String(right.componentId)));
   return { buildIndex, containers, sourceDigests, subjectReceipt: subject.receipt,
-    sbomNormalizedDigest: sha256(normalizedSbom(sbom)), sbomRawDigest: sha256(sbomRaw), verificationKeyUse: subject.verificationKeyUse };
+    sbomNormalizedDigest: sha256(normalizedSbom(sbom, sourceRoot)), sbomRawDigest: sha256(sbomRaw), verificationKeyUse: subject.verificationKeyUse };
 }
 function cleanRoots(/** @type {string[]} */ roots) {
   for (const root of roots.splice(0)) {
@@ -212,7 +215,7 @@ function cleanRoots(/** @type {string[]} */ roots) {
       if (sbomRun.exitCode !== 0) return releaseRefusal("SBOM_GENERATION_FAILED");
       const sbomValue = parseJson(sbomRun); if (sbomComponentCount(sbomValue) === 0) return releaseRefusal("SBOM_REPORT_INVALID");
       if (buildIndex === 1) { firstSbom = sbomRun; firstSbomValue = sbomValue; firstAudit = await ports.generateAudit({ sourceRoot: root }); firstLicenses = await ports.generateLicenses({ sourceRoot: root }); }
-      builds.push(buildReceipt(subject, buildIndex, { lockAfter: after.lock, lockBefore: before.lock, packageAfter: after.package, packageBefore: before.package }, sbomRun.stdout, sbomValue));
+      builds.push(buildReceipt(subject, buildIndex, { lockAfter: after.lock, lockBefore: before.lock, packageAfter: after.package, packageBefore: before.package }, sbomRun.stdout, sbomValue, root));
     }
     if (!firstSbom || !firstAudit || !firstLicenses) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
     if (firstAudit.exitCode !== 0) return releaseRefusal("DEPENDENCY_AUDIT_FAILED");
@@ -225,7 +228,7 @@ function cleanRoots(/** @type {string[]} */ roots) {
       componentCount: 5, doctor: { missingSymbol: "@moe/daemon.collectDoctorVersionReport", reason: "DOCTOR_COMPATIBILITY_UNAVAILABLE", status: "UNKNOWN" },
       licenses: { ...parsed.licenses, digest: sha256(firstLicenses.stdout) }, operation: "RECORDED",
       os: [{ platform: "win32", status: "PASS" }, { deferredTaskId: "task-e87a735386f643fe92c0eeff09bc4275", platform: "linux", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }, { deferredTaskId: "task-e94b2055e281489ea9e97820919f6856", platform: "darwin", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }],
-      publicationAuthorized: false, releaseVerdict: "UNKNOWN", sbom: { ...parsed.sbom, digest: sha256(firstSbom.stdout), normalizedPointers: SBOM_IGNORES }, source, templateCount: 3, tools });
+      publicationAuthorized: false, releaseVerdict: "UNKNOWN", sbom: { ...parsed.sbom, digest: sha256(firstSbom.stdout), normalizedPointers: SBOM_IGNORES, normalizedSourceRootToken: SBOM_ROOT_TOKEN }, source, templateCount: 3, tools });
     const bytes = new TextEncoder().encode(canonical(evidence)); const evidenceDigest = sha256(bytes);
     const evidencePath = join(String(input.evidenceRoot), source.sourceSha, evidenceDigest, "evidence.json");
     const published = await ports.publishEvidence({ bytes, evidencePath, evidenceRoot: String(input.evidenceRoot) });
