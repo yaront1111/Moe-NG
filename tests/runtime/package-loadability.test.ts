@@ -21,29 +21,7 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const noRuntimeEntryReasons: Readonly<Record<string, string>> = Object.freeze({
   "@moe/control-room": "browser-only Vite application; no Node entry by design",
 });
-const allowedPackageFailures: Readonly<Record<string, AllowedPackageFailure>> = Object.freeze({
-  "@moe/control-room-client": {
-    addedOn: "2026-08-09",
-    expectedCode: "ERR_MODULE_NOT_FOUND",
-    expectedPathFragment: "/packages/control-room-client/src/",
-    ownerTaskId: "task-17b03331e4ee488a994635144cae4a53",
-    reason: "package-wide runtime bridges are pending",
-  },
-  "@moe/mcp": {
-    addedOn: "2026-08-09",
-    expectedCode: "ERR_MODULE_NOT_FOUND",
-    expectedPathFragment: "/packages/mcp/src/",
-    ownerTaskId: "task-17b03331e4ee488a994635144cae4a53",
-    reason: "package-wide runtime bridges are pending",
-  },
-  "@moe/skills": {
-    addedOn: "2026-08-09",
-    expectedCode: "ERR_MODULE_NOT_FOUND",
-    expectedPathFragment: "/packages/skills/src/",
-    ownerTaskId: "task-17b03331e4ee488a994635144cae4a53",
-    reason: "package-wide runtime bridges are pending",
-  },
-});
+const allowedPackageFailures: Readonly<Record<string, AllowedPackageFailure>> = Object.freeze({});
 
 it("discovers every workspace package manifest from pnpm-workspace.yaml", async () => {
   const discovered = await discoverWorkspacePackages(repositoryRoot);
@@ -51,6 +29,7 @@ it("discovers every workspace package manifest from pnpm-workspace.yaml", async 
 
   expect(discovered.length).toBeGreaterThan(0);
   expect(discovered.map(({ directory }) => directory)).toEqual(directoriesOnDisk);
+  expect(new Set(discovered.map(({ name }) => name)).size).toBe(discovered.length);
 });
 
 it("tolerates a workspace glob whose base directory is absent", async () => {

@@ -123,24 +123,26 @@ async function readWorkspacePackage(
   directory: string,
 ): Promise<WorkspacePackage | null> {
   const manifestPath = resolve(root, directory, "package.json");
+  let contents: string;
   try {
-    const parsed: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
-    const manifest = record(parsed);
-    if (manifest === null || typeof manifest.name !== "string") {
-      throw new Error(`${normalizePath(relative(root, manifestPath))} has no package name`);
-    }
-    const rawEntry = record(manifest.exports)?.["."];
-    const entry = typeof rawEntry === "string" && [".ts", ".js", ".mts", ".mjs"].includes(extname(rawEntry))
-      ? resolve(root, directory, rawEntry)
-      : null;
-    if (entry !== null && !(await stat(entry)).isFile()) {
-      throw new Error(`${manifest.name} declares missing runtime entry ${rawEntry}`);
-    }
-    return Object.freeze({ directory, name: manifest.name, runtimeEntry: entry });
+    contents = await readFile(manifestPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+  const parsed: unknown = JSON.parse(contents);
+  const manifest = record(parsed);
+  if (manifest === null || typeof manifest.name !== "string") {
+    throw new Error(`${normalizePath(relative(root, manifestPath))} has no package name`);
+  }
+  const rawEntry = record(manifest.exports)?.["."];
+  const entry = typeof rawEntry === "string" && [".ts", ".js", ".mts", ".mjs"].includes(extname(rawEntry))
+    ? resolve(root, directory, rawEntry)
+    : null;
+  if (entry !== null && !(await stat(entry)).isFile()) {
+    throw new Error(`${manifest.name} declares missing runtime entry ${rawEntry}`);
+  }
+  return Object.freeze({ directory, name: manifest.name, runtimeEntry: entry });
 }
 
 export async function probeRuntimeEntry(
@@ -201,7 +203,7 @@ function parseProbeOutput(stdout: string, stderr: string, code: number | null): 
   if (code !== 0) {
     return { outcome: "PROCESS_FAILED", reason: `exit=${String(code)} stderr=${stderr.trim()}` };
   }
-  for (const line of stdout.trim().split(/\r?\n/u)) {
+  for (const line of stdout.trim().split(/\r?\n/u).reverse()) {
     try {
       const result = decodeProbeResult(JSON.parse(line));
       if (result !== null) return result;
