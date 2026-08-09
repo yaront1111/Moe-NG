@@ -33,30 +33,44 @@
     {
       "stepId": "step-2",
       "description": "CARGO.TOML: add `\"Win32_System_Threading\"` to the existing windows-sys feature list. Do not touch the `=0.61.2` exact pin, do not add a second dependency entry, and do not remove any existing feature. Extend the existing comment block to say why the feature is now required (CreateProcessW, the PROC_THREAD_ATTRIBUTE_* family, and ResumeThread are all declared in Win32/System/Threading) and to record that AssignProcessToJobObject and IsProcessInJob were already reachable via Win32_System_JobObjects. Then run the verification command and confirm it still passes 7/7. Finally run `git diff --stat -- <crate>/Cargo.lock`: a feature addition that pulls no new package leaves the lock byte-unchanged. If it is unchanged, do NOT stage it. Only stage Cargo.lock if the diff is genuinely non-empty.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/Cargo.toml"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/Cargo.toml"
+      ],
+      "note": "ALREADY LANDED last session; re-verified on disk this session, not re-done.\n\nCargo.toml:37-41 — windows-sys pinned `=0.61.2` (exact pin untouched), features carry \"Win32_System_JobObjects\" and \"Win32_System_Threading\". One dependency entry, no feature removed. Comment block at 13-21 records why the pin is exact and that Win32_System_Threading was deliberately absent while the crate was job-only.\n\nCargo.lock: `git diff --stat HEAD -- Cargo.lock` is EMPTY — byte-unchanged, correctly NOT staged, exactly as the step required.\n\nThe \"still passes 7/7\" clause is not re-runnable in isolation: the crate now also carries the 12-test process suite and sibling 2b's in-flight lifecycle work. Gate evidence is under step-10.",
+      "startedAt": "2026-08-09T19:07:18.117Z",
+      "completedAt": "2026-08-09T19:07:31.088Z"
     },
     {
       "stepId": "step-3",
       "description": "PURE MOVE, ZERO LOGIC EDITS. Extract child 1's Win32 impl out of win32.rs so the file has room. Create src/win32/system_job.rs containing win32.rs lines 136-251 dedented by exactly four spaces, and replace win32.rs lines 134-252 with the two lines `#[cfg(windows)]` and `mod system_job;`. The new file MUST live at src/win32/system_job.rs and NOT at src/system_job.rs — the moved block's `use super::{...}` resolves to the `win32` module, which is preserved only if the file is a child of win32. (The task description names src/system_job.rs; it is wrong, and that path would force import edits and destroy the zero-edit property.) Change nothing else: no reformatting, no comment rewrites, no visibility changes. This exact procedure was rehearsed in a scratch copy and yields win32.rs=135 and system_job.rs=116 with the suite green. Verify fidelity mechanically before moving on: `diff <(git show HEAD:packages/runner/src/platform/windows/native/src/win32.rs | sed -n '136,251p' | sed 's/^    //') packages/runner/src/platform/windows/native/src/win32/system_job.rs` must print nothing. Then run the verification command: still 7 passed, 0 failed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/src/win32.rs"
       ],
       "newFiles": [
         "packages/runner/src/platform/windows/native/src/win32/system_job.rs"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/src/win32.rs",
+        "packages/runner/src/platform/windows/native/src/win32/system_job.rs"
+      ],
+      "note": "ALREADY LANDED last session; fidelity re-proved mechanically this session.\n\nsrc/win32/system_job.rs = 116 lines, and the verbatim-move check prints NOTHING:\n  diff <(git show 1e3057ab:.../src/win32.rs | sed -n '136,251p' | sed 's/^    //') src/win32/system_job.rs\n  => BYTE-IDENTICAL to base\n\nUSE 1e3057ab (the task's merge-base), NOT `HEAD`, as the step text says. HEAD has moved many commits since; HEAD's win32.rs IS the post-split version, so the literal `git show HEAD:` form now produces a large bogus diff and would read as a failed move. This is the same trap recorded in the prior handoff memory. The property being proved — the moved block is child 1's bytes unchanged — is only meaningful against the pre-move commit.\n\nFile lives at src/win32/system_job.rs (child of win32), NOT src/system_job.rs, so `use super::{...}` still resolves to the win32 module and no import edit was needed. The task description's path is wrong; the plan's is right.",
+      "startedAt": "2026-08-09T19:07:39.863Z",
+      "completedAt": "2026-08-09T19:07:52.436Z"
     },
     {
       "stepId": "step-4",
       "description": "EXTEND THE VOCABULARY AND DECLARE THE SEAM, AND REPAIR JOB_SWEEP WITHOUT WEAKENING IT. In win32.rs add exactly nine NativeOp variants — InitAttributeList, SetJobListAttribute, SetHandleListAttribute, CreateProcess, AssignProcessToJob, IsProcessInJob, QueryProcessId, QueryCreationTime, ResumeThread — extend NativeOp::ALL to `[NativeOp; 15]` listing all fifteen in declaration order, and add compile-time `const _: () = assert!(...)` pins for PROC_THREAD_ATTRIBUTE_JOB_LIST == 131085 and PROC_THREAD_ATTRIBUTE_HANDLE_LIST == 131074 against the windows-sys constants, mirroring the existing pin at win32.rs:115-119. There is deliberately NO variant for DeleteProcThreadAttributeList: windows-sys declares it with no return type, so it cannot fail. Declare `pub trait ProcessCalls` with an associated type for the attribute list (so the test double can use `()` while the real impl owns a heap buffer) and one method per arm above, plus an infallible `delete_attribute_list`. Then repair tests/job_sweep.rs: replace the `NativeOp::ALL` comparison with exact equality against a hand-written JOB_OPS list of the six job ops this sweep owns, PLUS an assertion that every JOB_OPS member is present in NativeOp::ALL. Do NOT convert it to a subset or containment test — process_sweep will own the totality check in step 8. PROVE THE REPAIR STILL BITES: temporarily delete one entry from the CASES array, confirm the test goes RED, then restore it and confirm 7/7 green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/src/win32.rs",
         "packages/runner/src/platform/windows/native/tests/job_sweep.rs"
-      ]
+      ],
+      "startedAt": "2026-08-09T19:08:00.380Z"
     },
     {
       "stepId": "step-5",
@@ -128,7 +142,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T17:09:00.580Z",
-  "updatedAt": "2026-08-09T19:06:17.363Z",
+  "updatedAt": "2026-08-09T19:08:00.380Z",
   "contextFetchedBy": [
     "worker-4091b158",
     "qa-5be1a8d6"
@@ -138,7 +152,9 @@
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [
     {
@@ -152,7 +168,7 @@
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
     "firstClaimAt": "2026-08-09T18:21:01.308Z",
-    "executedStepCount": 11,
+    "executedStepCount": 13,
     "rejectCount": 1,
     "reopenCount": 1
   },

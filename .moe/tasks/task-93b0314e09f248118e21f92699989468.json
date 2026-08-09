@@ -155,8 +155,8 @@
       "completedAt": "2026-08-09T19:06:21.079Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-97d6df26",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-5be1a8d6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:45:37.588Z",
-  "updatedAt": "2026-08-09T19:06:21.079Z",
+  "updatedAt": "2026-08-09T19:07:13.759Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:29:22.558Z",
     "plannedStepCount": 10,
@@ -190,7 +190,8 @@
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
-    "worker-97d6df26"
+    "worker-97d6df26",
+    "qa-5be1a8d6"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -245,5 +246,21 @@
     "escalatedAt": "2026-08-09T18:47:43.753Z"
   },
   "planApprovedAt": "2026-08-09T18:47:24.345Z",
-  "workStartedAt": "2026-08-09T18:47:55.790Z"
+  "workStartedAt": "2026-08-09T18:47:55.790Z",
+  "reviewStartedAt": "2026-08-09T19:07:10.319Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  22 passed (22)\n      Tests  359 passed (359)\n   Start at  22:05:50\n   Duration  724ms (transform 3.94s, setup 0ms, import 5.82s, tests 716ms, environment 1ms)",
+    "reportedAt": "2026-08-09T19:07:10.319Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/planning-run-expansion.test.ts",
+    "packages/core/src/planning/planning-run-test-fixtures.ts",
+    "packages/core/src/planning/planning-run-reducer.ts",
+    "packages/core/src/planning/planning-run-submission.ts",
+    "packages/core/src/planning/planning-results.ts",
+    "packages/core/src/planning/planning-run-reducer.test.ts",
+    "packages/core/src/expansion/planning-expansion-contract.test.ts"
+  ]
 }

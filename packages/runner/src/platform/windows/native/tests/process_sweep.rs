@@ -54,6 +54,12 @@ struct ScriptedCalls {
     /// error with. With a single `fail_at` the cleanup always succeeds and the
     /// test proves nothing.
     close_failure: Cell<Option<u32>>,
+    /// A THIRD programmable failure, for the process-terminate arm only.
+    ///
+    /// Same reason `close_failure` exists: proving that an unwind failure does
+    /// not overwrite the error that CAUSED the unwind needs two failures at
+    /// once, and `fail_at` only ever programs one.
+    terminate_failure: Cell<Option<u32>>,
     /// What `wait_for_process` reports when the CALL itself succeeds. Three of
     /// the four Win32 results are Ok values, so this is programmable rather
     /// than being folded into `fail_at`.
@@ -79,6 +85,7 @@ impl ScriptedCalls {
             in_job: Cell::new(true),
             prior_suspend_count: Cell::new(1),
             close_failure: Cell::new(None),
+            terminate_failure: Cell::new(None),
             wait_outcome: Cell::new(WaitOutcome::Signalled),
             exit_code: Cell::new(0),
             active_remaining: Cell::new(0),
@@ -112,6 +119,12 @@ impl ScriptedCalls {
     /// Every close from here on fails with `code`, whatever else is programmed.
     fn fail_closes_with(&self, code: u32) {
         self.close_failure.set(Some(code));
+    }
+
+    /// Every process-terminate from here on fails with `code`, whatever else is
+    /// programmed.
+    fn fail_process_terminate_with(&self, code: u32) {
+        self.terminate_failure.set(Some(code));
     }
 
     /// The wait CALL succeeds and reports this outcome. Distinct from
@@ -279,7 +292,11 @@ impl ProcessCalls for ScriptedCalls {
     }
 
     fn terminate_process(&self, _process: RawHandle) -> Result<(), NativeError> {
-        self.arm(NativeOp::TerminateProcess, "terminate-process")
+        self.arm(NativeOp::TerminateProcess, "terminate-process")?;
+        match self.terminate_failure.get() {
+            Some(code) => Err(NativeError::new(NativeOp::TerminateProcess, code)),
+            None => Ok(()),
+        }
     }
 
     fn image_name(&self, _process: RawHandle) -> Result<Vec<u16>, NativeError> {
@@ -465,29 +482,63 @@ fn sweep_pins_the_exact_op_and_code_for_every_construction_arm() {
         produced.insert(error.op());
     }
 
-    let owned: BTreeSet<NativeOp> = PROCESS_OPS.iter().copied().collect();
+    let owned: BTreeSet<NativeOp> = CONSTRUCTION_OPS.iter().copied().collect();
     assert_eq!(produced, owned, "sweep did not reach every construction NativeOp");
     assert_eq!(produced.len(), 9);
 }
 
 #[test]
+fn sweep_pins_the_exact_op_and_code_for_every_lifecycle_arm() {
+    // Guard the case list itself: a sweep that generates zero cases passes.
+    assert_eq!(LIFECYCLE_CASES.len(), 4, "every failable lifecycle arm needs exactly one case");
+
+    let mut produced = BTreeSet::new();
+    for case in &LIFECYCLE_CASES {
+        let calls = ScriptedCalls::failing(case.op, case.code);
+        let (job, contained) = healthy_pair(&calls);
+
+        let error = (case.drive)(&calls, &contained)
+            .unwrap_or_else(|| panic!("{:?} did not refuse at the programmed arm", case.op));
+
+        assert_eq!(error.op(), case.op, "wrong arm reported for {:?}", case.op);
+        assert_eq!(error.code(), case.code, "wrong Win32 code for {:?}", case.op);
+        produced.insert(error.op());
+
+        drop(contained);
+        drop(job);
+    }
+
+    let owned: BTreeSet<NativeOp> = LIFECYCLE_OPS.iter().copied().collect();
+    assert_eq!(produced, owned, "sweep did not reach every lifecycle NativeOp");
+    assert_eq!(produced.len(), 4);
+}
+
+#[test]
 fn the_two_sweeps_together_account_for_every_native_op() {
     // THE TOTALITY CHECK job_sweep.rs deliberately no longer owns. Every
-    // variant must be reached by exactly one of the two sweeps, so a tenth
-    // construction variant added without a case fails HERE rather than passing
+    // variant must be reached by exactly one of the two sweeps, so a new
+    // process-side variant added without a case fails HERE rather than passing
     // unnoticed in both files.
+    //
+    // THIS IS ALSO THE PROOF THAT NO OPEN-BY-PID ARM EXISTS. There is no way to
+    // assert that a method is absent, so the guarantee is carried by the closed
+    // vocabulary instead: reopening a process by PID would need an operation,
+    // an operation needs a `NativeOp` variant, and any new variant breaks both
+    // the fixed length of `NativeOp::ALL` and the sum below. The absence is
+    // enforced by this count, not by a comment.
     let all: BTreeSet<NativeOp> = NativeOp::ALL.iter().copied().collect();
     assert_eq!(all.len(), NativeOp::ALL.len(), "NativeOp::ALL lists a variant twice");
 
-    for op in PROCESS_OPS {
-        assert!(all.contains(&op), "{op:?} is no longer listed in NativeOp::ALL");
+    for op in CONSTRUCTION_OPS.iter().chain(LIFECYCLE_OPS.iter()) {
+        assert!(all.contains(op), "{op:?} is no longer listed in NativeOp::ALL");
     }
 
     assert_eq!(
-        PROCESS_OPS.len() + JOB_OP_COUNT,
+        CONSTRUCTION_OPS.len() + LIFECYCLE_OPS.len() + JOB_OP_COUNT,
         NativeOp::ALL.len(),
         "a NativeOp variant exists that neither sweep owns a case for"
     );
+    assert_eq!(NativeOp::ALL.len(), 19, "the operation vocabulary changed size");
 }
 
 #[test]
@@ -841,4 +892,195 @@ fn a_failed_wait_call_carries_the_operating_systems_error() {
 
     contained.close().expect("healthy close must succeed");
     job.close().expect("healthy close must succeed");
+}
+
+/// One entry per failable LIFECYCLE arm. Each carries the operation that must
+/// drive it, so adding an arm to the vocabulary without a driver here is a
+/// missing table entry rather than a silently unreached branch of a `match`.
+struct LifecycleCase {
+    op: NativeOp,
+    /// A distinct Win32 error per arm, and distinct from every construction
+    /// code above, so "right arm" cannot be confused with "right code by
+    /// coincidence".
+    code: u32,
+    drive: fn(&ScriptedCalls, &ContainedProcess<'_, ScriptedCalls>) -> Option<NativeError>,
+}
+
+fn drive_wait(
+    calls: &ScriptedCalls,
+    contained: &ContainedProcess<'_, ScriptedCalls>,
+) -> Option<NativeError> {
+    wait_for_process(calls, contained, 500).err()
+}
+
+fn drive_exit_code(
+    calls: &ScriptedCalls,
+    contained: &ContainedProcess<'_, ScriptedCalls>,
+) -> Option<NativeError> {
+    // The wait arm is healthy in this case, so the query is reached with the
+    // proof it requires and the failure observed is the exit query's own.
+    let waited = wait_for_process(calls, contained, u32::MAX)
+        .expect("the wait arm is healthy in the exit-code case");
+    query_exit_status(calls, contained, Some(&waited)).err()
+}
+
+fn drive_terminate(
+    calls: &ScriptedCalls,
+    contained: &ContainedProcess<'_, ScriptedCalls>,
+) -> Option<NativeError> {
+    terminate_process(calls, contained).err()
+}
+
+fn drive_image_name(
+    calls: &ScriptedCalls,
+    contained: &ContainedProcess<'_, ScriptedCalls>,
+) -> Option<NativeError> {
+    query_identity(calls, contained).err()
+}
+
+const LIFECYCLE_CASES: [LifecycleCase; 4] = [
+    // ERROR_SEM_TIMEOUT
+    LifecycleCase { op: NativeOp::WaitForProcess, code: 121, drive: drive_wait },
+    // ERROR_INVALID_DATA
+    LifecycleCase { op: NativeOp::QueryExitCode, code: 13, drive: drive_exit_code },
+    // ERROR_SHUTDOWN_IN_PROGRESS
+    LifecycleCase { op: NativeOp::TerminateProcess, code: 1_115, drive: drive_terminate },
+    // ERROR_GEN_FAILURE
+    LifecycleCase { op: NativeOp::QueryImageName, code: 31, drive: drive_image_name },
+];
+
+#[test]
+fn the_identity_query_reports_the_queried_image_and_the_retained_pid() {
+    // PID and creation time are DELEGATED to what construction read from the
+    // live handle; only the image is queried now. Asserting all three catches a
+    // surface that re-queried identity later, which would answer about whatever
+    // the handle refers to at that point rather than about the proved process.
+    let calls = ScriptedCalls::healthy();
+    let (job, contained) = healthy_pair(&calls);
+
+    let identity = query_identity(&calls, &contained).expect("a healthy identity query succeeds");
+
+    assert_eq!(identity.pid, SCRIPTED_PID);
+    assert_eq!(identity.creation_time, SCRIPTED_CREATION_TIME);
+    assert_eq!(identity.image, wide(SCRIPTED_IMAGE), "the image was fabricated, not queried");
+    assert!(calls.calls().contains(&"image-name"));
+
+    contained.close().expect("healthy close must succeed");
+    job.close().expect("healthy close must succeed");
+}
+
+/// The construction prefix every unwind test starts from, up to and including
+/// the membership proof.
+const THROUGH_MEMBERSHIP: [&str; 9] = [
+    "create",
+    "set",
+    "query",
+    "init",
+    "job-list",
+    "handle-list",
+    "create-process",
+    "assign",
+    "membership",
+];
+
+#[test]
+fn a_pre_membership_fault_terminates_and_awaits_the_child_directly() {
+    // REGIME ONE. Membership has NOT been proven, so the Job may not contain
+    // this child. Terminating the Job could return Ok while the child keeps
+    // running with nothing left to name it -- so the child's own handle is
+    // terminated and awaited instead.
+    let calls = ScriptedCalls::failing(NativeOp::AssignProcessToJob, 5);
+    let error = drive(&calls);
+    assert_eq!(error.op(), NativeOp::AssignProcessToJob);
+
+    // THE WHOLE VECTOR, not a containment. A containment assertion passes with
+    // the job-side cleanup ALSO present, which is exactly the collapse of the
+    // two regimes this test exists to forbid.
+    let mut expected = THROUGH_MEMBERSHIP[..8].to_vec();
+    expected.extend(["terminate-process", "wait", "close", "close", "close"]);
+    assert_eq!(calls.calls(), expected);
+}
+
+#[test]
+fn a_post_membership_fault_terminates_the_job_and_waits_for_it_to_empty() {
+    // REGIME TWO. The Job owns the child now, so terminating the JOB is correct
+    // and sufficient -- and it also covers any grandchild the child may already
+    // have spawned, which terminating one process handle would not.
+    //
+    // Two live processes are scripted, so the accounting query must be REPEATED
+    // until it reaches zero. TerminateJobObject returns before its processes
+    // are gone; a surface that sampled once would report an emptiness it never
+    // observed, and would pass a test that only checked for one query.
+    let calls = ScriptedCalls::failing(NativeOp::QueryProcessId, 1_008);
+    calls.reporting_active_processes(2);
+    let error = drive(&calls);
+    assert_eq!(error.op(), NativeOp::QueryProcessId);
+
+    let mut expected = THROUGH_MEMBERSHIP.to_vec();
+    expected.extend(["pid", "terminate", "accounting", "accounting", "accounting"]);
+    expected.extend(["close", "close", "close"]);
+    assert_eq!(calls.calls(), expected);
+}
+
+#[test]
+fn an_unwind_failure_never_replaces_the_error_that_caused_the_unwind() {
+    // BOTH HALVES OF THE RULE, in one test.
+    //
+    // Half one: assignment fails, and the unwind's terminate fails too. The
+    // caller must still see AssignProcessToJob -- an unwind failure that
+    // overwrote it would hide why the run actually failed.
+    let calls = ScriptedCalls::failing(NativeOp::AssignProcessToJob, 5);
+    calls.fail_process_terminate_with(1_115);
+    let error = drive(&calls);
+
+    assert_eq!(error.op(), NativeOp::AssignProcessToJob, "the unwind overwrote the first error");
+    assert_eq!(error.code(), 5);
+
+    // Half two: the unwind's own failure is not swallowed either. Called
+    // directly it surfaces as an error carrying its OWN NativeOp -- and the
+    // wait still ran, because stopping at the first failure would leak it.
+    let direct = ScriptedCalls::healthy();
+    direct.fail_process_terminate_with(1_115);
+    let unwind_error = unwind_before_membership(&direct, RawHandle::new(FIRST_HANDLE))
+        .err()
+        .expect("a failed terminate during unwind must not report success");
+
+    assert_eq!(unwind_error.op(), NativeOp::TerminateProcess);
+    assert_eq!(unwind_error.code(), 1_115);
+    assert_eq!(direct.calls(), vec!["terminate-process", "wait"], "the wait was skipped");
+}
+
+#[test]
+fn an_unwind_wait_that_does_not_observe_the_exit_stays_uncertain() {
+    // The terminate succeeded but the wait timed out, so whether the process is
+    // gone is UNKNOWN. That must not be laundered into success: it refuses as
+    // WaitForProcess with code 0 -- our refusal, not the operating system's.
+    for outcome in [WaitOutcome::TimedOut, WaitOutcome::Abandoned] {
+        let calls = ScriptedCalls::healthy();
+        calls.reporting_wait(outcome);
+
+        let error = unwind_before_membership(&calls, RawHandle::new(FIRST_HANDLE))
+            .err()
+            .unwrap_or_else(|| panic!("{outcome:?} during unwind must not report success"));
+
+        assert_eq!(error.op(), NativeOp::WaitForProcess);
+        assert_eq!(error.code(), 0, "an unobserved exit is our refusal, not a Win32 failure");
+    }
+}
+
+#[test]
+fn a_failed_accounting_query_during_unwind_surfaces_its_own_op() {
+    // The post-membership regime's second step has the same rule as the first:
+    // a cleanup whose outcome cannot be read is an error carrying its own
+    // NativeOp, never a silent success.
+    let calls = ScriptedCalls::failing(NativeOp::QueryAccounting, 6);
+    let job = Job::create(&calls).expect("healthy Job construction must succeed");
+
+    let error = unwind_after_membership(&job)
+        .err()
+        .expect("an unreadable process count must not report an empty Job");
+
+    assert_eq!(error.op(), NativeOp::QueryAccounting);
+    assert_eq!(error.code(), 6, "a failed CALL carries the OS error, not our refusal code");
+    assert_eq!(calls.calls(), vec!["create", "set", "query", "terminate", "accounting"]);
 }

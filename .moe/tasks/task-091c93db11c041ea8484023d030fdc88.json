@@ -22,8 +22,9 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE (read-only; this step writes nothing), then read the ruling that changes the shape of this task.\n\nI verified every primitive the description names. All are PRESENT and, unusually for this board, the description is ACCURATE on them — confirm anyway, the staleness rail binds in both directions:\n  packages/runner/src/supervisor/launch-lock.ts:29 LaunchLockRegistration, :64 parseLaunchLockRegistration, :76 bindsClaim, :90 registerLaunchLock\n  packages/runner/src/supervisor/process-observation.ts:21 BoundProcessObservation, :60 intakeProcessObservation\n  packages/runner/src/workspace/workspace-manifest.ts:62 buildInputManifest, :189 buildResultManifest\n  packages/runner/src/workspace/workspace-contract.ts:59 WorkspaceInputEntry, :66 WorkspaceInputManifest, :91 WorkspaceTreeEntry\n  packages/runner/src/providers/claude/claude-probe.ts:56 probeClaudeRuntime, :89 capabilityStatus\n  packages/runner/src/providers/codex/codex-probe.ts:93 probeCodexRuntime, :102 capabilityStatus\nSlice 1 is landed AND tracked at HEAD (git ls-tree confirms 7 files): recovery-inventory-contract.ts 207 lines, recovery-inventory-shape.ts 223, recovery-inventory.ts 378, recovery-inventory.test.ts 615, plus .js bridges.\n\n*** THE RULING — DO NOT EDIT THE SLICE-1 AGGREGATE. *** The description lists \"the two-line registration edit in the slice-1 aggregate\" as an owned path. Do NOT make that edit; there is nothing there to edit. recovery-inventory.ts:53 createRecoveryInventoryRegistry(registrations) takes an IMMUTABLE CALLER-SUPPLIED TUPLE, and its doc comment rejects the alternative in terms naming this exact hazard: \"Registration is an immutable caller-supplied tuple rather than a module-global registry: a global would be order-dependent, race-prone across concurrent collections, and would let a sibling adapter slice change this aggregate's behaviour by importing it.\" Slice 2 IS that sibling adapter slice. Instead each new module EXPORTS a RecoveryInventoryRegistration constant; tests compose their own registry and the daemon coordinator composes the real one. Your final diff must show ZERO changes to recovery-inventory.ts, index.ts and index-surface.test.ts.\n\nNAME COLLISION: capabilityStatus is exported by BOTH probe modules over different profile/capability types. Importing both unaliased will not compile — alias them (claudeCapabilityStatus / codexCapabilityStatus).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T19:08:09.563Z"
     },
     {
       "stepId": "step-2",
@@ -101,7 +102,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-901cc711",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -120,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:34.714Z",
-  "updatedAt": "2026-08-09T19:02:26.947Z",
+  "updatedAt": "2026-08-09T19:08:09.563Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T18:57:07.679Z",
     "plannedStepCount": 8,
@@ -151,5 +152,9 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-09T19:02:26.947Z"
+  "planApprovedAt": "2026-08-09T19:02:26.947Z",
+  "contextFetchedBy": [
+    "worker-901cc711"
+  ],
+  "workStartedAt": "2026-08-09T19:08:09.563Z"
 }
