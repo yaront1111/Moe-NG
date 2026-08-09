@@ -167,8 +167,8 @@
       "completedAt": "2026-08-09T11:41:53.715Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-b2df68b9",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -187,7 +187,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T10:40:22.680Z",
-  "updatedAt": "2026-08-09T11:42:54.256Z",
+  "updatedAt": "2026-08-09T11:48:12.436Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
@@ -204,7 +204,9 @@
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
     "firstClaimAt": "2026-08-09T10:46:31.243Z",
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-09T11:48:12.436Z",
+    "wallClockMs": 3701193
   },
   "planningNotes": {
     "approachesConsidered": "(1) THE TWO HALVES SHARE A TASK because they share the same durable record set and the same store transaction discipline, and because splitting them would let restart reconciliation land without any way to act on its output — a board full of SUSPECT records and no continuation command is worse than neither. They are also both small: this is composition over @moe/runner's finished recovery subtree.\n(2) THE HARD DEPENDENCY IS REAL AND MUST BE CHECKED AT STEP 1, not assumed. task-7d0abdcd publishes classifyCrash / admitResume / advanceRecoveryDrain on the @moe/runner root. Until it lands they are unreachable: the exports map is exclusive and a deep subpath does not resolve at runtime. If a worker reaches for a deep import to get moving, this task ships a runtime failure that vitest will hide — the exact wall that has cost this board several task-days.\n(3) APPEND-ONLY IS THE PROPERTY MOST LIKELY TO BE IMPLEMENTED WRONG, because the natural way to 'continue an interrupted attempt' is to update that attempt's row. Design 1099 requires a traceable continuation BINDING and explicitly says 'not edited history'. I gave it its own step and a byte-comparison assertion, because a test that only checks 'a new record exists' passes against an in-place rewrite.\n(4) NOTHING SILENTLY RESUMES IS ASSERTED AS AN ABSENCE, which is hard to test well. The plan does it two ways: totality (every in-flight attempt lands in exactly one classified record) and a vocabulary check (the outcome kinds equal @moe/runner's exported RECOVERY_OUTCOME_KINDS, which deliberately contains no RESUMED arm). Together those make a silent resume unexpressible rather than merely untested.",
@@ -252,5 +254,8 @@
     "apps/daemon/src/recovery/continuation-contracts.js",
     "apps/daemon/src/recovery/continuation-test-harness.ts",
     "apps/daemon/src/recovery/continuation-binding.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-09T11:48:12.436Z",
+  "reviewCompletedAt": "2026-08-09T11:48:12.436Z",
+  "reviewSummary": "APPROVED — verified from disk, not from worker summaries.\n\nGATES RE-RUN BY QA: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` -> exit 0, 26 files / 480 tests, all packages Done. Matches task.verification. Green again after my drills; recovery/ clean.\n\nPLAIN-NODE PROBE (vitest resolves NodeNext .js back to .ts, so a green suite proves nothing here): `node --experimental-strip-types` from apps/daemon imported all three bridges; reconcileOnRestart, evaluateContinuationCommandBytes, CONTINUATION_COMMAND_KINDS [\"work.resume\"] resolved under real Node.\n\nTWO DECISIVE DRILLS RE-RUN BY QA (blob shas captured first; restores verified by git hash-object, not git status):\n1. Append-only — bindingTarget:59 repointed at the attempt's own aggregate: RED at continuation-binding.test.ts:61 byte-identity. Restored, sha eec27fe.\n2. Totality — recordBase(result.kind) -> \"ADOPTED\": RED, 4 suites / 10 tests incl. outcome-set equality (restart-reconciliation.test.ts:121) and both SUSPECT cases. Restored, sha d1d25df.\n\nDoD 1-7 evidenced: classifyCrash composed (:212); set equality vs exported RECOVERY_OUTCOME_KINDS with seed count asserted non-zero first; one record per attempt; unestablished -> SUSPECT; no RESUMED arm. ONE action = kinds length 1 AND row delta +1. Three predecessor states pinned distinctly with a collapse guard; PROVEN_RELEASED+null handoff refused only by admitResume. Non-mutation proven by store read-back. Idempotence by row counts plus the ADOPTED->SUSPECT convergence arm.\n\nRAILS: no deep subpath import. Per-file 232/220/169 lines, all <250. Bridges present. doctor-commands.ts and bootstrap-contracts.ts untouched. Helpers drive production. 1506 insertions not scored — epic rail 5.\n\nCOMMIT: none of its own; the 12 owned files landed in sibling sweep 5ef4bcc. Hook attribution, not a defect — nothing foreign staged, HEAD bytes = tested bytes."
 }

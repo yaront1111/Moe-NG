@@ -1,0 +1,48 @@
+{
+  "id": "task-5606947a9d7d4f228dc63e6ce4dea69a",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Cursor-bound complete backup generation",
+  "description": "Objective: implement the production BackupGeneration capability required before CORE-S14 can restore anything. Deliverable: a @moe/store backup-generation module that snapshots the project SQLite database at one committed global cursor and builds/verifies a canonical signed manifest over the database plus every caller-declared reachable artifact, receipt, context, manifest, and public-key-chain object (digest and byte length). MEASURED GAP at HEAD 1ce0059: @moe/store has WAL/full-sync durability and cursor reads, while @moe/runner has artifact verification, but `rg` finds no BackupGeneration type, backup API, generation manifest, or verifier anywhere in packages/*/src or apps/*/src. NOT in scope: two-slot installation, recovery-incarnation minting, external-effect inventory, R3 completion, fault fixtures, release publication, or editing the authoritative design. Hard dependencies: existing @moe/store and @moe/runner artifact contracts only. Owned paths: packages/store/src/backup-generation.* and focused package export wiring only. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "The production API snapshots SQLite at one explicit committed cursor N and returns a frozen versioned manifest binding project identity, cursor/RPO, database digest/size, complete declared object closure, verification-key chain, and source-generation digest.",
+    "A generation is marked complete only after every listed byte source re-verifies by digest and size; any missing, unreadable, extra, duplicate, mixed-generation, or unverifiable object returns stable `BACKUP_PROOF_UNKNOWN` at layer `BACKUP_GENERATION`, truth `UNKNOWN`, and no restorable manifest.",
+    "Manifest canonicalization, digest, and signature verification are deterministic and reject cursor/database/object/key-chain tampering with stable reason codes asserted against the production surface.",
+    "Focused tests exercise a real temporary SQLite file plus real object bytes, assert at least one object in every configured closure category, and mutation-check one production verifier branch so a zero-case or helper-only proof cannot pass.",
+    "Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "Do not import @moe/runner into @moe/store; reproduce the descriptor-oriented write/fsync/rename/persist/verify boundary behind store-owned ports so dependency direction stays valid.",
+    "No mock-backed manifest may be called restorable: tests must exercise production capture and verification over real bytes.",
+    "Tests for refusals assert exact stable reason code and layer, and any generated closure asserts non-zero generated cases.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-f39f0c46",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.1,
+  "comments": [
+    {
+      "id": "comment-4d5d3610d2424f48a66362bcf82d9f40",
+      "author": "architect-f39f0c46",
+      "content": "Composition record (global rail Clause 1): consumers are task-b6e3dd2af916490fb2bc4d375a530683 (two-slot installer) and task-6f786c58cabf4f85be8ed4135e68a752 (R3 completion). This task is not complete merely by exporting BackupGeneration; at least one named consumer must import and call its production capture/verifier surface.",
+      "timestamp": "2026-08-09T12:09:34.107Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:04:41.210Z",
+  "updatedAt": "2026-08-09T12:11:55.688Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T12:11:51.572Z"
+  },
+  "contextFetchedBy": [
+    "architect-f39f0c46"
+  ]
+}

@@ -16,12 +16,12 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "PIPELINED promotion by governor-eae4fc53 2026-08-09 on human instruction. NOT a clean dependency pass — read this before planning. THREE OF FOUR DEPS ARE SETTLED: Lease presence core (task-967769ea) DONE, Conserved budget core (task-d5c4b086) DONE, and Readiness explanation engine (task-fa96b81c) is at 10/11 with its implementation ALREADY COMMITTED at bf6bc81 — packages/scheduler/src/readiness/ holds readiness-explanation.ts, readiness-cursor.ts, readiness-fact-shapes.ts, readiness-facts.ts and their .js bridges on disk now. That is a stronger position than the pipelined promotion of task-791d7340 earlier on this board, which succeeded from a dep at 5/7. Read that surface directly; do not plan against the dep's task description. THE FOURTH DEP I COULD NOT VERIFY: \"closure of all reference-model blocker findings\" names no task and no artifact I can resolve mechanically. I did not confirm it. If planning shows open blocker findings against the corrected DEVELOPMENT_ONLY reference, report_blocked and I will move this back — cheap reversal, expected, not a failure. TRAP WORTH NAMING UP FRONT, because DoD 3 and the owned path pull in opposite directions: the DEVELOPMENT_ONLY reference model lives in packages/scheduler/src/test-fixtures.ts, admission/admission-fixtures.ts and readiness/test-fixtures.ts, but DoD 3 requires that PRODUCTION MUST NOT IMPORT DEVELOPMENT_ONLY testkit code. You are implementing FROM the reference, never importing it. Plan a structural assertion for that, not just a behavioural one — a negative property cannot be proved by tests that happen to pass. Owned path packages/scheduler/src/fairness/** is ABSENT/greenfield and disjoint from readiness/, so no collision with the in-flight dep. Note the scheduler package uses .js bridges, so every new non-test .ts needs its sibling — task-535e773b is landing a repo-wide runtime-loadability gate that will enforce it.",
+  "reopenReason": "Restoring architect-da724bb7's original block. The 11:40Z BLOCKED->PLANNING transition was an unintended side effect of moe.unblock_worker, which flips the TASK out of BLOCKED when a WORKER is unblocked. The human was freeing a stuck worker and did not intend to re-queue this task; confirmed at 11:58Z. Mechanism found by architect-8c9073cd.\n\nTHE BLOCK STANDS ON ITS ORIGINAL EVIDENCE, which I re-verified on disk at 11:29Z. There is no WDRR, ring, or resource-queue code anywhere under packages/scheduler/src — the directory holds the admission model plus DEVELOPMENT_ONLY fixtures and nothing else. Production WorkItem, ring, resource, opportunity-evidence and cap-revision contracts are all absent.\n\narchitect-da724bb7's further finding stands and is the part that makes this unplannable rather than merely hard: the hard dependency \"closure of all reference-model blocker findings\" remains UNKNOWN. Commit d33240c is the only correction candidate and carries no independent closure artifact, and the landed DEVELOPMENT_ONLY reference explicitly EXCLUDES the WDRR rings and resource queues this task requires, while trusting caller-declared bypass IDs and retaining hostile-state gaps. Implementing from that reference would invent policy and authority — the exact failure Clause 2 names.\n\nRequired output is a prerequisite production task for the scheduler primitives, with the gap measured symbol by symbol, not a plan against a reference that excludes the subject. That authoring belongs alongside the platform-boundary and doctor-inventory prerequisites architect-8c9073cd is routing.\n\nUnblock when the production scheduler primitives exist and are verifiable by grep or probe, not on a status flip.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -36,15 +36,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-09T11:40:12.277Z",
+  "updatedAt": "2026-08-09T11:58:41.259Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:45:35.201Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Restoring architect-da724bb7's original block. The 11:40Z BLOCKED->PLANNING transition was an unintended side effect of moe.unblock_worker, which flips the TASK out of BLOCKED when a WORKER is unblocked. The human was freeing a stuck worker and did not intend to re-queue this task; confirmed at 11:58Z. Mechanism found by architect-8c9073cd.\n\nTHE BLOCK STANDS ON ITS ORIGINAL EVIDENCE, which I re-verified on disk at 11:29Z. There is no WDRR, ring, or resource-queue code anywhere under packages/scheduler/src — the directory holds the admission model plus DEVELOPMENT_ONLY fixtures and nothing else. Production WorkItem, ring, resource, opportunity-evidence and cap-revision contracts are all absent.\n\narchitect-da724bb7's further finding stands and is the part that makes this unplannable rather than merely hard: the hard dependency \"closure of all reference-model blocker findings\" remains UNKNOWN. Commit d33240c is the only correction candidate and carries no independent closure artifact, and the landed DEVELOPMENT_ONLY reference explicitly EXCLUDES the WDRR rings and resource queues this task requires, while trusting caller-declared bypass IDs and retaining hostile-state gaps. Implementing from that reference would invent policy and authority — the exact failure Clause 2 names.\n\nRequired output is a prerequisite production task for the scheduler primitives, with the gap measured symbol by symbol, not a plan against a reference that excludes the subject. That authoring belongs alongside the platform-boundary and doctor-inventory prerequisites architect-8c9073cd is routing.\n\nUnblock when the production scheduler primitives exist and are verifiable by grep or probe, not on a status flip.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-09T11:58:41.259Z"
 }

@@ -1,0 +1,43 @@
+{
+  "id": "task-0325dcf7ee744123b40cf583230c7b6a",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Node-side recovery-window inventory adapters",
+  "description": "Objective: provide complete production enumeration/negative-proof inputs for external state that can survive beyond backup cursor N on the host. Deliverable: @moe/runner recovery-inventory adapters for project-tagged provider runs/process registrations/launch locks, workspaces, Git branches/refs, integration targets represented on disk, artifact objects/staging, and their configured recovery-window coverage. The adapters must reuse the shipped Codex/Claude probe capabilities, launch-lock records, hermetic Git observer, workspace manifests, and artifact store rather than inventing a fixture authority. MEASURED GAP at HEAD 1ce0059: those per-area observation primitives exist, but no production module enumerates them as one cursor/incarnation-bound inventory; `rg` finds no orphan inventory or recovery coverage protocol. NOT in scope: scheduler resource rows, deciding adopt/quarantine, clearing a project embargo, R3 approval, ordinary restart classification, or tests/fault. Hard dependencies: task-5606947a9d7d4f228dc63e6ce4dea69a supplies cursor/generation identity and task-684e6972c8c1418f8996ea3edd61f00c supplies the recovery-incarnation binding. Owned paths: packages/runner/src/recovery-inventory/** and focused @moe/runner exports only. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "The production inventory API accepts an exact project, backup cursor/generation, recovery incarnation, recovery-window bounds, and frozen configured class set; it returns canonical items and one explicit COMPLETE or UNKNOWN coverage proof per configured node-side class.",
+    "Provider/process/lock, workspace, Git/integration-on-disk, and artifact/staging adapters call the existing production probes/observers/stores and bind every item to class, stable external identity, observed disposition facts, and source proof digest without treating silence as absence.",
+    "An unavailable enumerator, unsupported provider capability, truncated/over-limit result, malformed project tag, or missing negative proof returns stable `RECOVERY_INVENTORY_COVERAGE_UNKNOWN` at layer `INVENTORY_ADAPTER`, truth `UNKNOWN`; partial items cannot upgrade coverage.",
+    "Enumeration order and digest are deterministic across path separators and locale on Windows, macOS, and Linux; duplicate external identities or entries outside the exact project/window refuse rather than merge.",
+    "Focused tests exercise real temporary filesystem/Git/artifact bytes plus shipped provider-probe surfaces, assert every configured class generated at least one coverage case, pin exact code/layer, and mutation-check production coverage handling.",
+    "Fresh `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "A configured class requires complete enumeration or a verifiable negative proof; an empty list, quiet process, absent optional probe, or mock response is never COMPLETE by itself.",
+    "This pure/adapter package must name and be consumed by the daemon coordinator task before completion; root exports alone are not composition.",
+    "Tests assert exact stable reason code and `INVENTORY_ADAPTER` layer and assert non-zero generated class coverage.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.5,
+  "comments": [
+    {
+      "id": "comment-1939cc7221764a4c8932b3db90a150d5",
+      "author": "architect-f39f0c46",
+      "content": "Composition record (global rail Clause 1): task-cf7fb147bd1c47698cbd65c9535370aa is the daemon consumer and must import/call this production inventory surface. Root export/loadability alone does not complete this task.",
+      "timestamp": "2026-08-09T12:09:34.248Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:07:00.170Z",
+  "updatedAt": "2026-08-09T12:09:34.248Z"
+}

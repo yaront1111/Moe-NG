@@ -1,0 +1,37 @@
+{
+  "id": "task-cf7fb147bd1c47698cbd65c9535370aa",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Recovery inventory quarantine coordinator",
+  "description": "Objective: compose restored durable intents, scheduler resource/integration records, and real node-side inventory into one fail-closed post-cursor reconciliation and project-wide effect embargo. Deliverable: a daemon recovery inventory coordinator that requires the exact configured class set (provider/process/lock, resource, workspace, integration, Git, artifact), joins each observed post-N item to restored intent under the new incarnation, records absent/adopted/quarantined dispositions, persists a canonical coverage/reconciliation digest, and gates work claim/effect activation until every class and item is closed. MEASURED GAP at HEAD 1ce0059: runner ordinary-restart classification can return QUARANTINED and scheduler resources can be QUARANTINED, but daemon reconcileOnRestart trusts caller-supplied attempts, no service enumerates configured classes, and no production claim gate reads a disaster-recovery embargo. NOT in scope: ordinary restart timing, optimistic orphan adoption, creating missing history, minting recovery identity, approving recovery.complete, or tests/fault. Hard dependencies: task-b6e3dd2af916490fb2bc4d375a530683 (installed quiesced restore), task-8a01c025b65246aca09e69d82e009587 (current incarnation fence), and task-0325dcf7ee744123b40cf583230c7b6a (node-side inventory). Owned paths: apps/daemon/src/recovery/effect-inventory.* plus minimal work/effect admission and daemon export wiring. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The production coordinator derives the required class set from daemon configuration and demands one cursor/incarnation-bound COMPLETE coverage proof for provider/process/lock, resource, workspace, integration, Git, and artifact classes; omitted, duplicate, unknown, or extra class evidence cannot satisfy coverage.",
+    "Every post-N item is deterministically classified as proven absent, safely adopted only to an exact restored intent under the current incarnation, or quarantined as an orphan; an unmatched item is never inserted into restored history or automatically repeated.",
+    "Missing inventory, adapter/coverage uncertainty, non-fenceable unknown state, artifact/key proof failure, or an unresolved item persists truth `UNKNOWN` and returns stable `UNKNOWN_TRUTH` at layer `RECOVERY_INVENTORY`, with the precise upstream adapter code retained.",
+    "Daemon work-claim and effect-activation production paths consult the persisted project recovery embargo before allocating authority; unresolved/unknown inventory returns `RECOVERY_RECONCILIATION_REQUIRED` from layer `RECOVERY_INVENTORY` with no attempt, slot, lease, effect, or spend.",
+    "The frozen canonical coverage/reconciliation record binds project, backup cursor/generation, current incarnation/key epoch, configured class set, source proof digests, item dispositions, and quarantine references; any byte change alters or invalidates its digest.",
+    "Focused tests drive production runner/scheduler/store surfaces, assert all seven configured classes generated, pin exact code/layer precedence, and mutation-check the production embargo branch.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "Human optimism, an empty enumerator, or a fixture-provided list is not a complete production inventory. Missing/unverifiable coverage stays UNKNOWN and effect authority remains unavailable.",
+    "Where runner/scheduler/daemon can refuse, tests assert the exact code and the layer that answered first; carried upstream codes must not be restamped.",
+    "This task is the durable consumer of task-0325dcf7ee744123b40cf583230c7b6a; it must import and call that production surface.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:07:49.319Z",
+  "updatedAt": "2026-08-09T12:07:49.319Z"
+}

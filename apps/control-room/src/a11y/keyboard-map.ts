@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 export type KeyboardAction =
   | "goals"
@@ -139,4 +140,49 @@ export function useKeyboardRouter(onAction: (action: KeyboardAction) => void): v
       document.removeEventListener("keydown", handleKey);
     };
   }, [onAction]);
+}
+
+type ProjectionAction = Extract<KeyboardAction, "board" | "graph" | "timeline">;
+
+export interface ShellKeyboardController {
+  readonly closeHelp: () => void;
+  readonly focusMain: () => void;
+  readonly helpOpen: boolean;
+  readonly inspectorExpanded: boolean;
+  readonly mainRef: RefObject<HTMLElement | null>;
+  readonly rootRef: RefObject<HTMLDivElement | null>;
+}
+
+function focusWithin(root: ParentNode | null, selector: string): void {
+  root?.querySelector<HTMLElement>(selector)?.focus();
+}
+
+export function useShellKeyboardController(
+  onTab: (tab: ProjectionAction) => void,
+): ShellKeyboardController {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [inspectorExpanded, setInspectorExpanded] = useState(true);
+  const handleAction = useCallback((action: KeyboardAction): void => {
+    switch (action) {
+      case "board": case "graph": case "timeline": onTab(action); return;
+      case "goals": case "approvals":
+        focusWithin(rootRef.current, `[data-testid='cr.nav.${action}']`); return;
+      case "search":
+        focusWithin(rootRef.current, "[role='searchbox'], input[type='search']"); return;
+      case "help": setHelpOpen(true); return;
+      case "collapse-inspector": setInspectorExpanded(false); return;
+      case "expand-inspector": setInspectorExpanded(true); return;
+    }
+  }, [onTab]);
+  useKeyboardRouter(handleAction);
+  return {
+    closeHelp: () => setHelpOpen(false),
+    focusMain: () => mainRef.current?.focus(),
+    helpOpen,
+    inspectorExpanded,
+    mainRef,
+    rootRef,
+  };
 }

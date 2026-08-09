@@ -1,4 +1,6 @@
 import type { NextAllowedCommand, RuntimeCommandKind } from "@moe/contracts";
+import { describeTruthClass } from "@moe/control-room-model";
+import type { TruthClass, TruthPresentationDescriptor } from "@moe/control-room-model";
 import { cleanup, render } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +14,7 @@ import {
   auditFactChips,
   auditKeyboardReachability,
   auditLiveRegions,
+  auditTruthClassMonochrome,
 } from "./surface-audit.js";
 
 beforeAll(() => {
@@ -36,6 +39,16 @@ function command(commandId: string): NextAllowedCommand {
   });
 }
 
+const TRUTH_CLASSES: readonly TruthClass[] = [
+  "OBSERVED", "AGENT_REPORTED", "DAEMON_VERIFIED", "HUMAN_APPROVED", "UNKNOWN",
+];
+
+function productionDescriptor(truthClass: TruthClass): TruthPresentationDescriptor {
+  const described = describeTruthClass(truthClass);
+  if (!described.ok) throw new Error(`missing production descriptor for ${truthClass}`);
+  return described.descriptor;
+}
+
 describe("auditFactChips", () => {
   it("accepts a real rendered fact and rejects the exact wrapper missing its chip", () => {
     const affordance = CONTROL_ROOM_FIXTURES.affordances[0];
@@ -53,6 +66,19 @@ describe("auditFactChips", () => {
     expect(bad.checked).toBeGreaterThan(0);
     expect(bad.violations).toEqual([
       { code: "FACT_WITHOUT_CHIP", testId: "cr.fact.orphan" },
+    ]);
+  });
+
+  it("does not mistake the POL actor badge for a truth chip", () => {
+    const root = fragment(`
+      <div data-testid="cr.fact.policy-decision">
+        <span data-testid="cr.chip.policy-approved">POL</span>
+      </div>
+    `);
+    const result = auditFactChips(root);
+    expect(result.checked).toBeGreaterThan(0);
+    expect(result.violations).toEqual([
+      { code: "FACT_WITHOUT_CHIP", testId: "cr.fact.policy-decision" },
     ]);
   });
 });
@@ -134,5 +160,45 @@ describe("auditActionParity", () => {
         { code: "ACTION_MISSING_AT_NARROW", testId: "cr.action.desktop-only" },
       ],
     });
+  });
+});
+
+describe("auditTruthClassMonochrome", () => {
+  it("checks exactly five production truth classes without using semantic tone", () => {
+    const result = auditTruthClassMonochrome();
+    expect(result.checked).toBe(5);
+    expect(result.violations).toEqual([]);
+  });
+
+  it("fails closed when the supplied descriptor set is shorter than five", () => {
+    const descriptors = TRUTH_CLASSES.slice(0, 4).map(productionDescriptor);
+    const result = auditTruthClassMonochrome(descriptors);
+    expect(result.checked).toBe(4);
+    expect(result.violations).toEqual([
+      { code: "TRUTH_CLASS_COUNT_MISMATCH", truthClasses: [] },
+    ]);
+  });
+
+  it("detects a tuple collision even when semantic tones differ", () => {
+    const descriptors = TRUTH_CLASSES.map(productionDescriptor);
+    const observed = descriptors[0];
+    const agent = descriptors[1];
+    if (observed === undefined || agent === undefined) throw new Error("missing truth fixtures");
+    expect(agent.semanticTone).not.toBe(observed.semanticTone);
+    descriptors[1] = Object.freeze({
+      ...agent,
+      borderStyle: observed.borderStyle,
+      glyph: observed.glyph,
+      shortLabel: observed.shortLabel,
+    });
+
+    const result = auditTruthClassMonochrome(descriptors);
+    expect(result.checked).toBe(5);
+    expect(result.violations).toEqual([
+      {
+        code: "TRUTH_CLASS_MONOCHROME_COLLISION",
+        truthClasses: ["OBSERVED", "AGENT_REPORTED"],
+      },
+    ]);
   });
 });

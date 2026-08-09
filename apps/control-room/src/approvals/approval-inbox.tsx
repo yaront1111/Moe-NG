@@ -1,7 +1,6 @@
 import type { NextAllowedCommand } from "@moe/contracts";
 import { useState } from "react";
 import type { JSX } from "react";
-
 import { FactRow } from "../nodes/node-authority.js";
 import type { ProvenanceHandler, SuppliedFact } from "../nodes/node-authority.js";
 import { idleConsequence } from "./approval-fixtures.js";
@@ -78,6 +77,7 @@ export function DecisionControl(props: {
   return (
     <span>
       <button
+        data-command-id={control.commandId ?? undefined}
         data-reason-code={control.reasonCode ?? undefined}
         data-refused-by={control.refusedBy ?? undefined}
         data-testid={control.testId}

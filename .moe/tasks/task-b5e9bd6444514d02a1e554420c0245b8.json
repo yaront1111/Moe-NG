@@ -1,0 +1,42 @@
+{
+  "id": "task-b5e9bd6444514d02a1e554420c0245b8",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Isolated hostile-test lane infrastructure",
+  "description": "Objective: provide one shell-neutral, typechecked root runner for fault and security suites without letting broad root Vitest discovery or zero-case sweeps create false evidence. Deliverable: root `test:fault` and `test:security` scripts, dedicated `tests/fault` and `tests/security` tsconfig/Vitest configs, and a non-authority security lane smoke case; existing Foundation fault tests prove the fault lane is non-empty. MEASURED GAP at HEAD 1ce0059: package.json has no test:fault/test:security scripts, only tests/fault/foundation has its own tsconfig and three `.test.ts` cases, tests/security is absent, and task-05ce9b8f comments describe but did not create G0. NOT in scope: adding security/fault schedules, editing tests/fault/foundation/**, disaster/Linux/macOS subtrees, reimplementing production authority, or claiming any platform/security scenario PASS. Hard dependencies/serialization: wait until package.json owners task-739879d0d1ce4a7ea4d1430688cdc4dc and task-9449ce65fae544ef9809691ec079f599 finish and reconcile their scripts. Consumers: task-05ce9b8f982f448a9cdaa4142a653f32, task-0c89476b78044024b07c86c0c8986bd0, task-e87a735386f643fe92c0eeff09bc4275, and task-e94b2055e281489ea9e97820919f6856. Owned paths: package.json, tests/fault/tsconfig.json, tests/fault/vitest.config.ts, tests/security/tsconfig.json, tests/security/vitest.config.ts, tests/security/lane-smoke.security.ts. Verification: pnpm test:fault && pnpm test:security.",
+  "definitionOfDone": [
+    "`package.json` exposes shell-neutral `test:fault` and `test:security` commands that each run `tsc -p` for its own tree before Vitest with its own config, preserving all foreign scripts added by serialized predecessor tasks.",
+    "The fault config discovers existing `tests/fault/foundation/**/*.test.ts` plus future `**/*.fault.ts`; the security config discovers `**/*.security.ts`; both set `passWithNoTests:false`, deterministic serial execution, and exclude the other lane.",
+    "The committed security lane smoke case tests only runner/config facts and grants no product authority; each lane run reports at least one collected file/case, and a zero-case or type-error lane exits non-zero.",
+    "The root `pnpm test` behavior remains explicit: hostile-only `.fault.ts`/`.security.ts` files are not accidentally counted as ordinary regression evidence, while existing Foundation `.test.ts` behavior is preserved.",
+    "Fresh `pnpm test:fault && pnpm test:security` exits 0 on Windows and uses no Unix-only shell commands; config path normalization is portable to macOS/Linux."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "This infrastructure task certifies only lane discovery/typechecking/execution, never security, fault, restore, or platform behavior.",
+    "Do not edit tests/fault/foundation/**, tests/fault/disaster-restore/**, tests/fault/linux/**, tests/fault/macos/**, or tests/fault/system/**.",
+    "Preserve concurrent package.json work and begin only after task-739879d0d1ce4a7ea4d1430688cdc4dc and task-9449ce65fae544ef9809691ec079f599 finish.",
+    "Every downstream generated sweep must separately assert its exact non-zero generated case set and production reason code/layer."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.8,
+  "comments": [
+    {
+      "id": "comment-92c4811441de4d47996c83cd45f22403",
+      "author": "architect-f39f0c46",
+      "content": "Ownership/serialization record: package.json is actively modified by task-739879d0d1ce4a7ea4d1430688cdc4dc and is also planned by task-9449ce65fae544ef9809691ec079f599. Keep this task BACKLOG until both finish; then preserve their scripts and take the shared lane ownership once, rather than creating per-epic copies.",
+      "timestamp": "2026-08-09T12:09:34.318Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:09:16.769Z",
+  "updatedAt": "2026-08-09T12:09:34.318Z"
+}

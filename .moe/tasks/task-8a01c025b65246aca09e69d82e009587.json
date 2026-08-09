@@ -1,0 +1,36 @@
+{
+  "id": "task-8a01c025b65246aca09e69d82e009587",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Recovery-incarnation command authentication fence",
+  "description": "Objective: make every authenticated command and capability grant prove the currently installed recovery incarnation/key epoch so restored credentials cannot regain authority. Deliverable: extend the core Session, Credential, CapabilityGrant, proof challenge, and authorization context with exact recovery bindings; enforce them before expiry/capability matching; and compose the check into the daemon HTTP Authenticator so the production ingress, not a test helper, returns the refusal. MEASURED GAP at HEAD 1ce0059: core identity validates session generation/replay and exact capability tuples, but none of Session/Credential/CapabilityGrant/AuthenticateCommandInput contains recoveryIncarnationRef or keyEpochRef, and the daemon HTTP authenticator has no restore binding. NOT in scope: minting keys/nonces, installing database slots, effect inventory, approval policy, broad RBAC, or fault fixtures. Hard dependencies: task-684e6972c8c1418f8996ea3edd61f00c defines the fresh binding and task-b6e3dd2af916490fb2bc4d375a530683 installs it as current authority. Owned paths: packages/core/src/identity/** for the minimal binding change and apps/daemon/src/http/** plus a focused daemon identity adapter; do not modify unrelated ingress handlers. Verification: pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "Session, Credential, CapabilityGrant, proof challenge, and successful AuthorizationContext carry exact validated `recoveryIncarnationRef` and `keyEpochRef` values; canonicalization/conflict identity includes both fields.",
+    "Core authentication compares session, credential, proof-verification authority, grant, and daemon-current recovery binding before expiry or capability matching; any prior-incarnation or prior-key material returns `SESSION_REPLAYED` with zero authorization context/business effect.",
+    "The daemon production Authenticator reads the selected store/anchor current binding and preserves stale-restore refusal as code `SESSION_REPLAYED`, stage `AUTHENTICATE`, layer `IDENTITY`, rather than flattening it to a generic outcome.",
+    "A freshly issued current-incarnation credential and grant authenticate normally, while credentials/grants from both earlier installs of the same backup generation fail; tests pin refusal precedence, code, stage, and layer and mutation-check the production comparison.",
+    "No raw bearer, proof-of-possession secret, private key, or incarnation nonce is exposed in errors, contexts, logs, or serialized test evidence.",
+    "Fresh `pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "This task must land the real daemon consumer edge for the changed core identity surface; exporting fields without a production ingress call site is incomplete.",
+    "Structural spoofing remains `AUTHENTICATION_FAILED`; a well-formed credential bound to a prior recovery identity is `SESSION_REPLAYED` from layer `IDENTITY`. Tests pin this precedence.",
+    "Do not convert restored counters into recovery authority or accept a caller-selected current binding.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:06:34.822Z",
+  "updatedAt": "2026-08-09T12:06:34.822Z"
+}

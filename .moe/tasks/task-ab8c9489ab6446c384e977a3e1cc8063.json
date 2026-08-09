@@ -80,55 +80,99 @@
     {
       "stepId": "step-5",
       "description": "Make step 4 green. Implement the audit predicates over a supplied root element, each returning a frozen {checked, violations} record where violations name the offending element's test id and a stable code (FACT_WITHOUT_CHIP, ACTION_WITHOUT_COMMAND, ACTION_UNREACHABLE, BANNER_WITHOUT_LIVE_REGION, ACTION_MISSING_AT_NARROW). Selectors must use the reserved prefixes exactly as kernel.tsx documents them (cr.fact. names the wrapper alone, cr.chip. the chip alone), so prefix selection keeps counting facts and chips exactly. auditActionLegality takes the NextAllowedCommand list as a parameter and compares data-command-id, deriving no authority of its own. These are production modules under an owned path, not test helpers. Keep the module under 250 lines; if it approaches that, move the truth-class predicate of step 6 into a sibling module rather than growing this one.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/a11y/surface-audit.ts"
       ],
       "newFiles": [
         "apps/control-room/src/a11y/surface-audit.ts"
       ],
-      "startedAt": "2026-08-09T11:41:38.638Z"
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/surface-audit.ts"
+      ],
+      "note": "GREEN: implemented five frozen-result audit predicates in 122 production lines. Exact reserved-prefix selectors count every swept fact/action/banner; action legality only compares enabled controls against supplied NextAllowedCommand ids; keyboard audit catches hidden/aria-hidden/negative-tab and CSS-order mismatch while tolerating disabled controls; live regions and wide/narrow parity return exact offending test ids and stable codes. Fresh focused test run passed 27 files / 387 tests and control-room typecheck exited 0.",
+      "startedAt": "2026-08-09T11:41:38.638Z",
+      "completedAt": "2026-08-09T11:43:35.806Z"
     },
     {
       "stepId": "step-6",
       "description": "Add the CR-A11Y-001 monochrome predicate, red first then green, in the same two files. Export auditTruthClassMonochrome, which calls describeTruthClass from @moe/control-room-model for all five classes and asserts the (glyph, shortLabel, borderStyle) tuple is pairwise distinct with semanticTone deliberately excluded from the comparison. It must call the production function, never carry its own copy of the descriptors, or the property is asserted against a reimplementation instead of the real surface. It must assert it examined exactly five classes, so a shortened input list cannot pass. Note in a comment why border alone is insufficient: four classes are solid and only UNKNOWN is dashed, so the tuple carries the distinction, not the border. The test must also confirm the predicate is sensitive: feed it two descriptors made identical except for semanticTone and assert it reports a collision with a stable code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/a11y/surface-audit.ts",
         "apps/control-room/src/a11y/surface-audit.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/surface-audit.ts",
+        "apps/control-room/src/a11y/surface-audit.test.ts"
+      ],
+      "note": "TDD red then green: auditTruthClassMonochrome now obtains the five descriptors from production describeTruthClass, requires exactly five, and detects pairwise (glyph, shortLabel, borderStyle) collisions while deliberately excluding semanticTone; border-only insufficiency is documented. Stable codes TRUTH_CLASS_COUNT_MISMATCH and TRUTH_CLASS_MONOCHROME_COLLISION are pinned, including a sensitivity case with differing tones. Production source is 194 lines. Fresh focused run passed 27 files / 391 tests and typecheck exited 0.",
+      "startedAt": "2026-08-09T11:43:39.719Z",
+      "completedAt": "2026-08-09T11:45:49.214Z"
     },
     {
       "stepId": "step-7",
       "description": "Fix the shell so keyboard operation is real, not just resolvable. In shell/frame.tsx add a skip-link as the first focusable element targeting the existing cr.shell.main outlet, with test id cr.shell.skiplink (deliberately NOT a cr.fact. or cr.chip. prefix, which would corrupt bar 3 for every surface), and mount useKeyboardRouter so the section 11.2 bindings are live app-wide. Wire the router's actions to the frame state that already exists: the tab setter for board/graph/timeline and the nav items for goals/approvals. Give focus styling a visible ring of at least 2 px per section 11.1. Update shell/gating-keyboard.test.tsx for the new first-focusable element and add assertions that the skip-link is reachable by keyboard as the first tab stop and moves focus to cr.shell.main, and that the router does not fire while focus is inside a form field rendered in the frame.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/shell/frame.tsx",
         "apps/control-room/src/shell/gating-keyboard.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/keyboard-map.ts",
+        "apps/control-room/src/shell/frame.tsx",
+        "apps/control-room/src/shell/gating-keyboard.test.tsx"
+      ],
+      "note": "TDD red then green: ShellFrame now mounts the global router, exposes cr.shell.skiplink as the first tab stop with a 2px focus outline and programmatic main focus, routes tab/nav/search/help/inspector actions to existing shell targets, renders a safe cr.shell.help dialog, and collapses/expands the inspector. Text-entry focus still refuses routing. Shell-specific controller was added to the already-owned a11y keyboard module to keep frame.tsx at 245 lines and ShellFrame exactly 50 lines; keyboard-map.ts is 188 lines. Fresh focused run passed 27 files / 394 tests and typecheck exited 0.",
+      "startedAt": "2026-08-09T11:45:53.425Z",
+      "completedAt": "2026-08-09T11:50:53.705Z"
     },
     {
       "stepId": "step-8",
       "description": "Write the UI-wide acceptance fixture that runs the harness across every committed canonical surface, not just J1. Mount each surface inside ShellFrame with the existing CONTROL_ROOM_FIXTURES affordances and run auditFactChips, auditActionLegality, auditKeyboardReachability and auditLiveRegions over each: goals-home, board-surface, approval-inbox and the four approval details, doctor-console, evidence-inspect, timeline-list, reconciliation-inventory, recovery-status, node-authority, attempt-detail and review-surface. Assert per surface that checked is greater than zero before asserting zero violations, and assert the surface list itself is non-empty and covers each mounted surface exactly once. Add CR-A11Y-001 (the monochrome predicate over the real chips rendered by a surface, asserting all five classes appear distinguishable without colour) and CR-A11Y-002 (complete J1's three human actions keyboard-only, via userEvent.keyboard only with zero click calls, including the board h/l column traversal, and assert the count of human actions is at most 3 so bar 1 holds on the keyboard path too). Record bar 2 as an explicit not-applicable with its reason (the graph projection renders GraphPlaceholder in this slice and CR-J1-002 forbids cr.graph.* mounting), never as a passing assertion over zero cases. Also assert degraded and loading honesty on the surfaces that support it: a degraded surface renders its stale label and still exposes no enabled cr.action.* that is absent from nextAllowedCommands. If this file approaches 250 lines, split the keyboard journey into a sibling test file rather than letting it grow.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx"
       ],
       "newFiles": [
         "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/a11y/ui-wide-acceptance.test.tsx",
+        "apps/control-room/src/a11y/ui-wide-core-fixtures.tsx",
+        "apps/control-room/src/a11y/ui-wide-ops-fixtures.tsx",
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-inbox.test.tsx"
+      ],
+      "note": "Completed the non-vacuous 15-surface acceptance harness with split fixtures (191/173/77 lines), degraded/loading legality checks, wide/narrow action parity, five-class monochrome proof, explicit bar-2 N/A evidence, and CR-A11Y-002 keyboard-only coverage of board h/l traversal plus exactly three human activations. Amendment amend-1 was exercised narrowly: DecisionControl now emits only its caller-supplied data-command-id; a focused red-green test pins the exact id and proves disabled/null controls do not fabricate one while retaining CAPABILITY_DENIED/AFFORDANCE_ABSENT. approval-inbox.tsx remains exactly 250 lines. Fresh results: ui-wide acceptance 25/25; approval-inbox + acceptance 39/39 before CR-A11Y-002, and control-room typecheck exit 0.",
+      "startedAt": "2026-08-09T11:51:02.599Z",
+      "completedAt": "2026-08-09T12:05:59.112Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "Write the UI-wide acceptance fixture that runs the harness across every committed canonical surface, not just J1. Mount each surface inside ShellFrame with the existing CONTROL_ROOM_FIXTURES affordances and run auditFactChips, auditActionLegality, auditKeyboardReachability and auditLiveRegions over each: goals-home, board-surface, approval-inbox and the four approval details, doctor-console, evidence-inspect, timeline-list, reconciliation-inventory, recovery-status, node-authority, attempt-detail and review-surface. Assert per surface that checked is greater than zero before asserting zero violations, and assert the surface list itself is non-empty and covers each mounted surface exactly once. Add CR-A11Y-001 (the monochrome predicate over the real chips rendered by a surface, asserting all five classes appear distinguishable without colour) and CR-A11Y-002 (complete J1's three human actions keyboard-only, via userEvent.keyboard only with zero click calls, including the board h/l column traversal, and assert the count of human actions is at most 3 so bar 1 holds on the keyboard path too). Record bar 2 as an explicit not-applicable with its reason (the graph projection renders GraphPlaceholder in this slice and CR-J1-002 forbids cr.graph.* mounting), never as a passing assertion over zero cases. Also assert degraded and loading honesty on the surfaces that support it: a degraded surface renders its stale label and still exposes no enabled cr.action.* that is absent from nextAllowedCommands. If this file approaches 250 lines, split the keyboard journey into a sibling test file rather than letting it grow.\n\nAMENDED 2026-08-09 by governor-f70d1157 — OWNERSHIP WIDENED BY ONE PRODUCTION FILE.\n\nYour audit found a real bar-4 defect and you were right to refuse to weaken it. Fix the production code instead. `apps/control-room/src/approvals/approval-inbox.tsx` and its existing focused tests are now ADDED to this step's affected paths, alongside `apps/control-room/src/a11y/ui-wide-acceptance.test.tsx`.\n\nTHE DEFECT, as you measured it: `DecisionControl` renders enabled `cr.action.*` buttons with no `data-command-id`. Because all four approval detail surfaces reuse that component, the audit correctly returns ACTION_WITHOUT_COMMAND on 7 controls — plan approve/reject, expansion approve/decline, acceptance accept/decline, and cutover activate — with focused acceptance at 20 passed / 4 failed.\n\nTHE FIX, and nothing beyond it: give `DecisionControl` the `data-command-id` its callers already supply, so each rendered control carries the command id it will actually issue. Do NOT invent a command id, do NOT derive one, and do NOT default one when a caller supplies none — the id must come from the caller's supplied command, because a fabricated id would make the audit pass while the control still cannot be checked against nextAllowedCommands. If a call site turns out not to supply a command at all, that is a second defect: report it, do not paper over it.\n\nDO NOT weaken the audit. `auditActionLegality` stays exactly as written — it is correct and it just proved its worth. The four failing cases must go green because the production code was fixed, never because the predicate was relaxed.\n\nSCOPE LIMIT: this amendment adds one component file plus its existing tests. If the fix cannot be made within that boundary — for example if it requires changing a call site outside approval-inbox.tsx, or a shared type — report blocked rather than widening further on your own authority. You will not be penalised for a second block here; you have already been right twice today.\n\nCommit by explicit pathspec over exactly your owned paths, and re-run the focused acceptance to confirm 24/24 before completing the step.",
+          "reason": "Scope amendment authorised by governor-f70d1157 on the human's explicit \"so finish\", after worker-b6bbb60c reported the defect and no architect responded (architect-1721c07f, who planned this task, has been idle since 11:33 through five routed pings; the other three architects are mid-task).\n\nThe worker did the right thing and must not be penalised for it: their non-vacuous audit caught a REAL bar-4 production defect outside their approved paths, and they refused to weaken the predicate to go green. Weakening it would have retired a genuine ACTION_WITHOUT_COMMAND violation into false evidence — exactly the failure epic rail 6 exists to prevent. The audit is correct; the production code is wrong.\n\nThis amendment ONLY widens ownership by one production component plus its existing focused tests. No DoD item is narrowed, no predicate is loosened, no assertion is relaxed. If the fix turns out to need more than data-command-id wiring on DecisionControl, report blocked rather than expanding further under this amendment.",
+          "amendedBy": "governor-f70d1157",
+          "amendedAt": "2026-08-09T12:00:54.871Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
     },
     {
       "stepId": "step-9",
       "description": "Verification. Run the one command that gates this task: pnpm --filter @moe/control-room test. Capture its fresh output verbatim as the completion evidence; do not reuse an earlier run. Then satisfy epic rail 6's mutation requirement, which a green suite cannot show on its own: for each failure-path test, mutate the production surface and confirm the test goes red, then revert the mutation. At minimum mutate the TEXT_ENTRY_FOCUSED guard in the resolver, the SURFACE_LOCAL deferral, the FACT_WITHOUT_CHIP violation branch, and the semanticTone exclusion in the monochrome predicate; a mutation that leaves the suite green means that test is not asserting what it claims. Record which mutations were performed and that each produced red. Attribute any repo-wide red by path: this task owns only apps/control-room/src/a11y/** and apps/control-room/src/shell/frame.tsx, so report foreign failures verbatim with their file paths rather than either hiding them or claiming them.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Fresh named gate after all restores: pnpm --filter @moe/control-room test => exit 0, 28 files / 420 tests passed. Four byte-backed out-of-tree mutation drills were applied, visibly printed, killed by the intended stable-code tests, and hash-restored: TEXT_ENTRY_FOCUSED (4 focused failures), SURFACE_LOCAL (exact SURFACE_LOCAL vs NO_BINDING), FACT_WITHOUT_CHIP (2 exact failures), semanticTone exclusion (TRUTH_CLASS_MONOCHROME_COLLISION sensitivity failure). HEAD stayed 1ce0059de305e9e8f13f099daa1b9c5249b34071 and ALL_FILES_RESTORED=True. Repo-wide pnpm typecheck/test were also run and remain FOREIGN RED only on untracked distribution WIP: packages/contracts/src/distribution/distribution-manifest.test.ts missing decode/parse exports and distribution-verifier.js (plus implicit-any line 449); tests/integration/distribution/distribution-packaging.test.ts missing tools/packaging/distribution-build.js. Root test otherwise: 187 files passed, 3317 passed/1 skipped. No failing path intersects this task's owned apps/control-room paths.",
+      "startedAt": "2026-08-09T12:06:03.463Z",
+      "completedAt": "2026-08-09T12:08:42.722Z"
     },
     {
       "stepId": "step-10",
       "description": "Adversarial self-review before complete_task. Read the diff as an attacker, not the author. Check specifically: does any audit pass when it swept zero elements, on any surface, including one that renders empty or degraded (the vacuous-sweep defect project rail 1 names); does the global keydown listener double-handle after a remount, or survive unmount; can the g-chord be left armed so a later unrelated keypress navigates; does any new element use a cr.fact. or cr.chip. prefix and thereby corrupt bar 3 app-wide; does auditActionLegality derive any authority instead of comparing against the supplied nextAllowedCommands; does the monochrome predicate still call describeTruthClass rather than a local copy; does any test assert only that something was refused rather than naming the specific reason code and, where two layers can refuse, which layer did; is every production file under 250 lines; and are there any debug, probe, scratch or generated evidence files left in the commit. Confirm the plan's own stated non-coverage is reported honestly at completion rather than implied as done: the section 4.16 layout reflow, prefers-reduced-motion, and the four-phase timing clause of DoD item 2 (carved out to task-a62e3c2d58404bd7bc2fc2ca09930f1d) are NOT delivered by this task.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-09T12:08:51.077Z"
     }
   ],
   "status": "WORKING",
@@ -136,7 +180,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human requested advancing genuinely unblocked work. All canonical control-room surfaces are committed; orders 1-5 are DONE, Canonical goals board is DONE, and Recovery doctor is 8/8 in REVIEW with committed green focused gates. Planning is read-only and can proceed against those committed surfaces without inventing dependencies.",
+  "reopenReason": "Unblocking on the human's explicit \"so finish\" to worker-b6bbb60c, with the scope question resolved by amendment amend-1 on step-8 rather than by weakening the gate.\n\nThe block was correct and is now answered. worker-b6bbb60c's non-vacuous UI-wide audit caught a real bar-4 production defect outside their approved paths — DecisionControl in apps/control-room/src/approvals/approval-inbox.tsx renders 7 enabled cr.action.* controls with no data-command-id, reused across all four approval detail surfaces, giving exact ACTION_WITHOUT_COMMAND and focused acceptance at 20 passed / 4 failed. They refused to loosen the predicate to go green and asked for an amendment instead, which is precisely what epic rail 6 wants and the opposite of the failure mode it guards.\n\nResolution: step-8's affected paths now include approval-inbox.tsx plus its existing focused tests. The audit is unchanged — auditActionLegality stays exactly as written. The four failing cases go green by fixing the production code, never by relaxing the assertion. The amendment carries an explicit scope limit: if the fix needs a call site outside approval-inbox.tsx or a shared type, report blocked rather than widening further.\n\nAuthority note: architects own amendments and I would normally route this. architect-1721c07f planned this task and has been idle since 11:33 through five routed pings; the other three architects are mid-task. moe.amend_plan_step is architect-or-governor, the human had already told the worker to finish, and the amendment only widens ownership by one component while narrowing nothing. Recorded here so the decision is auditable rather than implicit.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -151,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:21.717Z",
-  "updatedAt": "2026-08-09T11:41:38.638Z",
+  "updatedAt": "2026-08-09T12:08:51.077Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-1721c07f",
@@ -161,7 +205,7 @@
     "firstClaimAt": "2026-08-09T10:27:40.723Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 9
   },
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -171,7 +215,12 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T11:32:35.490Z",
@@ -196,5 +245,9 @@
     "wallClockMs": 9000000
   },
   "planApprovedAt": "2026-08-09T11:32:37.534Z",
-  "workStartedAt": "2026-08-09T11:33:13.409Z"
+  "workStartedAt": "2026-08-09T11:33:13.409Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

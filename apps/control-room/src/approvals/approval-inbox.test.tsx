@@ -9,7 +9,8 @@ import {
   approvalAffordance,
   withRecord,
 } from "./approval-fixtures.js";
-import { ApprovalInbox } from "./approval-inbox.js";
+import { ApprovalInbox, DecisionControl } from "./approval-inbox.js";
+import type { ApprovalControl } from "./approval-gating.js";
 import type { ApprovalInboxProps, ApprovalInboxItem } from "./approval-inbox.js";
 
 beforeAll(() => {
@@ -204,5 +205,37 @@ describe("policy-decided group", () => {
     // The POL badge marks the actor, not a fact's truth class, so it must never sit
     // inside a fact wrapper where the "one chip per fact" audit would count it.
     expect(pol.closest("[data-testid^='cr.fact.']")).toBeNull();
+  });
+});
+
+describe("DecisionControl command identity", () => {
+  const enabled = Object.freeze({
+    commandId: "cmd-fx-approval-decide",
+    commandKind: "approval.decide",
+    destructive: false,
+    disabledText: null,
+    label: "Approve",
+    reasonCode: null,
+    refusedBy: null,
+    state: "ENABLED",
+    testId: "cr.action.approval-decide.approve",
+  }) satisfies ApprovalControl;
+
+  it("renders only the caller-supplied command id", () => {
+    const { rerender } = render(<DecisionControl control={enabled} />);
+    expect(screen.getByRole("button").getAttribute("data-command-id"))
+      .toBe("cmd-fx-approval-decide");
+
+    rerender(<DecisionControl control={{
+      ...enabled,
+      commandId: null,
+      reasonCode: "CAPABILITY_DENIED",
+      refusedBy: "AFFORDANCE_ABSENT",
+      state: "DISABLED",
+    }} />);
+    const disabled = screen.getByRole("button");
+    expect(disabled.getAttribute("data-command-id")).toBeNull();
+    expect(disabled.getAttribute("data-reason-code")).toBe("CAPABILITY_DENIED");
+    expect(disabled.getAttribute("data-refused-by")).toBe("AFFORDANCE_ABSENT");
   });
 });

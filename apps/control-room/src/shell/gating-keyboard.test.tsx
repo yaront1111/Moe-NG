@@ -163,6 +163,53 @@ describe("a disabled control never invents a reason", () => {
 });
 
 describe("keyboard reachability and provenance drill-down", () => {
+  it("makes the skip link the first tab stop and moves focus to main", async () => {
+    const user = userEvent.setup();
+    renderFrame(affordanceFor("CONNECTED"));
+    await user.tab();
+    const skipLink = screen.getByTestId("cr.shell.skiplink");
+    expect(document.activeElement).toBe(skipLink);
+    expect(skipLink.getAttribute("style")).toContain("2px");
+    await user.keyboard("{Enter}");
+    expect(document.activeElement).toBe(screen.getByTestId("cr.shell.main"));
+  });
+
+  it("routes every global shell action to its declared shell target", async () => {
+    const user = userEvent.setup();
+    render(
+      <ShellFrame affordance={affordanceFor("CONNECTED")} inspector={<p>Inspector body</p>}>
+        <input aria-label="Global search" type="search" />
+      </ShellFrame>,
+    );
+    await user.keyboard("gt");
+    expect(screen.getByTestId("cr.shell.tab.timeline").getAttribute("aria-pressed")).toBe("true");
+    await user.keyboard("a");
+    expect(document.activeElement).toBe(screen.getByTestId("cr.nav.approvals"));
+    await user.keyboard("?");
+    expect(screen.getByTestId("cr.shell.help").getAttribute("role")).toBe("dialog");
+    await user.keyboard("[BracketLeft]");
+    expect(screen.getByTestId("cr.shell.inspector").hasAttribute("hidden")).toBe(true);
+    await user.keyboard("[BracketRight]");
+    expect(screen.getByTestId("cr.shell.inspector").hasAttribute("hidden")).toBe(false);
+    await user.keyboard("/");
+    expect(document.activeElement).toBe(screen.getByRole("searchbox"));
+  });
+
+  it("does not route global actions while a form field has focus", async () => {
+    const user = userEvent.setup();
+    render(
+      <ShellFrame affordance={affordanceFor("CONNECTED")}>
+        <input aria-label="Goal title" />
+      </ShellFrame>,
+    );
+    const title = screen.getByLabelText<HTMLInputElement>("Goal title");
+    title.focus();
+    await user.keyboard("a");
+    expect(title.value).toBe("a");
+    expect(document.activeElement).toBe(title);
+    expect(screen.queryByTestId("cr.shell.help")).toBeNull();
+  });
+
   it("exposes the frame landmarks and a graph tab that mounts nothing", () => {
     renderFrame(affordanceFor("CONNECTED"));
     for (const id of ["cr.shell.navrail", "cr.shell.main", "cr.shell.inspector",

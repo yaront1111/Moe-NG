@@ -113,7 +113,7 @@ export {
   type DoctorReported,
   type DoctorRequestInvalid,
 } from "./recovery/doctor-commands.js";
-export { REVIEW_HANDLERS } from "./review/review-services.js";
+export { REVIEW_HANDLERS, runReviewCommand } from "./review/review-services.js";
 export type {
   DeltaClassification,
   DeltaNodeClassification,

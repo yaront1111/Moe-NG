@@ -1,0 +1,33 @@
+{
+  "id": "task-f01ef545b1554a2cb5df340ce78f6a5c",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Linux platform observation boundary",
+  "description": "Objective: land the production Linux platform observation/classification surface that task-e87a735386f643fe92c0eeff09bc4275 will later certify. Deliverable: a shared platform contract plus Linux adapter and public runner seam under packages/runner/src/platform/**, with focused tests and the consumer task ID recorded. NOT in scope: claiming execution on Linux, spawning processes, producing conformance/fault evidence, changing doctor output, or weakening Windows behavior. Owned paths: packages/runner/src/platform/** and the minimal @moe/runner root export/surface-test wiring. Verification: pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "A frozen, non-empty production boundary vocabulary covers provider launch, Git/workspace and path/symlink observation, locks, signals/cancellation, runtime closure, and crash-recovery observation; tests assert the exact hand-written set and count.",
+    "Linux observations classify caller-supplied facts as PROVEN or UNKNOWN with stable reason codes and the PLATFORM_LINUX layer; missing, hostile, stale, or off-host facts never become PROVEN.",
+    "The adapter composes existing runner provider, workspace/scope, cancellation, and recovery contracts without copying lifecycle or authority semantics, and contains no child_process/spawn/kill/clock/random environment probing.",
+    "@moe/runner exposes a loadable public Linux platform seam, and task-e87a735386f643fe92c0eeff09bc4275 is recorded as the real conformance consumer (task-e94b2055e281489ea9e97820919f6856 consumes only the shared contract, not Linux facts).",
+    "pnpm --filter @moe/runner test exits 0 with each refusal test asserting its exact reason code and refusing layer."
+  ],
+  "taskRails": [
+    "This is an implementation task, not Linux conformance evidence; completion must say host facts remain UNKNOWN unless actually observed by a later real-host task.",
+    "Keep the shared contract OS-neutral and Linux classification separate; macOS cannot inherit Linux facts.",
+    "No direct process launch, shell command, wall clock, randomness, or environment probing inside the pure runner adapter."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e87a735386f643fe92c0eeff09bc4275",
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T11:56:15.881Z",
+  "updatedAt": "2026-08-09T11:56:15.881Z"
+}

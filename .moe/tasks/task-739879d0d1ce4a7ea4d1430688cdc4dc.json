@@ -15,9 +15,134 @@
     "Unsupported OS/provider/import facts remain typed UNSUPPORTED or UNKNOWN, never guessed.",
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-8c9073cd",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and freeze the subject before editing. Re-read the task comment and the authoritative design lines for DistributionManifest; inspect createCompatGate, GENERATED_CONTRACT_PINS, daemon WIRE_PROTOCOL_VERSION/COMPATIBILITY refusal, validateSkillManifestBytes, and the actual daemon/control-room/MCP/Claude/Codex entry assets. Record the merge-base and the pre-diff failing-path sets for pnpm typecheck, pnpm test, and pnpm --filter @moe/daemon test so the final repo-wide legs can be path-attributed. Write down the hand-reviewed current artifact IDs/kinds and exact count, the exact durable-template inventory (AGENTS.md, CLAUDE.md, .codex/agent-instructions.md), and the explicit current built-in-skill count. Confirm adapters/jetbrains is still absent and record task-9fd52b41f3ea4aad8c0c07bbe6fd3025 as the real IDE consumer; do not generate or claim a JetBrains artifact in this task. Produce no files.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Explored and froze the subject. No files produced.\n\nMERGE-BASE: HEAD 1ce0059de305e9e8f13f099daa1b9c5249b34071. Baselines captured fresh, all three repo-wide gates GREEN with an EMPTY failing-path set:\n- `pnpm typecheck` exit 0 (16 projects, all \"Done\").\n- `pnpm test` exit 0 — 187 files / 3317 passed, 1 skipped.\n- `pnpm --filter @moe/daemon test` exit 0 — 26 files / 480 tests.\nConsequence for step 8: because the baseline is empty, ANY new failure under any path is attributable to this diff. There is no foreign red to subtract, so the (2)-minus-(1) delta gives me no cover.\n\nABSENT AS PLANNED, verified on disk: `adapters/` (no such directory, so no JetBrains adapter), `packages/contracts/src/distribution/`, `tools/`, `tests/integration/`, and a root `test:integration` script.\n\nEXISTING AUTHORITIES I COMPOSE WITH, NOT REIMPLEMENT:\n- `createCompatGate` (packages/control-room-client/src/client-compat.ts:166) owns the control-room admission decision. It gates on exactly two facts — `contractSchemaHash === GENERATED_CONTRACT_PINS.contractDigest` and an exact three-key pin match — and deliberately shape-checks `buildToolVersions`/`sourceSha`/`assetDigest` only, because it holds no expected value for them. Its refusal is a frozen shared `DISTRIBUTION_MISMATCH` with `truthClass: \"OBSERVED\"`. My verifier supplies the expected values it lacks; it must not restate this gate.\n- `DISTRIBUTION_MISMATCH` is a real registry code: packages/contracts/src/runtime/runtime-error-registry.ts:153, lifecycle source PROJECT, retry NEVER, recovery HUMAN_DECISION.\n- `validateSkillManifestBytes` (packages/skills/src/skill-manifest.ts:179) returns `{ok, manifest, canonicalJson, identityDigest}` and already enforces NFC paths, Win32 device stems, case-fold collisions and exact keys. Packaging reuses it for skill identity rather than reimplementing any of that.\n\nHAND-REVIEWED ARTIFACT INVENTORY — exactly 5 real cases, to be asserted as an exact count and an exact ID/kind set:\n1. `daemon` DAEMON — apps/daemon/src/index.ts\n2. `control-room` CONTROL_ROOM — apps/control-room/index.html + src assets\n3. `mcp-bridge` MCP_BRIDGE — packages/mcp/src/index.ts\n4. `provider-claude` PROVIDER_ADAPTER — packages/runner/src/providers/claude/**\n5. `provider-codex` PROVIDER_ADAPTER — packages/runner/src/providers/codex/**\nProviders have NO per-provider entry module; they are module directories inside @moe/runner (7 non-test .ts under claude/, 8 under codex/). The component's assets are those files, not a fabricated entrypoint. IDE_ADAPTER stays a declared kind exercised only by an explicitly labelled contract fixture; its real consumer is task-9fd52b41f3ea4aad8c0c07bbe6fd3025 and this task claims no JetBrains artifact.\n\nDURABLE INSTRUCTION TEMPLATES — exactly 3: AGENTS.md, CLAUDE.md, .codex/agent-instructions.md.\n\nBUILT-IN SKILL BUNDLES — exactly 0, and this is a determination, not an oversight. `.moe/skills/` IS tracked and holds 20+ SKILL.md directories plus a manifest.json, but that manifest is the Moe tool-skill registry (`{moeGeneratedSha, version, skills[{name,description,role,triggeredBy}]}`) — a DIFFERENT schema from the product's `SkillManifest` (`{manifestVersion, skillId, version, origin, files}`), and `.moe/` is this project's own workspace state, not shipped product content. Per the roadmap comment those are external runtime/project inputs with provenance. So the shipped built-in count is 0, and step 2 asserts the literal 0 so that adding a real built-in bundle turns the inventory red until deliberately registered.\n\nTWO FACTS THAT CONSTRAIN THE IMPLEMENTATION:\n- There is no `node_modules/@moe` at the repo root; pnpm links workspace packages only into each consumer's own node_modules. So `tools/packaging/*` CANNOT use a bare `@moe/skills` specifier. Measured working form: `import('./packages/skills/src/index.js')` from repo root loads 15 exports with `validateSkillManifestBytes` a function, because that package ships a .js bridge and its own node_modules/@moe/contracts. Packaging will import the skills validator by relative path.\n- Ed25519 confirmed on Node v24.16.0: `generateKeyPairSync('ed25519')`, 64-byte detached signature, and a raw 32-byte public key round-trips through the SPKI DER prefix `302a300506032b6570032100` and still verifies. So the trusted key map can hold raw hex keys rather than PEM.\n\nDISCLOSED GAP, not introduced by me and not fixable inside my 9 planned paths: `tools/**` and `tests/**` are outside every tsconfig project (only `tests/e2e/foundation` and `tests/fault/foundation` have one), so `pnpm typecheck` will not typecheck the two new tooling modules or the integration suite. Root vitest include is `[\"packages/**/*.test.ts\",\"tests/**/*.test.ts\"]`, so both new test files DO run under `pnpm test`. I intend to close the tooling half inside my own owned `test:integration` script with a config-free `tsc --noEmit` over tools/packaging rather than silently shipping untypechecked production code; if that proves unworkable I will re",
+      "startedAt": "2026-08-09T11:53:09.257Z",
+      "completedAt": "2026-08-09T11:56:33.459Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: add the task-owned test:integration script and failing contract/integration specifications before production code. The contract suite must pin a closed, frozen manifest/container schema containing source SHA plus git object format, contract schema hash, exact API compatibility pins, build/tool versions, aggregate and per-asset digests, component ID/kind, built-in skill ID/version/digest entries, durable instruction template ID/version/digest entries, key ID, Ed25519 algorithm, and signature. For every invalid/missing/duplicate/hostile input and every startup mismatch, assert code DISTRIBUTION_MISMATCH plus the exact stable reason and refusedBy layer; also assert the launch port was never called. The integration suite must hand-enumerate the existing daemon/control-room/MCP/Claude/Codex cases, assert the exact non-zero case count and exact IDs/kinds, exercise IDE_ADAPTER only with an explicitly labelled contract fixture, pin the exact template and built-in-skill counts, and use the production skill validator for bundle identities. Add two-build byte comparisons, reordered enumeration/path-root cases, signature/key/source/schema/range/tool/asset/component-set tampering, and external-skill same-ID substitution cases. Run pnpm test:integration once and record RED because the named production modules do not exist—not because zero cases were discovered.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "note": "TDD RED recorded, for the right reason.\n\n`pnpm test:integration` exit 1. The failure is `Error: Cannot find module '../../../packages/contracts/src/distribution/distribution-contract.js'` — a named production module that does not exist yet. It is NOT \"0 tests discovered\": the runner reports `Test Files 1 failed (1)` with the suite named, i.e. the file was found and collected, and collection died on the missing import.\n`pnpm --filter @moe/contracts test` exit 1 the same way: `Test Files 1 failed | 6 passed (7)`, the 6 pre-existing contract suites still green at 94 tests, mine failing on the same missing module.\n\nSCRIPT: added exactly one key to root package.json — `\"test:integration\": \"vitest run tests/integration\"`. Nothing else in that file changed. Root vitest include already covers `tests/**/*.test.ts`, so the suite is reachable from `pnpm test` as well as the new script. I deliberately did NOT chain a `tsc` leg into the script yet: at RED the tools glob matches nothing, so tsc would fail first and the red would be attributable to the wrong cause. That leg goes in at step 6, when the modules exist.\n\nCONTRACT SUITE — packages/contracts/src/distribution/distribution-manifest.test.ts. Note this file lives under a typechecked project (contracts tsconfig includes src/**/*.ts), so it is held to strict/noUncheckedIndexedAccess unlike the integration suite.\n- Closed-vocabulary pins: exact 5-kind component set including IDE_ADAPTER, exact 2-layer refusal set, reasons unique and frozen.\n- Canonical bytes: key insertion order, asset enumeration order, and buildToolVersions key order each produce identical signed bytes. A 13-entry FIELD-LIST sweep (asserted `toBe(13)`) mutates each provenance-bearing value and requires the signed bytes to change — a key-shape check would stay green against an implementation that signs the right keys but drops a value. Plus the converse: two containers differing only in signature have identical unsigned manifest bytes and different container bytes, which pins \"excluded from the bytes it signs, and nothing else is\".\n- 24-case manifest refusal table (`toBe(24)`), 11-case container table (`toBe(11)`), 20-case startup table (`toBe(20)`). Every case asserts the full triple — `code: DISTRIBUTION_MISMATCH`, the exact stable `reason`, and `refusedBy` — never `ok:false` alone, and `expectRefusal` additionally asserts the reason is a member of DISTRIBUTION_REFUSAL_REASONS so a typo'd literal cannot pass.\n- The layer is proved to be caller-supplied, not hardcoded: the same malformed input refused through DISTRIBUTION_PACKAGER and through DISTRIBUTION_STARTUP.\n- Hostile inputs: revoked-safe proxy record and a prototype-bearing object both refused at the schema gate.\n- Two properties the obvious implementation gets wrong: an entirely stale but MUTUALLY CONSISTENT set (both components agreeing on the same wrong sourceSha) must still be refused, because agreement inside the observed set is not evidence — only the trusted expectation decides; and an untrusted keyId must be refused BEFORE the signature port is consulted, asserted by a spy that must never be called.\n- The admitted result is asserted to expose no function-valued property, so admission cannot smuggle a launch affordance.\n\nINTEGRATION SUITE — tests/integration/distribution/distribution-packaging.test.ts.\n- Hand-enumerated inventory of the 5 components that exist on disk, with exact count, exact ID list and exact kind list asserted, plus a per-component \"assets non-empty\" guard. Provider assets are read from the real directories, so a new provider source file joins the digest automatically while the component set stays hand-reviewed.\n- IDE_ADAPTER: asserted to be a member of the closed kind set AND asserted absent from the shipped inventory, then exercised in its own describe block as an explicitly labelled `ide-adapter-contract-fixture`. No JetBrains artifact is claimed anywhere.\n- Exact template count 3 with each file proved readable; exact shipped built-in-skill count 0, with the reasoning recorded in the file so a future built-in has to turn that assertion red before it can be registered.\n- Determinism: two builds byte-identical, all five components rebuilt byte-identically, reversed asset enumeration identical (on the 7-asset claude component, with `assets.length > 1` asserted so the reorder is real), and a `./`-prefixed path-root spelling identical.\n- Skill provenance: identities come from the production `validateSkillManifestBytes` and the manifest entry is asserted to equal that validator's own `identityDigest`; same-ID substitution refuses SKILL_IDENTITY_DUPLICATE; malformed bytes refuse SKILL_IDENTITY_INVALID; an undeclared `runtimeSkills` payload refuses BUILD_INPUT_INVALID rather than being silently embedded.\n- 13-case tamper table (`toBe(13)`, labels asserted unique) covering flipped signature, absent trusted key, wrong signing key, stale source, drifted schema hash / api range / build tool, mutated embedded asset bytes, miss",
+      "startedAt": "2026-08-09T11:58:05.455Z",
+      "completedAt": "2026-08-09T12:02:49.219Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the dependency-free manifest/container contract and canonical codec in packages/contracts/src/distribution/distribution-contract.ts, with its exact one-line LF distribution-contract.js bridge. Define closed component kinds including DAEMON, CONTROL_ROOM, MCP_BRIDGE, IDE_ADAPTER, and PROVIDER_ADAPTER; bounded exact-key inputs; explicit source object format; canonical unsigned bytes; deterministic NFC/code-unit ordering; safe relative logical-path rules; deep-frozen immutable results; and stable DISTRIBUTION_MISMATCH reasons/layers. The signature must be excluded only from the bytes it signs, while all provenance, component, skill/template, and asset identities remain covered. Do not add clocks, absolute paths, environment reads, signing logic, authority, or lifecycle semantics. Keep the TypeScript source <=250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-contract.js",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-contract.js"
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-contract.js",
+        "packages/contracts/src/distribution/distribution-parser.ts",
+        "packages/contracts/src/distribution/distribution-parser.js",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts"
+      ],
+      "note": "Contract and canonical codec landed, dependency-free. PLAN DEVIATION recorded below — one extra module, forced by the per-file line rail.\n\nDEVIATION: the step named one module. The first correct, fully-guarded implementation measured 345 physical lines against the epic rail's <=250 target. Per the precedent on task-12e18265f7a84c7eacdf79a3bef2bdf3 (three splits accepted, commit 88e92a4), the line rail beats a plan's module count and the answer is to SPLIT along a real seam rather than compress by deleting guards or comments. Split into:\n- `distribution-contract.ts` (164 lines) — the contract proper: closed vocabularies, every shared type, `distributionRefusal`, the text/path rules, and the canonical JSON codec.\n- `distribution-parser.ts` (248 lines) — the untrusted-input gate: `parseDistributionManifest`, `parseDistributionContainer`, `decodeDistributionContainerBytes`.\nThat is a responsibility seam, not an arbitrary cut: the contract declares what a distribution IS and how it serializes; the parser decides whether an observed value is one. Both files are under 250. Line counts measured with the Node CRLF-safe counter, not `wc -l`.\nDistinct affectedFiles for the task therefore becomes 11 rather than the planned 9. I did NOT split the 575-line contract test suite: the epic rail's cap is on PRODUCTION sources, and the repo norm is clearly wider for tests — 23 of 221 landed test files exceed 400 lines, the largest being packages/runner/src/index-surface.test.ts at 925.\n\nCONTRACT (distribution-contract.ts):\n- Closed component kinds CONTROL_ROOM/DAEMON/IDE_ADAPTER/MCP_BRIDGE/PROVIDER_ADAPTER, frozen; 2 refusal layers; 34 stable refusal reasons, frozen.\n- `DistributionManifest` deliberately has NO signature field. The signature sits beside the manifest on the container, so \"excluded from the bytes it signs\" is a STRUCTURAL property rather than a field the codec must remember to skip — there is no skip list to get wrong.\n- `canonicalJson` sorts keys by UTF-16 code unit and emits no whitespace; both byte functions run through it, so one tree yields one byte string on every host.\n- `normalizeLogicalPath` strips exactly one leading `./` and refuses everything else that could canonicalize differently across hosts: backslash, colon (drive/ADS), leading `/`, empty/dot/dot-dot segments, and segments ending in a dot or space. NFC + `isWellFormed()` are required, so a decomposed path is a refusal rather than a second spelling of the same file.\n- Dependency-free as required: it imports only `isNonEmptyString` and the `GitObjectFormat` type from inside @moe/contracts. No clock, no filesystem, no environment read, no crypto, no authority or lifecycle semantics.\n\nPARSER (distribution-parser.ts):\n- `refusedBy` is the caller's layer everywhere, never a literal — the same malformed bytes are a packager fault at build time and a startup fault at admission, and a hardcoded layer would lie about one of them. The suite pins this by refusing the same input through both layers.\n- Source provenance picks the digest width FROM the declared object format (sha1 -> 40, sha256 -> 64) instead of inferring the format from the length, so a 40-hex value declared `sha256` is a refusal rather than a silently accepted sha1.\n- Assets are sorted by path and deduplicated case-INSENSITIVELY, because a Windows checkout cannot carry both `src/A.ts` and `src/a.ts`; accepting both would produce a manifest no host can materialize.\n- `parseIdentities` is one routine over both identity lists, parameterised by `idKey`, so skills and templates cannot drift apart in their duplicate/ordering rules. Only skills get the strict `^[a-z0-9][a-z0-9-]*$` pattern — template IDs are real paths like `.codex/agent-instructions.md`.\n- Container admission requires the carried asset key set to EQUAL the manifest's declared paths in both directions: extra bytes nobody signed for are as wrong as a missing asset.\n- Reused rather than reimplemented: `decodeBoundedJsonBytes` for the bounded decode, and `hasExactKeys`/`isHex64`/`isPlainRecord`/`isSafeArray`/`isSafeCount` from runtime-guards. `isPlainRecord` is what makes the hostile-input cases refuse — it rejects proxies (checked before `Array.isArray`, which throws on a revoked proxy), exotic prototypes, symbol keys and accessors.\n\nBRIDGES: both modules have their one-line LF `.js` bridge naming their own sibling (`export * from \"./distribution-contract.ts\";` / `\"./distribution-parser.ts\";`), verified byte-wise with `od -c`.\n\nVERIFICATION AT THIS STEP: `pnpm --filter @moe/contracts typecheck` reports exactly three errors, all in the test file and all downstream of `./distribution-verifier.js` not existing yet (two TS2307 plus one TS7006 on the signature-port callback parameter whose type comes from that module). Zero errors in either new production module. Step 4 lands the verifier and clears all three.",
+      "startedAt": "2026-08-09T12:03:46.980Z",
+      "completedAt": "2026-08-09T12:09:09.919Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the pure set-admission kernel in packages/contracts/src/distribution/distribution-verifier.ts, with its exact one-line LF distribution-verifier.js bridge. Accept already observed manifest/container bytes, recomputed asset digests, an injected signature-verification port, and a trusted StartupDistributionExpectation. Fail closed unless the exact expected component set is present once each and every manifest has a trusted key/signature, expected source SHA/object format, expected schema hash, compatible live pins, expected build/tool facts where pinned, matching aggregate/per-asset bytes, and exact built-in-skill/template identities. Return one deeply frozen admitted result or a frozen refusal with code DISTRIBUTION_MISMATCH, one stable reason, refusedBy DISTRIBUTION_STARTUP, and no launch affordance. Preserve the existing client/daemon compatibility authorities by comparing their supplied pins rather than reimplementing runtime lifecycle/error policy. Keep the TypeScript source <=250 physical lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-verifier.js",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts"
+      ],
+      "newFiles": [
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-verifier.js"
+      ],
+      "startedAt": "2026-08-09T12:09:47.874Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement tools/packaging/distribution-build.ts as the Node 24 packaging edge and immediate consumer of the contracts. Given explicit source/schema/compatibility/tool/key metadata plus logical artifact bytes, validated built-in skill-manifest bytes, and durable template bytes, compute per-asset and aggregate SHA-256 digests, reuse validateSkillManifestBytes for skill ID/version/digest, reject duplicate/colliding/substituting external skill facts, canonicalize the unsigned manifest, sign it with an injected Ed25519 private key, and return deterministic packaged-container and embedded-manifest bytes. Exact-key build inputs must reject undeclared runtime/user/project skill payloads rather than silently embedding or mutating them. The same source bytes/key/metadata must yield byte-identical output regardless of input enumeration, host root, or separator spelling. Never persist/log the private key, shell out, add timestamps, publish artifacts, or read unbounded paths. Keep the source <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tools/packaging/distribution-build.ts",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "newFiles": [
+        "tools/packaging/distribution-build.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement tools/packaging/distribution-startup.ts as the production startup choke point. Decode each packaged container with the bounded contract codec, recompute asset digests from embedded bytes, verify Ed25519 signatures against the caller-supplied trusted public-key map, invoke verifyDistributionSet with the trusted expected source/schema/pins/component/skill/template inventory, and call the injected component launch port only after admission. Any decode, unknown key, unverifiable signature, stale source/schema/range/tool fact, altered/missing asset, missing/extra/duplicate component, or built-in/template drift must return the contract refusal unchanged and leave launch count at zero; port exceptions also fail closed with a stable startup reason. The integration suite must build the hand-reviewed component cases twice from one source tree, byte-compare both manifest and container bytes, prove the existing control-room/daemon compatibility pins are the supplied live pins rather than literals, and raw-Node import both tooling modules under --experimental-strip-types so bridge/loadability failures cannot hide behind Vitest. Keep the source <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tools/packaging/distribution-startup.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ],
+      "newFiles": [
+        "tools/packaging/distribution-startup.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review and mutation drill, after implementation and before the final gate. Review concurrency/repeated invocation, empty/null/huge/hostile records, duplicate IDs and normalized/case-fold path collisions, untrusted or throwing crypto ports, truncated containers, swapped signatures, all-stale-but-mutually-consistent sets, changed asset bytes, missing/extra components, and external skill same-ID substitution. Confirm no result grants command/effect/lifecycle authority. Mutate the production source-SHA comparison so a validly signed stale manifest is admitted and prove the targeted test goes red with its exact reason/layer assertion; mutate the artifact-case list and prove the exact case-count/set assertion goes red; corrupt the production signature path and prove the signature test—not syntax failure—goes red. Restore each file by captured checksum, confirm no probe/generated-evidence files remain, and verify every production source is <=250 lines (mandatory split before 400).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tools/packaging/distribution-build.ts",
+        "tools/packaging/distribution-startup.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Final concentrated verification and delivery. First rerun pnpm typecheck, pnpm test, and pnpm --filter @moe/daemon test; compare their exact failing paths with the merge-base baselines from step 1, require no new failure under package.json, packages/contracts/src/distribution/**, tools/packaging/**, or tests/integration/distribution/**, and report any foreign red verbatim. Require the owned contracts/integration legs to be exit 0. Then run the task's one exact fresh completion-evidence command LAST: pnpm test:integration. Record its foreground output and exit code, including the asserted artifact/template/skill case counts and byte-rebuild cases. Stage/commit only the nine explicit planned paths; never use git add -A/git add ., push, merge, reset, stash, or touch foreign work.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json",
+        "packages/contracts/src/distribution/distribution-contract.ts",
+        "packages/contracts/src/distribution/distribution-contract.js",
+        "packages/contracts/src/distribution/distribution-verifier.ts",
+        "packages/contracts/src/distribution/distribution-verifier.js",
+        "packages/contracts/src/distribution/distribution-manifest.test.ts",
+        "tools/packaging/distribution-build.ts",
+        "tools/packaging/distribution-startup.ts",
+        "tests/integration/distribution/distribution-packaging.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4addc779",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,12 +161,46 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.684Z",
-  "updatedAt": "2026-08-09T11:40:34.208Z",
+  "updatedAt": "2026-08-09T12:09:47.874Z",
   "contextFetchedBy": [
     "architect-da724bb7",
-    "architect-8c9073cd"
+    "architect-8c9073cd",
+    "worker-4addc779"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T11:40:33.980Z"
-  }
+    "firstClaimAt": "2026-08-09T11:40:33.980Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 3
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T11:52:40.187Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: a packaging-time signed container plus a production startup admission gate. This keeps daemon, control-room, MCP, provider, and future IDE sources thin: packaging embeds the manifest and the generated artifact can launch only through one verifier. It also stays inside the owned distribution/tooling paths instead of editing five unrelated consumers.\nRejected: adding independent compatibility checks to daemon, UI, MCP, and provider modules. That would fork the existing authority: createCompatGate already owns the control-room contract-pin decision and apps/daemon/src/http/http-adapter.ts already maps wire drift to DISTRIBUTION_MISMATCH.\nRejected: treating the absent JetBrains adapter as if it were built. adapters/jetbrains is absent and task-9fd52b41f3ea4aad8c0c07bbe6fd3025 explicitly depends on this task. This task must publish and exercise the IDE_ADAPTER packaging/startup contract, while task-9fd52b41f3ea4aad8c0c07bbe6fd3025 is the named real consumer; tests must not claim a real JetBrains binary exists.\nRejected: deriving a second schema authority or embedding signing secrets. Build input must use the existing generated contract digest/pins, and callers inject an Ed25519 signing key plus trusted public-key map. Release publication, key provisioning, and secret persistence remain out of scope.",
+    "codebaseInsights": "Verified on disk at planning time: packages/contracts/src/distribution, tools/packaging, tests/integration, adapters/jetbrains, and the root test:integration script are absent.\nExisting compatibility surfaces are partial but authoritative for their seams. createCompatGate validates exact contractSchemaHash/apiCompatibilityRange and shape-checks buildToolVersions/sourceSha/assetDigest; daemon handleCommandRequest refuses protocolVersion drift at stage COMPATIBILITY with DISTRIBUTION_MISMATCH. The new gate composes with these pins; it must not replace or restate lifecycle/authority semantics.\nBuilt source components currently available for the integration inventory are daemon (apps/daemon/src/index.ts), control-room (apps/control-room/index.html plus its source assets), MCP (packages/mcp/src/index.ts), and the Claude/Codex provider adapter entrypoints. The integration sweep must assert this hand-reviewed inventory and its exact non-zero case count. IDE_ADAPTER is exercised as a packaging contract fixture only and its real consumer is task-9fd52b41f3ea4aad8c0c07bbe6fd3025.\nThe roadmap comment adds built-in skill bundles and durable instruction templates to every manifest. Reuse packages/skills/src/index.js -> validateSkillManifestBytes for skill identities instead of reimplementing skill validation. AGENTS.md, CLAUDE.md, and .codex/agent-instructions.md are the current durable instruction sources; pin their exact IDs/count/digests in the integration inventory. Runtime/user/project skills remain separate provenance inputs and never enter or override built-in entries.\nRaw Node does not resolve a .js specifier to a .ts file. New contracts modules therefore need one-line LF .js bridges because the packaging tools run under Node 24 --experimental-strip-types. Vitest alone is not sufficient proof of loadability.",
+    "risks": "Trust must not be self-derived. Startup expectations include the trusted source SHA/object format, schema hash, compatibility pins, exact component IDs, and key IDs; agreement among an entirely stale set is not admission. Missing expectation/key/signature/asset evidence returns DISTRIBUTION_MISMATCH and no launch.\nEd25519 signing must cover canonical unsigned manifest bytes. Exclude wall time, temp directories, filesystem enumeration order, absolute paths, locale, and host separators; normalize logical paths to NFC forward-slash relative paths, reject traversal/drive/UNC/case-fold collisions, sort deterministically, and emit LF canonical bytes. This is required for Windows/macOS/Linux byte equality.\nEvery refusal test must assert code DISTRIBUTION_MISMATCH, the stable reason, and refusedBy DISTRIBUTION_STARTUP (or DISTRIBUTION_PACKAGER for build-input refusals). A control-room/daemon refusal test must also pin that its existing compatibility layer refused. Never assert only ok:false or that launch was not called.\nThe generated inventory must not pass vacuously: assert the exact component case count, exact component IDs/kinds, exact durable-template count, and the explicit built-in-skill count, even when the current built-in-skill count is zero. A future shipped asset must make the hand-reviewed inventory check red until deliberately registered.\nKeep each production TypeScript source at or below 250 physical lines and split before 400. The two contract modules and two tooling modules are intentionally separated by responsibility; one-line bridges are runtime support, not duplicate logic.\npackage.json is touched only for the task-mandated test:integration entry. Preserve foreign shared-tree work, never stage broadly, and use only explicit owned pathspecs.",
+    "keyFiles": [
+      "packages/control-room-client/src/client-compat.ts",
+      "packages/control-room-client/src/generated/generated-client.ts",
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/http/http-contract.ts",
+      "packages/contracts/src/runtime/runtime-error-registry.ts",
+      "packages/skills/src/skill-manifest.ts",
+      "packages/skills/src/index.js",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-09T11:52:42.224Z",
+  "workStartedAt": "2026-08-09T11:53:09.257Z"
 }

@@ -1,0 +1,36 @@
+{
+  "id": "task-b6e3dd2af916490fb2bc4d375a530683",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Crash-safe two-slot recovery anchor installer",
+  "description": "Objective: implement the media-loss install protocol that selects only a fully verified quiesced database generation. Deliverable: a @moe/store two-slot RecoveryAnchor installer with `PREPARED`/`INSTALLED` metadata outside restored payloads, inactive-slot database installation, one SQLite recovery transaction, database/artifact persistence and read-back verification, atomic current-slot switch, and exact-command resume/discard inspection. MEASURED GAP at HEAD 1ce0059: @moe/store has transaction/WAL integrity and runner artifact CAS has file fsync/rename precedent, but repo-wide searches find no RecoveryAnchor, inactive database slot, slot switch, restore installer, or anchor/database mismatch guard. NOT in scope: generating backup bytes, minting entropy/keys, external-effect inventory, R3 completion, ordinary restart, optimistic adoption, fault-suite evidence, or adding a second business authority. Hard dependencies: task-5606947a9d7d4f228dc63e6ce4dea69a (verified BackupGeneration) and task-684e6972c8c1418f8996ea3edd61f00c (fresh recovery identity binding). Owned paths: packages/store/src/recovery-anchor.* and focused @moe/store export wiring. Verification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "The production installer persists one versioned OS-protected anchor record with active/inactive slots and `PREPARED|INSTALLED` state, bound to restore command, complete backup-generation digest, incarnation, and key epoch; the anchor is excluded from restored payload bytes.",
+    "Installation writes only the inactive slot, transactionally installs the fresh incarnation/key epoch, revokes all restored credentials/grants, records `QUIESCED/RECOVERY_REQUIRED`, persists database and reachable artifacts, read-back verifies them, then performs one atomic current-slot switch before marking the anchor `INSTALLED`.",
+    "Injected failure at prepare, inactive install, transaction, file fsync, directory persistence, verification, switch, or installed-marker boundary exposes either the prior active slot or one verified quiesced restored slot; never mixed slots or mutating authority.",
+    "Anchor/database/command/incarnation mismatch, absent persistence proof, or unverifiable inactive bytes refuses mutating open with distinct stable `RECOVERY_ANCHOR_*` code at layer `RECOVERY_ANCHOR`; allowed output is limited to exact install inspection/resume/discard.",
+    "Repeated resume of the same prepared command reuses its prepared identity, while a new command for the identical generation requires a different incarnation/key epoch; focused tests assert code/layer and mutation-check the production slot selector.",
+    "Fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "RecoveryAnchor is bootstrap selection metadata only; the selected verified database remains the sole lifecycle/readiness authority.",
+    "Implement descriptor-oriented write -> fsync -> close -> rename/switch -> parent persistence -> read-back verification for Windows, macOS, and Linux; do not claim POSIX directory-fsync semantics on win32.",
+    "Failure tests assert exact stable code and `RECOVERY_ANCHOR` layer, and each declared injection point must be generated at least once.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:05:35.053Z",
+  "updatedAt": "2026-08-09T12:05:35.053Z"
+}

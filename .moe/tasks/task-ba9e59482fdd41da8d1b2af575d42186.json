@@ -1,0 +1,33 @@
+{
+  "id": "task-ba9e59482fdd41da8d1b2af575d42186",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Doctor runtime inventory",
+  "description": "Objective: give Linux/macOS packaging conformance a real production doctor surface for exact engine and tool observations. Deliverable: a focused daemon recovery runtime-inventory module, composition into doctor.report_recovery_state, public daemon export, and tests. NOT in scope: changing recovery authority, running platform conformance, adding test:fault, editing package-manager pins, or inferring unavailable versions. Owned paths: apps/daemon/src/recovery/doctor-runtime-inventory.* plus the minimal doctor-commands/index/test wiring. Verification: pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "doctor.report_recovery_state returns a deeply frozen runtime inventory containing the declared Node engine range, observed Node runtime, declared pnpm version, observed platform/architecture, and any explicitly supplied build-tool versions, each with PROVEN or UNKNOWN truth.",
+    "Missing, malformed, contradictory, or stale version observations fail closed with a stable DOCTOR_RUNTIME_* reason code and the DOCTOR_RUNTIME layer; tests assert both code and layer rather than only refusal.",
+    "The inventory composes into the existing report-only doctor path without changing proposal commands, confirmation requirements, recovery authority, or existing DOCTOR_REQUEST_* refusal ordering.",
+    "@moe/daemon publicly exposes the runtime inventory/report types and production constructor, and its raw Node runtime-entrypoint test proves the export is defined.",
+    "pnpm --filter @moe/daemon test exits 0; package.json remains the single source for the already-declared Node/pnpm pins and no host fact is guessed."
+  ],
+  "taskRails": [
+    "Read versions from explicit immutable observations and declared package metadata; never turn an absent executable/tool into a guessed version.",
+    "Keep doctor-commands.ts below the production-file line cap by placing runtime inventory validation/composition in its own focused module.",
+    "This task creates the production reporting capability only; Linux/macOS conformance remains a separate real-host proof."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e87a735386f643fe92c0eeff09bc4275",
+  "priority": "HIGH",
+  "order": 6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T11:56:29.637Z",
+  "updatedAt": "2026-08-09T11:56:29.637Z"
+}

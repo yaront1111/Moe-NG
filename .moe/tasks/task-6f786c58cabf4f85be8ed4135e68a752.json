@@ -1,0 +1,37 @@
+{
+  "id": "task-6f786c58cabf4f85be8ed4135e68a752",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "R3 disaster-recovery completion composition",
+  "description": "Objective: make `recovery.complete` a real durable command that can clear QUIESCED only for the exact installed restore and fully reconciled external world. Deliverable: a daemon recovery-completion service that recomputes a versioned R3 recovery digest over BackupGeneration/cursor, RecoveryAnchor install, incarnation/key epoch, configured inventory coverage and dispositions, verifies a current HUMAN R3 approval with reason and recent step-up bound to that digest, then calls the existing project reducer and durable store exactly once. MEASURED GAP at HEAD 1ce0059: core `RecoveryCompletionWitness` and `reduceProject` exist and generic policy supports R3, but no daemon service builds the witness, no canonical recovery digest exists, and no approval is bound to restore/inventory bytes. NOT in scope: minting the restore identity, installing slots, enumerating external state, weakening the embargo, UI controls, GO_QUIESCE/GO_ACTIVATE, or tests/fault. Hard dependencies: task-5606947a9d7d4f228dc63e6ce4dea69a, task-b6e3dd2af916490fb2bc4d375a530683, task-8a01c025b65246aca09e69d82e009587, and task-cf7fb147bd1c47698cbd65c9535370aa must be DONE and consumed. Owned paths: apps/daemon/src/recovery/recovery-completion.* plus minimal command-registry/index wiring. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The production service recomputes one canonical versioned digest over project, backup generation/cursor/RPO, installed anchor slot and command, current incarnation/key epoch, exact configured inventory class set, coverage proofs, item dispositions, quarantine refs, and reconciliation digest; callers cannot supply the accepted digest as authority.",
+    "Only a current HUMAN approval classified R3 and carrying a non-empty reason plus recent step-up reference, itself bound to that exact digest/incarnation/project, can authorize completion; system-policy, stale, carried-forward, mismatched, or weaker approvals refuse.",
+    "Missing/unverifiable evidence or unresolved UNKNOWN/quarantined inventory returns `UNKNOWN_TRUTH` or `RECOVERY_RECONCILIATION_REQUIRED` from its originating layer; digest mismatch returns `RECOVERY_COMPLETION_DIGEST_MISMATCH` at layer `RECOVERY_COMPLETION`; tests pin which layer refused first.",
+    "A valid request durably commits exactly one `recovery.complete` decision/event using the existing reducer, changes the selected database from QUIESCED/RECOVERY_REQUIRED to READY, and releases the effect embargo only in the same committed authority sequence; replay returns the stored decision without a second transition.",
+    "Any post-approval change to anchor, generation, key epoch, coverage, inventory, disposition, quarantine, policy, reason, or step-up binding invalidates completion and leaves the project quiesced.",
+    "Focused tests use the shipped store, core reducer, policy approval, anchor, and inventory surfaces—not reimplemented helpers—and mutation-check the production digest comparison.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "`recovery.complete` is human-only R3. No policy opt-in, waiver, test fixture, doctor proposal, or caller-supplied truth may bypass exact evidence binding.",
+    "This task must land real consumer edges for the backup, anchor, identity-fence, inventory, policy, core reducer, and store surfaces; exports or shape validation alone are incomplete.",
+    "Where multiple layers can refuse, preserve the upstream stable code/layer and test the intended precedence.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:08:18.169Z",
+  "updatedAt": "2026-08-09T12:08:18.169Z"
+}

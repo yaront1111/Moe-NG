@@ -1,0 +1,37 @@
+{
+  "id": "task-fdf3e6aaaa4a4b7c86a08d9d8fc4f919",
+  "epicId": "epic-923660dca9af4d0987405c8ea08ed9ed",
+  "title": "Narrow-mode surface reflow",
+  "description": "Objective: finish spec section 4.16 below the shell — the per-surface narrow reflow that the shell task's narrow mode makes drivable.\n\nScope, all measured on disk:\n- DECISION-BUTTON PINNING. approval-detail-plan.tsx:146 already stamps a data-pinned=\"true\" marker, but grep for data-pinned across *.css returns 0 hits: nothing targets it. Add the stylesheet rule behind the existing marker; do not invent a second marker.\n- ROW FIELD-SET PARITY. Section 4.16 says tables drop to two-line rows with \"no column removed, only reflowed\". There is no table, thead, tbody or role=grid anywhere in the app (0 hits), and the two table surfaces section 4.16 implies (section 4.11 Runs/leases, section 4.12 Resources) do not exist: cr.runs and cr.resources are both 0 hits. What DOES exist is li/div row surfaces. The assertable form is field-set equality wide versus narrow on those rows. \"Two-line\" itself is a pixel property and is NOT checkable in this harness.\n- BOARD REMAINDER. board-layout.css:50 already carries the narrow block (sticky cr.board.columnjump, overflow-x auto plus scroll-snap on cr.board.columns, 85vw snap columns) and board-surface.tsx:209 renders the column-jump control. Only the gaps left after the shell task land are in scope. Do not rebuild what is there.\n- LOCK AMENDMENTS. Any file added under a frozen directory requires amending goals-board-ban.test.ts's readdirSync array, and any new import into board-surface requires amending its frozen import allowlist. Amend deliberately and narrowly; never widen a lock beyond the file being added.\n\nNOT IN SCOPE: the width ladder, the width-derived hook, the narrow marker, the nav rail, the `?` overlay and the inspector sheet (all owned by task-3e3275476efe4e9086a2a89b7c78cab0). The graph clause and the Runs/Resources table clause are permanently out — see the DoD not-applicable item.\n\nOwned paths: apps/control-room/src/board/**, apps/control-room/src/approvals/**, and the row surfaces named in the plan. NOT owned: apps/control-room/src/a11y/**, apps/control-room/src/shell/**, apps/control-room/src/performance/**.\n\nHard dependencies: Narrow-mode source of truth and shell reflow (task-3e3275476efe4e9086a2a89b7c78cab0) must reach DONE first — the parity assertions need its narrow render mode to have a narrow root to compare against.\n\nVerification: pnpm --filter @moe/control-room test",
+  "definitionOfDone": [
+    "A stylesheet rule targets the EXISTING data-pinned marker at approval-detail-plan.tsx:146 so decision buttons pin at narrow width, and a source-text pin asserts the rule exists. No second marker attribute is introduced. The rule's visual effect is explicitly NOT asserted — jsdom evaluates no CSS.",
+    "Row field-set parity is asserted across every row surface the plan names: the set of field test-ids rendered inside a row at narrow width equals the set rendered wide, with each set asserted non-empty first so the comparison cannot pass vacuously. This is the assertable form of \"no column removed, only reflowed\".",
+    "Every stylesheet this task adds or edits carries a @media (prefers-reduced-motion: reduce) block, and a source-text pin asserts it. Without this the reduced-motion guarantee that board-layout.css:68 currently provides silently regresses as soon as a second stylesheet exists.",
+    "Any amendment to the frozen readdirSync arrays or the frozen import allowlist in goals-board-ban.test.ts names exactly the files added and nothing more, and the amended test still fails when an unlisted file is introduced — verified by adding a scratch file, confirming red, and removing it.",
+    "Recorded as explicit not-applicable WITH the reason, never as a passing assertion over zero cases: section 4.16's table clause against Runs and Resources (cr.runs and cr.resources are 0 hits — those surfaces do not exist), and section 4.16's graph clause (three committed tests ban the cr.graph. prefix).",
+    "pnpm --filter @moe/control-room test passes, and each new failure-path test is verified by mutating the production surface and confirming it goes red."
+  ],
+  "taskRails": [
+    "Pinned UI spec: D:/projexts/moes/docs/plans/2026-08-05-moe-v1-control-room-spec.md SHA-256 C55AF8A9FC7386E6492FD57E34A4B8321ABAAE4E4E08FF38703544B58B0BEF1F. Section 4.16 is lines 425-433.",
+    "THE HARNESS CANNOT SEE LAYOUT — measured, not assumed. offsetWidth, clientWidth and getBoundingClientRect().width are all 0 even with an inline width, and document.styleSheets.length is 0 because Vitest stubs the CSS import. Never assert that a button reached the viewport bottom, that a row wrapped to two lines, or that a media query evaluated. Those are source-text pins or nothing.",
+    "Do not add a motion ban that fights the board. board-layout.css legitimately uses scroll-snap-type and scroll-snap-align for section 4.16's column behavior. Any motion guard must target animation, transition and @keyframes and scroll-behavior:smooth — never scroll-snap.",
+    "Do not edit apps/control-room/src/a11y/** or apps/control-room/src/shell/**. Those belong to task-ab8c9489ab6446c384e977a3e1cc8063 and task-3e3275476efe4e9086a2a89b7c78cab0 respectively.",
+    "The standalone control room displays daemon truth and nextAllowedCommands; it never derives authority, readiness, or evidence strength. Narrow mode is presentation only: it may never change which commands exist, which actions are enabled, or any truth class.",
+    "Keep each production file below 400 lines, target 250. Explicit owned paths only; no git add -A."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 14,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:00:15.228Z",
+  "updatedAt": "2026-08-09T12:00:15.228Z"
+}

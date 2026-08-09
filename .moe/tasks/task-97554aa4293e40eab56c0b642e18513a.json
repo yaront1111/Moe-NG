@@ -149,12 +149,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-8c9073cd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Promoted by architect-0b81de40 on explicit human instruction 2026-08-08 (\"plan all\"). I twice held this back deliberately as the epic's terminal acceptance gate (\"every preceding SH task and completion of the cleanup lane\"), and that reasoning still stands: nearly every feature it exercises is in flight right now. Promoting because the human asked, and because a reviewable plan for the E2E harness has value ahead of the features. THE PLAN IS SPLIT ALONG THE DEPENDENCY LINE, same as the supervisor hardening gate: the harness, fixtures, evidence manifest and release manifest rest on nothing and are buildable now; the J1/J3/J4 journey assertions need the daemon commands, control-room seam, review flow and crash reconciliation that are still being written. Step 1 checks the board and decides. ARCHITECT/WORKER: do NOT weaken a journey assertion to make it pass against a partial system — this is the cutover acceptance gate and a canary trimmed until it goes green is worse than no canary.",
+  "reopenReason": "UNBLOCKED by governor-f70d1157 at 12:09Z on the human's standing approval. All four of this task's original block claims are now false on disk, and I verified every one myself by grep and probe rather than reading them off a status field or a design doc — Clause 2's standard, applied to the unblock as well as to the block.\n\nHEAD f1a494e. Each claim from worker-e46fb0dc's original block, answered:\n\n1. \"No authenticated durable handler for goal.close\" — goal.close is in GOAL_HANDLERS at apps/daemon/src/goals/goal-services.ts:113, published at the daemon root, and reachable: plain-Node probe reports GOAL_HANDLERS typeof object. Shipped by task-671578e5c (DONE, QA-approved 11:33Z).\n\n2. \"PLANNING_HANDLERS does not activate the graph\" — approval.decide now composes activateInitialGraph as the SINGLE durable commit for both halves (apps/daemon/src/planning/planning-services.ts:175, apps/daemon/src/planning/approval-activation.ts). Partial approval is unrepresentable by construction: every gate returns early ahead of the one commit, and an activation may only ride an APPROVE. Shipped by task-671578e5c.\n\n3. \"No composition for final reviewed-result acceptance\" — integration.accept_output exists in REVIEW_HANDLERS (apps/daemon/src/review/review-services.ts:159) and my probe confirms it resolves to a callable function through the package root.\n\n4. \"@moe/review has pure helpers but no daemon/store persistence\" — apps/daemon/src/review/ is tracked, 18 files with .js bridges on every runtime module. Shipped by task-9011e3b32c (DONE, QA-approved 11:46Z).\n\nTHE CLAUSE 1 GATE, which is why this task stayed blocked for 45 minutes after its two enabling tasks were DONE: the capability existed but had no consumer edge. Exporting symbols into a directory is not composition. That gap closed with task-f5d1dae629 (created at human direction when the ask could not be routed to an architect), committed at f1a494e:\n- apps/daemon/src/index.ts:116 exports REVIEW_HANDLERS from ./review/review-services.js\n- apps/daemon/src/index-surface.test.ts guard reads toBe(32) AND the list gained the literal name — both required, since a bare cardinality bump defeats the guard\n- Independent plain-Node probe by me, not vitest: root export count 32, REVIEW_HANDLERS typeof object, keys exactly escalation.decide, integration.accept_output, qualification.replan, review.submit. Vitest resolves NodeNext .js back to .ts and cannot prove this; the probe can.\n\nCARRY INTO PLANNING — a design observation from qa-b2df68b9's J3 review, recorded here so it is not lost and is exercised by the journey most likely to surface it. A QUARANTINED attempt can be continued when predecessorRelease is PROVEN_RELEASED and a safeHandoff is present, because admitResume and admitSuccessorOverlap take no classification argument. QA correctly declined to reject: adding a daemon-side \"quarantine blocks continuation\" gate would be the daemon deciding rather than composing, a second source of truth that drifts from the drilled one, and no DoD required it. If this is a real hole, the canary's end-to-end path is where it shows, and the fix belongs to the @moe/runner contract owner as a classification argument — NOT to a daemon-side gate.\n\nRESUME AT STEP 5. Steps 1-4 are COMPLETED; read moe.get_handoff_history before starting rather than redoing that work. Note that task-6054520bc's worker recorded a method worth reusing: prove a published package root with plain Node from inside apps/daemon, and remember shell cwd persists between tool calls, so later repo-relative git pathspecs silently match nothing after a cd.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -175,7 +175,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-09T10:41:48.313Z",
+  "updatedAt": "2026-08-09T12:11:39.150Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 11,
@@ -216,13 +216,14 @@
     "worker-e46fb0dc",
     "architect-da724bb7",
     "architect-8a4a1764",
-    "governor-fce4d563"
+    "governor-fce4d563",
+    "architect-8c9073cd"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
-  "blockedReason": "The existing E2E harness/manifest slice is green, but the required journeys are not reachable through production authority. The published @moe/daemon root exposes GOAL_HANDLERS with only goal.create; there is no authenticated durable handler/composition for final reviewed-result acceptance or goal.close. PLANNING_HANDLERS only proposes plans and records a generic approval; it does not activate the graph, accept output, or close the goal. @moe/review has pure helpers but no daemon/store persistence for finding lineage, changed-hash invalidation/carry-forward, successor replan, or retained review records. Production fault schedules still declare core-to-store dispatch, durable restart adoption/outbox acknowledgement, terminal release, atomic release+handoff, and review assignment absent. Runner/Claude observation and recovery helpers are likewise not composed into a real launcher/restart boundary. Implementing these under tests/e2e would recreate authority in tests and falsely certify a partial system, violating the fail-closed rails and DoD. The J3 isolated *.e2e.ts lane amendment has been granted, so lane isolation is no longer the structural blocker.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T10:18:45.363Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Existing harness/manifest slice at commit 69663dc audited; fresh pnpm test:e2e passed 2 files/34 tests; production reachability block reported; isolated *.e2e.ts Vitest lane amendment granted; comprehensive Serena handoff written.",

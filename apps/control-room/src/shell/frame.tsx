@@ -3,18 +3,11 @@ import type { NextAllowedCommand, RuntimeCommandKind } from "@moe/contracts";
 import { createContext, useContext, useMemo, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
+import { useShellKeyboardController } from "../a11y/keyboard-map.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import { ProvenanceProvider } from "./provenance-panel.js";
 
-/**
- * The control-room shell frame: nav rail, context bar, main outlet, inspector, and
- * status strip (spec line 51). Surfaces are mounted into the outlet by the caller;
- * the board is a surface, not part of the frame.
- *
- * The frame is also where affordance state stops. It publishes what the daemon
- * supplied and never recomputes it, so no surface below can talk itself into an
- * action the daemon did not return.
- */
+/** Shell layout and the fail-closed boundary for daemon-supplied affordances. */
 export interface GatingValue {
   readonly actionsEnabled: boolean;
   readonly commands: readonly NextAllowedCommand[];
@@ -142,6 +135,41 @@ function Banners({ affordance }: { readonly affordance: FixtureAffordanceSnapsho
   );
 }
 
+function ContextBar({
+  affordance,
+  onTab,
+  tab,
+}: {
+  readonly affordance: FixtureAffordanceSnapshot;
+  readonly onTab: (tab: ControlRoomTab) => void;
+  readonly tab: ControlRoomTab;
+}): JSX.Element {
+  return (
+    <div data-testid="cr.shell.contextbar">
+      {CONTROL_ROOM_TABS.map((name) => (
+        <button aria-pressed={tab === name} data-testid={`cr.shell.tab.${name}`} key={name}
+          onClick={() => onTab(name)} type="button">
+          {name}
+        </button>
+      ))}
+      <Banners affordance={affordance} />
+    </div>
+  );
+}
+
+function HelpOverlay({ onClose, open }: {
+  readonly onClose: () => void;
+  readonly open: boolean;
+}): JSX.Element {
+  if (!open) return <></>;
+  return (
+    <section aria-label="Keyboard shortcuts" data-testid="cr.shell.help" role="dialog">
+      <p>Global keyboard shortcuts are available throughout the control room.</p>
+      <button onClick={onClose} type="button">Close keyboard help</button>
+    </section>
+  );
+}
+
 /**
  * The graph projection is reachable as a tab but mounts nothing in this slice.
  *
@@ -167,12 +195,12 @@ export interface ShellFrameProps {
 
 export function ShellFrame({ affordance, children, inspector }: ShellFrameProps): JSX.Element {
   const [tab, setTab] = useState<ControlRoomTab>("board");
+  const keyboard = useShellKeyboardController(setTab);
   const gating = useMemo<GatingValue>(
     () => ({
       actionsEnabled: affordance.mutationsEnabled,
       commands: affordance.nextAllowedCommands,
-      stale: affordance.connection === "LAGGING"
-        || affordance.connection === "HISTORICAL"
+      stale: affordance.connection === "LAGGING" || affordance.connection === "HISTORICAL"
         || affordance.requiresAffordanceRefresh,
     }),
     [affordance],
@@ -180,28 +208,26 @@ export function ShellFrame({ affordance, children, inspector }: ShellFrameProps)
   return (
     <GatingContext.Provider value={gating}>
       <ProvenanceProvider>
-        <div data-testid="cr.shell.root">
+        <div data-testid="cr.shell.root" ref={keyboard.rootRef}>
+          <a
+            data-testid="cr.shell.skiplink"
+            href="#cr-shell-main"
+            onClick={(event) => { event.preventDefault(); keyboard.focusMain(); }}
+            style={{ outline: "2px solid currentColor", outlineOffset: "2px" }}
+          >
+            Skip to main content
+          </a>
           <NavRail />
-          <div data-testid="cr.shell.contextbar">
-            {CONTROL_ROOM_TABS.map((name) => (
-              <button
-                aria-pressed={tab === name}
-                data-testid={`cr.shell.tab.${name}`}
-                key={name}
-                onClick={() => {
-                  setTab(name);
-                }}
-                type="button"
-              >
-                {name}
-              </button>
-            ))}
-            <Banners affordance={affordance} />
-          </div>
-          <main data-testid="cr.shell.main">
+          <ContextBar affordance={affordance} onTab={setTab} tab={tab} />
+          <HelpOverlay onClose={keyboard.closeHelp} open={keyboard.helpOpen} />
+          <main data-testid="cr.shell.main" id="cr-shell-main" ref={keyboard.mainRef} tabIndex={-1}>
             {tab === "graph" ? <GraphPlaceholder /> : children}
           </main>
-          <aside aria-label="Inspector" data-testid="cr.shell.inspector">
+          <aside
+            aria-label="Inspector"
+            data-testid="cr.shell.inspector"
+            hidden={!keyboard.inspectorExpanded}
+          >
             {inspector}
           </aside>
           <footer

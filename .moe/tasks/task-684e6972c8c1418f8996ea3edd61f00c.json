@@ -1,0 +1,42 @@
+{
+  "id": "task-684e6972c8c1418f8996ea3edd61f00c",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Fresh recovery incarnation and signing-key epoch",
+  "description": "Objective: mint the non-restored fencing identity that every disaster restore must install. Deliverable: a daemon recovery-incarnation service using the production Node crypto boundary to create a 256-bit CSPRNG nonce and a fresh signing-key epoch, bind both to one backup-generation digest and restore command ID, and return only verification-safe metadata plus protected key material handles. MEASURED GAP at HEAD 1ce0059: RestoreQuiesceWitness carries an arbitrary `recoveryIncarnationRef`, but repo-wide searches find no recovery-incarnation mint, `keyEpoch`, entropy health gate, or restore-key rotation service. NOT in scope: incrementing restored counters, two-slot file installation, session/grant validation, effect inventory, R3 approval, fault fixtures, or persisting raw private keys in events/logs. Hard dependency: task-5606947a9d7d4f228dc63e6ce4dea69a defines the backup-generation digest it binds; implementation may plan in parallel but cannot complete against a guessed contract. Owned paths: apps/daemon/src/recovery/recovery-incarnation.* and minimal daemon export wiring. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The production service obtains exactly 32 bytes from a CSPRNG and generates a new signing-key epoch outside restored state, returning a frozen versioned binding over restoreCommandId, backupGenerationDigest, incarnation digest/reference, key-epoch reference, and verification-key fingerprint.",
+    "Two distinct restore command IDs for the identical backup generation produce distinct incarnation and key-epoch references; no counter, timestamp, backup byte, or caller-selected ID can supply either fresh identity.",
+    "Entropy failure, short/randomly repeated output, key-generation failure, or unverifiable public-key metadata refuses with stable `RECOVERY_ENTROPY_UNAVAILABLE` or `RECOVERY_KEY_EPOCH_UNAVAILABLE` at layer `RECOVERY_INCARNATION`, truth `UNKNOWN`, and no prepared authority.",
+    "Tests exercise the production crypto adapter, assert no private-key bytes appear in serialized outcomes/errors, pin exact refusal code/layer precedence, and mutation-check the production freshness comparison.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "Never derive recovery identity by incrementing restored state, hashing the backup, using wall time, or accepting caller-supplied nonce/key epoch.",
+    "Private signing material must remain behind an OS/protected-key port and must not enter events, manifests, errors, logs, tests, or evidence.",
+    "Tests for refusals assert exact stable reason code and `RECOVERY_INCARNATION` layer.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
+  "priority": "CRITICAL",
+  "order": 13.2,
+  "comments": [
+    {
+      "id": "comment-18289b05e4c64d278f6069d39450c2ab",
+      "author": "architect-f39f0c46",
+      "content": "SPIDR/title warning adjudication: nonce and signing-key epoch remain one task because the design requires one atomic fresh fencing identity; landing either alone would create an installable half-authority. Composition consumers are task-b6e3dd2af916490fb2bc4d375a530683, task-8a01c025b65246aca09e69d82e009587, and task-6f786c58cabf4f85be8ed4135e68a752.",
+      "timestamp": "2026-08-09T12:09:34.179Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T12:05:04.423Z",
+  "updatedAt": "2026-08-09T12:09:34.179Z"
+}

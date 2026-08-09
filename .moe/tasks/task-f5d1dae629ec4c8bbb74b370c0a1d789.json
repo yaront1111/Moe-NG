@@ -1,0 +1,150 @@
+{
+  "id": "task-f5d1dae629ec4c8bbb74b370c0a1d789",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Publish REVIEW_HANDLERS on the @moe/daemon root",
+  "description": "Objective: publish the committed review command surface on the @moe/daemon package root so the Foundation canary and any external consumer can drive it. Created by governor-f70d1157 on 2026-08-09 at explicit human direction, after the ask was routed to three architects who each auto-claimed from the PLANNING queue instead. A governor created this task; an ARCHITECT must still plan it — do not treat the description below as a plan.\n\nWHY THIS EXISTS. task-9011e3b32c (\"Persist the review flow: finding lineage, invalidation and carry-forward\") landed the full review command surface and was QA-approved DONE at 11:46Z. apps/daemon/src/review/ is tracked: 18 files including .js runtime bridges for every runtime module (review-contracts.js, review-ledger.js, review-read-model.js, review-services.js, review-delta.js, review-acceptance.js). But the daemon root never gained the export, because index.ts was outside that task's owned paths. Its worker disclosed the omission in their step notes rather than reaching into a foreign path — that was correct behaviour under epic rail 3, and THIS TASK IS NOT A DEFECT FIX. Write it up as a follow-on.\n\nMEASURED ON DISK by governor-f70d1157 at 11:47Z, HEAD 1ce0059:\n- `grep -c REVIEW_HANDLERS apps/daemon/src/index.ts` returns 0.\n- `apps/daemon/src/index-surface.test.ts:131` reads `expect(EXPECTED_EXPORTS.length).toBe(31)`.\n- REVIEW_HANDLERS is defined at apps/daemon/src/review/review-services.ts:159 as a frozen HandlerTable with four handlers: \"escalation.decide\", \"integration.accept_output\", \"qualification.replan\", \"review.submit\". The pipeline entry point is runReviewCommand in the same file. Read these modules before naming a single symbol; do not copy names from this description without verifying each on disk.\n\nTHIS IS THE FOURTH INSTANCE OF ONE PATTERN, and the three prior fixes are the template: task-8ee125d0 for @moe/scheduler (commit 239aa4f), task-53680e91 for @moe/runner, and task-6054520bc for the daemon's first publication. USE task-6054520bc AS THE LITERAL TEMPLATE — it is DONE, it is four steps, and it published the existing 31-symbol surface this task extends by one.\n\nTHIS IS THE CANARY'S LAST BLOCKER. task-97554aa4 (Foundation self-host canary, CRITICAL) is BLOCKED and its other three block claims are already false on disk: goal.close is in GOAL_HANDLERS (goal-services.ts:113, exported at index.ts:40); approval.decide composes activateInitialGraph as a single durable commit (planning-services.ts:175); integration.accept_output exists in REVIEW_HANDLERS. Both gating tasks are DONE — task-671578e5c cleared QA at 11:33Z, task-9011e3b32c at 11:46Z. Global rail Clause 1 is why the canary is still held: exporting symbols into a directory is not composition, and a canary that cannot reach review commands through production authority would re-block. governor-f70d1157 unblocks task-97554aa4 once this lands and the export is verified reachable.\n\nNOT in scope: changing ANY behaviour in any daemon or review module; exporting test-only modules (review-test-fixtures.ts is fixtures — do NOT export it); touching packages/**; any package.json or lockfile edit; adding .js bridges (they already exist under apps/daemon/src/review/).\n\nHard dependencies: none. Every surface named above is committed at HEAD 1ce0059.\n\nOwned paths: apps/daemon/src/index.ts and apps/daemon/src/index-surface.test.ts.\nNOTE ON THE SECOND OWNED PATH: index-surface.test.ts is task-6054520bc's owned file. Updating its EXPECTED_EXPORTS list and cardinality guard is REQUIRED CO-CHANGE, not scope creep — both qa-58b24ffb and qa-b2df68b9 have stated on the record that they will not reject on it, and will reject if index.ts gains the export while that test is left red.\n\nVerification: pnpm --filter @moe/daemon typecheck &amp;&amp; pnpm --filter @moe/daemon test &amp;&amp; pnpm typecheck, PLUS a plain-Node root import probe (see task rails).\n\nExpected size: 4-6 steps. If the plan comes out materially larger, something has been misread — report it rather than padding.",
+  "definitionOfDone": [
+    "apps/daemon/src/index.ts exports REVIEW_HANDLERS from ./review/review-services.js, plus the review type closure a consumer needs to name every parameter and discriminate every union arm of the review command path (including ReviewOutcome and the request/result types runReviewCommand consumes and returns), using curated named exports with .js specifiers and the `type` modifier, in the same grouped style the file already uses. No export-star.",
+    "apps/daemon/src/index-surface.test.ts asserts REVIEW_HANDLERS is present with the expected typeof, via the package ROOT specifier @moe/daemon and never a relative or deep path, so a dropped export fails by name rather than by a count.",
+    "The EXPECTED_EXPORTS list in index-surface.test.ts gains the literal name REVIEW_HANDLERS AND the cardinality guard at line 131 moves from 31 to 32. Both changes are required together: a bare number bump to 32 with no name added defeats the guard and is an explicit rejection condition already agreed by both QA agents.",
+    "Reachability is proved by a PLAIN-NODE root import probe, not by vitest, and the probe output is recorded verbatim in the completion evidence. Vitest resolves a NodeNext \".js\" specifier back to \".ts\" and is structurally blind to a missing bridge — task-6054520bc sat at 46/46 green while plain Node died ERR_MODULE_NOT_FOUND on exactly this surface. The probe must show REVIEW_HANDLERS present as an object with its four handler keys.",
+    "No test-only module reaches the runtime surface — review-test-fixtures.ts in particular stays internal — asserted by the set-equality list, not by inspection.",
+    "Zero behaviour change: git diff shows apps/daemon/src/index.ts as the only modified non-test file, no .js bridge is added, no review or daemon service module is edited, and the daemon suite's test count is greater than or equal to the pre-task count, stated as an explicit before/after number.",
+    "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck all exit 0. Foreign red is attributed by path per global rail 3 and disclosed verbatim, never hidden and never fabricated green."
+  ],
+  "taskRails": [
+    "Re-export only. This task changes what is REACHABLE, never what any function DOES. No .ts file other than index.ts and index-surface.test.ts may be edited. If a symbol seems to need a signature change to be exportable, report_blocked rather than editing a review or daemon service module.",
+    "Read apps/daemon/src/review/review-services.ts and review-ledger.ts before naming a symbol; do not guess export names and do not copy them from this description without verifying each one on disk (skill: explore-before-assume).",
+    "Never export a test-only module. review-test-fixtures.ts stays internal; exporting fixtures puts test code on the runtime surface.",
+    "Prefer curated named exports over a blanket `export *`, so the published seam stays a reviewed decision rather than whatever the module happens to export next week.",
+    "PROVE IT WITH PLAIN NODE, NOT VITEST. A green vitest suite is not evidence for a task whose whole objective is that an external consumer can import the surface. Run the root import from apps/daemon with plain Node and record the output. Note: shell cwd persists between tool calls — after cd apps/daemon, later repo-relative git pathspecs silently match nothing, which is indistinguishable from a clean tree.",
+    "Assert against the production surface obtained through the @moe/daemon root import, never against a locally re-declared type or a fixture copy.",
+    "Keep the entry point focused: target <=250 lines, split before 400. index.ts was 222 lines after task-6054520bc, so budget accordingly; if the added exports push it past 250, extract a per-area re-export module that index.ts re-exports rather than letting the entry point sprawl.",
+    "Commit by explicit pathspec only — git commit -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts — never a bare git commit or git add -A. Several agents share this working directory. Verify with git show --stat afterwards. If a foreign completion hook has already swept your files into another task's commit, do NOT amend it and do NOT create an empty commit: report the base-ref diff QA should review instead."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the baseline and write the package-root test first. Record merge-base/current daemon test count and repo-wide typecheck failures, then import only from @moe/daemon; add [\"REVIEW_HANDLERS\", \"object\"] to EXPECTED_EXPORTS, bump the cardinality guard from 31 to 32 in the same change, assert exact runtime-export set equality and the sorted four review-handler keys, and add compile-time assertions for the public review request/decode/outcome/refusal and aliased handler-table type closure. Run the focused index-surface test/typecheck and retain the RED evidence showing the package root is missing REVIEW_HANDLERS/types rather than accepting a generic failure.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Baseline + RED written first, both recorded.\n\nBASELINE at merge-base/HEAD 1ce0059 (my diff not yet applied):\n- `pnpm --filter @moe/daemon test` -> exit 0, Test Files 26 passed (26), Tests 480 passed (480).\n- `pnpm --recursive --no-bail typecheck` -> exit 1. ONE failing package, foreign: packages/contracts, 7 errors all in src/distribution/distribution-manifest.test.ts (untracked path, another agent's TDD red): TS2307 x4 on './distribution-contract.js' / './distribution-verifier.js', TS7006 x3. apps/daemon typechecks clean at baseline.\n\nVerified on disk before naming a symbol (explore-before-assume): REVIEW_HANDLERS at review/review-services.ts:159 is a frozen HandlerTable with exactly escalation.decide, integration.accept_output, qualification.replan, review.submit. review-ledger.ts exports CommandHandler/HandlerContext/HandlerTable/ReviewOutcome/ReviewAccepted/ReviewRefused/ReviewDaemonLayer/ReviewDaemonRefusalCode and re-exports ReviewLedger/ReviewRoundRecord from review-read-model.ts. review-contracts.ts exports ReviewCommandKind/ReviewRequest/ReviewDecodeResult/ReviewDecodeRefusal/ReviewRequestAccepted/ReviewRequestRefused/ReviewInputRejected/ReviewIngressRefusalCode/ReviewPrerequisiteRefusalCode/ReviewRefusedBy/DeltaClassification/DeltaNodeClassification. Bootstrap already owns CommandHandler/HandlerContext/HandlerTable at index.ts:25,28,29, so the review three must land aliased. All six review .js bridges exist. tsconfig.base has noUnusedLocals, so every imported type is asserted.\n\nTEST CHANGES (index-surface.test.ts, imports only from the @moe/daemon ROOT, no relative/deep path):\n- EXPECTED_EXPORTS gains [\"REVIEW_HANDLERS\",\"object\"] AND the cardinality guard moves 31 -> 32 in the same change.\n- New named runtime test: Object.hasOwn(daemon,\"REVIEW_HANDLERS\") true, typeof object, Object.keys(...).sort() equals the exact four kinds, each handler typeof \"function\".\n- New type-closure test asserting the review request/decode/outcome/refusal closure and the aliased ReviewCommandHandler/ReviewHandlerContext/ReviewHandlerTable against the production root.\n\nRED EVIDENCE (retained, fails by NAME not by a generic count):\nvitest exit 1 -- Tests 3 failed | 46 passed (49):\n  x publishes the review command table by name with exactly its four handlers -- AssertionError: expected false to be true (Object.hasOwn(daemon,\"REVIEW_HANDLERS\"))\n  x publishes REVIEW_HANDLERS as object -- expected 'undefined' to be 'object'\n  x publishes exactly the reviewed runtime namespace -- expected [ ...(30) ] to deeply equal [ ...(31) ]\ntsc exit 1 -- TS2305/TS2724 on all 22 review type names, e.g. \"src/index-surface.test.ts(47,3): error TS2724: '\\\"@moe/daemon\\\"' has no exported member named 'ReviewAccepted'. Did you mean 'ServiceAccepted'?\"",
+      "startedAt": "2026-08-09T12:02:07.074Z",
+      "completedAt": "2026-08-09T12:04:41.814Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Make the minimum curated root publication: explicitly re-export REVIEW_HANDLERS from ./review/review-services.js and type-only review contracts/outcomes from ./review/review-contracts.js and ./review/review-ledger.js, using .js specifiers and ReviewCommandHandler/ReviewHandlerContext/ReviewHandlerTable aliases to avoid existing bootstrap-name collisions. Export no review fixture, export-star, decoder, constants, runReviewCommand, or other runtime value. Keep index.ts at or below 250 physical lines, then make the focused package-root test and daemon typecheck GREEN without changing review behavior.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts"
+      ],
+      "note": "Minimum curated root publication landed; RED -> GREEN with no behaviour change.\n\napps/daemon/src/index.ts gains exactly three grouped statements after the recovery block, all with NodeNext \".js\" specifiers, matching the file's existing style:\n1. `export { REVIEW_HANDLERS } from \"./review/review-services.js\";` -- the ONLY new runtime export. runReviewCommand, decodeReviewRequestBytes, REVIEW_COMMAND_KINDS and every other review runtime value stay internal, which is what keeps the runtime cardinality at exactly 32.\n2. `export type { ... } from \"./review/review-contracts.js\"` -- 12 type-only names: DeltaClassification, DeltaNodeClassification, ReviewCommandKind, ReviewDecodeRefusal, ReviewDecodeResult, ReviewIngressRefusalCode, ReviewInputRejected, ReviewPrerequisiteRefusalCode, ReviewRefusedBy, ReviewRequest, ReviewRequestAccepted, ReviewRequestRefused.\n3. `export type { ... } from \"./review/review-ledger.js\"` -- 10 type-only names, three of them ALIASED because bootstrap-ledger already owns the bare names at index.ts:25,28,29: CommandHandler as ReviewCommandHandler, HandlerContext as ReviewHandlerContext, HandlerTable as ReviewHandlerTable; plus ReviewAccepted, ReviewDaemonLayer, ReviewDaemonRefusalCode, ReviewLedger, ReviewOutcome, ReviewRefused, ReviewRoundRecord.\n\nNo export-star anywhere; no fixture (review-test-fixtures.ts remains unreferenced from index.ts and has no .js bridge by design); no .js bridge added; no review or daemon service module touched.\n\nSize: index.ts 222 -> 249 physical lines (`wc -l`), under the 250 target, so no per-area barrel extraction was needed.\n\nGREEN evidence, focused:\n- `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/index-surface.test.ts` -> exit 0, Test Files 1 passed (1), Tests 49 passed (49) (was 3 failed | 46 passed).\n- `pnpm --filter @moe/daemon typecheck` -> exit 0 (was 22 TS2305/TS2724 errors).",
+      "startedAt": "2026-08-09T12:04:44.299Z",
+      "completedAt": "2026-08-09T12:05:11.669Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Perform the final adversarial review against the production root: temporarily remove REVIEW_HANDLERS and confirm the named/set assertions fail; temporarily alias a different object-valued daemon handler table as REVIEW_HANDLERS and confirm the exact four-key assertion fails; temporarily add an unapproved safe runtime export and confirm exact set equality/cardinality fails. Restore the intended bytes, rerun the focused test, inspect the diff for only the two owned paths, explicit named/type exports, no fixture or export-star, no signature/behavior change, no scratch artifacts, and index.ts <=250 lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Adversarial review against the PRODUCTION root. Three mutation drills, each red for its own reason, bytes restored and sha256-verified (before == after == 5970446fad62359d0461b9ff0af27fe2e55e015696794d8f33d653ea93deb24d; backup lived outside the repo in /tmp, no scratch file in the tree).\n\nDRILL A -- delete `export { REVIEW_HANDLERS } ...`: Tests 3 failed | 46 passed. \"expected false to be true\" (Object.hasOwn by NAME), \"expected 'undefined' to be 'object'\", and set equality \"expected [ ...(30) ] to deeply equal [ ...(31) ]\". Fails by name first, not only by a count.\nDRILL B -- publish the WRONG object-valued table under the right name (`export { GOAL_HANDLERS as REVIEW_HANDLERS } from \"./goals/goal-services.js\"`, which keeps the exported name set identical at 32): Tests 1 failed | 48 passed -- \"AssertionError: expected [ 'goal.close', 'goal.create' ] to deeply equal [ 'escalation.decide', ...(3) ]\". So the assertion pins the table's IDENTITY, not merely its typeof.\nDRILL C -- add one unapproved runtime export (`REVIEW_COMMAND_KINDS`): Tests 1 failed | 48 passed -- set equality \"expected [ ...(32) ] to deeply equal [ ...(31) ]\". A fixture or stray value cannot slip onto the surface.\n\nAfter restore: focused suite exit 0, Test Files 1 passed (1), Tests 49 passed (49).\n\nDIFF REVIEW vs merge-base 1ce0059 -- exactly two files, both owned: index.ts +27/-0, index-surface.test.ts +70/-1. `git status --porcelain -- apps/daemon` lists only those two. index.ts 249 lines (<=250), test 333 (<400). All new exports are explicit named/`export type`; no export-star; no fixture; no .js bridge added; no review or daemon service module edited; no signature changed.\n\nADVERSARIAL CHECKLIST, items that actually apply to a re-export seam:\n- Shared state / concurrency: none introduced -- no IO, no mutation, no module-level state. REVIEW_HANDLERS is already Object.freeze'd at review-services.ts:159, so a consumer cannot swap a handler on the published table.\n- Module-graph side effects (the real risk of publishing a seam): the root import now pulls review-services -> review-acceptance/-delta/-ledger/-read-model -> @moe/review, @moe/core, @moe/contracts. Every top-level statement in that graph is pure constant construction (frozen arrays, Sets, one TextEncoder). @moe/store is imported as a VALUE only by review-test-fixtures.ts, which is test-tier and unreachable from index.ts -- so publishing this surface does NOT put the native sqlite binding on the package-root import path. Step 4's plain-Node probe settles it empirically.\n- Name collision: bootstrap-ledger already owns CommandHandler/HandlerContext/HandlerTable, hence the three Review* aliases; tsc would raise TS2308 on any residual duplicate and is exit 0.\n\nDISCLOSED LIMITATION for the canary (task-97554aa4), not a defect and deliberately NOT fixed here: at the agreed cardinality of 32, REVIEW_HANDLERS is the only new runtime export, so a consumer can NAME every review type and INSPECT/dispatch the handler table, but cannot build a ReviewHandlerContext through production authority -- that needs `runReviewCommand` (review-services.ts:177) and/or `readReviewLedger` + `decodeReviewRequestBytes`, all of which the approved plan and planningNotes explicitly exclude (\"REVIEW_HANDLERS is the sole new runtime export\"). Exporting them would move the guard past 32 and is an explicit rejection condition, so it stays for a governor/architect call as a follow-on.",
+      "startedAt": "2026-08-09T12:05:40.988Z",
+      "completedAt": "2026-08-09T12:07:05.885Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the single completion-evidence PowerShell gate exactly: `& { pnpm --filter @moe/daemon typecheck; if ($LASTEXITCODE) { exit $LASTEXITCODE }; pnpm --filter @moe/daemon test; if ($LASTEXITCODE) { exit $LASTEXITCODE }; pnpm typecheck; if ($LASTEXITCODE) { exit $LASTEXITCODE }; Push-Location apps/daemon; try { node --experimental-strip-types --input-type=module -e \"const m=await import('@moe/daemon');const keys=Object.keys(m.REVIEW_HANDLERS).sort();console.log(JSON.stringify({type:typeof m.REVIEW_HANDLERS,keys}));if(typeof m.REVIEW_HANDLERS!=='object'||keys.join(',')!=='escalation.decide,integration.accept_output,qualification.replan,review.submit')process.exit(1)\"; if ($LASTEXITCODE) { exit $LASTEXITCODE } } finally { Pop-Location } }`. Confirm daemon test count is not below baseline; compare repo-wide failures with the recorded baseline and disclose unchanged foreign red verbatim/path-attributed if present. Then stage and commit only `apps/daemon/src/index.ts` and `apps/daemon/src/index-surface.test.ts` with explicit pathspecs and report the fresh gate output/exit status.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Gate run, committed by pathspec, gate re-run fresh after the commit.\n\nPLAN GATE VERBATIM (run first, exactly as written): exit 1, and it stopped at the repo-wide leg. Legs in order:\n- `pnpm --filter @moe/daemon typecheck` -> exit 0.\n- `pnpm --filter @moe/daemon test` -> exit 0, Test Files 26 passed (26), Tests 483 passed (483). Baseline was 26/480, so +3 and never below.\n- `pnpm typecheck` -> exit 1, entirely in a foreign path (attribution below). The bail meant the probe leg did not run inside that invocation, so it was run standalone immediately after.\n\nPLAIN-NODE ROOT IMPORT PROBE (Node v24.16.0, cwd apps/daemon, NOT vitest), exit 0, output verbatim:\n{\"type\":\"object\",\"keys\":[\"escalation.decide\",\"integration.accept_output\",\"qualification.replan\",\"review.submit\"]}\nThis is the evidence vitest structurally cannot give: vitest resolves a NodeNext \".js\" specifier back to \".ts\", so it is blind to a missing bridge. Plain Node followed ./review/review-services.js -> the committed bridge and loaded the whole review graph through the package root's exports[\".\"].\n\nFOREIGN RED, disclosed verbatim and path-attributed per global rail 3 (`pnpm --recursive --no-bail typecheck`, so nothing hides behind the first bail):\n(1) merge-base 1ce0059 baseline, 1 failing package:\n  packages/contracts typecheck: src/distribution/distribution-manifest.test.ts(15,8)/(19,8): error TS2307: Cannot find module './distribution-contract.js' or its corresponding type declarations.\n  packages/contracts typecheck: src/distribution/distribution-manifest.test.ts(20,39)/(24,8): error TS2307: Cannot find module './distribution-verifier.js' or its corresponding type declarations.\n  packages/contracts typecheck: src/distribution/distribution-manifest.test.ts(321,33)/(425,30)/(449,61): error TS7006: Parameter implicitly has an 'any' type.\n(2) HEAD f1a494e, 2 failing packages:\n  packages/contracts typecheck: src/distribution/distribution-manifest.test.ts(22,39)/(26,8): error TS2307: Cannot find module './distribution-verifier.js' or its corresponding type declarations.\n  packages/contracts typecheck: src/distribution/distribution-manifest.test.ts(451,61): error TS7006: Parameter 'input' implicitly has an 'any' type.\n  apps/control-room typecheck: src/a11y/ui-wide-acceptance.test.tsx(4,54): error TS6133: 'vi' is declared but its value is never read.\n(3) delta (2)-(1) by path = { apps/control-room/src/a11y/ui-wide-acceptance.test.tsx }. Intersected with this task's owned paths (apps/daemon/src/index.ts, apps/daemon/src/index-surface.test.ts) = EMPTY.\nBoth failing files are UNTRACKED at merge-base -- `git cat-file -e 1ce0059:packages/contracts/src/distribution/distribution-manifest.test.ts` answers \"exists on disk, but not in '1ce0059'\", and ui-wide-acceptance.test.tsx is a `??` entry -- so neither could have failed before this diff and neither can be its regression. The contracts error set also shifted between the two runs (line numbers moved 15/19/20/24 -> 22/26), i.e. that agent is editing live. apps/daemon typechecks clean in both runs.\n\nCOMMIT: `git commit -F - -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` -> f1a494e. `git status --porcelain` was inspected first and nothing was staged (all foreign entries sat in the worktree column). `git show --stat f1a494e` confirms exactly two files, 96 insertions(+), 1 deletion(-), both owned.\n\nFRESH POST-COMMIT GATE (owned scope + probe), exit 0:\n`& { pnpm --filter @moe/daemon typecheck; ...; pnpm --filter @moe/daemon test; ...; Push-Location apps/daemon; node --experimental-strip-types --input-type=module -e \"<root import probe>\" ... }`\n-> Test Files 26 passed (26), Tests 483 passed (483); probe {\"type\":\"object\",\"keys\":[\"escalation.decide\",\"integration.accept_output\",\"qualification.replan\",\"review.submit\"]}; OWNED_GATE_EXIT=0. Committed bytes and gated bytes are the same bytes.",
+      "startedAt": "2026-08-09T12:07:29.266Z",
+      "completedAt": "2026-08-09T12:09:02.892Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-b2df68b9",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 3.65,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-09T11:55:52.374Z",
+  "updatedAt": "2026-08-09T12:10:52.490Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-09T11:57:25.008Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-8c9073cd",
+    "worker-4e85eff4",
+    "qa-b2df68b9"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-09T12:00:44.327Z",
+  "planningNotes": {
+    "approachesConsidered": "Mirror the already-approved daemon root-publication pattern: add one package-root runtime symbol plus its type-only closure. Do not export runReviewCommand, decodeReviewRequestBytes, review constants, or fixtures: the task mechanically fixes the runtime export-set cardinality at 32, so REVIEW_HANDLERS is the sole new runtime export. Do not create an area barrel because ownership is limited to the two named files; keep the curated declarations compact enough for index.ts to remain at or below 250 physical lines, otherwise report blocked rather than widening scope.",
+    "codebaseInsights": "apps/daemon/src/index.ts is currently 222 lines and uses explicit .js re-exports. Existing bootstrap exports already occupy the names CommandHandler, HandlerContext, and HandlerTable, so the review equivalents must be exposed as ReviewCommandHandler, ReviewHandlerContext, and ReviewHandlerTable aliases. REVIEW_HANDLERS is a frozen object in review/review-services.ts with exactly escalation.decide, integration.accept_output, qualification.replan, and review.submit. index-surface.test.ts imports through @moe/daemon and currently pins 31 runtime exports; adding type-only exports will not alter that set.",
+    "risks": "Vitest can hide package-root/runtime loader mistakes, so retain the required plain-Node probe from apps/daemon. A mere typeof assertion would accept the wrong handler table; pin the exact four-key set through the production package root. Exact export-set equality must also catch accidental fixture or extra runtime exports. Keep the test red for the intended missing root symbol before production edits, preserve daemon test-count baseline, and never change review implementation modules or signatures.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts",
+      "apps/daemon/src/review/review-contracts.ts",
+      "apps/daemon/src/review/review-ledger.ts",
+      "apps/daemon/src/review/review-services.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-09T12:00:46.370Z",
+  "workStartedAt": "2026-08-09T12:02:07.074Z",
+  "reviewStartedAt": "2026-08-09T12:10:44.187Z",
+  "verification": {
+    "command": "& { pnpm --filter @moe/daemon typecheck; if($LASTEXITCODE){exit 1}; pnpm --filter @moe/daemon test; if($LASTEXITCODE){exit 1}; Push-Location apps/daemon; node --experimental-strip-types -e \"import('@moe/daemon').then(m=>{const k=Object.keys(m.REVIEW_HANDLERS).sort();console.log(typeof m.REVIEW_HANDLERS,JSON.stringify(k));if(k.join()!=='escalation.decide,integration.accept_output,qualification.replan,review.submit')process.exit(1)})\"; $c=$LASTEXITCODE; Pop-Location; exit $c }",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  26 passed (26)\n      Tests  483 passed (483)\n   Start at  15:10:17\n   Duration  1.25s (transform 11.83s, setup 0ms, import 16.53s, tests 2.54s, environment 2ms)\n\nobject [\"escalation.decide\",\"integration.accept_output\",\"qualification.replan\",\"review.submit\"]",
+    "reportedAt": "2026-08-09T12:10:44.187Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/index.ts"
+  ]
+}
