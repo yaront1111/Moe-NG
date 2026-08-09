@@ -142,34 +142,55 @@
     {
       "stepId": "step-8",
       "description": "Mutation drills, then restore byte-exact. Each must redden a NAMED test in an owned file; record which test failed for each. (a) Delete `adapters/ide-contract/src/index.js` and confirm the plain-Node probe fails with ERR_MODULE_NOT_FOUND — this is the whole point of DoD 4, and it proves the bridge is load-bearing rather than decorative; run vitest alone afterwards to observe that it stays GREEN without the bridge, which is the structural blindness the DoD names. (b) Remove one entry from IDE_ADAPTER_REASON_CODES and confirm the sweep's exact-length assertion reddens rather than the suite quietly shrinking. (c) Make the discovery operation return an optimistic success where it cannot determine daemon state and confirm the typed-UNKNOWN test reddens (task rail 4). (d) Change one returned `layer` value and confirm a layer assertion reddens, proving the tests pin the refusing layer and not just the code. (e) Revert the vitest.config.ts include and confirm `pnpm test` collects ZERO adapters tests — note it still exits 0, which is exactly why step 3 exists. `git diff` is BLIND to untracked files and every file in this task is new, so never verify a restore by an empty diff: hash each file with `git hash-object` before and after. A foreign whole-tree completion hook can commit your drill edit, after which git status looks clean while the mutation is live — re-run the suite after every restore.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "adapters/ide-contract/src/index.ts",
         "adapters/ide-contract/src/index.js",
         "vitest.config.ts"
       ],
-      "startedAt": "2026-08-09T20:36:36.521Z"
+      "modifiedFiles": [
+        "adapters/ide-contract/src/index.ts",
+        "adapters/ide-contract/src/index.js",
+        "vitest.config.ts"
+      ],
+      "note": "Five mutation drills run, each restored, every restore verified by `git hash-object` (git diff is BLIND here — every file in this task is untracked, so an empty diff would have proved nothing). All nine blob hashes match pre-drill byte-for-byte, and the suite was re-run green afterwards: \"Test Files 2 passed (2) / Tests 30 passed (30)\".\n\n(a) DELETE THE BRIDGE index.js — RESULT CONTRADICTS THE PLAN'S EXPECTATION, reported as measured rather than as predicted.\nThe plain-Node probe did NOT fail. Verbatim: {\"outcome\":\"IMPORTED\",\"keys\":6}. Reason: the exports map targets \"./src/index.ts\" directly and --experimental-strip-types loads .ts natively, so the ROOT specifier never traverses a .js bridge. Bridges are load-bearing only for RELATIVE \"./foo.js\" specifiers between modules, and this contract is a single self-contained module with no relative imports. The same is true of the control-room-client reference; its bridge matters for the modules index.ts imports, not for its own root entry.\nThe drill still reddened three NAMED tests, so the bridge is pinned rather than decorative:\n  FAIL ide-adapter-runtime-entrypoint.test.ts > bridges exactly the non-test modules of this package\n  FAIL ide-adapter-runtime-entrypoint.test.ts > bridges every module reachable from the package entry point\n  FAIL ide-adapter-contract.test.ts > contains no editor-specific identifier anywhere in the owned deliverable  (its MINIMUM_SCANNED_FILES floor caught the file count dropping 6 -> 5)\nCONSEQUENCE FOR DoD 4, stated plainly: root reachability by plain Node is PROVEN (step 6 evidence), but it is proven by the exports map, not by the bridge. The bridge is kept because it is the repo-wide convention the copied audit enforces, and it becomes load-bearing the moment index.ts gains a relative import. I did not fabricate the ERR_MODULE_NOT_FOUND the plan predicted.\n\n(b) REMOVE \"CONTROL_ROOM_OPEN_UNKNOWN\" FROM IDE_ADAPTER_REASON_CODES -> RED:\n  FAIL > produces every declared reason code from the production surface\nThe exact-length assertion fired; the swept set did not quietly shrink.\n\n(c) OPTIMISTIC SUCCESS ON UNDETERMINABLE DAEMON STATE (returned ok(\"DAEMON_RUNNING\", ...) where UNDETERMINED evidence belongs) -> RED, 2 tests:\n  FAIL > discovery that cannot determine daemon state is UNKNOWN, never an optimistic success\n  FAIL > produces every declared reason code from the production surface\nThis is task rail 4's failure mode and it is caught.\n\n(d) CHANGE ONE RETURNED LAYER (\"DAEMON_START_PORT\" -> IDE_ADAPTER_LAYER), leaving the CODE untouched -> RED:\n  FAIL > start refused by the port is attributed to the port\nThe code was identical in both runs, so this proves the tests pin the REFUSING LAYER independently of the reason code, exactly as epic rail 6 demands.\n\n(e) REVERT THE vitest.config.ts INCLUDE -> the whole reason step 3 exists.\n`pnpm test` exited 0 with \"Test Files 212 passed (212)\" and ZERO adapters tests collected — grep for adapters/ide-contract in the output returned nothing. A completely green, completely vacuous run for this package. Every other DoD item would have been certified by a suite that never executed it.\n\nObservation for final verification, not a claim: in that full run the totals were 212 files / 4008 tests, against a baseline of 212 files / 4002 tests recorded in step 1. Same file count, +6 tests, with my package excluded — consistent with another agent editing a test file in this shared worktree during the session. I will re-measure at step 10 and attribute by path rather than assume.",
+      "startedAt": "2026-08-09T20:36:36.521Z",
+      "completedAt": "2026-08-09T20:38:16.402Z"
     },
     {
       "stepId": "step-9",
       "description": "Record the consumer edges per Clause 1 and DoD 6 — this is a deliverable, not paperwork, because a pure package with no named consumer cannot complete. In the contract module's header comment name both, with their task ids: task-9fd52b41 (Thin JetBrains adapter) IMPLEMENTS this contract and owns adapters/jetbrains/**; task-05ce9b8f (Security fault matrix) SCHEDULES hostile, stale and replay cases against this declared boundary and was blocked on its absence. State plainly in the same comment that this package declares a boundary and certifies nothing — it spawns no process, launches no browser, and proves no IDE works (task rail 2). Do NOT add a dependency edge from either consumer here: neither package exists yet, and editing them is out of scope. Repeat both task ids in your completion notes so QA can verify the clause without reading the source.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "adapters/ide-contract/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "adapters/ide-contract/src/index.ts",
+        "adapters/ide-contract/src/ide-adapter-contract.test.ts"
+      ],
+      "note": "CONSUMER EDGES, per global rail Clause 1 and DoD 6. Repeated here so QA can verify without reading the source:\n- task-9fd52b41 (Thin JetBrains adapter) IMPLEMENTS this contract. It is the sibling package under adapters/ that it owns; it supplies the ports and does not restate the codes.\n- task-05ce9b8f (Security fault matrix) SCHEDULES hostile, stale and replay cases against this declared IDE authority boundary, and was blocked on its absence.\nNo dependency edge was added from either consumer: neither package exists yet and editing them is out of scope.\n\nThe header comment in adapters/ide-contract/src/index.ts:1-23 names both by TASK ID and states plainly that the package declares a boundary and CERTIFIES NOTHING — it spawns no process, launches no browser, opens no socket and proves no IDE works (task rail 2).\n\nDEVIATION FROM THE STEP'S LITERAL WORDING, already recorded in step 7 and restated because it is a real judgement call. The step text asks for \"task-9fd52b41 (Thin JetBrains adapter) ... owns adapters/jetbrains/**\" IN THE MODULE COMMENT. Writing that puts an editor identifier in the deliverable, which DoD 5 forbids anywhere in the owned paths and task rail 1 forbids outright (\"editor-neutral or nothing\"). The neutrality guard proved it, not I: it failed with \"expected [ 'src/index.ts: jetbrains' ] to deeply equal []\". Clause 1 is satisfied by the TASK ID, which is the stable identifier and is what the step tells me to record in these notes anyway. The editor name appears here in the completion evidence, never in the shipped bytes.\n\nMADE THE CLAUSE MACHINE-CHECKED rather than prose. Added a test, \"names both consumer tasks in the contract module, per Clause 1\", asserting index.ts contains task-9fd52b41, task-05ce9b8f and the \"CERTIFIES NOTHING\" statement — so deleting the consumer edge reddens instead of silently rotting. Drilled it to prove it is not vacuous: renaming task-9fd52b41 to task-REMOVED produced\n  FAIL adapters/ide-contract/src/ide-adapter-contract.test.ts > names both consumer tasks in the contract module, per Clause 1\nand the file was restored to blob 9499c1a78d8d51e41e632567454ca383797b5a13, verified by git hash-object.\n\n`pnpm test adapters/ide-contract` -> exit 0, \"Test Files 2 passed (2) / Tests 31 passed (31)\".",
+      "startedAt": "2026-08-09T20:38:19.206Z",
+      "completedAt": "2026-08-09T20:38:54.444Z"
     },
     {
       "stepId": "step-10",
       "description": "Verify, self-review, commit. (1) Hand-measure every new .ts with `grep -c ''` and confirm each is at or below 250 — PowerShell Measure-Object -Line skips blank lines and reports headroom you do not have. (2) Run `pnpm typecheck && pnpm test` fresh and last, unnarrowed. Read the Test Files count and CONFIRM IT GREW by the adapters files — an unchanged count means step 3's include edit is not working and the whole suite is vacuous for this package. (3) Run the plain-Node probe standalone and paste its stdout verbatim into the completion evidence; DoD 4 requires the probe output, not a vitest summary. (4) Path-attributed baseline: compare repo-wide failures at merge-base and at HEAD, intersect the delta with owned paths, and confirm it is EMPTY; disclose the known foreign scheduler package-boundary red verbatim and never call it green. (5) Adversarial self-review: does any operation return success where evidence was unavailable, instead of a typed UNKNOWN? Does any test assert only that a call failed, without pinning code AND layer? Did the neutrality sweep actually scan a non-zero number of files? Is there any editor-specific identifier, including in a comment or a fixture name? Did you accidentally reimplement any part of packages/control-room-client (task rail 5)? (6) Stage by explicit pathspec ONLY — never git add -A — then run `git diff --cached --name-only` and confirm the list is EXACTLY your owned paths plus pnpm-lock.yaml; the git index is shared on this board and carries other agents' staged files. Note pnpm-lock.yaml changes because `pnpm install` records the new workspace importer: it is shared state, so verify its diff contains ONLY the new package's importer entry. Hand QA `git hash-object` blob shas alongside a base-ref diff rather than a commit sha.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "adapters/ide-contract/src/index.ts",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "adapters/ide-contract/src/index.ts",
+        "adapters/ide-contract/src/ide-adapter-contract.test.ts"
+      ],
+      "note": "(1) PER-FILE LINES, hand-measured with `grep -c ''` (not Measure-Object, which skips blank lines): index.ts 234, index.js 1, package.json 13, tsconfig.json 9. Only production source is index.ts at 234, inside the 250 target. Test files: ide-adapter-contract.test.ts 362, ide-adapter-runtime-entrypoint.test.ts 216 — tests, not production sources; the cap governs production sources and both are under 400 regardless.\n\n(2) FRESH FINAL GATE, run last and unnarrowed: `pnpm typecheck && pnpm test` -> exit 0. \"Scope: 17 of 18 workspace projects\", \"adapters/ide-contract typecheck: Done\", then \"Test Files 214 passed (214) / Tests 4041 passed | 1 skipped (4042)\".\nTHE COUNT GREW: baseline was 212 files, now 214 — exactly my two adapters test files. The include edit is live and this package's suite is not vacuous. (Test total 4002 -> 4041: 33 mine, 6 from foreign edits landed in this shared worktree during the session; all green.)\n\n(3) PLAIN-NODE PROBE, standalone, verbatim stdout (DoD 4 wants probe output, not a vitest summary):\n{\"outcome\":\"IMPORTED\",\"hasNamedExports\":true,\"undefinedBindingCount\":0,\"layerType\":\"string\",\"reasonCodeCount\":14,\"exportNames\":[\"IDE_ADAPTER_LAYER\",\"IDE_ADAPTER_LAYERS\",\"IDE_ADAPTER_REASON_CODES\",\"decideControlRoomOpen\",\"decideDaemonDiscovery\",\"decideDaemonStart\"],\"nullRefusal\":{\"code\":\"EVIDENCE_MALFORMED\",\"detail\":\"unrecognised daemon discovery evidence\",\"layer\":\"IDE_ADAPTER\",\"outcome\":\"REFUSED\"}}\nexit 0.\n\n(4) PATH-ATTRIBUTED BASELINE. Failures at merge-base/step-1 HEAD c3ad46a: NONE (typecheck 0, test 0, 212/212). Failures at HEAD: NONE (typecheck 0, test 0, 214/214). Delta is empty, so the intersection with owned paths is trivially EMPTY. NO FOREIGN RED TO DISCLOSE — and I will not claim one: the scheduler package-boundary red the plan predicted did not exist at my baseline and does not exist now.\n\n(5) ADVERSARIAL SELF-REVIEW — FOUND AND FIXED A REAL FAIL-OPEN. null/undefined evidence read a discriminant off nothing and THREW `TypeError: Cannot read properties of null (reading 'status')` in all three operations. A thrown TypeError carries no stable reason code, so the failure path was not total (epic rail 4, DoD 3). Fixed with an isEvidence() guard on every operation returning EVIDENCE_MALFORMED at the IDE_ADAPTER layer, plus an it.each test over [null, undefined] asserting the full result for all 3 operations. Drilled: removing one guard reproduces the TypeError and reddens \"refuses null evidence with a stable code on every operation, rather than throwing\". Remaining answers: no operation returns success on unavailable evidence (UNKNOWN with a reason instead); no test asserts only that a call failed — every failure case pins code AND layer via whole-object toEqual; the neutrality sweep scans 5 files against a hand-written floor of 5; no editor identifier survives anywhere in the owned paths (the guard caught my own and it was removed); nothing from packages/control-room-client is reimplemented — this package has no dependencies at all and no client code.\n\n(6) COMMIT. FOREIGN WHOLE-TREE COMMIT HAZARD OCCURRED, per global rail 5. HEAD moved c3ad46a -> 921ff53 mid-session; commit 921ff53 \"feat(task-f6c9011b...): Git ref and artifact object enumeration capabilities\" swept in 8 of my files. I did NOT amend it, reset, or fake an empty claim commit. Its blob shas match my step-8 recorded hashes exactly. My remaining adversarial fix was staged BY EXPLICIT PATHSPEC (never git add -A) as commit a266ec1; `git diff --cached --name-only` listed EXACTLY adapters/ide-contract/src/index.ts and adapters/ide-contract/src/ide-adapter-contract.test.ts, and the shared index carried no other agent's staged files.\nCOMMITTED BYTES == GATED BYTES, verified: index.ts disk cd763f1c14751bf490afcf9ac20e37c3c65ad26b == HEAD; ide-adapter-contract.test.ts disk 2accdf0018fe713c973b5ba9d20a1856ab8d453c == HEAD.\nLOCKFILE: my contribution vs merge-base is exactly one line, `+  adapters/ide-contract: {}`. The other hunk in that file (`+ '@moe/mcp'` under apps/daemon) is FOREIGN, from another task — disclosed, not mine.\n\nBLOB SHAS FOR QA (git hash-object), review by base-ref diff `git diff 1e3057ab..HEAD -- adapters/ vitest.config.ts pnpm-workspace.yaml tests/runtime/package-loadability.test.ts` rather than by a single commit sha:\n  4a520956297caca3d39d8acbeafd1f144c113681  adapters/ide-contract/package.json\n  622c713ef01930a7c125166ed8022272b09fec2b  adapters/ide-contract/tsconfig.json\n  cd763f1c14751bf490afcf9ac20e37c3c65ad26b  adapters/ide-contract/src/index.ts\n  a88bebe96f470afc5d96b8f77de3243af90ac59e  adapters/ide-contract/src/index.js\n  2accdf0018fe713c973b5ba9d20a1856ab8d453c  adapters/ide-contract/src/ide-adapter-contract.test.ts\n  2dd6b52d2e288f59b0b38694d11bd25ec525efce  adapters/ide-contract/src/ide-adapter-runtime-entrypoint.test.ts\n  8d2a4e8d08fb186d6ae1fff5e8bcce8f9b048c98  vitest.config.ts\n  2a2b270036c5a63205e62770ca3d16396aa082fc  pnpm-workspace.yaml\n  cda11278bcfe9ef8ddff1a48c2e3a6fe479dcee3  tests/runtime/pac",
+      "startedAt": "2026-08-09T20:39:00.563Z",
+      "completedAt": "2026-08-09T20:42:15.235Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a87e980a",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -181,12 +202,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T19:57:53.146Z",
-  "updatedAt": "2026-08-09T20:36:36.521Z",
+  "updatedAt": "2026-08-09T20:43:04.784Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T19:58:16.781Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 10
   },
   "contextFetchedBy": [
     "architect-8ee37119",
@@ -204,7 +225,10 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T20:01:59.159Z",
@@ -238,5 +262,24 @@
       "reason": "Explicit handoff, not idleness. Plan submitted and AWAITING_APPROVAL; no further architect work remains. Releasing the assignment to claim the next PLANNING task."
     }
   ],
-  "workStartedAt": "2026-08-09T20:25:11.854Z"
+  "workStartedAt": "2026-08-09T20:25:11.854Z",
+  "reviewStartedAt": "2026-08-09T20:43:04.784Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm test",
+    "exitCode": 0,
+    "outputTail": "$ pnpm --recursive typecheck\nScope: 17 of 18 workspace projects\nadapters/ide-contract typecheck$ tsc --project tsconfig.json\nadapters/ide-contract typecheck: Done\n... (all 17 projects Done) ...\napps/daemon typecheck: Done\n$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  214 passed (214)\n      Tests  4041 passed | 1 skipped (4042)\n   Start at  23:41:29\n   Duration  5.30s (transform 36.42s, setup 0ms, import 64.92s, tests 40.44s, environment 17ms)\n\nGATE_EXIT=0\n\nBaseline at merge-base was 212 files / 4002 tests, also exit 0. File count grew by exactly the 2 adapters test files, so the new package's suite is collected and not vacuous. No failures at baseline and none at HEAD, so the path-attributed delta intersected with owned paths is EMPTY.",
+    "reportedAt": "2026-08-09T20:43:04.784Z"
+  },
+  "filesModified": [
+    "adapters/ide-contract/package.json",
+    "adapters/ide-contract/tsconfig.json",
+    "pnpm-lock.yaml",
+    "vitest.config.ts",
+    "pnpm-workspace.yaml",
+    "tests/runtime/package-loadability.test.ts",
+    "adapters/ide-contract/src/ide-adapter-contract.test.ts",
+    "adapters/ide-contract/src/index.ts",
+    "adapters/ide-contract/src/index.js",
+    "adapters/ide-contract/src/ide-adapter-runtime-entrypoint.test.ts"
+  ]
 }
