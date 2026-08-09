@@ -162,6 +162,23 @@ describe("graph revision supersession", () => {
     expect(result.layer).not.toBe("SUPERSESSION_KERNEL");
   });
 
+  /** An epoch that cannot be verified is UNKNOWN: it refuses, and never defaults to zero. */
+  it("refuses a state whose bound epoch does not match its lifecycle", () => {
+    const malformed: readonly GraphRevisionState[] = [
+      state("ACTIVE", { graphEpoch: 0 }),
+      state("SUPERSEDED", { graphEpoch: 0 }),
+      state("DRAFT", { graphEpoch: 1 }),
+      state("ACTIVE", { graphEpoch: -1 }),
+      state("ACTIVE", { graphEpoch: 1.5 }),
+      state("ACTIVE", { graphEpoch: Number.NaN }),
+      { ...state("ACTIVE"), graphEpoch: undefined } as unknown as GraphRevisionState,
+    ];
+    expect(malformed).toHaveLength(7);
+    for (const source of malformed) {
+      expectError(reduceGraphRevision(source, supersedeCommand(source)), "UNKNOWN_ERROR");
+    }
+  });
+
   it("refuses supersede from every lifecycle except active with that state's exact code", () => {
     const seen = new Set<string>();
     for (const lifecycle of RUNTIME_LIFECYCLES.GRAPH_REVISION) {
