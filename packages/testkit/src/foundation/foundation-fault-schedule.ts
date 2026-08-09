@@ -53,12 +53,9 @@ const probe = (
  * A probe measures the PUBLIC EXPORT SURFACE of a package, so ABSENT here means
  * "not reachable from the package index", not "not implemented anywhere". That
  * is deliberate and conservative: a schedule can only be driven through what a
- * consumer can import. `probe:scheduler-authority-lease` is the live example —
- * the lease and fencing modules are committed inside the scheduler package but
- * are not re-exported from its index, so no caller can exercise them and the
- * schedule stays honestly PRODUCTION_BEHAVIOR_ABSENT. Adding the re-export is
- * what flips it: the probe goes red against the declared outcome and forces the
- * manifest entry to be updated to PASS_EXPECTED.
+ * consumer can import. Each probe is therefore a temporary ratchet: once a
+ * package publishes the named surface, the probe returns PASS_EXPECTED against
+ * the absence declaration and forces its manifest row to retire the claim.
  */
 const CATALOGUE_PROBES: readonly FoundationAbsenceProbe[] = Object.freeze([
   probe(
@@ -78,12 +75,6 @@ const CATALOGUE_PROBES: readonly FoundationAbsenceProbe[] = Object.freeze([
     "@moe/store",
     ["acknowledgeOutbox", "ackOutboxMessage", "markOutboxDelivered"],
     "[Aa]cknowledg|ACKNOWLEDG",
-  ),
-  probe(
-    "probe:scheduler-authority-lease",
-    "@moe/scheduler",
-    ["LEASE_STATES", "fenceAuthority", "markSuspect", "confirmRevoke", "restartReconstruct"],
-    "Lease|LEASE|Fence|FENCE",
   ),
 ]);
 
@@ -164,8 +155,7 @@ const CATALOGUE_ROWS: readonly ScheduleRow[] = Object.freeze([
     "a stale client's expected version is refused by the landed goal reducer", PASS],
   ["schedule:j4-stale-lease-enforcement", "J4",
     "a command carrying a superseded lease epoch must be refused by the authority surface",
-    productionBehaviorAbsent(
-      "exported lease/authority fencing surface", "probe:scheduler-authority-lease")],
+    PASS],
   ["schedule:j4-review-round-corpus", "J4",
     "distribution of rejection rounds across real reviews",
     honestUnknown("no reviewer-calibration corpus is owned at Foundation Preview")],

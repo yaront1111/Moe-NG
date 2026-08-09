@@ -5,9 +5,8 @@
  * The stale-client schedules execute for real against the landed contracts
  * decoder and error registry: a superseded envelope version, a malformed
  * command shape and a stale expected version are all refused with named,
- * fail-closed outcomes. Lease staleness is split honestly — carriage and
- * classification exist today and are asserted; enforcement does not exist and
- * is probed rather than assumed.
+ * fail-closed outcomes. Lease staleness drives the published scheduler
+ * authority surface and pins both its refusal code and refusing layer.
  */
 
 import { describe, expect, it } from "vitest";
@@ -43,6 +42,7 @@ import {
   partitionRows,
   produceAbsenceOutcome,
   refused,
+  scheduler,
 } from "./foundation-harness.js";
 import type { FoundationExecutors } from "./foundation-harness.js";
 
@@ -184,7 +184,35 @@ const EXECUTORS: FoundationExecutors = {
     return passExpected();
   },
 
-  "schedule:j4-stale-lease-enforcement": (entry) => produceAbsenceOutcome(entry),
+  "schedule:j4-stale-lease-enforcement": () => {
+    const lease = {
+      leaseId: "lease:j4-stale", kind: "ASSIGNMENT", ownerSessionRef: "session:j4-owner",
+      leaseToken: "token:j4-current", epoch: 3, state: "ACTIVE", serverWallDeadline: 90,
+      bootId: "boot:j4", monotonicObservation: 12, authorityHashRef: "a".repeat(64), version: 7,
+    };
+    const authority = {
+      leaseToken: lease.leaseToken, epoch: lease.epoch,
+      authorityHashRef: lease.authorityHashRef, ownerSessionRef: lease.ownerSessionRef,
+      expectedVersion: lease.version,
+    };
+    const stale = scheduler.fenceAuthority(
+      lease, { ...authority, epoch: lease.epoch - 1 }, "work.dispatch", ["ACTIVE"],
+    );
+    expect(stale.ok).toBe(false);
+    if (stale.ok) throw new Error("expected the lease authority layer to refuse a stale epoch");
+    expect(stale.rejection.issues.map((issue) => issue.code)).toEqual(["AUTHORITY_STALE_EPOCH"]);
+    expect(stale.rejection.securityRecord).toEqual({
+      aggregateKind: "LEASE", code: "AUTHORITY_STALE_EPOCH", commandKind: "work.dispatch",
+      leaseId: lease.leaseId, sourceState: "ACTIVE",
+      expectedEpoch: lease.epoch, observedEpoch: lease.epoch - 1,
+    });
+
+    const current = scheduler.fenceAuthority(lease, authority, "work.dispatch", ["ACTIVE"]);
+    expect(current.ok).toBe(true);
+    if (!current.ok) throw new Error("expected current lease authority to be accepted");
+    expect([current.lease.epoch, current.proof.epoch]).toEqual([lease.epoch, lease.epoch]);
+    return passExpected();
+  },
   "incident:silent-review-theft": (entry) => produceAbsenceOutcome(entry),
   "incident:stale-assets-refuse-handshake": (entry) => produceAbsenceOutcome(entry),
 
