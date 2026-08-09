@@ -128,6 +128,58 @@ export function commandFor(kind: PlanningRunCommandKind, expectedVersion = 7): P
   }
 }
 
+/** The exact 11-key active hold binding the committed contract predicate admits. */
+export const HOLD = {
+  generation: 2, goalVersion: 3, graphEpoch: 4, holdId: "hold-1", lifecycle: "ACTIVE",
+  parentNodeRef: "node-parent-1", parentRunRef: "planning-run-0", proposalBaseHash: hash("99"),
+  sourceFingerprint: hash("aa"), truthClass: "DAEMON_VERIFIED",
+  workerHandoff: { digest: hash("bb"), ref: "handoff-1" },
+} as const;
+
+/** Bound to the submission the shared `SUBMISSION` witness names, never a second free identity. */
+export const IDENTITY = { proposalHash: SUBMISSION_HASH, proposalRef: "submission-1",
+  truthClass: "DAEMON_VERIFIED" } as const;
+
+/** One named variant per binding-layer refusal, so tests select rather than mutate inline. */
+export const MALFORMED_HOLDS: Readonly<Record<string, Record<string, unknown>>> = {
+  NON_ACTIVE_HOLD: { ...HOLD, lifecycle: "RELEASED" },
+  STALE_PROPOSAL_BASE: { ...HOLD, proposalBaseHash: "not-a-proposal-base-hash" },
+  WRONG_GRAPH_EPOCH: { ...HOLD, graphEpoch: -1 },
+};
+
+export function expansionCreate(
+  overrides: Readonly<Record<string, unknown>> = {},
+): PlanningRunCommand {
+  return { commandId: "cmd-planning.create_draft", expansion: { ...HOLD }, expectedVersion: 0,
+    goalRef: "goal-1", kind: "planning.create_draft", runId: "planning-run-1",
+    runKind: "EXPANSION", ...overrides } as unknown as PlanningRunCommand;
+}
+
+export function expansionPropose(
+  overrides: Readonly<Record<string, unknown>> = {},
+): PlanningRunCommand {
+  return { commandId: "cmd-plan.propose", expansion: { ...HOLD }, expectedVersion: 7,
+    kind: "plan.propose", proposalKind: "EXPANSION", sealedProposal: { ...IDENTITY },
+    submissionHash: SUBMISSION_HASH, witness: SUBMISSION,
+    ...overrides } as unknown as PlanningRunCommand;
+}
+
+/** A child node and an integrator node, both execution-bearing, plus a non-bearing review node. */
+export function expansionFinalizeWitness(): Record<string, unknown> {
+  return { ...finalizeWitness(2), nodeSummaries: [
+    { executionBearing: true, nodeKey: "child-1" },
+    { executionBearing: true, nodeKey: "integrator-1" },
+    { executionBearing: false, nodeKey: "review-node" }] };
+}
+
+export function expansionState(
+  lifecycle: PlanningRunLifecycle,
+  overrides: Readonly<Record<string, unknown>> = {},
+): PlanningRunState {
+  return { ...state(lifecycle), expansion: { ...HOLD }, runKind: "EXPANSION",
+    sealedProposal: null, ...overrides } as unknown as PlanningRunState;
+}
+
 export function expectError(
   result: PlanningRunReducerResult,
   code: string,

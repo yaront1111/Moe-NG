@@ -39,9 +39,9 @@ describe("planning run creation and readiness", () => {
       commandId: "" } as PlanningRunCommand), "UNKNOWN_ERROR");
   });
 
-  it("returns the typed UNSUPPORTED variant for non-INITIAL run kinds", () => {
+  it("returns the typed UNSUPPORTED variant for a REVISION run kind", () => {
     const result = reducePlanningRun(undefined, {
-      ...commandFor("planning.create_draft", 0), runKind: "EXPANSION",
+      ...commandFor("planning.create_draft", 0), runKind: "REVISION",
     } as PlanningRunCommand);
     expect(result).toEqual({ executionBearingNodeKeys: [], ok: false,
       reason: "PLANNING_KIND_UNSUPPORTED", unsupported: true });
@@ -129,8 +129,8 @@ describe("planning run submission", () => {
     expect(next.facets.livePlannerEffect).toBe(false);
   });
 
-  it("refuses REVISION and EXPANSION proposals with the typed UNSUPPORTED variant", () => {
-    for (const proposalKind of ["REVISION", "EXPANSION"] as const) {
+  it("refuses REVISION proposals with the typed UNSUPPORTED variant", () => {
+    for (const proposalKind of ["REVISION"] as const) {
       const result = reducePlanningRun(state("PLANNING"),
         { ...commandFor("plan.propose"), proposalKind } as PlanningRunCommand);
       expect(result).toEqual({ executionBearingNodeKeys: [], ok: false,

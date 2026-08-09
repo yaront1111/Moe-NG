@@ -1,5 +1,6 @@
 import { createRuntimeError } from "@moe/contracts";
 
+import type { PlanningExpansionHoldBinding } from "./planning-command-contract.js";
 import type {
   PlanningRunCommandKind,
   PlanningRunEvent,
@@ -9,6 +10,7 @@ import type {
   PlanningRunSuccessorData,
   PlanningUnsupportedReason,
 } from "./planning-contract.js";
+import { validExpansionHoldBinding } from "./planning-expansion-validation.js";
 import { deepFreeze } from "./planning-snapshot.js";
 
 /**
@@ -92,16 +94,39 @@ export function clonedState(
   return deepFreeze({ ...state, ...patch, facets: { ...facets } });
 }
 
-/** Successor data is built from literals so it can never alias the rejected run's objects. */
+/** Rebuilt key by key, so an EXPANSION successor can never alias the rejected run's binding. */
+function carriedBinding(value: PlanningExpansionHoldBinding): PlanningExpansionHoldBinding {
+  return {
+    generation: value.generation, goalVersion: value.goalVersion, graphEpoch: value.graphEpoch,
+    holdId: value.holdId, lifecycle: "ACTIVE", parentNodeRef: value.parentNodeRef,
+    parentRunRef: value.parentRunRef, proposalBaseHash: value.proposalBaseHash,
+    sourceFingerprint: value.sourceFingerprint, truthClass: "DAEMON_VERIFIED",
+    workerHandoff: { digest: value.workerHandoff.digest, ref: value.workerHandoff.ref },
+  };
+}
+
+/**
+ * Successor data is built from literals so it can never alias the rejected run's objects.
+ *
+ * An EXPANSION successor carries the same hold binding forward and seals nothing: dropping it
+ * would produce a state claiming `runKind: "EXPANSION"` with no binding, which
+ * `validExpansionContractState` refuses outright, silently degrading the successor's NEXT
+ * command to `UNKNOWN_ERROR`. Carrying the binding is containment evidence only and grants no
+ * approval, activation, or transition.
+ */
 export function successorData(
   state: PlanningRunState,
   runId: string,
 ): PlanningRunSuccessorData {
-  return deepFreeze({
+  const base = {
     approvedHashes: null, attemptRef: null, facets: idle(), goalRef: state.goalRef,
     graphRevisionRef: null, leaseRef: null, lifecycle: "DRAFT" as const, runId,
     runKind: state.runKind, sealedHashes: null, submissionHash: null, version: 1 as const,
-  });
+  };
+  const bound: unknown = (state as { readonly expansion?: unknown }).expansion;
+  if (state.runKind !== "EXPANSION" || !validExpansionHoldBinding(bound)) return deepFreeze(base);
+  const carried = { ...base, expansion: carriedBinding(bound), sealedProposal: null };
+  return deepFreeze(carried);
 }
 
 export function rejectRun(

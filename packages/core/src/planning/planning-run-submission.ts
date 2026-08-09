@@ -10,6 +10,14 @@ import type {
   PlanningRunReducerResult,
   PlanningRunState,
 } from "./planning-contract.js";
+import type {
+  PlanningExpansionHoldBinding,
+  PlanningExpansionProposalIdentity,
+} from "./planning-command-contract.js";
+import {
+  validExpansionHoldBinding,
+  validExpansionProposeCommand,
+} from "./planning-expansion-validation.js";
 import {
   accepted,
   clonedState,
@@ -41,6 +49,64 @@ function hashesOf(source: PlanRevisionHashes): PlanRevisionHashes {
   });
 }
 
+type ExpansionProposeCommand = Extract<PlanProposeCommand, { readonly proposalKind: "EXPANSION" }>;
+
+interface SealPlan { readonly draining: boolean; readonly next: PlanningRunState }
+
+/** Identical seal arithmetic for both kinds, so the INITIAL result stays byte-for-byte its old. */
+function sealPlan(
+  state: PlanningRunState, command: PlanProposeCommand,
+  sealedProposal?: PlanningExpansionProposalIdentity,
+): SealPlan | undefined {
+  const proof: unknown = command.effectTerminalProof;
+  const proven = proof !== undefined;
+  if (!state.facets.owned || (proven && !validEffectTerminal(proof))) return undefined;
+  const draining = state.facets.livePlannerEffect && !proven;
+  const patch: Partial<PlanningRunState> = {
+    facets: { ...state.facets, livePlannerEffect: draining },
+    lifecycle: draining ? "SUBMISSION_DRAINING" as const : "PLANNING" as const,
+    submissionHash: command.submissionHash, version: state.version + 1,
+  };
+  const carried = sealedProposal === undefined ? patch : { ...patch, sealedProposal };
+  return { draining, next: clonedState(state, carried) };
+}
+
+const HOLD_IDENTITY_KEYS = ["generation", "goalVersion", "graphEpoch", "holdId", "lifecycle",
+  "parentNodeRef", "parentRunRef", "proposalBaseHash", "sourceFingerprint",
+  "truthClass"] as const;
+
+/** The proposal re-presents the exact hold the run was created under, or it is refused. */
+function sameHold(
+  left: PlanningExpansionHoldBinding, right: PlanningExpansionHoldBinding,
+): boolean {
+  return HOLD_IDENTITY_KEYS.every((key) => left[key] === right[key])
+    && left.workerHandoff.digest === right.workerHandoff.digest
+    && left.workerHandoff.ref === right.workerHandoff.ref;
+}
+
+/** Zero-authority: one immutable identity is sealed and nothing is dispatched or allocated. */
+function proposeExpansion(
+  state: PlanningRunState,
+  command: ExpansionProposeCommand,
+): PlanningRunReducerResult {
+  const bound: unknown = (state as { readonly expansion?: unknown }).expansion;
+  if (!validExpansionProposeCommand(command) || !validExpansionHoldBinding(bound)
+    || !sameHold(bound, command.expansion)) {
+    return illegal(state, command.kind);
+  }
+  if (state.submissionHash !== null) {
+    return state.submissionHash === command.submissionHash
+      ? accepted(clonedState(state), []) : illegal(state, command.kind);
+  }
+  const sealedProposal = command.sealedProposal;
+  const plan = sealPlan(state, command, sealedProposal);
+  if (plan === undefined) return illegal(state, command.kind);
+  return accepted(plan.next, [deepFreeze({ commandId: command.commandId,
+    draining: plan.draining, expansion: command.expansion,
+    kind: "PlanningSubmissionSealed" as const, proposalKind: "EXPANSION" as const,
+    sealedProposal, submissionHash: command.submissionHash, version: plan.next.version })]);
+}
+
 export function propose(
   state: PlanningRunState,
   command: PlanProposeCommand,
@@ -49,31 +115,27 @@ export function propose(
     || !validRunKind(command.proposalKind)) {
     return illegal(state, command.kind);
   }
+  if (command.proposalKind === "EXPANSION") return proposeExpansion(state, command);
   if (command.proposalKind !== "INITIAL") return unsupported("PLANNING_KIND_UNSUPPORTED");
+  if (state.runKind === "EXPANSION") return illegal(state, command.kind);
   if (state.submissionHash !== null) {
     return state.submissionHash === command.submissionHash
       ? accepted(clonedState(state), []) : illegal(state, command.kind);
   }
-  const proof: unknown = command.effectTerminalProof;
-  const proven = proof !== undefined;
-  if (!state.facets.owned || (proven && !validEffectTerminal(proof))) {
-    return illegal(state, command.kind);
-  }
-  const draining = state.facets.livePlannerEffect && !proven;
-  const next = clonedState(state, {
-    facets: { ...state.facets, livePlannerEffect: draining },
-    lifecycle: draining ? "SUBMISSION_DRAINING" as const : "PLANNING" as const,
-    submissionHash: command.submissionHash, version: state.version + 1,
-  });
-  return accepted(next, [deepFreeze({ commandId: command.commandId, draining,
-    kind: "PlanningSubmissionSealed" as const, submissionHash: command.submissionHash,
-    version: next.version })]);
+  const plan = sealPlan(state, command);
+  if (plan === undefined) return illegal(state, command.kind);
+  return accepted(plan.next, [deepFreeze({ commandId: command.commandId,
+    draining: plan.draining, kind: "PlanningSubmissionSealed" as const,
+    submissionHash: command.submissionHash, version: plan.next.version })]);
 }
 
 /**
  * Foundation Preview admission (design 396 and 1322) runs here, at submission validation, so a
  * multi-node graph can never reach `PLAN_REVIEW`. The refusal branch deliberately skips it: the
- * daemon's follow-up refusal for a refused admission must stay reachable (design row 293).
+ * daemon's follow-up refusal for a refused admission must stay reachable (design row 293). The
+ * fence is gated on the run KIND, never on the node count: an EXPANSION run is inherently
+ * multi-node, its whole purpose being one sealed child plus integrator proposal. A graph
+ * bearing no execution at all stays illegal for both kinds — malformed, not unsupported.
  */
 export function finalize(
   state: PlanningRunState,
@@ -93,7 +155,9 @@ export function finalize(
   }
   if (!validSeal(revision)) return illegal(state, command.kind);
   const bearing = executionBearingKeys(command.witness);
-  if (bearing.length > 1) return unsupported("MULTI_NODE_EXECUTION_UNSUPPORTED", bearing);
+  if (state.runKind !== "EXPANSION" && bearing.length > 1) {
+    return unsupported("MULTI_NODE_EXECUTION_UNSUPPORTED", bearing);
+  }
   if (bearing.length === 0) return illegal(state, command.kind);
   const hashes = hashesOf(revision);
   const next = clonedState(state, {

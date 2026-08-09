@@ -21,6 +21,7 @@ import {
   accepted,
   commandFor,
   expansionCreate,
+  expansionFinalizeWitness,
   expansionPropose,
   expansionState,
   expectError,
@@ -169,7 +170,7 @@ describe("planning run EXPANSION finalization", () => {
 
   it("seals a child and integrator multi-node proposal instead of refusing", () => {
     const command = { ...commandFor("planning.finalize_submission"),
-      witness: finalizeWitness(2) } as PlanningRunCommand;
+      witness: expansionFinalizeWitness() } as unknown as PlanningRunCommand;
     const next = accepted(reducePlanningRun(sealed, command));
     expect(next).toMatchObject({ lifecycle: "PLAN_REVIEW", runKind: "EXPANSION" });
     expect(fields(next)["sealedProposal"]).toEqual(IDENTITY);
@@ -178,7 +179,7 @@ describe("planning run EXPANSION finalization", () => {
 
   it("still refuses a graph bearing no execution on both run kinds", () => {
     const empty = { ...commandFor("planning.finalize_submission"),
-      witness: finalizeWitness(0) } as PlanningRunCommand;
+      witness: finalizeWitness(0) } as unknown as PlanningRunCommand;
     expectIllegal(reducePlanningRun(sealed, empty), "planning.finalize_submission", "PLANNING");
     expectIllegal(reducePlanningRun(state("PLANNING", { submissionHash: SUBMISSION_HASH }), empty),
       "planning.finalize_submission", "PLANNING");

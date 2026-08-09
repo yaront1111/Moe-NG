@@ -30,13 +30,16 @@ import {
   revisePlan,
 } from "./planning-run-submission.js";
 import {
+  snapshotPlanningRunContractState,
+  validExpansionCreateCommand,
+} from "./planning-expansion-validation.js";
+import {
   deepFreeze,
   snapshotCommand,
   validExpectedVersion,
   validRef,
 } from "./planning-snapshot.js";
 import {
-  snapshotPlanningRunState,
   validAbsenceRecovery,
   validClaim,
   validReadiness,
@@ -69,11 +72,31 @@ export const PLANNING_RUN_TRANSITIONS = Object.freeze({
   "planning.cancel": Object.freeze([]),
 } as const satisfies Readonly<Record<PlanningRunCommandKind, readonly PlanningRunLifecycle[]>>);
 
+/** The hold binding is carried verbatim and nothing is sealed: creation grants no authority. */
+function createExpansion(
+  command: PlanningCreateDraftCommand & { readonly runKind: "EXPANSION" },
+): PlanningRunReducerResult {
+  if (!validExpansionCreateCommand(command)) return unknownFailure();
+  const expansion = command.expansion;
+  const state = deepFreeze({
+    approvedHashes: null, attemptRef: null, expansion, facets: idle(), goalRef: command.goalRef,
+    graphRevisionRef: null, leaseRef: null, lifecycle: "DRAFT" as const, runId: command.runId,
+    runKind: "EXPANSION" as const, sealedHashes: null, sealedProposal: null,
+    submissionHash: null, version: 1,
+  });
+  return accepted(state, [deepFreeze({
+    commandId: command.commandId, expansion, goalRef: state.goalRef,
+    kind: "PlanningRunCreated" as const, runId: state.runId, runKind: "EXPANSION" as const,
+    version: 1,
+  })]);
+}
+
 function create(command: PlanningCreateDraftCommand): PlanningRunReducerResult {
   if (command.expectedVersion !== 0 || !validRef(command.runId) || !validRef(command.goalRef)
     || !validRunKind(command.runKind)) {
     return unknownFailure();
   }
+  if (command.runKind === "EXPANSION") return createExpansion(command);
   if (command.runKind !== "INITIAL") return unsupported("PLANNING_KIND_UNSUPPORTED");
   const state = deepFreeze({
     approvedHashes: null, attemptRef: null, facets: idle(), goalRef: command.goalRef,
@@ -175,7 +198,7 @@ export function reducePlanningRun(
     }
     return create(input);
   }
-  const current = snapshotPlanningRunState(state);
+  const current = snapshotPlanningRunContractState(state);
   if (current === undefined) return unknownFailure();
   if (!validExpectedVersion(input.expectedVersion)) return illegal(current, input.kind);
   if (input.expectedVersion !== current.version) {

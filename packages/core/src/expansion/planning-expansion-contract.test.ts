@@ -259,12 +259,23 @@ describe("preserved legacy behaviour", () => {
       });
   });
 
-  it("still refuses an EXPANSION draft, so the schema alone enables no transition", () => {
-    expect(reducePlanningRun(undefined, { ...createInitial, expansion: HOLD_BINDING,
-      runKind: "EXPANSION" })).toStrictEqual({
-      executionBearingNodeKeys: [], ok: false, reason: "PLANNING_KIND_UNSUPPORTED",
-      unsupported: true,
-    });
+  /**
+   * EXPANSION creation became legal in task-93b0314e09f248118e21f92699989468. The claim this
+   * case was written to pin is unchanged and still asserted: the schema alone grants no
+   * authority. The draft it now produces carries exactly the hold binding and an empty seal —
+   * no lease, effect, slot, resource, budget, activation, dispatch, or partial proposal.
+   */
+  it("creates only a zero-authority EXPANSION draft, so the schema alone grants nothing", () => {
+    const result = reducePlanningRun(undefined, { ...createInitial, expansion: HOLD_BINDING,
+      runKind: "EXPANSION" });
+    const state = result.ok ? (result.state as unknown as Record<string, unknown>) : {};
+    expect(state["lifecycle"]).toBe("DRAFT");
+    expect(state["runKind"]).toBe("EXPANSION");
+    expect(state["sealedProposal"]).toBeNull();
+    expect(state["submissionHash"]).toBeNull();
+    expect(Object.keys(state).sort()).toStrictEqual(["approvedHashes", "attemptRef", "expansion",
+      "facets", "goalRef", "graphRevisionRef", "leaseRef", "lifecycle", "runId", "runKind",
+      "sealedHashes", "sealedProposal", "submissionHash", "version"]);
   });
 });
 
