@@ -38,11 +38,26 @@ pub struct OwnedAttributeList {
 }
 
 impl OwnedAttributeList {
-    /// The list itself. Casts away const because `CreateProcessW` and
-    /// `UpdateProcThreadAttribute` both type this parameter as mutable, though
-    /// the creation path only reads it.
+    /// The list for a caller that only READS it -- which is `CreateProcessW`
+    /// via `STARTUPINFOEXW::lpAttributeList`, and nothing else.
+    ///
+    /// The cast away from const is required by the parameter's declared type,
+    /// and is sound ONLY because creation does not write through it. Anything
+    /// that writes into the list must take [`Self::as_mut_ptr`] instead:
+    /// `Vec::as_ptr`'s contract forbids writing through it or through any
+    /// pointer derived from it, so a write on this provenance is undefined
+    /// behaviour no scripted test can observe.
     pub(super) fn as_ptr(&self) -> LPPROC_THREAD_ATTRIBUTE_LIST {
         self.buffer.as_ptr() as LPPROC_THREAD_ATTRIBUTE_LIST
+    }
+
+    /// The list for a caller that WRITES into it -- `UpdateProcThreadAttribute`
+    /// on both attribute arms, which stores each attribute into the buffer.
+    ///
+    /// Derives from `Vec::as_mut_ptr` so the write travels on mutable
+    /// provenance, exactly as [`delete`] does.
+    pub(super) fn as_mut_ptr(&mut self) -> LPPROC_THREAD_ATTRIBUTE_LIST {
+        self.buffer.as_mut_ptr().cast()
     }
 }
 
@@ -84,11 +99,13 @@ pub(super) fn set_job_list(
 ) -> Result<(), NativeError> {
     *list.job = as_handle(job);
     let value: *const c_void = ptr::addr_of!(*list.job).cast();
-    let target = list.as_ptr();
-    // SAFETY: `target` is an initialized list; `value` points into a Box this
+    let target = list.as_mut_ptr();
+    // SAFETY: `target` is an initialized list, on MUTABLE provenance because
+    // this call writes the attribute into it. `value` points into a Box this
     // list owns, so the pointee stays valid and un-moved until the list is
     // deleted -- which is exactly what UpdateProcThreadAttribute requires,
-    // because it stores the pointer rather than copying the handle.
+    // because it stores the pointer rather than copying the handle. `value`
+    // stays const: the list only records it, and only CreateProcessW reads it.
     let ok = unsafe {
         UpdateProcThreadAttribute(
             target,
@@ -116,9 +133,10 @@ pub(super) fn set_handle_list(
         *slot = as_handle(handle);
     }
     let value: *const c_void = list.handles.as_ptr().cast();
-    let target = list.as_ptr();
-    // SAFETY: as in set_job_list -- the array lives in a Box this list owns, so
-    // the stored pointer stays valid until the list is deleted.
+    let target = list.as_mut_ptr();
+    // SAFETY: as in set_job_list -- `target` carries mutable provenance because
+    // the call writes into the list, while the array lives in a Box this list
+    // owns, so the stored pointer stays valid until the list is deleted.
     let ok = unsafe {
         UpdateProcThreadAttribute(
             target,
