@@ -502,6 +502,13 @@ describe("release package command", () => {
     assert.doesNotMatch(source, /"pnpm(?:\.exe)?"/u);
   });
 
+  test("collects the CycloneDX document from a file, never from stdout", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    assert.match(source, /"-o", output/u);
+    assert.match(source, /stdout: readFileSync\(output, "utf8"\)/u);
+    assert.doesNotMatch(source, /"-o", "-"/u);
+  });
+
   test("pins checked release scripts and the local CycloneDX generator", () => {
     const root = packageJson();
     assert.equal(root.devDependencies["@cyclonedx/cdxgen"], "12.8.2");
