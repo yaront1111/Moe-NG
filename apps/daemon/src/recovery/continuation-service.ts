@@ -154,7 +154,7 @@ export function evaluateContinuationCommandBytes(
   // whose classification the runner itself refused, has no truth to continue from.
   const record = readReconciliationRecords(store, request.projectId).get(request.attemptRef);
   if (record === undefined) return UNRECONCILED;
-  if (!isRecoveryOutcomeKind(record.classification)) return UNCLASSIFIED;
+  if (!isRunnerClassification(record.classification)) return UNCLASSIFIED;
 
   // EVERY boundary fact below comes off `record`, never off `request`. The request
   // shape can no longer even express them, so this is the only source there is.

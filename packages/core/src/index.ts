@@ -213,6 +213,22 @@ export type {
   CarryForwardVerdict,
 } from "./policy/approval-contract.js";
 
+export {
+  EXPANSION_HOLD_CAUSES,
+  EXPANSION_HOLD_COMMAND_KINDS,
+  EXPANSION_HOLD_ERROR_CODES,
+  EXPANSION_HOLD_LAYERS,
+  reduceExpansionPlanningHold,
+} from "./expansion/expansion-planning-hold.js";
+export type {
+  CreateExpansionHoldCommand, ExpansionHandoffBinding, ExpansionHoldCause,
+  ExpansionHoldErrorCode, ExpansionHoldLayer, ExpansionHoldLifecycle,
+  ExpansionPlanningHoldCommand, ExpansionPlanningHoldEvent,
+  ExpansionPlanningHoldResult, ExpansionPlanningHoldState,
+  ExpansionReleaseEvidence, ExpansionTerminalProof,
+  TransitionExpansionHoldCommand,
+} from "./expansion/expansion-planning-hold.js";
+
 /**
  * Identity is re-exported through its own curated area seam rather than as per-module blocks:
  * `./identity/index.ts` already curates the three identity modules, so duplicating its surface

@@ -147,8 +147,8 @@
       "completedAt": "2026-08-09T14:39:10.394Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4e85eff4",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-b2df68b9",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,7 +160,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:26:30.419Z",
-  "updatedAt": "2026-08-09T14:39:10.395Z",
+  "updatedAt": "2026-08-09T14:40:48.117Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T13:45:48.502Z",
     "plannedStepCount": 7,
@@ -169,7 +169,8 @@
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
-    "worker-4e85eff4"
+    "worker-4e85eff4",
+    "qa-b2df68b9"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -203,5 +204,28 @@
     "wallClockMs": 12600000
   },
   "planApprovedAt": "2026-08-09T13:50:42.250Z",
-  "workStartedAt": "2026-08-09T13:50:57.971Z"
+  "workStartedAt": "2026-08-09T13:50:57.971Z",
+  "reviewStartedAt": "2026-08-09T14:40:41.214Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  34 passed (34)\n      Tests  678 passed (678)\n   Start at  17:38:08\n   Duration  2.89s\nOWNED_GATE_EXIT=0",
+    "reportedAt": "2026-08-09T14:40:41.214Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/doctor-commands.ts",
+    "apps/daemon/src/recovery/doctor-commands.test.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.node.ts",
+    "apps/daemon/src/runtime-entrypoint.test.ts",
+    "apps/daemon/src/recovery/doctor-version-contract.ts",
+    "apps/daemon/src/recovery/doctor-version-contract.js",
+    "apps/daemon/src/recovery/doctor-version-contract.test.ts",
+    "apps/daemon/src/recovery/doctor-version.node.test.ts",
+    "apps/daemon/src/recovery/doctor-version.node.ts",
+    "apps/daemon/src/recovery/doctor-version.node.js",
+    "apps/daemon/src/recovery/doctor-version-components.node.ts",
+    "apps/daemon/src/recovery/doctor-version-components.node.js",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts"
+  ]
 }

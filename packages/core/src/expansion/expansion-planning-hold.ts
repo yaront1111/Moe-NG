@@ -1,8 +1,8 @@
 /**
  * Pure EXPANSION_PLANNING hold lifecycle. It records runner/daemon evidence
  * but creates no child, execution, graph, resource, or budget authority.
- * Immediate consumers: task-fcad40b6d26243439cd19fd3e49c924d and
- * task-9634ed3b72014fe781591c7df9674da2.
+ * Immediate composition consumer: task-fcad40b6d26243439cd19fd3e49c924d.
+ * Durable daemon consumer: task-9634ed3b72014fe781591c7df9674da2.
  */
 import { RUNTIME_LIFECYCLES, type RuntimeTruthClass } from "@moe/contracts";
 

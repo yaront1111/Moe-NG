@@ -77,7 +77,7 @@
     {
       "stepId": "step-5",
       "description": "Runtime bridge and narrow publication — add the exact one-line expansion-planning-hold.js -> .ts bridge, then add explicit curated value/type re-exports in packages/core/src/index.ts so core's bridge-reachability audit treats the module as production and bare @moe/core can reach it. Do not wildcard-export unrelated expansion symbols, alter package.json, or publish any PlanningRun/daemon authority. Keep index.ts <=250 physical lines and document in the module header that task-fcad40b6d26243439cd19fd3e49c924d is the immediate composition consumer and task-9634ed3b72014fe781591c7df9674da2 is the durable daemon consumer.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-planning-hold.js",
         "packages/core/src/index.ts"
@@ -85,18 +85,26 @@
       "newFiles": [
         "packages/core/src/expansion/expansion-planning-hold.js"
       ],
-      "startedAt": "2026-08-09T14:39:13.229Z"
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-planning-hold.ts",
+        "packages/core/src/expansion/expansion-planning-hold.js",
+        "packages/core/src/index.ts"
+      ],
+      "note": "Added exact LF one-line .js -> .ts bridge (hex ends 3B0A), curated all intended reducer values/types from the core root without wildcarding unrelated expansion surfaces, and documented immediate task-fcad40b6d26243439cd19fd3e49c924d versus durable daemon task-9634ed3b72014fe781591c7df9674da2 consumers. index.ts is 237 physical lines. Fresh exact package gate exit 0: 17 files, 254 tests, plus typecheck.",
+      "startedAt": "2026-08-09T14:39:13.229Z",
+      "completedAt": "2026-08-09T14:40:10.805Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarial review and mutation drill — inspect the exact owned diff as an attacker for duplicate/concurrent command ordering, null/empty/huge/hostile objects, stale version/generation/epoch, same-ID payload swaps, terminal replay, deadline-driven clearing, handoff resurrection, mutable nested data, accidental runtime-error-registry degradation, forbidden authority keys, cross-package imports, and index export collisions. Temporarily weaken the production safe-boundary truth/disposition check, terminal-proof gate, and same-ID payload comparison one at a time; run the focused test after each mutation and require a red assertion at the exact code/layer/authority property, then restore and verify exact diff bytes. Assert nonzero generated counts and scan production for Date.now/Math.random/node:crypto/IO; check expansion-planning-hold.ts <400 (target <=250), index.ts <=250, the bridge exact LF bytes, and no edits outside the four approved paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-planning-hold.ts",
         "packages/core/src/expansion/expansion-planning-hold.test.ts",
         "packages/core/src/expansion/expansion-planning-hold.js",
         "packages/core/src/index.ts"
-      ]
+      ],
+      "startedAt": "2026-08-09T14:40:23.113Z"
     },
     {
       "stepId": "step-7",
@@ -130,12 +138,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:44:11.795Z",
-  "updatedAt": "2026-08-09T14:39:13.229Z",
+  "updatedAt": "2026-08-09T14:40:23.113Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:11:19.310Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -145,7 +153,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:25:48.136Z",

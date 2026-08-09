@@ -18,7 +18,7 @@
     "This is a native primitive, not authority: no @moe/runner root export, Claude policy, activation grant, daemon/store call, or evidence claim."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -27,9 +27,9 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-4d1f8ba54cb6476c930c46b413f882aa",
   "priority": "CRITICAL",
-  "order": 46.1,
+  "order": 72,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:34:08.847Z",
-  "updatedAt": "2026-08-09T14:34:08.847Z"
+  "updatedAt": "2026-08-09T14:40:17.844Z"
 }

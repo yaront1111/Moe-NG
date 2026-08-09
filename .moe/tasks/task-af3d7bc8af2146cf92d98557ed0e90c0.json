@@ -18,7 +18,7 @@
     "Keep each Rust production source focused, target <=250 physical lines and split before 400; no executable, Cargo target, transcript, or generated smoke evidence may be committed."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -27,9 +27,9 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-4d1f8ba54cb6476c930c46b413f882aa",
   "priority": "CRITICAL",
-  "order": 46.2,
+  "order": 73,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:36:05.450Z",
-  "updatedAt": "2026-08-09T14:36:05.450Z"
+  "updatedAt": "2026-08-09T14:40:19.817Z"
 }

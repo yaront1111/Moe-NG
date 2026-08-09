@@ -31,14 +31,19 @@
     {
       "stepId": "step-2",
       "description": "TDD red. Create packages/core/src/identity/authenticate-session.test.ts importing from \"./index.js\" (identity area seam, matching the existing authenticate-command.test.ts convention). Build a fixture mirroring authenticate-command.test.ts's records (createPrincipal/createSession/createCredential) but WITHOUT any RuntimeCommandEnvelope — the seam takes scalars. Declare a frozen REFUSAL_CASES table with exactly these 9 entries, each naming its override, expected code and expected layer: BINDING/AUTHENTICATION_FAILED (null session), PROOF/AUTHENTICATION_FAILED (verifyProof returns false), PROOF/AUTHENTICATION_FAILED (verifyProof throws), REPLAY/AUTHENTICATION_FAILED (checkReplay returns \"UNKNOWN\"), REPLAY/AUTHENTICATION_FAILED (checkReplay throws), REPLAY/SESSION_REPLAYED (checkReplay returns \"REPLAYED\"), GENERATION/SESSION_REPLAYED (credential.generation mismatched), SESSION_STATE/SESSION_REPLAYED (status \"CLOSED\"), EXPIRY/SESSION_EXPIRED (now === session.expiresAt, expiry is exclusive), TRANSPORT/CAPABILITY_DENIED (unlisted transportId). Assert REFUSAL_CASES.length is exactly 9 and that the distinct layer set equals SESSION_AUTH_LAYERS in full — per epic rail 6 a sweep that generates zero cases must not pass silently. Every refusal assertion checks BOTH code and layer, plus Object.keys(result) deep-equals exactly [\"ok\",\"code\",\"layer\"] so zero principal/session authority is proven structurally rather than by absence of a lookup. Add success-path tests: frozen facts object, accepts at one tick before expiry, a caller-supplied positive boolean on the proof object (e.g. proof.verified = true) is ignored because the challenge is rebuilt from records. Add one test importing \"../index.js\" asserting typeof authenticateSession === \"function\" and SESSION_AUTH_LAYERS frozen, proving root publication. Tests must fail now (module absent).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/identity/authenticate-session.test.ts"
       ],
       "newFiles": [
         "packages/core/src/identity/authenticate-session.test.ts"
       ],
+      "modifiedFiles": [
+        "packages/core/src/identity/authenticate-session.test.ts"
+      ],
+      "note": "TDD RED confirmed. Added the focused session-authentication spec with exactly 10 frozen table cases covering all seven layers, exact code+layer+zero-authority assertions, success/freeze/expiry/proof-authority tests, and root publication. `pnpm --filter @moe/core test` exited 1 for the expected missing production seam: authenticateSession undefined and SESSION_AUTH_LAYERS absent; 17 existing files / 254 existing tests still passed.",
       "startedAt": "2026-08-09T14:25:39.341Z",
+      "completedAt": "2026-08-09T14:40:49.686Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -123,12 +128,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:06:18.722Z",
-  "updatedAt": "2026-08-09T14:38:45.106Z",
+  "updatedAt": "2026-08-09T14:40:49.686Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:24.531Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-cb476f76",
@@ -139,7 +144,8 @@
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-09T14:23:24.744Z",
