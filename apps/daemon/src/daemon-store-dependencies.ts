@@ -108,6 +108,27 @@ const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freez
 type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind;
 
+/**
+ * The capabilities an agent session needs to execute one wired kind: the kind's
+ * own family capability plus work.write, because an agent that cannot claim,
+ * renew, and release its item cannot participate in the work register at all.
+ * Unknown kinds return null so a caller cannot mint capabilities for a command
+ * this provider never wired.
+ */
+export function agentCapabilitiesFor(kind: string): readonly string[] | null {
+  const family = kind in BOOTSTRAP_FAMILY
+    ? BOOTSTRAP_FAMILY[kind as BootstrapCommandKind]
+    : kind in REVIEW_FAMILY
+      ? REVIEW_FAMILY[kind as ReviewCommandKind]
+      : kind in SESSION_FAMILY
+        ? SESSION_FAMILY[kind as SessionCommandKind]
+        : kind in WORK_FAMILY ? WORK_FAMILY[kind as WorkClaimCommandKind] : null;
+  if (family === null) return null;
+  return family === CAPABILITIES.WORK
+    ? Object.freeze([CAPABILITIES.WORK])
+    : Object.freeze([family, CAPABILITIES.WORK]);
+}
+
 /** Exact top-level payload keys each command admits; an unlisted key is refused upstream. */
 const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({

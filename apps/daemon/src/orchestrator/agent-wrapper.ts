@@ -1,0 +1,176 @@
+import { createHash } from "node:crypto";
+
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { JsonObject } from "@moe/contracts";
+
+import { agentCapabilitiesFor } from "../daemon-store-dependencies.js";
+import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
+import { handleCommandRequest } from "../http/http-adapter.js";
+import type { CommandAdapterDeps } from "../http/http-contract.js";
+import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
+import { workItemIdFor } from "../http/affordance-read.js";
+
+/**
+ * The wrapper: watches the daemon's own offer surface and staffs it — the
+ * old-Moe loop on new-Moe truth.
+ *
+ * For each READY, unclaimed step (up to `maxAgents`): mint an agent identity
+ * (session.open, capabilities scoped to exactly the claimed kind's family plus
+ * work.write), claim the item UNDER THE AGENT'S OWN credential so the durable
+ * fence names the agent and not the wrapper, then hand the spawner the
+ * credential and a mission naming the claimed item. Every step is a normal
+ * dispatch through the committed adapter — the wrapper holds no side door, so
+ * anything it can do, an agent with the operator credential could do too.
+ *
+ * The wrapper never invents outcomes: a spawned agent's work shows up as
+ * ledger facts (the step turns COMMITTED, the claim is released) or it
+ * doesn't. `runOnce` reports what was observed and what was started, nothing
+ * more.
+ */
+
+export interface SpawnRequest {
+  /** The agent's bearer credential. Hand it to the process environment only. */
+  readonly credential: string;
+  readonly expiresAt: string;
+  readonly kind: string;
+  readonly mission: string;
+  readonly sessionId: string;
+  readonly workItemId: string;
+}
+
+export interface AgentWrapperConfig {
+  readonly affordances: AffordancePort;
+  /** Claim/session lifetime per spawn. */
+  readonly claimTtlMs: number;
+  readonly clock: () => number;
+  readonly deps: CommandAdapterDeps;
+  readonly maxAgents: number;
+  readonly mintSecret: () => string;
+  readonly operatorCredential: string;
+  /** Spawns the agent process; resolves when it exits. Injectable for tests. */
+  readonly spawnAgent: (request: SpawnRequest) => Promise<void>;
+}
+
+export interface SpawnReport {
+  readonly kind: string;
+  readonly outcome: "SPAWNED" | string;
+  readonly sessionId: string | null;
+  readonly workItemId: string;
+}
+
+export interface RunOnceReport {
+  readonly active: number;
+  readonly spawned: readonly SpawnReport[];
+  readonly surfaceOutcome: string;
+}
+
+const encoder = new TextEncoder();
+
+function digestOf(payload: JsonObject): string {
+  return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
+}
+
+function mission(workItemId: string, kind: string, expiresAt: string): string {
+  return [
+    `You are a moe-next agent. You hold the durable claim on work item "${workItemId}"`,
+    `(command kind ${kind}) until ${expiresAt}.`,
+    "Use the moe-next MCP tools: call work_get_context to see the board,",
+    `dispatch ${kind.replaceAll(".", "_")} using the daemon's offered identity for your step,`,
+    "renew your claim with work_renew if you need longer, and finish by calling",
+    `work_release for "${workItemId}". Every refusal carries a stable reason code —`,
+    "read it, correct the request, and never work around a refusal.",
+  ].join(" ");
+}
+
+export function createAgentWrapper(config: AgentWrapperConfig) {
+  const active = new Map<string, Promise<void>>();
+
+  const dispatch = (
+    credential: string, kind: string, payload: JsonObject,
+    target: string, expectedVersion: number,
+  ): { code: string; ok: boolean } => {
+    const envelope = {
+      commandId: `wrap-${config.mintSecret().slice(0, 18)}`,
+      commandKind: kind,
+      correlationId: "agent-wrapper",
+      expectedVersion,
+      payload,
+      requestDigest: digestOf(payload),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential,
+      targetAggregateId: target,
+    };
+    const result = handleCommandRequest(config.deps, {
+      body: encoder.encode(JSON.stringify(envelope)),
+      credential,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    }) as { ok: boolean; outcome: string;
+      decision?: { resultCode: string }; refusal?: { code: string }; error?: { code: string }; };
+    return result.ok
+      ? { code: (result.decision?.resultCode ?? "ACCEPTED"), ok: true }
+      : { code: result.refusal?.code ?? result.error?.code ?? result.outcome, ok: false };
+  };
+
+  const staff = (step: ChainStep): SpawnReport => {
+    const workItemId = workItemIdFor(step.kind, step.aggregateId);
+    const capabilities = agentCapabilitiesFor(step.kind);
+    if (capabilities === null) {
+      return { kind: step.kind, outcome: "UNWIRED_KIND", sessionId: null, workItemId };
+    }
+    const secret = config.mintSecret();
+    // The full mint, never a prefix: distinct mints can share long prefixes.
+    const sessionId = `sess-wrap-${config.mintSecret()}`;
+    const expiresAt = new Date(config.clock() + config.claimTtlMs).toISOString();
+
+    const opened = dispatch(config.operatorCredential, "session.open", {
+      capabilities: [...capabilities],
+      credentialSha256: createHash("sha256").update(secret, "utf8").digest("hex"),
+      expiresAt,
+      sessionId,
+    }, `session/${sessionId}`, 0);
+    if (!opened.ok) {
+      return { kind: step.kind, outcome: opened.code, sessionId: null, workItemId };
+    }
+
+    // The AGENT claims, so the fence names the agent: expiry doubles as the
+    // reap horizon when a spawned process dies without releasing.
+    const claimed = dispatch(secret, "work.claim", { expiresAt, workItemId },
+      `work/${workItemId}`, 0);
+    if (!claimed.ok) {
+      return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
+    }
+
+    const exit = config.spawnAgent({
+      credential: secret, expiresAt, kind: step.kind,
+      mission: mission(workItemId, step.kind, expiresAt), sessionId, workItemId,
+    }).catch(() => undefined).then(() => { active.delete(workItemId); });
+    active.set(workItemId, exit);
+    return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
+  };
+
+  const runOnce = (): RunOnceReport => {
+    const surface = config.affordances.readSurface();
+    if (surface.outcome !== "SURFACE") {
+      return { active: active.size, spawned: [], surfaceOutcome: surface.code };
+    }
+    const spawned: SpawnReport[] = [];
+    for (const step of surface.steps) {
+      if (active.size >= config.maxAgents) break;
+      if (step.status !== "READY" || step.claim !== null) continue;
+      // Session lifecycle steps are identity plumbing the wrapper itself uses,
+      // not board work an agent should be staffed on.
+      if (step.kind.startsWith("session.")) continue;
+      if (active.has(workItemIdFor(step.kind, step.aggregateId))) continue;
+      spawned.push(staff(step));
+    }
+    return { active: active.size, spawned, surfaceOutcome: "SURFACE" };
+  };
+
+  return Object.freeze({
+    activeCount: (): number => active.size,
+    runOnce,
+    /** Resolves when every currently spawned agent has exited. */
+    settle: (): Promise<void> =>
+      Promise.all([...active.values()]).then(() => undefined),
+  });
+}
