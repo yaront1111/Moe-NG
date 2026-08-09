@@ -120,7 +120,6 @@ function snapshot(value: unknown, seen = new WeakSet<object>()): unknown | typeo
     return copy;
   } catch { return INVALID; } finally { seen.delete(value); }
 }
-
 function record(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const actual = Object.keys(value).sort();
@@ -128,6 +127,7 @@ function record(value: unknown, keys: readonly string[]): Record<string, unknown
     ? value as Record<string, unknown> : null;
 }
 function text(value: unknown): value is string { return typeof value === "string" && value.length > 0 && value.length <= MAX_TEXT; }
+function hex64(value: unknown): value is string { return typeof value === "string" && HEX64.test(value); }
 function uint(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) >= 0; }
 function positive(value: unknown): value is number { return Number.isSafeInteger(value) && (value as number) > 0; }
 function member(values: readonly string[], value: unknown): value is string { return typeof value === "string" && values.includes(value); }
@@ -139,7 +139,7 @@ function same(left: unknown, right: unknown): boolean { return JSON.stringify(le
 
 function handoff(value: unknown): ExpansionHandoffBinding | null {
   const item = record(value, ["digest", "ref"]);
-  return item !== null && HEX64.test(String(item["digest"])) && text(item["ref"])
+  return item !== null && hex64(item["digest"]) && text(item["ref"])
     ? { digest: item["digest"] as string, ref: item["ref"] } : null;
 }
 function release(value: unknown): ExpansionReleaseEvidence | null {
@@ -176,14 +176,14 @@ function parseCommand(value: unknown): ExpansionPlanningHoldCommand | null {
     const rationale = record(item["rationale"], ["text", "truthClass"]);
     const released = release(item["release"]); const workerHandoff = handoff(item["workerHandoff"]);
     const refs = ["commandId", "holdId", "parentNodeRef", "parentRevisionRef", "parentRunRef", "planningRunRef"];
-    if (!refs.every((key) => text(item[key])) || !uint(item["deadline"]) || !uint(item["expectedVersion"]) || !positive(item["generation"]) || !uint(item["graphEpoch"]) || !HEX64.test(String(item["proposalBaseHash"])) || !HEX64.test(String(item["sourceFingerprint"])) || !rationale || !text(rationale["text"]) || rationale["truthClass"] !== "AGENT_REPORTED" || !released || !workerHandoff) return null;
+    if (!refs.every((key) => text(item[key])) || !uint(item["deadline"]) || !uint(item["expectedVersion"]) || !positive(item["generation"]) || !uint(item["graphEpoch"]) || !hex64(item["proposalBaseHash"]) || !hex64(item["sourceFingerprint"]) || !rationale || !text(rationale["text"]) || rationale["truthClass"] !== "AGENT_REPORTED" || !released || !workerHandoff) return null;
     return { ...item, rationale, release: released, workerHandoff } as unknown as CreateExpansionHoldCommand;
   }
   if (base["kind"] === "expansion.transition_hold") {
     const item = record(base, TRANSITION_KEYS); if (!item) return null;
     const terminalProof = proof(item["terminalProof"]);
     const refs = ["commandId", "holdId", "parentNodeRef", "parentRevisionRef", "parentRunRef", "planningRunRef"];
-    if (!refs.every((key) => text(item[key])) || !uint(item["expectedVersion"]) || !positive(item["generation"]) || !uint(item["graphEpoch"]) || !HEX64.test(String(item["proposalBaseHash"])) || !HEX64.test(String(item["sourceFingerprint"])) || !member(EXPANSION_HOLD_CAUSES, item["cause"]) || !member(LIFECYCLES, item["targetLifecycle"]) || terminalProof === INVALID) return null;
+    if (!refs.every((key) => text(item[key])) || !uint(item["expectedVersion"]) || !positive(item["generation"]) || !uint(item["graphEpoch"]) || !hex64(item["proposalBaseHash"]) || !hex64(item["sourceFingerprint"]) || !member(EXPANSION_HOLD_CAUSES, item["cause"]) || !member(LIFECYCLES, item["targetLifecycle"]) || terminalProof === INVALID) return null;
     return { ...item, terminalProof } as unknown as TransitionExpansionHoldCommand;
   }
   return null;

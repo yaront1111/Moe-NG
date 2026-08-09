@@ -305,7 +305,9 @@ describe("expansion planning hold creation", () => {
       { ...createCommand(), extra: true },
       { ...createCommand(), holdId: "" },
       { ...createCommand(), proposalBaseHash: "A".repeat(64) },
+      { ...createCommand(), proposalBaseHash: Object.create(null) },
       { ...createCommand(), sourceFingerprint: "short" },
+      { ...createCommand(), workerHandoff: { ...createCommand().workerHandoff, digest: Object.create(null) } },
       { ...createCommand(), deadline: Number.MAX_SAFE_INTEGER + 1 },
       { ...createCommand(), generation: 0 },
       { ...createCommand(), rationale: { text: "x".repeat(257), truthClass: "AGENT_REPORTED" } },
@@ -316,7 +318,7 @@ describe("expansion planning hold creation", () => {
       { ...createCommand(), release: { ...createCommand().release, terminalEffectRefs: indexed } },
       { ...createCommand(), release: { ...createCommand().release, terminalResourceRefs: inherited } },
     ];
-    expect(hostile).toHaveLength(15);
+    expect(hostile).toHaveLength(17);
     expect(hostile.length).toBeGreaterThan(0);
     for (const input of hostile) {
       expectRefusal(
