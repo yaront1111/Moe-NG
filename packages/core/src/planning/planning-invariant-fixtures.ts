@@ -30,7 +30,7 @@ export const PLAN_APPROVAL = { ...HASHES, approvalRef: "plan-approval-1",
 export const RUN_ACTIVATION = { activationRef: "activation-1", budgetHash: BUDGET_HASH,
   expectedGoalVersion: 3, goalDraftNoActiveRevision: true, graphHash: GRAPH_HASH,
   policyHash: POLICY_HASH, qualityHash: QUALITY_HASH, truthClass: "HUMAN_APPROVED" } as const;
-export const REVISION_ACTIVATION = { ...BINDING, activationRef: "activation-1",
+export const REVISION_ACTIVATION = { ...BINDING, activationRef: "activation-1", graphEpoch: 1,
   truthClass: "HUMAN_APPROVED" } as const;
 
 /** Terminal lifecycles must absorb every later command; ranks must never decrease. */

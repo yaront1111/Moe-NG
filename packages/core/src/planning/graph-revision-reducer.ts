@@ -4,9 +4,11 @@
  *
  * Composition contract: this reducer is pure and touches only its own aggregate. `graphEpoch`
  * authority still lives in the goal aggregate, where `goal.activate_initial_graph` increments it;
- * activation here emits reference data (`goalRef`, `expectedGoalVersion`) and PERSISTS the bound
- * epoch it was activated at, which is what lets `graph.supersede` bind this predecessor to its
- * successor. The bound value is a reference, never a private counter this aggregate advances.
+ * activation here emits reference data (`goalRef`, `expectedGoalVersion`) and PERSISTS the epoch
+ * the ACTIVATION WITNESS carries — exactly 1 for an initial activation, exactly the named
+ * predecessor's epoch + 1 for a successor, both decided by `validActivation` before this module
+ * sees them. That persisted value is what lets `graph.supersede` bind this predecessor to its
+ * successor, and it is a bound reference, never a private counter this aggregate advances.
  * Initial activation is therefore THREE reducer results the daemon must commit in one atomic
  * transaction: the planning run's `graph.approve`, this revision's activation, and the goal's
  * `goal.activate_initial_graph`. Any of the three rejecting aborts all of them; a concurrent
@@ -157,12 +159,13 @@ function decide(
   }
   if (!validActivation(activation)) return illegal(state, command.kind);
   if (binding === null || !sameBinding(binding, activation)
-    || activation.graphHash !== state.graphContentHash) {
+    || activation.graphHash !== state.graphContentHash
+    || activation.succession?.predecessorRevisionId === state.revisionId) {
     return rebound(state);
   }
   const witness = deepFreeze({ ...activation });
   version += 1;
-  const next = clonedState(state, { boundHashes: binding, graphEpoch: 1,
+  const next = clonedState(state, { boundHashes: binding, graphEpoch: activation.graphEpoch,
     lifecycle: "ACTIVE" as const, version });
   events.push(deepFreeze({ commandId: command.commandId,
     expectedGoalVersion: witness.expectedGoalVersion, goalRef: state.goalRef,

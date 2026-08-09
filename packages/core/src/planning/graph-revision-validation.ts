@@ -7,6 +7,7 @@ import type {
   GraphRevisionLifecycle,
   GraphRevisionRefusalWitness,
   GraphRevisionState,
+  GraphRevisionSuccessionBinding,
   GraphSubmissionWitness,
 } from "./graph-revision-contract.js";
 import {
@@ -22,7 +23,12 @@ const BINDING_KEYS = [
 ] as const;
 const SUBMISSION_KEYS = ["submissionRef", "truthClass"] as const;
 const APPROVAL_KEYS = [...BINDING_KEYS, "approvalRef", "truthClass"] as const;
-const ACTIVATION_KEYS = [...BINDING_KEYS, "activationRef", "truthClass"] as const;
+const ACTIVATION_KEYS = [...BINDING_KEYS, "activationRef", "graphEpoch", "truthClass"] as const;
+/** The succession binding is optional, and `exact` rejects extra keys, so it needs its own tuple. */
+const SUCCESSION_ACTIVATION_KEYS = [...ACTIVATION_KEYS, "succession"] as const;
+const SUCCESSION_KEYS = [
+  "predecessorGraphContentHash", "predecessorGraphEpoch", "predecessorRevisionId",
+] as const;
 const REFUSAL_KEYS = ["findingsRef", "truthClass"] as const;
 const STATE_KEYS = [
   "boundHashes", "goalRef", "graphContentHash", "graphEpoch", "lifecycle", "planHash",
@@ -64,9 +70,32 @@ export function validApproval(value: unknown): value is GraphRevisionApprovalWit
     && strongTruth(value["truthClass"]);
 }
 
+/** Names the predecessor a successor activation replaces; an unusable epoch here is UNKNOWN. */
+export function validSuccessionBinding(value: unknown): value is GraphRevisionSuccessionBinding {
+  return exact(value, SUCCESSION_KEYS) && validHex64(value["predecessorGraphContentHash"])
+    && validRef(value["predecessorRevisionId"])
+    && Number.isSafeInteger(value["predecessorGraphEpoch"])
+    && (value["predecessorGraphEpoch"] as number) >= 1;
+}
+
+/**
+ * The epoch is goal-issued authority bound onto this activation, never a counter advanced here:
+ * an initial activation lands at exactly 1 and a successor at exactly the named predecessor's
+ * epoch + 1. Absent, non-integer, negative or skipped epochs refuse rather than default.
+ */
+function validActivationEpoch(value: Readonly<Record<string, unknown>>): boolean {
+  const graphEpoch = value["graphEpoch"];
+  if (!Number.isSafeInteger(graphEpoch)) return false;
+  if (!("succession" in value)) return graphEpoch === 1;
+  const succession = value["succession"];
+  return validSuccessionBinding(succession)
+    && graphEpoch === succession.predecessorGraphEpoch + 1;
+}
+
 export function validActivation(value: unknown): value is GraphRevisionActivationWitness {
-  return exact(value, ACTIVATION_KEYS) && bindingShape(value) && validRef(value["activationRef"])
-    && strongTruth(value["truthClass"]);
+  if (!exact(value, ACTIVATION_KEYS) && !exact(value, SUCCESSION_ACTIVATION_KEYS)) return false;
+  return bindingShape(value) && validRef(value["activationRef"])
+    && strongTruth(value["truthClass"]) && validActivationEpoch(value);
 }
 
 export function validRefusal(value: unknown): value is GraphRevisionRefusalWitness {

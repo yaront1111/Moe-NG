@@ -10,13 +10,16 @@ import type {
   SupersessionDisposition,
   SupersessionInput,
   SupersessionPredecessorBinding,
+  SupersessionSuccessorBinding,
 } from "../supersession/supersession-engine.js";
 import type {
+  GraphRevisionActivationWitness,
   GraphRevisionCommand,
   GraphRevisionCommandKind,
   GraphRevisionLifecycle,
   GraphRevisionReducerResult,
   GraphRevisionState,
+  GraphRevisionSuccessionBinding,
 } from "./graph-revision-contract.js";
 
 export function hash(seed: string): string {
@@ -35,7 +38,8 @@ export const BINDING = { budgetHash: BUDGET_HASH, expectedGoalVersion: 3, graphH
 export const SUBMISSION = { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" } as const;
 export const APPROVAL = { ...BINDING, approvalRef: "approval-1",
   truthClass: "HUMAN_APPROVED" } as const;
-export const ACTIVATION = { ...BINDING, activationRef: "activation-1",
+/** Epoch 1 is exactly what an initial activation requires, and what the reducer used to hardcode. */
+export const ACTIVATION = { ...BINDING, activationRef: "activation-1", graphEpoch: 1,
   truthClass: "HUMAN_APPROVED" } as const;
 export const REJECTION = { findingsRef: "findings-1", truthClass: "DAEMON_VERIFIED" } as const;
 
@@ -128,6 +132,35 @@ export function supersedeCommand(
   return {
     commandId: "cmd-supersede", expectedVersion: current.version,
     kind: "graph.supersede", supersession,
+  };
+}
+
+export const SUCCESSOR_BINDING = { ...BINDING, graphHash: SUCCESSOR_HASH } as const;
+export const SUCCESSOR_APPROVAL = { ...SUCCESSOR_BINDING, approvalRef: "approval-2",
+  truthClass: "HUMAN_APPROVED" } as const;
+
+/** The predecessor a kernel-emitted successor binding names, plus the epoch that predecessor held. */
+export function successionOf(
+  successor: SupersessionSuccessorBinding,
+  predecessorGraphEpoch: number,
+): GraphRevisionSuccessionBinding {
+  return {
+    predecessorGraphContentHash: successor.predecessorGraphContentHash, predecessorGraphEpoch,
+    predecessorRevisionId: successor.predecessorRevisionId,
+  };
+}
+
+/** Derived from the kernel's own successor binding, so every refusal fixture is one field's drift. */
+export function successorActivation(
+  successor: SupersessionSuccessorBinding,
+  predecessorGraphEpoch: number,
+  overrides: Partial<GraphRevisionActivationWitness> = {},
+): GraphRevisionActivationWitness {
+  return {
+    ...SUCCESSOR_BINDING, activationRef: "activation-2", graphEpoch: successor.graphEpoch,
+    graphHash: successor.graphContentHash,
+    succession: successionOf(successor, predecessorGraphEpoch),
+    truthClass: "HUMAN_APPROVED", ...overrides,
   };
 }
 

@@ -42,8 +42,29 @@ export interface GraphRevisionApprovalWitness extends GraphActivationBinding {
   readonly truthClass: RuntimeTruthClass;
 }
 
+/**
+ * Names the predecessor whose authority a successor activation replaces. Field names mirror the
+ * kernel's `SupersessionSuccessorBinding` so the `GraphRevisionSuperseded` binding maps across
+ * without translation; `predecessorGraphEpoch` is the extra fact the kernel binding does not
+ * carry, and it is what lets activation validate `epoch + 1` without reaching outside the command.
+ */
+export interface GraphRevisionSuccessionBinding {
+  readonly predecessorGraphContentHash: string;
+  readonly predecessorGraphEpoch: number;
+  readonly predecessorRevisionId: string;
+}
+
 export interface GraphRevisionActivationWitness extends GraphActivationBinding {
   readonly activationRef: string;
+  /**
+   * A BOUND REFERENCE to the goal-owned epoch this activation binds — the goal aggregate's
+   * `goal.activate_initial_graph` remains the only authority that advances an epoch, and this
+   * aggregate never increments one. Exactly `1` for an initial activation and exactly
+   * `succession.predecessorGraphEpoch + 1` for a successor; an unverifiable epoch refuses.
+   */
+  readonly graphEpoch: number;
+  /** Absent means an initial activation; present means this revision replaces the named one. */
+  readonly succession?: GraphRevisionSuccessionBinding;
   readonly truthClass: RuntimeTruthClass;
 }
 
