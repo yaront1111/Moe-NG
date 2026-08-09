@@ -67,7 +67,6 @@ export const EDGE = Object.freeze({
   pQuiesceReady: edge("PROJECT", "READY", "recovery.restore_quiesce", "QUIESCED"),
   pRecover: edge("PROJECT", "QUIESCED", "recovery.complete", "READY"),
   pRegister: edge("PROJECT", GENESIS_STATE, "project.register", "BOOTSTRAPPING"),
-  // A revision reaches SUPERSEDED through authority loss, never through this table.
   revActivate: edge(REVISION, "APPROVED", "graph.approve", "ACTIVE"),
   revActivateCompound: edge(REVISION, "PENDING_APPROVAL", "graph.approve", "ACTIVE"),
   revApprove: edge(REVISION, "PENDING_APPROVAL", "graph.approve", "APPROVED"),
@@ -76,6 +75,8 @@ export const EDGE = Object.freeze({
   revRejectDraft: edge(REVISION, "DRAFT", "graph_revision.reject", "REJECTED"),
   revRejectPending: edge(REVISION, "PENDING_APPROVAL", "graph_revision.reject", "REJECTED"),
   revSubmit: edge(REVISION, "DRAFT", "graph_revision.submit", "PENDING_APPROVAL"),
+  /** The only authority-moving transition out of ACTIVE; the kernel binds the successor. */
+  revSupersede: edge(REVISION, "ACTIVE", "graph.supersede", "SUPERSEDED"),
   runActivate: edge(RUN, "APPROVED", "graph.approve", "ACTIVATED"),
   runActivateCompound: edge(RUN, "PLAN_REVIEW", "graph.approve", "ACTIVATED"),
   runApprove: edge(RUN, "PLAN_REVIEW", "plan.approve", "APPROVED"),
@@ -179,7 +180,7 @@ export const GENESIS_COMMANDS: Readonly<Record<string, readonly string[]>> = Obj
 /** Commands whose landed table row is empty because no state admits them at all. */
 export const NEVER_LEGAL_COMMANDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   GOAL: Object.freeze([]),
-  GRAPH_REVISION: Object.freeze(["graph.supersede"]),
+  GRAPH_REVISION: Object.freeze([]),
   PLANNING_RUN: Object.freeze(["planning.cancel"]),
   PROJECT: Object.freeze([]),
 });
