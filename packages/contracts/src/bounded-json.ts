@@ -1,5 +1,3 @@
-import { types } from "node:util";
-
 import type {
   BoundedJsonDecodeResult,
   BoundedJsonErrorCode,
@@ -8,7 +6,23 @@ import type {
 import { BoundedJsonParseError, parseBoundedJsonText } from "./bounded-json-parser.js";
 import { MAX_JSON_BODY_BYTES } from "./input-limits.js";
 
+// Browser-safety invariant: this module must not import any node:* builtin.
+// @moe/contracts loads inside browser bundles (apps/control-room), where the
+// bundler externalizes node builtins and the import crashes at module load.
+// Input classification therefore relies on saved native accessors whose
+// internal-slot brand checks are equally hostile-proof in pure ECMAScript:
+// internal-slot access never tunnels through Proxy traps, so a Proxy over a
+// real Uint8Array fails the brand check exactly as the former isProxy
+// refusal did, and forged prototype-only objects fail it too.
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+// %TypedArray%.prototype[@@toStringTag] reads [[TypedArrayName]]: it yields
+// "Uint8Array" only for genuine Uint8Array instances (subclasses such as
+// Buffer included, cross-realm safe) and undefined for proxies, revoked
+// proxies, forged objects, DataView, and every other typed-array kind.
+const typedArrayTag = Object.getOwnPropertyDescriptor(
+  typedArrayPrototype,
+  Symbol.toStringTag,
+)?.get;
 const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer")?.get;
 const typedArrayByteLength = Object.getOwnPropertyDescriptor(
   typedArrayPrototype,
@@ -17,6 +31,14 @@ const typedArrayByteLength = Object.getOwnPropertyDescriptor(
 const typedArrayByteOffset = Object.getOwnPropertyDescriptor(
   typedArrayPrototype,
   "byteOffset",
+)?.get;
+// ArrayBuffer.prototype.byteLength requires [[ArrayBufferData]] and throws a
+// TypeError when the receiver is a SharedArrayBuffer or any non-ArrayBuffer,
+// replacing both former shared/non-shared util checks without ever naming
+// SharedArrayBuffer (which is absent in non-cross-origin-isolated browsers).
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(
+  ArrayBuffer.prototype,
+  "byteLength",
 )?.get;
 const arrayBufferResizable = Object.getOwnPropertyDescriptor(
   ArrayBuffer.prototype,
@@ -46,18 +68,25 @@ function failure(code: BoundedJsonErrorCode): BoundedJsonDecodeResult {
 }
 
 function snapshotBytes(input: unknown): Uint8Array | BoundedJsonDecodeResult {
-  if (types.isProxy(input) || !types.isUint8Array(input)) {
-    return failure("JSON_INPUT_TYPE_INVALID");
-  }
-  if (!typedArrayBuffer || !typedArrayByteLength || !typedArrayByteOffset) {
+  if (
+    !typedArrayTag ||
+    !typedArrayBuffer ||
+    !typedArrayByteLength ||
+    !typedArrayByteOffset ||
+    !arrayBufferByteLength
+  ) {
     return failure("JSON_INPUT_TYPE_INVALID");
   }
 
   try {
-    const buffer = Reflect.apply(typedArrayBuffer, input, []) as ArrayBufferLike;
-    if (types.isSharedArrayBuffer(buffer) || !types.isArrayBuffer(buffer)) {
+    if (Reflect.apply(typedArrayTag, input, []) !== "Uint8Array") {
       return failure("JSON_INPUT_TYPE_INVALID");
     }
+
+    const buffer = Reflect.apply(typedArrayBuffer, input, []) as ArrayBufferLike;
+    // Brand check: throws for SharedArrayBuffer-backed views and anything
+    // else lacking a non-shared [[ArrayBufferData]] internal slot.
+    Reflect.apply(arrayBufferByteLength, buffer, []);
     if (arrayBufferResizable && Reflect.apply(arrayBufferResizable, buffer, []) === true) {
       return failure("JSON_INPUT_TYPE_INVALID");
     }

@@ -1,6 +1,40 @@
-import { types } from "node:util";
-
 const HEX_64 = /^[0-9a-f]{64}$/;
+
+/**
+ * Engine-level proxy detection without a static `node:util` import, which would
+ * crash every browser consumer of the package root (Vite externalizes node
+ * builtins). `process.getBuiltinModule` is synchronous, Node-only, and invisible
+ * to bundler static analysis; in Node the guards keep the full
+ * `util.types.isProxy` strength at the daemon trust boundary.
+ *
+ * Browser fallback, narrowed and disclosed: an ACTIVE well-behaved proxy is not
+ * detectable in standard ECMAScript, so there the check refuses only revoked
+ * proxies and hostile traps (anything that throws under basic introspection).
+ * The trust boundary this guard defends — hostile bytes reaching the daemon —
+ * always runs in Node; a browser runs these guards against its own runtime's
+ * values only.
+ */
+interface UtilTypesLike {
+  isProxy(value: unknown): boolean;
+}
+
+const nodeUtilTypes: UtilTypesLike | null =
+  (globalThis as {
+    process?: { getBuiltinModule?: (id: string) => { types?: UtilTypesLike } | undefined };
+  }).process?.getBuiltinModule?.("node:util")?.types ?? null;
+
+/** True when the object must be refused: a proxy in Node; revoked/hostile anywhere. */
+function isRefusedExotic(value: object): boolean {
+  if (nodeUtilTypes !== null) return nodeUtilTypes.isProxy(value);
+  try {
+    Array.isArray(value);
+    Object.getPrototypeOf(value);
+    Object.getOwnPropertyNames(value);
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -26,7 +60,7 @@ export function isSafeCount(value: unknown): value is number {
  * The proxy check runs first because `Array.isArray` throws on a revoked proxy.
  */
 export function isPlainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || types.isProxy(value)) return false;
+  if (value === null || typeof value !== "object" || isRefusedExotic(value)) return false;
   if (Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value) as object | null;
   if (prototype !== null && prototype !== Object.prototype) return false;
@@ -39,7 +73,8 @@ export function isPlainRecord(value: unknown): value is Readonly<Record<string, 
 
 /** A real array, never a proxy: `Array.isArray` throws on a revoked proxy. */
 export function isSafeArray(value: unknown): value is readonly unknown[] {
-  return !types.isProxy(value) && Array.isArray(value);
+  if (value === null || typeof value !== "object") return false;
+  return !isRefusedExotic(value) && Array.isArray(value);
 }
 
 /** Exact own-key set: every required key present and no key outside required+optional. */

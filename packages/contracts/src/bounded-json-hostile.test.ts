@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { runInNewContext } from "node:vm";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -125,6 +128,34 @@ describe("bounded JSON hostile input", () => {
     ]) {
       expectCode(decodeBoundedJsonBytes(input), "JSON_INPUT_TYPE_INVALID");
     }
+  });
+
+  it("refuses forged objects carrying Uint8Array.prototype without the brand", () => {
+    const bare = Object.create(Uint8Array.prototype) as object;
+    const dressed = Object.create(Uint8Array.prototype, {
+      buffer: { value: bytes("null").buffer },
+      byteLength: { value: 4 },
+      byteOffset: { value: 0 },
+      length: { value: 4 },
+    }) as object;
+    for (const forged of [bare, dressed]) {
+      expectCode(decodeBoundedJsonBytes(forged), "JSON_INPUT_TYPE_INVALID");
+    }
+  });
+
+  it("accepts a plain same-realm Uint8Array and a cross-realm Uint8Array", () => {
+    expect(expectOk(decodeBoundedJsonBytes(bytes("[1,2]")))).toEqual([1, 2]);
+
+    const foreign = runInNewContext(
+      "Uint8Array.from([0x6e, 0x75, 0x6c, 0x6c])",
+    ) as Uint8Array;
+    expect(foreign).not.toBeInstanceOf(Uint8Array);
+    expect(expectOk(decodeBoundedJsonBytes(foreign))).toBeNull();
+  });
+
+  it("keeps the decoder module free of node: import specifiers (browser-safe)", async () => {
+    const source = await readFile(new URL("./bounded-json.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/["']node:/);
   });
 
   it("rejects shared, resizable, and detached backing stores", () => {
