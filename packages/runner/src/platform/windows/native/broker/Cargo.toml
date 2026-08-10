@@ -38,9 +38,20 @@ moe-windows-job-core = { path = ".." }
 # Win32_Foundation provides HANDLE, INVALID_HANDLE_VALUE, CloseHandle,
 # GetLastError and GetHandleInformation — the last of which the handle probe
 # uses to observe what is, and is not, in its own handle table.
+# Win32_System_IO is REQUIRED and is easy to miss, because the functions it
+# gates do not live in it. `ReadFile` and `WriteFile` are declared in
+# Win32/Storage/FileSystem, but both are `#[cfg(feature = "Win32_System_IO")]`
+# because their final parameter is `*mut OVERLAPPED` and that type lives in
+# Win32/System/IO. Without the feature the two functions simply do not exist,
+# and the error names Storage_FileSystem — the module that has them — rather
+# than the feature that is missing.
+#
+# We pass a null overlapped pointer, which selects the synchronous form, but the
+# feature still gates the declaration.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
+  "Win32_System_IO",
   "Win32_System_Threading",
 ] }

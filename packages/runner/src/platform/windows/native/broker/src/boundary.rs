@@ -7,11 +7,16 @@
 //! numbers up; the refusal vocabulary and the ownership rules live in
 //! `descriptors.rs` and `verify.rs`.
 
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE};
-use windows_sys::Win32::Storage::FileSystem::{GetFileType, FILE_TYPE_PIPE, FILE_TYPE_UNKNOWN};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, GetLastError, ERROR_BROKEN_PIPE, ERROR_NO_DATA, HANDLE,
+};
+use windows_sys::Win32::Storage::FileSystem::{
+    GetFileType, ReadFile, WriteFile, FILE_TYPE_PIPE, FILE_TYPE_UNKNOWN,
+};
 use windows_sys::Win32::System::Threading::{GetStartupInfoW, STARTUPINFOW};
 
 use crate::descriptors::DescriptorError;
+use crate::frames::ByteChannel;
 use crate::verify::{acquire_from_block, Descriptors, HandleCalls, PIPE_FILE_TYPE};
 
 /// Compile-time proof that the constant `verify.rs` compares against is the real
@@ -91,4 +96,78 @@ pub fn startup_block() -> (Vec<u8>, u16) {
 pub fn acquire<C: HandleCalls>(calls: &C) -> Result<Descriptors<'_, C>, DescriptorError> {
     let (block, declared) = startup_block();
     acquire_from_block(&block, declared, calls)
+}
+
+/// A [`ByteChannel`] over one of this process's descriptor handles.
+///
+/// BORROWS, OWNS NOTHING, HAS NO `Drop`. `Descriptors` is the sole owner of
+/// every handle and closes each exactly once; a channel that also closed one
+/// would be precisely the double close this crate is built to make
+/// unrepresentable — and the second close could land on a value Windows has
+/// since reused. So this holds the raw value and nothing else, the same shape
+/// [`HandleCalls`] uses.
+pub struct PipeChannel {
+    raw: isize,
+}
+
+impl PipeChannel {
+    pub const fn over(raw: isize) -> Self {
+        Self { raw }
+    }
+}
+
+impl ByteChannel for PipeChannel {
+    /// A read of zero means the channel ended.
+    ///
+    /// A CLOSED PEER IS AN END OF STREAM, NOT A FAILURE, and Windows does not
+    /// say so directly: once the writer closes its end, `ReadFile` FAILS with
+    /// `ERROR_BROKEN_PIPE` rather than returning zero bytes. Reporting that as
+    /// an error would make an ordinary parent disconnect indistinguishable from
+    /// a broken pipe, and would make "fd0 reached end of stream" unreachable in
+    /// production even though every test can reach it.
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, u32> {
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX);
+        let mut taken: u32 = 0;
+        // SAFETY: `buffer` is a live slice of exactly `capacity` bytes, `taken`
+        // is a live out-parameter, and the handle is one this process verified
+        // as a pipe. A null overlapped pointer selects the synchronous form,
+        // which is what a handle opened without FILE_FLAG_OVERLAPPED requires.
+        let ok = unsafe {
+            ReadFile(self.raw as HANDLE, buffer.as_mut_ptr(), capacity, &mut taken, core::ptr::null_mut())
+        };
+        if ok == 0 {
+            // SAFETY: read immediately after the failed call, before anything
+            // else on this thread can overwrite it.
+            let code = unsafe { GetLastError() };
+            if code == ERROR_BROKEN_PIPE {
+                return Ok(0);
+            }
+            return Err(code);
+        }
+        Ok(taken as usize)
+    }
+
+    /// Writes what the pipe accepts, which may be less than it was offered.
+    ///
+    /// `ERROR_NO_DATA` is the write-side twin of `ERROR_BROKEN_PIPE`: the reader
+    /// has gone. Reported as zero accepted rather than as an error, so the
+    /// framing layer refuses the write as a channel that stopped taking bytes
+    /// instead of retrying forever against a peer that is never coming back.
+    fn write(&mut self, bytes: &[u8]) -> Result<usize, u32> {
+        let offered = u32::try_from(bytes.len()).unwrap_or(u32::MAX);
+        let mut taken: u32 = 0;
+        // SAFETY: same contract as the read above, with an immutable source.
+        let ok = unsafe {
+            WriteFile(self.raw as HANDLE, bytes.as_ptr(), offered, &mut taken, core::ptr::null_mut())
+        };
+        if ok == 0 {
+            // SAFETY: read immediately after the failed call.
+            let code = unsafe { GetLastError() };
+            if code == ERROR_NO_DATA || code == ERROR_BROKEN_PIPE {
+                return Ok(0);
+            }
+            return Err(code);
+        }
+        Ok(taken as usize)
+    }
 }

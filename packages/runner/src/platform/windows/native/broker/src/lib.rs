@@ -68,19 +68,25 @@
 
 // Modules are private: every item has exactly one public path, re-exported
 // below, which is how the core crate is arranged too.
+mod completion;
 mod control;
 mod descriptors;
 mod diagnostics;
 mod frames;
+mod launch;
 mod payload;
 mod protocol;
 mod refusal;
+mod session;
+mod settle;
 mod status;
 mod verify;
+mod watch;
 
 #[cfg(windows)]
 mod boundary;
 
+pub use completion::{Completion, Outcome, Precondition, Stopped, Unobserved};
 pub use control::{AcceptState, Accepted, Inbound, LaunchRequest};
 pub use descriptors::{
     parse_descriptor_block, DescriptorError, DescriptorReason, INVALID_HANDLE,
@@ -95,10 +101,11 @@ pub use protocol::{
     ProtocolError, ProtocolReason, ProtocolStage, PROTOCOL_VERSION,
 };
 pub use refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES};
+pub use session::{Session, ShutdownSignal, Wiring};
 pub use status::{Completed, Outbound, Started, Status};
 pub use verify::{
     acquire_from_block, Descriptors, HandleCalls, OwnedDescriptor, PIPE_FILE_TYPE,
 };
 
 #[cfg(windows)]
-pub use boundary::{acquire, startup_block, SystemHandles};
+pub use boundary::{acquire, startup_block, PipeChannel, SystemHandles};
