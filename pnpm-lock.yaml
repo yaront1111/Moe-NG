@@ -157,6 +157,12 @@ importers:
       '@moe/context':
         specifier: workspace:*
         version: link:../context
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@moe/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/skills:
     dependencies:

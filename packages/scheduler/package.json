@@ -7,7 +7,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@moe/context": "workspace:*"
+    "@moe/context": "workspace:*",
+    "@moe/contracts": "workspace:*",
+    "@moe/core": "workspace:*"
   },
   "scripts": {
     "typecheck": "tsc --project tsconfig.json",
