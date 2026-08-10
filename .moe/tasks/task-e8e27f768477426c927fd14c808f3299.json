@@ -127,28 +127,45 @@
     {
       "stepId": "step-7",
       "description": "DoD 6 - PUBLISH TO THE PACKAGE ROOT AND PROVE IT FROM PLAIN NODE. Clause 1 is explicit that exporting into a directory is not composition.\n\nRe-export the three modules from packages/scheduler/src/index.ts through the existing export blocks. packages/scheduler/package.json maps exports \".\" -> \"./src/index.ts\", so the root is the only public surface.\n\nUpdate packages/scheduler/src/index-surface.test.ts: it hand-writes the expected namespace and pins `expect(EXPECTED_EXPORTS.length).toBe(36)` at line 57. RE-READ THAT LITERAL AT THE MOMENT YOU EDIT - export counts on this board have moved repeatedly under tasks today. Add each new RUNTIME value exactly once and bump by the exact runtime delta; TYPE-ONLY exports do not inflate the count.\n\nTHE PLAIN-NODE PROBE ALREADY EXISTS - EXTEND IT, do not invent one. packages/scheduler/src/scheduler-runtime-entrypoint.test.ts spawns a Worker running ./scheduler-entrypoint-smoke-worker.mjs with execArgv [\"--experimental-strip-types\"] and asserts an exact result object. Add a field to the worker that imports the package root and reports something only the new fairness exports can produce - a frozen vocabulary's length, or a validator's refusal code on a known-bad input - then assert it in the test's toEqual.\n\nWHY THIS AND NOT VITEST, per DoD 6: vitest resolves NodeNext .js specifiers back to .ts and is therefore BLIND to a missing bridge. Only the Node worker executes the real resolution. Record the probe output VERBATIM in your completion evidence.\n\nIf the probe fails with ERR_MODULE_NOT_FOUND on a fairness path, a .js bridge is missing - the existing worker already asserts internalSubpath: \"ERR_PACKAGE_PATH_NOT_EXPORTED\", so read that assertion before changing anything.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts",
         "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs"
       ],
-      "startedAt": "2026-08-10T07:09:22.441Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+        "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts"
+      ],
+      "note": "DoD 6 SATISFIED. Published to the package root and PROVEN from plain Node.\n\nEXPORT COUNT RE-READ AT THE MOMENT OF EDIT, per the risk note. `sed -n '32,58p' packages/scheduler/src/index-surface.test.ts` printed `expect(EXPECTED_EXPORTS.length).toBe(36)` immediately before I touched it. Added 11 RUNTIME values, bumped to 47, and hand-transcribed each into EXPECTED_EXPORTS in sorted position: FAIRNESS_CONTRACT_ISSUE_CODES, FAIRNESS_CONTRACT_LAYERS, FAIRNESS_DISPATCHABILITY_STATES, FAIRNESS_PRIORITY_CLASSES (arrays), isFairnessIdentity, validateWorkItem, validateWorkItemSet, validateRing, validateRingResource, validateBypassClaim, validateCapRevision (functions).\n\nThe fairness PLUMBING is deliberately NOT published at the root — makeFairnessIssue, refuseFairness, unknownFairness, acceptFairness, readFairnessItems and isFairnessRefusal stay internal to the fairness directory. Publishing issue constructors would let a consumer mint arbitrary fairness issues, which is exactly the authority these contracts are supposed to withhold. The root surface is vocabularies + validators + the identity guard.\n\n17 TYPES published, and proven properly. Per mem:type-only-export-invisible-to-count-test the count and namespace guards see runtime values only, so a wrong or missing `export type` would leave every existing surface test green. Each type is instead proven by calling through the bare @moe/scheduler specifier and annotating the returned value, with both arms of the result union narrowed (`if (!item.ok) throw` then `const validated: FairnessWorkItem = item.value`). `pnpm --filter @moe/scheduler typecheck` is therefore the assertion; an unpublished type is a tsc error. Types covered: FairnessContractIssue, FairnessContractIssueCode, FairnessContractLayer, FairnessContractRefusal, FairnessContractResult, FairnessDispatchabilityState, FairnessPriorityClass, FairnessDispatchabilityFact, FairnessWorkItem, FairnessRing, FairnessRingResource, FairnessRingQueueEntry, FairnessBypassClaim, FairnessOpportunityAttestation, FairnessProvenBypasses, FairnessCapMigration, FairnessCapRevision.\n\nTHE EXISTING PROBE WAS EXTENDED, not reinvented. scheduler-entrypoint-smoke-worker.mjs now imports the fairness exports from the package root and reports four fields only they can produce, then scheduler-runtime-entrypoint.test.ts asserts them inside its existing exact toEqual. Two of the four are validator refusal strings rather than mere lengths, so the probe proves behaviour and not just presence.\n\nPROBE OUTPUT, VERBATIM, from running the worker directly under plain Node rather than through vitest:\n\n  node --input-type=module -e \"import {Worker} from 'node:worker_threads'; const w = new Worker(new URL('file:///D:/projexts/moe-next/packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs'), {execArgv: ['--experimental-strip-types']}); w.once('message', (m) => { console.log(JSON.stringify(m, null, 2)); w.terminate(); }); ...\"\n\n  {\n    \"admissionReadyWidth\": 1,\n    \"counterfactualEdgeCount\": 0,\n    \"counterfactualType\": \"function\",\n    \"dispatchableWidth\": 1,\n    \"fairnessBypassRefusal\": \"REFUSED:FAIRNESS_CONTRACT_BYPASS_EVIDENCE_MISSING:OPPORTUNITY_EVIDENCE\",\n    \"fairnessIssueCodeCount\": 18,\n    \"fairnessLayerCount\": 5,\n    \"fairnessRingRefusal\": \"REFUSED:FAIRNESS_CONTRACT_ITEM_IN_MULTIPLE_QUEUES:RING\",\n    \"logicalReadyWidth\": 1,\n    \"internalSubpath\": \"ERR_PACKAGE_PATH_NOT_EXPORTED\",\n    \"outcome\": \"IMPORTED\",\n    \"previewAuthority\": \"NONE\",\n    \"previewOutcome\": \"ANALYZED\",\n    \"previewType\": \"function\",\n    \"stageCount\": 1,\n    \"validateType\": \"function\"\n  }\n\nNote the ring probe reports ITEM_IN_MULTIPLE_QUEUES, not UNDECLARED_RESOURCE: I declared BOTH res-a and res-b in the worker fixture on purpose, so the invariant that answers is the one the reference could not express at all. With only res-a declared, UNDECLARED_RESOURCE would have fired first and the probe would have proved a weaker thing.\n\nNote also that these bridges ARE load-bearing here, unlike the case in mem:gotcha-package-root-ts-entry-needs-no-js-bridge. That memory is about a package ROOT specifier resolving straight to .ts; these five modules are reached through relative \"./fairness/x.js\" specifiers from index.ts, which is precisely the situation where plain Node needs the sibling bridge. Drill 5 in step 8 deletes one to prove it.\n\nVERIFIED: tsc over @moe/scheduler clean; `npx vitest run --root . packages/scheduler/src` = 38 files / 882 tests passed.",
+      "startedAt": "2026-08-10T07:09:22.441Z",
+      "completedAt": "2026-08-10T07:13:07.869Z"
     },
     {
       "stepId": "step-8",
       "description": "VERIFY, MUTATION-DRILL AND ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm typecheck\n\nThe third leg is REPO-WIDE - run it from the repo root, since a run from a subdirectory prints a false green with no `Scope:` line. Path-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/scheduler itself is a BLOCK, not a disclosure.\n\nMUTATION DRILLS - each new guard must be reddenable:\n  1. Accept a bypass claim without its evidence -> the defect-(a) test must go RED naming its code and layer.\n  2. Allow one work item into two ring queues -> the ring structural test must go RED.\n  3. Empty the generated case list -> the non-zero-count assertion must go RED (this is the guard on the guard).\n  4. Export a function that orders ring entries -> the DoD 4 no-authority test must go RED. If it stays green, that test is decorative and must be rewritten as a real property over exports.\n  5. Delete one .js bridge -> the plain-Node probe must go RED while vitest stays green. This is the drill that proves the probe earns its place.\nRevert each and confirm green before the next. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`.\n\nAdversarial review:\n- DoD 5: `git diff -- packages/testkit/src/scheduler-fairness/` must be EMPTY. Any modification there is a rejection.\n- Did I copy a reference shape rather than design from the gap? Every family needs a justification that is not \"it matches the reference\".\n- Did any contract acquire authority - a function that orders, charges, ages or admits?\n- Did I add or change a fairness constant? Forbidden without approval.\n- Are all exported objects and arrays actually Object.freeze'd, and all fields readonly?\n- Is every reason code reachable from a real refusal path a test exercises?\n- Per-file `grep -c ''` under 400, target 250.\n- Clause 1: name task-10cab3e5 as the consumer in completion evidence.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm the list is EXACTLY your owned paths. THE INDEX ON THIS BOARD IS SHARED AND CURRENTLY PRE-LOADED: 27 foreign files were staged by another agent earlier in this session. Never git add -A.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-contract.ts",
         "packages/scheduler/src/fairness/fairness-ring.ts",
         "packages/scheduler/src/fairness/fairness-evidence.ts",
         "packages/scheduler/src/fairness/fairness-contract.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+        "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts"
+      ],
+      "note": "GATE GREEN, ALL FIVE DRILLS REDDENED, COMMITTED BY PATHSPEC.\n\nTHE GATE, run fresh, foreground, from the repo root:\n  pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm typecheck\n  GATE_EXIT=0\n  Test Files 38 passed (38) | Tests 882 passed (882)\n  Repo-wide leg reached every workspace and every one printed \"Done\" (import, store, coordination, control-room-client, core, mcp, skills, testkit, scheduler, runner, review, apps/control-room, apps/daemon).\nNO FOREIGN RED TO DISCLOSE. The repo-wide leg is fully green, so the path-attributed baseline is trivially satisfied: (HEAD failures minus merge-base failures) is empty because the HEAD failure set is empty.\n\nMUTATION DRILLS — every new guard is reddenable. Baseline `git hash-object` recorded for all 15 files before the first drill and re-verified identical after each revert; because the new files are tracked at HEAD, `git status --porcelain packages/scheduler` was also checked and shows only the four intended modifications.\n\nDrill 1a — disabled the EVIDENCE_MISSING guard alone. 2 named tests RED. I read WHICH assertion panicked rather than counting reds, per mem:mutation-drill-red-on-wrong-assertion, and the diff is the point of the whole task:\n    - \"code\": \"FAIRNESS_CONTRACT_BYPASS_EVIDENCE_MISSING\"\n    + \"code\": \"FAIRNESS_CONTRACT_BYPASS_COUNT_UNPROVEN\"\n      \"layer\": \"OPPORTUNITY_EVIDENCE\"\n  A second refusal layer started answering. Because the test pins the exact code it went red instead of staying green — the mem:refusal-test-answered-by-earlier-guard failure mode, caught.\n\nDrill 1b — reinstated the reference's actual defect: trusted the caller's declared count and copied it into provenBypasses. 4 named tests RED. The defect this task exists to close is reddenable.\n\nDrill 2 — allowed one work item into two ring queues. 2 named tests RED.\n\nDrill 3 — emptied all three generated case lists (REACHABILITY_CASES .slice(0,0), RECORD_VALIDATORS .slice(0,0), the hostile filter to () => false). 4 tests RED: the reachability count, the code-coverage-equals-vocabulary guard, the layer-coverage guard, and the totality count. Total collected tests fell 154 -> 49. This is the guard on the guard: without the hand-written counts the suite would have reported a clean 45/45 green while testing nothing.\n\nDrill 4 — appended `export function orderRingEntries(ring)` that sorts entries by deficitCounter. ALL THREE no-authority properties RED: the per-module export count, the validator/guard/constructor classifier, and the AUTHORITY_NAME property. The DoD-4 test is not decorative.\n\nDrill 5 — moved packages/scheduler/src/fairness/fairness-ring.js aside. This is the cleanest result of the set:\n  vitest: Tests 1 failed | 881 passed (882) — and the ONE failure is\n    FAIL packages/scheduler/src/scheduler-runtime-entrypoint.test.ts > loads and executes the scheduler entrypoint in Node's strip-types runtime\n  plain Node: PROBE_ERROR code=ERR_MODULE_NOT_FOUND\n    Cannot find module 'D:\\projexts\\moe-next\\packages\\scheduler\\src\\fairness\\fairness-ring.js' imported from D:\\projexts\\moe-next\\packages\\scheduler\\src\\index.ts\n  All 154 fairness contract tests and the 47-export root surface test stayed GREEN with the bridge missing. Vitest resolved the NodeNext \".js\" specifier back to \".ts\" and was blind; the only red came from the probe it hosts. The probe earns its place, and these bridges ARE load-bearing here — unlike mem:gotcha-package-root-ts-entry-needs-no-js-bridge, which is about a package ROOT specifier resolving straight to .ts.\n\nADVERSARIAL REVIEW:\n- DoD 5: `git diff -- packages/testkit/src/scheduler-fairness/` EMPTY and `git status --porcelain` on that path returns nothing. The DEVELOPMENT_ONLY reference is untouched.\n- No copied reference shape. Each family's justification is in the step-2/4/5/6 notes and turns on something the reference lacks: three dispositions vs two, a refusing layer vs none, an observation ref vs a bare caller-confirmed boolean, evidence-carrying bypasses vs a range check, a prior bound carried with the migration datum vs a rule in a comment, and a ring family that has no counterpart at all.\n- No authority acquired. Exported functions are 6 validators + 1 identity guard. No sort anywhere in the fairness modules — I deliberately did NOT copy the declaredResources sort in authority/resource-model.ts, and a behavioural test asserts caller order and deficit counters pass through verbatim.\n- No fairness constant added or changed. Bounds are the package's existing MAX_AUTHORITY_ITEMS (128) and MAX_GRAPH_KEY_CODE_UNITS (128, via isGraphKey). The test pins MAX_AUTHORITY_ITEMS === 128 so a change to the reused bound reddens loudly rather than silently resizing the cardinality fixtures.\n- Everything exported is Object.freeze'd; every field readonly; accepted values deep-frozen; inputs copied, proven by a test that mutates the caller's array and object after validation.\n- Every one of the 18 codes is reachable, asserted by set EQUALITY aga",
+      "startedAt": "2026-08-10T07:13:12.351Z",
+      "completedAt": "2026-08-10T07:17:55.129Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-131786b8",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,12 +177,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:39:10.317Z",
-  "updatedAt": "2026-08-10T07:09:22.441Z",
+  "updatedAt": "2026-08-10T07:18:49.495Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:43:10.233Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -176,7 +193,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:46:47.247Z",
@@ -202,5 +221,29 @@
   "contextFetchedBy": [
     "worker-131786b8"
   ],
-  "workStartedAt": "2026-08-10T06:48:53.845Z"
+  "workStartedAt": "2026-08-10T06:48:53.845Z",
+  "reviewStartedAt": "2026-08-10T07:18:49.495Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  38 passed (38)\n      Tests  882 passed (882)\n   Start at  10:17:12\n   Duration  722ms\n\nGATE_EXIT=0\napps/control-room typecheck$ tsc --project tsconfig.json\npackages/review typecheck$ tsc --project tsconfig.json\npackages/review typecheck: Done\napps/control-room typecheck: Done\napps/daemon typecheck$ tsc --project tsconfig.json\napps/daemon typecheck: Done\nREPO_WIDE_EXIT=0",
+    "reportedAt": "2026-08-10T07:18:49.495Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/fairness/fairness-contract.test.ts",
+    "packages/scheduler/src/fairness/fairness-contract.ts",
+    "packages/scheduler/src/fairness/fairness-contract.js",
+    "packages/scheduler/src/fairness/fairness-work-item.ts",
+    "packages/scheduler/src/fairness/fairness-work-item.js",
+    "packages/scheduler/src/fairness/fairness-ring.ts",
+    "packages/scheduler/src/fairness/fairness-ring.js",
+    "packages/scheduler/src/fairness/fairness-evidence.ts",
+    "packages/scheduler/src/fairness/fairness-evidence.js",
+    "packages/scheduler/src/fairness/fairness-cap-revision.ts",
+    "packages/scheduler/src/fairness/fairness-cap-revision.js",
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/index-surface.test.ts",
+    "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+    "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts"
+  ]
 }

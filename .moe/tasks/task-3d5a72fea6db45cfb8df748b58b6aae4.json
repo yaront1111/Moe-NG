@@ -114,22 +114,30 @@
     {
       "stepId": "step-7",
       "description": "MUTATION DRILLS — DoD 5 requires each new guard be provably reddenable. Run each, confirm the NAMED case kills it, revert, confirm green before the next, and record the exact failing assertion.\n\n  1. Drop the predecessor-mismatch check -> the DoD 2 case must go RED, and specifically on the code-and-layer assertion, not merely on ok.\n  2. Make the refusal path build and return a next state before refusing -> the byte-identical-state assertion must go RED. If it stays green that assertion is only checking ok:false and must be rewritten.\n  3. Change the increment to state.graphEpoch + 2 -> the skipped-epoch case must go RED.\n  4. Admit the new command from DRAFT -> the lifecycle-fence case must go RED.\n  5. Remove the layer field from one refusal helper -> every refusal test must go RED. This is the drill that proves the layer assertions read a production discriminant rather than a value the test supplied.\n  6. Empty the generated case list -> the non-zero count assertion must go RED.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-reducer.ts",
         "packages/core/src/goal/goal-results.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-epoch-advance.test.ts"
+      ],
+      "note": "All six mutants killed and SHA-restored with focused green between drills: dropped predecessor guard -> code/layer undefined; leaked next state -> Object.hasOwn(state) true; +2 -> skipped case accepted; admitted DRAFT -> table assertion saw DRAFT; removed layer -> all 9 refusal tests failed; emptied sweep -> count 0 failed. Final core typecheck/test green (25 files/382). Foreign completion commit 17bfb37 swept earlier owned bytes; preserved per rail.",
+      "startedAt": "2026-08-10T07:13:26.801Z",
+      "completedAt": "2026-08-10T07:13:32.603Z"
     },
     {
       "stepId": "step-8",
       "description": "VERIFY AND ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\n\nBoth legs exit 0 with nonzero discovery. Path-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/core itself is a BLOCK, not a disclosure.\n\nHAND-MEASURE EVERY TOUCHED PRODUCTION FILE with `grep -c ''` and report the numbers in your completion evidence:\n  goal-reducer.ts, goal-validation.ts, goal-contract.ts, goal-results.ts — each at or below 250.\nA green suite is NOT evidence of the cap: packages/core/src/goal/ is not swept by planning-source-size.test.ts. PowerShell Measure-Object -Line skips blank lines and will report headroom you do not have.\n\nAdversarial review:\n- Did I touch anything under packages/core/src/planning? I must NOT have — task-aedcd01a owns it and runs in parallel. Confirm with `git diff --stat`.\n- Did goal.activate_initial_graph's admitted set or behaviour change? DoD 3 forbids it.\n- Is there exactly ONE epoch counter, still owned by the goal aggregate?\n- Does every refusal carry its layer from the production result field rather than a test-side reconstruction?\n- Did the extraction in step 2 change behaviour? It must have been pure.\n- Do all pre-existing assertions in goal-reducer.test.ts and goal-invariants.test.ts still pass, except any genuinely invalidated by the added `layer` field — and did I update those rather than delete them?\n- Clause 1: record task-aedcd01ad91245d9a036d9dac3b76a22 as the consumer that binds a graph revision's activation to the epoch this command issues.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH 27 FOREIGN FILES earlier in this session. Never git add -A.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/core/src/goal/goal-reducer.ts",
         "packages/core/src/goal/goal-validation.ts",
         "packages/core/src/goal/goal-results.ts",
         "packages/core/src/goal/goal-epoch-advance.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-10T07:13:44.744Z"
     }
   ],
   "status": "WORKING",
@@ -145,12 +153,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T20:57:57.134Z",
-  "updatedAt": "2026-08-10T07:09:02.990Z",
+  "updatedAt": "2026-08-10T07:13:44.744Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:51:41.418Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "stepsCompleted": [
     "step-1",
@@ -158,7 +166,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:54:06.010Z",

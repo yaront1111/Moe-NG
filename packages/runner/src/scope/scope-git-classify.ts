@@ -20,7 +20,7 @@ export function classifyRefFailure(error: unknown): ScopeObserverError {
   if (error instanceof ScopeObserverError) {
     const overflowed =
       error.code === "RUNNER_SCOPE_OBSERVATION_OVERFLOW" ||
-      (error as { cause?: { code?: unknown } }).cause?.code === "ENOBUFS";
+      false;
     return new ScopeObserverError(
       overflowed ? "RUNNER_SCOPE_OBSERVATION_OVERFLOW" : error.code,
       error.message,

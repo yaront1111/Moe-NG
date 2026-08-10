@@ -121,29 +121,49 @@
     {
       "stepId": "step-7",
       "description": "THE NON-INHERITANCE PROOF, FROM THE CHILD'S SIDE. Extend tests/node_loadability.rs (or add the case beside it) to launch handle_probe THROUGH moe-windows-job-core -- Job::create, then ContainedProcess::create with a ProcessSpec whose `inherited` array carries ONLY fd3/fd4/fd5 -- so the evidence is about the real production launch path rather than a bespoke one. Pass the probe the numeric values of fd0, fd1, fd2 and of the Job, process and thread handles. Assert POSITIVELY from the child's report that fd3/4/5 are present and usable AND that every one of the other six is absent or unusable in the child's handle table. Absence must be demonstrated by the child, never inferred from the fact that the parent did not list them -- that inference is the assumption this DoD item exists to reject. Do not assert any specific numeric handle value; values are not stable across runs. Close every handle and reap the probe on every path including failure.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/tests/node_loadability.rs"
       ],
-      "startedAt": "2026-08-10T07:05:47.696Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/handle_inheritance.rs"
+      ],
+      "note": "NON-INHERITANCE PROVED FROM THE CHILD'S SIDE, and PROVED TO BITE. Full broker suite green 3/3 consecutive runs; the inheritance test alone ran clean 35 times while I characterised it.\n\nPut in its own file tests/handle_inheritance.rs (the step permits \"beside it\") rather than growing node_loadability.rs, which owns a different question.\n\nTHE LAUNCH IS THE PRODUCTION PATH: `Job::create` then `ContainedProcess::create` from moe-windows-job-core, with a ProcessSpec whose `inherited` array carries exactly the three allowlisted handles. `Recording` is a pure delegating decorator over SystemWin32 — the same shape as the core's own `Observing` — that notes the handle VALUES the boundary produced (Job from create_job_object, process and thread from create_process_suspended). It decides nothing and reimplements nothing.\n\nTHE DRILL, RUN BEFORE I BELIEVED THE TEST. It went green first try, which for something this intricate is a reason to distrust it, so I leaked a handle the child genuinely holds into the forbidden list. The child reported `forbidden 0=present` and the test FAILED on the intended assertion at line 110. Then restored, verified by GREPPING THE FILE for the drill symbol (exit 1, absent) rather than trusting git status — the tree is shared and a foreign whole-tree commit already captured my files once this session. Full report observed under the drill:\n  crt=BlockAbsent\n  allowed 0=pipe 1=pipe 2=pipe\n  forbidden 0=present 1=absent 2=absent 3=absent 4=absent 5=absent\n\nWHAT THE CHILD ASSERTS, all positive observations it made itself: `allowed 0=pipe 1=pipe 2=pipe` (the three it WAS given are present and usable), `forbidden 0=absent ... 5=absent` for fd0/fd1/fd2 and the Job, process and thread, plus a standalone `!report.contains(\"present\")` so a new forbidden entry cannot slip through unasserted. Nothing is inferred from what the parent passed. The probe's own exit code is asserted too, and it is 0 only when the counts are exactly 3 and 6 — a probe that received nothing cannot exit 0. NO NUMERIC HANDLE VALUE IS ASSERTED anywhere; values are not stable across runs.\n\n`crt=BlockAbsent` IS PINNED, and it is a real finding: the core passes stdio through STARTF_USESTDHANDLES and leaves lpReserved2 null, so a child launched through the core has NO CRT descriptor block at all. Node's path and the core's path use genuinely different mechanisms, and this test is what will notice if that changes.\n\nONE GENUINE HAZARD FOUND AND CLOSED STRUCTURALLY. \"Absent\" is answered by GetHandleInformation on a NUMBER, and Windows allocates handle values as low ascending indices in EACH process independently — so a parent handle could coincidentally share a value with something the child opened for itself, and the test would fail while nothing was wrong. A false alarm rather than a false pass, but a flaky proof gets deleted instead of believed. `HandleFloor::raise()` now holds enough non-inheritable duplicates of this process's pseudo-handle open that every value allocated afterwards is >= 4096, and the test ASSERTS that floor over all nine values rather than trusting it. The child holds a few dozen handles of its own, all far below. Probability replaced by a checked structural fact.\n\nFOR THE RECORD ON THE ONE FAILURE I SAW: it was a stale drill binary, not a flake — cargo had not yet re-fingerprinted after two rapid edits. Measured afterwards at 0 failures in 25 direct runs and 0 in 10 full cargo runs of the restored source. I did not paper over it; I reproduced before concluding.\n\nCLEANUP ON EVERY PATH: every duplicate is closed exactly once by a Drop impl, and Drop runs while a panic unwinds. The probe is reaped by wait_for_process + query_exit_status; on a panicking path the Job is KILL_ON_JOB_CLOSE, so dropping it takes the probe down. The parent's inheritable copies are dropped right after create, which is what lets the child see EOF on stdin and this process see EOF on the child's stdout — without that, read_to_string would hang forever.",
+      "startedAt": "2026-08-10T07:05:47.696Z",
+      "completedAt": "2026-08-10T07:10:59.762Z"
     },
     {
       "stepId": "step-8",
       "description": "WIRE UP AND AUDIT SIZE. Make main.rs a real entry point: acquire descriptors, verify them, exit with a stable code, and emit nothing that could be mistaken for a protocol frame -- framing, vocabularies and session belong to siblings 3b and 3c and must not appear here even as a placeholder. Add module docs stating the scope boundary and naming those siblings, in the style the core crate uses. Then audit every Rust production source in the broker package with `grep -c ''` and record each count -- main.rs, descriptors.rs, bin/handle_probe.rs -- and confirm every one is <=250. Split by responsibility rather than by reformatting if any exceeds it; a descriptors.rs that grows past the bar splits into block parsing versus handle verification.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/src/main.rs"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml"
+      ],
+      "note": "SIZE AUDIT CLEAN, every count from `grep -c ''`, and the suite is still green (exit 0, 10 tests, 0 ignored).\n\nPRODUCTION SOURCES, cap 250, target 250, hard split 400:\n  src/descriptors.rs      222  OK\n  src/verify.rs           157  OK\n  src/bin/handle_probe.rs 127  OK\n  src/boundary.rs          94  OK\n  src/main.rs              76  OK\n  src/lib.rs               51  OK\nNo file needed splitting AT this step because the split the plan anticipated — \"block parsing versus handle verification\" — was taken at step 4, when descriptors.rs would otherwise have carried the seam, the owner and the boundary too. descriptors.rs at 222 is the only one near the bar; anything added to it should go to verify.rs or a new file rather than be reformatted.\n\nTESTS, uncapped by epic rail 5 (per-FILE production cap): descriptor_block.rs 398, handle_inheritance.rs 446, node_loadability.rs 132. For calibration the core crate's own tests are 312 / 1157 / 393.\n\nMAIN.RS WAS ALREADY THE REAL ENTRY POINT from step 6, where the Node test needed something to assert against. Re-verified against this step's requirements: it acquires, verifies, reports, closes, exits with a stable code; it writes NOTHING to fd3/4/5; and it contains no frame codec, no control/status vocabulary, no CANCEL, no Job creation, no process launch, no lifecycle and no completion semantics — not even a placeholder. Its module docs and lib.rs's both state the scope boundary and name siblings 3b (protocol), 3c (session) and 3d (hardening) explicitly, in the core crate's style, including WHY a placeholder is worse than nothing: it is a second implementation for its owner to collide with in a shared working directory.\n\nMANIFEST COMMENT TRUED UP. It claimed moe-windows-job-core supplies \"any Win32 Job or process syscall the broker needs\", which is the architecture but was not yet the whole truth about who uses it. It now also records that the only consumer TODAY is tests/handle_inheritance.rs — which launches the probe through the real production path rather than a bespoke CreateProcessW — and that production use arrives with the siblings. Kept as a regular dependency rather than a dev-dependency deliberately: it is the crate's stated architecture, not a test-only convenience, and moving it back later would be churn. An inaccurate comment is the kind of thing that gets believed later.\n\nPACKAGE CONTENTS, full inventory, nothing else present: Cargo.toml, six src/*.rs, three tests/*.rs. No executable, no Cargo target output, no transcript, no generated smoke evidence. The crate's own target/ is covered by native/.gitignore:9 and the verification target-dir by the repo-root dist/ rule — both confirmed with `git check-ignore -v`, including the nested `dist/windows-job-native/node-loadability` tree the Node test builds into.",
+      "startedAt": "2026-08-10T07:11:09.334Z",
+      "completedAt": "2026-08-10T07:11:50.559Z"
     },
     {
       "stepId": "step-9",
       "description": "VERIFY, ATTACK, COMMIT. (a) Run the task's exact verification command -- locked test AND locked release build for -p moe-windows-job-broker -- and paste real output; both exit 0. Also re-run the CORE's verification command and confirm it is still green and unchanged. (b) Compare against the step-1 baseline; any repo-wide red must exist at the merge-base too or it is yours. (c) MUTATION DRILL, required by epic rail 6: change FILE_TYPE_PIPE to FILE_TYPE_CHAR and confirm the pipe-verification tests go RED; remove one bounds check and confirm the corresponding hostile-block case goes RED; make the non-inheritance test assert only what the parent passed instead of what the child observed and confirm it no longer detects a deliberately leaked handle. Restore each and re-confirm green, verifying by reading file contents rather than trusting a clean git status, since a foreign whole-tree commit can capture a drill edit. (d) Adversarial pass: no handle value, executable path, argv, cwd or environment reaches any error, log or panic message; the parser cannot panic on any input; every acquired handle closes exactly once. (e) Confirm no target output, binary, transcript or smoke evidence is staged. (f) `git status --porcelain`, unstage anything foreign with `git restore --staged`, commit by explicit pathspec over this task's owned paths only, and verify with `git show --stat`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/main.rs",
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+        "packages/runner/src/platform/windows/native/broker/tests/descriptor_block.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/handle_inheritance.rs"
+      ],
+      "note": "(a) VERIFICATION, FRESH AND POST-COMMIT. Task command verbatim, both legs: exit 0. descriptor_block 8 passed, handle_inheritance 1, node_loadability 1, three unit targets 0, doc 0 — 10 tests, 0 failed, 0 IGNORED; locked release build exit 0. CORE re-verified unchanged: job_sweep 7, process_sweep 28, real_windows 2, 0 ignored, release exit 0 — identical to the step-1 pre-diff baseline.\n\n(b) PATH-ATTRIBUTED BASELINE: repo-wide `pnpm typecheck` exit 0 at HEAD, exit 0 at the step-1 baseline. Delta is EMPTY, so there is no foreign red to disclose and none of mine. The diff is Rust-only under a directory no TS gate scans.\n\n(c) THREE MUTATION DRILLS, all run, all restored, restoration verified BY GREPPING FILE CONTENTS and then by grepping the COMMITTED bytes — not by a clean git status, which cannot be trusted here after `mem:mutation-drills-in-shared-worktree`.\nDRILL 1, FILE_TYPE_PIPE -> FILE_TYPE_CHAR (both the constant and the const-assert, simulating reaching for the wrong constant by name): 6 of 8 descriptor tests went RED. Restored; committed bytes confirm `PIPE_FILE_TYPE: u32 = 3` and `assert!(PIPE_FILE_TYPE == FILE_TYPE_PIPE)`.\nDRILL 2, remove the block-size bounds check: `count_implies_more_than_cb_reserved2` went RED with `left: SlotNotPipe, right: CountExceedsBlock`. HONEST DETAIL, because it matters for rail 6: only that one of the three CountExceedsBlock cases reddens. The other two are ALSO caught by `read_handles`' own checked reads. That is not a mis-attribution — in the SHIPPED code the `fits` check answers all three first, so the layer under test is the layer that answers; `read_handles` is deliberate defence in depth, documented in its doc comment as such. Restored; committed bytes confirm `if !fits {` present and `let _ = fits` absent.\nDRILL 3, the DoD's own question, run in two stages because the first was not decisive. Stage one replaced the child-observed absence assertions with a parent-side one AND leaked a handle the child genuinely holds: it still went red — but at `code.value() == 0`, the PROBE'S OWN verdict, not the assertion I removed. So I removed that detector too, leaving only parent-side inference. Result: GREEN, with a real leaked handle present. That is the DoD item stated as an experiment — a parent-side assertion is blind to a leak the child can see. Restored; grepped absent: `let leaked`, the substitute assertion, the relaxed exit assertion. Grepped present: the `forbidden 0=absent...` line, `!report.contains(\"present\")`, the probe-verdict assertion, `unpassed_read`.\n\n(d) ADVERSARIAL PASS, full checklist.\nRAILS: no handle value, executable path, argv, cwd or environment reaches any production error, log or panic. `DescriptorError` carries reason + slot index + numeric code and nothing else, its `Display` is hand-written, and it derives nothing that could grow a field carrying one. main.rs's fd1 line is `descriptors ready N of M`. The probe prints reason NAMES and per-index verdicts only. DISCLOSED, considered not an oversight: two TEST-only failure diagnostics echo more — node_loadability prints Node's stderr when the harness itself fails, and assertions interpolate the probe's report. These are test diagnostics on failing paths, not refusals; without them a harness failure is undiagnosable. The report contains no handle values.\nPANIC-FREEDOM: the parser has no indexing, no range slicing, no unwrap and no expect; every offset is checked_add/checked_mul and every read is `get(..)` + `try_from`. `unsafe` exists in exactly one production file, boundary.rs.\nCLOSE-EXACTLY-ONCE ON EVERY PATH: consuming `close` makes a second explicit close a compile error, the flag stops Drop repeating one that ran, and three tests assert PER-HANDLE counts (a total of six could be six closes of one handle). A refusal mid-acquisition drops only what was adopted; the handle that FAILED verification is never adopted, because closing a handle whose identity could not be established is the double-close hazard. A failed close is surfaced as CloseFailed with the operating system's code, never converted to success, and every remaining close is still attempted.\nCONCURRENCY: the parser is pure; main is single-threaded. The two threading hazards found in this task were real and are both closed structurally rather than by retry — the deliberate double-close that corrupted concurrent tests via handle-value reuse (step 5), and handle-value collision making \"absent\" ambiguous (step 7).\nRESIDUAL, stated plainly: `startup_block` trusts that the kernel populated `lpReserved2` with exactly `cbReserved2` bytes. That is inherent to the Win32 API — there is no second source for the length — and it is the crate's only unverifiable assumption. It is written into the SAFETY comment rather than left implicit. Everything downstream of it treats the block as hostile.\n\n(e) NO ARTIFACTS. `git ls-tree -r HEAD` under the broker lists exactly 10 source files; the whole native/ tree contains no target/, .exe, .pdb or .rlib. dist/w",
+      "startedAt": "2026-08-10T07:11:54.205Z",
+      "completedAt": "2026-08-10T07:17:15.991Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-01abf979",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -155,7 +175,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:05.950Z",
-  "updatedAt": "2026-08-10T07:05:47.697Z",
+  "updatedAt": "2026-08-10T07:19:34.199Z",
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -166,7 +186,10 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:45:03.427Z",
@@ -174,7 +197,7 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
     "firstClaimAt": "2026-08-10T06:45:15.578Z",
-    "executedStepCount": 6
+    "executedStepCount": 9
   },
   "planningNotes": {
     "approachesConsidered": "PROVING HANDLE ABSENCE NEEDS A COOPERATING CHILD. DoD item 5 requires proving fd0/1/2, Job, process and thread handles are NOT in the provider's handle table. You cannot prove a negative from the parent by asserting what it did not pass -- that is the assumption, not the evidence. Chose a `src/bin/handle_probe.rs` cooperating child: the parent passes the numeric handle values it holds via argv, and the child asserts each is invalid or refers to something else (GetHandleInformation/GetFileType failing), while separately confirming fd3/4/5 ARE usable. Cargo autobins discovers src/bin/*.rs with no manifest entry and exposes CARGO_BIN_EXE_handle_probe to integration tests.\n\nWHY THAT IS NOT A BANNED PROBE ARTIFACT: rail 5 forbids committing generated evidence, transcripts and binaries. This is committed SOURCE for a durable test fixture, and its compiled output lands in the ignored target/dist tree like every other binary. Say so in the commit message so QA does not read the filename as a smoke-probe leftover. Rejected the alternative of a hidden argv mode on the broker binary itself: it puts test-only branching in the production entry point, which is worse than a separate fixture.\n\nWHY NOT A WAIT-BASED PROOF LIKE THE CORE USED. For 2b I replaced a marker-file proof with a kernel-observable wait, which was strictly better. That trick does not transfer: handle-table membership has no timing signature, so a cooperating child is genuinely the minimum.\n\nWORKSPACE SHAPE. Chose package-plus-workspace-root on the existing manifest. Rejected a virtual workspace with core moved to native/core/: it relocates nine files owned by two DONE tasks and invalidates the verification commands recorded in their completion evidence, for zero benefit.\n\nDESCRIPTOR OWNERSHIP. Chose to model each acquired descriptor as an owned handle closing exactly once, mirroring the core's OwnedHandle discipline. Did NOT reuse core's OwnedHandle directly: its constructor is pub(crate) and deliberately so -- the core's comment explains that exposing it would let a second owner close the same raw value. The broker needs its own small owner over its own descriptors; that is not duplicated Win32 AUTHORITY (no Job or process syscall), it is local RAII.",
@@ -195,5 +218,26 @@
   "contextFetchedBy": [
     "worker-01abf979"
   ],
-  "workStartedAt": "2026-08-10T06:45:31.586Z"
+  "workStartedAt": "2026-08-10T06:45:31.586Z",
+  "reviewStartedAt": "2026-08-10T07:19:34.199Z",
+  "verification": {
+    "command": "cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker",
+    "exitCode": 0,
+    "outputTail": "Running tests\\descriptor_block.rs\nrunning 8 tests\ntest the_two_sentinels_the_parser_hardcodes_match_windows_sys ... ok\ntest the_hostile_block_table_is_exactly_the_nine_named_cases ... ok\ntest a_handle_that_is_not_a_pipe_is_refused_by_its_slot_index ... ok\ntest a_close_the_kernel_refuses_is_surfaced_and_never_converted_to_success ... ok\ntest six_real_pipes_are_acquired_and_every_one_closes_exactly_once ... ok\ntest dropping_the_descriptors_without_closing_still_closes_each_exactly_once ... ok\ntest every_hostile_block_refuses_with_its_own_reason_and_slot ... ok\ntest the_table_plus_the_type_check_reach_every_reason_in_the_vocabulary ... ok\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n\nRunning tests\\handle_inheritance.rs\nrunning 1 test\ntest the_probe_child_sees_only_the_three_handles_it_was_allowed ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n\nRunning tests\\node_loadability.rs\nrunning 1 test\ntest real_node_hands_the_release_broker_six_pipes_and_it_verifies_all_of_them ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n\nDoc-tests moe_windows_job_broker\ntest result: ok. 0 passed; 0 failed; 0 ignored\n\nFinished `release` profile [optimized] target(s) in 0.01s\nFRESH_VERIFICATION_EXIT=0",
+    "reportedAt": "2026-08-10T07:19:34.199Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/native/Cargo.toml",
+    "packages/runner/src/platform/windows/native/Cargo.lock",
+    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+    "packages/runner/src/platform/windows/native/broker/src/main.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/descriptor_block.rs",
+    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+    "packages/runner/src/platform/windows/native/broker/src/descriptors.rs",
+    "packages/runner/src/platform/windows/native/broker/src/verify.rs",
+    "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
+    "packages/runner/src/platform/windows/native/broker/src/bin/handle_probe.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/node_loadability.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/handle_inheritance.rs"
+  ]
 }
