@@ -24,8 +24,7 @@ import type {
  * is ADDRESSABILITY. A process that died holds nothing, and every incarnation
  * ref is entropy-derived, so no ref can be recomputed from the restore command.
  * The pointer aggregate is the only thing derivable from what a restarting
- * daemon still has, which is what turns "the epoch survived" into "the epoch can
- * be found".
+ * daemon still has, turning "the epoch survived" into "the epoch can be found".
  *
  * Only PUBLIC bytes are written, exactly as `recovery-incarnation-anchor.ts`
  * documents: refs, digests, a generation counter. No key material, ever.
@@ -131,7 +130,9 @@ const UNREADABLE = Object.freeze({ state: "UNREADABLE" as const });
  * the aggregate id is computable from the restore command alone, which is the
  * whole point of digesting it. The LAST event wins, and its generation must
  * equal the number of events before it — a row claiming a generation the
- * aggregate never reached is a drifted row, not a newer truth.
+ * aggregate never reached is a drifted row, not a newer truth. `readEvents` is
+ * bounded at MAX_PAGE_SIZE (1000) and THROWS past it rather than truncating, so
+ * a 1001st open fails loudly instead of refusing on an invented mismatch.
  */
 export function readKeyEpochPointer(
   store: SqliteEventStore,
