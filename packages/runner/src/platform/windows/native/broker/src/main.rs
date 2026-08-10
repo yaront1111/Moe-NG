@@ -29,6 +29,15 @@ use moe_windows_job_broker::{
 /// All six descriptors acquired, verified as pipes, and closed cleanly.
 const EXIT_READY: i32 = 0;
 
+/// Fewer than six descriptors were verified.
+///
+/// UNREACHABLE BY CONSTRUCTION — `Descriptors` cannot exist unless all six
+/// passed — and it has its own code precisely because it is unreachable. Folding
+/// an impossible state into either "ready" or "report failed" would make the
+/// stable-code contract lie about which thing went wrong on the day the
+/// invariant breaks.
+const EXIT_INCOMPLETE: i32 = 8;
+
 /// The inventory could not be written, so nothing downstream can know what was
 /// verified. An unreportable success is not a success.
 const EXIT_REPORT_FAILED: i32 = 9;
@@ -59,7 +68,7 @@ fn run() -> i32 {
 
     match descriptors.close() {
         Ok(()) if verified == REQUIRED_DESCRIPTOR_COUNT => EXIT_READY,
-        Ok(()) => EXIT_REPORT_FAILED,
+        Ok(()) => EXIT_INCOMPLETE,
         Err(refusal) => code_for(refusal),
     }
 }

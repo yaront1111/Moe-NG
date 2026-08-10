@@ -145,8 +145,11 @@ fn hostile_blocks() -> Vec<Case> {
             slot: None,
         },
         Case {
-            // 4 + u32::MAX * 9 must be computed WITHOUT wrapping to a small
-            // number that would then fit inside 58 bytes.
+            // A count of u32::MAX must refuse. Stated precisely, because the
+            // obvious claim would be an overclaim: on a 64-bit target
+            // 4 + u32::MAX * 9 CANNOT wrap a usize, so what this case pins is
+            // the refusal itself. The checked arithmetic behind it is what
+            // keeps the same case honest on a 32-bit target, where it would.
             name: "count_of_u32_max_refuses_instead_of_overflowing",
             bytes: raw_block(u32::MAX, REQUIRED_DESCRIPTOR_COUNT, &[FILLER; REQUIRED_DESCRIPTOR_COUNT]),
             declared: 58,

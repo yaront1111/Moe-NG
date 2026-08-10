@@ -41,8 +41,24 @@ use windows_sys::Win32::System::Threading::GetCurrentProcess;
 /// fd0, fd1, fd2, the Job, the process and the thread.
 const FORBIDDEN_COUNT: usize = 6;
 
+/// Every handle this test asks the child about must have a value at or above
+/// this, and [`HandleFloor`] is what makes that true.
+///
+/// WHY IT MATTERS. "Absent" is answered by `GetHandleInformation` on a NUMBER,
+/// and Windows hands out handle values as small ascending indices in EACH
+/// process independently. A parent handle that happened to share a value with
+/// something the child opened for itself would be reported present, and the test
+/// would fail while nothing was actually wrong — a false alarm, never a false
+/// pass, but a flaky proof gets deleted rather than believed. Raising the
+/// parent's values out of the range a handful of child-local handles can reach
+/// turns that from a probability into a structural fact, and the assertions
+/// below check it rather than trusting it.
+const HANDLE_VALUE_FLOOR: isize = 4096;
+
 #[test]
 fn the_probe_child_sees_only_the_three_handles_it_was_allowed() {
+    let _floor = HandleFloor::raise();
+
     // The parent's own pipes. The three the child gets are INHERITABLE
     // duplicates; the three originals never leave this process.
     let (to_child, from_parent) = std::io::pipe().expect("a pipe must be creatable");
@@ -72,6 +88,7 @@ fn the_probe_child_sees_only_the_three_handles_it_was_allowed() {
     // The child has its own copies now. Dropping the parent's inheritable
     // duplicates is what lets the child observe end-of-stream on stdin and what
     // lets THIS process observe it on the child's stdout.
+    let allowed_values = allowed.values();
     drop(allowed);
     drop(to_child);
     drop(to_parent);
@@ -88,6 +105,12 @@ fn the_probe_child_sees_only_the_three_handles_it_was_allowed() {
     assert!(
         forbidden.iter().all(|value| *value != 0),
         "the recorder did not capture every handle the launch produced"
+    );
+    // The floor holds for everything the child is asked about, so a `present`
+    // answer below can only mean a real leak and never a coincidental value.
+    assert!(
+        forbidden.iter().chain(allowed_values.iter()).all(|value| *value >= HANDLE_VALUE_FLOOR),
+        "a handle value fell below the floor, so absence would be ambiguous"
     );
 
     let line = forbidden.map(|value| value.to_string()).join(" ");
@@ -131,6 +154,57 @@ fn the_probe_child_sees_only_the_three_handles_it_was_allowed() {
     contained.close().expect("closing the probe's handles must succeed");
     job.close().expect("closing the real Job must succeed");
     drop(child_errors);
+}
+
+/// Holds enough handles open that every value allocated afterwards is at or
+/// above [`HANDLE_VALUE_FLOOR`].
+///
+/// Windows hands out the lowest free index, so keeping the low ones occupied is
+/// all it takes. The duplicates are of this process's own pseudo-handle — the
+/// cheapest real handle available — and NON-inheritable, so they could not reach
+/// a child even if the allowlist were not already stopping them.
+struct HandleFloor {
+    handles: Vec<HANDLE>,
+}
+
+impl HandleFloor {
+    fn raise() -> Self {
+        let mut handles = Vec::new();
+        loop {
+            let mut duplicate: HANDLE = ptr::null_mut();
+            // SAFETY: both process arguments are pseudo-handles needing no
+            // close, and `duplicate` is a live out-parameter. bInheritHandle is
+            // 0 (FALSE) deliberately.
+            let ok = unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    GetCurrentProcess(),
+                    GetCurrentProcess(),
+                    &mut duplicate,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            };
+            assert!(ok != 0, "DuplicateHandle failed while raising the handle floor");
+            let value = duplicate as isize;
+            handles.push(duplicate);
+            if value >= HANDLE_VALUE_FLOOR {
+                return Self { handles };
+            }
+            assert!(handles.len() < 65_536, "handle values never reached the floor");
+        }
+    }
+}
+
+impl Drop for HandleFloor {
+    fn drop(&mut self) {
+        for handle in &self.handles {
+            // SAFETY: each was produced by DuplicateHandle here and is closed
+            // exactly once.
+            unsafe { CloseHandle(*handle) };
+        }
+    }
 }
 
 /// Three inheritable duplicates, closed exactly once each.

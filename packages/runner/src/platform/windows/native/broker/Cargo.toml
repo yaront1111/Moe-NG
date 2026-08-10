@@ -10,6 +10,14 @@ publish = false
 # the same workspace and has no registry existence. ANY Win32 Job or process
 # syscall the broker needs comes from here — restating one locally would be a
 # second, untested authority over the same kernel objects.
+#
+# WHO USES IT TODAY: tests/handle_inheritance.rs, which launches the probe child
+# through the real production path (Job::create, then ContainedProcess::create)
+# rather than through a bespoke CreateProcessW written for the test. This crate's
+# own production code does no Job or process work yet — that arrives with the
+# SPIDR siblings that add session and lifecycle. A regular dependency rather than
+# a dev-dependency for exactly that reason: it is the crate's stated architecture,
+# not a test-only convenience.
 [dependencies]
 moe-windows-job-core = { path = ".." }
 
