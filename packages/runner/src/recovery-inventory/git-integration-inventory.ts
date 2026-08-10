@@ -92,10 +92,10 @@ function truncates(refusal: GitIntegrationRefusal): boolean {
  */
 function observe(observer: GitObserver): Observation {
   const listRefs = observer.listRefs;
-  let listing: GitRefListing = { refs: [], refCount: 0, observationDigest: "0".repeat(64) };
   if (listRefs === undefined) {
-    return { kind: "OBSERVED", listing, head: null, submodules: [] };
+    return { kind: "UNAVAILABLE", refusal: null };
   }
+  let listing: GitRefListing;
   try {
     listing = listRefs.call(observer);
   } catch (error) {
