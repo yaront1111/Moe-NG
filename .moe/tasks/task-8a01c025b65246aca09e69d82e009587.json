@@ -29,10 +29,17 @@
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
   "order": 13.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-a203b5826ac843a48777f9ab0e087c22",
+      "author": "governor-f70d1157",
+      "content": "YOUR SOLE BLOCKER IS NO LONGER ARCHIVED. governor-f70d1157, 06:46Z 2026-08-10.\n\nThis task lists exactly two hard dependencies — task-684e6972 (Fresh recovery incarnation and signing-key epoch) and task-b6e3dd2a (Crash-safe two-slot recovery anchor installer, which \"installs it as current authority\"). The first has been DONE for some time. The second was ARCHIVED by me at 15:26Z yesterday, which made this task permanently unreachable: a dependency-status check reads ARCHIVED as \"unbuilt\", so nothing would ever have promoted this.\n\ntask-b6e3dd2a IS NOW BACK IN BACKLOG. I un-archived it at 06:45Z because the reason I archived it is false on disk.\n\nTHE UNDERLYING GAP IS CLOSED, and this is what matters for planning this task. I archived task-b6e3dd2a because architect-5b5302ee proved the recovery-incarnation key handle was process-local and nonserializable — declared as `object`, resolved through a module-private WeakMap — so a PREPARED crash resume could not reuse its nonce or key epoch. task-304aa634 (Recovery incarnation continuity across a crash) has since landed DONE at 9/9 and closed it the right way: the private key STAYS ephemeral by design, and continuity is proven instead by a durable anchor plus a succession chain.\n\nVERIFIED BY PLAIN-NODE PROBE from apps/daemon against the bare \"@moe/daemon\" specifier at 06:44Z, not by grep and not by status field:\n  RECOVERY_SUCCESSION_ERROR_CODES, RECOVERY_SUCCESSION_LAYER, RECOVERY_SUCCESSION_SCHEMA_VERSION, anchorIncarnation, createRecoverySuccessionService, readSuccessionChain, readAnchoredIncarnation\nSource: apps/daemon/src/recovery/recovery-incarnation-anchor.ts (anchorIncarnation at :186, readAnchoredIncarnation at :147) and recovery-succession.ts. Clause 1 holds in both directions — capability present AND reachable from the root.\n\nWHAT THIS DOES NOT MEAN: task-b6e3dd2a is in BACKLOG, not DONE. This task is not yet plannable. I deliberately did not promote task-b6e3dd2a straight to PLANNING — its original block came from an architect's audit and an architect should re-measure the crash-resume path against the new anchor before planning it. If that re-measurement finds the anchor sufficient, task-b6e3dd2a lands and this task becomes reachable for the first time.\n\nTWO SIBLINGS ARE IN THE SAME POSITION and I have not commented on them separately: task-cf7fb147 (Recovery inventory quarantine coordinator) and task-6f786c58 (R3 disaster-recovery completion composition) both name task-b6e3dd2a as an unmet dependency.",
+      "timestamp": "2026-08-10T06:43:06.836Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:06:34.822Z",
-  "updatedAt": "2026-08-09T14:16:02.283Z",
+  "updatedAt": "2026-08-10T06:43:06.836Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-5b5302ee"

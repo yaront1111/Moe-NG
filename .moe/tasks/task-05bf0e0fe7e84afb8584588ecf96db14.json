@@ -20,9 +20,91 @@
     "Keep every Rust production source focused, target and hard-cap <=250 physical lines; split before 400. Never commit Cargo target output, binaries, transcripts or smoke evidence.",
     "Do not implement frame codec, control/status vocabulary, CANCEL, Job creation, process launch, lifecycle delegation, completion semantics, or idempotence. Those belong to SPIDR siblings 3b, 3c and 3d and implementing them here collides with their owners in the shared working directory."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND RE-MEASURE. Write nothing. Confirm each of these and STOP with moe.report_blocked if any differs, because the plan is calibrated to them: (a) packages/runner/src/platform/windows/native/Cargo.toml is a single `[package] name = \"moe-windows-job-core\"` with no `[workspace]` and no `[[bin]]`; (b) the core's own verification command is green at HEAD (expect job_sweep 7, process_sweep 28, real_windows 2, 0 ignored, release exit 0); (c) `node --version` is v24.16.0 on win32-x64 and cargo/rustc are 1.96.0; (d) the core still exports Job, ContainedProcess, ProcessSpec, CreatedProcess, SystemWin32, RawHandle, NativeError, NativeOp and INHERITED_HANDLE_COUNT from its lib.rs. Record `grep -c ''` for every existing Rust source, the repo-wide gate result as the PRE-DIFF baseline required by the path-attributed-baseline rail, `git rev-parse HEAD`, the merge-base, and which foreign paths are already dirty in `git status --porcelain`.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE RE-MEASURED at HEAD 6de0ad02124ebf31d72ed7f63ece3c0090825196, merge-base 1e3057ab938236a98105177fb060021ff992b529. All four preconditions hold; nothing written.\n\n(a) native/Cargo.toml IS a single `[package] name = \"moe-windows-job-core\"` with no [workspace] and no [[bin]]. 47 lines, all deps under [target.'cfg(windows)'.dependencies] windows-sys = \"=0.61.2\" features Win32_Foundation, Win32_Security, Win32_System_JobObjects, Win32_System_Threading. Note Win32_Storage_FileSystem is ABSENT, so GetFileType is not reachable from the core's feature set — the broker manifest must add it.\n(b) CORE GREEN AT HEAD, pre-diff: `cargo test --locked --manifest-path .../native/Cargo.toml --target-dir dist/windows-job-native` exit 0 (process_sweep 28 passed 0 ignored, real_windows 2 passed 0 ignored, doc-tests 0); `cargo build --locked --release ...` exit 0.\n(c) node v24.16.0 win32-x64; cargo 1.96.0 (30a34c682 2026-05-25); rustc 1.96.0 (ac68faa20 2026-05-25); rust-toolchain.toml channel \"1.96.0\". Matches.\n(d) lib.rs re-exports Job, ContainedProcess, ProcessSpec, CreatedProcess, SystemWin32, RawHandle, NativeError, NativeOp, INHERITED_HANDLE_COUNT, plus OwnedHandle and the lifecycle/unwind fns. CORRECTION to planningNotes: OwnedHandle the TYPE is `pub use handle::OwnedHandle`, but `OwnedHandle::new` and `::raw` are pub(crate) (handle.rs:37,43) — so the broker still cannot construct one and needs its own owner, as planned. Job::handle and ContainedProcess::process_handle are also pub(crate); ContainedProcess::create(&calls, &job, &spec) takes &Job, so the probe launch is reachable without them.\n\nPRE-DIFF LINE COUNTS, `grep -c ''`: src/handle.rs 77, src/job.rs 93, src/lib.rs 73, src/lifecycle.rs 213, src/process.rs 218, src/spec.rs 78, src/unwind.rs 74, src/win32.rs 185, src/win32/process_calls.rs 171, src/win32/system_job.rs 130, src/win32/system_lifecycle.rs 105, src/win32/system_process.rs 210, src/win32/system_process_attrs.rs 162; tests/job_sweep.rs 312, tests/process_sweep.rs 1157, tests/real_windows.rs 393.\n\nREPO-WIDE GATE PRE-DIFF BASELINE (path-attributed-baseline rail, leg 1): `pnpm typecheck` exit 0, all 11 packages Done — no pre-existing red to attribute. The diff for this task is Rust-only (.rs + one Cargo.toml section) under a directory no TS gate scans, so the TS legs cannot be moved by it; I will re-run typecheck post-diff as leg 2 regardless.\n\nIGNORE COVERAGE CONFIRMED: `git check-ignore -v` says native/.gitignore:9 `target/` covers the crate target tree and root .gitignore:4 `dist/` covers dist/windows-job-native.\n\nFOREIGN DIRTY PATHS AT BASELINE (not mine, not to be staged): .moe/messages/chan-75ef142c…, chan-c57d1d65…, chan-ced99359… .jsonl; .moe/tasks/*.json for tasks 04e43674, 05bf0e0f, 10cab3e5, 14ab762d, 667b1085, 8a01c025, af3d7bc8, b6e3dd2a, e8e27f76, f6c9011b; packages/runner/src/scope/scope-git-classify.test.ts; untracked .moe/tasks/task-55e2c4c8….json and task-e18b1284….json. Note scope-git-classify.ts was dirty at session start and is now clean — a peer committed mid-session, so HEAD is live.",
+      "startedAt": "2026-08-10T06:45:31.586Z",
+      "completedAt": "2026-08-10T06:47:16.378Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "WORKSPACE WIRING AND EMPTY PACKAGE. Add ONLY a `[workspace] members = [\"broker\"]` section to the existing native/Cargo.toml -- a manifest may be both a package and a workspace root, so the core keeps its exact current layout. Do not touch the core's package keys, its `=0.61.2` windows-sys pin, or its feature list, and do NOT move any core file into a native/core/ directory. Create native/broker/Cargo.toml declaring package `moe-windows-job-broker`, publish = false, edition 2021, depending on `moe-windows-job-core` by relative path and on the same exact-pinned `=0.61.2` windows-sys with the features descriptor work needs (Win32_Foundation, Win32_System_Threading, Win32_Storage_FileSystem at minimum -- GetFileType lives in Storage_FileSystem, not Threading). Create a minimal native/broker/src/main.rs that compiles and exits 0. GATE THIS STEP TWICE: `cargo test --locked ... -p moe-windows-job-broker` must now RESOLVE and exit 0, AND the core's own verification command must still exit 0 unchanged. Confirm with `git status --porcelain` that no core source file shows as modified or renamed.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/Cargo.toml"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+        "packages/runner/src/platform/windows/native/broker/src/main.rs"
+      ],
+      "startedAt": "2026-08-10T06:47:23.714Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED: THE HOSTILE-BLOCK UNIT TESTS, before any parser exists. Write them against a pure function that takes the raw bytes plus a declared cbReserved2 and returns Result<Descriptors, Reason>, so the hostile cases need no real process. Cover, each asserting its OWN exact stable reason code and never merely that parsing failed: absent block (null pointer or cbReserved2 == 0); cbReserved2 < 4 so even the count cannot be read; a count whose implied size EXCEEDS cbReserved2; a count of u32::MAX that must refuse via checked arithmetic rather than overflow into a small size; a count smaller than 6 so fd3/4/5 are not present at all; a slot carrying INVALID_HANDLE_VALUE or 0; and a slot whose handle is a real handle that is NOT a pipe. Assert a nonzero exact case count so a generator producing zero cases fails. These must be unit tests over bytes -- do not require a spawned process to reach them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/main.rs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN: THE DESCRIPTOR PARSER. Create native/broker/src/descriptors.rs. Read the CRT block from GetStartupInfoW's lpReserved2/cbReserved2. LAYOUT, CONFIRMED EMPIRICALLY ON THIS HOST: u32 count, then `count` bytes of per-fd flags, then `count` POINTER-SIZED handles; total 4 + count*(1 + size_of::<usize>()), which measured exactly 58 for count=6 on x64. Use size_of::<usize>(), never a hardcoded 8. Use read_unaligned for every field -- the handle array is not guaranteed aligned when count is odd, and a plain read is UB. Bounds-check before every read: require cbReserved2 >= 4 before reading the count, then require the full computed size via CHECKED arithmetic before touching either array. Verify each descriptor with GetFileType == windows_sys FILE_TYPE_PIPE. IMPORT THAT CONSTANT; DO NOT WRITE A LITERAL -- FILE_TYPE_PIPE is 3 and FILE_TYPE_CHAR is 2, and a literal 2 here refuses every valid pipe while looking like a Node bug. Treat 0 and INVALID_HANDLE_VALUE as absent slots rather than calling GetFileType on them. Model each acquired descriptor as an owner that closes exactly once, mirroring the core's handle discipline; do not reuse the core's OwnedHandle, whose constructor is deliberately pub(crate). Refusals carry a closed reason code plus a numeric Win32 code where one exists, and never a handle value.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/main.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/descriptors.rs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE COOPERATING PROBE CHILD. Create native/broker/src/bin/handle_probe.rs. Cargo autobins discovers src/bin/*.rs with no manifest entry and exposes CARGO_BIN_EXE_handle_probe to integration tests. This is committed SOURCE for a durable test fixture, not a banned probe artifact -- its compiled output lands in the ignored target/dist tree like any binary; note that explicitly in the commit message so QA does not read the filename as smoke-test leftover. The probe accepts, via argv, the numeric handle values its parent holds (fd0, fd1, fd2, Job, process, thread) and reports for each whether it is present and usable in ITS OWN handle table, using GetHandleInformation and GetFileType. It separately reports whether fd3/fd4/fd5 resolved from its own CRT block and are FILE_TYPE_PIPE. It reports via its exit code and fd1, never by parsing anything, and it must not link or drive the Job core. Keep it small and free of production logic.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/bin/handle_probe.rs"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "REAL NODE LOADABILITY. Create native/broker/tests/node_loadability.rs. It spawns the RELEASE broker binary from real Node v24.16.0 with `shell:false` and exactly six pipes, and asserts fd3/fd4/fd5 resolve to valid FILE_TYPE_PIPE handles. The test RUNS -- no #[ignore], no cfg gate, no stub. IT MUST NEVER SKIP SILENTLY: if Node is missing, is the wrong version, or the release binary cannot be located, the test FAILS with a message naming what was missing, because a skip that reports success is exactly the vacuous pass the DoD forbids. Resolve the release binary deterministically rather than guessing a path, and if the test must trigger the release build itself, do that explicitly and fail on a nonzero build status. Assert on the child's reported descriptor inventory, not merely on its exit code, so a child that exits 0 without checking anything cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/node_loadability.rs"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE NON-INHERITANCE PROOF, FROM THE CHILD'S SIDE. Extend tests/node_loadability.rs (or add the case beside it) to launch handle_probe THROUGH moe-windows-job-core -- Job::create, then ContainedProcess::create with a ProcessSpec whose `inherited` array carries ONLY fd3/fd4/fd5 -- so the evidence is about the real production launch path rather than a bespoke one. Pass the probe the numeric values of fd0, fd1, fd2 and of the Job, process and thread handles. Assert POSITIVELY from the child's report that fd3/4/5 are present and usable AND that every one of the other six is absent or unusable in the child's handle table. Absence must be demonstrated by the child, never inferred from the fact that the parent did not list them -- that inference is the assumption this DoD item exists to reject. Do not assert any specific numeric handle value; values are not stable across runs. Close every handle and reap the probe on every path including failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/node_loadability.rs"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "WIRE UP AND AUDIT SIZE. Make main.rs a real entry point: acquire descriptors, verify them, exit with a stable code, and emit nothing that could be mistaken for a protocol frame -- framing, vocabularies and session belong to siblings 3b and 3c and must not appear here even as a placeholder. Add module docs stating the scope boundary and naming those siblings, in the style the core crate uses. Then audit every Rust production source in the broker package with `grep -c ''` and record each count -- main.rs, descriptors.rs, bin/handle_probe.rs -- and confirm every one is <=250. Split by responsibility rather than by reformatting if any exceeds it; a descriptors.rs that grows past the bar splits into block parsing versus handle verification.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/main.rs"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "VERIFY, ATTACK, COMMIT. (a) Run the task's exact verification command -- locked test AND locked release build for -p moe-windows-job-broker -- and paste real output; both exit 0. Also re-run the CORE's verification command and confirm it is still green and unchanged. (b) Compare against the step-1 baseline; any repo-wide red must exist at the merge-base too or it is yours. (c) MUTATION DRILL, required by epic rail 6: change FILE_TYPE_PIPE to FILE_TYPE_CHAR and confirm the pipe-verification tests go RED; remove one bounds check and confirm the corresponding hostile-block case goes RED; make the non-inheritance test assert only what the parent passed instead of what the child observed and confirm it no longer detects a deliberately leaked handle. Restore each and re-confirm green, verifying by reading file contents rather than trusting a clean git status, since a foreign whole-tree commit can capture a drill edit. (d) Adversarial pass: no handle value, executable path, argv, cwd or environment reaches any error, log or panic message; the parser cannot panic on any input; every acquired handle closes exactly once. (e) Confirm no target output, binary, transcript or smoke evidence is staged. (f) `git status --porcelain`, unstage anything foreign with `git restore --staged`, commit by explicit pathspec over this task's owned paths only, and verify with `git show --stat`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-01abf979",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -34,5 +116,40 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:05.950Z",
-  "updatedAt": "2026-08-10T06:38:05.950Z"
+  "updatedAt": "2026-08-10T06:47:23.714Z",
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T06:45:03.427Z",
+  "metrics": {
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 6,
+    "firstClaimAt": "2026-08-10T06:45:15.578Z",
+    "executedStepCount": 1
+  },
+  "planningNotes": {
+    "approachesConsidered": "PROVING HANDLE ABSENCE NEEDS A COOPERATING CHILD. DoD item 5 requires proving fd0/1/2, Job, process and thread handles are NOT in the provider's handle table. You cannot prove a negative from the parent by asserting what it did not pass -- that is the assumption, not the evidence. Chose a `src/bin/handle_probe.rs` cooperating child: the parent passes the numeric handle values it holds via argv, and the child asserts each is invalid or refers to something else (GetHandleInformation/GetFileType failing), while separately confirming fd3/4/5 ARE usable. Cargo autobins discovers src/bin/*.rs with no manifest entry and exposes CARGO_BIN_EXE_handle_probe to integration tests.\n\nWHY THAT IS NOT A BANNED PROBE ARTIFACT: rail 5 forbids committing generated evidence, transcripts and binaries. This is committed SOURCE for a durable test fixture, and its compiled output lands in the ignored target/dist tree like every other binary. Say so in the commit message so QA does not read the filename as a smoke-probe leftover. Rejected the alternative of a hidden argv mode on the broker binary itself: it puts test-only branching in the production entry point, which is worse than a separate fixture.\n\nWHY NOT A WAIT-BASED PROOF LIKE THE CORE USED. For 2b I replaced a marker-file proof with a kernel-observable wait, which was strictly better. That trick does not transfer: handle-table membership has no timing signature, so a cooperating child is genuinely the minimum.\n\nWORKSPACE SHAPE. Chose package-plus-workspace-root on the existing manifest. Rejected a virtual workspace with core moved to native/core/: it relocates nine files owned by two DONE tasks and invalidates the verification commands recorded in their completion evidence, for zero benefit.\n\nDESCRIPTOR OWNERSHIP. Chose to model each acquired descriptor as an owned handle closing exactly once, mirroring the core's OwnedHandle discipline. Did NOT reuse core's OwnedHandle directly: its constructor is pub(crate) and deliberately so -- the core's comment explains that exposing it would let a second owner close the same raw value. The broker needs its own small owner over its own descriptors; that is not duplicated Win32 AUTHORITY (no Job or process syscall), it is local RAII.",
+    "codebaseInsights": "I RAN THE DESCRIPTOR MECHANISM END TO END BEFORE PLANNING IT, in scratchpad, not the repo. This is the foundation of the whole task and I would not plan it from memory. A release Rust binary built against windows-sys =0.61.2, spawned from real Node v24.16.0 with `shell:false` and `stdio:['pipe' x6]`, calling GetStartupInfoW, printed:\n\n  cbReserved2=58   count=6   declared 4 + 6*(1+8) = 58   consistent=true\n  fd0..fd5  flags=0x09  handles 0x2c8,0x2d0,0x2d8,0x2e0,0x2e8,0x2f0  GetFileType=3 for all six\n\nWHAT THAT ESTABLISHES:\n1. The CRT lpReserved2 block IS populated for a NON-libuv child. Rust does not link libuv and does not use the msvcrt fd table, yet the block is there and parseable. The mechanism the task assumes is real on this host.\n2. LAYOUT, CONFIRMED ON x64: u32 count, then `count` bytes of per-fd flags, then `count` pointer-sized HANDLEs. 4 + 6*(1+8) = 58 matched cbReserved2 EXACTLY. Note the handle array is pointer-sized, so the formula is 4 + count*(1 + size_of::<usize>()) and hardcoding 8 would be wrong on a 32-bit target.\n3. THE TRAP, AND IT IS THE ONE MOST LIKELY TO SINK THIS TASK: **FILE_TYPE_PIPE == 3, NOT 2.** Verified in windows-sys source: FILE_TYPE_UNKNOWN=0, FILE_TYPE_DISK=1, FILE_TYPE_CHAR=2, FILE_TYPE_PIPE=3. My own probe printed a label saying \"2=PIPE\" and it was WRONG; the observed 3 is correct and all six really are pipes. A worker who assumes 2 refuses every valid descriptor and will chase it as a Node bug. Import the constant, never a literal.\n4. flags=0x09 = FOPEN(0x01) | FPIPE(0x08), which independently corroborates pipe-ness from the CRT's own view. Useful as a cross-check but GetFileType is the authority the DoD names.\n5. The handles are NOT sequential-by-luck; do not infer fd n's handle from fd 0's.\n\nMANIFEST STRUCTURE, measured: packages/runner/src/platform/windows/native/Cargo.toml is a SINGLE `[package] name = \"moe-windows-job-core\"`. `grep -n \"\\[workspace\\]\\|\\[\\[bin\\]\\]\"` returns nothing. So `-p moe-windows-job-broker` cannot resolve today. Adding `[workspace] members = [\"broker\"]` to that SAME file makes it both a package and a workspace root and moves ZERO existing files. Do not restructure into native/core/.\n\nCORE CRATE, measured green at HEAD: job_sweep 7, process_sweep 28, real_windows 2 passed with 0 ignored, release exit 0. Public surface the broker consumes: `Job`, `ContainedProcess`, `ProcessSpec` (all fields pub), `CreatedProcess`, `SystemWin32`, `RawHandle::new` (pub), `NativeError`/`NativeOp`, `INHERITED_HANDLE_COUNT`, and the lifecycle/unwind functions. The `pub(crate)` items (OwnedHandle::new, Job::handle, ContainedProcess::process_handle, spec::validate) are ones the broker never needs -- it passes `&Job` and `&ProcessSpec` by reference.\n\nHOST: node v24.16.0 win32-x64, cargo/rustc 1.96.0 matching rust-toolchain.toml. DoD item 2's pin is satisfiable honestly here.\n\nNO Node consumer exists (grep across packages/ for the broker name or a 6-entry stdio array returns nothing). Expected: consumer is task-4d1f8ba5, named per the pure-package rail. Do not build one here.",
+    "risks": "1. FILE_TYPE_PIPE == 3. Repeating it because it is the single likeliest way this task fails: a literal 2 refuses every valid pipe and looks like a Node or libuv bug. Import windows_sys FILE_TYPE_PIPE; never write the number.\n\n2. lpReserved2 IS HOSTILE INPUT from the broker's perspective and the DoD treats it that way. Every read must be bounds-checked against cbReserved2 BEFORE it happens: read the count only if cbReserved2 >= 4, then require cbReserved2 >= 4 + count*(1 + size_of::<usize>()) before touching the flags or handle arrays. A count of u32::MAX must refuse, not multiply-overflow into a small number -- use checked arithmetic. A panic is a failure of this task, not a refusal.\n\n3. Use read_unaligned. The block is a byte buffer with a u32 followed by count bytes followed by pointer-sized values; the handle array is NOT guaranteed aligned for usize when count is odd. A plain pointer read is UB and may fault. My probe used read_unaligned throughout and that was deliberate.\n\n4. INVALID_HANDLE_VALUE and 0 both appear in real blocks for unused slots. Node fills all six here, but a defensive parser must classify those as absent rather than calling GetFileType on them.\n\n5. The Node loadability test needs the RELEASE binary, which the plain `cargo test` leg does not build. If it cannot find the binary it must FAIL, never skip -- a silent skip is exactly the vacuous pass DoD item 4 forbids. Resolve it deterministically rather than by guessing a path, and if the test must build it, do that explicitly.\n\n6. Handle VALUES are not stable across runs and must never be asserted as constants; assert only their TYPE and usability. Also, per the epic rail, a handle value must never reach an error, a log or a status frame -- my probe printed them because it was a throwaway diagnostic, and production must not.\n\n7. Shared working directory with a starving fleet: three workers are idle and several architects are active. Before committing, `git status --porcelain`, unstage anything foreign, commit by explicit pathspec over the six owned paths, verify with `git show --stat`.\n\n8. Do not let the broker restate a Job or process syscall. It imports moe-windows-job-core. The non-inheritance test launches its probe child THROUGH the core, which is also what makes that test evidence about the real launch path rather than about a bespoke one.",
+    "keyFiles": [
+      "packages/runner/src/platform/windows/native/Cargo.toml",
+      "packages/runner/src/platform/windows/native/src/lib.rs",
+      "packages/runner/src/platform/windows/native/src/spec.rs",
+      "packages/runner/src/platform/windows/native/src/handle.rs",
+      "packages/runner/src/platform/windows/native/tests/real_windows.rs"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 14400000
+  },
+  "planApprovedAt": "2026-08-10T06:45:05.458Z",
+  "contextFetchedBy": [
+    "worker-01abf979"
+  ],
+  "workStartedAt": "2026-08-10T06:45:31.586Z"
 }

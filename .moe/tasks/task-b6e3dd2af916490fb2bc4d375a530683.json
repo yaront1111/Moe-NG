@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "ARCHIVED",
+  "status": "BACKLOG",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Transit to BACKLOG for ARCHIVE by governor-f70d1157 at 15:26Z. Already BACKLOG since 14:44Z; re-stating because BACKLOG does not hold and this task is currently re-servable.\n\nWHY ARCHIVE: architect-cb476f76 proved at 15:04Z that claim_next_task re-serves demoted tasks. This one is especially dangerous to leave in the pool because a NAIVE DEPENDENCY CHECK SAYS IT IS READY: both its stated hard dependencies (task-5606947a Cursor-bound complete backup generation, task-684e6972 Fresh recovery incarnation and signing-key epoch) are DONE with published root exports. My own audit script flagged it \"*** ALL DEPS DONE ***\" at 14:57Z.\n\nIT IS NOT READY, and the reason is the sharpest lesson of the session. architect-5b5302ee's audit found the landed recovery-incarnation key handle is PROCESS-LOCAL and NONSERIALIZABLE: recovery-incarnation-contract.ts:42 declares RecoveryIncarnationKeyHandle = object, resolved to key material \"through a module-private WeakMap\". A WeakMap lookup cannot survive process death. A PREPARED crash resume therefore cannot reuse the same nonce or key epoch — which is exactly what a crash-safe two-slot anchor installer must do.\n\nSYMBOL PRESENCE IS NOT CAPABILITY FITNESS. The dependency is present, exported, reachable, and unusable for this consumer because its LIFETIME is bounded by the process. Grep cannot see that; only reading the contract can. Anyone who re-promotes this on a dependency-status check will be wrong, and the check will look like it passed.\n\nREAL UNBLOCK CONDITION: task-304aa634 (Recovery incarnation continuity across a crash) must land. Note that worker-2811ade9 has since blocked THAT task too, having measured that nothing anywhere in the repo persists a RecoveryIncarnationBinding — so this chain needs a persistence prerequisite before either task is plannable.\n\nReversible when a durable succession capability exists and is verified on disk BY READING ITS LIFETIME SEMANTICS, not by grepping for the symbol.",
+  "reopenCount": 1,
+  "reopenReason": "UN-ARCHIVED by governor-f70d1157 at 06:45Z on 2026-08-10. I archived this task myself at 15:26Z yesterday and the reason I gave is now FALSE on disk. Reversing my own action.\n\nWHY I ARCHIVED IT: architect-5b5302ee found that the landed recovery-incarnation key handle was PROCESS-LOCAL and NONSERIALIZABLE — RecoveryIncarnationKeyHandle is declared as `object` and resolved through a module-private WeakMap, so a PREPARED crash resume could not reuse the same nonce or key epoch. I recorded it as the sharpest lesson of the session: SYMBOL PRESENCE IS NOT CAPABILITY FITNESS. That was correct at the time. worker-2811ade9 then blocked the remedy task with a further measurement: \"NOTHING persists a RecoveryIncarnationBinding anywhere in the repo.\"\n\nWHAT CHANGED: task-304aa634 (Recovery incarnation continuity across a crash: re-mint and prove succession) is DONE at 9/9 steps. I created that task on 2026-08-09 specifically to close this gap, and it landed the durable half that was missing:\n- apps/daemon/src/recovery/recovery-incarnation-anchor.ts exports anchorIncarnation (:186) and readAnchoredIncarnation (:147)\n- apps/daemon/src/recovery/recovery-succession-contract.ts and recovery-succession.ts landed the succession chain\n\nVERIFIED BY PLAIN-NODE PROBE, not by grep and not by status field — run from apps/daemon against the bare \"@moe/daemon\" specifier at 06:44Z:\n  anchor/succession root exports: RECOVERY_SUCCESSION_ERROR_CODES, RECOVERY_SUCCESSION_LAYER, RECOVERY_SUCCESSION_SCHEMA_VERSION, anchorIncarnation, createRecoverySuccessionService, readSuccessionChain, readAnchoredIncarnation\nClause 1 satisfied in both directions: the capability exists AND has a published, reachable consumer edge. index.ts:211-220 documents the intent — \"anchorIncarnation is published alongside the succession service because an ORIGIN incarnation has to be anchored by whoever mints it: without it a root consumer could never place one.\"\n\nThe ephemeral private key was NOT made durable, which was the constraint I wrote into the remedy task: the key stays process-local by design, and continuity is proven by anchoring and succession records instead. That is the right shape and it is why this now works.\n\nWHY BACKLOG RATHER THAN STRAIGHT TO PLANNING: I am not re-promoting it into the claim pool on my own measurement alone. Its original block came from an architect's audit, and an architect should re-measure the crash-resume path against the new anchor before planning. If the anchor genuinely satisfies the two-slot installer's needs, promote it; if a gap remains, block it again and the record will show why.\n\nBLAST RADIUS THIS UNLOCKS — three CRITICAL backlog tasks name this as an unmet dependency and can move once it lands: task-8a01c025 (Recovery-incarnation command authentication fence, blocked on this alone), task-cf7fb147 (Recovery inventory quarantine coordinator), task-6f786c58 (R3 disaster-recovery completion composition).",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -39,11 +39,8 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:05:35.053Z",
-  "updatedAt": "2026-08-09T15:25:00.885Z",
-  "contextFetchedBy": [
-    "architect-f39f0c46",
-    "architect-5b5302ee"
-  ],
+  "updatedAt": "2026-08-10T06:42:47.599Z",
+  "contextFetchedBy": [],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:12:14.266Z"
   },
@@ -61,5 +58,6 @@
       "releasedBy": "architect-5b5302ee",
       "reason": "Explicit blocked-task handoff after root-cause audit; continuing the human-requested planning queue."
     }
-  ]
+  ],
+  "failedDodItems": []
 }

@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "moe-windows-job-broker"
+version = "0.1.0"
+dependencies = [
+ "moe-windows-job-core",
+ "windows-sys",
+]
+
+[[package]]
 name = "moe-windows-job-core"
 version = "0.1.0"
 dependencies = [

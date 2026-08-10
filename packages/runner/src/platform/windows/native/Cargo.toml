@@ -1,3 +1,18 @@
+# A manifest may be BOTH a package and a workspace root, and this one is. The
+# broker crate lives at broker/ and is a member; `moe-windows-job-core` keeps
+# its existing layout (src/ and tests/ stay exactly where they are).
+#
+# WHY NOT A VIRTUAL WORKSPACE WITH THE CORE MOVED TO core/. That shape is the
+# textbook one, and it is wrong here: it relocates nine source files owned by
+# two completed tasks and invalidates the verification commands recorded in
+# their evidence, for no benefit this crate can observe. Adding this table
+# moves zero existing files.
+#
+# The resolver is 2 by inheritance from the root package's `edition = "2021"`,
+# so no explicit `resolver` key is needed and none is added.
+[workspace]
+members = ["broker"]
+
 [package]
 name = "moe-windows-job-core"
 version = "0.1.0"

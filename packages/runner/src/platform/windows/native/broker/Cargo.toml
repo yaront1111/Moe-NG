@@ -1,0 +1,38 @@
+[package]
+name = "moe-windows-job-broker"
+version = "0.1.0"
+edition = "2021"
+# Never published. This is the native side of the Node runner's job broker, not
+# a distributable library.
+publish = false
+
+# The Job/process primitive. Imported by relative path because it is a member of
+# the same workspace and has no registry existence. ANY Win32 Job or process
+# syscall the broker needs comes from here — restating one locally would be a
+# second, untested authority over the same kernel objects.
+[dependencies]
+moe-windows-job-core = { path = ".." }
+
+# The SAME exact pin as the core: `=0.61.2` forbids 0.61.3, where a plain
+# "0.61.2" would silently accept it. Two crates in one workspace disagreeing on
+# this pin would be resolved silently by Cargo rather than reported.
+#
+# Features are declared per-target for the same reason the core's are: this
+# crate is Windows-only by construction and has no non-Windows fallback.
+#
+# Win32_Storage_FileSystem is REQUIRED and is the one the core does not have:
+# `GetFileType` and the `FILE_TYPE_*` constants are declared there, NOT in
+# Win32_System_Threading. Without the feature the function does not exist.
+#
+# Win32_System_Threading provides `GetStartupInfoW` and `STARTUPINFOW`, which is
+# how the CRT `lpReserved2` descriptor block is reached.
+#
+# Win32_Foundation provides HANDLE, INVALID_HANDLE_VALUE, CloseHandle,
+# GetLastError and GetHandleInformation — the last of which the handle probe
+# uses to observe what is, and is not, in its own handle table.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Threading",
+] }

@@ -18,7 +18,7 @@
     "Keep each Rust production source focused, target <=250 physical lines and split before 400; no executable, Cargo target, transcript, or generated smoke evidence may be committed."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,17 +31,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:36:05.450Z",
-  "updatedAt": "2026-08-09T20:56:36.818Z",
+  "updatedAt": "2026-08-10T06:41:53.174Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:50:47.603Z"
   },
   "contextFetchedBy": [
     "architect-21f667ae"
   ],
-  "blockedReason": null,
+  "blockedReason": "SPLIT, NOT STUCK. Now a SPIDR parent shell. Blocking only to keep it out of the PLANNING claim pool; do not plan or implement it directly. Its six DoD items are redistributed across four children and satisfied THERE.\n\nCHILDREN (parentTaskId set here):\n- task-05bf0e0fe7e84afb8584588ecf96db14 -- 3a, PLANNING, 73.1. Package + workspace wiring + CRT descriptor acquisition + non-inheritance proof. DoD 2.\n- task-14ab762db8494959b93b070b9d3b3730 -- 3b, BLOCKED behind 3a. Frozen protocol, closed vocabularies, bounded framing, hostile-frame sweep. DoD 1.\n- task-55e2c4c836894a788b7a30960e4fdb1f -- 3c, BLOCKED behind 3a+3b. Job ownership, core delegation, STARTED-after-proof, natural COMPLETED. DoD 3-4.\n- task-e18b12845ec54f7483d481d4f6183ead -- 3d, BLOCKED behind all. Concurrent idempotence, detached-grandchild kill proof, acceptance. DoD 5-6 plus whole-parent regression.\n\nWHY SPLIT, on plan shape not lines (epic rail 5): one plan needs 11+ files and 12+ steps against ceilings of 10 and 12. DoD item 5 alone -- concurrent CANCEL/EOF/timeout idempotence plus a forcible-kill proof that last-Job-handle close kills a parent AND a detached grandchild -- is a task by itself. Human confirmed the 4-way split in the REPL first.\n\nMEASURED 2026-08-10, changes the work: native/Cargo.toml is a SINGLE `[package] moe-windows-job-core`, no `[workspace]`, no `[[bin]]` -- so THIS TASK'S OWN verification command (`-p moe-windows-job-broker`) cannot resolve today. Fix moving no existing file: add `[workspace] members = [\"broker\"]` to that same manifest; a manifest can be both package and workspace root. Restructuring into native/core/ would move nine files owned by two DONE tasks.\n\nAlso: no Node consumer exists. Expected -- consumer is task-4d1f8ba5, named per the pure-package rail; 3d records it.\n\nDependency task-ea76e0cf is DONE; core green at HEAD (7+28+2 tests, 0 ignored, release exit 0). Host matches DoD 2's pin: node v24.16.0 win32-x64, rustc 1.96.0.\n\nDO NOT re-plan this shell. Claim 3a.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-10T06:41:53.174Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Verified the native crate/core is absent on disk, measured the parent shell and both child statuses, reported the broker BLOCKED, and wrote task-task-af3d7bc8af2146cf92d98557ed0e90c0-handoff.",

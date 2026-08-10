@@ -98,5 +98,8 @@ describe("classifyRefFailure", () => {
     expect(classified).toBeInstanceOf(ScopeObserverError);
     expect(classified.code).toBe("RUNNER_SCOPE_OBSERVATION_FAILED");
     expect(classified.layer).toBe("GIT_OBSERVER");
+    // A foreign throw carries no message worth trusting, so the fallback names
+    // the operation instead. Pinned because nothing else asserts this constant.
+    expect(classified.message).toBe("git for-each-ref failed");
   });
 });

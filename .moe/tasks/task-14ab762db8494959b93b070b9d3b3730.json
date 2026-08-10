@@ -21,12 +21,12 @@
     "Do not implement descriptor acquisition, Job creation, process launch, lifecycle delegation, STARTED timing, completion semantics, idempotence or kill proofs. Those belong to SPIDR siblings 3a, 3c and 3d."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Depends on task-05bf0e0fe7e84afb8584588ecf96db14 (SPIDR sibling 3a), which is in PLANNING and not implemented. 3a lands the workspace wiring, the moe-windows-job-broker package and its descriptor acquisition. This task adds protocol modules to that package, so starting first means writing into a crate that does not exist.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool, which would let an architect plan this against a package that has not been created. The brief PLANNING status immediately before this was a transit hop only -- BACKLOG -> BLOCKED is not legal.\n\nUNBLOCK CONDITION: promote to PLANNING when 3a is DONE. Verify by compiling, not by reading a status field -- `cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml -p moe-windows-job-broker` must RESOLVE, and native/broker/src/descriptors.rs must be tracked at HEAD with `git status --porcelain` clean over that path.",
   "createdBy": "WORKER",
   "parentTaskId": "task-af3d7bc8af2146cf92d98557ed0e90c0",
   "priority": "CRITICAL",
@@ -34,5 +34,8 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:44.701Z",
-  "updatedAt": "2026-08-10T06:38:48.269Z"
+  "updatedAt": "2026-08-10T06:40:32.359Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-10T06:40:32.359Z",
+  "blockedReason": "Depends on task-05bf0e0fe7e84afb8584588ecf96db14 (SPIDR sibling 3a), which is in PLANNING and not implemented. 3a lands the workspace wiring, the moe-windows-job-broker package and its descriptor acquisition. This task adds protocol modules to that package, so starting first means writing into a crate that does not exist.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool, which would let an architect plan this against a package that has not been created. The brief PLANNING status immediately before this was a transit hop only -- BACKLOG -> BLOCKED is not legal.\n\nUNBLOCK CONDITION: promote to PLANNING when 3a is DONE. Verify by compiling, not by reading a status field -- `cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml -p moe-windows-job-broker` must RESOLVE, and native/broker/src/descriptors.rs must be tracked at HEAD with `git status --porcelain` clean over that path."
 }

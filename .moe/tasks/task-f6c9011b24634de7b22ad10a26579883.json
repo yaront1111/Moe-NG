@@ -96,26 +96,38 @@
     {
       "stepId": "step-6",
       "description": "Re-run QA's exact killing mutations and prove they now redden — this is the acceptance evidence for the reopen, so record the failing test NAME and the assertion text for each. Run the WHOLE package suite per drill, never a focused file, because 'nothing anywhere covers it' is the claim being disproved. (a) scope-git-classify.ts: `overflowed ? \"RUNNER_SCOPE_OBSERVATION_OVERFLOW\" : error.code` -> `error.code` — QA measured 1409 passed / ZERO red; it must now redden the already-overflow case AND the ENOBUFS case. (b) `.cause?.code === \"ENOBUFS\"` -> `false` — QA measured ZERO red; it must now redden the ENOBUFS case ONLY, leaving the already-overflow case green, which proves the two arms are pinned independently rather than by one over-broad assertion. (c) `\"GIT_OBSERVER\"` -> `\"SCOPE_DECIDER\"` — QA's control reddened 1 case before; it must now redden the new layer assertions TOO, and the pre-existing `refuses a missing repository` case must still be among them. (d) artifact-enumeration.ts:126-135, replace BOTH the code and the layer with ADDRESS_CORRUPT / ARTIFACT_STORE — QA measured 1409 passed / ZERO red; the new ninth case must now be the one that reddens. (e) Replace ONLY the layer, leaving the code — the ninth case must still redden, proving the layer half is independently pinned. Restore byte-exact after each and verify with `git hash-object` against `git rev-parse HEAD:<path>`; for the two NEW untracked files hash them before and after instead, because `git diff` cannot see an untracked file and an 'empty diff' proves nothing about them.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/scope/scope-git-classify.ts",
         "packages/runner/src/artifacts/artifact-enumeration.ts"
       ],
-      "startedAt": "2026-08-10T06:39:18.719Z"
+      "modifiedFiles": [
+        "packages/runner/src/scope/scope-git-classify.ts",
+        "packages/runner/src/artifacts/artifact-enumeration.ts"
+      ],
+      "note": "Eight drills, WHOLE 46-file/1421-test suite each, harness in %TEMP% (never the repo). Baseline green = 1421 passed.\n\n(a) OVERFLOW promotion -> plain `error.code`. QA measured ZERO red; now 1 red.\n  FAIL scope-git-classify.test.ts > classifyRefFailure > promotes an ENOBUFS spawn fault to the overflow code\n  \"expected 'RUNNER_SCOPE_OBSERVATION_FAILED' to be 'RUNNER_SCOPE_OBSERVATION_OVERFLOW'\"\n\n(a2) true-branch constant OVERFLOW -> STATUS_MALFORMED: 2 red — the already-overflowed case AND the ENOBUFS case. Proves the already-overflow arm is reached and its output pinned.\n\n(a3) DISCLOSED HONESTLY, ZERO RED, and it is an EQUIVALENT MUTANT, not a coverage hole. Deleting the first disjunct `error.code === \"RUNNER_SCOPE_OBSERVATION_OVERFLOW\" ||` leaves 1421 passing. Proof it cannot be otherwise: that disjunct only flips `overflowed` false->true when error.code IS already the overflow code, and in that state the ternary's two arms evaluate to the same string (\"RUNNER_SCOPE_OBSERVATION_OVERFLOW\" vs error.code, which is that). Output is identical for every input, so NO test can distinguish it — that is a theorem about the mutant, not a gap. Drill (a2) is the companion evidence that the case is genuinely reached. I left the disjunct in place: removing it is a production change beyond the verbatim extraction, and it is defensive if runGit's mapping ever widens.\n\n(b) `.cause?.code === \"ENOBUFS\"` -> `false`. QA measured ZERO red; now exactly 1 red, the ENOBUFS case ONLY, already-overflowed stays GREEN. That is the independence proof the plan asked for — one over-broad assertion could not produce this split.\n\n(b2) NEGATIVE CONTROL, ENOBUFS test -> `.cause !== undefined`: 2 red — the ENOENT case AND, decisively, scope-git.test.ts's REAL-git `refuses a missing repository`. A live spawn failure reddens, so the classifier is genuinely wired into listRefs and not merely tested in isolation.\n\n(c) \"GIT_OBSERVER\" -> \"SCOPE_DECIDER\" (2 occurrences): 10 red — all 9 layer-asserting classify cases PLUS QA's pre-existing `refuses a missing repository`. QA's control previously reddened 1; it now reddens 10 and the original is still among them.\n\n(d) artifact readAll catch, BOTH code and layer -> ADDRESS_CORRUPT/ARTIFACT_STORE. QA measured ZERO red; now 1 red.\n  FAIL artifact-enumeration.test.ts > ... > refuses entry-unreadable\n  \"expected 'RUNNER_ARTIFACT_ADDRESS_CORRUPT' to be 'RUNNER_ARTIFACT_VERIFY_FAILED'\"\n\n(e) layer ONLY -> ARTIFACT_STORE: 1 red, same case, \"expected 'ARTIFACT_STORE' to be 'ARTIFACT_FS_PORT'\".\n(d2) code ONLY -> ADDRESS_CORRUPT: 1 red, same case, code assertion. (e)+(d2) together prove the two halves are pinned independently — the exact failure that let QA's combined swap pass unnoticed.\n\nRESTORE VERIFIED BY HASH, not by an empty diff (three of the six files are untracked-at-HEAD, so `git diff` is blind to them). All six working-tree `git hash-object` values equal the pre-drill baseline:\n1c1a9d6b98c165b9f7736341b6852e43adeec31e scope-git-classify.ts\nf3ada24fb3f8e781cff47d6324563c8b5e60025c scope-git-classify.js\n5a9faabd2ac86e2d0125abcc5354b4249c93d24d scope-git-classify.test.ts\n26336099a08b05981b7c1bb506b05845208873df artifact-enumeration.ts\n17c2c32cc57d30131b21ca24ea1417aa1e5eb6f0 scope-git.ts\n384c243484e329ce16d52112bfaee4b186bbb50e artifact-enumeration.test.ts",
+      "startedAt": "2026-08-10T06:39:18.719Z",
+      "completedAt": "2026-08-10T06:42:25.136Z"
     },
     {
       "stepId": "step-7",
       "description": "Verify and self-review. (1) Run the gate fresh, last, and UNNARROWED: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`. Confirm the Test Files count is 45 and the test count is 1409 + your new cases — a count that did not grow means your new assertions are not being collected. (2) Confirm packages/runner/src/runtime-entrypoint.test.ts still passes: it asserts the bridge set over non-test modules, so the new scope-git-classify.js must satisfy it; if it reddens, the bridge is missing or misnamed. (3) Re-measure every touched file with `grep -c ''` and confirm scope-git.ts is now BELOW 250 rather than at it — PowerShell Measure-Object -Line skips blank lines and would tell you there is room where there is none. (4) Path-attributed baseline: repo-wide `pnpm typecheck` and `pnpm test` at merge-base and HEAD, intersect the failing-path delta with owned paths, confirm EMPTY. QA measured ZERO foreign red last round, so any red is likely yours. (5) Adversarial self-review against the defect class that caused BOTH rejections — a production branch no test reaches: re-read your own diff and ask which branches of the two changed functions are now asserted and which are still only reachable under mutation. Both rejections were 'the code landed, the assertion did not'; drills (b) and (e) exist specifically to prove each arm is pinned independently rather than by one assertion covering two. (6) Stage by explicit pathspec only, then `git diff --cached --name-only` and confirm the list is exactly the five owned paths — the git index on this board is shared. Hand QA `git hash-object` blob shas alongside a base-ref diff, and state plainly that production behaviour is unchanged apart from the verbatim extraction in step 3.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/scope/scope-git.ts",
         "packages/runner/src/scope/scope-git-classify.test.ts",
         "packages/runner/src/artifacts/artifact-enumeration.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/scope/scope-git-classify.test.ts"
+      ],
+      "note": "(1) GATE, fresh and last, unnarrowed: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` = 0 / 0. 46 test files / 1421 tests, up from 45 / 1409 — +1 file and +12 cases, so the new assertions are genuinely collected.\n(2) runtime-entrypoint.test.ts GREEN, so the new scope-git-classify.js bridge satisfies the bridge-set assertion.\n(3) LINES by `grep -c ''` (not Measure-Object, which skips blanks): scope-git.ts 250 -> 232, now BELOW the target with real headroom instead of exactly on it. New: scope-git-classify.ts 35, scope-git-classify.test.ts 105, bridge 1. Unchanged: artifact-enumeration.ts 165. artifact-enumeration.test.ts 308 -> 329 (already over target in its committed state; not split, that is scope QA did not ask for on a reopen).\n(4) PATH-ATTRIBUTED BASELINE: repo-wide `pnpm typecheck` 0 and `pnpm test` 0 — 216 files / 4059 passed + 1 skipped, on final bytes. There are ZERO failing paths at HEAD, so the (HEAD minus merge-base) failing-path delta is EMPTY by construction and nothing is attributed to anyone. Nothing foreign to disclose.\n\n(5) ADVERSARIAL SELF-REVIEW found and closed one gap of MY OWN, exactly the defect class that caused both rejections. Drill (h) — changing the fallback message constant \"git for-each-ref failed\" — left 1421 green. The branch was reached (drills f/g prove it), but that constant was unasserted. Fixed by pinning it in the foreign-throw it.each; drill (h2) now reddens all 5 foreign-throw cases. Drill (i), clobbering the `error.message` pass-through, reddens `preserves the refusal message it was handed`.\nCompleted the discriminator sweep too: drill (f) `instanceof` forced true -> 5 red (every foreign-throw case); drill (g) forced false -> 3 red (all three ScopeObserverError cases). Both arms pinned in both directions.\nFull branch inventory of the moved function, all now killed by a named case: instanceof true / instanceof false / ENOBUFS disjunct / ternary true constant / ternary false pass-through / message pass-through / layer on both arms / fallback code / fallback message. The one exception is the first disjunct, which drill (a3) shows is a provably EQUIVALENT MUTANT — disclosed with proof in step 6, not a coverage hole.\nChecklist items with nothing to fix: classifyRefFailure is pure and allocation-only (no shared state, no I/O, no handles, idempotent under concurrency and retry); null/undefined/string/primitive causes are all safe through optional chaining and are covered by the table; the only theoretical input it cannot survive is a `cause` implemented as a throwing getter, which is unreachable because the sole producer is runGit's own Object.assign of a plain data property. Cross-module `instanceof` identity is not assumed but empirically proven by drill (b2), where a REAL git spawn failure through listRefs reclassified correctly.\n\n(6) STAGING by explicit pathspec only: `git diff --cached --name-only` = exactly `packages/runner/src/scope/scope-git-classify.test.ts`, nothing else. No debug, probe or scratch files; the drill harness lived in %TEMP% and is deleted.\n\nFOREIGN COMMIT DISCLOSURE (epic rail 3 / project rail 5): commit 6de0ad0 \"chore(board): sweep in-flight fleet work and board state\" (2026-08-10 09:40:17, 27 files) is a whole-tree sweep belonging to ANOTHER task, and it captured five of my files mid-task. I did not amend, reset, or claim it. It landed between drills, so I VERIFIED rather than assumed the committed bytes: `git rev-parse HEAD:<path>` equals `git hash-object <path>` for all six files, and those working-tree hashes equal the pre-drill baseline. The committed bytes ARE the gated bytes.\n\nQA should review by base-ref diff, not by commit: `git diff b6f6f52..HEAD -- <owned paths>` = 5 files, +162/-21. Six of the eight production sources are byte-IDENTICAL to what QA already passed twice (artifact-enumeration.ts, artifact-contract.ts, artifact-node-fs.ts, artifact-store.ts, scope-contract.ts, scope-refs.ts — verified by rev-parse against b6f6f52). Production behaviour is unchanged apart from the verbatim extraction: the 16 body lines of the classifier moved byte-identically, proved by an empty diff of the old HEAD range against the new module.\n\nBlob shas for QA: scope-git.ts 17c2c32cc57d30131b21ca24ea1417aa1e5eb6f0 | scope-git-classify.ts 1c1a9d6b98c165b9f7736341b6852e43adeec31e | scope-git-classify.js f3ada24fb3f8e781cff47d6324563c8b5e60025c | scope-git-classify.test.ts 44e4b3d6112991777f7060a53e03087e6aeb6c98 | artifact-enumeration.ts 26336099a08b05981b7c1bb506b05845208873df | artifact-enumeration.test.ts 384c243484e329ce16d52112bfaee4b186bbb50e",
+      "startedAt": "2026-08-10T06:42:32.538Z",
+      "completedAt": "2026-08-10T06:46:32.520Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-131786b8",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -152,7 +164,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:18:36.217Z",
-  "updatedAt": "2026-08-10T06:39:18.719Z",
+  "updatedAt": "2026-08-10T06:47:57.029Z",
   "contextFetchedBy": [
     "qa-ed8ebade",
     "worker-131786b8"
@@ -161,7 +173,7 @@
     "firstClaimAt": "2026-08-09T14:47:58.588Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 21,
+    "executedStepCount": 23,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -173,7 +185,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:34:06.334Z",
@@ -221,23 +235,20 @@
       "reason": "Dependency-gated at step 6 on another task's uncommitted root files; releasing rather than parking the slot, per the governor's standing guidance. Steps 1-5 and 7 are done, green and self-consistent on disk."
     }
   ],
-  "reviewStartedAt": "2026-08-09T21:14:54.119Z",
+  "reviewStartedAt": "2026-08-10T06:47:57.029Z",
   "verification": {
     "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\nTC=0\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  45 passed (45)\n      Tests  1409 passed (1409)\n   Start at  00:13:21\n   Duration  3.15s (transform 9.78s, setup 0ms, import 13.78s, tests 8.46s, environment 3ms)\n\nTEST=0",
-    "reportedAt": "2026-08-09T21:14:54.119Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  46 passed (46)\n      Tests  1421 passed (1421)\n   Start at  09:46:43\n   Duration  3.29s (transform 11.02s, setup 0ms, import 15.56s, tests 9.61s, environment 3ms)\n\nCOMPOSITE_EXIT=0",
+    "reportedAt": "2026-08-10T06:47:57.029Z"
   },
   "filesModified": [
-    "packages/runner/src/scope/scope-git.test.ts",
-    "packages/runner/src/artifacts/artifact-enumeration.test.ts",
-    "packages/runner/src/scope/scope-contract.ts",
-    "packages/runner/src/artifacts/artifact-contract.ts",
+    "packages/runner/src/scope/scope-git-classify.test.ts",
+    "packages/runner/src/scope/scope-git-classify.ts",
+    "packages/runner/src/scope/scope-git-classify.js",
     "packages/runner/src/scope/scope-git.ts",
-    "packages/runner/src/artifacts/artifact-node-fs.ts",
-    "packages/runner/src/artifacts/artifact-store.ts",
-    "packages/runner/src/index.ts",
-    "packages/runner/src/index-surface.test.ts"
+    "packages/runner/src/artifacts/artifact-enumeration.test.ts",
+    "packages/runner/src/artifacts/artifact-enumeration.ts"
   ],
   "reviewCompletedAt": "2026-08-09T21:30:17.932Z",
   "rejectionDetails": {

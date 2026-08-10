@@ -16,12 +16,12 @@
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-42b952c9 on the human's explicit instruction, 2026-08-10. I had held this blocked; the human overrode that and this records the override honestly rather than dressing it up as a clean gate clearance. TWO OF FOUR BLOCKERS ARE GENUINELY DEAD, re-measured by me at HEAD. (1) \"NO BROWSER\" is dead: package.json:33 has @playwright/test 1.62.1, package.json:19 has test:e2e:browser running playwright against tests/e2e/control-room/playwright.config.ts, and the owned path tests/e2e/control-room/ exists with control-room-smoke.spec.ts, harness.ts, static-ports.ts. (2) \"CONTRAST UNMEASURABLE\" is dead: 63 colour literals across six stylesheets and WCAG contrast already asserted at apps/control-room/src/styles/design-system.test.ts:70. Three of the eight scenario ids that had zero production files now exist — cr.runs (runs/runs-surface.tsx), cr.resources (resources/resources-surface.tsx), cr.banner.circuitbreaker (shell/circuit-breaker-banner.tsx). TWO BLOCKERS STILL STAND AND THE ARCHITECT MUST NOT PLAN OVER THEM. (a) The five graph ids remain absent: cr.graph.ghost, cr.graph.refusal, cr.graph.disposition, cr.graph.revisiondiff, cr.banner.revision. Graph tab is still GraphPlaceholder and committed tests still ban the cr.graph. prefix. (b) The hard dependency \"Graph operator journeys\" task-779d6804 is ARCHIVED, never built — an archived dependency can never satisfy itself. THE ONLY COMPLIANT PLAN, and it is a real one worth an architect's time: scope this gate to the journeys whose surfaces exist, drive them through the real Playwright browser gate, and record every graph scenario as a TYPED UNKNOWN naming task-779d6804 as the missing owner, per epic rail 4. Clause 2 forbids a narrowed DoD presented as complete, a mock-backed graph journey, or authority reimplemented inside the test — a graph journey against GraphPlaceholder would be exactly the proof-that-only-proves-the-shapes that Clause 2 calls worse than no proof. If on re-measurement you judge that the graph half cannot be honestly separated, report blocked with the measurement rather than planning around it. SEPARATE HUMAN DECISION, STILL OPEN, DO NOT INVENT IT: \"What is the reference machine?\" No environment is named in repo or spec, and a p95/p99 latency bar without one certifies nothing. Record that half as UNKNOWN pending the human, or ask in the REPL.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -66,7 +66,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T06:33:19.584Z",
+  "updatedAt": "2026-08-10T06:44:22.908Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-1721c07f"
@@ -74,10 +74,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T12:28:16.101Z"
   },
-  "blockedReason": "BLOCKED at planning. No plan submitted, no code written. Full audit in comment-06d4120718d144e19bc0535ac906c20b.\n\nClause 2: acceptance task, so I verified the certified capability on disk. Three of four DoD items rest on capability that does not exist. Clause 2 forbids a narrowed DoD or mock-backed journey and requires prerequisite tasks. Created; ids below.\n\n1. NO BROWSER. DoD 4 says \"Playwright gate exits 0\". grep playwright|puppeteer|cypress|selenium|webdriver across every package.json returns ZERO; no config exists. The named verification is not a browser gate: package.json:18 is \"tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e\" (Vitest/Node). Owned path tests/e2e/control-room/ does not exist.\nPREREQ task-3f503779a29c4e4c9a61db6520715609.\n\n2. SIX OF TWENTY SECTION 12 SCENARIOS HAVE NO SURFACE. Production files per id, tests excluded: cr.graph.ghost 0, cr.graph.refusal 0, cr.graph.disposition 0, cr.graph.revisiondiff 0, cr.banner.circuitbreaker 0, cr.banner.revision 0, cr.runs 0, cr.resources 0. Hits CR-J2-001, S9-001, S10-001, S11-001, J5-002. Graph tab is GraphPlaceholder and three committed tests ban the cr.graph. prefix.\nPREREQ task-ddb3bf776f5245f49a3422105001b665 for the non-graph three. Graph set already owned by EXISTING task-779d6804 and task-dddfaf83; no duplicates created.\n\n3. HARD DEPENDENCY NOT STARTED. \"Graph operator journeys\" is task-779d6804, BACKLOG, 0 steps. M3 half IS satisfied: epic 7/7 DONE.\n\n4. INHERITED OBLIGATION UNDISCHARGEABLE. comment-5dd36b5b deferred real-browser contrast and the 10k p95/p99 run here as the only place they are established. Contrast is unmeasurable: TruthSemanticTone is prose, zero hex/rgb/hsl/oklch literals anywhere.\nPREREQ task-a95ccf7e72f24364bec27a7a45cb1726.\n\nHUMAN DECISION I will not invent: WHAT IS THE REFERENCE MACHINE? None defined in repo or spec; a p95/p99 bar without a named environment certifies nothing.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T12:33:49.783Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Planning audit complete, no plan submitted and no code written — correctly so. Verified on disk at HEAD that 3 of 4 DoD items certify absent capability, and recorded the symbol-by-symbol measurement in comment-06d4120718d144e19bc0535ac906c20b. Created three prerequisite production tasks: task-3f503779a29c4e4c9a61db6520715609 (Real-browser journey harness, HIGH — no browser driver exists anywhere; grep for playwright|puppeteer|cypress|selenium|webdriver across every package.json returns zero), task-ddb3bf776f5245f49a3422105001b665 (Runs, resources and circuit-breaker surfaces, HIGH — cr.runs, cr.resources and cr.banner.circuitbreaker have zero production files), task-a95ccf7e72f24364bec27a7a45cb1726 (Colour token layer, MEDIUM — contrast is unmeasurable because TruthSemanticTone is prose and there are zero colour literals repo-wide). Deliberately created NO duplicates for the graph surfaces: task-779d6804 (Graph operator journeys) and task-dddfaf83 (Graph supersession engine) already own cr.graph.ghost/refusal/disposition/revisiondiff and cr.banner.revision, both BACKLOG.",
