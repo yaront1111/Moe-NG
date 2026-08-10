@@ -12,10 +12,54 @@
 //! double serves bytes in configurable chunks precisely so that assumption
 //! cannot survive.
 
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use moe_windows_job_broker::{
-    read_frame, write_frame, AcceptState, Accepted, ByteChannel, ChannelKind, Inbound,
-    ProtocolError, ProtocolReason, ProtocolStage, RawFrame, FRAME_HEADER_BYTES, PROTOCOL_VERSION,
+    parse_descriptor_block, read_frame, write_frame, AcceptState, Accepted, ByteChannel,
+    ChannelKind, Completed, Diagnostic, DiagnosticNote, Inbound, Outbound, ProtocolError,
+    ProtocolReason, ProtocolStage, RefusalLayer, Refused, Started, Status, FRAME_HEADER_BYTES,
+    PROTOCOL_VERSION,
 };
+use moe_windows_job_core::{NativeError, NativeOp, UnknownExit};
+
+/// Bytes handed out by the allocator since this binary started.
+static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
+
+/// Counts every allocation and then delegates.
+///
+/// WHY THIS EXISTS. DoD 2 requires an over-limit frame to be refused WITHOUT
+/// allocating to its declared size, and "how many bytes did the channel serve"
+/// cannot show that: a codec that sized a buffer from the declaration and only
+/// THEN bounds-checked reads nothing extra and returns the right reason, so it
+/// passes every other assertion here while committing four gigabytes. Counting
+/// the allocator is the only way to assert the thing the DoD actually asks for.
+struct Counting;
+
+unsafe impl GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        ALLOCATED.fetch_add(layout.size(), Ordering::Relaxed);
+        unsafe { System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        ALLOCATED.fetch_add(new_size, Ordering::Relaxed);
+        unsafe { System.realloc(ptr, layout, new_size) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static COUNTING_ALLOCATOR: Counting = Counting;
 
 /// A byte channel with a written script: exact bytes in, chunk sizes for both
 /// directions, injectable failures, and a record of every byte written.
@@ -191,14 +235,25 @@ fn a_declared_length_near_u32_max_is_refused_before_the_payload_is_read() {
     let declared = u32::MAX - 8;
     let mut channel = Scripted::serving(header(PROTOCOL_VERSION, 1, declared));
 
+    let before = ALLOCATED.load(Ordering::Relaxed);
     let outcome = read_frame(&mut channel, ChannelKind::Control);
+    let allocated = ALLOCATED.load(Ordering::Relaxed) - before;
 
     let error = assert_refused(outcome, ProtocolReason::LengthOverLimit, ProtocolStage::Framing);
     assert_eq!(error.code(), 0, "our refusal, not the operating system's");
     assert_eq!(
         channel.bytes_read(),
         FRAME_HEADER_BYTES,
-        "the header was read and nothing more: no payload was pulled, so nothing was sized to the declaration"
+        "the header was read and nothing more: no payload was pulled"
+    );
+    // THE ALLOCATION BOUND, which is what DoD 2 actually asks for. The counter is
+    // process-wide and the suite runs threaded, so this is an upper bound rather
+    // than an exact figure: 1 MiB is orders of magnitude above anything any other
+    // test in this binary allocates, and four thousand times below the ~4 GiB a
+    // codec that trusted the declaration would commit.
+    assert!(
+        allocated < 1024 * 1024,
+        "refusing an over-limit frame allocated {allocated} bytes against a declared {declared}"
     );
 }
 
@@ -488,4 +543,496 @@ fn a_cancel_carrying_a_payload_reports_trailing_bytes() {
     let outcome = offer(&mut state, frame(Inbound::Cancel.opcode(), b"why"));
 
     assert_refused(outcome, ProtocolReason::TrailingBytes, ProtocolStage::Control);
+}
+
+/// Emits one status through the SHIPPED writer and returns the bytes that
+/// reached the wire.
+fn emitted(status: &Status) -> Vec<u8> {
+    let mut channel = Scripted::serving(Vec::new());
+    status.emit(&mut channel).expect("a status frame is within its channel's cap");
+    channel.written
+}
+
+#[test]
+fn the_outbound_vocabulary_is_exactly_started_completed_and_refused() {
+    assert_eq!(Outbound::ALL.len(), 3);
+    assert_eq!(Outbound::ALL, [Outbound::Started, Outbound::Completed, Outbound::Refused]);
+    assert_eq!(Outbound::Started.opcode(), 1);
+    assert_eq!(Outbound::Completed.opcode(), 2);
+    assert_eq!(Outbound::Refused.opcode(), 3);
+    assert_eq!(Outbound::from_opcode(0), None);
+    assert_eq!(Outbound::from_opcode(4), None);
+    for status in Outbound::ALL {
+        assert_eq!(Outbound::from_opcode(status.opcode()), Some(status));
+    }
+}
+
+#[test]
+fn the_refusal_layers_are_exactly_descriptor_protocol_and_native() {
+    assert_eq!(RefusalLayer::ALL.len(), 3);
+    assert_eq!(
+        RefusalLayer::ALL,
+        [RefusalLayer::Descriptor, RefusalLayer::Protocol, RefusalLayer::Native]
+    );
+    assert_eq!(RefusalLayer::Descriptor.wire(), 1);
+    assert_eq!(RefusalLayer::Protocol.wire(), 2);
+    assert_eq!(RefusalLayer::Native.wire(), 3);
+    assert_eq!(RefusalLayer::from_wire(0), None);
+    assert_eq!(RefusalLayer::from_wire(4), None);
+    for layer in RefusalLayer::ALL {
+        assert_eq!(RefusalLayer::from_wire(layer.wire()), Some(layer));
+    }
+}
+
+#[test]
+fn a_started_frame_encodes_to_exactly_these_bytes() {
+    // BYTE-EXACT AGAINST A HAND-WRITTEN LITERAL. Encoding and then decoding our
+    // own output would only prove two functions agree with each other.
+    let status = Status::Started(Started::new(4321, 0x0102_0304_0506_0708));
+
+    assert_eq!(
+        emitted(&status),
+        vec![
+            1, // version
+            1, // opcode: STARTED
+            12, 0, 0, 0, // declared length
+            0xE1, 0x10, 0, 0, // pid 4321, little-endian
+            8, 7, 6, 5, 4, 3, 2, 1, // creation time, little-endian
+        ]
+    );
+}
+
+#[test]
+fn a_completed_frame_encodes_to_exactly_these_bytes_for_both_a_known_and_an_unknown_exit() {
+    assert_eq!(
+        emitted(&Status::Completed(Completed::Exited(7))),
+        vec![1, 2, 5, 0, 0, 0, 1, 7, 0, 0, 0]
+    );
+    // An exit that is NOT knowable must be representable, or a caller would be
+    // forced to invent an exit code for it.
+    assert_eq!(
+        emitted(&Status::Completed(Completed::Unknown(UnknownExit::StillRunning))),
+        vec![1, 2, 5, 0, 0, 0, 2, 2, 0, 0, 0]
+    );
+}
+
+#[test]
+fn a_refused_frame_encodes_to_exactly_these_bytes() {
+    let refusal = Refused::protocol(ProtocolError::refused(ProtocolReason::VersionMismatch));
+
+    assert_eq!(
+        emitted(&Status::Refused(refusal)),
+        vec![
+            1, // version
+            3, // opcode: REFUSED
+            7, 0, 0, 0, // declared length
+            2, // layer: protocol
+            0, 0, // reason ordinal within THAT layer's vocabulary
+            0, 0, 0, 0, // numeric code: ours, so zero
+        ]
+    );
+}
+
+#[test]
+fn two_layers_refusing_with_the_same_ordinal_are_still_told_apart_on_the_wire() {
+    // BOTH are ordinal 0 in their own vocabulary: DescriptorReason::BlockAbsent
+    // and ProtocolReason::VersionMismatch. A refusal frame carrying only a
+    // number could not distinguish them, which is what the layer byte is for.
+    let descriptor = parse_descriptor_block(&[], 0).expect_err("an absent block is refused");
+    let from_descriptor = Refused::descriptor(descriptor);
+    let from_protocol =
+        Refused::protocol(ProtocolError::refused(ProtocolReason::VersionMismatch));
+
+    assert_eq!(from_descriptor.reason(), from_protocol.reason(), "the same ordinal, deliberately");
+    assert_eq!(from_descriptor.layer(), RefusalLayer::Descriptor);
+    assert_eq!(from_protocol.layer(), RefusalLayer::Protocol);
+    assert_ne!(
+        emitted(&Status::Refused(from_descriptor)),
+        emitted(&Status::Refused(from_protocol)),
+        "the wire must distinguish them even though the ordinals collide"
+    );
+}
+
+#[test]
+fn a_native_refusal_carries_the_cores_own_operation_and_code() {
+    // Rail 4: import the core's vocabulary, never restate it. 9 is CreateProcess's
+    // position in NativeOp::ALL and is the frozen wire value; if the core
+    // reorders its operations this reddens, which is correct — that is a wire
+    // break, not a refactor.
+    let refusal = Refused::native(NativeError::new(NativeOp::CreateProcess, 5));
+
+    assert_eq!(refusal.layer(), RefusalLayer::Native);
+    assert_eq!(refusal.reason(), 9);
+    assert_eq!(refusal.code(), 5);
+    assert_eq!(
+        emitted(&Status::Refused(refusal)),
+        vec![1, 3, 7, 0, 0, 0, 3, 9, 0, 5, 0, 0, 0]
+    );
+}
+
+#[test]
+fn a_diagnostic_frame_encodes_to_exactly_these_bytes() {
+    let note = Diagnostic::new(DiagnosticNote::FrameRefused, 42);
+
+    let mut channel = Scripted::serving(Vec::new());
+    note.emit(&mut channel).expect("a diagnostic is within fd2's cap");
+
+    assert_eq!(channel.written, vec![1, 1, 5, 0, 0, 0, 1, 42, 0, 0, 0]);
+}
+
+#[test]
+fn a_diagnostic_frame_offered_to_the_control_decoder_never_becomes_a_command() {
+    // fd2 is NON-AUTHORITATIVE. Even read as control — which nothing in the
+    // crate does — its payload cannot decode to a launch request.
+    let mut channel = Scripted::serving(Vec::new());
+    Diagnostic::new(DiagnosticNote::FrameRefused, 42).emit(&mut channel).expect("emitted");
+
+    let outcome = offer(&mut AcceptState::new(), channel.written);
+
+    assert_refused(outcome, ProtocolReason::PayloadMalformed, ProtocolStage::Control);
+}
+
+// ---------------------------------------------------------------------------
+// THE SWEEP
+// ---------------------------------------------------------------------------
+
+/// The six hostile classes the parent DoD names, plus channel loss.
+///
+/// The parent's six come FIRST and `PARENT_CLASSES` pins them by name, so a
+/// rename or a removal is a test failure rather than a quietly narrower sweep.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum HostileClass {
+    Malformed,
+    Truncated,
+    Reordered,
+    Duplicate,
+    Extra,
+    OverLimit,
+    /// Not one of the parent's six: the channel itself failing is not a
+    /// property of any byte sequence. Carried so the sweep can reach every
+    /// reason in the production vocabulary rather than excusing one.
+    ChannelLoss,
+}
+
+impl HostileClass {
+    const ALL: [HostileClass; 7] = [
+        HostileClass::Malformed,
+        HostileClass::Truncated,
+        HostileClass::Reordered,
+        HostileClass::Duplicate,
+        HostileClass::Extra,
+        HostileClass::OverLimit,
+        HostileClass::ChannelLoss,
+    ];
+}
+
+const PARENT_CLASSES: [HostileClass; 6] = [
+    HostileClass::Malformed,
+    HostileClass::Truncated,
+    HostileClass::Reordered,
+    HostileClass::Duplicate,
+    HostileClass::Extra,
+    HostileClass::OverLimit,
+];
+
+/// One hostile case: what must be accepted first, the bytes, and the EXACT
+/// reason and layer it must produce.
+struct Hostile {
+    name: &'static str,
+    class: HostileClass,
+    prior: Vec<Vec<u8>>,
+    bytes: Vec<u8>,
+    read_error: Option<u32>,
+    reason: ProtocolReason,
+    stage: ProtocolStage,
+}
+
+impl Hostile {
+    fn new(
+        name: &'static str,
+        class: HostileClass,
+        bytes: Vec<u8>,
+        reason: ProtocolReason,
+        stage: ProtocolStage,
+    ) -> Self {
+        Self { name, class, prior: Vec::new(), bytes, read_error: None, reason, stage }
+    }
+
+    fn after(mut self, prior: Vec<Vec<u8>>) -> Self {
+        self.prior = prior;
+        self
+    }
+
+    fn with_read_error(mut self, code: u32) -> Self {
+        self.read_error = Some(code);
+        self
+    }
+
+    /// Drives this case through the SHIPPED path, both layers.
+    ///
+    /// Framing and control refusals are funnelled into one `Result` on purpose:
+    /// nothing here forces which layer answers, so the per-case `stage`
+    /// assertion is a real measurement rather than a consequence of the harness.
+    fn run(&self) -> Result<Accepted, ProtocolError> {
+        let mut state = AcceptState::new();
+        for setup in &self.prior {
+            offer(&mut state, setup.clone())
+                .expect("a case's setup frames must be accepted, or it never reaches its subject");
+        }
+        let mut channel = Scripted::serving(self.bytes.clone());
+        if let Some(code) = self.read_error {
+            channel = channel.failing_reads_with(code);
+        }
+        let raw = read_frame(&mut channel, ChannelKind::Control)?;
+        state.accept(&raw)
+    }
+}
+
+/// GENERATED: every strict prefix of one well-formed launch frame.
+///
+/// A real generator rather than a hand-listed pair, so a cut anywhere in the
+/// header or anywhere in the payload is covered without anyone choosing which
+/// offsets are interesting.
+fn generated_truncations() -> Vec<Hostile> {
+    let whole = a_launch_frame();
+    (0..whole.len())
+        .map(|cut| {
+            Hostile::new(
+                "a well-formed launch frame cut short",
+                HostileClass::Truncated,
+                whole[..cut].to_vec(),
+                ProtocolReason::FrameTruncated,
+                ProtocolStage::Framing,
+            )
+        })
+        .collect()
+}
+
+fn hostile_cases() -> Vec<Hostile> {
+    let mut cases = generated_truncations();
+
+    // OVER-LIMIT
+    cases.push(Hostile::new(
+        "a declared length near u32::MAX",
+        HostileClass::OverLimit,
+        header(PROTOCOL_VERSION, Inbound::Launch.opcode(), u32::MAX - 8),
+        ProtocolReason::LengthOverLimit,
+        ProtocolStage::Framing,
+    ));
+    cases.push(Hostile::new(
+        "a declared length one byte over the control cap",
+        HostileClass::OverLimit,
+        header(
+            PROTOCOL_VERSION,
+            Inbound::Launch.opcode(),
+            u32::try_from(ChannelKind::Control.max_payload() + 1).expect("the cap fits a u32"),
+        ),
+        ProtocolReason::LengthOverLimit,
+        ProtocolStage::Framing,
+    ));
+
+    // MALFORMED
+    cases.push(Hostile::new(
+        "a version this build does not speak",
+        HostileClass::Malformed,
+        header(PROTOCOL_VERSION + 1, Inbound::Launch.opcode(), 0),
+        ProtocolReason::VersionMismatch,
+        ProtocolStage::Framing,
+    ));
+    cases.push(Hostile::new(
+        "wrong version AND an undefined opcode AND over-limit, at once",
+        HostileClass::Malformed,
+        header(PROTOCOL_VERSION + 7, 0xEE, u32::MAX - 8),
+        ProtocolReason::VersionMismatch,
+        ProtocolStage::Framing,
+    ));
+    cases.push(Hostile::new(
+        "an opcode outside the closed vocabulary",
+        HostileClass::Malformed,
+        frame(0xEE, &[]),
+        ProtocolReason::UnknownOpcode,
+        ProtocolStage::Control,
+    ));
+    cases.push(Hostile::new(
+        "a launch field whose declared length runs past the payload",
+        HostileClass::Malformed,
+        {
+            let mut payload = 300u16.to_le_bytes().to_vec();
+            payload.extend_from_slice(b"C:\\w");
+            frame(Inbound::Launch.opcode(), &payload)
+        },
+        ProtocolReason::PayloadMalformed,
+        ProtocolStage::Control,
+    ));
+    cases.push(Hostile::new(
+        "a launch payload that ends before its environment",
+        HostileClass::Malformed,
+        frame(Inbound::Launch.opcode(), &text("C:\\w\\t.exe")),
+        ProtocolReason::PayloadMalformed,
+        ProtocolStage::Control,
+    ));
+    cases.push(Hostile::new(
+        "an executable that is not valid UTF-8",
+        HostileClass::Malformed,
+        {
+            let mut payload = 2u16.to_le_bytes().to_vec();
+            payload.extend_from_slice(&[0xFF, 0xFE]);
+            payload.extend_from_slice(&0u16.to_le_bytes());
+            payload.extend_from_slice(&text("C:\\w"));
+            payload.extend_from_slice(&0u16.to_le_bytes());
+            frame(Inbound::Launch.opcode(), &payload)
+        },
+        ProtocolReason::PayloadMalformed,
+        ProtocolStage::Control,
+    ));
+
+    // REORDERED
+    cases.push(Hostile::new(
+        "a cancel before any launch",
+        HostileClass::Reordered,
+        a_cancel_frame(),
+        ProtocolReason::FrameOutOfOrder,
+        ProtocolStage::Control,
+    ));
+
+    // DUPLICATE
+    cases.push(
+        Hostile::new(
+            "a second launch on a channel that already launched",
+            HostileClass::Duplicate,
+            a_launch_frame(),
+            ProtocolReason::DuplicateLaunch,
+            ProtocolStage::Control,
+        )
+        .after(vec![a_launch_frame()]),
+    );
+
+    // EXTRA, MEANING ONE: extra bytes INSIDE a well-formed frame.
+    cases.push(Hostile::new(
+        "bytes left over after a complete launch payload",
+        HostileClass::Extra,
+        {
+            let mut payload = launch_payload("C:\\w\\t.exe", &[], "C:\\w", &[]);
+            payload.extend_from_slice(b"leftover");
+            frame(Inbound::Launch.opcode(), &payload)
+        },
+        ProtocolReason::TrailingBytes,
+        ProtocolStage::Control,
+    ));
+    cases.push(
+        Hostile::new(
+            "a cancel carrying a payload it has no field for",
+            HostileClass::Extra,
+            frame(Inbound::Cancel.opcode(), b"why"),
+            ProtocolReason::TrailingBytes,
+            ProtocolStage::Control,
+        )
+        .after(vec![a_launch_frame()]),
+    );
+    // EXTRA, MEANING TWO: an additional frame AFTER the terminal one. A distinct
+    // reason, because a reader that cannot tell these apart cannot tell a
+    // malformed payload from a peer that kept talking.
+    cases.push(
+        Hostile::new(
+            "another frame after the terminal cancel",
+            HostileClass::Extra,
+            a_launch_frame(),
+            ProtocolReason::FrameAfterTerminal,
+            ProtocolStage::Control,
+        )
+        .after(vec![a_launch_frame(), a_cancel_frame()]),
+    );
+
+    // CHANNEL LOSS
+    cases.push(
+        Hostile::new(
+            "the channel failing instead of delivering the frame",
+            HostileClass::ChannelLoss,
+            a_launch_frame(),
+            ProtocolReason::ChannelFailed,
+            ProtocolStage::Framing,
+        )
+        .with_read_error(109),
+    );
+
+    cases
+}
+
+#[test]
+fn the_sweep_generates_exactly_the_expected_number_of_cases() {
+    // NONZERO AND EXACT. A generator that silently produced nothing would pass
+    // every assertion below it, which is the defect epic rail 6 names.
+    let generated = generated_truncations();
+    assert_eq!(a_launch_frame().len(), 39, "the frame the truncations are cut from");
+    assert_eq!(generated.len(), 39, "one case per strict prefix, header and payload alike");
+    assert!(!generated.is_empty());
+
+    let cases = hostile_cases();
+    assert_eq!(cases.len(), 53);
+
+    // Per-class counts, hand-written. A table cannot police its own generator,
+    // so these numbers are stated here and nowhere else.
+    let counted = |class: HostileClass| cases.iter().filter(|case| case.class == class).count();
+    assert_eq!(counted(HostileClass::Truncated), 39);
+    assert_eq!(counted(HostileClass::Malformed), 6);
+    assert_eq!(counted(HostileClass::OverLimit), 2);
+    assert_eq!(counted(HostileClass::Extra), 3);
+    assert_eq!(counted(HostileClass::Reordered), 1);
+    assert_eq!(counted(HostileClass::Duplicate), 1);
+    assert_eq!(counted(HostileClass::ChannelLoss), 1);
+    assert_eq!(cases.len(), HostileClass::ALL.iter().map(|class| counted(*class)).sum::<usize>());
+}
+
+#[test]
+fn all_six_hostile_classes_the_parent_names_are_covered() {
+    let cases = hostile_cases();
+
+    for class in PARENT_CLASSES {
+        assert!(
+            cases.iter().any(|case| case.class == class),
+            "hostile class {class:?} has no case at all"
+        );
+    }
+    // The parent's six are the first six of the local enum, so adding a seventh
+    // cannot quietly displace one of them.
+    assert_eq!(PARENT_CLASSES[..], HostileClass::ALL[..6]);
+}
+
+#[test]
+fn every_hostile_case_refuses_with_its_own_exact_reason_at_its_own_layer() {
+    let cases = hostile_cases();
+    let mut accepted = Vec::new();
+
+    for case in &cases {
+        match case.run() {
+            // THE AUTHORITY PROOF, DoD item 4. `Accepted::Launch(LaunchRequest)`
+            // is the ONLY value in this crate that could ever reach a process
+            // launch, and `AcceptState::accept` is its only constructor. So the
+            // absence of an `Ok` here is a stronger statement than an empty core
+            // call log: a call log can be satisfied by code that simply has not
+            // called yet, whereas this value cannot be brought into existence at
+            // all. See the completion notes for why the literal call-log form
+            // would have been vacuous in this task.
+            Ok(_) => accepted.push(case.name),
+            Err(error) => {
+                assert_eq!(error.reason(), case.reason, "wrong reason for: {}", case.name);
+                assert_eq!(error.stage(), case.stage, "wrong layer for: {}", case.name);
+            }
+        }
+    }
+
+    assert_eq!(accepted, Vec::<&str>::new(), "hostile frames that produced an Accepted value");
+}
+
+#[test]
+fn the_sweep_reaches_every_reason_in_the_production_vocabulary() {
+    // CROSS-CHECKED AGAINST THE PRODUCTION ENUM, never against the sweep's own
+    // case list. Deleting an entry from ProtocolReason::ALL reddens this even
+    // though every individual case still passes.
+    let produced: BTreeSet<ProtocolReason> =
+        hostile_cases().iter().filter_map(|case| case.run().err()).map(|e| e.reason()).collect();
+    let vocabulary: BTreeSet<ProtocolReason> = ProtocolReason::ALL.iter().copied().collect();
+
+    assert_eq!(vocabulary.len(), 10, "the vocabulary this sweep claims to cover");
+    assert_eq!(produced, vocabulary);
 }
