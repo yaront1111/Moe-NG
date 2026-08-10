@@ -9,14 +9,17 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
+import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
+import { readReviewLedger } from "../review/review-read-model.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
-import { AFFORDANCE_SURFACE_LAYER } from "./affordance-contract.js";
+import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
 import type {
   AffordancePort,
   AffordanceSurfaceResult,
   ChainStep,
   ChainStepClaim,
+  NodeSpec,
 } from "./affordance-contract.js";
 
 /**
@@ -46,6 +49,12 @@ export interface AffordancePortConfig {
   /** Canonical UTC instant used only to judge claim expiry; defaults to now. */
   readonly clock?: () => string;
   readonly mintId: () => string;
+  /**
+   * Operator-authored code nodes. Read per surface call so a spec added while
+   * the daemon runs appears on the next poll. Absent means no node steps —
+   * never an invented one.
+   */
+  readonly nodes?: () => readonly NodeSpec[];
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
@@ -156,6 +165,32 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         steps.push(Object.freeze({
           aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
           missing: [], status: "READY" as const, version: record.version,
+        }));
+      }
+    }
+
+    // Code nodes appear only behind a durably approved plan; each unaccepted
+    // node is a claimable step whose real dispatches are the review family
+    // offers minted at the node's own review-ledger version. An accepted node
+    // is COMMITTED at that version — the ledger's fact, not the spec's.
+    if (config.nodes !== undefined && ledger.kinds.has("approval.decide")) {
+      for (const spec of config.nodes()) {
+        const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
+        const claim = claimOf(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
+        if (review.accepted !== undefined) {
+          steps.push(Object.freeze({
+            aggregateId: spec.nodeRef, claim, kind: NODE_DELIVER_KIND,
+            missing: [], status: "COMMITTED" as const, version: review.version,
+          }));
+          continue;
+        }
+        offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+        offers.push(offer(
+          "integration.accept_output", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION,
+        ));
+        steps.push(Object.freeze({
+          aggregateId: spec.nodeRef, claim, kind: NODE_DELIVER_KIND,
+          missing: [], status: "READY" as const, version: review.version,
         }));
       }
     }

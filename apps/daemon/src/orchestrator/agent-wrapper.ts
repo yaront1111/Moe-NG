@@ -36,6 +36,16 @@ export interface SpawnRequest {
   readonly mission: string;
   readonly sessionId: string;
   readonly workItemId: string;
+  /** For code nodes: the directory the agent works in; null for chain steps. */
+  readonly workspace: string | null;
+}
+
+/** Operator-authored coding brief for one node (full spec file). */
+export interface NodeMission {
+  readonly instructions: string;
+  readonly test: string;
+  readonly title: string;
+  readonly workspace: string;
 }
 
 export interface AgentWrapperConfig {
@@ -46,6 +56,8 @@ export interface AgentWrapperConfig {
   readonly deps: CommandAdapterDeps;
   readonly maxAgents: number;
   readonly mintSecret: () => string;
+  /** Coding brief per node ref; a node step without one is not staffed. */
+  readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
   readonly operatorCredential: string;
   /**
    * Optional development payload suggestion embedded in the mission, so a real
@@ -74,6 +86,38 @@ const encoder = new TextEncoder();
 
 function digestOf(payload: JsonObject): string {
   return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
+}
+
+function codeMission(
+  workItemId: string, nodeRef: string, expiresAt: string, brief: NodeMission,
+  hints: { accept: JsonObject | null; submit: JsonObject | null },
+): string {
+  const lines = [
+    `You are a moe-next coding agent. You hold the durable claim on code node "${nodeRef}"`,
+    `(work item "${workItemId}") until ${expiresAt}. TASK — ${brief.title}:`,
+    brief.instructions,
+    `Work in the directory ${brief.workspace} (your working directory). Verify by running:`,
+    `${brief.test} — it must exit 0 before you report anything as done.`,
+    "Then record your delivery durably over the moe-next MCP tools:",
+    "1) call work_get_context and find the review.submit offer whose targetAggregateId is",
+    `"${nodeRef}"; call review_submit with EXACTLY that offer's commandId and`,
+    "expectedVersion, round = expectedVersion + 1, and empty findings if your test run",
+    "was clean.",
+    "2) call work_get_context AGAIN (the ledger moved), find the integration.accept_output",
+    `offer for "${nodeRef}", and dispatch it the same way.`,
+    `3) finish with work_release for "${workItemId}".`,
+    "Every refusal carries a stable reason code — read it, correct the request, never",
+    "work around a refusal, and report what the daemon actually answered.",
+  ];
+  if (hints.submit !== null) {
+    lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
+  }
+  if (hints.accept !== null) {
+    lines.push(
+      `Suggested integration.accept_output payload shape: ${JSON.stringify(hints.accept)}`,
+    );
+  }
+  return lines.join(" ");
 }
 
 function mission(
@@ -132,6 +176,15 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     if (capabilities === null) {
       return { kind: step.kind, outcome: "UNWIRED_KIND", sessionId: null, workItemId };
     }
+    // Resolve the coding brief BEFORE any durable step: refusing after the
+    // claim would leave a fenced item nobody is working on until expiry.
+    let brief: NodeMission | null = null;
+    if (step.kind === "node.deliver") {
+      brief = config.nodeMission?.(step.aggregateId ?? "") ?? null;
+      if (brief === null) {
+        return { kind: step.kind, outcome: "NODE_BRIEF_MISSING", sessionId: null, workItemId };
+      }
+    }
     const secret = config.mintSecret();
     // The full mint, never a prefix: distinct mints can share long prefixes.
     const sessionId = `sess-wrap-${config.mintSecret()}`;
@@ -155,10 +208,21 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
     }
 
-    const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
+    let missionText: string;
+    let workspace: string | null = null;
+    if (brief !== null) {
+      workspace = brief.workspace;
+      missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
+        accept: config.payloadHint?.("integration.accept_output", step.aggregateId) ?? null,
+        submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
+      });
+    } else {
+      const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
+      missionText = mission(workItemId, step.kind, expiresAt, hint);
+    }
     const exit = config.spawnAgent({
       credential: secret, expiresAt, kind: step.kind,
-      mission: mission(workItemId, step.kind, expiresAt, hint), sessionId, workItemId,
+      mission: missionText, sessionId, workItemId, workspace,
     }).catch(() => undefined).then(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
@@ -170,7 +234,15 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { active: active.size, spawned: [], surfaceOutcome: surface.code };
     }
     const spawned: SpawnReport[] = [];
-    for (const step of surface.steps) {
+    // Staffing priority: code nodes are the point of the board, so they come
+    // first; goal.close comes last so a goal is never closed while its nodes
+    // still have unstaffed work in the same pass.
+    const ordered = [...surface.steps].sort((a, b) => {
+      const rank = (step: ChainStep): number =>
+        step.kind === "node.deliver" ? 0 : step.kind === "goal.close" ? 2 : 1;
+      return rank(a) - rank(b);
+    });
+    for (const step of ordered) {
       if (active.size >= config.maxAgents) break;
       if (step.status !== "READY" || step.claim !== null) continue;
       // Session lifecycle steps are identity plumbing the wrapper itself uses,

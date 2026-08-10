@@ -15,6 +15,20 @@ import type { NextAllowedCommand } from "@moe/contracts";
 
 export const AFFORDANCE_SURFACE_LAYER = "AFFORDANCE_SURFACE" as const;
 
+/**
+ * The pseudo-kind for a deliverable code node. It is not a runtime command —
+ * delivery happens through review.submit and integration.accept_output against
+ * the node's subjectRef — but it IS a claimable, staffable unit of board work,
+ * so it appears as a step with the shared work-item key convention.
+ */
+export const NODE_DELIVER_KIND = "node.deliver" as const;
+
+/** An operator-authored code node behind an approved goal. */
+export interface NodeSpec {
+  readonly nodeRef: string;
+  readonly title: string;
+}
+
 export const CHAIN_STEP_STATUSES = Object.freeze(["BLOCKED", "COMMITTED", "READY"] as const);
 export type ChainStepStatus = (typeof CHAIN_STEP_STATUSES)[number];
 

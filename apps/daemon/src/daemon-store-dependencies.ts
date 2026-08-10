@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
@@ -116,6 +118,11 @@ type WiredCommandKind =
  * this provider never wired.
  */
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
+  // The pseudo-kind for delivering a code node: the agent reviews and accepts
+  // its own output through the wired review family, and claims through work.
+  if (kind === "node.deliver") {
+    return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
+  }
   const family = kind in BOOTSTRAP_FAMILY
     ? BOOTSTRAP_FAMILY[kind as BootstrapCommandKind]
     : kind in REVIEW_FAMILY
@@ -149,7 +156,7 @@ const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
     "qualification.replan": [
       "nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions",
     ],
-    "review.submit": ["findings", "packageItems", "subjectRef"],
+    "review.submit": ["findings", "packageItems", "round", "subjectRef"],
     "session.close": ["sessionId"],
     "session.open": ["capabilities", "credentialSha256", "expiresAt", "sessionId"],
     "session.renew": ["expiresAt", "sessionId"],
@@ -166,6 +173,8 @@ const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
 export interface StoreDependencyConfig {
   readonly clock?: () => string;
   readonly credential: string;
+  /** Directory of operator-authored code-node specs (*.json); absent = no nodes. */
+  readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
   readonly projectId: string;
   readonly storePath: string;
@@ -185,6 +194,7 @@ export function readStoreDependencyEnv(
   }
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
+    nodeSpecsDir: env.MOE_NODE_SPECS_DIR,
     principalId: env.MOE_PRINCIPAL_ID ?? "operator-local",
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
@@ -192,6 +202,35 @@ export function readStoreDependencyEnv(
 }
 
 const encoder = new TextEncoder();
+
+/**
+ * Reads operator-authored node specs (*.json with at least {nodeRef, title})
+ * fresh on every call. A malformed file is SKIPPED, never invented into a
+ * node; an unreadable directory reads as no nodes.
+ */
+function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; title: string }[] {
+  return () => {
+    let entries: string[];
+    try {
+      entries = readdirSync(directory).filter((name) => name.endsWith(".json"));
+    } catch {
+      return [];
+    }
+    const specs: { nodeRef: string; title: string }[] = [];
+    for (const name of entries.sort()) {
+      try {
+        const parsed = JSON.parse(readFileSync(join(directory, name), "utf8")) as {
+          nodeRef?: unknown; title?: unknown;
+        };
+        if (typeof parsed.nodeRef === "string" && parsed.nodeRef.length > 0
+          && typeof parsed.title === "string") {
+          specs.push({ nodeRef: parsed.nodeRef, title: parsed.title });
+        }
+      } catch { /* skipped, never invented */ }
+    }
+    return specs;
+  };
+}
 
 class DomainRefusal extends Error {
   public readonly code: string;
@@ -357,6 +396,7 @@ export function createStoreDependencies(
 
   const affordances = () => createAffordancePort({
     mintId: () => randomUUID(),
+    ...(config.nodeSpecsDir === undefined ? {} : { nodes: nodeSpecLoader(config.nodeSpecsDir) }),
     projectId: config.projectId,
     store,
   });

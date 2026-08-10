@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@moe/contracts": "workspace:*",
+    "@moe/coordination": "workspace:*",
     "@moe/core": "workspace:*",
     "@moe/mcp": "workspace:*",
     "@moe/review": "workspace:*",

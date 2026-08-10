@@ -1,0 +1,38 @@
+{
+  "id": "task-14ab762db8494959b93b070b9d3b3730",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Frozen broker protocol version, closed vocabularies, bounded framing, hostile-frame refusal sweep",
+  "description": "SPIDR child 3b of 4, split from task-af3d7bc8af2146cf92d98557ed0e90c0 by architect-5aba94da. Human confirmed the 4-way split in the REPL. Carries parent DoD item 1, and the \"refusal frames carry only op+code\" half of parent DoD item 3.\n\nDEPENDS ON task-05bf0e0fe7e84afb8584588ecf96db14 (3a: workspace wiring, broker package, descriptor acquisition). Do not start until 3a is DONE, and RE-MEASURE its landed symbols before planning rather than trusting this description -- every prior task in this chain found at least one stale claim in its own description.\n\nObjective: define the wire contract and make it refuse everything malformed BEFORE any Job or process exists. This child is the reason the parent split cleanly: it needs no pipes, no Job, no process and no real Windows -- it is pure, fast, and exhaustively testable in isolation.\n\nDeliverable, inside packages/runner/src/platform/windows/native/broker/:\n- src/frames.rs (NEW): bounded binary framing for fd0 (inbound control) and fd1 (outbound status), plus the bounded non-authoritative fd2 diagnostics form. Every length is checked against an explicit maximum before allocation. A frame that would exceed the cap is refused without allocating to its declared size -- a declared length is attacker-controlled and must never be trusted as an allocation hint.\n- src/control.rs (NEW): the frozen protocol version and the CLOSED control vocabulary -- exactly one launch request shape and CANCEL. No catch-all variant, no open string command space.\n- src/status.rs (NEW): the CLOSED status vocabulary -- STARTED with its identity payload, terminal COMPLETED, and REFUSED. A refusal frame carries only the exact stable operation and numeric Win32 code; it can carry no executable, argv, cwd, environment or handle data and no free-form error string, and the TYPE must make that unrepresentable rather than merely unwritten.\n- tests/frame_sweep.rs (NEW): the hostile-frame sweep.\n\nThe parent DoD names six hostile classes explicitly and all six must be covered: malformed, truncated, reordered, duplicate, extra, and over-limit. Each must refuse BEFORE the lifecycle core would create a Job or process -- that ordering is the point, not merely that a refusal happens.\n\nThe sweep must assert a NONZERO EXACT generated-case count. A generated sweep that silently produces zero cases passes while testing nothing; that defect has been found on this board before, and epic rail 6 names it. Cross-check the produced refusal-reason set against the production vocabulary rather than against the sweep's own case list.\n\nNOT IN SCOPE: descriptor acquisition (3a), Job creation, process launch, lifecycle delegation, STARTED emission timing, completion semantics (3c), idempotence or kill proofs (3d). No JavaScript, no daemon/store, no receipts, no public @moe/runner export.\n\nVerification: cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker && cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker",
+  "definitionOfDone": [
+    "A frozen protocol version constant and CLOSED control, status and refusal-reason vocabularies exist as enums with no catch-all variant and no open string space, so adding a case is a compile error at every match site. The version is asserted by an exact-equality test, and a frame declaring any other version is refused by its own stable reason code.",
+    "Framing is bounded on all three of fd0, fd1 and fd2. A declared length exceeding the cap is refused WITHOUT allocating to the declared size, proved by a test that submits an enormous declared length and asserts the specific over-limit reason code rather than relying on the absence of a crash.",
+    "All six hostile classes the parent names are covered by the sweep -- malformed, truncated, reordered, duplicate, extra, and over-limit -- each asserting its own exact stable reason code, never merely that the frame was rejected. Where two layers could refuse, the test pins WHICH layer refused.",
+    "Every hostile case is proved to refuse BEFORE any Job or process would be created, asserted as the absence of any lifecycle-core call in a recorded call log -- not merely that an error was returned. Ordering is the requirement, not the outcome.",
+    "The sweep asserts a NONZERO EXACT generated-case count, so a generator that silently produces zero cases fails, and cross-checks the produced refusal-reason set against the production vocabulary rather than against its own case list. Verified by deleting one production reason and confirming the suite goes red.",
+    "A REFUSED frame is structurally incapable of carrying an executable path, argv, cwd, environment, handle value or free-form error string -- unrepresentable in the type, not merely absent from current call sites, so a future field addition fails to compile rather than leaking.",
+    "Every Rust production source is <=250 physical lines by `grep -c ''` with counts recorded; the locked broker test and release build both exit 0; no executable, Cargo target output, transcript or generated smoke evidence is committed."
+  ],
+  "taskRails": [
+    "Control and status use bounded binary framing on fd0/fd1; fd2 diagnostics is bounded and non-authoritative. A declared length is attacker-controlled input and must never be used as an allocation hint before it is bounds-checked.",
+    "Closed vocabularies only: no catch-all enum variant, no open command string space, no free-form error text anywhere in a frame. Refusals carry the stable operation and numeric Win32 code and nothing else, enforced by the type.",
+    "Refuse before authority: every malformed, truncated, reordered, duplicate, extra or over-limit frame must be rejected before the lifecycle core would create a Job or process, and the test must assert the absence of the core call, not just the error.",
+    "Import moe-windows-job-core for its reason vocabulary rather than restating operation codes; do not duplicate its Win32 authority.",
+    "Keep every Rust production source focused, target and hard-cap <=250 physical lines; split before 400. Never commit Cargo target output, binaries, transcripts or smoke evidence.",
+    "Do not implement descriptor acquisition, Job creation, process launch, lifecycle delegation, STARTED timing, completion semantics, idempotence or kill proofs. Those belong to SPIDR siblings 3a, 3c and 3d."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-af3d7bc8af2146cf92d98557ed0e90c0",
+  "priority": "CRITICAL",
+  "order": 75,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-10T06:38:44.701Z",
+  "updatedAt": "2026-08-10T06:38:48.269Z"
+}

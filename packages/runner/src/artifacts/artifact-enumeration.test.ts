@@ -221,6 +221,27 @@ const REFUSAL_CASES: readonly EnumerationRefusal[] = Object.freeze([
     },
   },
   {
+    // The ONLY case that reaches classify()'s per-entry read. The name is valid
+    // lowercase 64-hex on purpose: the grammar runs BEFORE readAll, so every
+    // other entry with a throwing read — uppercase-address above included — is
+    // answered by the grammar and never gets there. "an unreadable entry" and
+    // "an unreadable listing" are two different branches, and listing-unreadable
+    // covers only the second.
+    id: "entry-unreadable",
+    code: "RUNNER_ARTIFACT_VERIFY_FAILED",
+    layer: "ARTIFACT_FS_PORT",
+    arrange: (root: string) => {
+      mkdirSync(join(root, "objects"), { recursive: true });
+      return Object.freeze({
+        ...createNodeArtifactFs(),
+        listDirectory: () => [{ name: "d".repeat(64), kind: "FILE" as const }],
+        readAll: () => {
+          throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+        },
+      });
+    },
+  },
+  {
     id: "object-bytes-do-not-match-address",
     code: "RUNNER_ARTIFACT_ADDRESS_CORRUPT",
     layer: "ARTIFACT_STORE",
@@ -244,7 +265,7 @@ const REFUSAL_CASES: readonly EnumerationRefusal[] = Object.freeze([
 describe("enumerateArtifacts — every refusal names its code and its layer", () => {
   it("runs every hand-authored case exactly once", () => {
     expect(REFUSAL_CASES.length).toBeGreaterThan(0);
-    expect(REFUSAL_CASES.length).toBe(8);
+    expect(REFUSAL_CASES.length).toBe(9);
     expect(new Set(REFUSAL_CASES.map((entry) => entry.id)).size).toBe(REFUSAL_CASES.length);
   });
 

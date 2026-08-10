@@ -80,6 +80,9 @@ importers:
       '@moe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@moe/coordination':
+        specifier: workspace:*
+        version: link:../../packages/coordination
       '@moe/core':
         specifier: workspace:*
         version: link:../../packages/core

@@ -135,6 +135,53 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
   },
 });
 
+/** The seven evidence-bindable package items buildReviewPackage demands. */
+const REVIEW_PACKAGE_ITEMS: readonly JsonObject[] = [
+  { digest: hex64("c1"), kind: "CRITERION", locator: "criterion-1" },
+  { digest: hex64("d1"), kind: "DAEMON_RECEIPT", locator: "receipt-1" },
+  { digest: hex64("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
+  { digest: hex64("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
+  { digest: hex64("b1"), kind: "PLAN_HASH", locator: "plan-1" },
+  { digest: hex64("2b"), kind: "RUBRIC", locator: "rubric-1" },
+  { digest: hex64("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
+];
+
+/** Review-family payloads are per-subject: the target aggregate IS the node. */
+function reviewPayloadFor(kind: string, subjectRef: string): JsonObject | null {
+  if (kind === "review.submit") {
+    return {
+      findings: [], packageItems: REVIEW_PACKAGE_ITEMS, round: 1, subjectRef,
+    };
+  }
+  if (kind === "integration.accept_output") {
+    return {
+      calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" },
+      packageItems: REVIEW_PACKAGE_ITEMS,
+      policy: {
+        action: "integration.accept_output", actor: "reviewer-1", callerRiskHint: "R1",
+        decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
+        evaluatorVersion: "evaluator-1",
+        facts: [{ factId: "fact-review-risk", tier: "R1", truthClass: "DAEMON_VERIFIED" }],
+        graphNodeRevisionRefs: [], policyRevisionRef: hex64("a1"), requiredFactIds: [],
+        scope: [],
+        sliceChain: [{
+          autoApprovalOptIns: [{ action: "integration.accept_output", tier: "R1" }],
+          rules: [], sliceRef: hex64("a1"),
+        }],
+        waivers: [],
+      },
+      proof: "PASSED",
+      reviewer: {
+        authors: ["author-1"], authorshipResolved: true,
+        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef }],
+        leaseHistoryResolved: true, reviewer: "reviewer-1", subjectRef,
+      },
+      subjectRef,
+    };
+  }
+  return null;
+}
+
 /** session.close / session.renew derive their payload from the step's aggregate. */
 export function payloadFor(kind: string, aggregateId: string | null): JsonObject | null {
   if (kind === "session.close" || kind === "session.renew") {
@@ -145,6 +192,10 @@ export function payloadFor(kind: string, aggregateId: string | null): JsonObject
     return kind === "session.close"
       ? { sessionId }
       : { expiresAt: "2027-06-01T00:00:00.000Z", sessionId };
+  }
+  if ((kind === "review.submit" || kind === "integration.accept_output")
+    && aggregateId !== null) {
+    return reviewPayloadFor(kind, aggregateId);
   }
   return DEV_PAYLOADS[kind] ?? null;
 }

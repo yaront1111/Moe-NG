@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 
 import { isCommitIdentity } from "../canonical.js";
+import { classifyRefFailure } from "./scope-git-classify.js";
 import {
   ScopeObserverError,
   type GitObserver,
@@ -212,30 +213,11 @@ export function createNodeGitObserver(
           "for-each-ref",
         );
       } catch (error) {
-        throw retagRefFailure(error);
+        throw classifyRefFailure(error);
       }
       return parseRefListing(bytes, "for-each-ref");
     },
   });
-}
-
-/** Attaches the refusing layer, and treats ENOBUFS as the overflow it is. */
-function retagRefFailure(error: unknown): ScopeObserverError {
-  if (error instanceof ScopeObserverError) {
-    const overflowed =
-      error.code === "RUNNER_SCOPE_OBSERVATION_OVERFLOW" ||
-      (error as { cause?: { code?: unknown } }).cause?.code === "ENOBUFS";
-    return new ScopeObserverError(
-      overflowed ? "RUNNER_SCOPE_OBSERVATION_OVERFLOW" : error.code,
-      error.message,
-      "GIT_OBSERVER",
-    );
-  }
-  return new ScopeObserverError(
-    "RUNNER_SCOPE_OBSERVATION_FAILED",
-    "git for-each-ref failed",
-    "GIT_OBSERVER",
-  );
 }
 
 export function createNodeScopePaths(): ScopePathObserver {

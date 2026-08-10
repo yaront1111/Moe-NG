@@ -20,7 +20,7 @@
     "Every pre-existing assertion in goal-reducer.test.ts and goal-invariants.test.ts must pass unchanged except those the new command genuinely invalidates. Both files are already over 250 lines; do not grow them further — put new coverage in a focused new test file."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,9 +29,9 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 78,
+  "order": 74,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T20:57:57.134Z",
-  "updatedAt": "2026-08-09T20:57:57.134Z"
+  "updatedAt": "2026-08-10T06:28:40.751Z"
 }

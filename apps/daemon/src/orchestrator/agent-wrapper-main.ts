@@ -5,12 +5,14 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { readFileSync, readdirSync } from "node:fs";
+
 import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
-import type { SpawnRequest } from "./agent-wrapper.js";
+import type { NodeMission, SpawnRequest } from "./agent-wrapper.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -44,6 +46,12 @@ function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
         },
       },
     }), "utf8");
+    // Code-node agents work IN their workspace and get the file/exec tools a
+    // worker needs; chain-step agents keep the MCP-only surface.
+    const coding = request.workspace !== null;
+    const allowed = coding
+      ? "mcp__moe-next,mcp__moe-next__*,Edit,Write,Read,Glob,Grep,Bash"
+      : "mcp__moe-next,mcp__moe-next__*";
     return new Promise((resolve) => {
       // The mission travels over STDIN: on Windows the CLI is a .cmd requiring
       // shell resolution, and shell spawns concatenate argv unescaped — a
@@ -52,9 +60,9 @@ function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
       const child = spawn(command, [
         "-p",
         "--mcp-config", mcpConfigPath,
-        "--allowedTools", "mcp__moe-next,mcp__moe-next__*",
+        "--allowedTools", allowed,
       ], {
-        cwd: DAEMON_DIR,
+        cwd: request.workspace ?? DAEMON_DIR,
         shell: process.platform === "win32",
         stdio: ["pipe", "inherit", "inherit"],
       });
@@ -82,7 +90,35 @@ async function main(): Promise<void> {
   ).catch(() => null) as
     { payloadFor?: (kind: string, target: string | null) => object | null } | null;
 
+  // Full coding briefs come from the same spec dir the affordance surface
+  // lists nodes from; a spec without instructions/test/workspace is no brief.
+  const nodeMission = (nodeRef: string): NodeMission | null => {
+    const dir = config.nodeSpecsDir;
+    if (dir === undefined) return null;
+    let names: string[];
+    try {
+      names = readdirSync(dir).filter((name) => name.endsWith(".json"));
+    } catch {
+      return null;
+    }
+    for (const name of names) {
+      try {
+        const spec = JSON.parse(readFileSync(join(dir, name), "utf8")) as
+          Partial<NodeMission> & { nodeRef?: string };
+        if (spec.nodeRef !== nodeRef) continue;
+        if (typeof spec.instructions !== "string" || typeof spec.test !== "string"
+          || typeof spec.workspace !== "string") return null;
+        return {
+          instructions: spec.instructions, test: spec.test,
+          title: spec.title ?? nodeRef, workspace: spec.workspace,
+        };
+      } catch { /* skipped */ }
+    }
+    return null;
+  };
+
   const wrapper = createAgentWrapper({
+    nodeMission,
     payloadHint: (kind, target) =>
       (hintModule?.payloadFor?.(kind, target) ?? null) as never,
     affordances,
