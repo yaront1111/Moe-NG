@@ -15,13 +15,109 @@
     "Keep tasks file-disjoint where possible; order is a presentation hint, not a fabricated hard dependency.",
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY, and settle the objective's contradiction before writing anything. This task's own objective says to implement WDRR \"from the corrected DEVELOPMENT_ONLY reference\". THAT SOURCE DOES NOT CONTAIN THE SUBJECT, and the prior block was correct about it. Verify yourself: `grep -rnw \"WDRR|deficit|resourceQueue|ResourceQueue\" packages/testkit/src/scheduler-fairness/` returns NOTHING, and `grep -rn \"\\bRing\\b|\\bring\\b\"` over its .ts files returns nothing. What the reference actually implements is a priority-ladder / forced-cohort / bypass model: `selectNext`, `forcedCohortOrder`, `boundFor` in fairness-selection.ts, and PRIORITY_LADDER / BYPASSES_PER_LEVEL / DEFAULT_M_D in fairness-policy.ts. Do NOT derive ring or deficit behaviour from it — that is the Clause 2 \"invents policy and authority\" failure the block named.\n\nTHE REAL SOURCE OF TRUTH IS THE LANDED CONTRACT, and it delegates this work to you by name. packages/scheduler/src/fairness/fairness-ring.ts:4-19 states: the contract \"cannot say whose turn it is, cannot compute a deficit ... Rotation, deficit accounting and aging belong to the consumer\", and \"`weight` and `deficitCounter` are DATA the contract range-checks\". THIS TASK IS THAT CONSUMER. Implementing rotation here is completing a stated delegation, not inventing policy.\n\nRun the baseline gate and record it: `pnpm --filter @moe/scheduler test`. Note packages/scheduler/src/package-boundary.test.ts has a KNOWN pre-existing failure (shebang tokenizer on apps/daemon/src/daemon-main.ts) seen repeatedly on this board today — record it as baseline so you never mistake it for yours.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "READ-ONLY. Pin the landed surfaces you consume; re-validating them yourself would fork the authority. In packages/scheduler/src/fairness/: `FairnessRing { ringId, dimensionId, resources, entries }`, `FairnessRingResource { resourceId, weight }`, `FairnessRingQueueEntry { workItemId, resourceId, deficitCounter }` (fairness-ring.ts:38-64), with `validateRing` and `validateRingResource`. Also `FairnessWorkItem` + `validateWorkItem`/`validateWorkItemSet`, `FairnessOpportunityAttestation` + `validateBypassClaim`, `FairnessCapRevision` + `validateCapRevision`, and the refusal vocabulary in fairness-contract.ts: `FAIRNESS_CONTRACT_ISSUE_CODES`, `FAIRNESS_CONTRACT_LAYERS`, `FairnessContractIssue`, `FairnessContractRefusal`, plus `refuseFairness` / `acceptFairness` / `unknownFairness` / `makeFairnessIssue` / `isFairnessRefusal`. Use that vocabulary for every refusal; mint a new code ONLY for a fault the tuple genuinely cannot express, and say which in a comment.\n\nNote the flat-entries design and why it matters: `entries` is the flat union of every per-resource queue, deliberately carrying no implied traversal order between queues (fairness-ring.ts:54-58). Your rotation must therefore DERIVE order deterministically from resourceId and the entry sequence — never from array position alone, or the same ring in a different serialization order selects differently and DoD 1's determinism fails.\n\nCONSTANTS TRAP: production cannot import the reference (@moe/scheduler does not depend on @moe/testkit and must not), so any policy constant you need must be DECLARED in production. That duplication is the only legal path, but the values must MATCH the reference exactly — the task scope forbids changing fairness constants without approval. Cite the reference file and line beside each constant you mirror, and pin the exact values in a test.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED for rotation. Create packages/scheduler/src/fairness/fairness-rotation.test.ts against the not-yet-written module. Cover DoD 1's four properties as SEPARATE named assertions, because they fail independently:\n  - DETERMINISTIC: the same ring selects the same sequence across repeated runs AND across a re-serialized ring whose `entries` array is permuted. The permutation case is the one that catches order-derived-from-array-position.\n  - WORK CONSERVING: while any compatible entry is queued, selection never returns null. Assert on a ring where the highest-weight resource is empty but others are not — the naive deficit loop idles there.\n  - CAPACITY BOUNDED: selection never exceeds the declared capacity for a resource.\n  - STARVATION BOUNDED: assert an explicit numeric bound — the lowest-weight resource is served within N rotations for a stated N derived from the weights. \"It eventually runs\" is not a bound and passes trivially.\nRefusal cases per DoD 2, each pinning the EXACT issue code and the refusing LAYER from the landed vocabulary: a forced head that conflicts with rotation; a cap revision applied mid-rotation; a dimension-identity mismatch between ring and work item; deficit arithmetic that would exceed the safe-integer range; and hostile identifiers. Assert a generated sweep produced a NON-ZERO case count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN: packages/scheduler/src/fairness/fairness-rotation.ts plus its one-line LF `.js` bridge (every module in this directory has one — fairness-ring.js, fairness-contract.js, fairness-work-item.js, fairness-evidence.js, fairness-cap-revision.js). Implement weighted deficit round-robin over a validated `FairnessRing`: a per-resource deficit advanced by that resource's `weight` each rotation, an entry selected when its resource's deficit covers it, and the deficit decremented on selection.\n\nWORK CONSERVATION IS THE SUBTLE PART: a plain WDRR loop stalls when the resource whose turn it is has an empty queue. The loop must skip empty queues and continue within the same rotation so a non-empty compatible queue is always served. Prove it with the empty-highest-weight-resource case from step 3.\n\nSAFE ARITHMETIC (DoD 2): deficits accumulate. Guard every add against `Number.MAX_SAFE_INTEGER` and refuse with an exact code rather than silently wrapping — the contract range-checks `deficitCounter` as input data but explicitly does not advance it, so overflow is yours to prevent.\n\nCall `validateRing` / `validateWorkItemSet` at the boundary and refuse on their result; do not re-derive their checks. Treat `deficitCounter` as carried state you read and return, never as a position — fairness-ring.ts:44-47 is explicit that the contract never reads it as one. Target <=250 physical lines by `grep -c ''`; split if it grows.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.ts",
+        "packages/scheduler/src/fairness/fairness-rotation.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.ts",
+        "packages/scheduler/src/fairness/fairness-rotation.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD RED for aging. Create packages/scheduler/src/fairness/fairness-aging.test.ts. Compatible-opportunity aging is what converts \"eventually\" into the starvation BOUND that DoD 1 requires, so its tests must assert the bound numerically, not qualitatively. Cover: an item whose compatible opportunity never arrives ages until it is promoted within a stated bound; aging is monotonic and never regresses; an item promoted by aging does not thereby exceed a capacity or cap limit; aging interacts correctly with a forced head rather than being silently overridden; and an `FairnessOpportunityAttestation` that is absent or unverifiable yields UNKNOWN and gains no promotion — per taskRail 2, a fairness claim without daemon-verifiable evidence is UNKNOWN or refused, never an optimistic promotion. Pin exact code and layer on every refusal, and assert the sweep produced a non-zero case count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN: packages/scheduler/src/fairness/fairness-aging.ts plus its LF `.js` bridge. Implement compatible-opportunity aging as a pure function over validated inputs: it raises an item's effective standing as compatible opportunities pass it by, bounded so no item waits longer than the stated bound. Consume `validateBypassClaim` for attestation evidence rather than trusting a caller-supplied flag; an unverifiable attestation is UNKNOWN and confers nothing.\n\nAging must not become a second authority: it changes SELECTION ORDER only, never capacity, never a cap, never a dimension identity. If a promotion would breach a capacity or a cap revision, the capacity wins and aging refuses — assert that precedence explicitly, because the opposite ordering is an easy and invisible way to let aging quietly raise a cap. Target <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.ts",
+        "packages/scheduler/src/fairness/fairness-aging.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.ts",
+        "packages/scheduler/src/fairness/fairness-aging.js"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Publish from the scheduler root, matching the pattern the contracts already use. packages/scheduler/src/index.ts currently exports the five fairness validators at :103-107 and their types at :221-239. Add a curated named block for the new rotation and aging surfaces in the same style — explicit named exports, never a wildcard. Keep the file's existing organisation and do not reorder or reformat neighbouring exports; the index is shared and a reflow makes the diff unreviewable and invites a conflict with another task editing it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "DoD 3 — prove production does not import DEVELOPMENT_ONLY testkit code, and prove the guard is real. The structural fact is favourable: `@moe/scheduler`'s dependencies are exactly @moe/context, @moe/contracts and @moe/core, with NO devDependencies and no @moe/testkit, so a testkit import cannot even resolve. But absence of a dependency is not an asserted property. Add an assertion over the owned fairness sources that no production module references @moe/testkit or the DEVELOPMENT_ONLY reference path, scoped to non-test files, with a hand-written non-zero floor on the number of files scanned so a mis-resolved directory read cannot pass by scanning nothing. Note packages/scheduler/src/package-boundary.test.ts already exists as this package's boundary guard — read it first and extend the existing mechanism if it fits rather than adding a parallel one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Mutation drills. Run each, confirm the NAMED test reddens, revert, confirm green, record the failing assertion text. (a) Remove the empty-queue skip so the WDRR loop idles on an empty turn — the work-conserving test must redden; this is the property most likely to be silently wrong. (b) Derive rotation order from array position instead of resourceId — the permuted-ring determinism test must redden. (c) Remove the MAX_SAFE_INTEGER guard on deficit accumulation — the safe-arithmetic refusal must redden. (d) Let aging promote past a capacity or cap limit — the precedence test must redden. (e) Accept an unverifiable attestation as evidence — the UNKNOWN case must redden. (f) Change only the refusing LAYER on one refusal, leaving the code — a layer assertion must redden independently, proving both halves are pinned separately.\n\nThe four new modules are UNTRACKED, so `git diff` is blind to them — hash with `git hash-object` before and after rather than trusting an empty diff, and re-run the suite after each restore, because a foreign whole-tree completion hook can commit a drill edit while `git status` looks clean.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.ts",
+        "packages/scheduler/src/fairness/fairness-aging.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verify and self-review. (1) Run the gate fresh and last: `pnpm --filter @moe/scheduler test`, plus `pnpm --filter @moe/scheduler typecheck`. Confirm the test count GREW by your cases. (2) The KNOWN baseline failure is packages/scheduler/src/package-boundary.test.ts (\"unterminated regular expression source token\" scanning apps/daemon/src/daemon-main.ts) — compare against the step-1 baseline and disclose it verbatim as pre-existing; do NOT claim it as yours and do NOT fix it here. Any OTHER red in this package is yours. (3) Hand-measure each new production file with `grep -c ''` and confirm <=250. (4) Path-attributed baseline: repo-wide typecheck and test at merge-base and HEAD, intersect the failing-path delta with owned paths, confirm EMPTY. (5) Adversarial review: does selection ever idle while a compatible entry is queued? Does any ordering depend on array position rather than a derived key? Can any deficit or age accumulate past the safe-integer range? Can aging raise a cap or a capacity? Does any refusal assert only that it failed rather than the exact code AND layer? Did any constant I mirrored from the reference drift from its cited value? Did I import @moe/testkit anywhere in production? (6) Confirm the four new `.js` bridges exist with a trailing LF, verified by `od -c`. (7) Stage and commit by explicit pathspec over the seven owned paths only, then `git diff --cached --name-only` to confirm nothing foreign is staged — the index on this board is shared and index.ts in particular is contended.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.ts",
+        "packages/scheduler/src/fairness/fairness-aging.ts",
+        "packages/scheduler/src/index.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-42b952c9 on the human's explicit instruction, 2026-08-10, TO GIVE THE MISSING PREREQUISITE AN OWNER — not because the original block was wrong. READ THIS BEFORE YOU DO ANYTHING. THE ORIGINAL BLOCK IS STILL FACTUALLY CORRECT AND I RE-VERIFIED IT: there is no WDRR, ring, or resource-queue production code anywhere under packages/scheduler/src; the landed DEVELOPMENT_ONLY reference EXPLICITLY EXCLUDES the WDRR rings and resource queues this task requires; and the hard dependency \"closure of all reference-model blocker findings\" remains UNKNOWN. NOTHING ABOUT THAT HAS CHANGED. *** YOUR REQUIRED OUTPUT IS NOT A PLAN FOR THIS TASK. *** Do NOT submit_plan for this task. Do NOT implement fairness from the reference model — it excludes the subject, so implementing from it would invent policy and authority, which is exactly the Clause 2 failure the block names. YOUR OUTPUT IS A NEW PREREQUISITE PRODUCTION TASK, authored via moe.create_task: the scheduler primitives — WorkItem, ring, resource, opportunity-evidence and cap-revision contracts — owned under packages/scheduler/src/fairness/**, with the gap measured symbol by symbol on disk rather than derived from the reference. Set its epicId to epic-e0c54bddb3004bf29e98b2a43cea2dc2 and order it ahead of this task. WHY THIS IS BEING DONE AS A STATUS FLIP: the block itself named this exact remedy and assigned the authoring to architect-8c9073cd, who is no longer registered. The task was never created, so the condition that would clear this block had no owner and no existence — a permanent dead end by construction. Flipping to PLANNING is the only way to put the authoring in front of an architect. AFTER YOU CREATE IT, RE-BLOCK THIS TASK with a reason naming the new task id. This task becomes plannable only when the primitives exist and are verifiable by grep or probe — NEVER on a status flip, including this one. BLAST RADIUS, so you know why it matters: task-005c9896, task-2561a780, task-b863bae8 and task-a1e7f75e — the entire expansion tail of this epic — all queue behind this. MECHANISM HAZARD recorded in the original block and still true: moe.unblock_worker flips the TASK out of BLOCKED as a side effect of unblocking a WORKER; at 11:40Z that silently re-queued this task while a human was only freeing a stuck session. That is NOT what happened here — this flip is deliberate and human-instructed.",
+  "reopenReason": "UNBLOCKED by architect-8ee37119 on 2026-08-10, on the blocking architect's OWN stated condition, verified by grep at HEAD rather than by a status flip.\n\nTHEIR UNBLOCK CONDITION, quoted: \"task-e8e27f76 reaches DONE and the five contract families are verifiable by grep or probe under packages/scheduler/src/fairness/. This task then consumes them.\" Both halves now hold.\n\n1. task-e8e27f768477426c927fd14c808f3299 = DONE (was WORKING when they wrote the block).\n\n2. ALL FIVE CONTRACT FAMILIES VERIFIED BY SYMBOL, not by filename — the distinction matters, because there is no fairness-resource.ts and a filename check would have wrongly reported a gap:\n   - WorkItem: FairnessWorkItem, validateWorkItem, validateWorkItemSet\n   - Ring: FairnessRing, FairnessRingQueueEntry, validateRing\n   - Resource: FairnessRingResource, validateRingResource (declared inside fairness-ring.ts)\n   - Opportunity-evidence: FairnessOpportunityAttestation\n   - Cap-revision: FairnessCapRevision, validateCapRevision\n   Plus the refusal vocabulary: FAIRNESS_CONTRACT_ISSUE_CODES, FAIRNESS_CONTRACT_LAYERS, FairnessContractRefusal, refuseFairness/acceptFairness/unknownFairness.\n\n3. COMMITTED, not merely on disk: `git ls-tree -r HEAD --name-only -- packages/scheduler/src/fairness` returns all five .ts modules with their .js bridges plus fairness-contract.test.ts. Two deliverables sat untracked-while-DONE on this board today, so this was checked explicitly.\n\n4. REACHABILITY, which is the check I got wrong on task-b6e3dd2a earlier today and will not repeat: this task's owned paths are packages/scheduler/src/fairness/** — the SAME directory the primitives landed in. Composition is a relative import; no cross-package manifest edge is required. That is the structural difference from b6e3dd2a, where the needed surface lived in a different package with no dependency edge and the task stayed correctly blocked.\n\n5. PROSE DEPENDENCIES also resolved, since this board states them as titles rather than ids: \"Readiness explanation engine\" = task-fa96b81c DONE; \"Lease presence core\" = task-967769ea DONE; \"Conserved budget core\" = task-d5c4b086 DONE.\n\nFOR THE PLANNING ARCHITECT: the original block warned that the DEVELOPMENT_ONLY reference genuinely EXCLUDES the subject — grep for ring|Ring|resourceQueue|WDRR|deficit over packages/testkit/src/scheduler-fairness returns nothing outside tests. Do not implement WDRR policy from that reference; consume the landed contracts and derive behaviour from them, or the Clause 2 \"invents policy and authority\" failure the block named returns. Re-measure before naming symbols.\n\nBlast radius this may help: task-005c9896, task-2561a780, task-b863bae8, task-a1e7f75e.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -48,17 +144,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-10T06:48:43.238Z",
+  "updatedAt": "2026-08-10T07:46:09.818Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T10:45:35.201Z"
+    "firstClaimAt": "2026-08-09T10:45:35.201Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 7
   },
-  "blockedReason": "RE-BLOCKED as the unblock instruction requires. Prerequisite: task-e8e27f768477426c927fd14c808f3299 (Production scheduler fairness primitives: WorkItem, ring, resource, opportunity-evidence, cap-revision contracts).\n\nI did NOT author a new task, deliberately. The required output — \"a NEW PREREQUISITE PRODUCTION TASK via moe.create_task\" — was ALREADY SATISFIED before I claimed this. governor-f70d1157 created exactly that task at human direction on 2026-08-10 to governor-42b952c9's audit spec. Measured now:\n  task-e8e27f76 | epicId epic-e0c54bddb3004bf29e98b2a43cea2dc2 (identical to this task's)\n  status WORKING, 8 plan steps\n  owns packages/scheduler/src/fairness/** — the exact paths this instruction names\nA second one would be a silent duplicate colliding with a task ACTIVELY WORKING those paths in a shared worktree: the \"gap claimed present, actually closed\" half of the staleness rail, and the more damaging half here.\n\nDisclosure: I planned task-e8e27f76 myself minutes ago (three contract modules with .js bridges, root publication proven by the existing plain-Node worker probe). It went WORKING while I was on this task.\n\nBLOCK CONDITION UNCHANGED AND STILL TRUE. Re-verified: packages/scheduler/src/fairness/ DOES NOT EXIST. No WDRR, ring or resource-queue production code anywhere under packages/scheduler/src. I also confirmed the reference genuinely excludes the subject — grep for ring|Ring|resourceQueue|ResourceQueue|WDRR|deficit over packages/testkit/src/scheduler-fairness returns nothing outside tests. Implementing from it would invent policy and authority, the Clause 2 failure the block names.\n\nUNBLOCK CONDITION, per the instruction's own words and never on a status flip including this one: task-e8e27f76 reaches DONE and the five contract families are verifiable by grep or probe under packages/scheduler/src/fairness/. This task then consumes them.\n\nBlast radius behind this, unchanged: task-005c9896, task-2561a780, task-b863bae8, task-a1e7f75e.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-10T06:47:55.707Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "The unblock instruction's required output is SATISFIED, but not by me — I verified it was already done and deliberately did not duplicate it. governor-f70d1157 had already created the prerequisite: task-e8e27f768477426c927fd14c808f3299 (Production scheduler fairness primitives), same epicId epic-e0c54bddb3004bf29e98b2a43cea2dc2, owning packages/scheduler/src/fairness/**. I planned it (8 steps: three contract modules with .js bridges, root publication proven by the existing plain-Node worker probe) and it is now WORKING. This task is re-BLOCKED naming that id, which is exactly the instruction's second half.",
@@ -69,5 +167,21 @@
       "releasedBy": "architect-705f0380",
       "reason": "Explicit handoff, not idle. The task is BLOCKED with a durable reason and needs no architect until its prerequisite lands; releasing frees the architect slot so I can keep draining the PLANNING pool."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T07:46:07.770Z",
+  "planningNotes": {
+    "approachesConsidered": "DERIVING WDRR FROM THE DEVELOPMENT_ONLY REFERENCE, as the task objective literally instructs — REJECTED, and this is the task's central trap. The reference does not contain the subject: `grep -rnw \"WDRR|deficit|resourceQueue|ResourceQueue\"` over packages/testkit/src/scheduler-fairness returns nothing, and there is no `Ring` identifier in it. It implements a priority-ladder / forced-cohort / bypass model instead (selectNext, forcedCohortOrder, boundFor, PRIORITY_LADDER, BYPASSES_PER_LEVEL, DEFAULT_M_D). architect who blocked this was right; implementing rings from it would invent policy, the Clause 2 failure they named.\n\nTREATING THAT AS GROUNDS TO STAY BLOCKED — REJECTED, because the landed contract explicitly delegates this work to this task. fairness-ring.ts:4-19 says the contract \"cannot say whose turn it is, cannot compute a deficit ... Rotation, deficit accounting and aging belong to the consumer\", and \"`weight` and `deficitCounter` are DATA the contract range-checks\". The consumer is this task. So the source of truth is the contract, not the reference, and the work is completing a stated delegation rather than inventing authority.\n\nIMPORTING THE REFERENCE'S CONSTANTS — IMPOSSIBLE, and the consequence must be handled deliberately. @moe/scheduler depends on exactly @moe/context, @moe/contracts and @moe/core, with no devDependencies and no @moe/testkit, and DoD 3 forbids the import anyway. So any policy constant must be redeclared in production. Duplication is the only legal path, but the values must match the reference exactly because the task scope forbids changing fairness constants without approval — hence the plan requires citing the reference file and line beside each mirrored constant and pinning the values in a test.\n\nONE COMBINED MODULE for rotation and aging — REJECTED. They fail independently and have different refusal vocabularies, and either alone plausibly approaches the 250-line target. Two focused modules keep the per-file cap comfortable and make the mutation drills target one property each.",
+    "codebaseInsights": "MEASURED AT HEAD on 2026-08-10, after I unblocked this task on the blocking architect's own stated condition.\n\nTHE PREREQUISITE LANDED AND IS REACHABLE. task-e8e27f76 is DONE and packages/scheduler/src/fairness/ is committed at HEAD with fairness-contract.ts (161), fairness-work-item.ts (150), fairness-ring.ts (235), fairness-evidence.ts (176), fairness-cap-revision.ts (191), each with a .js bridge, plus fairness-contract.test.ts (700). This task owns the SAME directory, so composition is a relative import — no cross-package edge is needed, which is exactly why this unblock is sound where task-b6e3dd2a's was not.\n\nALL FIVE CONTRACT FAMILIES VERIFIED BY SYMBOL rather than filename, which matters because there is no fairness-resource.ts: FairnessWorkItem/validateWorkItem/validateWorkItemSet; FairnessRing/FairnessRingQueueEntry/validateRing; FairnessRingResource/validateRingResource (declared inside fairness-ring.ts); FairnessOpportunityAttestation/validateBypassClaim; FairnessCapRevision/validateCapRevision. Refusal vocabulary: FAIRNESS_CONTRACT_ISSUE_CODES, FAIRNESS_CONTRACT_LAYERS, FairnessContractIssue, FairnessContractRefusal, refuseFairness/acceptFairness/unknownFairness/makeFairnessIssue/isFairnessRefusal.\n\nTHE CONTRACT DELEGATES THIS TASK BY NAME. fairness-ring.ts:4-19 — the contract \"cannot say whose turn it is, cannot compute a deficit ... Rotation, deficit accounting and aging belong to the consumer\". fairness-ring.ts:44-47 — the deficitCounter \"is carried so a consumer can persist and restore rotation state; this module never reads it as a position and never advances it.\" Both fairness-contract.ts:10 and fairness-ring.ts:7 state they were \"designed from a measured gap/void, NOT derived from the DEVELOPMENT_ONLY reference\".\n\nTHE FLAT-ENTRIES DESIGN IS A DETERMINISM HAZARD. fairness-ring.ts:54-58: `entries` is the flat union of every per-resource queue, deliberately carrying \"no implied traversal order between queues\". Rotation order must therefore be derived from resourceId and entry sequence, never from array position, or a re-serialized ring selects differently.\n\nROOT PUBLICATION PATTERN: packages/scheduler/src/index.ts already exports the five validators at :103-107 and their types at :221-239, as explicit named blocks. Follow it; the file is shared and contended.\n\nDoD 3 IS STRUCTURALLY FAVOURABLE: @moe/scheduler's dependencies are @moe/context, @moe/contracts, @moe/core — no @moe/testkit, no devDependencies — so a testkit import cannot resolve. packages/scheduler/src/package-boundary.test.ts already exists as this package's boundary guard; extend it rather than adding a parallel mechanism.\n\nKNOWN BASELINE RED IN THIS PACKAGE: package-boundary.test.ts fails with \"unterminated regular expression source token\" scanning apps/daemon/src/daemon-main.ts. It has been present all day across multiple tasks. Record it at step 1 so it is never mistaken for a regression.",
+    "risks": "1. IMPLEMENTING FROM THE REFERENCE ANYWAY, because the objective sentence says to. The reference genuinely lacks rings, deficits and resource queues; deriving them from it invents policy and is the exact Clause 2 failure the original block named. The contract is the source of truth.\n\n2. WORK CONSERVATION IS THE PROPERTY MOST LIKELY TO BE SILENTLY WRONG. A textbook WDRR loop stalls when the resource whose turn it is has an empty queue. The test must use a ring whose highest-weight resource is EMPTY while others are not; a test with all queues populated passes against a broken implementation. Drill (a) targets it.\n\n3. ORDER DERIVED FROM ARRAY POSITION. `entries` is a flat union with no implied inter-queue order by design, so a rotation keyed on index is deterministic only until the ring is re-serialized. The permuted-ring test is what catches it; drill (b) proves that test is live.\n\n4. \"STARVATION BOUNDED\" ASSERTED QUALITATIVELY. \"It eventually runs\" passes trivially and proves nothing. DoD 1 says bounded — assert a numeric bound derived from the weights.\n\n5. DEFICIT AND AGE ACCUMULATE. Both grow without bound over a long run; unguarded addition eventually leaves the safe-integer range and wraps silently. The contract range-checks deficitCounter as INPUT but explicitly never advances it, so overflow is entirely this module's responsibility.\n\n6. AGING BECOMING A SECOND AUTHORITY. If a promotion can breach a capacity or a cap revision, aging has quietly become a cap-raising mechanism. Assert the precedence explicitly — capacity wins, aging refuses.\n\n7. CONSTANT DRIFT. Production cannot import the reference, so constants are duplicated by necessity. A duplicated constant that drifts from its source silently changes fairness policy, which the task scope forbids without approval. Cite file and line beside each, and pin the values in a test.\n\n8. UNVERIFIABLE ATTESTATION TREATED AS EVIDENCE. taskRail 2 requires a fairness claim without daemon-verifiable evidence to be UNKNOWN or refused; an optimistic promotion here is an authority leak.\n\n9. SHARED INDEX.TS. Reordering or reflowing neighbouring exports makes the diff unreviewable and invites a conflict with another task editing the same file."
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-10T07:46:09.818Z"
 }

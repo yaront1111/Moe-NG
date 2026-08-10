@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import type { JSX, KeyboardEvent, MouseEvent } from "react";
 
+import { CONTROL_ROOM_KEYBOARD_MAP } from "../a11y/keyboard-map.js";
+import type { KeyboardAction } from "../a11y/keyboard-map.js";
 import type { FixtureAffordanceSnapshot } from "../fixtures.js";
 import { CONTROL_ROOM_NAV_ITEMS } from "./nav-rail.js";
 import { CircuitBreakerBanner } from "./circuit-breaker-banner.js";
@@ -66,24 +68,23 @@ export function ContextBar(props: ContextBarProps): JSX.Element {
             ))}
           </div>
         ) : null}
-        {narrow ? (
-          <button
-            aria-controls="cr-shell-inspector"
-            aria-expanded={inspectorExpanded}
-            aria-label={inspectorExpanded ? "Close inspector" : "Open inspector"}
-            className="cr-shell-inspector-toggle"
-            data-testid="cr.shell.inspector.toggle"
-            onClick={onInspectorToggle}
-            type="button"
-          >
-            <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
-              <path d="M4 5.5h16v13H4z M15.5 5.5v13 M8 9h3 M8 12h3"
-                stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"
-                strokeWidth="1.6" />
-            </svg>
-            <span className="cr-shell-inspector-toggle-label">Proof</span>
-          </button>
-        ) : null}
+        <button
+          aria-controls="cr-shell-inspector"
+          aria-expanded={inspectorExpanded}
+          aria-label={inspectorExpanded ? "Close inspector" : "Open inspector"}
+          className="cr-shell-inspector-toggle"
+          data-narrow={narrow ? "true" : undefined}
+          data-testid="cr.shell.inspector.toggle"
+          onClick={onInspectorToggle}
+          type="button"
+        >
+          <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+            <path d="M4 5.5h16v13H4z M15.5 5.5v13 M8 9h3 M8 12h3"
+              stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"
+              strokeWidth="1.6" />
+          </svg>
+          <span className="cr-shell-inspector-toggle-label">Proof</span>
+        </button>
       </div>
       <div className="cr-shell-banner-stack">
         <Banners affordance={affordance} />
@@ -92,6 +93,18 @@ export function ContextBar(props: ContextBarProps): JSX.Element {
     </header>
   );
 }
+
+const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
+  approvals: "Focus Approvals",
+  board: "Show board in goal views",
+  "collapse-inspector": "Close proof inspector",
+  "expand-inspector": "Open proof inspector",
+  goals: "Focus Goals",
+  graph: "Show graph in goal views",
+  help: "Open command map",
+  search: "Focus search when present",
+  timeline: "Show timeline in goal views",
+});
 
 export function HelpOverlay({ onClose, open }: {
   readonly onClose: () => void;
@@ -126,9 +139,25 @@ export function HelpOverlay({ onClose, open }: {
           <h2>Keyboard shortcuts</h2>
         </header>
         <p>Move through the control room without leaving the operational flow.</p>
-        <ul>
-          {CONTROL_ROOM_NAV_ITEMS.map((label) => <li key={label}>{label}</li>)}
-        </ul>
+        <div className="cr-shell-help-grid">
+          <section aria-label="Keyboard commands">
+            <h3>Commands</h3>
+            <ul className="cr-shell-command-map">
+              {CONTROL_ROOM_KEYBOARD_MAP.map((binding) => (
+                <li data-testid={`cr.shell.help.binding.${binding.action}`} key={binding.action}>
+                  <kbd data-testid="cr.shell.help.keys">{binding.sequence.join(" ")}</kbd>
+                  <span data-testid="cr.shell.help.description">{HELP_LABELS[binding.action]}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section aria-label="Navigation destinations">
+            <h3>Destinations</h3>
+            <ul className="cr-shell-help-destinations">
+              {CONTROL_ROOM_NAV_ITEMS.map((label) => <li key={label}>{label}</li>)}
+            </ul>
+          </section>
+        </div>
         <button onClick={onClose} ref={closeRef} type="button">Close keyboard help</button>
       </section>
     </div>

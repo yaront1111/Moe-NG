@@ -1,0 +1,161 @@
+{
+  "id": "task-eff945fcca89491c80bed61149442529",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Durable OS-protected recovery key provider surviving process restart",
+  "description": "Objective: supply the durable, OS-protected key/identity provider that the recovery chain has been missing, so a PREPARED restore command can resume after process death with the SAME key epoch. Authored by governor-36019faa on human direction 2026-08-10, from architect-5b5302ee's audit (comment-1a16d3a86ddb40e29b6a62d83e33897a) and architect-8ee37119's re-verification (comment-9f416aa2f693470ea2de4f6a9635d979), both on task-b6e3dd2af916490fb2bc4d375a530683.\n\nTHE PRODUCTION SOURCE NAMES THIS TASK ITSELF. apps/daemon/src/recovery/recovery-incarnation.ts, in its own header comment above createRecoveryIncarnationService (:63), states: \"MINTED carries authority: NONE and is process-local. It is a proposal for RecoveryAnchor to persist; nothing here is durable, and a non-extractable WebCrypto key behind a handle is protected against export but is NOT an OS-durable keystore reference - it does not survive the process. A later controller must supply a protected durable key provider before anything can claim crash-resume.\" This task is that provider. Do not treat the quoted sentence as a design suggestion; it is the acceptance boundary.\n\nMEASURED AT HEAD bec1cc6 by governor-36019faa, re-verify before planning (the staleness rail binds in both directions):\n- createRecoveryIncarnationService keeps `settled` and `inFlight` as in-process `new Map` (recovery-incarnation.ts:66-67). Restart loses both.\n- The key handle resolves to key material through a module-private WeakMap in recovery-incarnation.node.ts; only the PUBLIC key is exported via webcrypto.subtle.exportKey(\"spki\", publicKey).\n- recovery-incarnation.test.ts POSITIVELY ASSERTS that the signing handle stays out of the serialized binding. DO NOT PLAN TO PERSIST KEY MATERIAL - a landed test forbids it and any such plan goes red.\n- apps/daemon/src/recovery/ already contains recovery-succession.ts and recovery-incarnation-anchor.ts. Read both before naming any new file; task-304aa634 landed succession proof and this task must compose it rather than mint a parallel mechanism.\n\nTHE HARD PART, stated so it is not planned around: Node provides no portable Windows/macOS/Linux ACL or keystore primitive. POSIX mode bits plus a final-file fsync do NOT prove OS protection on win32. A plan that claims OS protection without a platform-specific mechanism, or that silently degrades to a plain file, is the \"proof that only proves the shapes\" that epic Clause 2 forbids. If a supported host cannot provide the guarantee, the correct outcome is a typed UNKNOWN that refuses with a stable code - never an optimistic pass.\n\nNOT IN SCOPE: the two-slot anchor installer itself (task-b6e3dd2a), store schema rows, the daemon restore controller, generating backup bytes, external-effect inventory, R3 completion.\n\nHard dependencies: none. This is the root of the chain and is plannable now.\n\nOwned paths: apps/daemon/src/recovery/ - a new focused provider module plus its .js bridge and focused tests. Do not edit recovery-incarnation.ts's existing exports beyond what composition requires.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+  "definitionOfDone": [
+    "A durable key/identity provider persists a key epoch and reopens the SAME epoch after full process death on every supported host (win32, darwin, linux), demonstrated by a test that actually terminates and restarts a process rather than simulating it.",
+    "Protection is OS-backed and platform-specific, not POSIX mode bits on win32; the mechanism used per platform is named in code and asserted. A host that cannot provide the guarantee yields a typed UNKNOWN refusing with a distinct stable code and layer, never an optimistic pass.",
+    "Private key material is never serialized into any binding or anchor payload; the existing recovery-incarnation.test.ts assertion that the signing handle stays out of the serialized binding still passes unchanged.",
+    "The provider composes the landed succession surface (apps/daemon/src/recovery/recovery-succession.ts) rather than minting a second incarnation mechanism; the composition point is named and tested.",
+    "Every refusal path asserts its exact stable reason code AND the refusing layer, and each declared failure injection is generated at least once (a sweep producing zero cases must fail).",
+    "Mutating each production guard turns a NAMED focused test red; the drill is run, reverted, and the exact failing assertion text recorded.",
+    "Fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "Do not persist private key material anywhere. Succession (re-mint and prove the chain from the predecessor) is the sanctioned answer to process death, not resurrection of a prior key.",
+    "Do not claim POSIX directory-fsync or ACL semantics on win32. Name the actual per-platform mechanism.",
+    "Cross-package symbol use must prove the DEPENDENCY EDGE, not just the symbol: manifest declaration, lockfile importer entry, and a compiled bare-specifier probe deleted in the same command. Three tasks died on this board today for skipping it.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, never per task."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY. Resolve the apparent contradiction between DoD 1 and taskRail 2 BEFORE writing anything, because building the wrong side of it lands a landed-test failure. DoD 1 says the provider \"persists a key epoch and reopens the SAME epoch after full process death\". taskRail 2 says \"Do not persist private key material anywhere. Succession (re-mint and prove the chain from the predecessor) is the sanctioned answer to process death, not resurrection of a prior key.\" These are consistent ONLY under this reading, which the landed code confirms: the DURABLE artifact is the anchored epoch RECORD (public SPKI, incarnation ref, restore-command and backup-generation bindings), and \"reopening the same epoch\" means resolving the same epoch IDENTITY and proving an unbroken chain to it — never resurrecting private bytes. Confirm by reading: apps/daemon/src/recovery/recovery-incarnation.ts:45-62 (the header comment the task calls the acceptance boundary — \"nothing here is durable ... A later controller must supply a protected durable key provider\"); recovery-incarnation.node.ts:1-27 (\"non-extractable is protection against export, not durability\"); and recovery-incarnation.test.ts, which POSITIVELY ASSERTS the signing handle stays out of the serialized binding. A plan that persists key material makes that landed test red. Also run the baseline gate first and record it: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "READ-ONLY, the composition surfaces DoD 4 requires. You are composing three landed modules, not minting a parallel mechanism.\n\nSUCCESSION (apps/daemon/src/recovery/recovery-succession.ts, 369 lines) exports `verifyAnchoredPredecessor` (:53), `mintSuccessor` (:107), `proveSuccession` (:131), `readSuccessionChain` (:233) and `createRecoverySuccessionService` (:322). That quartet IS the re-mint-and-prove path taskRail 2 sanctions and DoD 4 names.\n\nITS CONTRACT (recovery-succession-contract.ts) already owns the vocabulary — mint nothing new where these fit: `RECOVERY_SUCCESSION_LAYER` (:20), `RECOVERY_SUCCESSION_ERROR_CODES` (:24), and the prebuilt refusals `SUCCESSION_INPUT_INVALID` (:125), `SUCCESSION_PREDECESSOR_NOT_FOUND` (:129), `SUCCESSION_PREDECESSOR_UNVERIFIABLE` (:133), `SUCCESSION_ALREADY_RECORDED` (:137), `SUCCESSION_PROOF_UNAVAILABLE` (:141), `SUCCESSION_ANCHOR_UNAVAILABLE` (:145).\n\nDURABILITY ALREADY EXISTS AND IS NOT A FILE. recovery-incarnation-anchor.ts exports `readAnchoredIncarnation(store: SqliteEventStore, projectId, incarnationRef)` (:147) and `anchorIncarnation(store: SqliteEventStore, request, binding)` (:186). The anchored binding is persisted THROUGH SqliteEventStore. Do not invent a second durability substrate; the epoch record's survival across restart is already solved, and this task supplies the protected provider that composes it.\n\nTHE PLATFORM-PORT CONVENTION in this directory is a `.node.ts` sibling holding all host-specific code, with the pure logic in a plain module — see recovery-incarnation.ts / recovery-incarnation.node.ts and doctor-version.ts / doctor-version.node.ts. Follow it exactly.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "Contract module: apps/daemon/src/recovery/recovery-key-provider-contract.ts plus its one-line LF `.js` bridge. Declare TYPES and a frozen stable vocabulary only — no host calls, no crypto. Needed: a `RECOVERY_KEY_PROVIDER_LAYER` constant for the refusing-layer half of DoD 5; a frozen `RECOVERY_KEY_PROVIDER_ERROR_CODES` tuple; a `RecoveryKeyProtection` result naming the ACTUAL per-platform mechanism used (DoD 2 requires the mechanism be named in code and asserted, so make it a closed union of mechanism identifiers plus an UNPROTECTED/UNKNOWN member, never a boolean); a `RecoveryKeyProviderPort` interface the `.node.ts` implements; and a discriminated result type whose refusal carries both code and layer. Reuse the succession refusals from step 2 wherever the fault is a succession fault; mint a code here ONLY for faults succession does not model — specifically protection-unavailable and protection-unverifiable. Keep at or below 250 physical lines by `grep -c ''`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider-contract.ts",
+        "apps/daemon/src/recovery/recovery-key-provider-contract.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider-contract.ts",
+        "apps/daemon/src/recovery/recovery-key-provider-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED for the pure half. Create apps/daemon/src/recovery/recovery-key-provider.test.ts driving the not-yet-written provider with an INJECTED fake port, so every branch is reachable without touching a real filesystem or keystore. Cases, each asserting the EXACT stable code AND the refusing layer (DoD 5), never merely that it failed:\n  - Cold start with no anchored predecessor mints a fresh epoch and anchors it.\n  - REOPEN after process death: given an anchored predecessor, the provider verifies it, mints a SUCCESSOR key, proves succession, and resolves to the SAME epoch identity — assert the epoch/incarnation ref is identical AND that the successor's public SPKI DIFFERS from the predecessor's. Both halves matter: same identity proves reopen, different key proves it re-minted rather than resurrected.\n  - Predecessor present but unverifiable -> refuses with the succession vocabulary, not a new code.\n  - Protection unavailable on this host -> typed UNKNOWN refusing with the protection code and this layer. It must NOT fall through to an optimistic success; that is the exact failure the task text forbids.\n  - Protection claimed but unverifiable on read-back -> refuses.\n  - A sweep over every declared failure injection asserts a NON-ZERO case count and that each declared injection was generated at least once (taskRail 4). A sweep that silently produces zero cases passes while testing nothing.\nAssert on every refusal that no anchor write occurred.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN, the pure orchestrator: apps/daemon/src/recovery/recovery-key-provider.ts plus its LF `.js` bridge. It takes the port and the succession service by INJECTION and contains zero host-specific code — all platform work lives in the `.node.ts` from step 6, mirroring recovery-incarnation.ts / recovery-incarnation.node.ts.\n\nThe reopen path composes, in order: `readAnchoredIncarnation` to find the predecessor; `verifyAnchoredPredecessor` to establish it is trustworthy; `mintSuccessor` for a NEW key; `proveSuccession` to bind the successor to the predecessor; then anchor the result. Do not reimplement any of those four — DoD 4 requires composition and taskRail 2 forbids a parallel mechanism.\n\nFAIL CLOSED THROUGHOUT: an unreadable anchor, an unverifiable predecessor, an unavailable protection mechanism, or a failed read-back each refuse with a code and a layer and write nothing. Never downgrade a protection failure into a success — the provider's whole purpose is that something downstream may claim crash-resume, and an optimistic pass would launder that claim.\n\nNever accept a caller-supplied epoch, nonce or key handle as evidence — recovery-incarnation.ts:53-56 documents why (\"Each of those would let someone holding the backup predict or replay the fence\"). Keep at or below 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "The platform port: apps/daemon/src/recovery/recovery-key-provider.node.ts plus its LF `.js` bridge. This is where DoD 2 is won or lost.\n\nSTATE THE HONEST CONSTRAINT IN CODE, as recovery-incarnation.node.ts does: Node exposes NO portable Windows/macOS/Linux ACL or keystore primitive. Therefore implement DETECTION plus a NAMED mechanism per platform, and a typed UNKNOWN everywhere else:\n  - win32: POSIX mode bits are meaningless here. If you cannot name and verify a real Win32 mechanism, the honest result is the typed UNKNOWN refusal — the task text blesses this explicitly and forbids the alternative. Do NOT claim protection you cannot demonstrate, and do NOT claim directory-fsync semantics (taskRail 3).\n  - darwin / linux: name the specific mechanism you actually apply and VERIFY it by read-back rather than assuming the syscall succeeded.\n\nBecause taskRail 2 forbids persisting private key material, note what this protects: the anchored record holds PUBLIC material and bindings, so the property needed is TAMPER-EVIDENCE and access restriction against other local users, not secrecy. Say that in the header comment so a later reader does not mistake the provider for a secret store and try to widen it.\n\nEvery host call is wrapped: a throw becomes a typed refusal with a code and this layer, never an escaping exception. Keep at or below 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.node.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.node.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.node.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.node.js"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 1's hardest clause: a test that ACTUALLY TERMINATES AND RESTARTS A PROCESS, not a simulation. Create apps/daemon/src/recovery/recovery-key-provider.node.test.ts.\n\nUse the precedent already in this directory rather than inventing one — doctor-version.node.test.ts:345-347 runs `execFileAsync(process.execPath, [\"--experimental-strip-types\", \"--input-type=module\", \"-e\", source])`. No `.mjs` worker file is needed and none should be added; the daemon package has none and the inline `-e` form keeps the evidence in one file.\n\nThe proof is TWO separate child processes over ONE store path under `mkdtemp` in the OS temp root (never inside the repo, cleaned in an afterEach that runs on failure, recursive and forced — this host is win32):\n  child 1: open the provider, anchor a fresh epoch, print the epoch identity and public SPKI as JSON, EXIT.\n  child 2: a NEW process over the same store path — reopen, and print the resolved epoch identity, the successor SPKI, and the succession chain.\nThen assert in the parent: the epoch IDENTITY from child 2 equals child 1's; the SPKI DIFFERS; and the succession chain links child 2's successor to child 1's predecessor. That triple is what distinguishes a real durable reopen from both a simulation and a resurrected key.\n\nAlso assert the platform branch: on this host, the mechanism reported is the one the `.node.ts` names for `process.platform`, or a typed UNKNOWN refusal — and assert WHICH, so the test is meaningful on whichever host CI runs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.node.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.node.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Prove the landed constraint still holds — DoD 3. Re-run recovery-incarnation.test.ts and confirm its assertion that the signing handle stays OUT of the serialized binding passes UNCHANGED, and that you did not edit recovery-incarnation.ts's existing exports beyond what composition strictly required (the task's owned-paths clause). Then add one assertion in your own suite that the provider's anchored payload contains no private key material: serialize what the provider anchors and assert the private handle and any PKCS8-shaped bytes are absent. Do this by inspecting the ACTUAL anchored bytes, not by asserting on a shape you constructed in the test — the global rail requires the property be asserted against the production surface. This is the assertion that stops a future refactor quietly turning the provider into a secret store.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.node.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "DoD 6 mutation drills. Run each, confirm the NAMED test reddens, revert, confirm green before the next, and record the exact failing assertion text. (a) Make the protection-unavailable branch return success instead of the typed UNKNOWN — the protection refusal case must redden; this is the single most important drill because an optimistic pass here launders a crash-resume claim downstream. (b) Skip `verifyAnchoredPredecessor` and trust the anchored record — the unverifiable-predecessor case must redden. (c) Replace `mintSuccessor` with reuse of the predecessor's public SPKI — the restart test's \"SPKI DIFFERS\" assertion must redden, proving it re-mints rather than resurrects. (d) Drop `proveSuccession` — the chain assertion must redden. (e) Change only the refusing LAYER on one refusal — a layer assertion must redden independently of the code, proving both halves are pinned separately. (f) Make the read-back verification a no-op — the protection-unverifiable case must redden.\n\nAll new files here are UNTRACKED, so `git diff` is structurally blind to them — never verify a revert by an empty diff. Hash each with `git hash-object` before and after, and re-run the suite after every restore, because a foreign whole-tree completion hook can commit a drill edit while `git status` still looks clean.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.node.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Verify and self-review. (1) Run the gate fresh, last and unnarrowed: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Confirm the test count GREW by your new cases — an unchanged count means they are not being collected. (2) Confirm apps/daemon's runtime-entrypoint/bridge expectations still pass: every non-test module in this directory has a one-line LF `.js` sibling (recovery-incarnation.js, recovery-succession.js, recovery-incarnation-anchor.js, doctor-version.node.js all follow it), so your three new modules need three bridges; verify the trailing LF with `od -c`. (3) Hand-measure every new production file with `grep -c ''` and confirm each is at or below 250 — note this directory's TEST files routinely exceed it (recovery-incarnation.test.ts is 757, recovery-succession.test.ts 722), so the cap binds your production sources, not your tests. (4) Path-attributed baseline: repo-wide `pnpm typecheck` and `pnpm test` at merge-base and HEAD, intersect the failing-path delta with owned paths, confirm EMPTY, disclose foreign red verbatim. Foreign red inside @moe/daemon itself is a BLOCK, not a disclosure. (5) Adversarial review: does ANY path return success when protection could not be established or verified? Does anything persist private key material, directly or inside an anchored payload? Did I claim POSIX or ACL semantics on win32? Does the restart test assert all three of same-identity, different-SPKI and linked-chain? Did every declared injection actually generate a case? (6) Record the consumer per Clause 1: task-b6e3dd2af916490fb2bc4d375a530683 (Crash-safe two-slot recovery anchor installer) is the task this unblocks, and task-8a01c025b65246aca09e69d82e009587 is the downstream authentication consumer. (7) Stage and commit by explicit pathspec over the eight owned files only, then `git diff --cached --name-only` to confirm nothing foreign is staged — the index on this board is shared.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.node.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 13.01,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-10T07:31:03.909Z",
+  "updatedAt": "2026-08-10T07:40:40.448Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-10T07:36:59.330Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 8
+  },
+  "contextFetchedBy": [
+    "architect-8ee37119"
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T07:40:38.395Z",
+  "planningNotes": {
+    "approachesConsidered": "PERSISTING THE PRIVATE KEY so a restart can literally reopen the same signing key — REJECTED, and it is the trap this task is most likely to fall into because DoD 1's words \"reopens the SAME epoch\" invite it. taskRail 2 forbids it, and recovery-incarnation.test.ts already POSITIVELY ASSERTS the signing handle stays out of the serialized binding, so such a plan lands a red on a landed test rather than failing review. The sanctioned answer is succession: re-mint a new key and prove the chain to the anchored predecessor.\n\nINVENTING A FILE-BASED DURABILITY SUBSTRATE — REJECTED. recovery-incarnation-anchor.ts already persists the anchored binding THROUGH SqliteEventStore (`anchorIncarnation(store, request, binding)` :186, `readAnchoredIncarnation(store, projectId, incarnationRef)` :147). Durability across restart is solved; this task supplies the PROTECTED PROVIDER that composes it. A second substrate would fork the authority.\n\nMINTING A NEW REFUSAL VOCABULARY — REJECTED except for two genuinely new faults. recovery-succession-contract.ts already ships RECOVERY_SUCCESSION_LAYER and prebuilt refusals SUCCESSION_INPUT_INVALID, SUCCESSION_PREDECESSOR_NOT_FOUND, SUCCESSION_PREDECESSOR_UNVERIFIABLE, SUCCESSION_ALREADY_RECORDED, SUCCESSION_PROOF_UNAVAILABLE and SUCCESSION_ANCHOR_UNAVAILABLE. Only protection-unavailable and protection-unverifiable are unmodelled, so only those are new.\n\nADDING A .mjs WORKER for the process-death test — REJECTED. doctor-version.node.test.ts:345-347 in this same directory already runs a real child via `execFileAsync(process.execPath, [\"--experimental-strip-types\", \"--input-type=module\", \"-e\", source])`. The daemon package has zero .mjs files; the store's five are a different package's convention. The inline form keeps the evidence in one reviewable file.\n\nCLAIMING WIN32 OS PROTECTION — REJECTED unless a real mechanism can be named and verified. Node exposes no portable ACL/keystore primitive. The task text explicitly blesses a typed UNKNOWN refusal on a host that cannot provide the guarantee and forbids an optimistic pass, so detection-plus-UNKNOWN is the correct design rather than a defect.",
+    "codebaseInsights": "MEASURED AT HEAD bec1cc6 on 2026-08-10. Every governor claim in the description re-verified; all hold.\n\nTHE CONTRADICTION THAT MUST BE RESOLVED FIRST. DoD 1 (\"persists a key epoch and reopens the SAME epoch after full process death\") and taskRail 2 (\"Do not persist private key material anywhere. Succession ... not resurrection of a prior key\") are consistent only under one reading: the DURABLE artifact is the anchored epoch RECORD (public SPKI, incarnation ref, restore-command and backup-generation bindings), and \"reopen the same epoch\" means resolve the same epoch IDENTITY and prove an unbroken chain to it. The landed code confirms this reading three times over.\n\nTHE ACCEPTANCE BOUNDARY IS A CODE COMMENT, quoted by the task and verified at recovery-incarnation.ts:45-62: \"`MINTED` carries `authority: \\\"NONE\\\"` and is process-local ... nothing here is durable, and a non-extractable WebCrypto key behind a handle is protected against export but is NOT an OS-durable keystore reference — it does not survive the process. A later controller must supply a protected durable key provider before anything can claim crash-resume.\" recovery-incarnation.node.ts:1-27 repeats it: \"non-extractable is protection against export, not durability.\"\n\nSTILL-TRUE MEASUREMENTS: createRecoveryIncarnationService keeps `settled` and `inFlight` as in-process `new Map` (recovery-incarnation.ts:66-67). The key handle resolves through a module-private WeakMap in recovery-incarnation.node.ts; only the PUBLIC key leaves, via exportKey(\"spki\").\n\nCOMPOSITION SURFACES (DoD 4). recovery-succession.ts (369 lines) exports verifyAnchoredPredecessor (:53), mintSuccessor (:107), proveSuccession (:131), readSuccessionChain (:233), createRecoverySuccessionService (:322) — that quartet is the sanctioned re-mint-and-prove path. recovery-succession-contract.ts owns RECOVERY_SUCCESSION_LAYER (:20), the error-code tuple (:24) and six prebuilt refusals (:125-145). recovery-incarnation-anchor.ts exports readAnchoredIncarnation (:147) and anchorIncarnation (:186), BOTH taking a SqliteEventStore — the anchor is event-store persisted, not a file.\n\nWHAT \"OS-PROTECTED\" ACTUALLY MEANS HERE, and it reframes DoD 2: because no private material is persisted, the durable record holds PUBLIC material and bindings. The needed property is therefore TAMPER-EVIDENCE and access restriction against other local users, NOT secrecy. That is achievable per-platform; secrecy would not be.\n\nCONVENTIONS. Platform code goes in a `.node.ts` sibling with pure logic in a plain module (recovery-incarnation / recovery-incarnation.node, doctor-version / doctor-version.node). Every non-test module in this directory has a one-line LF `.js` bridge. The real-subprocess precedent is doctor-version.node.test.ts:345-347.\n\nLINE BUDGET NOTE: production files in this directory sit at 116-369 lines, and TEST files routinely exceed the cap (recovery-incarnation.test.ts 757, recovery-succession.test.ts 722). The <=250 rail binds production sources; do not split a test to chase it, and do not read the existing oversized tests as permission for oversized production.",
+    "risks": "1. BUILDING THE WRONG SIDE OF DoD 1. \"Reopens the SAME epoch\" reads like key resurrection. Persisting key material violates taskRail 2 AND makes a LANDED test red (recovery-incarnation.test.ts asserts the signing handle stays out of the serialized binding). Step 1 exists solely to settle this before any code.\n\n2. AN OPTIMISTIC PASS WHERE PROTECTION CANNOT BE ESTABLISHED. This is the defect the task text names explicitly — \"a proof that only proves the shapes\". Node has no portable ACL/keystore primitive, so the temptation on win32 is to fall back to mode bits or a plain file and call it protected. The correct output is a typed UNKNOWN refusal. Drill (a) targets exactly this.\n\n3. A SIMULATED RESTART. DoD 1 demands a test that actually terminates and restarts a process. An in-process \"close and reopen the service object\" would pass while proving nothing, because the in-process Maps at recovery-incarnation.ts:66-67 are precisely what a real process death destroys.\n\n4. A REOPEN TEST THAT CANNOT DISTINGUISH REOPEN FROM RESURRECTION. Asserting only that the epoch identity matches would also pass if the key were resurrected. The test must assert all three: same identity, DIFFERENT public SPKI, and a succession chain linking them. Drill (c) proves the SPKI half is live.\n\n5. MINTING A PARALLEL SUCCESSION MECHANISM instead of composing recovery-succession.ts. DoD 4 names the composition point; a second mechanism would fork the authority the same way a second epoch counter would.\n\n6. MISSING .js BRIDGES. Three new modules need three bridges. A missing bridge fails neither tsc nor vitest and breaks only plain-Node resolution, and this directory's convention is enforced by the daemon's entrypoint expectations.\n\n7. IN-REPO TEST ARTEFACTS. The restart test needs a real store path; use mkdtemp under the OS temp root with a forced recursive cleanup in an afterEach that runs on failure. This host is win32.\n\n8. ALL EIGHT FILES ARE NEW AND UNTRACKED, so `git diff` cannot see them. A mutation drill reverted \"because the diff is empty\" is not reverted — hash with git hash-object."
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-10T07:40:40.448Z"
+}

@@ -130,18 +130,31 @@
     {
       "stepId": "step-8",
       "description": "VERIFY AND ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\n\nBoth legs exit 0 with nonzero discovery. Path-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/core itself is a BLOCK, not a disclosure.\n\nHAND-MEASURE EVERY TOUCHED PRODUCTION FILE with `grep -c ''` and report the numbers in your completion evidence:\n  goal-reducer.ts, goal-validation.ts, goal-contract.ts, goal-results.ts — each at or below 250.\nA green suite is NOT evidence of the cap: packages/core/src/goal/ is not swept by planning-source-size.test.ts. PowerShell Measure-Object -Line skips blank lines and will report headroom you do not have.\n\nAdversarial review:\n- Did I touch anything under packages/core/src/planning? I must NOT have — task-aedcd01a owns it and runs in parallel. Confirm with `git diff --stat`.\n- Did goal.activate_initial_graph's admitted set or behaviour change? DoD 3 forbids it.\n- Is there exactly ONE epoch counter, still owned by the goal aggregate?\n- Does every refusal carry its layer from the production result field rather than a test-side reconstruction?\n- Did the extraction in step 2 change behaviour? It must have been pure.\n- Do all pre-existing assertions in goal-reducer.test.ts and goal-invariants.test.ts still pass, except any genuinely invalidated by the added `layer` field — and did I update those rather than delete them?\n- Clause 1: record task-aedcd01ad91245d9a036d9dac3b76a22 as the consumer that binds a graph revision's activation to the epoch this command issues.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH 27 FOREIGN FILES earlier in this session. Never git add -A.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-reducer.ts",
         "packages/core/src/goal/goal-validation.ts",
         "packages/core/src/goal/goal-results.ts",
         "packages/core/src/goal/goal-epoch-advance.test.ts"
       ],
-      "startedAt": "2026-08-10T07:13:44.744Z"
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-epoch-advance.test.ts",
+        "packages/core/src/goal/goal-reducer.test.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-results.js",
+        "packages/core/src/goal/goal-results.ts",
+        "packages/core/src/goal/goal-validation.ts",
+        "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+        "packages/testkit/src/schedule/schedule-universe-tables.ts"
+      ],
+      "note": "Fresh exact gate exit 0: core typecheck + 25 files/382 tests. Schedule manifest twin required scope growth after repo RED; focused coverage 17/17. Baseline bec1cc6c: root typecheck 0, test 216 files/4059 pass/1 skip. HEAD af48f92: root typecheck 0; sole foreign RED tests/fault/foundation/j1-linear.test.ts:225 expected PRODUCTION_BEHAVIOR_ABSENT but got PASS_EXPECTED; owned-path delta empty. Lines: contract235 reducer243 validation245 results61 testkit invariants119/tables217. planning diff empty; bridge load OK. Consumer task-aedcd01ad91245d9a036d9dac3b76a22 recorded. Foreign commit 17bfb37 carries earlier owned bytes; preserved.",
+      "startedAt": "2026-08-10T07:13:44.744Z",
+      "completedAt": "2026-08-10T07:19:59.703Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0a751aff",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,15 +163,24 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 74,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-361fafffae3e47fd9fd4e106580bf490",
+      "author": "qa-3227efb6",
+      "content": "QA full evidence (approval summary is capped at 2000 chars; this is the complete record).\n\nGATE, re-run by me at HEAD b24d2fd, foreground:\n- `pnpm --filter @moe/core typecheck` exit 0.\n- `npx vitest run --root . packages/core/src tests/property/schedule/schedule-coverage.test.ts` = 26 files / 399 tests pass. Core alone 25 files / 382 tests, matching the worker's claim exactly.\n- Plain-node probe: `goal-results.js` bridge loads 8 exports (GOAL_LAYER, accepted, clonedState, deepFreeze, illegal, rejected, unknownFailure, versionConflict).\n\nPER-FILE CAP, hand-measured `grep -c ''` AFTER restoring my drills: goal-contract.ts 235, goal-reducer.ts 243, goal-validation.ts 245, goal-results.ts 61 — all <=250. goal-reducer.test.ts still 300 (net 0 lines), goal-invariants.test.ts untouched. Owned base-ref diff bec1cc6c..HEAD = 9 paths, +283/-46. Zero writes under packages/core/src/planning (confirmed by name-only diff).\n\nMUTATION DRILLS I RAN MYSELF — 5, each SHA-restored, final `sha256sum -c` OK and `git status --porcelain` clean over owned paths:\n1. Strip `layer` from `rejected()` in goal-results.ts -> 9 refusal tests RED. The layer is a production discriminant, not test-reconstructed.\n2. Delete the predecessor guard -> exactly \"refuses a predecessor mismatch without changing or returning aggregate state\" RED.\n3. Leak `activatedState` into the refusal result -> 3 epoch cases RED on `Object.hasOwn(result, \"state\")`. The byte-identical guarantee is structural.\n4. Empty `invalidEpochs` -> \"generates at least one invalid epoch case\" RED.\n5. Admit the command from DRAFT -> the fence test RED.\n\nTWO THINGS WORTH RECORDING:\n- Drill 5 is shadowed at the handler. `goal-reducer.test.ts`'s ALLOWED per-lifecycle table did NOT redden: in DRAFT `activeGraphRevisionRef` is null, so the predecessor guard refuses with the same ILLEGAL_TRANSITION and the table still reads \"refused\". What killed the mutant is goal-epoch-advance.test.ts:115, which pins `GOAL_TRANSITIONS[\"goal.advance_graph_epoch\"]` toEqual [\"EXECUTION_ENABLED\"] directly on the production const. Step 7's note said \"table assertion saw DRAFT\" — imprecise about which assertion fired, but the outcome is the required one, so this is a note, not a defect.\n- Guard-shadowing check on the sweep. advanceEpoch refuses in order: (1) invalid refs / non-safe-integer -> UNKNOWN_ERROR, (2) predecessor mismatch -> ILLEGAL_TRANSITION, (3) epoch != current+1 -> ILLEGAL_TRANSITION. The stale/equal/skipped cases all pass a MATCHING predecessor, so guard 3 genuinely answers them rather than guard 2 answering first. That was the specific way this sweep could have gone vacuous; it did not.\n\nSCOPE CALL on the two testkit files: FORCED, not creep. tests/property/schedule/schedule-coverage.test.ts:88 asserts the authored tables are lockstep-equal to the LANDED GOAL_TRANSITIONS, so adding a command kind mandates the twin edit. The 4 added races are exactly the derived EXECUTION_ENABLED command pairs — complete, not padded.\n\nFOREIGN RED, attributed by experiment rather than by prose: tests/fault/foundation/j1-linear.test.ts \"incident:hot-claim-loop-on-gated-work\" expects PRODUCTION_BEHAVIOR_ABSENT, receives PASS_EXPECTED. I copied all five touched production files back to their bec1cc6c bytes and re-ran it — still RED. Not caused by this diff. Most likely flipped by the scheduler work (task-e8e27f76 / task-069853) landing the capability the absence probe asserted missing.\n\nCONSUMER (Clause 1): task-aedcd01ad91245d9a036d9dac3b76a22 is real and landed — packages/core/src/planning/graph-revision-reducer.ts:168 binds a durable graphEpoch from the activation, and graph-revision-succession.test.ts asserts against the successor's durable state rather than the emitted binding.\n\nDoD 1-6 all evidenced. Approved.",
+      "timestamp": "2026-08-10T07:35:22.091Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T20:57:57.134Z",
-  "updatedAt": "2026-08-10T07:13:44.744Z",
+  "updatedAt": "2026-08-10T07:36:01.321Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:51:41.418Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 8,
+    "doneAt": "2026-08-10T07:36:01.321Z",
+    "wallClockMs": 2659903
   },
   "stepsCompleted": [
     "step-1",
@@ -167,7 +189,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:54:06.010Z",
@@ -190,7 +213,29 @@
   },
   "planApprovedAt": "2026-08-10T06:54:08.062Z",
   "contextFetchedBy": [
-    "worker-0a751aff"
+    "worker-0a751aff",
+    "qa-3227efb6"
   ],
-  "workStartedAt": "2026-08-10T06:58:53.465Z"
+  "workStartedAt": "2026-08-10T06:58:53.465Z",
+  "reviewStartedAt": "2026-08-10T07:21:05.298Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next\n\nTest Files  25 passed (25)\nTests  382 passed (382)\nDuration 780ms\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/core/src\nExit code: 0",
+    "reportedAt": "2026-08-10T07:21:05.298Z"
+  },
+  "filesModified": [
+    "packages/core/src/goal/goal-contract.ts",
+    "packages/core/src/goal/goal-reducer.ts",
+    "packages/core/src/goal/goal-results.ts",
+    "packages/core/src/goal/goal-results.js",
+    "packages/core/src/goal/goal-epoch-advance.test.ts",
+    "packages/core/src/goal/goal-validation.ts",
+    "packages/core/src/goal/goal-reducer.test.ts",
+    "packages/testkit/src/schedule/schedule-universe-invariants.ts",
+    "packages/testkit/src/schedule/schedule-universe-tables.ts"
+  ],
+  "completedAt": "2026-08-10T07:36:01.321Z",
+  "reviewCompletedAt": "2026-08-10T07:36:01.321Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-361fafffae3e47fd9fd4e106580bf490.\n\nGATE re-run by me, foreground at HEAD b24d2fd: core typecheck exit 0; vitest over packages/core/src + tests/property/schedule/schedule-coverage.test.ts = 26 files/399 pass (core alone 25/382, matches worker). Plain-node probe: goal-results.js bridge loads 8 exports.\n\nCAP hand-measured grep -c '' after restore: contract 235, reducer 243, validation 245, results 61 (all <=250). reducer.test.ts still 300, net 0. Owned diff bec1cc6c..HEAD = 9 paths +283/-46. Zero writes under src/planning.\n\n5 MUTATION DRILLS I RAN MYSELF, each SHA-restored (sha256sum -c OK, porcelain clean): strip layer from rejected() -> 9 refusal tests RED, so layer is a production discriminant; drop predecessor guard -> exactly the mismatch test RED; leak next state into a refusal -> 3 cases RED on Object.hasOwn(result,\"state\"); empty invalidEpochs -> count assertion RED; admit from DRAFT -> fence RED.\n\nNOTE on the DRAFT drill: reducer.test.ts's ALLOWED table does NOT kill it (DRAFT ref is null so the predecessor guard answers with the same ILLEGAL_TRANSITION). The kill comes from goal-epoch-advance.test.ts:115 pinning GOAL_TRANSITIONS[\"goal.advance_graph_epoch\"] toEqual [\"EXECUTION_ENABLED\"] on the production const.\n\nSHADOWING CHECK: stale/equal/skipped each pass a MATCHING predecessor, so guard 3 answers them, not guard 2; codes pinned separately. Sweep is not vacuous.\n\nSCOPE: the 2 testkit schedule twins are FORCED - schedule-coverage.test.ts:88 asserts authored tables lockstep-equal LANDED GOAL_TRANSITIONS; the 4 races are exactly the derived EXECUTION_ENABLED pairs.\n\nFOREIGN RED ATTRIBUTED BY EXPERIMENT: j1-linear \"incident:hot-claim-loop-on-gated-work\" stays RED with all 5 touched files reverted to bec1cc6c bytes. Not this task's.\n\nDoD 1-6 evidenced. Consumer task-aedcd01a landed, binds durable graphEpoch at graph-revision-reducer.ts:168."
 }

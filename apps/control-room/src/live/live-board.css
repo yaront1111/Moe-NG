@@ -93,3 +93,26 @@
   font-size: 0.72rem;
   padding: 0.4rem 0.6rem;
 }
+
+@media (max-width: 959px) {
+  .cr-liveboard-columns {
+    grid-template-columns: minmax(0, 1fr);
+    min-inline-size: 0;
+  }
+
+  .cr-liveboard-column {
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+
+  .cr-liveboard-card {
+    min-inline-size: 0;
+  }
+
+  .cr-liveboard-card header span,
+  .cr-liveboard-card header code,
+  .cr-liveboard-card small,
+  .cr-liveboard-card p[data-testid^="cr.liveboard.report."] {
+    overflow-wrap: anywhere;
+  }
+}

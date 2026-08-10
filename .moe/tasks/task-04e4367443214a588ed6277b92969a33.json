@@ -145,7 +145,7 @@
       "completedAt": "2026-08-10T07:08:23.347Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -165,18 +165,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:07:22.408Z",
-  "updatedAt": "2026-08-10T07:09:07.408Z",
+  "updatedAt": "2026-08-10T07:30:06.530Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:32:52.514Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-10T07:30:06.530Z",
+    "wallClockMs": 61034016
   },
   "contextFetchedBy": [
     "architect-db2146e3",
     "worker-97d6df26",
     "architect-8ee37119",
-    "worker-767ae903"
+    "worker-767ae903",
+    "qa-12dfe1c1"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -234,5 +237,8 @@
     "apps/daemon/src/coordination/recipient-registry.js",
     "apps/daemon/src/coordination/recipient-registry-records.ts",
     "apps/daemon/src/coordination/recipient-registry-records.js"
-  ]
+  ],
+  "completedAt": "2026-08-10T07:30:06.530Z",
+  "reviewCompletedAt": "2026-08-10T07:30:06.530Z",
+  "reviewSummary": "APPROVED. Commit 2fb0243, 5 files, 1113 insertions, all under apps/daemon/src/coordination/. Full evidence in Serena memory task-task-04e4367443214a588ed6277b92969a33-qa-verdict.\n\nGATE RE-RUN BY ME. daemon typecheck exit 0. daemon test 55 files / 872 tests pass. `pnpm typecheck` from the REPO ROOT printed `Scope: 17 of 18 workspace projects` and exited 0 — the worker's disclosed foreign scheduler red no longer reproduces (later commit 72d7fb5), so DoD 5 is met outright, not by path attribution.\n\nDoD 4 VERIFIED BY MY OWN DRILLS, 5 of the worker's 8, each grepped to confirm applied: readActiveSession->readSessionAuthority 2 failed; records.ts:93 role check widened 2 failed; registry.ts:229 drop record projectId scoping 1 failed; registry.ts:234 answer UNFROZEN 1 failed; registry.ts:233 rotation check removed 1 failed. All restored — git hash-object on both production files equals git rev-parse HEAD:path, tree clean.\n\nDoD 1-3: session evidence comes only from readActiveSession read inside the module, never from caller input; grammar closed over COORDINATION_ROLES; idempotence is the store's command-decision dedupe and the replay test asserts identical receipt, identical version, unchanged event count AND unchanged decision digests. Real-file tests via mkdtemp under the OS temp root; the durability test closes the store, reopens the SAME path, re-asserts facts, revocation and byte-identical receipts. Refusals assert code+layer+outcome by toEqual, never bare \"refused\", each re-checking event count plus every digest. The positive answer is asserted through the REAL consumer (createCoordinationService read wired to resolveRecipient), not a reimplemented isKnownRecipient. Sweeps assert length > 0 at 4 sites.\n\nRAILS: per-FILE 249 and 184 (test 678; cap is per file). 5 files vs 3 owned paths — split authorised by plan step 5. index.ts, package.json, lockfile untouched. No mailbox/lifecycle/effect authority. Consumer task-4afcb064 recorded."
 }

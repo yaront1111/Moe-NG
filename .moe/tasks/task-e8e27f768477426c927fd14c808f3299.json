@@ -164,7 +164,7 @@
       "completedAt": "2026-08-10T07:17:55.129Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -174,15 +174,24 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 15.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-097f44db68034ec8913c18d7bbd4ec8c",
+      "author": "qa-3227efb6",
+      "content": "QA APPROVED — full evidence (qa-3227efb6, 2026-08-10).\n\nGATE, re-run by me, foreground, from repo root:\n  pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm typecheck\n  Test Files 38 passed (38) | Tests 882 passed (882); repo-wide leg reached apps/daemon; GATE_EXIT=0.\nNo foreign red to attribute — every repo-wide typecheck leg printed Done.\n\nDoD 1 — packages/scheduler/src/fairness/ exists, 5 production sources + 5 .js bridges + 1 test.\n`grep -c ''`: contract 161, work-item 150, ring 235, evidence 176, cap-revision 191 — all under the 250 target.\nEach module header justifies its shape against the DISK measurement (reference file:line cited), not\nagainst the reference's shape. Vocabularies Object.freeze'd, fields readonly, accepted values deepFrozen\n(asserted at test:678-683) and input-copied (test:685-699).\n\nDoD 2 — three defects closed, each asserting {code, layer} by whole-object equality:\n (a) fairness-evidence.ts:169-175 counts provenBypasses FROM the attestations; claimedBypasses is only ever\n     compared, never a source. Refusals BYPASS_EVIDENCE_MISSING / BYPASS_COUNT_UNPROVEN / BYPASS_SELF_ATTESTED,\n     all layer OPPORTUNITY_EVIDENCE, each with its positive twin (test:185-193).\n (b) ring + resource representable: validateRing accepts a multi-resource ring (test:197-207); RESOURCE layer\n     is distinguished from RING for a bad declaration (test:237-242).\n (c) 3 UNKNOWN paths each naming the missing input, plus the Unicode identity gap CLOSED (ASCII-only\n     isGraphKey reused, ZWJ id REFUSED, test:278-289).\n\nDoD 3 — sweeps hand-counted, not derived: HOSTILE_RECORDS.length toBe(12), TOTALITY_CASES toBe(60),\nLIST_TOTALITY_CASES toBe(11), REACHABILITY_CASES toBe(34), each with a toBeGreaterThan(0) companion.\nReachability table is HAND-WRITTEN and pinned both directions against the frozen vocabulary (test:516-524),\nso an unreachable code and an undeclared code both redden. `answer()` fails any throw.\n\nDoD 4 — real property over runtime exports: per-module export COUNT pinned (11/2/2/1/1), function names\nclassified against a closed allowlist, authority-name regex. Contracts preserve caller order verbatim.\n\nMUTATION DRILLS I RAN MYSELF (epic rail 6), each restored and `git status --porcelain` verified clean:\n 1. Disabled BOTH bypass proof guards in fairness-evidence.ts -> 4 failed / 150 passed. RED.\n 4. Added `validateWhoseTurnItIs()` — a real sorter whose name DODGES both regexes -> \"expected 3 to be 2\".\n    RED via the count pin. The worker's disclosed name-regex hole is backstopped by the count assertion.\n 5. Removed fairness-ring.js bridge -> contract test 154/154 GREEN (vitest blind, as predicted), plain-Node\n    probe RED: \"Cannot find module ...fairness-ring.js imported from ...index.ts\". The probe earns its place.\n\nDoD 5 — `git diff 1e3057ab..HEAD -- packages/testkit/src/scheduler-fairness/` EMPTY. Reference untouched.\n\nDoD 6 — plain-Node probe extended, not reinvented: smoke worker now returns behaviour, not just lengths —\n fairnessBypassRefusal \"REFUSED:FAIRNESS_CONTRACT_BYPASS_EVIDENCE_MISSING:OPPORTUNITY_EVIDENCE\"\n fairnessRingRefusal  \"REFUSED:FAIRNESS_CONTRACT_ITEM_IN_MULTIPLE_QUEUES:RING\"\n fairnessIssueCodeCount 18, fairnessLayerCount 5, internalSubpath ERR_PACKAGE_PATH_NOT_EXPORTED.\n\nDoD 7 — task-10cab3e5 named as consumer in the plan and in four module headers. Export count moved 36 -> 47.\n\nCOMMIT — all 11 fairness files sit inside FOREIGN commit 17bfb37 (task-04e4367...). Per global rail 5 that is\nnot a rejection reason. I verified bytes instead: `git rev-parse HEAD:<path>` == `git hash-object <path>` for\nall 15 owned paths. Committed bytes ARE the gated bytes.\n\nNot attributed to this task: untracked `packages/scheduler/src/supersession/` is task-dddfaf83's in-flight\nwork (its own header says so). Nothing scratch or generated was committed under the owned paths.\n\nRails: no fairness constant added or changed (BYPASSES_PER_LEVEL appears only in a prose comment saying it is\nnot imported); no @moe/testkit import; MAX_AUTHORITY_ITEMS reused and pinned at 128; no rotation, deficit or\naging logic anywhere in the five modules.",
+      "timestamp": "2026-08-10T07:28:33.027Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:39:10.317Z",
-  "updatedAt": "2026-08-10T07:18:49.495Z",
+  "updatedAt": "2026-08-10T07:29:15.069Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:43:10.233Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-10T07:29:15.068Z",
+    "wallClockMs": 2764835
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -219,7 +228,8 @@
   },
   "planApprovedAt": "2026-08-10T06:46:49.297Z",
   "contextFetchedBy": [
-    "worker-131786b8"
+    "worker-131786b8",
+    "qa-3227efb6"
   ],
   "workStartedAt": "2026-08-10T06:48:53.845Z",
   "reviewStartedAt": "2026-08-10T07:18:49.495Z",
@@ -245,5 +255,8 @@
     "packages/scheduler/src/index-surface.test.ts",
     "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
     "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-10T07:29:15.068Z",
+  "reviewCompletedAt": "2026-08-10T07:29:15.068Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-097f44db.\n\nGATE re-run by me, foreground, repo root: pnpm --filter @moe/scheduler typecheck && test && pnpm typecheck -> 38 files / 882 tests, exit 0, every repo-wide leg Done, no foreign red to attribute.\n\nDoD 1: fairness/ = 5 sources + 5 bridges; grep -c '' 161/150/235/176/191, all under 250. Each header justifies its shape against a cited disk measurement, not the reference. DoD 2: (a) provenBypasses COUNTED from attestations (evidence:169-175), 3 refusal codes each with a positive twin; (b) multi-resource ring accepted, RESOURCE layer distinct from RING; (c) 3 UNKNOWNs naming the missing input, plus the Unicode identity gap closed via ASCII isGraphKey. DoD 3: hand-counted sweeps 12/60/11/34 each with a >0 companion; reachability table hand-written, pinned BOTH directions to the frozen vocabulary. DoD 4: per-module export COUNTS pinned 11/2/2/1/1 + closed allowlist + caller order preserved.\n\nMY OWN DRILLS (rail 6), all restored, tree clean:\n1. Disabled both bypass proof guards -> 4 failed/150 passed. RED.\n4. Added validateWhoseTurnItIs(), a real sorter DODGING both name regexes -> \"expected 3 to be 2\". RED via the count pin, so the disclosed regex hole is backstopped.\n5. Removed fairness-ring.js -> vitest 154/154 GREEN, plain-Node probe RED \"Cannot find module ...fairness-ring.js imported from ...index.ts\".\n\nDoD 5: git diff 1e3057ab..HEAD -- packages/testkit/src/scheduler-fairness/ EMPTY. DoD 6: probe returns behaviour not lengths - \"REFUSED:FAIRNESS_CONTRACT_BYPASS_EVIDENCE_MISSING:OPPORTUNITY_EVIDENCE\", \"REFUSED:FAIRNESS_CONTRACT_ITEM_IN_MULTIPLE_QUEUES:RING\", codes 18, layers 5. DoD 7: task-10cab3e5 named consumer; exports 36 -> 47.\n\nThe 11 fairness files sit in FOREIGN commit 17bfb37 - not a rejection reason per global rail 5. Verified bytes: git rev-parse HEAD:<path> == git hash-object <path> for all 15 owned paths. No fairness constant touched, no testkit import, no rotation/deficit/aging logic."
 }

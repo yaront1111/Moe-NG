@@ -1,0 +1,37 @@
+{
+  "id": "task-584f4af04d184642a8475163f0f0b6b7",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Store-side recovery binding schema and atomic recovery-install transaction surface",
+  "description": "Objective: give @moe/store the rows and the public atomic transaction surface that a recovery install needs, and resolve the dependency-direction question that currently makes task-b6e3dd2a unsatisfiable. Authored by governor-36019faa on human direction 2026-08-10 from two independent architect audits on task-b6e3dd2af916490fb2bc4d375a530683.\n\nTHE BLOCKER THIS EXISTS TO REMOVE, measured at HEAD bec1cc6 by governor-36019faa:\n1. packages/store/package.json has NO \"dependencies\" field AT ALL. Full file is name, version, private, type, exports, scripts. @moe/store therefore cannot import @moe/core - which owns reduceProject(recovery.restore_quiesce) - and must not import upward from apps/daemon.\n2. grep -rln \"incarnation|key_epoch|keyEpoch\" packages/store/src/ returns NOTHING.\n3. The store schema holds exactly: aggregate_heads, command_receipts, domain_events, outbox_messages, store_metadata, command_decisions, store_project_binding, command_receipt_scopes, projections, inbox_receipts, event_subscriptions, cursor_generations. No recovery-incarnation, key-epoch, credential, grant, or project-lifecycle rows. Exact schema validation REJECTS extra tables/metadata, so rows cannot be added ad hoc by a consumer.\n\nTHE ARCHITECTURE QUESTION THE ARCHITECT MUST SETTLE FIRST, and it is genuinely open - do not assume the answer. Either (a) @moe/store legitimately declares a dependency on @moe/core, or (b) the binding codec lives in a lower shared package both can depend on, or (c) the anchor does not belong in @moe/store at all. Option (a) is a real layering change and must be justified, not slipped in as a manifest line. Record the decision and its reasoning in planningNotes; a later reader must be able to see why the edge is legitimate rather than expedient.\n\nRELATED PRIOR ART to read before naming files: apps/daemon/src/recovery/recovery-incarnation-anchor.ts already exists. Establish whether it is the codec this task should move/share or an unrelated surface, and say which. Landing a second binding codec is the silent-duplicate failure the staleness rail warns about.\n\nNOT IN SCOPE: the two-slot installer protocol itself (task-b6e3dd2a), the durable key provider, the daemon restore controller, generating backup bytes.\n\nHard dependencies: the durable OS-protected recovery key provider task (order 13.01, same epic) must be DONE, because the key-epoch column has no meaning until an epoch survives restart. This task is BACKLOG until then. If claim_next_task serves it before that task is DONE, block it immediately and cite this line rather than re-deriving.\n\nOwned paths: packages/store/src/ (schema migration, binding codec, recovery-install transaction surface, export wiring) plus packages/store/package.json if the architect's decision is option (a).\n\nVerification: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+  "definitionOfDone": [
+    "The dependency-direction decision is recorded with its justification, and the resulting edge is proven three ways: the consuming manifest declares it, pnpm-lock.yaml carries the importer entry, and a compiled bare-specifier probe typechecks and is deleted in the same command.",
+    "A schema migration adds the recovery binding rows the installer requires; exact schema validation accepts the new shape and still rejects unknown tables and metadata, with a test pinning both directions.",
+    "A public atomic recovery-install transaction surface exists on @moe/store: one transaction commits the binding, and a partial or interrupted install leaves the prior state intact rather than a mixed state.",
+    "Every refusal asserts its exact stable reason code AND the refusing layer; each declared failure injection is generated at least once and the suite fails if a sweep produces zero cases.",
+    "A migration applied to an existing populated database preserves prior rows, proven by a test that writes before migrating and reads back after.",
+    "Mutating each production guard turns a NAMED focused test red; drills run, reverted, exact failing assertions recorded.",
+    "Fresh pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "@moe/store must NOT import upward from apps/daemon under any circumstance. If the needed surface only exists there, that is a blocker to report, not a shortcut to take.",
+    "Do not reimplement lifecycle or business authority inside the store. The store holds rows and transactions; reduceProject remains @moe/core's.",
+    "Cross-package symbol use must prove the DEPENDENCY EDGE, not just the symbol: manifest, lockfile importer, compiled bare-specifier probe. This task exists partly because that check was skipped elsewhere.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, never per task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 13.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-10T07:31:27.898Z",
+  "updatedAt": "2026-08-10T07:31:27.898Z"
+}

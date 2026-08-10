@@ -162,7 +162,7 @@
       "completedAt": "2026-08-10T07:17:15.991Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -175,7 +175,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:05.950Z",
-  "updatedAt": "2026-08-10T07:19:34.199Z",
+  "updatedAt": "2026-08-10T07:30:41.760Z",
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -197,7 +197,9 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
     "firstClaimAt": "2026-08-10T06:45:15.578Z",
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-10T07:30:41.760Z",
+    "wallClockMs": 2726182
   },
   "planningNotes": {
     "approachesConsidered": "PROVING HANDLE ABSENCE NEEDS A COOPERATING CHILD. DoD item 5 requires proving fd0/1/2, Job, process and thread handles are NOT in the provider's handle table. You cannot prove a negative from the parent by asserting what it did not pass -- that is the assumption, not the evidence. Chose a `src/bin/handle_probe.rs` cooperating child: the parent passes the numeric handle values it holds via argv, and the child asserts each is invalid or refers to something else (GetHandleInformation/GetFileType failing), while separately confirming fd3/4/5 ARE usable. Cargo autobins discovers src/bin/*.rs with no manifest entry and exposes CARGO_BIN_EXE_handle_probe to integration tests.\n\nWHY THAT IS NOT A BANNED PROBE ARTIFACT: rail 5 forbids committing generated evidence, transcripts and binaries. This is committed SOURCE for a durable test fixture, and its compiled output lands in the ignored target/dist tree like every other binary. Say so in the commit message so QA does not read the filename as a smoke-probe leftover. Rejected the alternative of a hidden argv mode on the broker binary itself: it puts test-only branching in the production entry point, which is worse than a separate fixture.\n\nWHY NOT A WAIT-BASED PROOF LIKE THE CORE USED. For 2b I replaced a marker-file proof with a kernel-observable wait, which was strictly better. That trick does not transfer: handle-table membership has no timing signature, so a cooperating child is genuinely the minimum.\n\nWORKSPACE SHAPE. Chose package-plus-workspace-root on the existing manifest. Rejected a virtual workspace with core moved to native/core/: it relocates nine files owned by two DONE tasks and invalidates the verification commands recorded in their completion evidence, for zero benefit.\n\nDESCRIPTOR OWNERSHIP. Chose to model each acquired descriptor as an owned handle closing exactly once, mirroring the core's OwnedHandle discipline. Did NOT reuse core's OwnedHandle directly: its constructor is pub(crate) and deliberately so -- the core's comment explains that exposing it would let a second owner close the same raw value. The broker needs its own small owner over its own descriptors; that is not duplicated Win32 AUTHORITY (no Job or process syscall), it is local RAII.",
@@ -216,7 +218,8 @@
   },
   "planApprovedAt": "2026-08-10T06:45:05.458Z",
   "contextFetchedBy": [
-    "worker-01abf979"
+    "worker-01abf979",
+    "qa-f3560083"
   ],
   "workStartedAt": "2026-08-10T06:45:31.586Z",
   "reviewStartedAt": "2026-08-10T07:19:34.199Z",
@@ -239,5 +242,8 @@
     "packages/runner/src/platform/windows/native/broker/src/bin/handle_probe.rs",
     "packages/runner/src/platform/windows/native/broker/tests/node_loadability.rs",
     "packages/runner/src/platform/windows/native/broker/tests/handle_inheritance.rs"
-  ]
+  ],
+  "completedAt": "2026-08-10T07:30:41.760Z",
+  "reviewCompletedAt": "2026-08-10T07:30:41.760Z",
+  "reviewSummary": "APPROVED. Full evidence in Serena memory task-task-05bf0e0fe7e84afb8584588ecf96db14-qa-verdict.\n\nRE-RAN the task command verbatim, both legs: 10 passed / 0 failed / 0 IGNORED (descriptor_block 8, handle_inheritance 1, node_loadability 1); release build exit 0. CORE re-verified unchanged: 7/28/2, 0 ignored, exit 0.\n\nDIFF: 6de0ad02..HEAD over native/ = 12 files +1784/-0. Only pre-existing files touched are Cargo.toml (+15, the [workspace] table) and Cargo.lock (+8, one [[package]] entry forced by --locked). src/ and tests/ untouched -- DoD 1 holds.\n\nDoD 2/3: 9 hostile cases, each asserting its EXACT reason AND slot, never is_err(). Checked arithmetic, no unsafe, no panicking path. Table membership pinned by 9 hand-written NAMES, so a shrunken generator cannot sweep vacuously; DescriptorReason::ALL is fixed-length so a new variant is a compile error until covered.\n\nDoD 4: node_loadability RUNS -- no #[ignore], no cfg gate, every prerequisite branch panics. Asserts the printed inventory \"descriptors ready 6 of 6\", not the exit code alone.\n\nDoD 5: proved from the CHILD; HANDLE_VALUE_FLOOR=4096 asserted not assumed, so absence is unambiguous.\n\nDoD 6: per-handle close counts; CloseFailed surfaces exact ERROR_INVALID_HANDLE at slot 2, all six attempted, first-error-wins. No Job/process syscall restated.\n\nDoD 7: 222/157/127/94/85/51 by grep -c '', all <=250. No artifact committed; dist/ and target/ ignored.\n\nMY OWN DRILLS: (1) verify.rs:148 != PIPE_FILE_TYPE -> == u32::MAX => 2 of 8 RED. (2) forbidden[0] swapped for a handle the child GENUINELY inherited => RED \"a handle the provider must not have reached the child\" -- the absence detector is not stuck-at-absent. Restored; owned-path diff empty; gate re-run green.\n\nAccepted deviations, both disclosed and both forced: src/lib.rs (tests cannot link a binary-only crate) and the probe's forbidden values on stdin (process/thread handles are created BY CreateProcessW, so argv is impossible)."
 }

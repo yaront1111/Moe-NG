@@ -32,6 +32,18 @@ const COLUMNS = [
   { key: "COMMITTED", title: "Committed" },
 ] as const;
 
+const DRAG_STEP_IDENTITY = "application/x-moe-surface-step";
+
+function stepIdentity(step: SurfaceStep): string {
+  return JSON.stringify([step.kind, step.aggregateId, step.version]);
+}
+
+function dispatchLabel(step: SurfaceStep): string {
+  const target = step.aggregateId ?? "unscoped target";
+  const version = step.version ?? "unknown";
+  return `Dispatch ${step.kind} for ${target}, version ${version}`;
+}
+
 function offerFor(
   frame: SurfaceFrame, step: SurfaceStep,
 ): Record<string, unknown> | null {
@@ -55,7 +67,13 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
   }
   if (frame.outcome !== "SURFACE") {
     return (
-      <div className="cr-empty-state" data-testid="cr.liveboard.refused">
+      <div
+        aria-atomic="true"
+        aria-live="polite"
+        className="cr-empty-state"
+        data-testid="cr.liveboard.refused"
+        role="status"
+      >
         <span aria-hidden="true">§</span>
         <p><code>{frame.detail === "" ? frame.outcome : frame.detail}</code></p>
       </div>
@@ -85,9 +103,9 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
 
   const onDropCommitted = (event: DragEvent): void => {
     event.preventDefault();
-    const kind = event.dataTransfer.getData("text/moe-kind");
+    const identity = event.dataTransfer.getData(DRAG_STEP_IDENTITY);
     const step = frame.steps.find(
-      (entry) => entry.status === "READY" && entry.kind === kind,
+      (entry) => entry.status === "READY" && stepIdentity(entry) === identity,
     );
     if (step === undefined) {
       setDropNote("the daemon offers no command for this move");
@@ -130,7 +148,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                   draggable={step.status === "READY"}
                   key={key}
                   onDragStart={(event) => {
-                    event.dataTransfer.setData("text/moe-kind", step.kind);
+                    event.dataTransfer.setData(DRAG_STEP_IDENTITY, stepIdentity(step));
                   }}
                 >
                   <header>
@@ -145,6 +163,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                   ) : null}
                   {step.status === "READY" ? (
                     <button
+                      aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}
                       onClick={() => { void dispatch(step); }}
                       type="button"
@@ -154,8 +173,11 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                   ) : null}
                   {report === undefined ? null : (
                     <p
+                      aria-atomic="true"
+                      aria-live="polite"
                       data-ok={String(report.ok)}
                       data-testid={`cr.liveboard.report.${key}`}
+                      role="status"
                     >
                       {report.detail}
                     </p>

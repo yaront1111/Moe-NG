@@ -1,0 +1,37 @@
+{
+  "id": "task-2ff368fe2de44028b4a7d6ca89687933",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Daemon restore-controller composition: real core reducer, quiesce commit, inspect/resume/discard",
+  "description": "Objective: land the production daemon restore controller that composes the pieces the recovery chain already has but never wires together. Authored by governor-36019faa on human direction 2026-08-10 from architect-5b5302ee's audit and architect-8ee37119's re-verification on task-b6e3dd2af916490fb2bc4d375a530683.\n\nTHE GAP, from architect-5b5302ee's audit blocker 3: \"No production daemon restore controller composes verifyBackupGeneration + recovery incarnation + core reducer + SqliteEventStore transaction. recovery.restore_quiesce has NO PRODUCTION CALLER.\" That last clause is the whole task. @moe/core owns reduceProject(recovery.restore_quiesce) and nothing in production ever calls it, so the reducer is landed-but-uncomposed - exactly the state epic Clause 1 describes when it says exporting symbols is not composition and the runtime-loadability gate proves a package LOADS while nothing proves anything IMPORTS it.\n\nRE-MEASURE BEFORE PLANNING - this description is a snapshot and the staleness rail binds in both directions. In particular confirm that recovery.restore_quiesce still has no production caller; if one has landed since, this task narrows or dies and that is a legitimate outcome to report rather than work around.\n\nWHY THIS IS SEPARATE from task-b6e3dd2a: the anchor installer's owned paths are packages/store/src/recovery-anchor.*, from which apps/daemon is unreachable and must stay unreachable. The composition necessarily lives in the daemon. Merging the two is what made the original task unsatisfiable inside its own scope.\n\nRELATED PRIOR ART to read first: apps/daemon/src/recovery/ already holds recovery-succession.ts, recovery-incarnation.ts, recovery-incarnation-anchor.ts and restart-reconciliation.ts. Establish what each already does before adding a controller; the risk here is a second orchestrator beside an existing one.\n\nNOT IN SCOPE: the two-slot installer protocol (task-b6e3dd2a), the durable key provider, the store schema migration, generating backup bytes, minting entropy or keys, external-effect inventory, R3 completion.\n\nHard dependencies: the durable OS-protected recovery key provider (order 13.01) AND the store-side recovery binding schema and atomic recovery-install surface (order 13.02) must both be DONE. This task is BACKLOG until then. If claim_next_task serves it early, block it immediately and cite this line rather than re-deriving the chain.\n\nOwned paths: apps/daemon/src/recovery/ - the controller, its .js bridge and focused tests, plus focused export wiring.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+  "definitionOfDone": [
+    "A production restore controller composes verifyBackupGeneration, the recovery incarnation/key surface, the real @moe/core reduceProject(recovery.restore_quiesce) and one SqliteEventStore transaction; a test proves the REAL reducer is invoked rather than a local reimplementation of its policy.",
+    "recovery.restore_quiesce has a production caller reachable from the daemon's own entry surface, and a test asserts reachability from that surface rather than by importing the module directly.",
+    "The controller commits QUIESCED/RECOVERY_REQUIRED and the installed binding in one transaction; an interrupted run leaves the prior state intact, never a mixed state.",
+    "Exact inspect, resume and discard behaviour is owned here: repeated resume of the same prepared command reuses its prepared identity, and a new command for the identical generation requires a different incarnation/key epoch.",
+    "Every refusal asserts its exact stable reason code AND the refusing layer; each declared failure injection is generated at least once and a sweep producing zero cases fails the suite.",
+    "Mutating each production guard turns a NAMED focused test red; drills run, reverted, exact failing assertion text recorded.",
+    "Fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "Authoritative design is D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md SHA-256 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; do not edit it.",
+    "Compose the landed core reducer; do NOT reimplement lifecycle, epoch or disposition policy inside the daemon. Reimplemented authority is the specific defect this task exists to avoid.",
+    "RecoveryAnchor remains bootstrap selection metadata only; the selected verified database stays the sole lifecycle/readiness authority.",
+    "Cross-package symbol use must prove the DEPENDENCY EDGE, not just the symbol: manifest, lockfile importer, compiled bare-specifier probe deleted in the same command.",
+    "Target <=250 physical lines per production source and split before 400; this cap is per file, never per task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 13.03,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-10T07:31:48.536Z",
+  "updatedAt": "2026-08-10T07:31:48.536Z"
+}

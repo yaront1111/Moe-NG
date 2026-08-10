@@ -59,6 +59,13 @@ describe("Quiet Orchestration Ledger design system", () => {
     expect(tokens).toContain("--cr-attention-text: #e5a06d;");
   });
 
+  it("uses instrument lettering for the dispatch-manifest hierarchy", () => {
+    const tokens = read("tokens.css");
+    expect(tokens).toContain('--cr-font-display: "Bahnschrift"');
+    expect(tokens).toContain('--cr-font-body: "Aptos"');
+    expect(tokens).toContain('--cr-font-utility: "Cascadia Code"');
+  });
+
   it("keeps primary text and every filled truth chip at WCAG AA contrast", () => {
     expect(contrast("#1d2633", "#eef1f3")).toBeGreaterThanOrEqual(4.5);
     expect(contrast("#1d2633", "#fbfcfd")).toBeGreaterThanOrEqual(4.5);
@@ -89,7 +96,7 @@ describe("Quiet Orchestration Ledger design system", () => {
     expect(css).not.toMatch(/@import\s+url|fonts\.googleapis|display:\s*none/u);
   });
 
-  it("fits all five board lanes at comfortable width and widens them only in narrow mode", () => {
+  it("fits all five board lanes at comfortable width and stacks a narrow phase manifest", () => {
     const board = read("preview-board.css");
     expect(board).toContain(".cr-board-summary");
     expect(board).toContain(".cr-board-lanes");
@@ -97,7 +104,9 @@ describe("Quiet Orchestration Ledger design system", () => {
     const responsive = read("responsive.css");
     expect(responsive).toContain("@media (max-width: 959px)");
     expect(responsive).toContain(".cr-board-summary");
-    expect(responsive).toContain("repeat(5, minmax(13rem, 72vw))");
+    expect(responsive).toContain(".cr-board-lane--empty");
+    expect(responsive).toContain("grid-template-columns: 1fr;");
+    expect(responsive).not.toContain("repeat(5, minmax(13rem, 72vw))");
   });
 
   it("gives document lineage a dedicated responsive visual layer", () => {

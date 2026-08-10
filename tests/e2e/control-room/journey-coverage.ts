@@ -177,6 +177,52 @@ export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
 ]);
 
 /**
+ * Nothing on the board owns composing a pending state into a served entry point.
+ * This is NOT the daemon-lane owner: even once a daemon lane exists, some module
+ * still has to pass the flag, and today none does on either path.
+ */
+export const LOADING_OWNER =
+  "UNOWNED — no board task composes a pending state into either served entry point";
+
+/**
+ * DoD 2's LOADING invariant, recorded rather than proven — and it is recorded here
+ * because the first pass of this gate ASSERTED FIVE OF SEVEN INVARIANTS AND SAID
+ * NOTHING ABOUT THIS ONE. Silence read exactly like coverage, which is the failure
+ * this whole task exists to prevent, so the record is the fix.
+ *
+ * THE COMPONENTS ARE REAL. `cr.board.skeleton` (board-surface.tsx:101),
+ * `cr.goals.loading` (goals-home.tsx:231), `cr.health.loading` and
+ * `cr.health.skeleton` (doctor-console.tsx:231/233) are all committed production,
+ * and spec 11.3 specifies a loading state per primary surface. So this is
+ * SURFACE_NOT_COMPOSED, never SURFACE_ABSENT — a file-existence check passes for
+ * every one of them.
+ *
+ * IT IS UNREACHABLE ON BOTH SERVED PATHS, measured rather than assumed:
+ *   main.tsx:40 -> ControlRoomScaffold -> kernel.tsx -> ControlRoomPreview, which
+ *   contains no `loading` at all; and main.tsx's `?live=1` branch into
+ *   live/live-app.tsx, which contains none either. The only production module that
+ *   ever sets `loading: true` is a11y/ui-wide-core-fixtures.tsx, imported solely by
+ *   tests and by another fixture module.
+ *
+ * NO BROWSER ASSERTION IS WRITTEN. Driving a loading state would require wiring the
+ * flag into the served preview, and a surface created to give an assertion something
+ * to find is fabricated evidence under Clause 2 — worse than no proof, because it
+ * would retire the invariant while certifying nothing.
+ */
+export const LOADING_RECORD = Object.freeze({
+  cause: "SURFACE_NOT_COMPOSED" as const,
+  id: "CR-LOADING",
+  missingInput:
+    "No served entry point ever passes loading=true. ControlRoomPreview (the fixture path) "
+    + "and live/live-app.tsx (the ?live=1 path) both contain zero references to `loading`, so "
+    + "cr.board.skeleton, cr.goals.loading, cr.health.loading and cr.health.skeleton render in "
+    + "no browser despite existing as committed production. Needs a served composition that "
+    + "supplies a pending state; creating one from this gate would be fabricated evidence.",
+  owner: LOADING_OWNER,
+  status: "UNKNOWN" as const,
+});
+
+/**
  * The inherited latency obligation, deferred here from task-ab8c9489 and recorded
  * rather than answered. NO absolute p95/p99 assertion is written anywhere in this
  * gate: no reference machine is named in the repository or in the pinned spec, and a

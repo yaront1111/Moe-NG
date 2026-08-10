@@ -39,10 +39,13 @@ export interface BoardJ1Props {
 
 function Card({ card }: { readonly card: BoardJ1Card }): JSX.Element {
   return (
-    <article data-testid={`cr.board.card.${card.nodeId}`}>
+    <article className="cr-board-card" data-testid={`cr.board.card.${card.nodeId}`}>
+      <header className="cr-board-card-header">
+        <code data-testid="cr.board.card.id">{card.nodeId}</code>
+        <TruthChip truthClass={card.truthClass} />
+      </header>
       <h3 data-testid="cr.board.card.name">{card.name}</h3>
       <span data-testid="cr.board.card.phase">{card.phase}</span>
-      <TruthChip truthClass={card.truthClass} />
     </article>
   );
 }
@@ -56,17 +59,27 @@ export function BoardJ1({ cards, facts }: BoardJ1Props): JSX.Element {
         ))}
       </div>
       <div className="cr-board-lanes" data-testid="cr.board.lanes">
-        {BOARD_J1_COLUMNS.map((column) => (
-          <div aria-label={COLUMN_TITLES[column]} data-testid={`cr.board.column.${column}`}
-            key={column}>
-            <h2>{COLUMN_TITLES[column]}</h2>
-            {cards
-              .filter((card) => card.column === column)
-              .map((card) => (
-                <Card card={card} key={card.nodeId} />
-              ))}
-          </div>
-        ))}
+        {BOARD_J1_COLUMNS.map((column, index) => {
+          const laneCards = cards.filter((card) => card.column === column);
+          const count = laneCards.length;
+          return (
+            <div aria-label={COLUMN_TITLES[column]}
+              className={count === 0 ? "cr-board-lane cr-board-lane--empty" : "cr-board-lane"}
+              data-card-count={count} data-testid={`cr.board.column.${column}`} key={column}>
+              <header className="cr-board-lane-header">
+                <span data-testid={`cr.board.lane.index.${column}`}>
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <h2>{COLUMN_TITLES[column]}</h2>
+                <span aria-label={`${count} ${count === 1 ? "card" : "cards"}`}
+                  data-testid={`cr.board.lane.count.${column}`}>
+                  {String(count).padStart(2, "0")}
+                </span>
+              </header>
+              {laneCards.map((card) => <Card card={card} key={card.nodeId} />)}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

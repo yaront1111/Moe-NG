@@ -168,6 +168,7 @@ export function ShellFrame(
     <GatingContext.Provider value={gating}>
       <ProvenanceProvider>
         <div data-banner={affordance.statusLabel !== "" || breaker !== undefined ? "true" : undefined}
+          data-inspector={inspectorExpanded ? "open" : "closed"}
           data-narrow={narrow ? "true" : undefined} data-testid="cr.shell.root"
           onFocusCapture={(event) => {
             const sheet = keyboard.rootRef.current?.querySelector("#cr-shell-inspector");

@@ -210,6 +210,36 @@
   text-transform: uppercase;
 }
 
+.cr-shell-help-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(9rem, 0.75fr);
+}
+
+.cr-shell-help-grid h3 {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cr-shell-command-map,
+.cr-shell-help-destinations {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  padding: 0;
+}
+
+.cr-shell-command-map li {
+  align-items: center;
+  display: grid;
+  font-size: 0.72rem;
+  gap: 0.7rem;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+}
+
 @keyframes cr-shell-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }

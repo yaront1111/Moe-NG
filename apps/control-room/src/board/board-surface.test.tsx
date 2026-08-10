@@ -157,6 +157,13 @@ const chipOf = (factId: string): HTMLElement =>
   within(screen.getByTestId(`cr.fact.${factId}`)).getByTestId(/^cr\.chip\./u);
 
 describe("board columns are the daemon's supplied placement, not a client phase fold", () => {
+  it("applies card chrome to canonical card articles without styling nested silence facts", () => {
+    renderBoard({ cards: [EXECUTING_CARD] });
+    expect(screen.getByTestId("cr.board.card.api-endpnt").className).toContain("cr-board-card");
+    expect(screen.getByTestId("cr.board.card.silence.api-endpnt").className)
+      .not.toContain("cr-board-card");
+  });
+
   it("renders five columns column-major, keeping duplicate and blank identities visible", () => {
     renderBoard();
     expect(CARDS.length).toBe(13);

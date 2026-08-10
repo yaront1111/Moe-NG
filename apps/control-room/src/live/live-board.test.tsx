@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -23,6 +23,14 @@ function admittedClient() {
   });
   expect(probe.ok).toBe(false);
   return null;
+}
+
+function dragTransfer(): DataTransfer {
+  const entries = new Map<string, string>();
+  return {
+    getData: (format: string): string => entries.get(format) ?? "",
+    setData: (format: string, value: string): void => { entries.set(format, value); },
+  } as DataTransfer;
 }
 
 describe("frameOfSurface", () => {
@@ -120,6 +128,78 @@ describe("LiveBoard", () => {
     const envelope = sent[0] as unknown as Record<string, unknown>;
     expect(envelope["commandId"]).toBe("afford-77");
     expect(envelope["expectedVersion"]).toBe(0);
+  });
+
+  it("dispatches the exact dragged target when command kinds repeat", async () => {
+    const repeatedKindSurface = frameOfSurface({
+      nextAllowedCommands: [
+        {
+          commandId: "afford-a", commandKind: "project.register", expectedVersion: 1,
+          targetAggregateId: "proj-a",
+        },
+        {
+          commandId: "afford-b", commandKind: "project.register", expectedVersion: 2,
+          targetAggregateId: "proj-b",
+        },
+      ],
+      outcome: "SURFACE",
+      steps: [
+        {
+          aggregateId: "proj-a", kind: "project.register", missing: [],
+          status: "READY", version: 1,
+        },
+        {
+          aggregateId: "proj-b", kind: "project.register", missing: [],
+          status: "READY", version: 2,
+        },
+      ],
+    });
+    const sent: RuntimeCommandEnvelope[] = [];
+    const client = {
+      commands: {
+        "project.register": (affordance: unknown, caller: unknown) => ({
+          envelope: {
+            ...(affordance as Record<string, unknown>),
+            ...(caller as Record<string, unknown>),
+          } as unknown as RuntimeCommandEnvelope,
+          ok: true,
+        }),
+      },
+    } as never;
+    render(
+      <LiveBoard
+        client={client}
+        frame={repeatedKindSurface}
+        sessionCredential="cred"
+        transport={{
+          sendCommand: (envelope) => {
+            sent.push(envelope);
+            return Promise.resolve({
+              delivered: true as const,
+              response: {
+                decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+                ok: true,
+              },
+              status: 200,
+            });
+          },
+        }}
+      />,
+    );
+    const transfer = dragTransfer();
+    fireEvent.dragStart(screen.getByTestId("cr.liveboard.card.project.register@proj-b"), {
+      dataTransfer: transfer,
+    });
+    fireEvent.drop(screen.getByTestId("cr.liveboard.column.committed"), {
+      dataTransfer: transfer,
+    });
+
+    await waitFor(() => { expect(sent).toHaveLength(1); });
+    expect(sent[0]).toMatchObject({
+      commandId: "afford-b",
+      expectedVersion: 2,
+      targetAggregateId: "proj-b",
+    });
   });
 
   it("renders a daemon refusal verbatim on the card", async () => {

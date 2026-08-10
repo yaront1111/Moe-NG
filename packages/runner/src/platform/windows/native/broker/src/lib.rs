@@ -34,6 +34,7 @@
 // Modules are private: every item has exactly one public path, re-exported
 // below, which is how the core crate is arranged too.
 mod descriptors;
+mod protocol;
 mod verify;
 
 #[cfg(windows)]
@@ -42,6 +43,9 @@ mod boundary;
 pub use descriptors::{
     parse_descriptor_block, DescriptorError, DescriptorReason, INVALID_HANDLE,
     REQUIRED_DESCRIPTOR_COUNT,
+};
+pub use protocol::{
+    ProtocolError, ProtocolReason, ProtocolStage, PROTOCOL_VERSION,
 };
 pub use verify::{
     acquire_from_block, Descriptors, HandleCalls, OwnedDescriptor, PIPE_FILE_TYPE,

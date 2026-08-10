@@ -55,6 +55,7 @@ export function BoardCard(props: BoardCardProps): JSX.Element {
   const identity = readIdentity(card.nodeId);
   return (
     <article
+      className="cr-board-card"
       data-board-card={identity}
       data-placement={card.placement ?? "unmapped"}
       data-source-aggregate={card.sourceAggregate}

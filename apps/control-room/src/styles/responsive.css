@@ -70,12 +70,20 @@
   }
 
   .cr-board-lanes {
-    grid-template-columns: repeat(5, minmax(13rem, 72vw));
-    scroll-snap-type: x proximity;
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+    padding-block-end: 0;
   }
 
-  [data-testid^="cr.board.column."] {
-    scroll-snap-align: start;
+  .cr-board-lane--empty {
+    min-block-size: 0;
+    padding-block: 0.35rem;
+  }
+
+  .cr-board-lane--empty .cr-board-lane-header {
+    border-block-end: 0;
+    margin-block-end: 0;
+    padding-block: 0.2rem;
   }
 
   [data-testid="cr.shell.statusstrip"] {

@@ -98,6 +98,23 @@ function ids(root: ParentNode, selector: string): readonly string[] {
 }
 
 describe("ShellFrame narrow state", () => {
+  it("exposes the proof toggle on desktop and releases the inspector grid track", async () => {
+    const rendered = renderAt(1_280);
+    const root = within(rendered.container).getByTestId("cr.shell.root");
+    const inspector = within(rendered.container).getByTestId("cr.shell.inspector");
+    const toggle = within(rendered.container).getByTestId("cr.shell.inspector.toggle");
+    expect(root.getAttribute("data-inspector")).toBe("open");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    await userEvent.click(toggle);
+
+    expect(root.getAttribute("data-inspector")).toBe("closed");
+    expect(inspector.hasAttribute("hidden")).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(CSS).toContain('[data-inspector="closed"]');
+    expect(CSS).toContain("grid-template-columns: 4rem minmax(0, 1fr) 0;");
+  });
+
   it("tracks the rendered narrow marker through resize events", () => {
     const rendered = renderAt(1_280);
     const root = within(rendered.container).getByTestId("cr.shell.root");
