@@ -32,7 +32,7 @@
     {
       "stepId": "step-2",
       "description": "EXTRACT FIRST, ADD NOTHING YET. This step must leave behaviour byte-identical; keeping it pure is what makes the next steps reviewable.\n\nCreate packages/core/src/goal/goal-results.ts (plus its .js bridge if the directory convention has them) and move the inline helpers currently at goal-reducer.ts:48-85: deepFreeze, rejected, unknownFailure, illegal, versionConflict, accepted, clonedState. DoD 4 names this extraction as the required remedy.\n\nMIRROR packages/core/src/planning/planning-results.ts — it already exports exactly this helper family (rejected :22, unknownFailure :26, illegal :30, versionConflict :41, accepted :78, clonedState :89) for the sibling aggregate. Follow its shape so the two aggregates read the same way.\n\nADOPT THE LAYER DISCRIMINANT WHILE YOU ARE HERE, because the rail requires it and the sibling already solved it. packages/core/src/planning/graph-revision-results.ts:16-18 does exactly this: `return Object.freeze({ error, layer: GRAPH_REVISION_LAYER, ok: false })`, under the comment \"Every refusal names its layer here once, because RuntimeError cannot carry the source.\" @moe/contracts RuntimeError DROPS its validated `source`, so a test cannot recover the layer from the error — it must come from a production field on the result. Give goal-results.ts a GOAL layer constant and carry it on every refusal.\n\nNOTE this widens GoalReducerResult with a `layer` field. Pre-existing assertions in goal-reducer.test.ts and goal-invariants.test.ts must still pass — DoD 3 and the rails require it. If an assertion compares a refusal by whole-object equality it will now see the extra field; that is the one class of pre-existing test the change genuinely invalidates, and it should be updated rather than worked around.\n\nAFTER extracting, measure: `grep -c '' packages/core/src/goal/goal-reducer.ts` should drop from 247 to roughly 209. Run the full core suite and confirm it is still green BEFORE adding any behaviour.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-results.ts",
         "packages/core/src/goal/goal-reducer.ts"
@@ -40,42 +40,76 @@
       "newFiles": [
         "packages/core/src/goal/goal-results.ts"
       ],
-      "startedAt": "2026-08-10T06:59:51.306Z"
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-contract.ts",
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-results.ts",
+        "packages/core/src/goal/goal-results.js"
+      ],
+      "note": "Extracted immutable result/state helpers to goal-results.ts with required JS bridge; all goal refusals now carry production layer 'GOAL'. goal-reducer.ts is 217 lines. Fresh core typecheck + full core test passed: 24 files, 369 tests.",
+      "startedAt": "2026-08-10T06:59:51.306Z",
+      "completedAt": "2026-08-10T07:01:39.723Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED — create a NEW focused test file, packages/core/src/goal/goal-epoch-advance.test.ts. The rails forbid growing goal-reducer.test.ts (300 lines) or goal-invariants.test.ts (281); new coverage goes here.\n\nCases, each refusal pinning the EXACT stable @moe/contracts code AND the refusing layer read from the production result field, never reconstructed by a helper:\n  - HAPPY PATH: from the live execution lifecycle, the new command increments graphEpoch by exactly 1 and rebinds activeGraphRevisionRef to the named successor. Assert the emitted event carries the new epoch, matching the :113 pattern.\n  - PREDECESSOR MISMATCH (DoD 2): a command whose predecessor reference does not equal the goal's current activeGraphRevisionRef REFUSES, and state is BYTE-IDENTICAL afterwards. Assert the state object deep-equals the pre-command state — not merely that ok is false. A refusal that mutates is the defect worth catching.\n  - STALE, EQUAL, SKIPPED and NON-INTEGER epochs each refuse (DoD 3). Assert each separately; collapsing them into one branch is how a skipped epoch later reads as merely stale.\n  - UNKNOWN predecessor or epoch refuses and NEVER defaults to 0, to 1, or to the current value.\n  - LIFECYCLE FENCE: the new command is NOT admitted from DRAFT, and goal.activate_initial_graph remains admitted from DRAFT ONLY with behaviour unchanged.\n\nDoD 5: the generated sweep must assert a NON-ZERO case count — an emptied sweep must fail rather than pass silently.\n\nAssert refusals by whole-object equality on { code, layer } so a swapped code or a missing layer fails.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-epoch-advance.test.ts"
       ],
       "newFiles": [
         "packages/core/src/goal/goal-epoch-advance.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-epoch-advance.test.ts"
+      ],
+      "note": "TDD RED established in new focused test: focused Vitest discovered 13 cases and failed 6 for the missing goal.advance_graph_epoch behavior (happy path false; predecessor/epoch/lifecycle expected ILLEGAL_TRANSITION but got UNKNOWN_ERROR). Refusals pin {code, layer}; generated sweeps assert nonzero counts; state/no-state checks included.",
+      "startedAt": "2026-08-10T07:01:54.397Z",
+      "completedAt": "2026-08-10T07:04:24.799Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN 1 — declare the command in packages/core/src/goal/goal-contract.ts (216 lines, the only file here with headroom).\n\nAdd the new command kind to GoalCommandKind and its command interface: it must name BOTH the successor revision reference it activates AND the predecessor revision reference it replaces. The predecessor field is what makes DoD 2 checkable — without it the reducer has nothing to compare against activeGraphRevisionRef.\n\nDo NOT add a second epoch field anywhere. The graph revision persists a BOUND REFERENCE to the epoch it was activated at; the goal aggregate remains the sole counter. That is the rail, and it is also why task-aedcd01a's half consumes this rather than computing its own.\n\nDo not change the GoalExecutionEnabled event shape if the existing one already carries graphEpoch (:155 says it does) — reuse it, or add a sibling event only if the semantics genuinely differ. An advance is not an initial activation, so if you emit a distinct event kind, say why in a comment.\n\nKeep goal-contract.ts at or below 250 after the change.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-contract.ts"
+      ],
+      "note": "Declared goal.advance_graph_epoch with graphEpoch plus predecessor/successor revision refs and distinct GoalGraphEpochAdvanced event (successor activation is not an initial-enable witness). Contract is 235 lines. Intermediate typecheck is red only at the planned exhaustive reducer/test sites awaiting step 5.",
+      "startedAt": "2026-08-10T07:04:47.282Z",
+      "completedAt": "2026-08-10T07:05:19.456Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN 2 — admit and handle the command in packages/core/src/goal/goal-reducer.ts (now ~209 lines after step 2).\n\nAdd the kind to the frozen GOAL_TRANSITIONS map at :40 admitted from the LIVE EXECUTION LIFECYCLE (EXECUTION_ENABLED, and CLOSING only if the DoD's \"live execution lifecycle\" genuinely includes it — read the existing entries and match their intent rather than guessing). Leave \"goal.activate_initial_graph\": [\"DRAFT\"] EXACTLY as it is; DoD 3 requires its behaviour unchanged.\n\nWrite the handler by composing activate() at :106-115 rather than copying it: same graphEpoch: state.graphEpoch + 1 increment, same clonedState/accepted shape, same event emission carrying next.graphEpoch. What differs is the admitted lifecycle and the predecessor check.\n\nTHE PREDECESSOR CHECK IS THE NEW BEHAVIOUR: refuse unless the command's predecessor reference equals the goal's current activeGraphRevisionRef. Refuse through the extracted helpers so the layer is carried automatically. On refusal return without constructing a next state at all — that is how DoD 2's byte-identical guarantee is met structurally rather than by care.\n\nFail closed: an epoch or predecessor reference that cannot be verified is UNKNOWN and refuses. Never default to 0, to 1, or to the current value.\n\nMeasure after: `grep -c '' packages/core/src/goal/goal-reducer.ts` must be at or below 250. If it is not, extract more into goal-results.ts — never grow past the cap.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-reducer.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-validation.ts",
+        "packages/core/src/goal/goal-reducer.test.ts"
+      ],
+      "note": "Implemented goal.advance_graph_epoch from EXECUTION_ENABLED only. A single activatedState helper owns the +1 increment used by initial and successor activation; predecessor and exact next-epoch guards return before constructing state. Added the kind to snapshot admission and the pre-existing exhaustive matrix without increasing that 300-line test. Core typecheck passed; focused 13/13 and full core 25 files/382 tests passed. Reducer 237 lines.",
+      "startedAt": "2026-08-10T07:05:53.213Z",
+      "completedAt": "2026-08-10T07:08:28.314Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN 3 — extend validation in packages/core/src/goal/goal-validation.ts, which is 245 lines and has FOUR lines of headroom. Read this step before editing it.\n\nThe existing epoch invariants at :228-238 (safe integer, >= 0, DRAFT implies 0, COMPLETED implies > 0, active implies > 0 with a valid activeGraphRevisionRef) already cover most of what an advance must preserve — verify which ones hold unchanged before writing anything, because the cheapest correct outcome here is NO new predicate at all.\n\nIf a new invariant IS required, you have four lines. Do not spend them: extract a cohesive group of existing predicates into a focused sibling module the way step 2 extracted the reducer helpers, then add. DoD 4 requires goal-validation.ts at or below 250 AFTER the change, and the rail is explicit that a green suite is NOT evidence here because packages/core/src/goal/ is not swept by planning-source-size.test.ts. Hand-measure with `grep -c ''`.\n\nWhatever you add must keep the aggregate's existing guarantee that an active goal has graphEpoch > 0 AND a valid activeGraphRevisionRef — an advance changes both together or neither.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/goal/goal-validation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/goal/goal-validation.ts"
+      ],
+      "note": "Verified no new state predicate is needed: unchanged validGoalState already requires a safe nonnegative epoch, DRAFT=0, active epoch>0 with valid activeGraphRevisionRef, and completed epoch>0. Only command-kind snapshot admission changed (step 5); file remains exactly 245 lines. Focused epoch+invariant run passed 2 files/22 tests.",
+      "startedAt": "2026-08-10T07:08:35.008Z",
+      "completedAt": "2026-08-10T07:09:02.990Z"
     },
     {
       "stepId": "step-7",
@@ -111,15 +145,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T20:57:57.134Z",
-  "updatedAt": "2026-08-10T06:59:51.306Z",
+  "updatedAt": "2026-08-10T07:09:02.990Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:51:41.418Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 6
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:54:06.010Z",

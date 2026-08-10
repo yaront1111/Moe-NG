@@ -1,13 +1,13 @@
 import { createRuntimeError } from "@moe/contracts";
 
 import type {
+  GoalAdvanceGraphEpochCommand,
   GoalActivateInitialGraphCommand,
   GoalCancelCommand,
   GoalCloseCommand,
   GoalCommand,
   GoalCommandKind,
   GoalCreateCommand,
-  GoalEvent,
   GoalLifecycle,
   GoalPauseCommand,
   GoalQualificationInvalidatedCommand,
@@ -17,6 +17,15 @@ import type {
   GoalState,
   GoalSuccessorData,
 } from "./goal-contract.js";
+import {
+  accepted,
+  clonedState,
+  deepFreeze,
+  illegal,
+  rejected,
+  unknownFailure,
+  versionConflict,
+} from "./goal-results.js";
 import {
   GOAL_COMMAND_KINDS,
   snapshotGoalCommand,
@@ -38,6 +47,7 @@ export { GOAL_COMMAND_KINDS };
 export const GOAL_TRANSITIONS = Object.freeze({
   "goal.create": Object.freeze([]),
   "goal.activate_initial_graph": Object.freeze(["DRAFT"]),
+  "goal.advance_graph_epoch": Object.freeze(["EXECUTION_ENABLED"]),
   "goal.close": Object.freeze(["EXECUTION_ENABLED", "CLOSING"]),
   "goal.qualification_invalidated": Object.freeze(["CLOSING"]),
   "goal.cancel": Object.freeze(["DRAFT", "EXECUTION_ENABLED", "CLOSING"]),
@@ -45,44 +55,6 @@ export const GOAL_TRANSITIONS = Object.freeze({
   "goal.pause": Object.freeze(["DRAFT", "EXECUTION_ENABLED"]),
   "goal.resume": Object.freeze(["DRAFT", "EXECUTION_ENABLED"]),
 } as const satisfies Readonly<Record<GoalCommandKind, readonly GoalLifecycle[]>>);
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      deepFreeze((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
-function rejected(error: ReturnType<typeof createRuntimeError>): GoalReducerResult {
-  return Object.freeze({ error, ok: false });
-}
-
-function unknownFailure(): GoalReducerResult {
-  return rejected(createRuntimeError({ code: "UNKNOWN_ERROR" }));
-}
-function illegal(state: GoalState, kind: GoalCommandKind): GoalReducerResult {
-  return rejected(createRuntimeError({
-    code: "ILLEGAL_TRANSITION",
-    details: { aggregateKind: "GOAL", commandKind: kind, sourceState: state.lifecycle },
-    source: { aggregate: "GOAL", state: state.lifecycle },
-  }));
-}
-function versionConflict(state: GoalState, expectedVersion: number): GoalReducerResult {
-  return rejected(createRuntimeError({
-    code: "EXPECTED_VERSION_CONFLICT",
-    details: { actualVersion: state.version, expectedVersion },
-    source: { aggregate: "GOAL", state: state.lifecycle },
-  }));
-}
-function accepted(state: GoalState, events: readonly GoalEvent[]): GoalReducerResult {
-  return deepFreeze({ events, ok: true as const, state });
-}
-
-function clonedState(state: GoalState, patch: Partial<GoalState> = {}): GoalState {
-  const recoveryFacets = patch.recoveryFacets ?? state.recoveryFacets;
-  return deepFreeze({ ...state, ...patch, recoveryFacets: { ...recoveryFacets } });
-}
 function create(command: GoalCreateCommand): GoalReducerResult {
   const valid = command.expectedVersion === 0 && validRef(command.goalId)
     && validRef(command.projectId) && validRef(command.budgetAccountRef)
@@ -103,15 +75,32 @@ function create(command: GoalCreateCommand): GoalReducerResult {
     version: 1, witness,
   })]);
 }
+function activatedState(state: GoalState, activeGraphRevisionRef: string): GoalState {
+  return clonedState(state, { activeGraphRevisionRef,
+    graphEpoch: state.graphEpoch + 1, lifecycle: "EXECUTION_ENABLED" as const,
+    version: state.version + 1 });
+}
+
 function activate(state: GoalState, command: GoalActivateInitialGraphCommand): GoalReducerResult {
   if (!validActivation(command.witness)) return illegal(state, command.kind);
   const witness = deepFreeze({ ...command.witness });
-  const next = clonedState(state, { activeGraphRevisionRef: witness.activeGraphRevisionRef,
-    graphEpoch: state.graphEpoch + 1, lifecycle: "EXECUTION_ENABLED" as const,
-    version: state.version + 1 });
+  const next = activatedState(state, witness.activeGraphRevisionRef);
   return accepted(next, [deepFreeze({ commandId: command.commandId,
     graphEpoch: next.graphEpoch, kind: "GoalExecutionEnabled" as const,
     version: next.version, witness })]);
+}
+
+function advanceEpoch(state: GoalState, command: GoalAdvanceGraphEpochCommand): GoalReducerResult {
+  const { graphEpoch, predecessorGraphRevisionRef, successorGraphRevisionRef } = command;
+  if (!validRef(predecessorGraphRevisionRef) || !validRef(successorGraphRevisionRef)
+    || !Number.isSafeInteger(graphEpoch)) return unknownFailure();
+  if (predecessorGraphRevisionRef !== state.activeGraphRevisionRef
+    || graphEpoch !== state.graphEpoch + 1) return illegal(state, command.kind);
+  const next = activatedState(state, successorGraphRevisionRef);
+  return accepted(next, [deepFreeze({ activeGraphRevisionRef: successorGraphRevisionRef,
+    commandId: command.commandId, graphEpoch: next.graphEpoch,
+    kind: "GoalGraphEpochAdvanced" as const, predecessorGraphRevisionRef,
+    version: next.version })]);
 }
 function close(state: GoalState, command: GoalCloseCommand): GoalReducerResult {
   const closure = command.closureWitness;
@@ -200,6 +189,7 @@ function schedule(
 function apply(state: GoalState, command: GoalCommand): GoalReducerResult {
   switch (command.kind) {
     case "goal.activate_initial_graph": return activate(state, command);
+    case "goal.advance_graph_epoch": return advanceEpoch(state, command);
     case "goal.close": return close(state, command);
     case "goal.qualification_invalidated": return invalidate(state, command);
     case "goal.cancel": return cancel(state, command);

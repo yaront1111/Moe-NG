@@ -61,7 +61,7 @@
     {
       "stepId": "step-4",
       "description": "GREEN 1 - packages/scheduler/src/fairness/fairness-contract.ts plus its sibling fairness-contract.js bridge.\n\nHolds the SHARED frozen vocabularies every other module imports - the stable reason codes and the refusing-layer set - and the WorkItem family.\n\nDefine the layer vocabulary as a frozen closed union in this module; every refusal anywhere in the fairness contracts names one of its members, so a reader can always tell WHICH layer refused. Epic rail 6 requires exactly that where more than one layer can refuse.\n\nDO NOT reuse the reference's FairnessReasonCode union wholesale. Take the members the gap analysis justifies, and add the ones the reference could not express because it had no rings, no resource queues and no provable bypass. Every code you add must be reachable from a real refusal path that step 3's tests exercise - an unreachable code is a vocabulary claim with nothing behind it.\n\nWorkItem is IMMUTABLE: readonly fields, frozen arrays, no setters, no mutation helpers. Its validator is TOTAL - every input shape returns either a typed OK or a typed refusal naming code and layer. No throw, no undefined return, no optimistic default.\n\nDo NOT change fairness constants, and do NOT introduce one. If a contract appears to require a constant that does not exist, STOP and report_blocked naming it - the rail is explicit that constants are a product decision.\n\nTarget <=250 physical lines measured with `grep -c ''` (PowerShell Measure-Object -Line skips blank lines and reports headroom you do not have); split before 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-contract.ts",
         "packages/scheduler/src/fairness/fairness-contract.js"
@@ -70,12 +70,21 @@
         "packages/scheduler/src/fairness/fairness-contract.ts",
         "packages/scheduler/src/fairness/fairness-contract.js"
       ],
-      "startedAt": "2026-08-10T07:00:29.424Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-contract.ts",
+        "packages/scheduler/src/fairness/fairness-contract.js",
+        "packages/scheduler/src/fairness/fairness-work-item.ts",
+        "packages/scheduler/src/fairness/fairness-work-item.js",
+        "packages/scheduler/src/fairness/fairness-contract.test.ts"
+      ],
+      "note": "GREEN 1 landed, and I took the per-file split the step authorised.\n\nPLAN DEVIATION, declared: shared vocabulary + the WorkItem family in ONE file measured 304 physical lines by `grep -c ''` — under the 400 hard cap but over the 250 target. Per the step (\"a per-file split is always the correct response to an oversized source\") I split the WorkItem family into a fourth module. Result:\n  fairness-contract.ts   161 lines  (vocabularies + result plumbing)\n  fairness-work-item.ts  150 lines  (the WorkItem family)\nplus a sibling .js bridge for each. So four modules, not three; ring and evidence still follow in steps 5-6 as planned. No family was dropped or merged — the coupling argument for ring+resource and evidence+cap-revision is untouched.\n\nVOCABULARIES, all Object.freeze'd, all fields readonly:\n- FAIRNESS_CONTRACT_LAYERS: 5 members (CAP_REVISION, OPPORTUNITY_EVIDENCE, RESOURCE, RING, WORK_ITEM). Every issue anywhere in the fairness contracts names one, which is the rail-6 requirement the reference cannot meet — its FairnessIssue is {code, message, ticketIds} with no layer field at all.\n- FAIRNESS_CONTRACT_ISSUE_CODES: 18 members. NOT the reference's 12-member union. I dropped every reducer/selection code it carries (_STALE_EVENT, _UNKNOWN_TICKET, _DISPATCH_ORDER_VIOLATION, _EVENT_LIMIT_EXCEEDED, _PROJECT_CEILING_EXCEEDED, _TICKET_CAP_EXCEEDED, CAP_RAISE_REQUIRES_DRAIN_OR_TIGHTER_MIGRATION) because each names a DECISION and a contract makes none; declaring them would be a vocabulary claim with nothing behind it. I added the eleven the reference could not express: UNDECLARED_RESOURCE, ITEM_IN_MULTIPLE_QUEUES, EMPTY_RESOURCE_SET, BYPASS_EVIDENCE_MISSING, BYPASS_COUNT_UNPROVEN, BYPASS_SELF_ATTESTED, OPPORTUNITY_UNOBSERVED, DISPATCHABILITY_UNOBSERVED, PRIOR_BOUND_UNOBSERVED, BOUND_LOOSENED, MIGRATION_TARGET_DRAINED. The test asserts the covered set EQUALS this array, so an unreachable member reddens.\n- FAIRNESS_PRIORITY_CLASSES / FAIRNESS_DISPATCHABILITY_STATES: closed sets. The priority listing is string-identical to the reference's ladder so a reviewer can diff it, and the header states explicitly that the contract attaches NO ordering meaning to the listing — ranking is task-10cab3e5's.\n\nTHE THIRD DISPOSITION is the structural change that makes DoD 2(c) expressible. FairnessContractRefusal carries disposition \"REFUSED\" | \"UNKNOWN\" and every issue carries missingInput: string | null. unknownFairness() takes the missing input as a REQUIRED parameter, so an UNKNOWN cannot be constructed without naming what is absent — the guard is in the signature, not in a convention.\n\nWorkItem shape justified against the measurement, not the reference:\n- `resourceId` — absent from FairnessTicket entirely. A ring cannot place an item without knowing its queue, so gap (b) reaches back into family 1.\n- `dispatchability: {state, observationRef: string|null}` replaces the reference's bare `dispatchable: boolean` documented \"Caller-confirmed continuous dispatchability now\". An unbacked claim was admitted as truth there; here observationRef === null is representable and yields UNKNOWN naming \"dispatchability.observationRef\".\n- Aging fields deliberately absent (bypassesInLevel, forced, forcedCohortEntryEvent, continuousEligibilityEvent). Their absence is the scope fence made structural.\n- Identity uses this package's isGraphKey (ASCII-only, MAX_GRAPH_KEY_CODE_UNITS) rather than the reference's any-well-formed-Unicode isFairnessId, so invisible and bidirectional characters are unrepresentable rather than merely unwise.\n\nTOTALITY: validateWorkItem/validateWorkItemSet return an accepted value, a REFUSED or an UNKNOWN for every input. No throw, no undefined return, no optimistic default. One issue per refusal in a documented field order (shape, identities, priority, dispatchability), so the refusing guard is deterministic and the tests' whole-object [{code,layer}] equality is meaningful.\n\nCONSTANTS: none introduced, none changed. Bounds are the package's existing MAX_AUTHORITY_ITEMS (cardinality) and MAX_GRAPH_KEY_CODE_UNITS via isGraphKey (identity length). readFairnessItems() exists because readList collapses \"not a list\" and \"too long\" into one null, so over-cap and malformed would otherwise share a code.\n\nVERIFIED: `npx tsc --project packages/scheduler/tsconfig.json` reports zero errors outside the test file (which still imports the not-yet-written ring and evidence modules). One transient TS6133 for an unused isCount import was fixed by removing it.",
+      "startedAt": "2026-08-10T07:00:29.424Z",
+      "completedAt": "2026-08-10T07:04:35.039Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN 2 - packages/scheduler/src/fairness/fairness-ring.ts plus its .js bridge. The RING and RESOURCE families, together because a WDRR ring holds per-resource queues and separating them forces a circular import.\n\nThis is the family the reference could not express AT ALL - `grep -rn 'ring|Ring|resourceQueue|ResourceQueue|WDRR|deficit'` over packages/testkit/src/scheduler-fairness returns nothing outside tests. There is nothing to copy; design it from the gap and justify the shape.\n\nExpress STRUCTURE ONLY, never policy. The contract must be able to DESCRIBE a ring - its resources, its queues, its per-item deficit counters as DATA - and VALIDATE that a given ring is well-formed. It must NOT decide whose turn it is, must not compute a deficit increment, and must not order anything. That line is DoD 4 and it is the easiest one in this task to cross by accident: a function named `nextInRing` or `chargeDeficit` has already crossed it.\n\nValidate the structural invariants a ring must satisfy regardless of policy: every queued item names a resource the ring declares; no item appears in two queues; counters are non-negative safe integers; the resource set is non-empty when any queue is non-empty. Each violation refuses with its own code and layer.\n\nImmutable and frozen throughout. Total validators. <=250 lines target, split before 400.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-ring.ts",
         "packages/scheduler/src/fairness/fairness-ring.js"
@@ -83,12 +92,19 @@
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-ring.ts",
         "packages/scheduler/src/fairness/fairness-ring.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-ring.ts",
+        "packages/scheduler/src/fairness/fairness-ring.js"
+      ],
+      "note": "GREEN 2 landed. fairness-ring.ts is 235 physical lines by `grep -c ''`, plus its .js bridge. tsc over the package reports zero errors outside the test file (which still imports the not-yet-written evidence module).\n\nDESIGNED FROM A MEASURED VOID. Re-confirmed before writing: the ring/WDRR/deficit/resourceQueue grep over packages/testkit/src/scheduler-fairness returns only substring hits inside the word \"string\". There is no ring vocabulary in the reference to copy, so every shape decision below is justified against the gap and nothing else.\n\nSHAPE AND WHY:\n- FairnessRingResource {resourceId, weight}. `weight` is the caller's WDRR share carried as DATA. The contract range-checks it with the package's existing isCount and never reads it as a share.\n- FairnessRingQueueEntry {workItemId, resourceId, deficitCounter}. The counter is present so a consumer can persist and restore rotation state across a restart — that is exactly the state the reference had nowhere to put. This module never reads it as a position and never advances it.\n- FairnessRing {ringId, dimensionId, resources, entries}. `entries` is the FLAT union of every per-resource queue, with each entry naming its own queue via resourceId. That is a deliberate choice over a nested Record<resourceId, entry[]>: a nested map implies a traversal order between queues, and the enclosing object's key order would become schedulable information the contract has no right to supply.\n\nWHY NOT A SEPARATE RESOURCE MODULE: a ring holds per-resource queues, so the ring validator must delegate to the resource validator. Splitting them across files forces a circular import. They are 235 lines together, inside the target.\n\nSTRUCTURAL INVARIANTS, one code each, checked in a documented fixed order — entries well-formed; a non-empty queue requires a declared resource set; every entry names a declared resource; no (workItemId, resourceId) pair repeats; no work item in two different resource queues. The order matters and is deliberate: EMPTY_RESOURCE_SET must precede UNDECLARED_RESOURCE or a ring with items and no resources would refuse with the wrong code, and the duplicate-pair check must precede the two-queues check so \"queued twice on one resource\" is not misreported as \"queued on two resources\".\n\nTWO LAYERS, AND THE TEST PINS WHICH ONE ANSWERS. A malformed declared resource refuses under RESOURCE (delegated to validateRingResource); a ring-level invariant refuses under RING. That is the rail-6 \"where more than one layer can refuse, which layer refused\" case made real rather than hypothetical, and there is a test asserting a bad weight inside a ring reports RESOURCE and not RING.\n\nSCOPE FENCE HELD, and I checked it three ways. Exported names are exactly validateRing and validateRingResource — no nextInRing, no chargeDeficit, no ordering helper, and no private one either. Caller order is preserved verbatim: I did NOT copy the sort in ../authority/resource-model.ts parseReserveRequest, which sorts declaredResources by id, precisely because a canonical order emitted by a contract is an ordering a consumer could mistake for a decision. The test asserts resources given as [res-b, res-a] come back as [res-b, res-a] and that deficit counters pass through unchanged, so an implementation that sorted or charged would redden even with innocent export names.\n\nIMMUTABILITY: every field readonly, every key list Object.freeze'd, and accepted values deep-frozen through acceptFairness. Fresh objects are built from the caller's input rather than aliased, so later caller mutation of the input cannot change an accepted ring — asserted by a test that mutates the input array and object after validation.\n\nNo constant introduced or changed. Bounds are the package's existing MAX_AUTHORITY_ITEMS via readFairnessItems and MAX_GRAPH_KEY_CODE_UNITS via isFairnessIdentity.",
+      "startedAt": "2026-08-10T07:04:38.454Z",
+      "completedAt": "2026-08-10T07:06:06.924Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN 3 - packages/scheduler/src/fairness/fairness-evidence.ts plus its .js bridge. The OPPORTUNITY-EVIDENCE and CAP-REVISION families.\n\nOPPORTUNITY-EVIDENCE is where defect (a) is closed BY CONSTRUCTION. The reference decodes a caller's `bypassesInLevel` and range-checks it; the production contract must make an unprovable bypass claim UNREPRESENTABLE or REFUSED. Model a bypass as a claim that must carry its evidence, and validate the evidence - a claim arriving without it refuses with a named code and layer. Fail closed: an evidence shape you cannot classify is typed UNKNOWN naming the missing input, never optimistically admitted.\n\nCAP-REVISION carries the migration/raise semantics the reference gestured at with CapMigration and CAP_RAISE_REQUIRES_DRAIN_OR_TIGHTER_MIGRATION. Express the revision as data plus a total validator; do NOT decide whether a raise is permitted - that is policy and belongs to the consumer.\n\nBoth families immutable, frozen, total. <=250 lines target, split before 400.\n\nSCOPE FENCE, restated because this module is the most tempting place to break it: no rotation, no deficit accounting, no aging, no admission decision. If a DoD item seems to demand scheduling behaviour, you have crossed the boundary - report_blocked rather than widening.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-evidence.ts",
         "packages/scheduler/src/fairness/fairness-evidence.js"
@@ -96,17 +112,28 @@
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-evidence.ts",
         "packages/scheduler/src/fairness/fairness-evidence.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-evidence.ts",
+        "packages/scheduler/src/fairness/fairness-evidence.js",
+        "packages/scheduler/src/fairness/fairness-cap-revision.ts",
+        "packages/scheduler/src/fairness/fairness-cap-revision.js",
+        "packages/scheduler/src/fairness/fairness-contract.test.ts"
+      ],
+      "note": "GREEN 3 landed and the whole test file is now GREEN: 154 passed / 154, tsc over @moe/scheduler reports zero errors.\n\nSECOND DECLARED PLAN DEVIATION, same reason as the first. Opportunity-evidence + cap-revision in one file measured 336 physical lines — under the 400 hard cap, over the 250 target — so I split them. Final per-file measurement by `grep -c ''`, every production source inside the target:\n  fairness-contract.ts      161\n  fairness-work-item.ts     150\n  fairness-ring.ts          235\n  fairness-evidence.ts      176\n  fairness-cap-revision.ts  191\nFive modules, five sibling .js bridges, one test file (700 lines; the target is a production-source rule). The architect's coupling arguments both survive: ring+resource are still together because a ring HOLDS per-resource queues and separating them forces a circular import, which is a correctness constraint. The evidence+cap-revision grouping was justified only by \"both are claim-plus-evidence shapes validated the same way\" — a similarity, not a constraint — so the split costs nothing structural.\n\nDEFECT (a) CLOSED BY CONSTRUCTION. The reference decodes bypassesInLevel from caller input and range-checks it against BYPASSES_PER_LEVEL; nothing proves the caller earned those bypasses. Production models a bypass as FairnessBypassClaim {workItemId, claimedBypasses, attestations[]} and returns FairnessProvenBypasses whose provenBypasses is COUNTED from the distinct attested opportunityRefs. The claimed number is only ever a value the count is compared against — it is never the source of the answer. Four refusals, each with its own code: no attestations at all (BYPASS_EVIDENCE_MISSING, checked before the comparison so \"brought nothing\" stays distinguishable from \"brought the wrong amount\"), count mismatch (BYPASS_COUNT_UNPROVEN), an attestation whose winner is the claimant (BYPASS_SELF_ATTESTED), a repeated opportunity (DUPLICATE_IDENTITY). Plus the UNKNOWN: an attestation with observationRef null yields OPPORTUNITY_UNOBSERVED naming attestations[i].observationRef by index.\n\nCOUNTING IS NOT DECIDING, and I checked this deliberately because it is the closest call in the task. Nothing compares the proven count against a promotion threshold; BYPASSES_PER_LEVEL is neither imported nor referenced anywhere in packages/scheduler/src/fairness. The contract answers \"how many bypasses did the evidence prove\", never \"does that entitle a promotion\".\n\nCAP-REVISION: FairnessCapMigration carries currentBoundAtMost WITH the datum, which is the actual gap. The reference's CapMigration is {ticketId, boundAtMost} with the equal-or-tighter rule living in a comment and enforced against reducer state, so a migration value alone was uncheckable. Carrying the prior bound makes equal-or-tighter a structural property of the value. Refusals: BOUND_LOOSENED, MIGRATION_TARGET_DRAINED, DUPLICATE_IDENTITY (migration target and drained id both), INVALID_COUNTER, INVALID_IDENTITY. UNKNOWN: currentBoundAtMost null yields PRIOR_BOUND_UNOBSERVED naming migrations[i].currentBoundAtMost.\n\nSCOPE FENCE HELD. No successor to CAP_RAISE_REQUIRES_DRAIN_OR_TIGHTER_MIGRATION exists, on purpose: that code is a verdict on whether a raise is PERMITTED and permission is policy. There is a test asserting a LOWERED cap validates identically to a raise, which pins that the contract does not judge the direction of a revision. Exported names are exactly validateBypassClaim and validateCapRevision — one runtime export per module.\n\nNo constant introduced or changed. Bounds remain the package's existing MAX_AUTHORITY_ITEMS and MAX_GRAPH_KEY_CODE_UNITS.\n\nOne test fix was needed after the split: `mutable.entries[0].deficitCounter = 99` is TS2532 under noUncheckedIndexedAccess, so the fixture now binds and guards the element first.",
+      "startedAt": "2026-08-10T07:06:10.414Z",
+      "completedAt": "2026-08-10T07:09:18.363Z"
     },
     {
       "stepId": "step-7",
       "description": "DoD 6 - PUBLISH TO THE PACKAGE ROOT AND PROVE IT FROM PLAIN NODE. Clause 1 is explicit that exporting into a directory is not composition.\n\nRe-export the three modules from packages/scheduler/src/index.ts through the existing export blocks. packages/scheduler/package.json maps exports \".\" -> \"./src/index.ts\", so the root is the only public surface.\n\nUpdate packages/scheduler/src/index-surface.test.ts: it hand-writes the expected namespace and pins `expect(EXPECTED_EXPORTS.length).toBe(36)` at line 57. RE-READ THAT LITERAL AT THE MOMENT YOU EDIT - export counts on this board have moved repeatedly under tasks today. Add each new RUNTIME value exactly once and bump by the exact runtime delta; TYPE-ONLY exports do not inflate the count.\n\nTHE PLAIN-NODE PROBE ALREADY EXISTS - EXTEND IT, do not invent one. packages/scheduler/src/scheduler-runtime-entrypoint.test.ts spawns a Worker running ./scheduler-entrypoint-smoke-worker.mjs with execArgv [\"--experimental-strip-types\"] and asserts an exact result object. Add a field to the worker that imports the package root and reports something only the new fairness exports can produce - a frozen vocabulary's length, or a validator's refusal code on a known-bad input - then assert it in the test's toEqual.\n\nWHY THIS AND NOT VITEST, per DoD 6: vitest resolves NodeNext .js specifiers back to .ts and is therefore BLIND to a missing bridge. Only the Node worker executes the real resolution. Record the probe output VERBATIM in your completion evidence.\n\nIf the probe fails with ERR_MODULE_NOT_FOUND on a fairness path, a .js bridge is missing - the existing worker already asserts internalSubpath: \"ERR_PACKAGE_PATH_NOT_EXPORTED\", so read that assertion before changing anything.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts",
         "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs"
-      ]
+      ],
+      "startedAt": "2026-08-10T07:09:22.441Z"
     },
     {
       "stepId": "step-8",
@@ -133,12 +160,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:39:10.317Z",
-  "updatedAt": "2026-08-10T07:00:29.424Z",
+  "updatedAt": "2026-08-10T07:09:22.441Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T06:43:10.233Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -146,7 +173,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T06:46:47.247Z",

@@ -6,6 +6,7 @@ export type GoalSchedulingControl = typeof RUNTIME_LIFECYCLES.GOAL_SCHEDULING[nu
 export type GoalCommandKind =
   | "goal.create"
   | "goal.activate_initial_graph"
+  | "goal.advance_graph_epoch"
   | "goal.close"
   | "goal.qualification_invalidated"
   | "goal.cancel"
@@ -73,6 +74,13 @@ export interface GoalActivateInitialGraphCommand extends GoalCommandBase {
   readonly witness: InitialGraphActivationWitness;
 }
 
+export interface GoalAdvanceGraphEpochCommand extends GoalCommandBase {
+  readonly graphEpoch: number;
+  readonly kind: "goal.advance_graph_epoch";
+  readonly predecessorGraphRevisionRef: string;
+  readonly successorGraphRevisionRef: string;
+}
+
 export interface GoalCloseCommand extends GoalCommandBase {
   readonly closureWitness?: AcceptanceClosureWitness;
   readonly kind: "goal.close";
@@ -111,6 +119,7 @@ export interface GoalResumeCommand extends GoalCommandBase {
 export type GoalCommand =
   | GoalCreateCommand
   | GoalActivateInitialGraphCommand
+  | GoalAdvanceGraphEpochCommand
   | GoalCloseCommand
   | GoalQualificationInvalidatedCommand
   | GoalCancelCommand
@@ -157,6 +166,14 @@ export interface GoalExecutionEnabled extends GoalEventBase {
   readonly witness: InitialGraphActivationWitness;
 }
 
+/** A successor activation advances authority; it is not another initial enablement witness. */
+export interface GoalGraphEpochAdvanced extends GoalEventBase {
+  readonly activeGraphRevisionRef: string;
+  readonly graphEpoch: number;
+  readonly kind: "GoalGraphEpochAdvanced";
+  readonly predecessorGraphRevisionRef: string;
+}
+
 export interface GoalClosing extends GoalEventBase {
   readonly kind: "GoalClosing";
   readonly witness: AcceptanceClosureWitness;
@@ -192,6 +209,7 @@ export interface GoalSchedulingChanged extends GoalEventBase {
 export type GoalEvent =
   | GoalCreated
   | GoalExecutionEnabled
+  | GoalGraphEpochAdvanced
   | GoalClosing
   | GoalCompleted
   | GoalQualificationInvalidated
@@ -210,6 +228,7 @@ export interface GoalAcceptedResult {
 
 export interface GoalRejectedResult {
   readonly error: RuntimeError;
+  readonly layer: "GOAL";
   readonly ok: false;
 }
 

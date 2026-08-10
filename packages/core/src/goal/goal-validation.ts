@@ -16,7 +16,7 @@ import type {
 } from "./goal-contract.js";
 
 export const GOAL_COMMAND_KINDS = Object.freeze([
-  "goal.create", "goal.activate_initial_graph", "goal.close",
+  "goal.create", "goal.activate_initial_graph", "goal.advance_graph_epoch", "goal.close",
   "goal.qualification_invalidated", "goal.cancel", "goal.reopen_as_revision",
   "goal.pause", "goal.resume",
 ] as const satisfies readonly GoalCommandKind[]);

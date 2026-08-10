@@ -1,6 +1,5 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 import { describe, expect, it } from "vitest";
-
 import { GOAL_COMMAND_KINDS, reduceGoal } from "./goal-reducer.js";
 import type {
   GoalCommand,
@@ -72,6 +71,7 @@ function command(
     case "goal.create": return { ...base, budgetAccountRef: "budget-1", goalId: "goal-1",
       kind, planningRunRef: "planning-1", projectId: "project-1", witness: PROJECT_READY };
     case "goal.activate_initial_graph": return { ...base, kind, witness: ACTIVATION };
+    case "goal.advance_graph_epoch": return { ...base, graphEpoch: 2, kind, predecessorGraphRevisionRef: "graph-1", successorGraphRevisionRef: "graph-2" };
     case "goal.close": return lifecycle === "CLOSING"
       ? { ...base, kind, zeroAuthorityWitness: ZERO_AUTHORITY }
       : { ...base, closureWitness: CLOSURE, kind };
@@ -106,7 +106,7 @@ const ALLOWED = Object.freeze({
     "goal.activate_initial_graph", "goal.cancel", "goal.pause", "goal.resume",
   ]),
   EXECUTION_ENABLED: new Set<GoalCommandKind>([
-    "goal.close", "goal.cancel", "goal.pause", "goal.resume",
+    "goal.advance_graph_epoch", "goal.close", "goal.cancel", "goal.pause", "goal.resume",
   ]),
   CLOSING: new Set<GoalCommandKind>([
     "goal.close", "goal.qualification_invalidated", "goal.cancel",

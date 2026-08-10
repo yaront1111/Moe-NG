@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE (read-only). The governor's unblock records an honest human override rather than a clean gate clearance; verify both halves before writing.\n\nCONFIRMED DEAD, so do not re-block on them:\n  Browser exists — @playwright/test 1.62.1 in package.json:33; script test:e2e:browser at :19; tests/e2e/control-room/ holds playwright.config.ts, harness.ts, static-ports.ts, control-room-smoke.spec.ts, harness.test.ts, tsconfig.json.\n  Contrast is measurable — 63 colour literals across six stylesheets, and WCAG contrast already asserted at apps/control-room/src/styles/design-system.test.ts:70.\n\nCONFIRMED STILL STANDING, verified by me:\n  All FIVE graph ids return ZERO production files: cr.graph.ghost, cr.graph.refusal, cr.graph.disposition, cr.graph.revisiondiff, cr.banner.revision. The graph tab is still GraphPlaceholder and committed tests still ban the cr.graph. prefix.\n  task-779d6804 (Graph operator journeys) is ARCHIVED. An archived dependency can never satisfy itself — waiting on it is waiting forever.\n\nTHE EXISTING SMOKE IS ALMOST EMPTY: control-room-smoke.spec.ts is 30 lines with ONE test, \"serving the built control-room bundle mounts its shell root element\". Treat the harness as real and the coverage as absent. Read harness.ts and static-ports.ts before writing a spec — they own how the bundle is served and how ports are chosen, and reimplementing either inside a spec is the reimplementation epic rail 6 forbids.\n\nGATE NAME DISCREPANCY, resolve it and say which you ran: the task's Verification field says `pnpm test:e2e`, but that script is `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` — NOT Playwright. The Playwright gate DoD 4 actually names is `pnpm test:e2e:browser` (`tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts`). Run BOTH; DoD 4 is satisfied by the browser one.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-10T07:06:17.503Z"
     },
     {
       "stepId": "step-2",
@@ -91,7 +92,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-a2c7f85f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -140,10 +141,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T06:59:09.070Z",
+  "updatedAt": "2026-08-10T07:06:17.503Z",
   "contextFetchedBy": [
     "architect-da724bb7",
-    "architect-1721c07f"
+    "architect-1721c07f",
+    "worker-a2c7f85f"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T12:28:16.101Z",
@@ -184,7 +186,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-10T07:05:26.859Z",
+    "escalatedAt": "2026-08-10T07:05:26.859Z"
   },
-  "planApprovedAt": "2026-08-10T06:59:09.070Z"
+  "planApprovedAt": "2026-08-10T06:59:09.070Z",
+  "workStartedAt": "2026-08-10T07:06:17.503Z"
 }
