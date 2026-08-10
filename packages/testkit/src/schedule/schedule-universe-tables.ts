@@ -47,6 +47,7 @@ const REVISION = "GRAPH_REVISION";
 
 export const EDGE = Object.freeze({
   gActivate: edge("GOAL", "DRAFT", "goal.activate_initial_graph", "EXECUTION_ENABLED"),
+  gAdvanceEpoch: edge("GOAL", "EXECUTION_ENABLED", "goal.advance_graph_epoch", "EXECUTION_ENABLED"),
   gCancelClosing: edge("GOAL", "CLOSING", "goal.cancel", "CANCELLED"),
   gCancelDraft: edge("GOAL", "DRAFT", "goal.cancel", "CANCELLED"),
   gCancelExecuting: edge("GOAL", "EXECUTION_ENABLED", "goal.cancel", "CANCELLED"),
@@ -113,6 +114,10 @@ export const RACE = Object.freeze({
   dCancelPause: race("GOAL", "DRAFT", "goal.cancel", "goal.pause"),
   dCancelResume: race("GOAL", "DRAFT", "goal.cancel", "goal.resume"),
   dPauseResume: race("GOAL", "DRAFT", "goal.pause", "goal.resume"),
+  eAdvanceCancel: race("GOAL", "EXECUTION_ENABLED", "goal.advance_graph_epoch", "goal.cancel"),
+  eAdvanceClose: race("GOAL", "EXECUTION_ENABLED", "goal.advance_graph_epoch", "goal.close"),
+  eAdvancePause: race("GOAL", "EXECUTION_ENABLED", "goal.advance_graph_epoch", "goal.pause"),
+  eAdvanceResume: race("GOAL", "EXECUTION_ENABLED", "goal.advance_graph_epoch", "goal.resume"),
   eCancelClose: race("GOAL", "EXECUTION_ENABLED", "goal.cancel", "goal.close"),
   eCancelPause: race("GOAL", "EXECUTION_ENABLED", "goal.cancel", "goal.pause"),
   eCancelResume: race("GOAL", "EXECUTION_ENABLED", "goal.cancel", "goal.resume"),
