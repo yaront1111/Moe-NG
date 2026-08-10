@@ -26,6 +26,15 @@ importers:
 
   adapters/ide-contract: {}
 
+  adapters/jetbrains:
+    dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@moe/ide-adapter-contract':
+        specifier: workspace:*
+        version: link:../ide-contract
+
   apps/control-room:
     dependencies:
       '@moe/contracts':
