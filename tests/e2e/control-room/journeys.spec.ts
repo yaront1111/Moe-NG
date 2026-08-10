@@ -113,9 +113,14 @@ test("CR-J1-002: the graph canvas is never mounted on any workspace", async ({ p
       await expect(driven.getByTestId("cr.graph.canvas")).toHaveCount(0);
       await expect(driven.locator("[data-testid^='cr.graph.']")).toHaveCount(0);
     }
-    // Selecting the graph tab must not mount one either.
+    // Selecting the graph tab must not mount one either. Back to Goals first: the
+    // shell renders its tab strip only while the projection is enabled, which
+    // `ControlRoomPreview` ties to the Goals workspace, so the tab is genuinely
+    // absent elsewhere rather than merely slow to appear.
+    await openWorkspace(driven, "goals");
     await driven.getByTestId("cr.shell.tab.graph").click();
     await expect(driven.getByTestId("cr.graph.canvas")).toHaveCount(0);
+    await expect(driven.locator("[data-testid^='cr.graph.']")).toHaveCount(0);
   }, page);
 });
 
