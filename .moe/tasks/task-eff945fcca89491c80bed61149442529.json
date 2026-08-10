@@ -23,19 +23,25 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY. Resolve the apparent contradiction between DoD 1 and taskRail 2 BEFORE writing anything, because building the wrong side of it lands a landed-test failure. DoD 1 says the provider \"persists a key epoch and reopens the SAME epoch after full process death\". taskRail 2 says \"Do not persist private key material anywhere. Succession (re-mint and prove the chain from the predecessor) is the sanctioned answer to process death, not resurrection of a prior key.\" These are consistent ONLY under this reading, which the landed code confirms: the DURABLE artifact is the anchored epoch RECORD (public SPKI, incarnation ref, restore-command and backup-generation bindings), and \"reopening the same epoch\" means resolving the same epoch IDENTITY and proving an unbroken chain to it — never resurrecting private bytes. Confirm by reading: apps/daemon/src/recovery/recovery-incarnation.ts:45-62 (the header comment the task calls the acceptance boundary — \"nothing here is durable ... A later controller must supply a protected durable key provider\"); recovery-incarnation.node.ts:1-27 (\"non-extractable is protection against export, not durability\"); and recovery-incarnation.test.ts, which POSITIVELY ASSERTS the signing handle stays out of the serialized binding. A plan that persists key material makes that landed test red. Also run the baseline gate first and record it: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "READ-ONLY. Contradiction settled + baseline recorded.\n\nBASELINE GATE (fresh, before any bytes written):\n- `pnpm --filter @moe/daemon typecheck` exit 0.\n- `pnpm --filter @moe/daemon test` exit 0 — \"Test Files 55 passed (55) / Tests 872 passed (872)\". That 872 is the number my new cases must GROW (step-10 check 1).\n\nRE-MEASURED, all governor/architect claims hold at this HEAD:\n- recovery-incarnation.ts:56-61 carries the acceptance-boundary comment verbatim (\"nothing here is durable ... A later controller must supply a protected durable key provider before anything can claim crash-resume\").\n- recovery-incarnation.ts:66-67 `settled`/`inFlight` are in-process `new Map`. Restart loses both.\n- recovery-incarnation.node.ts:43 `const protectedKeys = new WeakMap<object, webcrypto.CryptoKey>()` — port-private, not module-private (comment corrects the description's \"module-private\"); only `exportKey(\"spki\", publicKey)` leaves (:63). recovery-incarnation.node.ts:22-25 repeats \"non-extractable is protection against export, not durability\".\n- recovery-incarnation.test.ts:667-678 `describe(\"no private material escapes the mint\") > it(\"keeps the signing handle out of the serialized binding\")` asserts `Object.getOwnPropertyDescriptor(value,\"keyHandle\").enumerable === false` and `JSON.parse(JSON.stringify(value))` equals exactly {authority, binding, ok, outcome}. Also :58 asserts refusals carry no keyHandle. PERSISTING KEY MATERIAL WOULD LAND A RED ON A LANDED TEST — confirmed, not assumed.\n\nRESOLUTION (the one reading both DoD 1 and taskRail 2 admit): the durable artifact is the anchored epoch RECORD (public SPKI + incarnation/keyEpoch refs + restore-command and backup-generation bindings). \"Reopen the SAME epoch\" = resolve the same epoch IDENTITY — concretely the ORIGIN incarnation ref that `readSuccessionChain` walks back to (recovery-succession.ts:233-264 returns `originIncarnationRef` + `restoreCommandId`) — and prove an unbroken chain to it. A successor's own `incarnationRef` is entropy-derived and MUST differ; the ORIGIN is what is stable. Private bytes are never resurrected.",
+      "startedAt": "2026-08-10T07:55:08.512Z",
+      "completedAt": "2026-08-10T08:00:08.864Z"
     },
     {
       "stepId": "step-2",
       "description": "READ-ONLY, the composition surfaces DoD 4 requires. You are composing three landed modules, not minting a parallel mechanism.\n\nSUCCESSION (apps/daemon/src/recovery/recovery-succession.ts, 369 lines) exports `verifyAnchoredPredecessor` (:53), `mintSuccessor` (:107), `proveSuccession` (:131), `readSuccessionChain` (:233) and `createRecoverySuccessionService` (:322). That quartet IS the re-mint-and-prove path taskRail 2 sanctions and DoD 4 names.\n\nITS CONTRACT (recovery-succession-contract.ts) already owns the vocabulary — mint nothing new where these fit: `RECOVERY_SUCCESSION_LAYER` (:20), `RECOVERY_SUCCESSION_ERROR_CODES` (:24), and the prebuilt refusals `SUCCESSION_INPUT_INVALID` (:125), `SUCCESSION_PREDECESSOR_NOT_FOUND` (:129), `SUCCESSION_PREDECESSOR_UNVERIFIABLE` (:133), `SUCCESSION_ALREADY_RECORDED` (:137), `SUCCESSION_PROOF_UNAVAILABLE` (:141), `SUCCESSION_ANCHOR_UNAVAILABLE` (:145).\n\nDURABILITY ALREADY EXISTS AND IS NOT A FILE. recovery-incarnation-anchor.ts exports `readAnchoredIncarnation(store: SqliteEventStore, projectId, incarnationRef)` (:147) and `anchorIncarnation(store: SqliteEventStore, request, binding)` (:186). The anchored binding is persisted THROUGH SqliteEventStore. Do not invent a second durability substrate; the epoch record's survival across restart is already solved, and this task supplies the protected provider that composes it.\n\nTHE PLATFORM-PORT CONVENTION in this directory is a `.node.ts` sibling holding all host-specific code, with the pure logic in a plain module — see recovery-incarnation.ts / recovery-incarnation.node.ts and doctor-version.ts / doctor-version.node.ts. Follow it exactly.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "READ-ONLY. Composition surfaces re-measured at HEAD; all five architect line refs hold.\n\nSUCCESSION (recovery-succession.ts): verifyAnchoredPredecessor :53, mintSuccessor :107, proveSuccession :131, readSuccessionChain :233, createRecoverySuccessionService :322. Confirmed the four-step order inside `succeed` (:332-356) is verify -> mint -> anchorIncarnation -> proveSuccession -> commitSuccession.\n\nDECISION forced by the plan's own drills: compose the FOUR EXPORTED FUNCTIONS individually rather than calling `createRecoverySuccessionService(...).succeed`. Reason — `succeed` destroys the successor handle in a `finally` (:363-365) and returns no handle, and more decisively drills (b)/(c)/(d) require verifyAnchoredPredecessor / mintSuccessor / proveSuccession to be MY call sites: if the provider delegated to `succeed`, mutating my file could not redden those cases and the only way to run the drill would be editing a landed foreign file in a shared worktree. `commitSuccession` is module-private, so the provider commits the record itself using ONLY exported contract symbols (RECOVERY_SUCCESSION_COMMAND_KIND, successionAggregateId, RECOVERY_SUCCESSION_SCHEMA_VERSION) and the SAME `recovery-succeed:<pred>:<succ>` command-id format — the aggregate is keyed on the PREDECESSOR with expectedVersion 0, so the STORE still refuses a fork across both writers. The write is then verified by read-back through the LANDED `readSuccessionChain`, so the production surface proving the chain is theirs, not mine.\n\nVOCABULARY: reuse SUCCESSION_PREDECESSOR_NOT_FOUND / _UNVERIFIABLE / _PROOF_UNAVAILABLE / _ANCHOR_UNAVAILABLE / _ALREADY_RECORDED verbatim (they keep layer RECOVERY_SUCCESSION, and my tests assert that layer). Mint only what succession does not model: RECOVERY_KEY_EPOCH_INPUT_INVALID (succession's input refusal literally says \"must name exactly one predecessor incarnation\" — my request must NOT name one, so reusing it would be false evidence), RECOVERY_KEY_PROTECTION_UNAVAILABLE, RECOVERY_KEY_PROTECTION_UNVERIFIABLE, RECOVERY_KEY_EPOCH_POINTER_UNREADABLE.\n\nDURABILITY: readAnchoredIncarnation :147 / anchorIncarnation :186, both through SqliteEventStore. No second substrate. HEAD DISCOVERY is the one genuinely missing durable fact — a process that died holds nothing, and every incarnationRef is entropy-derived so none can be recomputed. Solved with ONE new aggregate on the SAME substrate: `recovery-key-epoch:<digestOf(\"key-epoch-pointer\", projectId, restoreCommandId)>`, deterministically addressable from the restore command alone, read via `store.readEvents(aggregateId)` (no full scan) and advanced with expectedVersion = generation so a lost race refuses rather than forks. Store API verified: SqliteEventStore.openForProject(path, projectId) (recovery-succession.test.ts:55), readEvents(aggregateId): readonly StoredEvent[] (sqlite-event-store.ts:308), StoredEvent.payload: Uint8Array (store-contracts.ts:170), getAggregateVersion (:266).\n\nPLATFORM MECHANISM probed live on this win32 host before committing to it: `icacls <dir> /inheritance:r /grant:r \"<domain\\user>:(OI)(CI)F\"` then `icacls <dir>` read-back returns exactly one ACE, `YARON-PC\\Yaron:(OI)(CI)(F)`, with NO `(I)` inherited marker (before: four ACEs, all `(I)`). That is a real Win32 DACL, not POSIX mode bits. POSIX hosts get chmod 0o700 + stat read-back on mode AND uid. Anything else -> typed UNKNOWN.\n\nCONVENTION: `.node.ts` sibling for host code (recovery-incarnation / .node, doctor-version / .node); every non-test module has a one-line LF `.js` bridge (12 present, 12 modules).",
+      "startedAt": "2026-08-10T08:00:12.205Z",
+      "completedAt": "2026-08-10T08:00:56.789Z"
     },
     {
       "stepId": "step-3",
       "description": "Contract module: apps/daemon/src/recovery/recovery-key-provider-contract.ts plus its one-line LF `.js` bridge. Declare TYPES and a frozen stable vocabulary only — no host calls, no crypto. Needed: a `RECOVERY_KEY_PROVIDER_LAYER` constant for the refusing-layer half of DoD 5; a frozen `RECOVERY_KEY_PROVIDER_ERROR_CODES` tuple; a `RecoveryKeyProtection` result naming the ACTUAL per-platform mechanism used (DoD 2 requires the mechanism be named in code and asserted, so make it a closed union of mechanism identifiers plus an UNPROTECTED/UNKNOWN member, never a boolean); a `RecoveryKeyProviderPort` interface the `.node.ts` implements; and a discriminated result type whose refusal carries both code and layer. Reuse the succession refusals from step 2 wherever the fault is a succession fault; mint a code here ONLY for faults succession does not model — specifically protection-unavailable and protection-unverifiable. Keep at or below 250 physical lines by `grep -c ''`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-key-provider-contract.ts",
         "apps/daemon/src/recovery/recovery-key-provider-contract.js"
@@ -43,23 +49,39 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-key-provider-contract.ts",
         "apps/daemon/src/recovery/recovery-key-provider-contract.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider-contract.ts",
+        "apps/daemon/src/recovery/recovery-key-provider-contract.js",
+        "apps/daemon/src/recovery/recovery-key-epoch-store.ts",
+        "apps/daemon/src/recovery/recovery-key-epoch-store.js"
+      ],
+      "note": "Contract landed. `pnpm --filter @moe/daemon typecheck` exit 0 with both modules present.\n\nDELIBERATE DEVIATION FROM THE PLAN'S FILE COUNT, disclosed rather than absorbed. Step 3 named one contract module and step 10 said \"eight owned files\". Written as one file the contract measured 290 lines by `grep -c ''` — over the 250 rail, which epic rail 5 makes non-negotiable and which the directory's own precedent handles by splitting (recovery-incarnation-contract.ts and recovery-succession-contract.ts both exist for exactly this reason and say so). So it is TWO modules, both measured: recovery-key-provider-contract.ts = 248, recovery-key-epoch-store.ts = 222. Owned file count becomes ten (4 modules + 4 LF `.js` bridges + 2 tests), not eight. No responsibility was added, only moved.\n\nrecovery-key-provider-contract.ts — types and frozen vocabulary only; no host calls, no crypto, no store I/O.\n- RECOVERY_KEY_PROVIDER_LAYER = \"RECOVERY_KEY_PROVIDER\" (the refusing-layer half of DoD 5).\n- RECOVERY_KEY_PROVIDER_ERROR_CODES frozen tuple of exactly four minted codes; the header states why each of the four is not modelled by succession and why every other fault propagates a succession refusal verbatim WITH ITS OWN LAYER.\n- RECOVERY_KEY_PROTECTION_MECHANISMS is a CLOSED union — \"WIN32_DACL_EXPLICIT_OWNER_ONLY\" | \"POSIX_MODE_0700_OWNER_ONLY\" — plus a separate RecoveryKeyProtectionUnknown member carrying mechanism:\"UNKNOWN\", truth:\"UNKNOWN\", a fixed code and this layer. Never a boolean: the comment records that a boolean lets a host that applied nothing report the same `true` as one that applied a real DACL.\n- RecoveryKeyProviderPort = { protect(directoryPath): Promise<RecoveryKeyProtectionResult> } — the single host boundary the `.node.ts` implements.\n- Refusal factories are fixed-text, so a caught `icacls` message or a path has no route into evidence; the ONLY observed value admitted is the platform, narrowed by asHostPlatform to win32|darwin|linux|OTHER first.\n- RecoveryKeyEpochRequest carries NO predecessorIncarnationRef and no keyHandle by construction, and snapshotKeyEpochRequest refuses extra keys — mirroring snapshotSuccessionRequest's descriptor-based single read.\n\nrecovery-key-epoch-store.ts — the durable I/O, all on the SAME SqliteEventStore substrate (no second substrate).\n- keyEpochAggregateId(projectId, restoreCommandId) = \"recovery-key-epoch:\" + digestOf(\"key-epoch-pointer\", projectId, restoreCommandId). Digested, not concatenated, because restoreCommandId is caller-chosen and a raw suffix would let a caller steer the aggregate id.\n- readKeyEpochPointer returns THREE distinct states, ABSENT | PRESENT | UNREADABLE, as separate union members. Collapsing UNREADABLE into ABSENT is what would silently mint a second epoch for one restore command; `mem:gotcha-empty-absent-unreadable-need-three-answers` is the reason this is a union rather than `pointer | null`, and step 4 will pin distinctness with a Set-size assertion rather than three independent arms.\n- writeKeyEpochPointer advances with expectedVersion = pointer.generation, so two processes racing to reopen one epoch both read N and the STORE lets exactly one write N+1. No try/catch, matching anchorIncarnation.\n- commitSuccessionRecord reproduces recovery-succession.ts's module-private writer on its own terms EXACTLY: same command kind, same predecessor-keyed aggregate via the exported successionAggregateId, same expectedVersion 0, same `recovery-succeed:<pred>:<succ>` command id. Matching the terms is what keeps the store's fork refusal effective across both writers.",
+      "startedAt": "2026-08-10T08:00:59.208Z",
+      "completedAt": "2026-08-10T08:06:08.455Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD RED for the pure half. Create apps/daemon/src/recovery/recovery-key-provider.test.ts driving the not-yet-written provider with an INJECTED fake port, so every branch is reachable without touching a real filesystem or keystore. Cases, each asserting the EXACT stable code AND the refusing layer (DoD 5), never merely that it failed:\n  - Cold start with no anchored predecessor mints a fresh epoch and anchors it.\n  - REOPEN after process death: given an anchored predecessor, the provider verifies it, mints a SUCCESSOR key, proves succession, and resolves to the SAME epoch identity — assert the epoch/incarnation ref is identical AND that the successor's public SPKI DIFFERS from the predecessor's. Both halves matter: same identity proves reopen, different key proves it re-minted rather than resurrected.\n  - Predecessor present but unverifiable -> refuses with the succession vocabulary, not a new code.\n  - Protection unavailable on this host -> typed UNKNOWN refusing with the protection code and this layer. It must NOT fall through to an optimistic success; that is the exact failure the task text forbids.\n  - Protection claimed but unverifiable on read-back -> refuses.\n  - A sweep over every declared failure injection asserts a NON-ZERO case count and that each declared injection was generated at least once (taskRail 4). A sweep that silently produces zero cases passes while testing nothing.\nAssert on every refusal that no anchor write occurred.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-key-provider.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/recovery/recovery-key-provider.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-key-provider.test.ts",
+        "apps/daemon/src/recovery/recovery-key-provider-contract.ts"
+      ],
+      "note": "TDD RED verified — failed for the RIGHT reason, not a typo:\n\"Error: Cannot find module './recovery-key-provider.js' imported from D:/projexts/moe-next/apps/daemon/src/recovery/recovery-key-provider.test.ts\" at recovery-key-provider.test.ts:31:1, \"src/recovery/recovery-key-provider.test.ts (0 test)\".\n\nA SECOND red is expected and self-clearing: the landed runtime-entrypoint.test.ts:179 sweep reports my two new bridges as `unexpected` because a module only joins the runtime tier once it has a `.test.ts` sibling or is reached from one — recovery-key-provider.ts does not exist yet. It clears at step 5. That landed guard also does step-10 check 2 for me: it pins bridge CONTENT to exactly `export * from \"./<name>.ts\";\\n`, so a missing or malformed bridge cannot pass.\n\nCases written (recovery-key-provider.test.ts, real SQLite under mkdtemp, real Ed25519 crypto port, INJECTED fake protection port):\n- Cold start -> MINTED, generation 0, chainLength 0, originIncarnationRef === incarnationRef; the anchored binding's publicKeySpkiHex is read back through readAnchoredIncarnation and the pointer through readKeyEpochPointer (exact toEqual on all five pointer fields).\n- REOPEN across a closed/reopened store handle -> asserts ALL THREE halves: origin IDENTICAL, incarnationRef DIFFERENT, publicKeySpkiHex DIFFERENT, plus readSuccessionChain (the landed reader, not my writer) links successor->predecessor with originIncarnationRef === the first incarnation. Either identity or SPKI alone would pass on a wrong build; both together separate reopen from resurrection.\n- Third open -> origin held, generation 2, chainLength 2, Set of three SPKIs has size 3.\n- CRASH HEAL: a Proxy store that throws only on the pointer commandKind reproduces the exact state ANCHOR-BEFORE-SUCCEED leaves (succession row committed, pointer not advanced). Asserts the pointer really is still at generation 0/first head, then that the next open adopts the recorded successor, keeps one origin and reaches chainLength 2. Without this the retry would try to succeed an already-succeeded predecessor forever.\n\nFAILURE SWEEP (taskRail 4 / DoD 5): 8 injections, each asserting `${layer}/${code}` — never merely \"it failed\".\n1 RECOVERY_KEY_PROVIDER/RECOVERY_KEY_EPOCH_INPUT_INVALID (request carrying predecessorIncarnationRef)\n2 RECOVERY_KEY_PROVIDER/RECOVERY_KEY_PROTECTION_UNAVAILABLE\n3 RECOVERY_KEY_PROVIDER/RECOVERY_KEY_PROTECTION_UNVERIFIABLE\n4 RECOVERY_KEY_PROVIDER/RECOVERY_KEY_PROTECTION_UNAVAILABLE (port THROWS)\n5 RECOVERY_KEY_PROVIDER/RECOVERY_KEY_EPOCH_POINTER_UNREADABLE (drifted pointer row)\n6 RECOVERY_SUCCESSION/RECOVERY_PREDECESSOR_NOT_FOUND (pointer names an unanchored head)\n7 RECOVERY_SUCCESSION/RECOVERY_PREDECESSOR_UNVERIFIABLE (real port wrapped so verify returns false)\n8 RECOVERY_SUCCESSION/RECOVERY_SUCCESSION_PROOF_UNAVAILABLE (generateSigningKey rejects)\nAnti-vacuity, all three of them: `expect(INJECTIONS).toHaveLength(8)` is HAND-WRITTEN, not INJECTIONS.length (a table that counts itself cannot notice an entry that stopped being generated); the generated names are compared to the table so a skipped arm fails; and answers are asserted as an ORDERED list against a hand-written EXPECTED_ANSWERS plus `new Set(answers).size === 7` per mem:gotcha-empty-absent-unreadable-need-three-answers, so a case that silently joined another's answer cannot hide. Cases 6-8 deliberately propagate the SUCCESSION layer verbatim rather than minting new codes.\nEvery arm also asserts decisionCount(store) is UNCHANGED across the refusal — no anchor, no pointer, no succession row.\n\nDoD 3 arm: keyHandle descriptor is non-enumerable, absent from JSON.parse(JSON.stringify(epoch)), and the ACTUAL committed resultBytes of every decision row are decoded and asserted to contain the public SPKI hex but none of \"PRIVATE KEY\", \"privateKey\", \"keyHandle\", \"pkcs8\", \"d\\\":\" — read from the production rows, not from a shape built in the test.\n\nAlso added to the contract during RED: RecoveryKeyProviderPort now declares `platform` alongside `protect`, so a port that THROWS still lets the pure provider name the host honestly instead of defaulting it to OTHER (injection 4 would otherwise report a false platform). Contract re-measured at 250 lines by grep -c ''.",
+      "startedAt": "2026-08-10T08:06:11.293Z",
+      "completedAt": "2026-08-10T08:09:38.072Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN, the pure orchestrator: apps/daemon/src/recovery/recovery-key-provider.ts plus its LF `.js` bridge. It takes the port and the succession service by INJECTION and contains zero host-specific code — all platform work lives in the `.node.ts` from step 6, mirroring recovery-incarnation.ts / recovery-incarnation.node.ts.\n\nThe reopen path composes, in order: `readAnchoredIncarnation` to find the predecessor; `verifyAnchoredPredecessor` to establish it is trustworthy; `mintSuccessor` for a NEW key; `proveSuccession` to bind the successor to the predecessor; then anchor the result. Do not reimplement any of those four — DoD 4 requires composition and taskRail 2 forbids a parallel mechanism.\n\nFAIL CLOSED THROUGHOUT: an unreadable anchor, an unverifiable predecessor, an unavailable protection mechanism, or a failed read-back each refuse with a code and a layer and write nothing. Never downgrade a protection failure into a success — the provider's whole purpose is that something downstream may claim crash-resume, and an optimistic pass would launder that claim.\n\nNever accept a caller-supplied epoch, nonce or key handle as evidence — recovery-incarnation.ts:53-56 documents why (\"Each of those would let someone holding the backup predict or replay the fence\"). Keep at or below 250 physical lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-key-provider.ts",
         "apps/daemon/src/recovery/recovery-key-provider.js"
@@ -67,7 +89,8 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-key-provider.ts",
         "apps/daemon/src/recovery/recovery-key-provider.js"
-      ]
+      ],
+      "startedAt": "2026-08-10T08:09:40.712Z"
     },
     {
       "stepId": "step-6",
@@ -121,7 +144,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-01abf979",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -133,20 +156,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T07:31:03.909Z",
-  "updatedAt": "2026-08-10T07:40:40.448Z",
+  "updatedAt": "2026-08-10T08:09:40.712Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T07:36:59.330Z",
     "plannedStepCount": 10,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
-    "architect-8ee37119"
+    "architect-8ee37119",
+    "worker-01abf979"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:40:38.395Z",
   "planningNotes": {
@@ -157,5 +187,6 @@
   "budget": {
     "wallClockMs": 9000000
   },
-  "planApprovedAt": "2026-08-10T07:40:40.448Z"
+  "planApprovedAt": "2026-08-10T07:40:40.448Z",
+  "workStartedAt": "2026-08-10T07:55:08.512Z"
 }

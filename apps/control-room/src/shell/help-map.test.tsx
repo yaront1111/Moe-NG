@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, expect, it } from "vitest";
 
@@ -30,4 +33,10 @@ it("shows the exact command map without dropping the complete navigation index",
   expect(within(help).getByTestId("cr.shell.help.binding.approvals").textContent)
     .toContain("when navigation is available");
   for (const label of CONTROL_ROOM_NAV_ITEMS) expect(within(help).getByText(label)).toBeDefined();
+});
+
+it("stacks the command map at phone width", () => {
+  const css = readFileSync(resolve(process.cwd(), "src/styles/responsive.css"), "utf8");
+  const phone = css.slice(css.indexOf("@media (max-width: 639px)"));
+  expect(phone).toMatch(/\.cr-shell-help-grid\s*\{[^}]*grid-template-columns:\s*1fr;/su);
 });

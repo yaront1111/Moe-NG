@@ -86,35 +86,56 @@
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove each guard is reddenable. Run each, confirm the NAMED assertion kills it, revert, confirm green before the next.\n\n  1. Mark a graph scenario COVERED in the ledger -> the \"every COVERED id resolves to a production file\" assertion must go RED. This is the drill that proves the gate cannot be narrowed into a false pass.\n  2. Delete one scenario entry -> the total-equals-twenty assertion must go RED.\n  3. Blank an UNKNOWN's missingInput -> the non-empty assertion must go RED.\n  4. Flip latency from UNKNOWN to COVERED -> its status assertion must go RED.\n  5. Remove a nextAllowedCommand binding from a rendered action -> the DoD 3 action/command assertion must go RED. If it stays green, that assertion is enumerating zero actions and the non-zero precondition is missing.\n  6. Strip the keyboard handler from one action -> the keyboard invariant must go RED, proving it asserts focus movement rather than element presence.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/journey-coverage.ts",
         "tests/e2e/control-room/journeys.spec.ts"
       ],
-      "startedAt": "2026-08-10T07:50:44.360Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/journey-coverage.ts",
+        "tests/e2e/control-room/journey-invariants.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "note": "SIX DRILLS ON THE NEW GUARDS. Each reddened at the assertion I aimed at, each restored, green re-confirmed between. Two of them were BAD DRILLS first and I redid them; both failures are recorded below because each taught something.\n\n1. FLIP LOADING_RECORD TO COVERED (QA's named drill).\n   RED: \"AssertionError: expected 'COVERED' to be 'UNKNOWN'\", 1 failed | 22 passed.\n   *** THIS DRILL FOUND A REAL DEFECT IN MY OWN DESIGN. *** Only ONE test reddened. The invariant ledger's UNKNOWN-set assertion stayed GREEN, because journey-invariants.ts hand-wrote `status: \"UNKNOWN\"` for its LOADING entry while deriving cause/missingInput/owner. Two sources of truth for one fact — precisely the drift that module's doc comment claims to avoid, sitting inside the artifact whose whole purpose is not to lie. Fixed by deriving `status: LOADING_RECORD.status` (and the same for LATENCY).\n   RE-DRILLED AFTER THE FIX and the flip is now UNREPRESENTABLE, not merely detected: tsc exits 1 with \"Type ... is missing the following properties from type 'CoveredInvariant': bar, provenBy\". Marking loading covered now requires naming a bar and the tests that prove it, which is exactly the work that would make it true. A compile error is a stronger guard than a red test.\n\n2. ROT GUARD AGAINST REAL PRODUCTION BYTES. Added `loading={false}` to <ActiveWorkspace> in control-room-preview.tsx.\n   RED: \"expected 'import { useState } from \\\"react\\\";\\nim…' not to match /\\bloading=/u\", 1 failed | 22 passed. Proves the guard reads that file's real contents, not a cached or empty string.\n   RESTORED and verified THREE ways, because a clean `git status` alone is not proof here: `grep -c 'loading=' <file>` -> 0, `git status --porcelain <file>` empty, `git diff --stat` empty.\n\n3. RENAME A PROVING TEST in journeys.spec.ts (\"...gets focus back\" -> \"...gets focus BACK\").\n   RED: \"PROVENANCE -> a focused truth chip drills to provenance by keyboard and gets focus back: expected false to be true\". The label names both the invariant and the missing title. This is the drill that matters most: it proves the ledger cannot keep claiming an invariant is COVERED after the test proving it is renamed or deleted — the failure mode that let loading go unrecorded in the first place.\n\n4. BLANK LOADING_RECORD.missingInput.\n   FIRST ATTEMPT WAS A BAD DRILL AND PASSED 23/23. I deleted only the first sentence, leaving a string that was still non-empty and still contained the three ids — so every assertion legitimately held. The guard was fine; my mutation was too weak. A 23/23 here would have read as \"the guard is decorative\" if I had not looked at what I actually changed.\n   REDONE with `missingInput: \"\"` -> 2 failed | 21 passed: \"expected '' not to be ''\" on the record, and \"LOADING missingInput: expected '' not to be ''\" on the invariant ledger. The second failure also confirms the derivation from drill 1 is live.\n\n5. SUBSTITUTE THE LOADING ENTRY (id \"LOADING\" -> \"LATENCY\", so the list still has seven members).\n   RED on two: \"expected [ 'TRUTH', 'PROVENANCE', …(5) ] to deeply equal [...]\" and \"expected [ 'LATENCY', 'LATENCY' ] to deeply equal [ 'LOADING', 'LATENCY' ]\".\n   WORTH KNOWING: THE COUNT STAYED SEVEN. A `toHaveLength(7)` assertion alone would have passed this substitution silently. The whole-list compare is the load-bearing guard, not the count — the same lesson QA's drill 5 taught about the on-disk file check.\n   (My first attempt at this one was also bad: I replaced a closing token with invalid syntax inside a batch script whose `set -e` did not stop it, so the result was unreadable. Redone as a clean single-token substitution.)\n\n6. EMPTY A provenBy ARRAY (NARROW_WINDOW).\n   RED: \"NARROW_WINDOW provenBy: expected 0 to be greater than 0\". Proves the non-vacuity precondition works — an empty provenBy cannot let the title sweep pass over zero cases, which is the epic rail 6 defect.\n\n*** SHARED-WORKTREE HAZARD, AND IT BIT: HEAD MOVED TWICE MID-DRILL AND A FOREIGN COMMIT CAPTURED ONE OF MY MUTATIONS. ***\nHEAD went 0b1d7a7 -> 968ca74 -> d531406 while I was drilling; neither commit is mine. d531406 captured journey-invariants.ts WITH DRILL 5 APPLIED. The committed bytes are wrong:\n  git show HEAD:tests/e2e/control-room/journey-invariants.ts | grep 'id: \"'  ->  TRUTH, PROVENANCE, KEYBOARD, NARROW_WINDOW, LATENCY, DEGRADED, LATENCY\n  working tree                                                              ->  TRUTH, PROVENANCE, KEYBOARD, NARROW_WINDOW, LOADING, DEGRADED, LATENCY\nMy working tree is correct and green; HEAD is not. `git status` shows a one-line diff and reads like a trivial edit, which is exactly why this is dangerous — only reading the committed bytes reveals it. Per global rail 5 I did NOT amend, reset or rewrite the foreign commit; the correction goes in as my own commit by explicit pathspec in step 7, and the gate is then run at that commit so DoD 4's evidence describes bytes that actually exist.\n\nCURRENT STATE: tsc exit 0; journey-coverage.test.ts 23 pas",
+      "startedAt": "2026-08-10T07:50:44.360Z",
+      "completedAt": "2026-08-10T07:55:48.852Z"
     },
     {
       "stepId": "step-7",
       "description": "RUN THE REAL GATE AND CAPTURE EVIDENCE AT ONE EXACT COMMIT (DoD 4).\n\nRun BOTH, fresh and foreground, and report which satisfies which DoD item:\n  pnpm test:e2e            # tsc foundation + vitest over tests/e2e — the Verification field's script\n  pnpm test:e2e:browser    # tsc control-room + playwright — THE Playwright gate DoD 4 names\n\nDoD 4 requires the gate to exit 0 AT ONE EXACT COMMIT. Record the commit SHA and confirm the working tree is clean over the owned paths at the moment of the run — evidence captured across a dirty tree does not identify what was tested. Capture the Playwright run's output verbatim, including the passed/failed counts, and confirm the test count is non-zero: a Playwright config that matches no spec exits 0 and reads exactly like success.\n\nCLEAN UP: tests/e2e/control-room/test-results/ already exists and Playwright writes into it. Confirm nothing from it enters the commit — epic rail 5 forbids generated evidence files in commits. Check `git status --porcelain tests/e2e/control-room/` before staging.\n\nOWNED PATHS ARE tests/e2e/control-room/** AND RELEASE EVIDENCE PATHS ONLY. Do not touch apps/control-room/src — if a journey fails because a production surface is wrong, that is a finding to report, not a fix to make here.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/journeys.spec.ts",
         "tests/e2e/control-room/journey-coverage.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/journey-invariants.ts"
+      ],
+      "note": "COMMITTED FIRST, THEN GATED — deliberately in that order. DoD 4 wants the gate green at ONE EXACT COMMIT, and HEAD was carrying a foreign-captured drill mutation. Gating a clean working tree against a broken HEAD would have produced evidence describing bytes that do not exist in any commit.\n\nMY COMMIT: 77fc85d, ONE file, by explicit pathspec. `git diff --cached --name-only` before it listed exactly `tests/e2e/control-room/journey-invariants.ts` and nothing else; the shared index was empty when I staged, so no foreign file rode along. No `git add -A`, and the foreign commit was NOT amended, reset or rewritten.\n\nCOMMITTED BYTES VERIFIED BY READING THEM, not by trusting a clean status:\n  git show HEAD:tests/e2e/control-room/journey-invariants.ts | grep 'id: \"'\n  -> TRUTH, PROVENANCE, KEYBOARD, NARROW_WINDOW, LOADING, DEGRADED, LATENCY\nAll seven present, in DoD order, LOADING restored.\n\nBOTH GATES, FRESH AND FOREGROUND, AT COMMIT 77fc85df5e084b457c5c5f90c9b86d30577a2b30:\n\n  pnpm test:e2e          -> 4 files / 67 tests passed, exit 0\n    (`tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` — the Node/Vitest\n     lane the task's Verification field names. 59 -> 67 is exactly my 8 new assertions.)\n\n  pnpm test:e2e:browser  -> 10 passed (9.7s), exit 0    <- THIS ONE SATISFIES DoD 4\n    (`tsc -p tests/e2e/control-room/tsconfig.json && playwright test ...` — the Playwright\n     gate DoD 4 actually names. 1 smoke + 9 journeys, every one listed ok by name.)\n\nNON-ZERO DISCOVERY CONFIRMED BY NAME, not by exit code: a Playwright config matching no spec exits 0 and reads exactly like success. All ten are named in the output above.\n\nONE EXACT COMMIT, PROVEN: `git rev-parse HEAD` was 77fc85df... before the first run and identical after the second, and `git status --porcelain tests/e2e/control-room/` was EMPTY at both points. So both lanes describe the same bytes, and nothing shifted underneath them this time.\n\nGENERATED EVIDENCE EXCLUDED: tests/e2e/control-room/test-results/ exists and Playwright wrote into it during the run. `git check-ignore -v` resolves it to tests/e2e/control-room/.gitignore:5, and the post-run status over owned paths is empty, so none of it is tracked or staged.\n\napps/control-room/src UNTOUCHED at this commit. The only production file I mutated all session was control-room-preview.tsx inside drill 2, restored and verified three ways in step 6; its status and diff are both empty now.",
+      "startedAt": "2026-08-10T07:55:54.877Z",
+      "completedAt": "2026-08-10T07:57:01.626Z"
     },
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL REVIEW AND COMPLETION EVIDENCE. This task's honesty is the deliverable, so the evidence must state its own limits.\n\nSTATE PLAINLY IN THE COMPLETION EVIDENCE, do not bury it:\n  - How many of the twenty scenario cases are COVERED and how many are UNKNOWN.\n  - That all five graph ids and cr.banner.revision are UNKNOWN because the surfaces do not exist, owner task-779d6804, WHICH IS ARCHIVED — so a governor reading this knows the owner must be revived or re-created before those cases can ever close.\n  - That latency is UNKNOWN pending a human decision on the reference machine, decided in the planning REPL on 2026-08-10, and that no absolute p95/p99 assertion was written because one would certify nothing.\n  - Which gate command was run for DoD 4 and at which commit SHA.\n\nDo NOT describe this gate as satisfying DoD 1 in full. It does not, and Clause 2 forbids a narrowed DoD presented as complete. It satisfies DoD 1 for the journeys whose surfaces exist and records the rest — say exactly that.\n\nAdversarial review:\n- Did I create any component, stub or fixture to give a scenario something to find? Absolutely forbidden.\n- Does any journey assert against a mock where a real surface exists?\n- Does any spec reimplement harness or port logic instead of composing harness.ts / static-ports.ts?\n- Does any assertion pass over zero cases — zero actions enumerated, zero specs matched, zero elements swept?\n- Did I touch apps/control-room/src? I must NOT have.\n- Are generated test-results excluded from the commit?\n- Files under 400 lines.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH 27 FOREIGN FILES earlier in this session. Never git add -A.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/journey-coverage.ts",
         "tests/e2e/control-room/journeys.spec.ts",
         "tests/e2e/control-room/journey-coverage.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/journey-coverage.ts",
+        "tests/e2e/control-room/journey-invariants.ts",
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW FOUND TWO REAL VACUITY HOLES IN MY OWN FIX. Neither had a failing test; both came from reading the diff as an attacker. Fixed and drilled before completing.\n\nHOLE 1 — COVERAGE CLAIMABLE FROM PROSE. The invariant/spec binding matched `test(\"<title>\"` as a PLAIN SUBSTRING, so a title quoted inside a doc comment satisfied it. A COVERED invariant could have pointed at a comment rather than an executing test. Same class of lie as the omitted loading invariant — claiming a proof that is not there. Now the binding builds a Set from LINE-ANCHORED /^test\\(\"((?:[^\"\\\\]|\\\\.)*)\"/gmu declarations and checks membership.\n  DRILL 7: renamed the real test and left its old title alive ONLY in a comment. RED — \"PROVENANCE -> a focused truth chip drills to provenance by keyboard and gets focus back: expected false to be true\". Under the substring version this exact mutation would have passed GREEN.\n\nHOLE 2 — A SWEEP THAT COULD COVER NOTHING. The served-entry-point rot guard swept an inline array literal in `it.each`. Emptying it generates ZERO tests and passes green — the swept-case defect epic rail 6 names, and I had written that guard for the other sweeps while missing it here. Extracted to a named SERVED_ENTRY_POINTS constant with a whole-list assertion.\n  DRILL 8: dropped one entry. RED at the new guard, AND the suite total fell 24 -> 23, the visible proof a case was lost.\n\nBoth fixes committed as 5e12da8.\n\nREST OF THE CHECKLIST:\n- No component, stub or fixture created to give anything to find. apps/control-room/src has ZERO bytes in either of my commits: `git log 77fc85d^..HEAD -- apps/control-room/src/preview/control-room-preview.tsx` is EMPTY, so the drill-2 mutation never reached a commit despite two foreign whole-tree commits landing mid-session.\n- No mock stands in for a real surface; the two UNKNOWNs are recorded, not simulated.\n- No harness or port logic reimplemented; journeys.spec.ts is byte-unchanged this pass.\n- Zero-case assertions: every sweep now has a non-vacuity precondition — declaredTitles.size > 0, covered.length > 0, provenBy.length > 0, and the SERVED_ENTRY_POINTS whole-list pin.\n- Generated evidence excluded: test-results/ resolves to tests/e2e/control-room/.gitignore:5; owned-path status empty after both runs.\n\nEDGE REVIEW: readFileSync on a renamed guarded file cannot assert over an empty string — existsSync is asserted first, failing closed. The SPEC read is at collection time, so an unreadable journeys.spec.ts fails loudly rather than yielding an empty Set. repoRoot() still throws JOURNEY_COVERAGE_ROOT_UNRESOLVED rather than scanning an empty tree. No concurrency surface: pure file reads, no shared mutable state, no handles held, no retries.\n\nPER-FILE COUNTS, `grep -c ''`, all under the 400 cap: journey-coverage.ts 281, journey-invariants.ts 143, journey-coverage.test.ts 320, journeys.spec.ts 341. TWO ARE OVER THE 250 TARGET (281, 320) and I am reporting it rather than hiding it. The split into journey-invariants.ts kept coverage.ts at 281 instead of ~370; splitting the test file further would separate the loading assertions from the ledger arithmetic they belong with.\n\nCOMMITS, both by explicit pathspec, each exactly one owned file, index verified empty before staging:\n  77fc85d  journey-invariants.ts     (restores the LOADING id a foreign commit captured mid-drill)\n  5e12da8  journey-coverage.test.ts  (the two adversarial fixes)\njourney-coverage.ts's LOADING_RECORD is already at HEAD via foreign commit 968ca74 — not amended, not reclaimed, per global rail 5.\n\nFINAL GATES, fresh and foreground at ONE EXACT COMMIT 5e12da8e0b6af64adb4c733b88941ff9db4fa485, owned tree clean before AND after, HEAD identical across both:\n  pnpm test:e2e         -> 4 files / 68 tests passed, exit 0\n  pnpm test:e2e:browser -> 10 passed (9.7s), exit 0   <- DoD 4\nNo repo-wide leg is reported because the entire diff is three files under tests/e2e/, compiled only by tests/e2e/control-room/tsconfig.json (verified with --listFiles) and imported by no package. A repo-wide delta attributable to this diff is not constructible.",
+      "startedAt": "2026-08-10T08:00:19.069Z",
+      "completedAt": "2026-08-10T08:00:38.935Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a2c7f85f",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f3560083",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -163,7 +184,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T07:50:44.361Z",
+  "updatedAt": "2026-08-10T08:05:13.891Z",
   "contextFetchedBy": [
     "worker-a2c7f85f",
     "qa-f3560083"
@@ -172,7 +193,7 @@
     "firstClaimAt": "2026-08-09T12:28:16.101Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 13,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -196,7 +217,10 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -238,15 +262,16 @@
   },
   "planApprovedAt": "2026-08-10T06:59:09.070Z",
   "workStartedAt": "2026-08-10T07:06:17.503Z",
-  "reviewStartedAt": "2026-08-10T07:33:24.930Z",
+  "reviewStartedAt": "2026-08-10T08:02:27.182Z",
   "verification": {
     "command": "pnpm test:e2e:browser",
     "exitCode": 0,
-    "outputTail": "$ tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts\n\nRunning 10 tests using 1 worker\n\n  ok  1 control-room-smoke.spec.ts:17 > serving the built control-room bundle mounts its shell root element (918ms)\n  ok  2 journeys.spec.ts:108 > CR-J1-002: the graph canvas is never mounted on any workspace (1.2s)\n  ok  3 journeys.spec.ts:135 > CR-A11Y-001: five truth classes stay distinct without colour (882ms)\n  ok  4 journeys.spec.ts:172 > CR-CMD-001: every rendered action is one the supplied command set allows (1.1s)\n  ok  5 journeys.spec.ts:202 > every displayed fact carries a truth chip, on every workspace (1.1s)\n  ok  6 journeys.spec.ts:231 > the disconnected banner never coexists with an enabled action (1.2s)\n  ok  7 journeys.spec.ts:251 > a focused truth chip drills to provenance by keyboard and gets focus back (931ms)\n  ok  8 journeys.spec.ts:283 > the narrow layout keeps action parity with the wide one (937ms)\n  ok  9 journeys.spec.ts:302 > an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell (866ms)\n  ok 10 journeys.spec.ts:337 > the ledger's COVERED set is exactly what this file drives (0ms)\n\n  10 passed (9.7s)\n\nEXIT 0 at commit 0b1d7a7d7d770ec746d5ebd247766e8e094e7ed1; tree clean over tests/e2e/control-room/ before and after; HEAD unchanged across the run. Also run: pnpm test:e2e -> 4 files / 59 tests passed, exit 0.",
-    "reportedAt": "2026-08-10T07:33:24.930Z"
+    "outputTail": "Running 10 tests using 1 worker\n  ok  1 control-room-smoke.spec.ts:17 > serving the built control-room bundle mounts its shell root element\n  ok  2 journeys.spec.ts:108 > CR-J1-002: the graph canvas is never mounted on any workspace\n  ok  3 journeys.spec.ts:135 > CR-A11Y-001: five truth classes stay distinct without colour\n  ok  4 journeys.spec.ts:172 > CR-CMD-001: every rendered action is one the supplied command set allows\n  ok  5 journeys.spec.ts:202 > every displayed fact carries a truth chip, on every workspace\n  ok  6 journeys.spec.ts:231 > the disconnected banner never coexists with an enabled action\n  ok  7 journeys.spec.ts:251 > a focused truth chip drills to provenance by keyboard and gets focus back\n  ok  8 journeys.spec.ts:283 > the narrow layout keeps action parity with the wide one\n  ok  9 journeys.spec.ts:302 > an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell\n  ok 10 journeys.spec.ts:337 > the ledger's COVERED set is exactly what this file drives\n\n  10 passed (9.8s)\nEXIT 0 at commit 5e12da8e0b6af64adb4c733b88941ff9db4fa485. HEAD identical before and after the run; git status --porcelain tests/e2e/control-room/ EMPTY before and after. Also run fresh at the same commit: pnpm test:e2e -> 4 files / 68 tests passed, exit 0.",
+    "reportedAt": "2026-08-10T08:02:27.182Z"
   },
   "filesModified": [
     "tests/e2e/control-room/journey-coverage.ts",
+    "tests/e2e/control-room/journey-invariants.ts",
     "tests/e2e/control-room/journeys.spec.ts",
     "tests/e2e/control-room/journey-coverage.test.ts"
   ],

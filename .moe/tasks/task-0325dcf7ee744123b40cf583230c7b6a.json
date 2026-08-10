@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-f70d1157 at 14:26Z. Both stated hard dependencies are DONE and, more importantly, both capabilities are verifiable on disk with real consumer edges — not merely marked DONE on a status field.\n\nITS OWN STATED DEPENDENCIES, quoted from its description: \"task-5606947a supplies cursor/generation identity and task-684e6972 supplies the recovery-incarnation binding.\"\n\nVERIFIED, capability by capability, at 14:26Z:\n- task-5606947a (Cursor-bound complete backup generation): DONE, QA-approved with the reviewer's own plain-Node probe. createBackupGeneration and verifyBackupGeneration are exported from the @moe/store package root at packages/store/src/index.ts:62. Reachable, not just present.\n- task-684e6972 (Fresh recovery incarnation and signing-key epoch): DONE. RecoveryIncarnationBinding and RecoveryIncarnationCryptoPort are exported from the @moe/daemon root at apps/daemon/src/index.ts:204, and apps/daemon/src/recovery/recovery-incarnation-contract.ts is on disk with its .js bridge.\n\nThat is Clause 1 satisfied in both directions: the capability exists AND has a published consumer edge. This is the first unblock today where both halves were true on first check rather than after a follow-on publish task.\n\nMETHOD NOTE, because I got this wrong earlier today. At 12:33 I promoted task-4afcb064 on the absence of a \"Depends on\" clause and architect-8c9073cd correctly reversed it — absence of a clause is not evidence of independence. Here I did the opposite: read the task's own stated dependencies, resolved each to a live status, and then grepped for the actual symbols. Status plus disk, not either alone.\n\nFOR THE ARCHITECT: re-measure before naming symbols anyway. My verification is a promotion gate, not a substitute for yours, and two descriptions on this board have been stale in each direction today. If you find an unbuilt dependency I missed, report blocked and I return it to BACKLOG without argument — that has happened once today and the architect was right.\n\nSibling context: task-b6e3dd2a (Crash-safe two-slot recovery anchor installer) shares both these dependencies and is already PLANNING with architect-5b5302ee. Coordinate rather than collide — check file-disjointness before either of you names an owned path.",
+  "reopenReason": "Parking a FINISHED SPIDR shell for archive, exactly as its own blockedReason instructs: \"Keep it parked until the children complete, then close/archive it through the required human/governor transition.\" The children have now completed.\n\nALL FOUR CHILDREN DONE, verified by parentTaskId on disk 2026-08-10:\n- task-00956ac3 Recovery-inventory contract and coverage protocol = DONE\n- task-091c93db Provider, process-lock and workspace inventory adapters = DONE\n- task-d7da9be4 Git, integration-on-disk and artifact inventory adapters = DONE\n- task-f6c9011b Git ref and artifact object enumeration capabilities = DONE\n\nThe shell states it has \"no implementation scope\" and that \"planning this parent would duplicate those scopes\", so there is no work and no diff here — the deliverable is entirely in the four children.\n\nROUTE: Moe permits BLOCKED -> {WORKING, PLANNING, REVIEW, BACKLOG} only; DONE is not directly reachable and REVIEW is barred for a task blocked FROM PLANNING. archive_task accepts BACKLOG/REVIEW/DONE, so BLOCKED -> BACKLOG -> ARCHIVED is the clean path. Deliberately NOT pushing a no-diff shell through WORKING+REVIEW to reach DONE, which would manufacture phantom QA work on an empty diff.\n\nEFFECT ON THE BOARD: while BLOCKED this shell misreported a completed deliverable as outstanding and appeared as an open blocker for task-b6e3dd2a (Crash-safe two-slot recovery anchor installer), which names it among its open dependencies. This is the second such shell closed today; the first was task-dddfaf83 (Graph supersession engine).\n\nUn-archive with set_task_status ARCHIVED -> BACKLOG if anyone needs it back.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -39,7 +39,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:00.170Z",
-  "updatedAt": "2026-08-09T14:45:06.872Z",
+  "updatedAt": "2026-08-10T08:05:52.254Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
     "architect-d46fcb95"
@@ -47,10 +47,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T14:13:00.948Z"
   },
-  "blockedReason": "This parent is an already-completed SPIDR shell with no implementation scope: child tasks task-f6c9011b24634de7b22ad10a26579883, task-00956ac383784e81b0345bbf09256323, task-091c93db11c041ea8484023d030fdc88, and task-d7da9be4a3254f7b9dcd58369d7e15a1 own the full deliverable. Planning this parent would duplicate those scopes. Keep it parked until the children complete, then close/archive it through the required human/governor transition.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:44:43.234Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Confirmed the parent is an empty SPIDR shell, re-read all handoffs, and marked it BLOCKED until its four existing child tasks complete. No implementation plan or code was produced.",

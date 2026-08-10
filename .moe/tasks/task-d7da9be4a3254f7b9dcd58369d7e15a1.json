@@ -153,7 +153,7 @@
       "completedAt": "2026-08-10T07:52:37.553Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -173,16 +173,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:57.152Z",
-  "updatedAt": "2026-08-10T07:53:21.704Z",
+  "updatedAt": "2026-08-10T08:04:56.114Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
-    "worker-01abf979"
+    "worker-01abf979",
+    "qa-f3560083"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-10T07:24:02.820Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-10T08:04:56.114Z",
+    "wallClockMs": 2453294
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -234,5 +237,8 @@
     "packages/runner/src/recovery-inventory/artifact-object-inventory.js",
     "packages/runner/src/recovery-inventory/artifact-object-inventory.test.ts",
     "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-10T08:04:56.114Z",
+  "reviewCompletedAt": "2026-08-10T08:04:56.114Z",
+  "reviewSummary": "APPROVE. Full evidence: chan-ced99359, msg-284f1457.\n\nRE-RAN BY ME twice at two HEADs: typecheck exit 0; test 49 files/1459 tests exit 0 - matches outputTail, and +3 files/+38 over the recorded 46/1421 baseline reconciles to 17 git + 14 artifact + 7 seam.\n\nMID-DRILL SWEEP checked first. 7879698 captured six files, one carrying drill 5's mutation; 968ca74 restores exactly the listRefs UNAVAILABLE branch, 2+/2-, nothing else. The green gate is itself proof no other residue survived - every drill reddens a named test, so 1459 passed rules them out. Tree clean over recovery-inventory/: committed bytes are gated bytes.\n\nSCOPE CLEAN: diff b24d2fd..HEAD is exactly 7 NEW files, 1662 insertions, ZERO modifications. Aggregate and both slice-2 files byte-untouched.\n\nDoD1: production spawns nothing; the test uses execFileSync argument-vector only, shell:false, bounded maxBuffer/timeout/windowsHide under hermeticGitEnvironment.\nDoD2: silent-skip case is real - drill M1.\nDoD3: asserted end to end through collectRecoveryInventory, whole-object equality on {truth,code,reason,layer}.\nDoD4: compareCodePoints throughout, localeCompare only in comments, separators folded in production.\nDoD5: real git-init repos and real createArtifactStore bytes under mkdtemp; hand-written counts 14/13 over a GENERATED array pushed inside proofFor.\nDoD6: grep -c '' git 250, artifact 194; both .js bridges, trailing LF verified.\n\nSEVEN OF MY OWN DRILLS, all red at the aimed assertion, sha256 byte-identical after restore. M1 ADDRESS_CORRUPT silently skipped. M2 truncates() false, 3 red. M3 localeCompare. M4 no separator normalisation. M5 null negative proof, 3 red. M6a MINE: narrowed the REAL scope-git listRefs, 4 items vs 1. M6b MINE: made the REAL artifact-enumeration drop staging, 3 red - composition proven, not read off the import list. M7 bridge removed, plain-Node probe red only.\n\nForeign j1-linear red ruled out: 7 new files, no external importer. Clause 1 met by consumer task-0325dcf7."
 }

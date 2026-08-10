@@ -39,8 +39,30 @@ it("opens as a modal on the required reason field", async () => {
 
   const modal = screen.getByRole("dialog");
   const reason = within(modal).getByRole("textbox");
+  const backdrop = screen.getByTestId("cr.approvals.reasonbackdrop");
+  expect(backdrop.contains(modal)).toBe(true);
+  expect(backdrop.parentElement).toBe(document.body);
   expect(modal.getAttribute("aria-modal")).toBe("true");
   expect(document.activeElement).toBe(reason);
+});
+
+it("keeps field labels unique when more than one approval surface is mounted", () => {
+  const common = {
+    auditEvent: "approval.decide",
+    body: "Decision body",
+    confirmLabel: "Reject plan",
+    onCancel: () => undefined,
+    onConfirm: () => undefined,
+    scope: "one plan revision",
+    title: "Reject plan",
+  } as const;
+  render(<><ReasonModal {...common} /><ReasonModal {...common} /></>);
+
+  const reasons = screen.getAllByRole("textbox");
+  const labels = screen.getAllByText("Reason (required):");
+  expect(new Set(reasons.map((reason) => reason.id)).size).toBe(2);
+  expect(labels.map((label) => label.getAttribute("for")))
+    .toEqual(reasons.map((reason) => reason.id));
 });
 
 it("contains forward and reverse tab traversal", async () => {

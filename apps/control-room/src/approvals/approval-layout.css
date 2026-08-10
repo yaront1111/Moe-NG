@@ -16,6 +16,76 @@
   overflow: visible;
 }
 
+.cr-approval-reason-backdrop {
+  background: rgb(20 28 43 / 58%);
+  display: grid;
+  inset: 0;
+  padding: 1rem;
+  place-items: center;
+  position: fixed;
+  z-index: 140;
+}
+
+[data-testid="cr.approvals.reasonmodal"] {
+  background: var(--cr-surface);
+  border: 1px solid var(--cr-line-strong);
+  border-block-start: 3px solid var(--cr-attention);
+  border-radius: var(--cr-radius-md);
+  box-shadow: var(--cr-shadow-high);
+  display: grid;
+  gap: 0.75rem;
+  inline-size: min(100%, 36rem);
+  max-block-size: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+[data-testid="cr.approvals.reasonmodal"] h3,
+[data-testid="cr.approvals.reasonmodal"] p {
+  margin: 0;
+}
+
+[data-testid="cr.approvals.reasonmodal"] label {
+  color: var(--cr-ink-soft);
+  font-family: var(--cr-font-utility);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-testid="cr.approvals.reasonmodal"] textarea {
+  inline-size: 100%;
+}
+
+.cr-approval-reason-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.cr-approval-reason-actions button {
+  border-radius: var(--cr-radius-xs);
+  min-block-size: 2.45rem;
+  padding: 0.55rem 0.9rem;
+}
+
+.cr-approval-reason-confirm {
+  background: var(--cr-action-deep);
+  color: var(--cr-white);
+  font-weight: 750;
+}
+
+.cr-approval-reason-confirm:disabled {
+  opacity: 0.48;
+}
+
+.cr-approval-reason-cancel {
+  background: var(--cr-surface-muted);
+  border: 1px solid var(--cr-line-strong);
+}
+
 @media (max-width: 959px) {
   /*
    * Pinned to the bottom edge rather than scrolled away with the plan body, so

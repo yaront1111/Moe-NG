@@ -52,16 +52,30 @@ function stepOf(value: unknown): SurfaceStep | null {
   if (status !== "BLOCKED" && status !== "COMMITTED" && status !== "READY") return null;
   const kind = text(value["kind"]);
   if (kind === "") return null;
-  const missing = Array.isArray(value["missing"])
-    ? value["missing"].filter((entry): entry is string => typeof entry === "string")
-    : [];
+  const aggregateId = value["aggregateId"];
+  if (aggregateId !== null && typeof aggregateId !== "string") return null;
+  const missing = value["missing"];
+  if (!Array.isArray(missing) || !missing.every((entry) => typeof entry === "string")) return null;
+  const version = value["version"];
+  if (version !== null
+    && (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0)) return null;
   return Object.freeze({
-    aggregateId: typeof value["aggregateId"] === "string" ? value["aggregateId"] : null,
+    aggregateId,
     kind,
-    missing,
+    missing: Object.freeze([...missing]) as readonly string[],
     status,
-    version: typeof value["version"] === "number" ? value["version"] : null,
+    version,
   });
+}
+
+function offerOf(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  if (text(value["commandId"]) === "" || text(value["commandKind"]) === ""
+    || text(value["targetAggregateId"]) === "") return null;
+  const expectedVersion = value["expectedVersion"];
+  if (typeof expectedVersion !== "number"
+    || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) return null;
+  return Object.freeze({ ...value });
 }
 
 function frame(
@@ -71,17 +85,33 @@ function frame(
   steps: readonly SurfaceStep[] = [],
   offers: readonly Record<string, unknown>[] = [],
 ): SurfaceFrame {
-  return Object.freeze({ connection, detail, offers, outcome, steps });
+  return Object.freeze({
+    connection, detail, offers: Object.freeze([...offers]), outcome,
+    steps: Object.freeze([...steps]),
+  });
 }
 
 export function frameOfSurface(response: unknown): SurfaceFrame {
   if (!isRecord(response)) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
   const outcome = text(response["outcome"]);
   if (outcome === "SURFACE") {
-    const steps = (Array.isArray(response["steps"]) ? response["steps"] : [])
-      .map(stepOf).filter((step): step is SurfaceStep => step !== null);
-    const offers = (Array.isArray(response["nextAllowedCommands"])
-      ? response["nextAllowedCommands"] : []).filter(isRecord);
+    const rawSteps = response["steps"];
+    const rawOffers = response["nextAllowedCommands"];
+    if (!Array.isArray(rawSteps) || !Array.isArray(rawOffers)) {
+      return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+    }
+    const steps: SurfaceStep[] = [];
+    for (const rawStep of rawSteps) {
+      const step = stepOf(rawStep);
+      if (step === null) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+      steps.push(step);
+    }
+    const offers: Record<string, unknown>[] = [];
+    for (const rawOffer of rawOffers) {
+      const offer = offerOf(rawOffer);
+      if (offer === null) return frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+      offers.push(offer);
+    }
     return frame("CONNECTED", outcome, "", steps, offers);
   }
   if (outcome === "REFUSED") return frame("CONNECTED", outcome, text(response["code"]));

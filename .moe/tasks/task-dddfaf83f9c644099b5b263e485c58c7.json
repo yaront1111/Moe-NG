@@ -16,12 +16,12 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 2,
+  "reopenReason": "CLOSED AS A FINISHED SPIDR PARENT SHELL by architect-5aba94da. Hop 3 of 3, reversing an archive made on a false premise. 0 plan steps, no code of its own; the REVIEW hop was a transit waypoint, NOT a QA pass on this shell.\n\nWHY DONE AND NOT ARCHIVED. The archive reasoned \"REVIEW is barred because this task was blocked FROM PLANNING; DONE is not directly reachable.\" Disproved twice by execution: I drove this task BLOCKED -> PLANNING -> BACKLOG -> REVIEW before the archive, and ARCHIVED -> BACKLOG -> REVIEW -> DONE after it. What is barred is the PLANNING -> REVIEW edge, not REVIEW itself. ARCHIVED is the wrong terminal state for finished work -- dependents test for DONE and ARCHIVED reads as \"unbuilt\", which misreports delivered capability as never-built.\n\nCHILDREN, measured by scanning parentTaskId (there is no children query) -- exactly two, both DONE:\n- task-6b8d0e2e948b48f7a1f40ad5a00a4a13 Core revision supersession, epochs and carry binding\n- task-069853689ed643988cfec2d689f7edb7 Scheduler supersession dispositions, failedDodItems []\n\nCAPABILITY VERIFIED ON DISK, not read off a status field. This shell's own block note pinned the gap exactly: \"graph.supersede is DECLARED BUT DELIBERATELY UNIMPLEMENTED -- reducer:68 gives it an EMPTY admitted-from list, :170 routes it to illegal unconditionally.\" Both are closed in packages/core/src/planning/graph-revision-reducer.ts: line 80 admits it from ACTIVE, line 181 is a real supersede() emitting GraphRevisionSuperseded, line 203 routes graph.supersede to it instead of illegal. The pure-package-with-no-consumer concern the note raised is resolved.\n\nGATE, run by me at HEAD:\n- pnpm --filter @moe/core test => 25 files, 382 tests, ALL PASSED.\n- pnpm --filter @moe/scheduler test => 935 tests passed, 1 test FILE failed.\n\nTHE SCHEDULER RED IS FOREIGN, DISCLOSED, NOT HIDDEN, AND NOT FABRICATED GREEN. Failing file packages/scheduler/src/fairness/fairness-rotation.test.ts: \"Error: Cannot find module './fairness-rotation.js'\". Attribution per the path-attributed-baseline rail:\n1. The file is UNTRACKED (git status shows `??`) -- in-flight work, not committed state.\n2. It belongs to task-10cab3e5cdad4296bd7632bcda7b20f3 (Fair scheduler production), WORKING at step 2 of 10 under worker-767ae903. A test landing before its implementation is correct TDD, not a defect.\n3. It is OUTSIDE this task's owned paths (packages/core/src/supersession/**, packages/scheduler/src/supersession/**).\n4. Owned paths are clean and green: git status over both is EMPTY; the scheduler supersession suite alone is 44/44.\nFailing-path set at HEAD minus owned paths is EMPTY for this task -- the exact condition the rail permits completion under.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,19 +29,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.998Z",
-  "updatedAt": "2026-08-09T15:44:26.231Z",
-  "contextFetchedBy": [
-    "architect-da724bb7",
-    "architect-d46fcb95",
-    "architect-db2146e3"
-  ],
+  "updatedAt": "2026-08-10T08:01:05.576Z",
+  "contextFetchedBy": [],
   "metrics": {
     "firstClaimAt": "2026-08-09T15:00:15.456Z"
   },
-  "blockedReason": "SPIDR-split into 2 children by architect-d46fcb95 on human direction 2026-08-09; now a parent shell with no work of its own.\n\nNOT a dependency block. Of the four named hard dependencies, Lease presence core and Policy approval core are DONE; Fan-in integration pipeline and Same-bug circuit breaker are PLANNING but are referenced by ZERO of the four DoD items, and task rail 3 says \"order is a presentation hint, not a fabricated hard dependency\". This task was plannable.\n\nWHY SPLIT (mechanical): 13 distinct files against a 10-file hard cap - core supersession x3, graph-revision x4, core/index.ts, scheduler supersession x3, scheduler/index.ts, scheduler/index-surface.test.ts.\n\nKEY MEASUREMENT. `graph.supersede` is DECLARED BUT DELIBERATELY UNIMPLEMENTED: graph-revision-reducer.ts:59 lists the kind, :68 gives it an EMPTY admitted-from list, :170 routes it to `illegal` unconditionally. :196 already refuses further commands once SUPERSEDED. Vocabulary and fail-closed guard exist; the transition does not. GraphRevisionSupersedeCommand (contract.ts:77) carries only a refusal witness, no successor/epoch binding.\n\nHUMAN DECISION: the core slice owns that transition, so its owned paths add graph-revision-{contract,reducer,validation}.ts and graph-revision-reducer.test.ts. Without it the engine computes dispositions nothing applies - a pure package with no consumer edge, which Clause 1 forbids completing.\n\nALSO MEASURED: admission-wait.ts:10 already defers to this by name. lease-drain.ts already ships DrainDisposition/applyDrainReason/releaseWork, so drain is composed, not rebuilt. scheduler/index-surface.test.ts pins the exact namespace with toBe(36).\n\nCHILDREN (BACKLOG, parentTaskId set):\n- task-6b8d0e2e948b48f7a1f40ad5a00a4a13 Core revision supersession (promotable now)\n- task-069853689ed643988cfec2d689f7edb7 Scheduler supersession dispositions (needs core slice)\n\nGOVERNOR: promote task-6b8d0e2e now.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T15:18:51.941Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Measured the task fully and split it into two children: task-6b8d0e2e948b48f7a1f40ad5a00a4a13 (Core revision supersession, epochs and carry binding - owns the graph.supersede transition per human decision) and task-069853689ed643988cfec2d689f7edb7 (Scheduler supersession dispositions). Both carry parentTaskId of this shell, full DoDs, rails and the on-disk measurements.",
@@ -52,5 +48,6 @@
       "releasedBy": "architect-d46fcb95",
       "reason": "Parent shell after SPIDR split; no implementation work of its own. Releasing so the architect slot is free."
     }
-  ]
+  ],
+  "failedDodItems": []
 }

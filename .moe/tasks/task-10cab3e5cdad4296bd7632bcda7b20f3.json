@@ -37,18 +37,24 @@
     {
       "stepId": "step-3",
       "description": "TDD RED for rotation. Create packages/scheduler/src/fairness/fairness-rotation.test.ts against the not-yet-written module. Cover DoD 1's four properties as SEPARATE named assertions, because they fail independently:\n  - DETERMINISTIC: the same ring selects the same sequence across repeated runs AND across a re-serialized ring whose `entries` array is permuted. The permutation case is the one that catches order-derived-from-array-position.\n  - WORK CONSERVING: while any compatible entry is queued, selection never returns null. Assert on a ring where the highest-weight resource is empty but others are not — the naive deficit loop idles there.\n  - CAPACITY BOUNDED: selection never exceeds the declared capacity for a resource.\n  - STARVATION BOUNDED: assert an explicit numeric bound — the lowest-weight resource is served within N rotations for a stated N derived from the weights. \"It eventually runs\" is not a bound and passes trivially.\nRefusal cases per DoD 2, each pinning the EXACT issue code and the refusing LAYER from the landed vocabulary: a forced head that conflicts with rotation; a cap revision applied mid-rotation; a dimension-identity mismatch between ring and work item; deficit arithmetic that would exceed the safe-integer range; and hostile identifiers. Assert a generated sweep produced a NON-ZERO case count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ],
+      "note": "TDD RED. packages/scheduler/src/fairness/fairness-rotation.test.ts written against the not-yet-written module; run confirms RED for the right reason: \"Cannot find module './fairness-rotation.js'\", 1 failed suite, no tests collected.\n\nDoD 1's four properties, each a separate named assertion because they fail independently:\n- DETERMINISTIC x3: repeated identical runs agree; a RE-SERIALIZED ring agrees; and resourceRotationOrder is asserted equal for ascending and descending declaration order. The re-serialization case is an INTERLEAVING permutation — [a1,b1,a2,b2] vs [a1,a2,b1,b2] — chosen deliberately: both encode the same per-resource FIFO queues, so only INTER-queue order changed. A blind shuffle would also reorder WITHIN a queue, where array order is the real FIFO and a difference in output would be correct rather than a bug; that test would fail for the wrong reason. The test also asserts the two serializations actually differ, so the case cannot go vacuous.\n- WORK CONSERVING: highest-weight resource (weight 5) EMPTY while weight-1 res.b holds three items; all three dispositions must be SELECTED. Plus a non-dispatchable head on one resource must not idle the ring.\n- CAPACITY BOUNDED: a resource at inFlight==capacity is never selected; and a separate case pins the per-dimension ceiling with per-resource capacity still available, so the two bounds cannot cover for each other.\n- STARVATION BOUNDED: numeric. Weights 3 and 1, so one round is sum(weights)=4 selections; res.b must appear within index < 4. A second test pins the exact service ratio 3:1 over that round, which is the arithmetic the bound rests on.\n\nRefusals, every one pinning code AND layer (18 cases): forced head absent from ring (INVALID_IDENTITY/RING), forced head at capacity (CARDINALITY_EXCEEDED/RING), forced head not dispatchable (DISPATCHABILITY_UNOBSERVED/RING), cap revision dimension mismatch (DIMENSION_MISMATCH/CAP_REVISION), revision draining a still-queued item (MIGRATION_TARGET_DRAINED/CAP_REVISION), in-flight above revised cap (CARDINALITY_EXCEEDED/CAP_REVISION), structurally invalid revision (INVALID_COUNTER/CAP_REVISION), work-item dimension mismatch (DIMENSION_MISMATCH/WORK_ITEM), entry naming an unknown work item (INVALID_IDENTITY/RING), entry/work-item resource disagreement (UNDECLARED_RESOURCE/RING), zero-weight resource holding entries (INVALID_COUNTER/RESOURCE), capacity below in-flight (CARDINALITY_EXCEEDED/RESOURCE), malformed request (MALFORMED_INPUT/RING), and BOTH deficit-overflow sites (INVALID_COUNTER/RING).\n\nTWO OVERFLOW SITES, NOT ONE — this is where the plan's single \"deficit exceeds the safe range\" case would have left a hole. Deficits accumulate at two distinct places: (a) a round advance adds a resource's weight to its head, and (b) a selected head's residual credit carries onto the newly promoted head. Site (b) is the one a naive guard misses, because (a) can only overflow when a queue is capacity-blocked and therefore keeps accruing while never draining. Each has its own test with its own fixture.\n\nNote site (a) is only reachable because I decided a round advance credits EVERY non-empty queue including capacity-blocked ones (classic DRR: blocking is transient and preserving credit preserves fairness). Had I skipped blocked queues, that overflow site would not exist and the test would be unreachable — recording the decision so the test is not later \"simplified\" away.\n\nUNKNOWN case: a declared ring resource with no capacity record returns disposition UNKNOWN with missingInput exactly \"capacities[res.b]\". Asserting the disposition separately from the code matters here — REFUSED and UNKNOWN carry the same ok:false, so a test checking only the code would pass on either.\n\nCODE MINTING — NOT DONE, AND IT CANNOT BE. I intended to mint a capacity-unobserved code and found it is structurally impossible from a consumer module: makeFairnessIssue/unknownFairness take FairnessContractIssueCode, a closed union derived from a frozen tuple in fairness-contract.ts, which this task does not own. So the vocabulary is fixed at 18 members and every refusal must map onto one. The nearest exact member for \"a ring resource has no capacity record\" is FAIRNESS_CONTRACT_UNDECLARED_RESOURCE — the resource is undeclared in the capacities input — carried with UNKNOWN disposition so the missing input is named rather than assumed.\n\nHostile-identifier sweep: 8 identifiers x 3 fields = 24 cases, with a hand-written pin on all three numbers (8, 3, 24) so a sweep that generated nothing cannot pass. The expected LAYER is per-field and exact — ringId and workItemId refuse under RING, a declared resourceId under RESOURCE — rather than a set-membership check, which would have stayed green if a refusal moved layers.\n\nToolchain note for whoever edits this file: the Edit tool interprets a JSON \"\\n\" in old_string as a real newline, so a match anchored on the source text \"new\\nline\" cannot succeed. Anchor around such lines, not across them.",
+      "startedAt": "2026-08-10T07:54:26.450Z",
+      "completedAt": "2026-08-10T07:58:32.444Z"
     },
     {
       "stepId": "step-4",
       "description": "GREEN: packages/scheduler/src/fairness/fairness-rotation.ts plus its one-line LF `.js` bridge (every module in this directory has one — fairness-ring.js, fairness-contract.js, fairness-work-item.js, fairness-evidence.js, fairness-cap-revision.js). Implement weighted deficit round-robin over a validated `FairnessRing`: a per-resource deficit advanced by that resource's `weight` each rotation, an entry selected when its resource's deficit covers it, and the deficit decremented on selection.\n\nWORK CONSERVATION IS THE SUBTLE PART: a plain WDRR loop stalls when the resource whose turn it is has an empty queue. The loop must skip empty queues and continue within the same rotation so a non-empty compatible queue is always served. Prove it with the empty-highest-weight-resource case from step 3.\n\nSAFE ARITHMETIC (DoD 2): deficits accumulate. Guard every add against `Number.MAX_SAFE_INTEGER` and refuse with an exact code rather than silently wrapping — the contract range-checks `deficitCounter` as input data but explicitly does not advance it, so overflow is yours to prevent.\n\nCall `validateRing` / `validateWorkItemSet` at the boundary and refuse on their result; do not re-derive their checks. Treat `deficitCounter` as carried state you read and return, never as a position — fairness-ring.ts:44-47 is explicit that the contract never reads it as one. Target <=250 physical lines by `grep -c ''`; split if it grows.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.ts",
         "packages/scheduler/src/fairness/fairness-rotation.js"
@@ -56,23 +62,39 @@
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.ts",
         "packages/scheduler/src/fairness/fairness-rotation.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.ts",
+        "packages/scheduler/src/fairness/fairness-rotation-input.ts",
+        "packages/scheduler/src/fairness/fairness-rotation.js",
+        "packages/scheduler/src/fairness/fairness-rotation-input.js",
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ],
+      "note": "GREEN. 56/56 rotation tests pass, `npx tsc --project packages/scheduler/tsconfig.json` exit 0.\n\nSPLIT INTO TWO PRODUCTION MODULES, not one. A single file landed at 281 physical lines, over the 250 target. The rail's remedy for a file over the target is to split it, so the boundary was separated from the engine along the seam that already existed:\n- fairness-rotation-input.ts (243 lines) — total validators only. Nothing selects, charges or ages.\n- fairness-rotation.ts (248 lines) — the WDRR engine.\nBoth under 250 by `grep -c ''`, both LF, each with a one-line LF `.js` bridge verified by `od -c`.\n\nTHE ALGORITHM, and the four decisions the properties actually rest on:\n1. ORDER IS DERIVED, NEVER POSITIONAL. `orderedResourceIds` sorts declared resourceIds with the package's existing `compareStrings`; the head of each queue is the first entry in `entries` carrying that resourceId. So INTER-queue order comes from the identifier and INTRA-queue order stays the caller's FIFO — the exact split fairness-ring.ts:54-58 describes. `resourceRotationOrder` is exported so the determinism test asserts against the production order rather than a re-implementation of it (epic rail 6).\n2. WORK CONSERVATION comes from two places, not one: a round credits ONLY non-empty queues, and `pick` scans past any head that is capacity-blocked or non-dispatchable instead of stopping. The textbook loop fails on the first; a loop that stops at the first blocked head fails on the second.\n3. AT MOST ONE ROUND IS ADVANCED PER CALL, and this is a termination argument rather than a convenience. After one advance every non-empty queue holds at least its weight, and the input boundary already refuses a weight below one service unit, so a second advance could only mean every head is BLOCKED — an idle, not a stall. There is no unbounded retry loop to hang.\n4. RESIDUAL CARRY. A selected head spends one unit and its remaining credit moves to the queue's next head; an emptied queue DROPS the residual. Dropping is the classic DRR reset and is what stops an intermittent queue banking share it never used — keeping it would break the very fairness the weights encode.\n\nSAFE ARITHMETIC — THREE GUARDED SITES, and the plan named one. `safeAdd` ceilings at MAX_AUTHORITY_COUNT (not MAX_SAFE_INTEGER, per my step-2 correction) and every accumulation goes through it: (a) round advance adding weight to a head, (b) residual carry onto a promoted head, (c) SUMMING in-flight units across capacity records. Site (c) I found while writing the boundary and it was in neither the plan nor my own step-3 test list: readFairnessItems admits up to MAX_AUTHORITY_ITEMS=128 records, each isCount-valid up to ~9.0e15, so a hostile input sums to ~1.15e18 and leaves the safe range silently. It now refuses INVALID_COUNTER/RESOURCE. That is a real fail-open I would have shipped.\n\nFORCING CANNOT RAISE A CAP. The per-dimension ceiling is checked BEFORE the forced-head path, and a forced head at the ceiling REFUSES (CARDINALITY_EXCEEDED/RING) rather than idling or being admitted. I added this case to the test file during this step because the step-3 list did not have it: had the ceiling been checked only on the normal path, a forced head would have been an unlimited cap bypass, which is precisely the second-authority failure DoD 2 exists to prevent. A forced head also spends its credit without carrying it, so forcing cannot bank share for the queue behind it.\n\nCODE MINTING: none, and none is possible — confirmed in step 2. Two mappings are non-obvious and each says why at the site: UNDECLARED_RESOURCE carried with an UNKNOWN disposition for a missing capacity record (the resource is undeclared in the CAPACITIES input, and the disposition distinguishes it from fairness-ring.ts's RING-layer REFUSED under the same code), and DISPATCHABILITY_UNOBSERVED for a forced head that is not dispatchable (the only dispatchability member of the closed tuple).\n\nCONTRACT AUTHORITY NOT FORKED: validateRing, validateWorkItemSet and validateCapRevision are called and refused on; none of their checks is re-derived. deficitCounter is read and returned as carried state and is never used as a position, per fairness-ring.ts:43-47.\n\nTest-count check: the suite grew from 0 to 56 for this file.",
+      "startedAt": "2026-08-10T07:58:36.410Z",
+      "completedAt": "2026-08-10T08:08:24.306Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD RED for aging. Create packages/scheduler/src/fairness/fairness-aging.test.ts. Compatible-opportunity aging is what converts \"eventually\" into the starvation BOUND that DoD 1 requires, so its tests must assert the bound numerically, not qualitatively. Cover: an item whose compatible opportunity never arrives ages until it is promoted within a stated bound; aging is monotonic and never regresses; an item promoted by aging does not thereby exceed a capacity or cap limit; aging interacts correctly with a forced head rather than being silently overridden; and an `FairnessOpportunityAttestation` that is absent or unverifiable yields UNKNOWN and gains no promotion — per taskRail 2, a fairness claim without daemon-verifiable evidence is UNKNOWN or refused, never an optimistic promotion. Pin exact code and layer on every refusal, and assert the sweep produced a non-zero case count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-aging.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-aging.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.test.ts"
+      ],
+      "note": "TDD RED. packages/scheduler/src/fairness/fairness-aging.test.ts written against the not-yet-written module; run confirms RED for the right reason — \"Cannot find module './fairness-aging.js'\", 1 failed suite, no tests collected.\n\nTHE BOUND IS NUMERIC, in three separate assertions, because \"eventually\" passes trivially:\n- one class promoted per quantum, pinned at the boundaries: 7 bypasses still P3, 8 gives P2, 16 P1, 24 P0.\n- forced at EXACTLY FAIRNESS_FORCED_BYPASS_BOUND and not one bypass earlier — the bound-1 case is what makes this an equality rather than a threshold.\n- a P0 item forces after ONE quantum, since it has no class left to gain. Mirrors bucketsToForced (fairness-policy.ts:35-49): P0=1 bucket, P1=2, P2=3, P3=4, scaled by the quantum, and bypassesToForced is asserted at all four classes.\n\nMONOTONICITY as a swept property over 0..35 proven bypasses, asserting three things that can fail independently: levelsPromoted never decreases, ladder rank never rises, and forcing once earned is never lost. The sweep length and last element are both pinned by hand (36 cases, last = 35) so a sweep that generated nothing cannot pass, and the loop asserts forcedSeen ended true — otherwise the \"once forced, stays forced\" clause would be vacuous for a sweep that never reached the bound.\n\nCONSTANT-DRIFT GUARD, and it is stronger than a value pin. Beyond pinning 8 / [\"P0\",\"P1\",\"P2\",\"P3\"] / 32 against their cited reference lines, a separate test asserts the ladder is a permutation of FAIRNESS_PRIORITY_CLASSES. That matters because fairness-contract.ts:80-83 states the contract's class tuple carries NO ordering meaning: the ladder is allowed to add ORDER and nothing else, and a value-only pin would stay green if the ladder gained or lost a member.\n\nEVIDENCE, per taskRail 2 — a fairness claim without daemon-verifiable evidence is UNKNOWN or refused, never an optimistic promotion:\n- a null observationRef yields disposition UNKNOWN with missingInput exactly \"attestations[0].observationRef\" and NO standing. Disposition is asserted separately from the code, since REFUSED and UNKNOWN share ok:false and a code-only assertion would pass on either.\n- a forged claim of 32 bypasses with zero attestations refuses BYPASS_EVIDENCE_MISSING/OPPORTUNITY_EVIDENCE — this is the \"counted, never copied\" property asserted through the aging surface rather than re-asserted against the contract.\n- self-attestation and a claim raised for a different work item both refuse with their own codes.\n\nPRECEDENCE — CAPACITY WINS, and the plan's single case would have been vacuous on its own. Two tests, not one: a promotion at a full resource REFUSES (CARDINALITY_EXCEEDED/RESOURCE), AND an item with sub-quantum evidence at the same full resource still returns an unpromoted standing. Without the second, an implementation that refuses on capacity unconditionally — never actually tying the refusal to the promotion — passes the first. Same shape for the cap revision: in-flight above the revised cap refuses at CAP_REVISION, as does a revision that drained this item.\n\nFORCED-HEAD INTERACTION is modelled as a visible withholding rather than a silent downgrade. When another item already holds the forced head, the promotion still stands but forcing is withheld and `forcedWithheld` says so; a third test asserts forcedWithheld stays FALSE when no forcing was earned, so the flag cannot degenerate into \"capacity was full\" noise.\n\nAll 20 refusal assertions pin code AND layer.",
+      "startedAt": "2026-08-10T08:08:26.877Z",
+      "completedAt": "2026-08-10T08:10:12.845Z"
     },
     {
       "stepId": "step-6",
       "description": "GREEN: packages/scheduler/src/fairness/fairness-aging.ts plus its LF `.js` bridge. Implement compatible-opportunity aging as a pure function over validated inputs: it raises an item's effective standing as compatible opportunities pass it by, bounded so no item waits longer than the stated bound. Consume `validateBypassClaim` for attestation evidence rather than trusting a caller-supplied flag; an unverifiable attestation is UNKNOWN and confers nothing.\n\nAging must not become a second authority: it changes SELECTION ORDER only, never capacity, never a cap, never a dimension identity. If a promotion would breach a capacity or a cap revision, the capacity wins and aging refuses — assert that precedence explicitly, because the opposite ordering is an easy and invisible way to let aging quietly raise a cap. Target <=250 physical lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-aging.ts",
         "packages/scheduler/src/fairness/fairness-aging.js"
@@ -80,7 +102,8 @@
       "newFiles": [
         "packages/scheduler/src/fairness/fairness-aging.ts",
         "packages/scheduler/src/fairness/fairness-aging.js"
-      ]
+      ],
+      "startedAt": "2026-08-10T08:10:16.157Z"
     },
     {
       "stepId": "step-7",
@@ -150,7 +173,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-10T07:51:53.817Z",
+  "updatedAt": "2026-08-10T08:10:16.157Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-767ae903"
@@ -159,7 +182,7 @@
     "firstClaimAt": "2026-08-09T10:45:35.201Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -182,7 +205,10 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:46:07.770Z",

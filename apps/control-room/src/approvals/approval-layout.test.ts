@@ -39,6 +39,14 @@ it("pins the decision-button rule to the marker the surface ALREADY renders", ()
   expect(CSS).toContain("position: sticky");
 });
 
+it("presents the reason step as a full-viewport decision desk", () => {
+  expect(CSS).toContain(".cr-approval-reason-backdrop");
+  expect(CSS).toContain("position: fixed");
+  expect(CSS).toContain("place-items: center");
+  expect(CSS).toContain('[data-testid="cr.approvals.reasonmodal"]');
+  expect(CSS).toContain("max-block-size: calc(100dvh - 2rem)");
+});
+
 it("carries its own reduced-motion block", () => {
   // board-layout.css:68 provides this today. The guarantee is per-stylesheet,
   // so a second sheet without one silently narrows it the moment it exists.

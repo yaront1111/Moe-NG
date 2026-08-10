@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { JSX, KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 
 export interface ReasonModalProps {
   readonly auditEvent: string;
@@ -20,6 +21,7 @@ const FOCUSABLE = [
 export function ReasonModal(props: ReasonModalProps): JSX.Element {
   const { auditEvent, body, confirmLabel, onCancel, onConfirm, scope, title } = props;
   const [reason, setReason] = useState("");
+  const reasonId = useId();
   const modalRef = useRef<HTMLDivElement>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const ready = reason.trim() !== "";
@@ -54,30 +56,37 @@ export function ReasonModal(props: ReasonModalProps): JSX.Element {
     }
   };
 
-  return (
-    <div
-      aria-label={title}
-      aria-modal="true"
-      data-testid="cr.approvals.reasonmodal"
-      onKeyDown={handleKeyDown}
-      ref={modalRef}
-      role="dialog"
-    >
-      <h3>{title}</h3>
-      <p>{body}</p>
-      <p>{`Scope of effect: ${scope}`}</p>
-      <p>{`This records event ${auditEvent} with your identity.`}</p>
-      <label htmlFor="cr-approvals-reason">Reason (required):</label>
-      <textarea
-        id="cr-approvals-reason"
-        onChange={(event) => setReason(event.target.value)}
-        ref={reasonRef}
-        value={reason}
-      />
-      <button disabled={!ready} onClick={() => onConfirm(reason)} type="button">
-        {confirmLabel}
-      </button>
-      <button onClick={onCancel} type="button">Cancel</button>
-    </div>
+  return createPortal(
+    <div className="cr-approval-reason-backdrop" data-testid="cr.approvals.reasonbackdrop">
+      <div
+        aria-label={title}
+        aria-modal="true"
+        data-testid="cr.approvals.reasonmodal"
+        onKeyDown={handleKeyDown}
+        ref={modalRef}
+        role="dialog"
+      >
+        <h3>{title}</h3>
+        <p>{body}</p>
+        <p>{`Scope of effect: ${scope}`}</p>
+        <p>{`This records event ${auditEvent} with your identity.`}</p>
+        <label htmlFor={reasonId}>Reason (required):</label>
+        <textarea
+          id={reasonId}
+          onChange={(event) => setReason(event.target.value)}
+          ref={reasonRef}
+          value={reason}
+        />
+        <div className="cr-approval-reason-actions">
+          <button className="cr-approval-reason-confirm" disabled={!ready}
+            onClick={() => onConfirm(reason)} type="button">
+            {confirmLabel}
+          </button>
+          <button className="cr-approval-reason-cancel" onClick={onCancel}
+            type="button">Cancel</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

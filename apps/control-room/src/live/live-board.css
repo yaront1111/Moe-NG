@@ -72,8 +72,12 @@
   padding: 0.3rem 0.7rem;
 }
 
-.cr-liveboard-card button:hover {
+.cr-liveboard-card button:not(:disabled):hover {
   background: var(--cr-action-deep);
+}
+
+.cr-liveboard-card button:disabled {
+  opacity: 0.58;
 }
 
 .cr-liveboard-card p[data-testid^="cr.liveboard.report."] {

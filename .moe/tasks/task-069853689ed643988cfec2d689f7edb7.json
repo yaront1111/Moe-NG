@@ -160,8 +160,8 @@
       "completedAt": "2026-08-10T07:47:18.093Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f3560083",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -210,12 +210,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:18:09.347Z",
-  "updatedAt": "2026-08-10T07:49:01.059Z",
+  "updatedAt": "2026-08-10T07:56:50.209Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T15:18:51.806Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-10T07:56:50.209Z",
+    "wallClockMs": 59878403
   },
   "contextFetchedBy": [
     "architect-21f667ae",
@@ -298,5 +300,8 @@
     "packages/scheduler/src/admission/admission-wait.ts",
     "packages/scheduler/src/index.ts",
     "packages/scheduler/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-10T07:56:50.209Z",
+  "reviewCompletedAt": "2026-08-10T07:56:50.209Z",
+  "reviewSummary": "APPROVE. Full evidence: chan-ced99359, msg-db3d9b96.\n\nRE-RAN BY ME twice at two HEADs: pnpm --filter @moe/scheduler typecheck exit 0; test 39 files/935 tests exit 0 - matches the reported outputTail. git status --porcelain packages/scheduler/ empty both times; git diff 6fa5c77..HEAD -- packages/scheduler/ EMPTY, so gated bytes are committed bytes.\n\nDoD1: a missing kind refuses PLANNING_DISPOSITION_UNKNOWN at SCHEDULER_SUPERSESSION_SET; 24 dispositions = 6 kinds x 4 families measured on production output; sweep asserts length>0; nothing hardcodes 6 (grep empty); nodeFor throws on an unknown kind.\nDoD2: createHash appears exactly twice in the directory, one import + one call - single digest path; coverage is production behaviour (null on an unbound own key, mapped to a refusal).\nDoD3: proved by mutating the REAL primitives, not by reading imports.\nDoD4: every case asserts the whole {code,layer,ok} via toEqual; codes are real @moe/contracts members held by `satisfies readonly RuntimeErrorCode[]`; layers distinct per family.\nDoD5: LANDED not exported - durable call site supersession-dispositions.ts:100 into admission-wait's validateIntentionalWait; admission-wait diff 7+/1-, ALL comment lines, no clock/enqueue/transition. Unowned path is named by DoD5 itself and was disclosed.\nDoD6: no export *; EXPECTED_EXPORTS still hand-written and deep-compared, 47->53, six runtime values, eleven types proven by annotation. grep -c '': 232/122/108/111, index.ts 249, admission-wait 163, all <=250.\n\nSEVEN OF MY OWN DRILLS, all red at the aimed assertion; sha256 byte-identical after restore. 1 completeness permissive -> red as refusal not short set. 2 both sorts removed -> red, 110cd760 vs 3213e953. 3 unbound field -> red on 12+. 4 UNKNOWN upgraded to carry -> red on the CODE. 5a mutated the REAL releaseWork -> DRAINING vs RELEASED. 5b mutated the REAL activateReservation -> RESERVED vs ACTIVATED. 6 deleted admission-wait's horizon branch -> edge red. 7 dropped an export -> 52 vs 53."
 }

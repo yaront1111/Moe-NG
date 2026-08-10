@@ -3,6 +3,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createCompatGate } from "@moe/control-room-client";
+import type { ControlRoomTransport } from "@moe/control-room-client";
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 
 import { LiveBoard } from "./live-board.js";
@@ -36,7 +37,10 @@ function dragTransfer(): DataTransfer {
 describe("frameOfSurface", () => {
   it("copies SURFACE steps and offers verbatim", () => {
     const frame = frameOfSurface({
-      nextAllowedCommands: [{ commandId: "afford-1", commandKind: "project.register" }],
+      nextAllowedCommands: [{
+        commandId: "afford-1", commandKind: "project.register", expectedVersion: 0,
+        targetAggregateId: "proj",
+      }],
       outcome: "SURFACE",
       steps: [
         { aggregateId: "proj", kind: "project.register", missing: [], status: "READY", version: 0 },
@@ -64,6 +68,25 @@ describe("frameOfSurface", () => {
 
   it("refuses an unreadable body with the stable code", () => {
     expect(frameOfSurface("nope")).toMatchObject({ detail: "LIVE_SURFACE_UNREADABLE" });
+  });
+
+  it("refuses an incomplete or partially malformed surface instead of hiding records", () => {
+    const malformed = [
+      { outcome: "SURFACE", steps: [] },
+      { nextAllowedCommands: [], outcome: "SURFACE", steps: [{}] },
+      {
+        nextAllowedCommands: [], outcome: "SURFACE",
+        steps: [{ aggregateId: "proj", kind: "project.register", missing: [1],
+          status: "READY", version: 0 }],
+      },
+      { nextAllowedCommands: [null], outcome: "SURFACE", steps: [] },
+    ];
+    for (const response of malformed) {
+      expect(frameOfSurface(response)).toEqual({
+        connection: "CONNECTED", detail: "LIVE_SURFACE_UNREADABLE",
+        offers: [], outcome: "UNREADABLE", steps: [],
+      });
+    }
   });
 });
 
@@ -128,6 +151,48 @@ describe("LiveBoard", () => {
     const envelope = sent[0] as unknown as Record<string, unknown>;
     expect(envelope["commandId"]).toBe("afford-77");
     expect(envelope["expectedVersion"]).toBe(0);
+  });
+
+  it("admits only one in-flight dispatch for the same affordance", async () => {
+    type SendResult = Awaited<ReturnType<ControlRoomTransport["sendCommand"]>>;
+    let resolveSend: ((result: SendResult) => void) | undefined;
+    const pending = new Promise<SendResult>((resolve) => { resolveSend = resolve; });
+    let sends = 0;
+    const client = {
+      commands: {
+        "project.register": (affordance: unknown, caller: unknown) => ({
+          envelope: {
+            ...(affordance as Record<string, unknown>),
+            ...(caller as Record<string, unknown>),
+          } as unknown as RuntimeCommandEnvelope,
+          ok: true,
+        }),
+      },
+    } as never;
+    render(
+      <LiveBoard
+        client={client}
+        frame={READY_SURFACE}
+        sessionCredential="cred"
+        transport={{ sendCommand: () => { sends += 1; return pending; } }}
+      />,
+    );
+    const button = screen.getByTestId("cr.liveboard.dispatch.project.register");
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await waitFor(() => { expect(sends).toBe(1); });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    resolveSend?.({
+      delivered: true,
+      response: {
+        decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
+        ok: true,
+      },
+      status: 200,
+    });
+    await waitFor(() => { expect((button as HTMLButtonElement).disabled).toBe(false); });
   });
 
   it("dispatches the exact dragged target when command kinds repeat", async () => {
@@ -200,6 +265,35 @@ describe("LiveBoard", () => {
       expectedVersion: 2,
       targetAggregateId: "proj-b",
     });
+  });
+
+  it("refuses a READY card whose offer does not bind its exact version", async () => {
+    const mismatched = {
+      connection: "CONNECTED" as const,
+      detail: "",
+      offers: [{
+        commandId: "afford-old", commandKind: "project.register", expectedVersion: 1,
+        targetAggregateId: "proj-x",
+      }],
+      outcome: "SURFACE",
+      steps: [{
+        aggregateId: "proj-x", kind: "project.register", missing: [],
+        status: "READY" as const, version: 2,
+      }],
+    };
+    render(
+      <LiveBoard
+        client={{ commands: {} } as never}
+        frame={mismatched}
+        sessionCredential="cred"
+        transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.project.register"));
+
+    expect(screen.getByTestId("cr.liveboard.report.project.register@proj-x").textContent)
+      .toBe("the daemon offers no command for this move");
   });
 
   it("renders a daemon refusal verbatim on the card", async () => {

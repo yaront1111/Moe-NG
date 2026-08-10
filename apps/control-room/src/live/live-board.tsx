@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { DragEvent, JSX } from "react";
 
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
@@ -24,6 +24,7 @@ export interface LiveBoardProps {
 interface CardReport {
   readonly detail: string;
   readonly ok: boolean;
+  readonly pending: boolean;
 }
 
 const COLUMNS = [
@@ -49,13 +50,15 @@ function offerFor(
 ): Record<string, unknown> | null {
   return frame.offers.find((offer) =>
     offer["commandKind"] === step.kind
-    && (step.aggregateId === null || offer["targetAggregateId"] === step.aggregateId)) ?? null;
+    && offer["targetAggregateId"] === step.aggregateId
+    && offer["expectedVersion"] === step.version) ?? null;
 }
 
 export function LiveBoard(props: LiveBoardProps): JSX.Element {
   const { client, frame, sessionCredential, transport } = props;
   const [reports, setReports] = useState<Readonly<Record<string, CardReport>>>({});
   const [dropNote, setDropNote] = useState("");
+  const pendingDispatches = useRef(new Set<string>());
 
   if (frame === null) {
     return (
@@ -84,20 +87,31 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
 
   const dispatch = async (step: SurfaceStep): Promise<void> => {
     const affordance = offerFor(frame, step);
-    const key = cardKey(step);
+    const key = stepIdentity(step);
+    if (pendingDispatches.current.has(key)) return;
     if (affordance === null) {
       setReports((prior) => ({
-        ...prior, [key]: { detail: "the daemon offers no command for this move", ok: false },
+        ...prior,
+        [key]: { detail: "the daemon offers no command for this move", ok: false, pending: false },
       }));
       return;
     }
-    setReports((prior) => ({ ...prior, [key]: { detail: "dispatching…", ok: true } }));
-    const report = await dispatchAffordance({
-      affordance, aggregateId: step.aggregateId, client,
-      kind: step.kind, sessionCredential, transport,
-    });
+    pendingDispatches.current.add(key);
     setReports((prior) => ({
-      ...prior, [key]: { detail: `${report.stage}: ${report.detail}`, ok: report.ok },
+      ...prior, [key]: { detail: "dispatching…", ok: true, pending: true },
+    }));
+    const report = await dispatchAffordance({
+      affordance, aggregateId: step.aggregateId, client, kind: step.kind,
+      sessionCredential, transport,
+    }).catch(() => ({
+      detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
+    }));
+    pendingDispatches.current.delete(key);
+    setReports((prior) => ({
+      ...prior,
+      [key]: {
+        detail: `${report.stage}: ${report.detail}`, ok: report.ok, pending: false,
+      },
     }));
   };
 
@@ -139,14 +153,16 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
             <h2>{column.title}</h2>
             {frame.steps.filter((step) => step.status === column.key).map((step) => {
               const key = cardKey(step);
-              const report = reports[key];
+              const identity = stepIdentity(step);
+              const report = reports[identity];
+              const dispatchPending = report?.pending === true;
               return (
                 <article
                   className="cr-liveboard-card"
                   data-status={step.status}
                   data-testid={`cr.liveboard.card.${key}`}
-                  draggable={step.status === "READY"}
-                  key={key}
+                  draggable={step.status === "READY" && !dispatchPending}
+                  key={identity}
                   onDragStart={(event) => {
                     event.dataTransfer.setData(DRAG_STEP_IDENTITY, stepIdentity(step));
                   }}
@@ -165,6 +181,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                     <button
                       aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}
+                      disabled={dispatchPending}
                       onClick={() => { void dispatch(step); }}
                       type="button"
                     >

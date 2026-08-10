@@ -101,6 +101,10 @@
 }
 
 @media (max-width: 639px) {
+  .cr-shell-help-grid {
+    grid-template-columns: 1fr;
+  }
+
   [data-testid="cr.shell.contextbar"] {
     grid-template-columns: minmax(0, 1fr);
   }
