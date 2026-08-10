@@ -143,9 +143,16 @@ test("CR-A11Y-001: five truth classes stay distinct without colour", async ({ pa
       "AGENT_REPORTED", "DAEMON_VERIFIED", "HUMAN_APPROVED", "OBSERVED", "UNKNOWN",
     ]);
 
-    const signatures = [...byClass.values()].map((chip) =>
-      `${chip.glyph}|${chip.shortLabel}|${chip.border ?? ""}`);
-    expect(new Set(signatures).size).toBe(byClass.size);
+    const signature = (chip: ChipRecord): string =>
+      `${chip.glyph}|${chip.shortLabel}|${chip.border ?? ""}`;
+    expect(new Set([...byClass.values()].map(signature)).size).toBe(byClass.size);
+    // `byClass` keeps one chip per class, so the distinctness check above would not
+    // notice two chips of the SAME class rendering differently. Check every chip
+    // against its class signature, not just the representative.
+    for (const chip of chips) {
+      expect(signature(chip), `${chip.truthClass} renders inconsistently`)
+        .toBe(signature(byClass.get(chip.truthClass) as ChipRecord));
+    }
     for (const chip of byClass.values()) {
       expect(chip.glyph).not.toBe("");
       expect(chip.shortLabel).not.toBe("");
@@ -300,16 +307,24 @@ test("an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell"
       const wrapper = chip?.closest("[data-testid^='cr.fact.']") ?? null;
       return {
         border: chip?.getAttribute("data-border") ?? null,
+        // `foundWrapper` is load-bearing. Without it a missing wrapper yields null
+        // text, `null?.trim()` is undefined, and `not.toBe("")` PASSES — the exact
+        // vacuous shape this test exists to catch, hiding in the test itself.
+        foundWrapper: wrapper !== null,
         label: wrapper?.querySelector("[data-testid='cr.label']")?.textContent ?? null,
         shortLabel: chip?.querySelector("[data-testid='cr.shortlabel']")?.textContent ?? null,
         value: wrapper?.querySelector("[data-testid='cr.value']")?.textContent ?? null,
       };
     });
+    expect(unknown.foundWrapper).toBe(true);
     expect(unknown.border).toBe("dashed");
     expect(unknown.shortLabel).toBe("UNK");
+    // Asserted as strings first, so a null can never reach a `.trim()` that would
+    // make the emptiness check vacuous.
+    expect(typeof unknown.label).toBe("string");
+    expect(typeof unknown.value).toBe("string");
     expect(unknown.label?.trim()).not.toBe("");
     expect(unknown.value?.trim()).not.toBe("");
-    expect(unknown.value?.trim()).not.toBeUndefined();
   }, page);
 });
 
