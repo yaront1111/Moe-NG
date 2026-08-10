@@ -103,7 +103,7 @@ export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
   } as const),
   Object.freeze({
     cause: LOADING_RECORD.cause,
-    id: "LATENCY",
+    id: "LOADING",
     missingInput: LOADING_RECORD.missingInput,
     owner: LOADING_RECORD.owner,
     // Derived, NOT the literal "UNKNOWN". A mutation drill caught the difference:
