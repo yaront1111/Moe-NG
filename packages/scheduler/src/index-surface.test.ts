@@ -35,11 +35,17 @@ import type {
   FairnessOpportunityAttestation, FairnessPriorityClass, FairnessProvenBypasses, FairnessRing,
   FairnessRingQueueEntry, FairnessRingResource, FairnessWorkItem,
 } from "@moe/scheduler";
+import type {
+  SupersessionBoundDispositionField, SupersessionBudgetFacts, SupersessionCarryRefusal,
+  SupersessionDispositionFamily, SupersessionDispositionLayer, SupersessionDispositionResult,
+  SupersessionDispositionSet, SupersessionFamilyDisposition,
+  SupersessionNodeFacts, SupersessionRefusalCode, SupersessionResourceFacts,
+} from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
- * values + 11 fairness contract values.
+ * values + 11 fairness contract values + 6 supersession disposition values.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -52,9 +58,14 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
+  ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
+  ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
+  ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
   ["adapterFail", "function"], ["analyzeGraphStructure", "function"],
-  ["analyzeHardEdgeCounterfactuals", "function"], ["cancelReservation", "function"],
+  ["analyzeHardEdgeCounterfactuals", "function"],
+  ["buildSupersessionDispositions", "function"], ["cancelReservation", "function"],
+  ["carryWaitProjection", "function"],
   ["createTraversalCounter", "function"], ["deriveReservationId", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"],
@@ -70,7 +81,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(47);
+  expect(EXPECTED_EXPORTS.length).toBe(53);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -367,4 +378,60 @@ it("publishes the admission purpose vocabularies and their contract mapping", ()
   expect([...scheduler.PROTECTED_ADMISSION_PURPOSES]).not.toContain("EXECUTION");
   expect(scheduler.BUDGET_RESERVATION_ISSUE_CODES)
     .toContain("BUDGET_RESERVATION_NEVER_STARTED_PROOF_MISSING");
+});
+
+/**
+ * Supersession dispositions. Same rule as the fairness block: a published TYPE
+ * is invisible to the count and namespace guards, so every one is annotated on
+ * a value that passes through the bare specifier — an unpublished type becomes
+ * a tsc error rather than a silently green test.
+ */
+const BOUND_FIELD: SupersessionBoundDispositionField = "outcome";
+const RESOURCE_FACTS: SupersessionResourceFacts =
+  { drainDisposition: null, release: null, slotState: null, successorCapacity: null };
+const BUDGET_FACTS: SupersessionBudgetFacts = {
+  expectedVersion: 0, neverStartedProofRef: null, reservation: null, settlementState: null,
+  successorAttemptRef: "attempt:1", view: null,
+};
+const ADD_NODE: SupersessionNodeFacts = {
+  attemptLifecycle: "CREATED", budget: null, effectsTerminal: true, kind: "ADD",
+  nodeKey: "node:add", resource: RESOURCE_FACTS,
+};
+
+/** Names both arms of the result union without any deep import. */
+function supersessionRefusal(result: SupersessionDispositionResult): SupersessionCarryRefusal {
+  if (result.ok) {
+    const set: SupersessionDispositionSet = result;
+    const first: SupersessionFamilyDisposition | undefined = set.dispositions[0];
+    throw new Error(`expected a refusal, got ${set.dispositions.length} from ${String(first?.kind)}`);
+  }
+  return result;
+}
+
+it("refuses an incomplete supersession set from the root, naming code and layer", () => {
+  const refused = supersessionRefusal(scheduler.buildSupersessionDispositions([ADD_NODE]));
+  const code: SupersessionRefusalCode = refused.code;
+  const layer: SupersessionDispositionLayer = refused.layer;
+  expect([code, layer]).toEqual(["PLANNING_DISPOSITION_UNKNOWN", "SCHEDULER_SUPERSESSION_SET"]);
+  expect(scheduler.SUPERSESSION_REFUSAL_CODES).toContain(code);
+  expect(scheduler.SUPERSESSION_DISPOSITION_LAYERS).toContain(layer);
+});
+
+it("refuses a malformed wait projection through the root consumer edge", () => {
+  const refused = supersessionRefusal(scheduler.carryWaitProjection(null, [ADD_NODE]));
+  expect([refused.code, refused.layer])
+    .toEqual(["INPUT_INVALID", "SCHEDULER_SUPERSESSION_SET"]);
+});
+
+it("publishes the supersession vocabularies as frozen closed sets", () => {
+  const family: SupersessionDispositionFamily = "RESOURCE";
+  expect([...scheduler.SUPERSESSION_DISPOSITION_FAMILIES]).toContain(family);
+  expect([...scheduler.SUPERSESSION_BOUND_DISPOSITION_FIELDS]).toContain(BOUND_FIELD);
+  expect(BUDGET_FACTS.successorAttemptRef).toBe("attempt:1");
+  for (const vocabulary of [
+    scheduler.SUPERSESSION_BOUND_DISPOSITION_FIELDS, scheduler.SUPERSESSION_DISPOSITION_FAMILIES,
+    scheduler.SUPERSESSION_DISPOSITION_LAYERS, scheduler.SUPERSESSION_REFUSAL_CODES,
+  ]) {
+    expect(Object.isFrozen(vocabulary)).toBe(true);
+  }
 });

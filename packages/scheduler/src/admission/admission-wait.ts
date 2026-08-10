@@ -3,11 +3,17 @@
  * admission-time validation. Nothing in this module schedules, enqueues, or
  * transitions anything.
  *
+ * CONSUMED BY, and deliberately not the other way round: the supersession carry
+ * of wait/blocker projections is LANDED in
+ * `../supersession/supersession-dispositions.ts` (`carryWaitProjection`), which
+ * calls `validateIntentionalWait` below and binds the validated wait's
+ * `ownerNodeKey` to the supersession disposition set. The direction matters —
+ * this module gained no scheduling authority from that edge and must not.
+ *
  * EXPLICITLY OUT OF SCOPE, owned elsewhere:
  *  - challenge enqueueing and timer/transaction re-evaluation -> readiness
  *    explanation engine (task-fa96b81c), which consumes these types;
  *  - Blocker record lifecycle (design 234);
- *  - supersession carry of wait/blocker projections -> graph supersession engine;
  *  - any readiness computation -> the landed `partitionFrontier` in frontier.ts.
  *
  * There is no clock here. "Now" is expressed as the caller's current

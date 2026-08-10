@@ -32,6 +32,14 @@
  *    claim the caller cannot prove is refused rather than admitted. The
  *    rotation algorithm and the aging policy are the consumer's, task-10cab3e5.
  *
+ * 5. Graph-supersession dispositions (scheduler half). buildSupersessionDispositions
+ *    is the complete, deterministic, hash-bound attempt/effect/resource/budget set
+ *    for one supersession, and carryWaitProjection is the wait/blocker carry
+ *    validated through admission-wait's own validateIntentionalWait. Both COMPOSE
+ *    the landed drain, resource and budget authority and decide none of it; a kind
+ *    with no disposition, a changed fact or an UNKNOWN fact refuses with an
+ *    existing @moe/contracts code and the refusing layer, never a shorter set.
+ *
  * Every area is contract-neutral and stays that way: the package reports exact
  * facts and never invents dependency, policy, lease, or execution authority. It
  * does not infer independence, delete edges, infer semantic dependency truth,
@@ -95,6 +103,12 @@ export { validateWorkItem, validateWorkItemSet } from "./fairness/fairness-work-
 export { validateRing, validateRingResource } from "./fairness/fairness-ring.js";
 export { validateBypassClaim } from "./fairness/fairness-evidence.js";
 export { validateCapRevision } from "./fairness/fairness-cap-revision.js";
+export {
+  SUPERSESSION_BOUND_DISPOSITION_FIELDS, SUPERSESSION_DISPOSITION_FAMILIES,
+  SUPERSESSION_DISPOSITION_LAYERS, SUPERSESSION_REFUSAL_CODES,
+} from "./supersession/supersession-disposition-contract.js";
+export { buildSupersessionDispositions, carryWaitProjection }
+  from "./supersession/supersession-dispositions.js";
 
 export type {
   BlockedNode,
@@ -219,3 +233,17 @@ export type {
   FairnessCapMigration,
   FairnessCapRevision,
 } from "./fairness/fairness-cap-revision.js";
+
+export type {
+  SupersessionBoundDispositionField,
+  SupersessionBudgetFacts,
+  SupersessionCarryRefusal,
+  SupersessionDispositionFamily,
+  SupersessionDispositionLayer,
+  SupersessionDispositionResult,
+  SupersessionDispositionSet,
+  SupersessionFamilyDisposition,
+  SupersessionNodeFacts,
+  SupersessionRefusalCode,
+  SupersessionResourceFacts,
+} from "./supersession/supersession-disposition-contract.js";
