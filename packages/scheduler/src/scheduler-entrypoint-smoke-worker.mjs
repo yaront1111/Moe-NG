@@ -1,11 +1,15 @@
 import { parentPort } from "node:worker_threads";
 
 import {
+  FAIRNESS_CONTRACT_ISSUE_CODES,
+  FAIRNESS_CONTRACT_LAYERS,
   analyzeHardEdgeCounterfactuals,
   analyzeGraphStructure,
   partitionFrontier,
   previewGraphSnapshot,
+  validateBypassClaim,
   validateGraphSnapshot,
+  validateRing,
 } from "@moe/scheduler";
 
 if (parentPort === null) {
@@ -47,6 +51,31 @@ const preview = previewGraphSnapshot(snapshot, {
 if (!preview.ok) {
   throw new Error("runtime graph preview did not analyze");
 }
+// Fairness contracts, exercised here and not only under vitest: vitest resolves a
+// NodeNext "./x.js" specifier back to "./x.ts" and is therefore blind to a
+// missing sibling bridge. Only this worker runs Node's real resolution, so a
+// deleted bridge under ./fairness/ shows up as an ERR_MODULE_NOT_FOUND here.
+const bypass = validateBypassClaim({
+  workItemId: "wi-a",
+  claimedBypasses: 2,
+  attestations: [],
+});
+const fairnessBypassRefusal = bypass.ok
+  ? "UNEXPECTEDLY_ADMITTED"
+  : `${bypass.disposition}:${bypass.issues[0].code}:${bypass.issues[0].layer}`;
+const ring = validateRing({
+  ringId: "ring-1",
+  dimensionId: "dim-1",
+  resources: [{ resourceId: "res-a", weight: 1 }, { resourceId: "res-b", weight: 1 }],
+  entries: [
+    { workItemId: "wi-a", resourceId: "res-a", deficitCounter: 0 },
+    { workItemId: "wi-a", resourceId: "res-b", deficitCounter: 0 },
+  ],
+});
+const fairnessRingRefusal = ring.ok
+  ? "UNEXPECTEDLY_ADMITTED"
+  : `${ring.disposition}:${ring.issues[0].code}:${ring.issues[0].layer}`;
+
 let internalSubpath;
 try {
   await import("@moe/scheduler/src/graph-provenance.js");
@@ -62,6 +91,10 @@ parentPort.postMessage({
   counterfactualEdgeCount: counterfactuals.edges.length,
   counterfactualType: typeof analyzeHardEdgeCounterfactuals,
   dispatchableWidth: analysis.dispatchableWidth,
+  fairnessBypassRefusal,
+  fairnessIssueCodeCount: FAIRNESS_CONTRACT_ISSUE_CODES.length,
+  fairnessLayerCount: FAIRNESS_CONTRACT_LAYERS.length,
+  fairnessRingRefusal,
   logicalReadyWidth: analysis.logicalReadyWidth,
   internalSubpath,
   outcome: "IMPORTED",

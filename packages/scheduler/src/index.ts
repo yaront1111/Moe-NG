@@ -24,6 +24,14 @@
  *  - No policy is re-evaluated and no approval is composed — a supplied gate
  *    must already read ALLOW / APPROVE+CURRENT or the admission is refused.
  *
+ * 4. Fairness contract families for the fair scheduler:
+ *  - the frozen reason-code and refusing-layer vocabularies, plus total
+ *    validators for the WorkItem, ring, resource, opportunity-evidence and
+ *    cap-revision families. They DESCRIBE and VALIDATE only: no exported
+ *    function decides rotation order, deficit accounting or aging, and a bypass
+ *    claim the caller cannot prove is refused rather than admitted. The
+ *    rotation algorithm and the aging policy are the consumer's, task-10cab3e5.
+ *
  * Every area is contract-neutral and stays that way: the package reports exact
  * facts and never invents dependency, policy, lease, or execution authority. It
  * does not infer independence, delete edges, infer semantic dependency truth,
@@ -76,6 +84,17 @@ export {
   deriveReservationId,
   reserveForAdmission,
 } from "./budget/budget-reservation.js";
+export {
+  FAIRNESS_CONTRACT_ISSUE_CODES,
+  FAIRNESS_CONTRACT_LAYERS,
+  FAIRNESS_DISPATCHABILITY_STATES,
+  FAIRNESS_PRIORITY_CLASSES,
+  isFairnessIdentity,
+} from "./fairness/fairness-contract.js";
+export { validateWorkItem, validateWorkItemSet } from "./fairness/fairness-work-item.js";
+export { validateRing, validateRingResource } from "./fairness/fairness-ring.js";
+export { validateBypassClaim } from "./fairness/fairness-evidence.js";
+export { validateCapRevision } from "./fairness/fairness-cap-revision.js";
 
 export type {
   BlockedNode,
@@ -172,3 +191,31 @@ export type {
   BudgetPolicyOutcome,
   BudgetReservePurpose,
 } from "./budget/budget-contract.js";
+
+export type {
+  FairnessContractIssue,
+  FairnessContractIssueCode,
+  FairnessContractLayer,
+  FairnessContractRefusal,
+  FairnessContractResult,
+  FairnessDispatchabilityState,
+  FairnessPriorityClass,
+} from "./fairness/fairness-contract.js";
+export type {
+  FairnessDispatchabilityFact,
+  FairnessWorkItem,
+} from "./fairness/fairness-work-item.js";
+export type {
+  FairnessRing,
+  FairnessRingQueueEntry,
+  FairnessRingResource,
+} from "./fairness/fairness-ring.js";
+export type {
+  FairnessBypassClaim,
+  FairnessOpportunityAttestation,
+  FairnessProvenBypasses,
+} from "./fairness/fairness-evidence.js";
+export type {
+  FairnessCapMigration,
+  FairnessCapRevision,
+} from "./fairness/fairness-cap-revision.js";

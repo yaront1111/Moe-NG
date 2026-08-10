@@ -28,15 +28,27 @@ import type {
 import type {
   BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, BudgetReservePurpose,
 } from "@moe/scheduler";
+import type {
+  FairnessBypassClaim, FairnessCapMigration, FairnessCapRevision, FairnessContractIssue,
+  FairnessContractIssueCode, FairnessContractLayer, FairnessContractRefusal,
+  FairnessContractResult, FairnessDispatchabilityFact, FairnessDispatchabilityState,
+  FairnessOpportunityAttestation, FairnessPriorityClass, FairnessProvenBypasses, FairnessRing,
+  FairnessRingQueueEntry, FairnessRingResource, FairnessWorkItem,
+} from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record";
-/** Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition values. */
+/**
+ * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
+ * values + 11 fairness contract values.
+ */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
   ["ABSOLUTE_MAX_GRAPH_TOTAL_EDGES", "number"], ["ADMISSION_PURPOSES", "array"],
   ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
+  ["FAIRNESS_CONTRACT_ISSUE_CODES", "array"], ["FAIRNESS_CONTRACT_LAYERS", "array"],
+  ["FAIRNESS_DISPATCHABILITY_STATES", "array"], ["FAIRNESS_PRIORITY_CLASSES", "array"],
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
@@ -45,16 +57,20 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["analyzeHardEdgeCounterfactuals", "function"], ["cancelReservation", "function"],
   ["createTraversalCounter", "function"], ["deriveReservationId", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
+  ["isFairnessIdentity", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
-  ["validateGraphSnapshot", "function"],
+  ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
+  ["validateGraphSnapshot", "function"], ["validateRing", "function"],
+  ["validateRingResource", "function"], ["validateWorkItem", "function"],
+  ["validateWorkItemSet", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(36);
+  expect(EXPECTED_EXPORTS.length).toBe(47);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -246,6 +262,101 @@ it("refuses a malformed admission view with BUDGET_RESERVATION_MALFORMED", () =>
   const hostile = null as unknown as BudgetAvailableView;
   expect(issueCodes(scheduler.reserveForAdmission(hostile, ADMISSION, GATE)))
     .toEqual(["BUDGET_RESERVATION_MALFORMED"]);
+});
+
+/**
+ * Fairness contracts. A published TYPE is invisible to the count and namespace
+ * guards above, which see runtime values only, so each one is proven by calling
+ * through the bare specifier and annotating the returned value — an unpublished
+ * type becomes a tsc error rather than a silently green test.
+ */
+const DISPATCHABILITY: FairnessDispatchabilityFact =
+  { state: "DISPATCHABLE" satisfies FairnessDispatchabilityState, observationRef: "obs:wi-a" };
+const FAIR_ITEM = {
+  workItemId: "wi-a", dimensionId: "dim-1",
+  priority: "P1" satisfies FairnessPriorityClass, resourceId: "res-a",
+  dispatchability: DISPATCHABILITY,
+};
+
+/** Names both arms of the result union without any deep import. */
+function fairnessCodes(
+  result: FairnessContractResult<unknown>,
+): readonly FairnessContractIssueCode[] {
+  if (result.ok) return [];
+  const refusal: FairnessContractRefusal = result;
+  return refusal.issues.map(
+    (issue: FairnessContractIssue): FairnessContractIssueCode => issue.code,
+  );
+}
+
+it("validates every fairness family through the root exports", () => {
+  const item = scheduler.validateWorkItem(FAIR_ITEM);
+  if (!item.ok) throw new Error(fairnessCodes(item).join(","));
+  const validated: FairnessWorkItem = item.value;
+  expect([validated.workItemId, validated.dispatchability.observationRef])
+    .toEqual(["wi-a", "obs:wi-a"]);
+  expect(scheduler.validateWorkItemSet([FAIR_ITEM], "dim-1").ok).toBe(true);
+  expect(scheduler.isFairnessIdentity("wi-a")).toBe(true);
+
+  const ringResult = scheduler.validateRing({
+    ringId: "ring-1", dimensionId: "dim-1",
+    resources: [{ resourceId: "res-a", weight: 1 }],
+    entries: [{ workItemId: "wi-a", resourceId: "res-a", deficitCounter: 0 }],
+  });
+  if (!ringResult.ok) throw new Error(fairnessCodes(ringResult).join(","));
+  const ring: FairnessRing = ringResult.value;
+  const resources: readonly FairnessRingResource[] = ring.resources;
+  const entries: readonly FairnessRingQueueEntry[] = ring.entries;
+  expect([resources.length, entries.length]).toEqual([1, 1]);
+  expect(scheduler.validateRingResource(resources[0]).ok).toBe(true);
+
+  const attestation: FairnessOpportunityAttestation =
+    { opportunityRef: "opp-1", winnerWorkItemId: "wi-b", observationRef: "obs-1" };
+  const claim: FairnessBypassClaim =
+    { workItemId: "wi-a", claimedBypasses: 1, attestations: [attestation] };
+  const proven = scheduler.validateBypassClaim(claim);
+  if (!proven.ok) throw new Error(fairnessCodes(proven).join(","));
+  const bypasses: FairnessProvenBypasses = proven.value;
+  expect(bypasses.provenBypasses).toBe(1);
+
+  const migration: FairnessCapMigration =
+    { workItemId: "wi-a", boundAtMost: 2, currentBoundAtMost: 4 };
+  const revised = scheduler.validateCapRevision({
+    revisionRef: "rev-1", dimensionId: "dim-1", fromCapUnits: 4, toCapUnits: 8,
+    drainedWorkItemIds: [], migrations: [migration],
+  });
+  if (!revised.ok) throw new Error(fairnessCodes(revised).join(","));
+  const revision: FairnessCapRevision = revised.value;
+  expect(revision.migrations.length).toBe(1);
+});
+
+it("refuses hostile fairness input from the root and names the refusing layer", () => {
+  const refused = scheduler.validateWorkItem(null);
+  expect(fairnessCodes(refused)).toEqual(["FAIRNESS_CONTRACT_MALFORMED_INPUT"]);
+  if (refused.ok) throw new Error("expected a refusal");
+  const layers: readonly FairnessContractLayer[] = refused.issues.map((issue) => issue.layer);
+  expect(layers).toEqual(["WORK_ITEM"]);
+  expect(refused.disposition).toBe("REFUSED");
+});
+
+it("refuses an unprovable bypass claim from the root, not merely a malformed one", () => {
+  const unproven =
+    scheduler.validateBypassClaim({ workItemId: "wi-a", claimedBypasses: 3, attestations: [] });
+  expect(fairnessCodes(unproven)).toEqual(["FAIRNESS_CONTRACT_BYPASS_EVIDENCE_MISSING"]);
+});
+
+it("publishes the fairness vocabularies as frozen closed sets", () => {
+  expect([...scheduler.FAIRNESS_CONTRACT_LAYERS]).toContain("WORK_ITEM");
+  expect([...scheduler.FAIRNESS_PRIORITY_CLASSES]).toContain("P1");
+  expect([...scheduler.FAIRNESS_DISPATCHABILITY_STATES]).toContain("NOT_DISPATCHABLE");
+  expect(scheduler.FAIRNESS_CONTRACT_ISSUE_CODES)
+    .toContain("FAIRNESS_CONTRACT_ITEM_IN_MULTIPLE_QUEUES");
+  for (const vocabulary of [
+    scheduler.FAIRNESS_CONTRACT_ISSUE_CODES, scheduler.FAIRNESS_CONTRACT_LAYERS,
+    scheduler.FAIRNESS_DISPATCHABILITY_STATES, scheduler.FAIRNESS_PRIORITY_CLASSES,
+  ]) {
+    expect(Object.isFrozen(vocabulary)).toBe(true);
+  }
 });
 
 it("publishes the admission purpose vocabularies and their contract mapping", () => {
