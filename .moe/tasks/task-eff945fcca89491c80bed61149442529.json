@@ -184,8 +184,8 @@
       "completedAt": "2026-08-10T08:35:06.201Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f3560083",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -197,12 +197,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T07:31:03.909Z",
-  "updatedAt": "2026-08-10T08:36:27.553Z",
+  "updatedAt": "2026-08-10T08:45:34.712Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T07:36:59.330Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-10T08:45:34.712Z",
+    "wallClockMs": 4115382
   },
   "contextFetchedBy": [
     "architect-8ee37119",
@@ -255,5 +257,8 @@
     "apps/daemon/src/recovery/recovery-key-provider.node.ts",
     "apps/daemon/src/recovery/recovery-key-provider.node.js",
     "apps/daemon/src/recovery/recovery-key-provider.node.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-10T08:45:34.712Z",
+  "reviewCompletedAt": "2026-08-10T08:45:34.712Z",
+  "reviewSummary": "APPROVE. Full evidence: chan-ced99359, msg-5b0e1740.\n\nGATE RE-RUN BY ME at HEAD 4144746, unnarrowed: typecheck exit 0; test 57 files / 883 tests exit 0 — identical to the recorded tail. Baseline 55/872, so +11 cases really are collected.\n\nDoD 4 PROVEN THE STRONG WAY, which the worker's own drill could not: I neutered mintSuccessor inside the LANDED recovery-succession.ts, not the call site. 6 red across BOTH suites incl. real process-death (\"expected [ 'REFUSED', undefined ] to deeply equal [ 'OPENED', undefined ]\"). Restored, hash back to 3552fcae. A reimplementation stays green; this did not. My first attempt indicted the MUTATION, not the test.\n\nDoD 6 spot-check: laundered the protection refusal into an optimistic success; RED on the named sweep case; restored to 41ef9b67.\n\nFOREIGN CAPTURE verified by outcome: all 10 owned files tracked at HEAD; 3 of 4 production blobs hash-match the PRE-DRILL hashes, proving clean restore against committed bytes, not git status. The 4th differs only by 79ac8e2, a comment reword.\n\nSCOPE CLEAN: merge-base diff over the recovery dir is EXACTLY the 10 files; over all 7 landed recovery modules it is EMPTY. grep -c '': 250/250/249/185, all under cap.\n\nDoD 1 real process death (389/583ms children vs 20ms in-process), triple asserted. DoD 2 win32 DACL with the READ-BACK as assertion, no POSIX bits, no fsync claim. DoD 3 landed assertion run BY NAME, unchanged. DoD 5 sweep hand-counted with an ordered layer/code list.\n\nFOREIGN RED reproduced and RE-ATTRIBUTED: probe:scheduler-hot-claim-admission is an absence ratchet flipped by the fair-scheduler landing (2847455), not this task. Zero importers of any owned symbol outside the dir.\n\nRECORDED NOT REJECTED ON: protectPosix (darwin/linux) has never executed anywhere — no CI matrix exists, so \"every supported host\" is proven on win32 only.\n\nTree clean before and after all three drills; HEAD unchanged throughout."
 }

@@ -22,18 +22,14 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY baseline, and re-measure the symbol list — the one in the task description was transcribed from a grep by me and is INCOMPLETE. `grep -n \"^export\" packages/contracts/src/distribution/distribution-contract.ts` returns more than the description lists: beyond the vocabulary and types, it also exports MAX_LOGICAL_PATH_CHARS, SIGNATURE_PATTERN, SKILL_ID_PATTERN, BASE64_PATTERN, SOURCE_SHA_LENGTHS, isCanonicalText, normalizeLogicalPath, canonicalUnsignedManifestBytes and canonicalContainerBytes. Do not publish those without a named consumer — see step 2.\n\nConfirm the gap is still real: `node -e 'console.log(JSON.stringify(require(\"./packages/contracts/package.json\").exports))'` -> exactly `{\".\":\"./src/index.ts\"}`; `grep -n \"distribution\\|Distribution\" packages/contracts/src/index.ts` -> NOTHING; barrel is 133 lines with 22 export statements.\n\nFAVOURABLE FACT worth confirming before you start: there is NO root entrypoint or surface test in packages/contracts and nothing pins the root export COUNT (`grep` for a count assertion returns only an unrelated MAX_JSON_BODY_BYTES comparison). So adding exports here will NOT break a pinned-namespace test — unlike @moe/runner, whose index-surface.test.ts hard-pins 116 values and has blocked other tasks on this board. Record the baseline gate: `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test`.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "note": "READ-ONLY baseline re-measured at HEAD 79ac8e2 (HEAD moved twice under me during claim — 2847455 then 79ac8e2; the gap is unchanged at all three).\n\nGAP STILL REAL, all four routes re-confirmed:\n- `node -e \"console.log(JSON.stringify(require('./packages/contracts/package.json').exports))\"` -> exactly {\".\":\"./src/index.ts\"}. No subpath.\n- `grep -n \"distribution\\|Distribution\" packages/contracts/src/index.ts` -> NOTHING, exit 1.\n- Barrel is 133 physical lines (`grep -c ''`) with 22 `^export` statements. NOTE: my own task comment said 23 — that was my miscount; the architect's 22 is correct, verified by `grep -c '^export'`.\n- `packages/contracts/src/distribution/distribution-contract.js` bridge EXISTS and is `export * from \"./distribution-contract.ts\";`, so a `.js` specifier from the barrel resolves under plain Node.\n\nFULL SYMBOL LIST RE-MEASURED ON DISK (the description's list was incomplete, as the plan warned). distribution-contract.ts is 164 lines and exports 29 symbols. Beyond the vocabulary+types the plan names, it also exports MAX_LOGICAL_PATH_CHARS, SIGNATURE_PATTERN, SKILL_ID_PATTERN, BASE64_PATTERN, SOURCE_SHA_LENGTHS, isCanonicalText, normalizeLogicalPath, canonicalUnsignedManifestBytes, canonicalContainerBytes — the canonicalization/parsing machinery, which stays unpublished per step 2.\n\nTYPE CLOSURE IS ALREADY COMPLETE — worth recording because it removes a scope question. DistributionManifest transitively needs DistributionApiRange, DistributionAsset, DistributionSkillEntry, DistributionTemplateEntry, DistributionComponentKind and DistributionSource; DistributionSource needs GitObjectFormat, which is ALREADY published from the barrel at index.ts:16 (`export type { GitObjectFormat, ... } from \"./phase0-evidence-contract.js\"`). So publishing the distribution block requires no second module's surface to be widened.\n\nFAVOURABLE FACT CONFIRMED BY MEASUREMENT, not assumption: nothing pins the root export COUNT in this package. There is no root entrypoint or surface test. The only namespace import of the barrel is packages/contracts/src/bounded-json-boundary.test.ts:5 `import * as contracts from \"@moe/contracts\"`, and every use is member access (decodeBoundedJsonBytes, MAX_JSON_DEPTH, MAX_JSON_STRING_UTF8_BYTES, MAX_JSON_BODY_BYTES) — no Object.keys(contracts), no `.length` over the namespace. The only `.length` hits in that file are `toHaveLength(4)` on a decode result and `oversizedEscapes.length < MAX_JSON_BODY_BYTES`, both unrelated. So added exports cannot redden a pinned count here — unlike @moe/runner's index-surface.test.ts, which hard-pins 116 values.\n\nBARREL STYLE, read from the tail (lines 100-133) to copy exactly: paired blocks — `export { VALUES } from \"./dir/module.js\";` then `export type { Types } from \"./dir/module.js\";` — one member per line, alphabetized within each block, `.js` NodeNext specifiers, never a wildcard. The document-work block at 115-133 is the pattern.\n\nBASELINE GATE RECORDED, both legs run fresh:\n  pnpm --filter @moe/contracts typecheck -> `$ tsc --project tsconfig.json`, exit 0\n  pnpm --filter @moe/contracts test      -> Test Files 9 passed (9), Tests 234 passed (234), exit 0\n`git status --porcelain -- packages/contracts/` is EMPTY, so the owned tree is clean before I write a byte.\n\nNo files modified in this step.",
-      "startedAt": "2026-08-10T08:33:50.599Z",
-      "completedAt": "2026-08-10T08:35:53.588Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-2",
       "description": "Decide the published SET by consumer need, and record the decision — DoD 4 requires the set be no wider than a named consumer requires. The blocked consumer is task-9fd52b41 (Thin JetBrains adapter), whose DoD 1 is \"discovers compatible daemon/control-room distributions and fails closed on mismatch\". Read its plan step 1 and adapters/jetbrains if present to confirm what it actually imports; the worker's block report names DISTRIBUTION_MANIFEST_VERSION and distributionRefusal explicitly as the two that failed with TS2305.\n\nPublish the compatibility VOCABULARY and its refusal constructor: DISTRIBUTION_MANIFEST_VERSION, DISTRIBUTION_CONTAINER_VERSION, DISTRIBUTION_SIGNATURE_ALGORITHM, DISTRIBUTION_COMPONENT_KINDS, DISTRIBUTION_REFUSAL_LAYERS, DISTRIBUTION_REFUSAL_REASONS, distributionRefusal, plus the types a consumer needs to hold the values it receives (DistributionComponentKind, DistributionRefusalLayer, DistributionRefusalReason, DistributionRefusal, DistributionApiRange, DistributionManifest, DistributionManifestResult, and the manifest's member types it transitively requires — verify which by compiling, not by guessing).\n\nDo NOT publish the canonicalization and parsing helpers (isCanonicalText, normalizeLogicalPath, canonicalUnsignedManifestBytes, canonicalContainerBytes, the PATTERN constants, SOURCE_SHA_LENGTHS) or the parser/verifier modules unless compiling the consumer proves they are needed. A root surface is easy to widen and hard to narrow, and every extra symbol is a public commitment. If you do publish any of them, record in your completion notes WHICH consumer required it and why.",
-      "status": "IN_PROGRESS",
-      "affectedFiles": [],
-      "startedAt": "2026-08-10T08:35:58.166Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-3",
@@ -72,12 +68,12 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a2c7f85f",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT on DoD 6 only. Everything else passed — full evidence in chan-ced99359, msg-47b65592.\n\nPASSED, all re-measured by me at c7a90bc:\n- DoD 1: append-only, +22 lines at EOF, ZERO deletions, no `export *`, no neighbour reordered.\n- DoD 2: proven HARDER than you ran it. Your test imports @moe/contracts from inside packages/contracts, i.e. Node self-reference (no tsconfig paths, no self-link — a real exports-map traversal, but not literally \"from a CONSUMING package\"). I ran the literal form: a probe in apps/daemon (declares @moe/contracts: workspace:*) importing 3 runtime VALUES plus 2 types, `tsc --noEmit` exit 0, deleted in the same command, tree clean after.\n- DoD 3: repo-wide typecheck exit 0; pre-existing distribution consumers 2 files / 111 tests pass; owned gate reproduced at 10 files / 242 tests (+1 file, +8 tests over 9/234).\n- DoD 4: parser/verifier/canonicalization correctly left unpublished, reason recorded.\n- DoD 5: task-9fd52b41 named, symbols now genuinely reachable.\n- Test quality is high: hand-written 7-name list not derived from the barrel, `toBe(defined)` identity check against lookalikes, and the eleven types routed through real annotations so tsc is the assertion.\n\nFAILED — DoD 6, second clause. `pnpm test:fault` = 2 failed | 41 passed, and j4 is yours: reverting ONLY packages/contracts/src/index.ts makes j4 pass while j1 still fails (sha 22caedad restored). Rail 3 forbids path-attributing a self-caused red.\n\nThis is a FIXTURE defect your correct landing exposed, not a defect in your code — but approving would leave a mandatory design-18.3 ratchet asserting a capability I proved absent by grep. One-line fix identified and pre-verified (0/114 name matches); it needs governor/architect authorisation for the unowned path, which I have requested on your behalf.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -88,21 +84,39 @@
       "author": "worker-a2c7f85f",
       "content": "From worker-a2c7f85f — I am the blocked downstream consumer (task-9fd52b41, Thin JetBrains adapter, BLOCKED on exactly this barrel). Re-measured this session at HEAD 2847455; identical to my original measurement at fec9488. Facts for the plan, so nothing has to be rediscovered:\n\nROUTE IS SINGULAR. packages/contracts/package.json exports map is exactly { \".\": \"./src/index.ts\" }. Deep import of ./src/distribution/distribution-contract.js is TS2307 Cannot find module. The root barrel is the only reachable surface — there is no second way to satisfy this.\n\nBARREL IS EMPTY OF IT. packages/contracts/src/index.ts has 23 `^export` statements; `grep -in distribution` returns nothing (exit 1).\n\nNOTHING BREAKS ON ADDING EXPORTS — I checked rather than assumed. There is no index-surface count test in this package. The only namespace import of the barrel is packages/contracts/src/bounded-json-boundary.test.ts:5 `import * as contracts from \"@moe/contracts\"`, and it is used solely for member access (decodeBoundedJsonBytes, MAX_JSON_DEPTH, MAX_JSON_STRING_UTF8_BYTES, MAX_JSON_BODY_BYTES) — no Object.keys(contracts), no length assertion over the namespace. So added exports cannot redden an existing count.\n\nONE TRAP WORTH PLANNING FOR. If the DoD wants a *type* published (DistributionRefusal, DistributionRefusalLayer/Reason, DistributionManifest are `interface`/`type`), a runtime export-count or Object.keys guard cannot see it — it would pass with the type unexported. Proving a published type needs a call THROUGH the bare specifier \"@moe/contracts\" with the result annotated to that type, in a file tsc actually checks.\n\nSYMBOLS MY PROBE NEEDS BY NAME (both currently TS2305 \"has no exported member\" from \"@moe/contracts\"): DISTRIBUTION_MANIFEST_VERSION and distributionRefusal, plus the DistributionRefusal type. All defined in packages/contracts/src/distribution/distribution-contract.ts (:4, :107, :35).\n\nNO EXISTING BARE-SPECIFIER CONSUMER. Every current importer of the distribution modules bypasses the exports map — relative siblings inside src/distribution/, or ROOT paths under tools/packaging/* and tests/integration/*. So a test that merely imports the source file relatively proves nothing about publication; the assertion has to travel through \"@moe/contracts\". My adapter will be the first real bare-specifier consumer.\n\nI am standing by. The moment this lands I re-run my probe and resume task-9fd52b41 at step 3. Happy to take this task myself if it is served to a worker.",
       "timestamp": "2026-08-10T08:33:24.893Z"
+    },
+    {
+      "id": "comment-1bb9626c162b4b7391b4809ab7c20af2",
+      "author": "worker-a2c7f85f",
+      "content": "AUTHORISATION REQUEST, on the task record so it survives chat scroll. Requested from @architect-8ee37119 (alive) in chan-ced99359 msg-f0496703; governor-36019faa is 1068s stale.\n\nBLOCKER: DoD 6 only. `pnpm test:fault` = 2 failed | 41 passed. j4 incident:stale-assets-refuse-handshake expects PRODUCTION_BEHAVIOR_ABSENT, gets PASS_EXPECTED. Authorship settled twice independently (mine and QA's): reverting ONLY packages/contracts/src/index.ts flips j4 green while j1 stays red, sha 22caedad both runs. Rail 3's last sentence forbids me path-attributing a self-caused red, so this is not disclosable.\n\nTHE FIXTURE'S OWN HEADER IS NOW FALSE AT HEAD — foundation-incident-schedules.ts:38-41: \"none of them matches an already-exported runtime name, so every probe starts absent for a real reason rather than because its pattern was chosen to miss.\" c7a90bc publishes DISTRIBUTION_MANIFEST_VERSION et al from the @moe/contracts root; probe:contracts-distribution-handshake's pattern at :79 is a bare \"Distribution|DISTRIBUTION\". That probe now matches an already-exported runtime name, which the header states must never happen. j4 is reporting a pattern collision, not a capability.\n\nPRECEDENT IN THE SAME FILE: :48-49 carries exactly this repair, already authorised once — `// Not a bare \"Release\": @moe/core already names types PlanningReleased.` with pattern `WorkRelease|WORK_RELEASE|releaseTerminal|ReleaseTerminal|TERMINAL_RELEASE`.\n\nGRANT SOUGHT — packages/testkit/src/foundation/foundation-incident-schedules.ts line 79, PATTERN STRING ONLY:\n  \"Distribution|DISTRIBUTION\" -> \"verifyDistribution|checkDistributionCompatibility|DISTRIBUTION_HANDSHAKE|DistributionHandshake\"\nplus one comment in :48's shape. Named symbols at :78 untouched, so the capability stays absent and j1 stays red.\n\nNO OWNED-PATH FIX EXISTS, each alternative measured not assumed:\n- PASS_EXPECTED flip: forbidden by epic rail 4. QA grepped verifyDistributionManifest and checkDistributionCompatibility repo-wide: zero hits. The capability is genuinely absent.\n- Rename published symbols: forbidden by taskRail 1, and they are the names the blocked consumer imports.\n- Narrow the published set: impossible. Every symbol DoD 1 requires matches `DISTRIBUTION` by definition.\n\nACCEPTANCE pre-cleared by qa-f3560083 (alternation matches 0 of 114 root exports): j4 green, j1 STILL red, testkit suite green, owned gate still 10 files / 242 tests exit 0. Restore verified by `git show HEAD:<path>` on the committed blob, never `git status`.\n\nIf the answer is DENIED, the alternative is a testkit-owned task and I stand down on this one; QA re-reviews once the fault gate is green.\n\nSEPARATE RECOMMENDATION: three of six probes have now collided with legitimate landings (core-terminal-release, scheduler-hot-claim-admission, this). Remaining bare patterns \"Handoff|HANDOFF\", \"Timer|TIMER\", \"Review|REVIEW\" will do this again. An audit task narrowing all remaining bare patterns is worth filing.",
+      "timestamp": "2026-08-10T09:00:01.531Z"
+    },
+    {
+      "id": "comment-5c6ddcd752af4039bcf69e278211ded9",
+      "author": "worker-a2c7f85f",
+      "content": "BLOCK OUTCOME, 09:11 — request made to a LIVE architect and went unanswered. Recording so the next governor does not have to reconstruct it.\n\nTIMELINE: architect-8ee37119 came alive 08:58:58, I put the grant request in chat at 08:59:39 (msg-f0496703) and on this task at 09:00:01. They claimed and planned task-9fd52b41 instead (plan submitted 09:00:44) and went stale at 09:00:44, now 547s. governor-36019faa has been stale 1717s. So the grant was ASKED FOR of someone alive, not merely filed into an empty room — it just was not answered before they went. Nobody alive can authorise it now.\n\nQA ENDORSED TWICE, INDEPENDENTLY: chan-ced99359 msg-1de6bf2b and msg-be041274. qa-f3560083 re-verified the alternation in BOTH directions and corrected their own earlier pre-clearance in the process — their first pass only checked that it matches zero live @moe/contracts exports (the half that stops it firing) and missed that foundation-spec.test.ts:171 requires the pattern to still match at least one of its OWN absentExportNames. It does. Their words: \"Grant it and I approve on the acceptance criteria already stated.\"\n\nTWO THINGS I MEASURED WHILE WAITING, both new since the block was filed:\n\n1. THE FIX IS COMPLETE AT ONE LINE, not merely small. `grep -n \"Distribution|DISTRIBUTION\"` across ALL of packages/testkit returns exactly two lines, both in foundation-incident-schedules.ts (:78 named symbols, :79 pattern). foundation-fault-schedule.ts keeps its own CATALOGUE_PROBES and spreads FOUNDATION_INCIDENT_PROBES at :83, but its three probes are Attempt|ATTEMPT, Dispatch|DISPATCH and [Aa]cknowledg|ACKNOWLEDG — none touch distribution. No second collision site exists.\n\n2. THE NARROWING IS SAFE AGAINST TESTKIT'S OWN SPEC SUITE. foundation-spec.test.ts polices probe patterns four ways and an overshooting narrowing reddens it — that risk was unassessed when I filed the block. Traced against `verifyDistribution|checkDistributionCompatibility|DISTRIBUTION_HANDSHAKE|DistributionHandshake`: :171 own-symbol match holds (verifyDistributionManifest contains verifyDistribution) and the `${named}FromAnotherAuthor` disguise still matches; :153 unrelatedExport no match; :160 driven by the name Set not the pattern; :185 decoys historicalRuntimeResult / PlanningReleased / GraphPreviewResult all no match. The manifest digest pinned at :199 is built from probeRef, not the pattern, so it is outside the digested identity — to be confirmed empirically, not on the read alone.\n\nSTATE ON DISK IS CLEAN AND UNCHANGED. I wrote nothing to any unowned path. The work remains committed at c7a90bc; DoD 1-5 pass; only DoD 6 fails, on the j4 fault ratchet.\n\nWHAT ANY ROLE CAN DO NEXT, no rediscovery needed:\n(A) A governor or architect grants the pattern-only edit at :79 — one line plus a comment in :48's shape. Acceptance: j4 GREEN, j1 STILL RED (j1 is task-10cab3e5's scheduler ratchet, not this task's; if j1 also goes green the narrowing overreached), testkit suite green, owned gate still 10 files / 242 tests exit 0.\n(B) File a testkit-owned task for the same one-line change. QA re-reviews 2411ed9c once the fault gate is green.\n\nI am leaving this task BLOCKED deliberately rather than clearing my own worker block, because clearing it would flip the task to WORKING and erase the authorisation signal from the board — the request would become invisible to the governor who needs to see it.\n\nRECOMMENDED FOLLOW-UP TASK, third occurrence: three of six probes have now collided with legitimate landings (core-terminal-release, scheduler-hot-claim-admission, this). foundation-outcomes-fixtures.ts:74-82 shows the authors deliberately made patterns case-SENSITIVE to avoid camelCase false positives, but a bare `CamelCase|UPPER` alternation has no defence against a SCREAMING_SNAKE constant prefix — which is exactly how DISTRIBUTION_MANIFEST_VERSION got through. Handoff|HANDOFF, Timer|TIMER and Review|REVIEW are all still standing in that hole.",
+      "timestamp": "2026-08-10T09:11:05.818Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T08:31:20.222Z",
-  "updatedAt": "2026-08-10T08:35:58.166Z",
+  "updatedAt": "2026-08-10T09:16:40.218Z",
   "metrics": {
     "firstClaimAt": "2026-08-10T08:31:49.366Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 1
+    "executedStepCount": 6,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
-  "stepsCompleted": [
-    "step-1"
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "6. Fresh `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test` exits 0, and repo-wide legs are path-attributed with any foreign red disclosed verbatim.",
+      "rejectedAt": "2026-08-10T08:54:41.700Z",
+      "rejectedBy": "qa-f3560083"
+    }
   ],
-  "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T08:33:36.778Z",
   "planningNotes": {
     "approachesConsidered": "ADDING A SUBPATH EXPORT to packages/contracts/package.json (e.g. \"./distribution\") — REJECTED. The exports map is exactly { \".\": \"./src/index.ts\" } and every other package in this workspace follows the same single-root shape. Introducing a subpath here would make @moe/contracts the only package with a second entry point and would create a second, competing way to reach the same symbols. The task rails forbid it explicitly.\n\nDEEP RELATIVE IMPORT FROM THE CONSUMER — REJECTED and already proven closed: the worker measured `TS2307: Cannot find module '@moe/contracts/src/distribution/distribution-contract.js'`. The exports map forbids it, which is correct behaviour and not a defect to work around.\n\nWILDCARD RE-EXPORT (`export * from ...`) — REJECTED. The barrel is 133 lines of entirely explicit named exports; a wildcard would publish the canonicalization helpers, the regex constants and SOURCE_SHA_LENGTHS as an unintended public commitment, and would make the root surface change silently whenever the distribution contract grows.\n\nPUBLISHING THE WHOLE DIRECTORY (parser and verifier too) — REJECTED absent a named consumer. The blocked consumer needs the compatibility vocabulary and the refusal constructor; it does not obviously need the parser. DoD 4 requires the set be no wider than a consumer requires, and a root surface is easy to widen and hard to narrow.\n\nASSERTING REACHABILITY WITH A RELATIVE IMPORT in the new test — REJECTED, and this is the subtlest trap. `import ... from \"./distribution/distribution-contract.js\"` already worked before this task and would pass against an unmodified barrel, certifying nothing. The assertion must go through the BARE specifier so it exercises the exports map.",
@@ -114,8 +128,85 @@
   },
   "planApprovedAt": "2026-08-10T08:33:38.824Z",
   "contextFetchedBy": [
-    "worker-767ae903",
     "worker-a2c7f85f"
   ],
-  "workStartedAt": "2026-08-10T08:33:50.599Z"
+  "workStartedAt": "2026-08-10T08:33:50.599Z",
+  "reviewStartedAt": "2026-08-10T08:50:05.025Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/contracts/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  10 passed (10)\n      Tests  242 passed (242)\n   Start at  11:48:10\n   Duration  387ms (transform 937ms, setup 0ms, import 1.36s, tests 294ms, environment 1ms)\n\nGATE_EXIT=0\n\n(baseline before this task was 9 files / 234 tests; +1 file and exactly +8 tests, matching the 8 new cases. Run fresh and LAST at HEAD c7a90bc.)",
+    "reportedAt": "2026-08-10T08:50:05.025Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/index.ts",
+    "packages/contracts/src/distribution-root-publication.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-10T08:54:41.700Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "6. Fresh `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test` exits 0, and repo-wide legs are path-attributed with any foreign red disclosed verbatim."
+    ],
+    "issues": [
+      {
+        "type": "test_failure",
+        "file": "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+        "line": 75,
+        "description": "This diff turns a mandatory fault ratchet RED. `pnpm test:fault` = 2 failed | 41 passed. j4 incident:stale-assets-refuse-handshake expects PRODUCTION_BEHAVIOR_ABSENT (probe:contracts-distribution-handshake), gets PASS_EXPECTED. AUTHORSHIP SETTLED BY MEASUREMENT: reverting ONLY packages/contracts/src/index.ts to c7a90bc~1 makes j4 PASS while j1 still fails; restored, sha 22caedad. Rail 3 forbids path-attributing a self-caused red."
+      },
+      {
+        "type": "other",
+        "file": "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+        "line": 78,
+        "description": "ROOT CAUSE IS THE FIXTURE, NOT YOUR CODE. The probe's named symbols verifyDistributionManifest / checkDistributionCompatibility exist NOWHERE (grep), so the capability really is absent; it fired only on the bare pattern Distribution|DISTRIBUTION, which DISTRIBUTION_* matches by definition. FIX: narrow the pattern as probe:core-terminal-release already was. Your alternation matches 0 of 114 names in contracts/src/index.ts. Keep BOTH named symbols; pattern only."
+      },
+      {
+        "type": "other",
+        "description": "NOT A CRITICISM OF YOUR JUDGEMENT: you were right not to flip the row to PASS_EXPECTED and right not to edit an unowned fixture unilaterally. That edit needs governor/architect authorisation, requested in chan-ced99359 msg-47b65592 with acceptance pre-cleared (j4 green, j1 STILL red, testkit suite green). If denied, a testkit task is the alternative; I re-review once the fault gate is green."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on DoD 6 only. Everything else passed — full evidence in chan-ced99359, msg-47b65592.\n\nPASSED, all re-measured by me at c7a90bc:\n- DoD 1: append-only, +22 lines at EOF, ZERO deletions, no `export *`, no neighbour reordered.\n- DoD 2: proven HARDER than you ran it. Your test imports @moe/contracts from inside packages/contracts, i.e. Node self-reference (no tsconfig paths, no self-link — a real exports-map traversal, but not literally \"from a CONSUMING package\"). I ran the literal form: a probe in apps/daemon (declares @moe/contracts: workspace:*) importing 3 runtime VALUES plus 2 types, `tsc --noEmit` exit 0, deleted in the same command, tree clean after.\n- DoD 3: repo-wide typecheck exit 0; pre-existing distribution consumers 2 files / 111 tests pass; owned gate reproduced at 10 files / 242 tests (+1 file, +8 tests over 9/234).\n- DoD 4: parser/verifier/canonicalization correctly left unpublished, reason recorded.\n- DoD 5: task-9fd52b41 named, symbols now genuinely reachable.\n- Test quality is high: hand-written 7-name list not derived from the barrel, `toBe(defined)` identity check against lookalikes, and the eleven types routed through real annotations so tsc is the assertion.\n\nFAILED — DoD 6, second clause. `pnpm test:fault` = 2 failed | 41 passed, and j4 is yours: reverting ONLY packages/contracts/src/index.ts makes j4 pass while j1 still fails (sha 22caedad restored). Rail 3 forbids path-attributing a self-caused red.\n\nThis is a FIXTURE defect your correct landing exposed, not a defect in your code — but approving would leave a mandatory design-18.3 ratchet asserting a capability I proved absent by grep. One-line fix identified and pre-verified (0/114 name matches); it needs governor/architect authorisation for the unowned path, which I have requested on your behalf.",
+      "rejectedAt": "2026-08-10T08:54:41.700Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "6. Fresh `pnpm --filter @moe/contracts typecheck && pnpm --filter @moe/contracts test` exits 0, and repo-wide legs are path-attributed with any foreign red disclosed verbatim."
+      ],
+      "issues": [
+        {
+          "type": "test_failure",
+          "file": "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+          "line": 75,
+          "description": "This diff turns a mandatory fault ratchet RED. `pnpm test:fault` = 2 failed | 41 passed. j4 incident:stale-assets-refuse-handshake expects PRODUCTION_BEHAVIOR_ABSENT (probe:contracts-distribution-handshake), gets PASS_EXPECTED. AUTHORSHIP SETTLED BY MEASUREMENT: reverting ONLY packages/contracts/src/index.ts to c7a90bc~1 makes j4 PASS while j1 still fails; restored, sha 22caedad. Rail 3 forbids path-attributing a self-caused red."
+        },
+        {
+          "type": "other",
+          "file": "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+          "line": 78,
+          "description": "ROOT CAUSE IS THE FIXTURE, NOT YOUR CODE. The probe's named symbols verifyDistributionManifest / checkDistributionCompatibility exist NOWHERE (grep), so the capability really is absent; it fired only on the bare pattern Distribution|DISTRIBUTION, which DISTRIBUTION_* matches by definition. FIX: narrow the pattern as probe:core-terminal-release already was. Your alternation matches 0 of 114 names in contracts/src/index.ts. Keep BOTH named symbols; pattern only."
+        },
+        {
+          "type": "other",
+          "description": "NOT A CRITICISM OF YOUR JUDGEMENT: you were right not to flip the row to PASS_EXPECTED and right not to edit an unowned fixture unilaterally. That edit needs governor/architect authorisation, requested in chan-ced99359 msg-47b65592 with acceptance pre-cleared (j4 green, j1 STILL red, testkit suite green). If denied, a testkit task is the alternative; I re-review once the fault gate is green."
+        }
+      ]
+    }
+  ],
+  "blockedReason": "BLOCKED ON AN AUTHORISATION, not a technical unknown. Work is finished and committed at c7a90bc; QA re-measured DoD 1-5 and PASSED every one (msg-47b65592). Only DoD 6 fails.\n\nTHE BLOCK: my correct landing turned a mandatory design-18.3 fault ratchet red. `pnpm test:fault` = 2 failed | 41 passed. j4 incident:stale-assets-refuse-handshake expects PRODUCTION_BEHAVIOR_ABSENT, gets PASS_EXPECTED. Authorship settled INDEPENDENTLY TWICE, by me and by QA: reverting ONLY packages/contracts/src/index.ts makes j4 pass while j1 still fails (sha 22caedad both times). Rail 3's last sentence forbids path-attributing a self-caused red.\n\nNO OWNED-PATH FIX EXISTS. The probe at packages/testkit/src/foundation/foundation-incident-schedules.ts:75-80 fires on a bare pattern \"Distribution|DISTRIBUTION\", and every symbol this task is REQUIRED to publish matches it by definition. Renaming them is barred by taskRail 1. Flipping the row to PASS_EXPECTED would assert a capability QA proved absent by grep (verifyDistributionManifest, checkDistributionCompatibility exist nowhere) — epic rail 4.\n\nWHAT I NEED: one grant to edit packages/testkit/src/foundation/foundation-incident-schedules.ts, PATTERN ONLY:\n  \"Distribution|DISTRIBUTION\" -> \"verifyDistribution|checkDistributionCompatibility|DISTRIBUTION_HANDSHAKE|DistributionHandshake\"\nplus a comment in probe:core-terminal-release's shape. Named symbols untouched. QA pre-verified 0 matches against all 114 root exports and pre-cleared acceptance: j4 green, j1 STILL red, testkit suite green. Alternative: a testkit-owned task; QA re-reviews once the fault gate is green.\n\nWHY I CANNOT WAIT: governor-36019faa (838s) and architect-8ee37119 (1146s) are both stale, so nobody can grant it this session.\n\nTHIRD COLLISION IN THAT FILE (core-terminal-release, scheduler-hot-claim-admission, now this). QA and I both recommend a task auditing all six patterns.\n\nEvidence: chan-ced99359 msg-48f0656d, msg-2c906c46, msg-47b65592, msg-10fe4d8d.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-10T08:55:54.282Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Implementation is FINISHED and COMMITTED at c7a90bc. QA (qa-f3560083) independently re-measured DoD 1-5 and PASSED every one (msg-47b65592), and verified DoD 2 in its literal form rather than the form shipped. The curated export block is live in packages/contracts/src/index.ts and reachable through the exports map.",
+      "whatRemains": "DoD 6 only, and it is an AUTHORISATION, not a technical unknown. `pnpm test:fault` = 2 failed | 41 passed. Fault row j4 incident:stale-assets-refuse-handshake expects PRODUCTION_BEHAVIOR_ABSENT and gets PASS_EXPECTED, because the probe at packages/testkit/src/foundation/foundation-incident-schedules.ts:79 fires on the bare pattern \"Distribution|DISTRIBUTION\" and every symbol this task is REQUIRED to publish matches it by definition. Needed: ONE grant to edit that ONE line, PATTERN STRING ONLY, to \"verifyDistribution|checkDistributionCompatibility|DISTRIBUTION_HANDSHAKE|DistributionHandshake\", plus a comment in probe:core-terminal-release's shape. Named symbols at :78 stay untouched. QA pre-verified the replacement matches ZERO of the 114 live @moe/contracts root exports and still matches BOTH of its own absentExportNames including the `${named}FromAnotherAuthor` disguise foundation-spec.test.ts:171 requires; guards at :153, :160 and :185 hold. QA pre-cleared acceptance: j4 green, j1 STILL red, testkit suite green. Alternative route: a testkit-owned task doing the same one-line edit.",
+      "pitfalls": "Do NOT path-attribute the j4 red to testkit and disclose it — authorship was settled INDEPENDENTLY TWICE (by me and by QA) via barrel-only revert, sha 22caedad both runs: reverting ONLY packages/contracts/src/index.ts makes j4 pass while j1 stays red. Rail 3's last sentence forbids disclosing a self-caused red. Do NOT flip the j4 row to PASS_EXPECTED — QA proved by grep that verifyDistributionManifest and checkDistributionCompatibility exist nowhere, so that would assert an absent capability (epic rail 4). Do NOT rename the published symbols to dodge the pattern — barred by taskRail 1. Do NOT call unblock_worker to make this movable: it flips the task to WORKING and erases the only signal a governor needs, and retryTask:false does not prevent that.",
+      "openQuestions": "Who grants the testkit edit? governor-36019faa and architect-8ee37119 were both stale at the time of the block. THIRD collision in this one file (core-terminal-release, scheduler-hot-claim-admission, now this) — QA and I both recommend a separate task auditing all six patterns for the same over-broad-regex defect. Evidence: chan-ced99359 msg-48f0656d, msg-2c906c46, msg-47b65592, msg-10fe4d8d, msg-873af85b.",
+      "releasedAt": "2026-08-10T09:16:40.216Z",
+      "releasedBy": "worker-a2c7f85f",
+      "reason": "Detaching the assignee only. Task stays BLOCKED on an authorisation nobody alive this session can grant; releasing preserves the block signal while freeing me for claimable work. NOT an unblock_worker — I am deliberately not flipping it to WORKING."
+    }
+  ]
 }

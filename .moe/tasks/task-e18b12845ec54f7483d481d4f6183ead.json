@@ -21,13 +21,83 @@
     "Tests must actually run on this win32 host -- no #[ignore], no cfg gate, no stub. Clean up every spawned process and temp path on every exit path including panic; never commit target output, binaries, transcripts or smoke evidence.",
     "As the final child, this task owns full broker-package regression and the whole-parent adversarial pass, not just its own slice."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY. Re-measure the three prerequisites' landed symbols — every prior task in this chain found a stale claim in its own description.\n\nCRATE AS 3C LEFT IT, `grep -c ''` on broker/src: boundary 173, completion 167, control 204, descriptors 222, diagnostics 95, frames 223, launch 167, lib 111, main 154, payload 100, protocol 205, refusal 146, session 214, settle 123, status 182, verify 157, watch 148. Tests: descriptor_block 401, frame_sweep 1038, handle_inheritance 446, node_loadability 132, session 1123 — tests are exempt from the 250 cap; production sources are NOT, and several sit near it.\n\nSURFACES YOU BUILD ON, from completion.rs: `Precondition` (:37), `Unobserved` (:65), `Completion` (:103), `Stopped` (:113), `Outcome` (:152), re-exported from lib.rs alongside `session::{Session, ShutdownSignal, Wiring}`, `status::{Completed, Outbound, Started, Status}`, `refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES}`, `control::{AcceptState, Accepted, Inbound, LaunchRequest}` and `boundary::{acquire, startup_block, PipeChannel, SystemHandles}`. `Unobserved` is the vocabulary for a leg whose outcome could not be seen — use it rather than inventing an UNKNOWN.\n\nDO NOT REDO 3C'S WORK. It already proved STARTED-after-proof, the four independent COMPLETED preconditions, and the five termination paths INDIVIDUALLY. Your DoD 1 is explicit that the sequential case is already covered and does not satisfy this item. Build the concurrency and containment proofs on top.\n\nPRECEDENT FOR A COOPERATING CHILD: src/bin/handle_probe.rs (127 lines) is the pattern 3a used for its absence proof — a real binary the test launches. Read it before writing the spawner in step 4.\n\nRecord the baseline: locked broker test command and release build, both exit 0.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-10T09:51:25.363Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DoD 1 — GENUINE CONCURRENCY. Create broker/tests/idempotence.rs driving CANCEL on fd0, fd0 EOF, and an instructed timeout so they ACTUALLY RACE. taskRail 2 is explicit that serialising them defeats the entire purpose, and DoD 1 says a test that runs the three one after another does NOT satisfy the item.\n\nMake the race real: start three threads, hold them at a `Barrier` (or equivalent rendezvous) so all three are released into the session at once, then join. A `sleep`-staggered sequence is the failure mode to avoid — it is sequential wearing concurrency's clothes.\n\nAssert EXACTLY-ONCE by call-count table: terminate count == 1 and reap count == 1 across the whole race, not merely that the session ended. Double-termination is the defect here and it is invisible to a \"did it terminate\" assertion.\n\nRun the race repeatedly (a bounded loop, e.g. 50-200 iterations) so a scheduling-order-dependent double-terminate surfaces rather than passing on one lucky interleaving. A single iteration proves almost nothing about a race.\n\nAssert `Unobserved` is PRESERVED on any leg whose outcome could not be seen — a racing loser must not be upgraded to a definite outcome.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "The cooperating child for the containment proof: broker/src/bin/detached_spawner.rs, following the src/bin/handle_probe.rs pattern. It launches a grandchild DELIBERATELY DETACHED from the job/process tree (that is the point — a naive kill must miss it), prints both PIDs and both CREATION TIMES on a stable channel the test can parse, then blocks until killed.\n\nIt must print CREATION TIME alongside each PID, because rail 1 forbids proving death by PID alone: Windows reuses PIDs, so a PID-only check can report an unrelated live process as the dead one. That is a false green, not a shortcut. Capture creation time at spawn, from the OS, for BOTH parent and grandchild.\n\nThis is a PRODUCTION source under src/, so DoD 7's <=250 physical line cap applies to it (handle_probe.rs is 127 for reference). Its output contract is consumed by step 4's test — keep it minimal and machine-parseable.\n\nDo not restate any Job or process syscall the core owns (taskRail 5); this binary spawns its own grandchild, which is a plain child process, not broker Job authority.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/bin/detached_spawner.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/bin/detached_spawner.rs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DoD 2 and 3 — containment. Create broker/tests/containment.rs.\n\nLaunch a provider that spawns the detached grandchild via step 3's binary, then FORCIBLY TERMINATE the broker. Prove BOTH the parent AND the detached grandchild are dead by PID PLUS CREATION TIME for each — read each identity before the kill and re-check after, asserting the (pid, creationTime) pair no longer resolves to a live process. A PID-only assertion passes when the OS has recycled the number onto something else.\n\nDoD 3 requires the two completion mechanisms be asserted SEPARATELY and neither inferred from the other:\n  - ordinary controlled completion AND cancel record Job ActiveProcesses==0 BEFORE returning (compose the core's `wait_until_job_is_empty`);\n  - only the forcible-kill path may rely on last-handle close as the mechanism.\ntaskRail 3 states closing the last Job handle is crash safety, NOT success evidence. Write one assertion for each path; a shared helper that satisfies both is exactly what this item forbids.\n\nCLEANUP ON EVERY EXIT PATH INCLUDING PANIC (DoD 7, taskRail 6): a detached grandchild that outlives a panicking test is a leaked process on the host. Use a guard whose Drop reaps both processes and removes any temp path, so an assertion failure still cleans up. Verify no stray process remains after the suite.\n\nNO #[ignore], NO cfg GATE, NO STUB (taskRail 6) — these must actually run on this win32 host.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD 4 — the confused-deputy proof, in broker/tests/containment.rs or its own file if that grows past readability. Write provider bytes to fd4/fd5 that are BYTE-IDENTICAL to a well-formed control frame — construct them with the same production encoder the control path uses, so they are genuinely indistinguishable at the byte level rather than merely similar.\n\nTHE ASSERTION SHAPE IS THE POINT: assert on the CONTROL PATH'S RECORDED INPUT — that those bytes never appeared there — and that no fd1 status frame was influenced by them. DoD 4 says explicitly the assertion is NOT merely the absence of a crash or an unexpected status. A test that only checks \"nothing bad happened\" passes against a broker that parsed the bytes and happened to produce the same output.\n\nRecord what the control path actually consumed and assert the provider bytes are absent from it. Provider bytes on fd3/fd4/fd5 are never mixed with or parsed as control (taskRail 4).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD 5 — the whole-parent regression, which this task owns as the final child (taskRail 7). Run the FULL broker suite and confirm every test from 3a, 3b and 3c is still green and UNWEAKENED.\n\nUnweakened is the hard part and DoD 5 names the method: mutate ONE PRODUCTION SURFACE PER SIBLING and confirm the corresponding suite goes red.\n  - 3a: break a descriptor guard in descriptors.rs -> descriptor_block.rs must redden.\n  - 3b: break a framing or vocabulary guard in frames.rs or protocol.rs -> frame_sweep.rs must redden.\n  - 3c: break a completion precondition in completion.rs or session.rs -> session.rs must redden.\nRecord the exact failing test name for each, then restore byte-exact and confirm green. If any sibling suite stays GREEN under its mutation, that suite has detached from its subject and is a finding to report — not something to work around.\n\nRun the locked broker test command and the release build; both must exit 0 on this supported Windows host.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 6 — delegation, verified correctly. The DoD asks for a grep for CreateJobObject, AssignProcessToJobObject, CreateProcessW, ResumeThread, TerminateProcess and WaitForSingleObject call sites in broker sources.\n\nDO NOT RUN THE NAIVE GREP AND EXPECT ZERO. I made exactly that mistake in 3c's plan: the bare grep returns hits from COMMENTS, because the module docs legitimately NAME those calls in order to state the rail, and launch.rs has prose naming CreateProcessW. A well-documented file fails the naive check precisely BECAUSE it documents the rule. Strip comments first (`sed 's://.*::'` across every .rs under broker/src) and then grep — that tests the DoD's actual property, which is CALL SITES.\n\nStronger and worth doing alongside: assert the delegation is PRESENT — that lifecycle operations route through the core's `Job`, `ProcessSpec`/`CreatedProcess`, `wait_for_process`, `query_exit_status`, `terminate_process` and `wait_until_job_is_empty`. Absence of a token is weaker evidence than presence of the delegation.\n\nAlso record task-4d1f8ba54cb6476c930c46b413f882aa as the Node consumer per the pure-package rail.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verify, self-review, complete. (1) `grep -c ''` every production .rs you touched — only src/bin/detached_spawner.rs should be new production — and confirm <=250, recording counts per DoD 7. Test files are exempt; the existing ones run 401-1123 lines. (2) DoD 7 artifact sweep: no executable, no Cargo `target/` output, no transcript, no generated smoke evidence, no probe artifact staged. The native tree HAS a target/ directory, so this is a live hazard — check `git status --porcelain` and confirm every staged path is owned. (3) Confirm no stray processes survived the suite: after a full run, verify no detached grandchild from the containment tests is still alive on the host. (4) Adversarial review, which as the final child covers the WHOLE parent (taskRail 7): is the concurrency genuinely racing or serialised by a sleep? Is any death proved by PID alone? Are ActiveProcesses==0 and last-handle-close asserted separately, or does one infer the other? Does the confused-deputy test assert on the control path's recorded input, or only on the absence of a crash? Did any sibling suite stay green under its mutation? Is there any #[ignore], cfg gate or stub making a test not actually run on this host? Does any test leak a process or temp path on a panic path? (5) Commit by explicit pathspec over the owned paths only, then `git diff --cached --name-only` to confirm the list is exactly yours. Note in completion evidence that landing this brings the task-af3d7bc8 shell to zero open children.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a2c7f85f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Depends on ALL THREE of task-05bf0e0fe7e84afb8584588ecf96db14 (3a), task-14ab762db8494959b93b070b9d3b3730 (3b) and task-55e2c4c836894a788b7a30960e4fdb1f (3c). None is implemented. This is the final child: it hardens and regression-tests the whole broker, so there is nothing to harden until the other three land.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool. The brief PLANNING status immediately before this was a transit hop only.\n\nUNBLOCK CONDITION: promote to PLANNING when 3a, 3b and 3c are all DONE. Verify by compiling and by running the full broker suite rather than by reading status fields, and re-measure landed symbols before planning.",
+  "reopenReason": "UNBLOCKED by architect-8ee37119, 2026-08-10. This task's block named all three prerequisites and said none was implemented. All three are now DONE and their symbols are committed.\n\nDEPENDENCIES SATISFIED:\n- task-05bf0e0fe7e84afb8584588ecf96db14 (3a: package, workspace wiring, CRT descriptors) = DONE\n- task-14ab762db8494959b93b070b9d3b3730 (3b: frozen protocol, closed vocabularies, bounded framing) = DONE\n- task-55e2c4c836894a788b7a30960e4fdb1f (3c: Job ownership, core delegation, STARTED after proof, natural COMPLETED) = DONE, landed minutes ago at commit 2de3a08 (10 owned paths, +2145/-37, gate exit 0, 77 tests against a 48 baseline).\n\nSYMBOLS VERIFIED IN HEAD, not inferred from status. `git ls-tree -r HEAD -- broker/src` now returns eighteen modules; 3c added completion.rs, launch.rs, session.rs, settle.rs and watch.rs, plus tests/session.rs. The crate root re-exports exactly what hardening consumes:\n  pub use completion::{Completion, Outcome, Precondition, Stopped, Unobserved};\n  pub use session::{Session, ShutdownSignal, Wiring};\n  pub use status::{Completed, Outbound, Started, Status};\n  pub use refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES};\n  pub use control::{AcceptState, Accepted, Inbound, LaunchRequest};\n  pub use boundary::{acquire, startup_block, PipeChannel, SystemHandles};\n`Precondition` and `Unobserved` are precisely the vocabulary this task needs for asserting UNKNOWN is preserved on an unobservable leg, and `Stopped`/`Outcome` for termination idempotence.\n\nREACHABILITY: same Rust crate, so composition is an in-crate `use` with no cross-package manifest edge to prove. That is what makes this unblock sound — contrast task-b6e3dd2a, which stayed correctly blocked because its owned path could not reach the package holding its surface.\n\nSCOPE, carried from 3c's rail 7 which fenced this work OUT of that task deliberately: concurrent-termination idempotence, the forcible-kill detached-grandchild proof, and the final acceptance sweep are YOURS. 3c already proved STARTED-after-proof, the four COMPLETED preconditions, and the five single-termination paths — do not redo them; build the concurrency and grandchild proofs on top.\n\nFOR THE PLANNING ARCHITECT, two things measured today on this crate that will save you a round trip:\n1. This is RUST. The repo's `.js` bridge and 250-line TypeScript conventions do not apply, but DoD/rail line caps do — check the crate's own committed modules for its conventions.\n2. DO NOT specify a bare `grep` for forbidden Win32 call sites as a verification step. I made that mistake on 3c: the naive grep matches five COMMENTS, because the module docs legitimately NAME the forbidden calls to state the rail. Strip comments first (`sed 's://.*::'`), or better, assert the delegation is PRESENT rather than that a token is absent. A well-documented file fails the naive check precisely because it documents the rule.\n\nLanding this brings the task-af3d7bc8 shell to zero open children, which then closes task-4d1f8ba5 and frees task-acf73253 (Windows Claude launch wrapper), whose other prerequisite task-078af6f1 is already DONE.",
   "createdBy": "WORKER",
   "parentTaskId": "task-af3d7bc8af2146cf92d98557ed0e90c0",
   "priority": "CRITICAL",
@@ -35,8 +105,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:40:05.834Z",
-  "updatedAt": "2026-08-10T06:41:02.963Z",
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-10T06:41:02.963Z",
-  "blockedReason": "Depends on ALL THREE of task-05bf0e0fe7e84afb8584588ecf96db14 (3a), task-14ab762db8494959b93b070b9d3b3730 (3b) and task-55e2c4c836894a788b7a30960e4fdb1f (3c). None is implemented. This is the final child: it hardens and regression-tests the whole broker, so there is nothing to harden until the other three land.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool. The brief PLANNING status immediately before this was a transit hop only.\n\nUNBLOCK CONDITION: promote to PLANNING when 3a, 3b and 3c are all DONE. Verify by compiling and by running the full broker suite rather than by reading status fields, and re-measure landed symbols before planning."
+  "updatedAt": "2026-08-10T09:51:25.363Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-10T09:33:22.283Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T09:35:19.803Z",
+  "planningNotes": {
+    "approachesConsidered": "SERIALISING THE THREE TERMINATION PATHS — REJECTED explicitly by DoD 1 and taskRail 2. 3c already proved CANCEL, fd0 EOF and instructed timeout INDIVIDUALLY with per-path call-count tables; running them one after another here adds nothing and the DoD says so outright. The race must be a genuine rendezvous (Barrier releasing three threads at once), looped enough times that a scheduling-order-dependent double-terminate surfaces rather than passing on one lucky interleaving.\n\nPROVING DEATH BY PID — REJECTED by taskRail 1, which calls it a false green rather than a shortcut. Windows reuses PIDs, so a PID-only check can report an unrelated live process as the dead one. Both identities must be captured as (pid, creationTime) BEFORE the kill and re-checked after, which is why the cooperating binary must print creation times rather than the test inferring them later.\n\nA SINGLE SHARED COMPLETION ASSERTION — REJECTED by DoD 3, which requires the controlled paths' ActiveProcesses==0 and the forcible-kill path's last-handle close to be asserted SEPARATELY with neither inferred from the other. taskRail 3 is the reason: last-handle close is crash safety, not success evidence, and a shared helper would let the weaker mechanism stand in for the stronger one.\n\n\"NOTHING BAD HAPPENED\" FOR THE CONFUSED DEPUTY — REJECTED by DoD 4, which says the assertion is explicitly NOT the absence of a crash or an unexpected status. A broker that PARSED the provider bytes and coincidentally produced the same fd1 output would pass that. Assert on the control path's RECORDED INPUT.\n\nA NAIVE GREP FOR THE FORBIDDEN CALLS — REJECTED, from direct experience: I specified exactly that in 3c's plan and it returns five hits, all comments, because the module docs name those calls to state the rail. Comment-strip first, and prefer asserting the delegation is present.\n\nREUSING handle_probe.rs FOR THE GRANDCHILD — REJECTED. It is 3a's cooperating child for the descriptor absence proof and has a different output contract; a second focused binary is cleaner than overloading it, and it follows the same established pattern.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-10 after 3c landed at commit 2de3a08 (10 owned paths, +2145/-37, gate exit 0, 77 tests against a 48 baseline).\n\nCRATE LINE COUNTS, `grep -c ''` on broker/src: boundary 173, completion 167, control 204, descriptors 222, diagnostics 95, frames 223, launch 167, lib 111, main 154, payload 100, protocol 205, refusal 146, session 214, settle 123, status 182, verify 157, watch 148. Several sit near the 250 production cap. Tests: descriptor_block 401, frame_sweep 1038, handle_inheritance 446, node_loadability 132, session 1123 — tests are exempt, and the crate's own norm is large integration files, so do not split a test to chase the cap.\n\nSURFACES 3C LANDED that this task consumes, from completion.rs: Precondition (:37), Unobserved (:65), Completion (:103), Stopped (:113), Outcome (:152). All re-exported from lib.rs together with session::{Session, ShutdownSignal, Wiring}, status::{Completed, Outbound, Started, Status}, refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES}, control::{AcceptState, Accepted, Inbound, LaunchRequest} and boundary::{acquire, startup_block, PipeChannel, SystemHandles}. `Unobserved` is the existing vocabulary for a leg whose outcome could not be seen — use it rather than minting an UNKNOWN.\n\nCOOPERATING-CHILD PRECEDENT: src/bin/handle_probe.rs (127 lines) is how 3a built a real binary for its absence proof. The detached spawner follows that shape and is PRODUCTION under src/, so the 250-line cap applies to it.\n\nWHAT 3C ALREADY PROVED, so this task does not redo it: STARTED reaches fd1 only after all five proof arms; the four COMPLETED preconditions each failed independently; the five termination paths each terminating and reaping exactly once, per-path call-count tables. 3c's rail 7 fenced concurrency, the grandchild proof and acceptance OUT of that task and INTO this one.\n\nARTIFACT HAZARD IS LIVE: the native tree contains a `target/` directory, so DoD 7's prohibition on committing Cargo output is a real risk rather than boilerplate.",
+    "risks": "1. CONCURRENCY THAT IS SECRETLY SEQUENTIAL. A sleep-staggered sequence looks like a race and proves nothing; DoD 1 rejects it by name. Use a real rendezvous and loop it — a single iteration of a genuine race still frequently passes against a broken implementation.\n\n2. DEATH PROVED BY PID ALONE. Windows PID reuse makes this a false GREEN, not merely a weak check: the assertion can resolve to an unrelated live process and report it dead. Capture (pid, creationTime) before the kill for both parent and grandchild.\n\n3. ONE MECHANISM INFERRING THE OTHER. If the controlled path's ActiveProcesses==0 assertion is satisfied by last-handle close, the stronger guarantee silently degrades to the weaker one. DoD 3 requires both asserted separately.\n\n4. CONFUSED-DEPUTY TEST THAT ASSERTS ABSENCE OF A CRASH. A broker that parsed the bytes and produced identical output passes it. Assert the control path's recorded input.\n\n5. THE NAIVE GREP, which I already got wrong once on this crate. It hits comments that state the rail. Comment-strip, or assert delegation presence.\n\n6. LEAKED PROCESSES ON A PANIC PATH. A detached grandchild that outlives a failing test is a stray process on the developer's host, and the whole point of the binary is that it is hard to kill. Use a Drop guard so cleanup runs on assertion failure, not just on success.\n\n7. A SIBLING SUITE THAT STAYS GREEN UNDER MUTATION. DoD 5's regression method will surface a detached assertion in 3a/3b/3c work. If one does not redden, that is a finding to report, not something to route around — and as the final child this task owns noticing it.\n\n8. COMMITTING BUILD OUTPUT OR A PROBE ARTIFACT. target/ exists in this tree and the new binary produces one."
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-10T09:35:21.865Z",
+  "contextFetchedBy": [
+    "worker-a2c7f85f"
+  ],
+  "workStartedAt": "2026-08-10T09:51:25.363Z"
 }
