@@ -131,3 +131,25 @@ export type {
   DocumentWorkSourceBinding,
 } from "./document-work/document-work-proposal-contract.js";
 export { decodeDocumentWorkProposalBytes } from "./document-work/document-work-proposal-codec.js";
+export {
+  DISTRIBUTION_COMPONENT_KINDS,
+  DISTRIBUTION_CONTAINER_VERSION,
+  DISTRIBUTION_MANIFEST_VERSION,
+  DISTRIBUTION_REFUSAL_LAYERS,
+  DISTRIBUTION_REFUSAL_REASONS,
+  DISTRIBUTION_SIGNATURE_ALGORITHM,
+  distributionRefusal,
+} from "./distribution/distribution-contract.js";
+export type {
+  DistributionApiRange,
+  DistributionAsset,
+  DistributionComponentKind,
+  DistributionManifest,
+  DistributionManifestResult,
+  DistributionRefusal,
+  DistributionRefusalLayer,
+  DistributionRefusalReason,
+  DistributionSkillEntry,
+  DistributionSource,
+  DistributionTemplateEntry,
+} from "./distribution/distribution-contract.js";
