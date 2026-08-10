@@ -117,6 +117,7 @@ export interface ShellFrameProps {
   readonly contextEyebrow?: string | undefined;
   readonly contextTitle?: string | undefined;
   readonly inspector?: ReactNode;
+  readonly navigationUnavailableReason?: string | undefined;
   readonly onNavigate?: ((label: NavLabel) => void) | undefined;
   readonly projectionEnabled?: boolean | undefined;
   readonly timeline?: ReactNode;
@@ -126,7 +127,7 @@ export function ShellFrame(
   {
     activeNavItem = "Goals", affordance, breaker, children,
     contextEyebrow = "Active goal", contextTitle = "Moe control room", inspector,
-    onNavigate, projectionEnabled = true, timeline,
+    navigationUnavailableReason, onNavigate, projectionEnabled = true, timeline,
   }: ShellFrameProps,
 ): JSX.Element {
   const [tab, setTab] = useState<ControlRoomTab>("board");
@@ -184,7 +185,8 @@ export function ShellFrame(
           >
             Skip to main content
           </a>
-          <NavRail activeItem={activeNavItem} narrow={narrow} onNavigate={onNavigate} />
+          <NavRail activeItem={activeNavItem} narrow={narrow} onNavigate={onNavigate}
+            unavailableReason={navigationUnavailableReason} />
           <ContextBar affordance={affordance} breaker={breaker} eyebrow={contextEyebrow}
             inspectorExpanded={inspectorVisible} narrow={narrow}
             onInspectorToggle={keyboard.toggleInspector} onTab={setTab}

@@ -69,22 +69,29 @@
     {
       "stepId": "step-5",
       "description": "ASSERT THE LEDGER FROM THE GATE — tests/e2e/control-room/journey-coverage.test.ts, a fast non-browser test so the ledger's own invariants fail loudly and quickly.\n\nAssert everything named in step 3: total equals twenty; COVERED plus UNKNOWN equals total; COVERED count greater than zero; every UNKNOWN carries a non-empty missingInput and an owner; every COVERED id resolves to a production file on disk; latency is UNKNOWN with a non-empty missingInput.\n\nAlso assert the five graph ids are STILL ABSENT from production sources. This is what stops the record rotting: the day someone ships cr.graph.ghost, this test goes red and tells the next agent the ledger needs updating, instead of the UNKNOWN quietly outliving the gap it described. Do the same for cr.banner.revision.\n\nAssert on whole objects rather than counts alone where a swap would otherwise pass silently.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/journey-coverage.test.ts"
       ],
       "newFiles": [
         "tests/e2e/control-room/journey-coverage.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ],
+      "note": "ASSERTIONS ADDED. Node lane now 23 tests, up from the 15 QA ran, and the delta is exactly the 8 I wrote — 1 loading record + 3 rot-guard cases + 4 invariant-ledger. Counted rather than assumed. `npx vitest run tests/e2e/control-room/journey-coverage.test.ts` -> 1 file, 23 passed, 297ms.\n\n1. LOADING RECORD, mirroring the latency assertions at :130-135. Pins status UNKNOWN, cause SURFACE_NOT_COMPOSED, non-empty missingInput and owner. It also asserts missingInput CONTAINS cr.board.skeleton, cr.goals.loading and cr.health.loading. Pinning the CAUSE matters as much as the status: downgrading it to SURFACE_ABSENT would be a plausible-looking edit that silently points the next reader at the wrong owner, since those components genuinely exist.\n\n2. ROT GUARD, and it is WIDER than QA asked for on purpose. QA specified control-room-preview.tsx. main.tsx:40 branches — `live ? <LiveControlRoom .../> : <ControlRoomScaffold />` — so guarding only the preview would let loading become reachable down the ?live=1 path while the ledger still called it UNKNOWN, which is the same rot in a different file. Guards all three served modules: preview/control-room-preview.tsx, live/live-app.tsx, live/live-board.tsx. Each asserts existsSync FIRST, because a guard reading a renamed file asserts over an empty string and passes while proving nothing.\n\nMatcher is `not.toMatch(/\\bloading=/u)`, deliberately the same shape as the existing `/\\bbreaker=/u` guard. I rejected the stricter `/\\bloading\\b/u`: a comment mentioning the word would redden it for no real reason, and the claim being guarded is that no served module PASSES the prop, not that the word never appears.\n\n3. THE DoD 2 INVARIANT LEDGER, four tests: exact seven-id list in DoD order; COVERED+UNKNOWN equals seven with COVERED greater than zero and the UNKNOWN set pinned to exactly [LOADING, LATENCY]; every UNKNOWN carrying non-empty cause/missingInput/owner; and the binding below.\n\n4. THE LOAD-BEARING ONE — every COVERED invariant's `provenBy` titles must resolve to real `test(\"...\")` declarations in journeys.spec.ts. This is what makes the ledger non-decorative: delete the keyboard test and the ledger goes RED rather than continuing to claim the invariant holds, which is exactly what did NOT happen for loading. It asserts `(SPEC.match(/^test\\(/gmu) ?? []).length` is greater than zero BEFORE the sweep, so a spec file that failed to read or changed declaration style cannot make every `includes` pass over nothing — the zero-case failure mode epic rail 6 names.\n\nMatched as the literal substring `test(\"<title>\"` rather than a built regex, so a title containing regex metacharacters cannot silently fail to match.\n\nI did NOT re-assert the five covered invariants' browser behaviour here. journeys.spec.ts already asserts it and re-checking it in the Node lane would be a helper reimplementing the production surface — the thing epic rail 6 forbids. This block asserts the LEDGER is honest about what that file proves; that file proves the behaviour.",
+      "startedAt": "2026-08-10T07:49:08.788Z",
+      "completedAt": "2026-08-10T07:50:41.290Z"
     },
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove each guard is reddenable. Run each, confirm the NAMED assertion kills it, revert, confirm green before the next.\n\n  1. Mark a graph scenario COVERED in the ledger -> the \"every COVERED id resolves to a production file\" assertion must go RED. This is the drill that proves the gate cannot be narrowed into a false pass.\n  2. Delete one scenario entry -> the total-equals-twenty assertion must go RED.\n  3. Blank an UNKNOWN's missingInput -> the non-empty assertion must go RED.\n  4. Flip latency from UNKNOWN to COVERED -> its status assertion must go RED.\n  5. Remove a nextAllowedCommand binding from a rendered action -> the DoD 3 action/command assertion must go RED. If it stays green, that assertion is enumerating zero actions and the non-zero precondition is missing.\n  6. Strip the keyboard handler from one action -> the keyboard invariant must go RED, proving it asserts focus movement rather than element presence.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/e2e/control-room/journey-coverage.ts",
         "tests/e2e/control-room/journeys.spec.ts"
-      ]
+      ],
+      "startedAt": "2026-08-10T07:50:44.360Z"
     },
     {
       "stepId": "step-7",
@@ -156,7 +163,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T07:48:37.020Z",
+  "updatedAt": "2026-08-10T07:50:44.361Z",
   "contextFetchedBy": [
     "worker-a2c7f85f",
     "qa-f3560083"
@@ -165,7 +172,7 @@
     "firstClaimAt": "2026-08-09T12:28:16.101Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 12,
+    "executedStepCount": 13,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -188,7 +195,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {

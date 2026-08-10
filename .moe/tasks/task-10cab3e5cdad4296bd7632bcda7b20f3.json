@@ -19,14 +19,20 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY, and settle the objective's contradiction before writing anything. This task's own objective says to implement WDRR \"from the corrected DEVELOPMENT_ONLY reference\". THAT SOURCE DOES NOT CONTAIN THE SUBJECT, and the prior block was correct about it. Verify yourself: `grep -rnw \"WDRR|deficit|resourceQueue|ResourceQueue\" packages/testkit/src/scheduler-fairness/` returns NOTHING, and `grep -rn \"\\bRing\\b|\\bring\\b\"` over its .ts files returns nothing. What the reference actually implements is a priority-ladder / forced-cohort / bypass model: `selectNext`, `forcedCohortOrder`, `boundFor` in fairness-selection.ts, and PRIORITY_LADDER / BYPASSES_PER_LEVEL / DEFAULT_M_D in fairness-policy.ts. Do NOT derive ring or deficit behaviour from it — that is the Clause 2 \"invents policy and authority\" failure the block named.\n\nTHE REAL SOURCE OF TRUTH IS THE LANDED CONTRACT, and it delegates this work to you by name. packages/scheduler/src/fairness/fairness-ring.ts:4-19 states: the contract \"cannot say whose turn it is, cannot compute a deficit ... Rotation, deficit accounting and aging belong to the consumer\", and \"`weight` and `deficitCounter` are DATA the contract range-checks\". THIS TASK IS THAT CONSUMER. Implementing rotation here is completing a stated delegation, not inventing policy.\n\nRun the baseline gate and record it: `pnpm --filter @moe/scheduler test`. Note packages/scheduler/src/package-boundary.test.ts has a KNOWN pre-existing failure (shebang tokenizer on apps/daemon/src/daemon-main.ts) seen repeatedly on this board today — record it as baseline so you never mistake it for yours.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "READ-ONLY. Contradiction settled and baseline recorded.\n\nREFERENCE DOES NOT CONTAIN THE SUBJECT — confirmed by my own grep, not by trusting the plan:\n  grep -rnw -E \"WDRR|deficit|resourceQueue|ResourceQueue\" packages/testkit/src/scheduler-fairness/  -> ZERO lines\n  grep -rn -E \"\\bRing\\b|\\bring\\b\" packages/testkit/src/scheduler-fairness/*.ts               -> ZERO lines\nWhat the reference actually holds: fairness-selection.ts (selectNext/forcedCohortOrder/boundFor) and fairness-policy.ts (PRIORITY_LADDER, BYPASSES_PER_LEVEL=8 at :25, DEFAULT_M_D=10_000 at :8) — a priority-ladder/forced-cohort/bypass model. I will NOT derive ring or deficit behaviour from it.\n\nSOURCE OF TRUTH IS THE LANDED CONTRACT, which delegates this task by name: fairness-ring.ts:12-20 \"Rotation, deficit accounting and aging belong to the consumer, task-10cab3e5\", and :43-47 the deficitCounter \"is carried so a consumer can persist and restore rotation state; this module never reads it as a position and never advances it.\" Implementing rotation here completes a stated delegation.\n\nBASELINE GATE — `pnpm --filter @moe/scheduler test`:\n  Test Files  39 passed (39)\n       Tests  935 passed (935)\n  exit 0, duration 971ms\n\nCORRECTION TO THE PLAN'S PREMISE: the plan (step-1, step-10, codebaseInsights) instructs me to record packages/scheduler/src/package-boundary.test.ts as a KNOWN pre-existing red (\"unterminated regular expression source token\" scanning apps/daemon/src/daemon-main.ts). THAT FAILURE IS NOT PRESENT AT HEAD. It has been fixed: package-boundary.test.ts:147-156 now skips a leading `#!` shebang before tokenizing, with a comment naming exactly that bin-entry-point hazard. The baseline is fully GREEN.\n\nConsequence, and it makes the rest of the task stricter rather than looser: there is NO disclosable pre-existing red in this package. Any red in @moe/scheduler at step 10 is mine and blocks completion. I will not carry the plan's baseline-red disclosure forward, because disclosing a failure that does not exist would be fabricated evidence in the opposite direction.",
+      "startedAt": "2026-08-10T07:49:41.761Z",
+      "completedAt": "2026-08-10T07:51:12.590Z"
     },
     {
       "stepId": "step-2",
       "description": "READ-ONLY. Pin the landed surfaces you consume; re-validating them yourself would fork the authority. In packages/scheduler/src/fairness/: `FairnessRing { ringId, dimensionId, resources, entries }`, `FairnessRingResource { resourceId, weight }`, `FairnessRingQueueEntry { workItemId, resourceId, deficitCounter }` (fairness-ring.ts:38-64), with `validateRing` and `validateRingResource`. Also `FairnessWorkItem` + `validateWorkItem`/`validateWorkItemSet`, `FairnessOpportunityAttestation` + `validateBypassClaim`, `FairnessCapRevision` + `validateCapRevision`, and the refusal vocabulary in fairness-contract.ts: `FAIRNESS_CONTRACT_ISSUE_CODES`, `FAIRNESS_CONTRACT_LAYERS`, `FairnessContractIssue`, `FairnessContractRefusal`, plus `refuseFairness` / `acceptFairness` / `unknownFairness` / `makeFairnessIssue` / `isFairnessRefusal`. Use that vocabulary for every refusal; mint a new code ONLY for a fault the tuple genuinely cannot express, and say which in a comment.\n\nNote the flat-entries design and why it matters: `entries` is the flat union of every per-resource queue, deliberately carrying no implied traversal order between queues (fairness-ring.ts:54-58). Your rotation must therefore DERIVE order deterministically from resourceId and the entry sequence — never from array position alone, or the same ring in a different serialization order selects differently and DoD 1's determinism fails.\n\nCONSTANTS TRAP: production cannot import the reference (@moe/scheduler does not depend on @moe/testkit and must not), so any policy constant you need must be DECLARED in production. That duplication is the only legal path, but the values must MATCH the reference exactly — the task scope forbids changing fairness constants without approval. Cite the reference file and line beside each constant you mirror, and pin the exact values in a test.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "READ-ONLY. Surfaces pinned by reading each definition, not by trusting the plan's line numbers.\n\nCONSUMED SURFACES (all verified present, exported, and reachable by relative import from packages/scheduler/src/fairness/):\n- fairness-ring.ts: FairnessRingResource{resourceId,weight}:38-41, FairnessRingQueueEntry{workItemId,resourceId,deficitCounter}:48-52, FairnessRing{ringId,dimensionId,resources,entries}:59-64, validateRing:207, validateRingResource:90.\n- fairness-work-item.ts: FairnessWorkItem{workItemId,dimensionId,priority,resourceId,dispatchability}:46-52, FairnessDispatchabilityFact:35-38, validateWorkItem:97, validateWorkItemSet(value, expectedDimensionId):122 — note the SECOND parameter; the set validator already enforces FAIRNESS_CONTRACT_DIMENSION_MISMATCH at :134-139, so dimension identity is the contract's job and I must not re-derive it.\n- fairness-evidence.ts: FairnessOpportunityAttestation:39-43, FairnessBypassClaim:46-50, FairnessProvenBypasses{workItemId,provenBypasses,opportunityRefs}:53-57, validateBypassClaim:125. It COUNTS evidence and never reads claimedBypasses as the source; a null observationRef yields UNKNOWN/FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED at :98-103. That is exactly the aging-evidence gate DoD 2 wants, already built.\n- fairness-cap-revision.ts: FairnessCapRevision:44-51, FairnessCapMigration:38-42, validateCapRevision:135. Deliberately does NOT judge revision DIRECTION (:129-134) — a raise and a reduction validate identically, so precedence-of-capacity-over-aging is mine.\n- fairness-contract.ts: 18 codes in FAIRNESS_CONTRACT_ISSUE_CODES:43-53, 5 layers CAP_REVISION|OPPORTUNITY_EVIDENCE|RESOURCE|RING|WORK_ITEM:30-32, makeFairnessIssue:91, refuseFairness:101, unknownFairness:106 (REQUIRES a missingInput string), acceptFairness:118, isFairnessRefusal:127, readFairnessItems:144.\n\nCODE-MINTING DECISION: I expect to need NO new issue code. The 18-member tuple covers every refusal the plan enumerates — INVALID_COUNTER for deficit overflow, DIMENSION_MISMATCH for ring/item identity, UNDECLARED_RESOURCE and EMPTY_RESOURCE_SET for ring faults, INVALID_IDENTITY for hostile ids, BOUND_LOOSENED / MIGRATION_TARGET_DRAINED for cap revisions, OPPORTUNITY_UNOBSERVED for unverifiable attestation. If a fault genuinely cannot be expressed I will say so in a comment at the mint site.\n\nARITHMETIC BOUND — CORRECTION TO THE PLAN. The plan says guard against Number.MAX_SAFE_INTEGER. That is the WRONG ceiling here and would leave a hole: the contract's isCount (authority-kernel.ts:150-153) accepts only values <= MAX_AUTHORITY_COUNT = Number.MAX_SAFE_INTEGER - 1_000_000 (:77). A deficit I advance past MAX_AUTHORITY_COUNT but below MAX_SAFE_INTEGER would pass my guard and then be REFUSED by validateRing on the next round-trip — a bricked ring, the exact failure the kernel comment at :70-76 describes for leases. I will guard at MAX_AUTHORITY_COUNT so every counter I emit is re-validatable by the contract that produced it. Strictly tighter than the plan's bound, so it also satisfies it.\n\nFLAT-ENTRIES DETERMINISM HAZARD confirmed at fairness-ring.ts:54-58 — entries is the flat union with \"no implied traversal order between queues\", and validateRing preserves caller order verbatim (:14 \"caller order is preserved verbatim, deliberately unlike ../authority/resource-model.ts, which sorts\"). So the contract will NOT normalise order for me. Rotation order must be derived from resourceId; authority-kernel.ts:32 compareStrings is the total order already used in this package.\n\nCONSTANTS TO MIRROR (production cannot import the reference — packages/scheduler/package.json declares exactly @moe/context, @moe/contracts, @moe/core and no devDependencies, so @moe/testkit cannot even resolve):\n- BYPASSES_PER_LEVEL = 8 — packages/testkit/src/scheduler-fairness/fairness-policy.ts:25\n- DEFAULT_M_D = 10_000 — same file :8 (design §8.4 per-dimension ceiling)\n- ladder order P0>P1>P2>P3 — same file :17-22; FAIRNESS_PRIORITY_CLASSES is string-identical but fairness-contract.ts:80-83 explicitly attaches NO ordering meaning, so the ORDERING is mine to declare.\nEach gets a file+line citation at its declaration and a pinned value in a test.\n\nFINDING THAT CHANGES STEP 8'S APPROACH. Three ALREADY-LANDED production files reference the reference path in PROSE: fairness-contract.ts:11, fairness-evidence.ts:7, fairness-ring.ts:9 all name \"packages/testkit/src/scheduler-fairness\" inside doc comments. A DoD-3 guard written as a raw text scan for \"@moe/testkit\" or the reference path would therefore redden on files that contain no import at all — a false positive on committed work. The guard MUST parse import specifiers and ignore comments and strings. packages/scheduler/src/package-boundary.test.ts:210-232 moduleSpecifiers already does exactly that (its allowedContentCases at :254-266 pin comment/string/template prose as NOT an import). So the plan's \"extend the existing mechanism if it fits\" resolves to YES — and the parallel-mechanism alt",
+      "startedAt": "2026-08-10T07:51:15.005Z",
+      "completedAt": "2026-08-10T07:51:53.817Z"
     },
     {
       "stepId": "step-3",
@@ -113,7 +119,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-767ae903",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -144,14 +150,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-10T07:46:09.818Z",
+  "updatedAt": "2026-08-10T07:51:53.817Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "worker-767ae903"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:45:35.201Z",
     "plannedStepCount": 10,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -172,7 +180,10 @@
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:46:07.770Z",
   "planningNotes": {
@@ -181,7 +192,10 @@
     "risks": "1. IMPLEMENTING FROM THE REFERENCE ANYWAY, because the objective sentence says to. The reference genuinely lacks rings, deficits and resource queues; deriving them from it invents policy and is the exact Clause 2 failure the original block named. The contract is the source of truth.\n\n2. WORK CONSERVATION IS THE PROPERTY MOST LIKELY TO BE SILENTLY WRONG. A textbook WDRR loop stalls when the resource whose turn it is has an empty queue. The test must use a ring whose highest-weight resource is EMPTY while others are not; a test with all queues populated passes against a broken implementation. Drill (a) targets it.\n\n3. ORDER DERIVED FROM ARRAY POSITION. `entries` is a flat union with no implied inter-queue order by design, so a rotation keyed on index is deterministic only until the ring is re-serialized. The permuted-ring test is what catches it; drill (b) proves that test is live.\n\n4. \"STARVATION BOUNDED\" ASSERTED QUALITATIVELY. \"It eventually runs\" passes trivially and proves nothing. DoD 1 says bounded — assert a numeric bound derived from the weights.\n\n5. DEFICIT AND AGE ACCUMULATE. Both grow without bound over a long run; unguarded addition eventually leaves the safe-integer range and wraps silently. The contract range-checks deficitCounter as INPUT but explicitly never advances it, so overflow is entirely this module's responsibility.\n\n6. AGING BECOMING A SECOND AUTHORITY. If a promotion can breach a capacity or a cap revision, aging has quietly become a cap-raising mechanism. Assert the precedence explicitly — capacity wins, aging refuses.\n\n7. CONSTANT DRIFT. Production cannot import the reference, so constants are duplicated by necessity. A duplicated constant that drifts from its source silently changes fairness policy, which the task scope forbids without approval. Cite file and line beside each, and pin the values in a test.\n\n8. UNVERIFIABLE ATTESTATION TREATED AS EVIDENCE. taskRail 2 requires a fairness claim without daemon-verifiable evidence to be UNKNOWN or refused; an optimistic promotion here is an authority leak.\n\n9. SHARED INDEX.TS. Reordering or reflowing neighbouring exports makes the diff unreviewable and invites a conflict with another task editing the same file."
   },
   "budget": {
-    "wallClockMs": 9000000
+    "wallClockMs": 9000000,
+    "warnedAt": "2026-08-10T07:49:27.008Z",
+    "escalatedAt": "2026-08-10T07:49:27.008Z"
   },
-  "planApprovedAt": "2026-08-10T07:46:09.818Z"
+  "planApprovedAt": "2026-08-10T07:46:09.818Z",
+  "workStartedAt": "2026-08-10T07:49:41.761Z"
 }

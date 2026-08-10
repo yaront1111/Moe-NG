@@ -180,6 +180,7 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
           </p>
         </div>
       }
+      navigationUnavailableReason="The live attachment is a single daemon workspace."
       projectionEnabled={false}
     >
       <div className="cr-workspace" data-testid="cr.live.workspace">

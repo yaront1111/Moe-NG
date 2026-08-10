@@ -45,7 +45,8 @@
   min-block-size: 2.55rem;
 }
 
-.cr-shell-brand-name {
+.cr-shell-brand-name,
+.cr-shell-nav-unavailable {
   block-size: 1px;
   clip-path: inset(50%);
   inline-size: 1px;
@@ -76,7 +77,12 @@
   transition: background 140ms var(--cr-ease), color 140ms var(--cr-ease);
 }
 
-.cr-shell-nav-items button:hover,
+.cr-shell-nav-items button:disabled {
+  color: #68758a;
+  opacity: 0.6;
+}
+
+.cr-shell-nav-items button:not(:disabled):hover,
 .cr-shell-nav-items button:focus-visible {
   background: rgb(255 255 255 / 8%);
   color: var(--cr-white);
@@ -112,7 +118,7 @@
   z-index: 90;
 }
 
-.cr-shell-nav-items button:hover .cr-shell-nav-label,
+.cr-shell-nav-items button:not(:disabled):hover .cr-shell-nav-label,
 .cr-shell-nav-items button:focus-visible .cr-shell-nav-label {
   opacity: 1;
   transform: translate(0, -50%);

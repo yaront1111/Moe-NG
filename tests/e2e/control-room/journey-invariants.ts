@@ -103,10 +103,16 @@ export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
   } as const),
   Object.freeze({
     cause: LOADING_RECORD.cause,
-    id: "LOADING",
+    id: "LATENCY",
     missingInput: LOADING_RECORD.missingInput,
     owner: LOADING_RECORD.owner,
-    status: "UNKNOWN",
+    // Derived, NOT the literal "UNKNOWN". A mutation drill caught the difference:
+    // with the status hand-written here, flipping LOADING_RECORD to COVERED left this
+    // ledger still calling it UNKNOWN — two sources of truth for one fact, which is
+    // the drift this module's doc comment claims to avoid. Derived, the flip cannot
+    // be half-applied: `status` narrows to "COVERED", the object stops satisfying
+    // UnknownInvariant, and tsc refuses it for want of a `bar` and `provenBy`.
+    status: LOADING_RECORD.status,
   } as const),
   Object.freeze({
     bar: "An absent fact renders AS UNKNOWN — dashed border, UNK short label, a non-blank "
@@ -123,7 +129,7 @@ export const DOD2_INVARIANTS: readonly InvariantRecord[] = Object.freeze([
     id: "LATENCY",
     missingInput: LATENCY_RECORD.missingInput,
     owner: LATENCY_RECORD.owner,
-    status: "UNKNOWN",
+    status: LATENCY_RECORD.status,
   } as const),
 ]);
 

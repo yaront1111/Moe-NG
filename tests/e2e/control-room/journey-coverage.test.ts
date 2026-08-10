@@ -7,11 +7,18 @@ import {
   ABSENT_PRODUCTION_IDS,
   DECLARED_SCENARIO_COUNT,
   LATENCY_RECORD,
+  LOADING_RECORD,
   SCENARIO_MATRIX,
   UNCOMPOSED_SURFACES,
   coveredScenarios,
   unknownScenarios,
 } from "./journey-coverage.js";
+import {
+  DECLARED_INVARIANT_COUNT,
+  DOD2_INVARIANTS,
+  coveredInvariants,
+  unknownInvariants,
+} from "./journey-invariants.js";
 
 /**
  * Node-lane guards for the scenario ledger. Named `*.test.ts`, not `*.spec.ts`, so it
@@ -133,6 +140,26 @@ describe("the scenario ledger's own arithmetic", () => {
     expect(LATENCY_RECORD.missingInput.trim()).not.toBe("");
     expect(LATENCY_RECORD.owner).toContain("HUMAN DECISION");
   });
+
+  /**
+   * The loading half, and the reason this task was reopened. It stays UNKNOWN because
+   * no served entry point composes a pending state — the components exist, so this is
+   * NOT the absent-surface case and a file check would pass for every one of them.
+   * Pinning the status is what stops it being flipped to a silent pass; pinning the
+   * CAUSE is what stops it being quietly downgraded to "surface absent", which would
+   * point the next reader at the wrong owner.
+   */
+  it("keeps loading an UNKNOWN naming the uncomposed pending state", () => {
+    expect(LOADING_RECORD.status).toBe("UNKNOWN");
+    expect(LOADING_RECORD.cause).toBe("SURFACE_NOT_COMPOSED");
+    expect(LOADING_RECORD.missingInput.trim()).not.toBe("");
+    expect(LOADING_RECORD.owner.trim()).not.toBe("");
+    // The record is only useful if it says which ids are stranded, so a later reader
+    // can check them rather than re-deriving the finding.
+    for (const id of ["cr.board.skeleton", "cr.goals.loading", "cr.health.loading"]) {
+      expect(LOADING_RECORD.missingInput, `missingInput names ${id}`).toContain(id);
+    }
+  });
 });
 
 describe("the ledger's UNKNOWNs still describe real gaps", () => {
@@ -179,5 +206,86 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
     const preview = join(repoRoot(), "apps/control-room/src/preview/control-room-preview.tsx");
     expect(existsSync(preview)).toBe(true);
     expect(readFileSync(preview, "utf8")).not.toMatch(/\bbreaker=/u);
+  });
+
+  /**
+   * The loading gap's rot guard, and it covers BOTH served entry points because
+   * main.tsx branches: `?live=1` renders LiveControlRoom, everything else renders
+   * ControlRoomScaffold -> ControlRoomPreview. Guarding only the preview would leave
+   * the invariant able to become reachable down the live path while the ledger still
+   * called it UNKNOWN — the exact rot this file exists to prevent.
+   *
+   * The day either path passes a loading prop, this goes RED and demands the record
+   * be re-measured rather than letting the UNKNOWN outlive its gap.
+   */
+  it.each([
+    ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
+    ["apps/control-room/src/live/live-app.tsx", "the ?live=1 path"],
+    ["apps/control-room/src/live/live-board.tsx", "the live board it mounts"],
+  ])("%s still composes no pending state (%s)", (file) => {
+    const path = join(repoRoot(), file);
+    // Fail closed on a rename: a guard reading a file that no longer exists would
+    // otherwise assert over an empty string and pass while proving nothing.
+    expect(existsSync(path), `${file} should exist`).toBe(true);
+    expect(readFileSync(path, "utf8")).not.toMatch(/\bloading=/u);
+  });
+});
+
+/**
+ * DoD 2's OWN LIST, which nothing in this repository enumerated until now. The first
+ * pass of this gate asserted five of the seven invariants, recorded latency, and said
+ * nothing about loading — and no test noticed, because there was no list for an
+ * invariant to be missing from. These assertions are that list.
+ */
+describe("the DoD 2 invariant ledger", () => {
+  const SPEC = readFileSync(join(HERE, "journeys.spec.ts"), "utf8");
+
+  it("records exactly the seven invariants DoD 2 names, in its order", () => {
+    expect(DOD2_INVARIANTS.map((invariant) => invariant.id)).toEqual([
+      "TRUTH", "PROVENANCE", "KEYBOARD", "NARROW_WINDOW", "LOADING", "DEGRADED", "LATENCY",
+    ]);
+    expect(DOD2_INVARIANTS).toHaveLength(DECLARED_INVARIANT_COUNT);
+    expect(DECLARED_INVARIANT_COUNT).toBe(7);
+  });
+
+  it("splits every invariant into exactly one of COVERED or UNKNOWN", () => {
+    const covered = coveredInvariants();
+    const unknown = unknownInvariants();
+    expect(covered.length + unknown.length).toBe(DECLARED_INVARIANT_COUNT);
+    // A ledger where every invariant is UNKNOWN is a list, not a gate.
+    expect(covered.length).toBeGreaterThan(0);
+    expect(unknown.map((invariant) => invariant.id)).toEqual(["LOADING", "LATENCY"]);
+  });
+
+  it("gives every UNKNOWN invariant a non-empty missing input and a named owner", () => {
+    const unknown = unknownInvariants();
+    expect(unknown.length).toBeGreaterThan(0);
+    for (const invariant of unknown) {
+      expect(invariant.missingInput.trim(), `${invariant.id} missingInput`).not.toBe("");
+      expect(invariant.owner.trim(), `${invariant.id} owner`).not.toBe("");
+      expect(invariant.cause.trim(), `${invariant.id} cause`).not.toBe("");
+      expect(invariant.missingInput.length, `${invariant.id} missingInput`).toBeGreaterThan(20);
+    }
+  });
+
+  /**
+   * THE LOAD-BEARING ASSERTION of this block. A COVERED invariant claims a browser
+   * proves it; this checks the named test actually exists in the file that would run
+   * it. Delete the keyboard test and the ledger goes RED instead of continuing to
+   * claim the invariant holds — which is precisely what did NOT happen for loading.
+   */
+  it("resolves every COVERED invariant to real tests in journeys.spec.ts", () => {
+    // Non-vacuity first: a spec file that failed to read, or whose declaration style
+    // changed, would make every `includes` below pass over nothing.
+    expect((SPEC.match(/^test\(/gmu) ?? []).length).toBeGreaterThan(0);
+    const covered = coveredInvariants();
+    expect(covered.length).toBeGreaterThan(0);
+    for (const invariant of covered) {
+      expect(invariant.bar.trim(), `${invariant.id} bar`).not.toBe("");
+      expect(invariant.provenBy.length, `${invariant.id} provenBy`).toBeGreaterThan(0);
+      for (const title of invariant.provenBy) {
+        expect(SPEC.includes(`test("${title}"`), `${invariant.id} -> ${title}`).toBe(true);
+      }
+    }
   });
 });

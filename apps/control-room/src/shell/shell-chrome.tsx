@@ -95,11 +95,11 @@ export function ContextBar(props: ContextBarProps): JSX.Element {
 }
 
 const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
-  approvals: "Focus Approvals",
+  approvals: "Focus Approvals when navigation is available",
   board: "Show board in goal views",
   "collapse-inspector": "Close proof inspector",
   "expand-inspector": "Open proof inspector",
-  goals: "Focus Goals",
+  goals: "Focus Goals when navigation is available",
   graph: "Show graph in goal views",
   help: "Open command map",
   search: "Focus search when present",

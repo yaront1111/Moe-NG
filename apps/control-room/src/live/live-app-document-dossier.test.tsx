@@ -74,6 +74,26 @@ it("attaches the authenticated daemon dossier to the live workspace", async () =
   expect(dossierReads).toBe(1);
 });
 
+it("marks canonical destinations unavailable in the single live workspace", () => {
+  vi.stubGlobal("fetch", async () => new Response(JSON.stringify({
+    code: "AFFORDANCE_TEST_EMPTY",
+    outcome: "REFUSED",
+  }), { status: 200 }));
+
+  render(<LiveControlRoom setup={setupWith(async () => DOSSIER_ANSWER)} />);
+
+  const destinations = screen.getAllByRole("button", {
+    name: /^(Approvals|Goals|Health|Policy|Resources|Runs & leases)$/u,
+  });
+  expect(destinations).toHaveLength(6);
+  for (const destination of destinations) {
+    expect((destination as HTMLButtonElement).disabled).toBe(true);
+    expect(destination.getAttribute("aria-current")).toBeNull();
+  }
+  expect(screen.getByText("The live attachment is a single daemon workspace."))
+    .toBeDefined();
+});
+
 it("never commits the previous setup's dossier under a replacement setup", async () => {
   vi.stubGlobal("fetch", async () => new Response(JSON.stringify({
     code: "AFFORDANCE_TEST_EMPTY",

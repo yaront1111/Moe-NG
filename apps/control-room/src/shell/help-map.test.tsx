@@ -27,5 +27,7 @@ it("shows the exact command map without dropping the complete navigation index",
     .toContain("when present");
   expect(within(help).getByTestId("cr.shell.help.binding.graph").textContent)
     .toContain("goal views");
+  expect(within(help).getByTestId("cr.shell.help.binding.approvals").textContent)
+    .toContain("when navigation is available");
   for (const label of CONTROL_ROOM_NAV_ITEMS) expect(within(help).getByText(label)).toBeDefined();
 });

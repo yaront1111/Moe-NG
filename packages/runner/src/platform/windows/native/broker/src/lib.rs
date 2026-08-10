@@ -33,7 +33,10 @@
 
 // Modules are private: every item has exactly one public path, re-exported
 // below, which is how the core crate is arranged too.
+mod control;
 mod descriptors;
+mod frames;
+mod payload;
 mod protocol;
 mod verify;
 
@@ -43,6 +46,11 @@ mod boundary;
 pub use descriptors::{
     parse_descriptor_block, DescriptorError, DescriptorReason, INVALID_HANDLE,
     REQUIRED_DESCRIPTOR_COUNT,
+};
+pub use control::{AcceptState, Accepted, Inbound, LaunchRequest};
+pub use frames::{
+    read_frame, write_frame, ByteChannel, ChannelKind, RawFrame, FRAME_HEADER_BYTES,
+    MAX_CONTROL_PAYLOAD, MAX_DIAGNOSTIC_PAYLOAD, MAX_STATUS_PAYLOAD,
 };
 pub use protocol::{
     ProtocolError, ProtocolReason, ProtocolStage, PROTOCOL_VERSION,

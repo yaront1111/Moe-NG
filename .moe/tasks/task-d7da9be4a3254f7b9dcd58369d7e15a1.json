@@ -116,27 +116,45 @@
     {
       "stepId": "step-7",
       "description": "DoD 5 MUTATION DRILLS — coverage handling that cannot go red proves nothing. Run each, confirm the NAMED case kills it, revert, confirm green before the next, and record the exact failing assertion.\n\n  1. Return { status: \"ENUMERATED\", items: [], complete: true, negativeProofDigest: null } for an empty ref listing -> NEGATIVE_PROOF_MISSING must go RED. This is the \"empty listing is not proof of absence\" invariant.\n  2. Silently skip an artifact entry whose name is not a valid content address -> the DoD 2 case must go RED. If it stays green the test is only counting valid entries and is blind to the drop.\n  3. Collapse the empty / absent / unreadable answers into one code -> at least two of the three-way tests must go RED. If only one fails, the other two were never distinguishing anything.\n  4. Replace the codepoint comparator with localeCompare -> the determinism test must go RED. If it stays green, the fixture is not exercising ordering and DoD 4 is unproven.\n  5. Treat a missing observer.listRefs as an empty listing instead of UNAVAILABLE -> the optional-method case must go RED.\n  6. Delete a .js bridge -> plain Node breaks while vitest stays green.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/git-integration-inventory.ts",
         "packages/runner/src/recovery-inventory/artifact-object-inventory.ts"
       ],
-      "startedAt": "2026-08-10T07:47:32.035Z"
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/git-integration-inventory.ts",
+        "packages/runner/src/recovery-inventory/artifact-object-inventory.ts"
+      ],
+      "note": "SIX DRILLS RUN, each reverted and re-verified green before the next. All six killed their NAMED case.\n\n1. negativeProofDigest -> null on a successful git enumeration. 3 RED.\n   \"proves an observed repository with no refs at all rather than staying silent\"\n   - \"reason\": null  +  \"reason\": \"NEGATIVE_PROOF_MISSING\"; truth COMPLETE -> UNKNOWN.\n   Also killed the 3-way test and the digest-invariance test.\n\n2. RUNNER_ARTIFACT_ADDRESS_CORRUPT mapped to a proven-empty ENUMERATED (the silent skip). 2 RED.\n   \"is reported with a stable code instead of being silently skipped\"\n   - truth \"UNKNOWN\"/reason \"RESULT_TRUNCATED\"  +  truth \"COMPLETE\"/reason null.\n   The valid staged artifact in that fixture is what makes the skip visible.\n\n3. truncates() forced false, collapsing unreadable into the absent answer. 3 RED (>=2 required).\n   \"answers RESULT_TRUNCATED for a record the observer could not read\",\n   \"keeps the three answers distinct rather than sharing one code\" (Set size 3),\n   \"truncates on a bounded-observation overflow, naming the overflow itself\".\n\n4. compareCodePoints -> localeCompare in the git item sort. 1 RED.\n   \"orders by code point, which no locale collation reproduces\".\n   The happy-path order assertion stayed green because the AGGREGATE re-sorts - which is exactly why DoD 4 is asserted against the enumerator's own output.\n\n5. missing observer.listRefs treated as an empty listing. 1 RED.\n   \"answers ENUMERATOR_UNAVAILABLE when the observer does not implement listRefs\".\n\n6. git-integration-inventory.js bridge moved out of the tree. 1 RED, and only in the plain-Node probe:\n   runtime-entrypoint.test.ts \"has an exact .js bridge for every runtime module\" - missing: [] vs the named module. Restored; od -c re-verified both bridges end `...-inventory.ts\";\\n`.\n\n*** FOREIGN WHOLE-TREE COMMIT - DISCLOSED, NOT REPAIRED ***\nCommit 7879698 \"feat(task-069853689ed643988cfec2d689f7edb7): Scheduler supersession dispositions\" whole-tree committed ALL SIX of my files mid-drill. It captured git-integration-inventory.ts carrying DRILL 5's mutation. I did not amend, reset, stash or touch that commit. My working tree holds the correct bytes; `git diff -- packages/runner/src/recovery-inventory/git-integration-inventory.ts` is exactly the 2-line revert (the UNAVAILABLE branch restored), and step 8 commits that correction by explicit pathspec. The other five files were captured in their correct state and are clean.\n\nPost-revert: packages/runner/src/recovery-inventory = 6 files / 131 tests, exit 0.",
+      "startedAt": "2026-08-10T07:47:32.035Z",
+      "completedAt": "2026-08-10T07:50:02.902Z"
     },
     {
       "stepId": "step-8",
       "description": "VERIFY AND ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test\n\nBoth legs exit 0 with nonzero discovery. Baseline from the producer task: @moe/runner was 43 files / 1366 tests before slice 2 landed — re-measure your own baseline rather than trusting that number, and confirm the file count GREW by your new test files. A flat count means your tests never ran.\n\nPath-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/runner itself is a BLOCK, not a disclosure.\n\nAdversarial review:\n- Did I reimplement ref or object enumeration anywhere, including in a test helper? That is the rails' central prohibition here — calling parseRefListing to rebuild what listRefs already does counts.\n- Did I edit recovery-inventory.ts, or any slice-2 file? I must NOT have.\n- Did I invoke git through a shell or accept a free-form command string? Forbidden. Are all child processes bounded by maxBuffer, timeout and windowsHide?\n- Are empty / absent / unreadable genuinely three different answers, or did two collapse?\n- Is any ordering locale-sensitive? localeCompare anywhere is a DoD 4 failure.\n- Does every refusal pin the exact code AND the INVENTORY_ADAPTER layer?\n- Did each of the two classes generate at least one coverage case with a non-zero asserted count?\n- Both .js bridges present with od -c verified trailing LF?\n- No temp git repository or artifact directory left inside the repo; no generated evidence in the diff.\n- Per-file `grep -c ''` under 400, target 250.\n- GLOBAL RAIL CLAUSE 1: name task-0325dcf7ee744123b40cf583230c7b6a as the consumer — it is BLOCKED waiting on exactly this task, and landing this clears the last non-REVIEW gate on that chain.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH FOREIGN FILES earlier in this session. Never git add -A.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/recovery-inventory/git-integration-inventory.ts",
         "packages/runner/src/recovery-inventory/artifact-object-inventory.ts",
         "packages/runner/src/recovery-inventory/git-integration-inventory.test.ts",
         "packages/runner/src/recovery-inventory/artifact-object-inventory.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/git-integration-inventory.ts",
+        "packages/runner/src/recovery-inventory/git-integration-inventory.js",
+        "packages/runner/src/recovery-inventory/git-integration-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/artifact-object-inventory.ts",
+        "packages/runner/src/recovery-inventory/artifact-object-inventory.js",
+        "packages/runner/src/recovery-inventory/artifact-object-inventory.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ],
+      "note": "GATE, fresh and foreground, run LAST:\n  pnpm --filter @moe/runner typecheck -> exit 0\n  pnpm --filter @moe/runner test      -> exit 0, 49 files / 1459 tests\nBaseline I measured myself BEFORE writing any byte: 46 files / 1421 tests. Grew by exactly +3 files / +38 tests = 17 git + 14 artifact + 7 seam. Not flat.\n\nPATH-ATTRIBUTED BASELINE (global rail 3). Repo-wide typecheck: exit 0, 17/18 projects Done. Repo-wide `pnpm test`: exit 1, 222 passed / 1 failed of 223 files, 4354 passed / 1 failed / 1 skipped.\nFOREIGN RED, verbatim:\n  FAIL tests/fault/foundation/j1-linear.test.ts > J1 linear journey fault schedules > incident:hot-claim-loop-on-gated-work produces its declared outcome\n  AssertionError: expected { kind: 'PASS_EXPECTED' } to deeply equal { ...(3) }\nPre-existing and not mine: it was already recorded before this session as caused by commit 2c93542 (task-e8e27f76) publishing scheduler root exports, with the stale expectation row in packages/testkit/src/foundation/foundation-incident-schedules.ts. Failing-path set intersected with my owned paths is EMPTY, and @moe/runner - the package I own - is fully green, so this is a disclosure, never an excuse.\n\nADVERSARIAL REVIEW, answered:\n- Ref/object enumeration reimplemented anywhere, including a test helper? NO. parseRefListing is never called; listRefs/headCommit/submodulePaths and ArtifactStore.enumerateArtifacts are the only sources. No test rebuilds a listing.\n- recovery-inventory.ts or any slice-2 file edited? NO. git show --stat on my only commit: one file. Slice 2 is imported read-only by the four-class test.\n- git through a shell or a free-form command string? NO. Production spawns nothing; the test uses execFileSync with an argument vector, shell:false, maxBuffer MAX_SCOPE_OBSERVATION_BYTES, timeout 30_000, windowsHide:true, stdio ignore, under hermeticGitEnvironment.\n- empty/absent/unreadable collapsed? NO - each suite asserts new Set(answers).size === 3, and drill 3 reddened 3 tests.\n- locale-sensitive ordering? NO. grep localeCompare over recovery-inventory/ matches only comments.\n- every refusal pins code AND INVENTORY_ADAPTER? YES, whole-object equality on {truth, code, reason, layer}; the seam test uses {class, truth, code, reason, layer}.\n- non-zero generated coverage per class? YES, EXACT counts: 14 git, 13 artifact.\n- .js bridges? Both present, od -c verified trailing LF; drill 6 proved their absence reddens the plain-Node probe.\n- temp fixtures inside the repo? NONE - git status over packages/runner shows no stray .git or objects/ path; all fixtures are mkdtemp under the OS temp root.\n- per-file grep -c '': git 250, artifact 194. Under target, far under the 400 cap.\n\nTWO JUDGEMENTS I WANT QA TO SEE RATHER THAN DISCOVER:\n1. DoD 2's \"stable code\" rides on the enumerator's return value, not the registry seam. It has to: RecoveryInventoryRegistration is exact-keyed [\"class\",\"enumerate\"] and readRegistry returns null for any extra field, so a registration literally cannot carry a code. enumerateArtifactObjectInventory therefore returns {reading, refusal} with the store's ArtifactEnumerationFailure verbatim (code + layer + message), and the registration passes only .reading. Both levels are asserted.\n2. PROJECT_MISMATCH is unreachable from these enumerators by construction - neither a ref nor a content address carries a project tag, so context.projectTag is stamped. The happy paths assert every item carries the request's tag; the window half of DoD 4 is exercised for real with an out-of-window clock.\n\nCOMMIT: 968ca74, by explicit pathspec, `git diff --cached --name-only` = exactly one owned path. All seven owned paths are TRACKED at HEAD and the working tree is clean for the directory. Never `git add -A`; foreign in-flight broker .rs files were left untouched.\n\nCONSUMER (global rail clause 1): task-0325dcf7ee744123b40cf583230c7b6a, the BLOCKED parent waiting on exactly this task.",
+      "startedAt": "2026-08-10T07:50:05.726Z",
+      "completedAt": "2026-08-10T07:52:37.553Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-01abf979",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -155,7 +173,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T14:19:57.152Z",
-  "updatedAt": "2026-08-10T07:47:32.035Z",
+  "updatedAt": "2026-08-10T07:53:21.704Z",
   "contextFetchedBy": [
     "architect-5b5302ee",
     "worker-01abf979"
@@ -164,7 +182,7 @@
     "firstClaimAt": "2026-08-10T07:24:02.820Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -175,7 +193,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:27:12.122Z",
@@ -198,5 +218,21 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-10T07:27:14.172Z",
-  "workStartedAt": "2026-08-10T07:27:32.301Z"
+  "workStartedAt": "2026-08-10T07:27:32.301Z",
+  "reviewStartedAt": "2026-08-10T07:53:21.704Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nLEG1=0\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  49 passed (49)\n      Tests  1459 passed (1459)\n   Start at  10:51:43\n   Duration  3.36s (transform 10.71s, setup 0ms, import 15.61s, tests 11.57s, environment 4ms)\nLEG2=0",
+    "reportedAt": "2026-08-10T07:53:21.704Z"
+  },
+  "filesModified": [
+    "packages/runner/src/recovery-inventory/git-integration-inventory.test.ts",
+    "packages/runner/src/recovery-inventory/git-integration-inventory.ts",
+    "packages/runner/src/recovery-inventory/git-integration-inventory.js",
+    "packages/runner/src/recovery-inventory/artifact-object-inventory.ts",
+    "packages/runner/src/recovery-inventory/artifact-object-inventory.js",
+    "packages/runner/src/recovery-inventory/artifact-object-inventory.test.ts",
+    "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+  ]
 }

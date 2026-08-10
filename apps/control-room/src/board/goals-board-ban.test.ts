@@ -22,8 +22,9 @@ const BOARD_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const GOALS_DIRECTORY = join(BOARD_DIRECTORY, "..", "goals");
 
 const EXPECTED_BOARD_FILES = Object.freeze([
-  "board-card.tsx", "board-contract.ts", "board-j1.tsx", "board-layout.css",
-  "board-surface.test.tsx", "board-surface.tsx", "goals-board-ban.test.ts",
+  "board-card.tsx", "board-contract.ts", "board-j1-manifest.test.tsx", "board-j1.tsx",
+  "board-layout.css", "board-surface.test.tsx", "board-surface.tsx",
+  "goals-board-ban.test.ts",
 ]);
 
 const EXPECTED_GOALS_FILES = Object.freeze([

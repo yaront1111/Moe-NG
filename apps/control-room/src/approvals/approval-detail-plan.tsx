@@ -14,6 +14,10 @@ import type {
 import { resolveApprovalControls } from "./approval-gating.js";
 import type { ApprovalControl, ApprovalReason } from "./approval-gating.js";
 import { DecisionControl } from "./approval-inbox.js";
+import { ReasonModal } from "./approval-reason-modal.js";
+
+export { ReasonModal };
+export type { ReasonModalProps } from "./approval-reason-modal.js";
 
 /**
  * Approval detail — plan (spec §4.7), and the shared frame every decision surface reuses.
@@ -87,52 +91,6 @@ export function DecisionHeader(props: {
 export function IdleLine({ kind }: { readonly kind: ApprovalDecisionKind }): JSX.Element | null {
   const idle = idleConsequence(kind);
   return idle === null ? null : <p>{`if idle: ${idle}`}</p>;
-}
-
-export interface ReasonModalProps {
-  readonly auditEvent: string;
-  readonly body: string;
-  readonly confirmLabel: string;
-  readonly onCancel: () => void;
-  readonly onConfirm: (reason: string) => void;
-  readonly scope: string;
-  readonly title: string;
-}
-
-/**
- * The §9 destructive-action pattern: concrete scope of effect, a required reason, the audit
- * event it records, and the destructive verb repeated on the confirm button — never "OK".
- * `Esc` and [Cancel] are always safe.
- */
-export function ReasonModal(props: ReasonModalProps): JSX.Element {
-  const { auditEvent, body, confirmLabel, onCancel, onConfirm, scope, title } = props;
-  const [reason, setReason] = useState("");
-  const ready = reason.trim() !== "";
-  return (
-    <div
-      aria-label={title}
-      data-testid="cr.approvals.reasonmodal"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-      role="dialog"
-    >
-      <h3>{title}</h3>
-      <p>{body}</p>
-      <p>{`Scope of effect: ${scope}`}</p>
-      <p>{`This records event ${auditEvent} with your identity.`}</p>
-      <label htmlFor="cr-approvals-reason">Reason (required):</label>
-      <textarea
-        id="cr-approvals-reason"
-        onChange={(event) => setReason(event.target.value)}
-        value={reason}
-      />
-      <button disabled={!ready} onClick={() => onConfirm(reason)} type="button">
-        {confirmLabel}
-      </button>
-      <button onClick={onCancel} type="button">Cancel</button>
-    </div>
-  );
 }
 
 export interface DecisionActionsProps {

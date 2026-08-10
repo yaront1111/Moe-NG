@@ -64,23 +64,39 @@
     {
       "stepId": "step-4",
       "description": "GREEN: THE BOUNDED CODEC. Create broker/src/frames.rs with a narrow byte-channel trait (read into a caller-owned buffer, write a slice) so the whole sweep runs injected, and the bounded frame reader/writer over it. Define one explicit maximum frame length as a named constant. CHECK THE DECLARED LENGTH AGAINST THE CAP BEFORE ALLOCATING ANYTHING -- never `Vec::with_capacity(declared)` ahead of the bound check; a declared length is attacker-controlled and that pattern is the memory-exhaustion bug DoD item 2 exists to catch. Verify the version BEFORE parsing opcode or payload so a future re-layout reports a version mismatch rather than malformed. Apply the same bounded form to the fd2 diagnostics frame, which is non-authoritative and must never be parsed as control. Do NOT reuse HandleCalls for I/O: it has only file_type and close_handle, no read or write, and contorting framing through it would be worse than a new narrow seam.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs"
       ],
       "newFiles": [
         "packages/runner/src/platform/windows/native/broker/src/frames.rs"
       ],
-      "startedAt": "2026-08-10T07:48:35.373Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/frames.rs",
+        "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs"
+      ],
+      "note": "GREEN. frames.rs landed, 223 lines. `cargo test --test frame_sweep` -> 13 passed, 0 failed, 0 ignored, exit 0. Every step-3 RED test now passes and none was edited to get there.\n\nFROZEN LAYOUT: [version u8][opcode u8][declared length u32 LE][payload N]. FRAME_HEADER_BYTES = 6. Little-endian for the reason descriptors.rs already records: Windows is little-endian on every target it supports.\n\nORDER IS THE CONTRACT in read_frame: fill the 6-byte header -> compare byte 0 to PROTOCOL_VERSION -> bound-check the declared length -> only then size a buffer and pull the payload. There is NO allocation of any kind before the bound check, and the opcode byte is never interpreted here at all.\n\nTHE ALLOCATION GUARD, concretely. `u64::from(declared) > kind.max_payload() as u64` is widened deliberately: comparing after `declared as usize` would, on a 32-bit target, be the very truncation being guarded against. The single `vec![0u8; declared as usize]` sits AFTER that comparison, so it is provably bounded by a compile-time constant. The write side is sized from our own already-bounded slice, never from a peer's declaration.\n\nTHREE CAPS, ONE PER CHANNEL, per DoD 2: MAX_CONTROL_PAYLOAD 65536 (fd0), MAX_STATUS_PAYLOAD 4096 (fd1), MAX_DIAGNOSTIC_PAYLOAD 512 (fd2), reached through `ChannelKind::max_payload()`. Deliberately unequal so `each_of_the_three_channels_bounds_its_own_frames_at_its_own_cap` is not vacuous -- one declared length is over-limit on fd2 and merely truncated on fd0/fd1. fd2 is documented non-authoritative and nothing in the crate feeds a diagnostics frame to a control decoder.\n\nNEW SEAM, NOT HandleCalls, exactly as the step directs: `pub trait ByteChannel { read(&mut self, &mut [u8]) -> Result<usize,u32>; write(&mut self, &[u8]) -> Result<usize,u32> }`. Caller-owned buffers on both sides, so nothing here can be handed an allocation sized by a peer. HandleCalls was re-measured in step 1 and has only file_type/close_handle.\n\nPANIC AUDIT of the two loops, both closed rather than assumed. `fill`: a channel returning MORE than the slice it was given would make `filled + got` index past the buffer -- refused as ChannelFailed, not clamped, because clamping would silently drop bytes. `push`: `took == 0` forever is an infinite loop and `took > remaining` would slice out of range -- both refused. No unwrap, no expect, no indexing by a peer-controlled value anywhere in the file.\n\nDESIGN CONSEQUENCE ALREADY DISCLOSED IN STEP 2, restated because it is visible here: the framing layer carries the opcode BYTE uninterpreted and `RawFrame` is not a command. Opcode interpretation is step 5's job at the Control stage. That is stronger than merely ordering version-before-opcode inside one function -- a wrong-version frame cannot reach opcode interpretation because opcode interpretation is in a different module.",
+      "startedAt": "2026-08-10T07:48:35.373Z",
+      "completedAt": "2026-08-10T07:50:14.711Z"
     },
     {
       "stepId": "step-5",
       "description": "INBOUND CONTROL VOCABULARY AND THE ACCEPT STATE. Create broker/src/control.rs with the CLOSED inbound vocabulary: exactly one launch request shape and CANCEL, no catch-all, no open string command space. Decoding yields `Accepted::Launch(LaunchRequest)` or `Accepted::Cancel`, or a ProtocolError. LaunchRequest is the one type that legitimately carries the executable, argv, cwd and environment -- that is its purpose, and it is precisely why ProtocolError must not; keeping them separate is what makes the no-echo rail enforceable by construction rather than by discipline. REORDERED AND DUPLICATE ARE SEQUENCE PROPERTIES a stateless decoder cannot see, so add a minimal accept state -- expecting-launch versus already-launched -- so that a second launch is DUPLICATE and a CANCEL arriving before any launch is OUT OF ORDER, each with its own reason code. That state holds no Job, no handle and no process; it is not 3c's session and must not grow into one.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/runner/src/platform/windows/native/broker/src/control.rs"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/control.rs",
+        "packages/runner/src/platform/windows/native/broker/src/payload.rs",
+        "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs"
+      ],
+      "note": "GREEN. 25 passed, 0 failed, 0 ignored, exit 0. TDD honoured: the 12 control tests went in first and failed with `unresolved imports ::AcceptState, ::Accepted, ::Inbound` (exit 101) before either module existed.\n\nCLOSED INBOUND VOCABULARY. `Inbound { Launch, Cancel }`, no catch-all, `ALL: [Inbound; 2]`, `opcode()` frozen at Launch=1/Cancel=2 (pinned by hand-written literals in the test, not by declaration order), `from_opcode()` returning Option. The `_` arm in from_opcode is over the 256 BYTES, not over the vocabulary -- that is what makes the command space closed rather than open.\n\nCLOSING A REAL HOLE THE STEP DID NOT NAME: `ALL`'s length forces a new variant to be listed, but from_opcode's byte arm would still compile, leaving a new command permanently unreachable from the wire. `the_inbound_vocabulary_is_exactly_launch_and_cancel` now round-trips every ALL entry through opcode()/from_opcode(), so that is a test failure instead.\n\nACCEPT STATE. `Phase { ExpectingLaunch, Launched, Terminated }`, private. ExpectingLaunch+Cancel -> FrameOutOfOrder; Launched+Launch -> DuplicateLaunch; Terminated+anything -> FrameAfterTerminal; the two legal transitions produce `Accepted::Launch(LaunchRequest)` and `Accepted::Cancel`. The Terminated arm is spelled `Inbound::Launch | Inbound::Cancel` rather than `_`, so adding a command forces a decision. HOLDS NO JOB, NO HANDLE, NO PROCESS, NO DESCRIPTOR, NO TIMING -- `AcceptState` is `Copy` and its only field is a three-valued enum, which is the strongest available statement that it has not become 3c's session.\n\nA REFUSAL NEVER ADVANCES THE PHASE, and that is asserted rather than asserted-in-a-comment: after a rejected duplicate launch the test sends CANCEL and requires it to still be accepted. Had the duplicate reset the channel to expecting-launch, a peer could re-arm the state machine with exactly the frame that was rejected. Sequence is judged BEFORE the payload is decoded, so an illegal-next frame is refused without its attacker-chosen bytes being parsed at all.\n\npayload.rs (100 lines, crate-internal, no public surface) holds the bounded cursor. NOTHING IS SIZED FROM A DECLARED COUNT: `list`/`pairs` push one element at a time, so a payload declaring 65535 entries and supplying none refuses on the first missing element. There is no `Vec::with_capacity` in the file. No indexing, no range slicing, no unwrap/expect; `take()` is checked_add + `get(..)`, so no byte sequence can panic the decoder.\n\nDoD 6, ENFORCED FURTHER: `LaunchRequest`'s `Debug` is HAND-WRITTEN and prints only field COUNTS, never content. A derived Debug would put an executable path and a whole environment into any log line, panic message or assertion failure that formatted an `Accepted` -- and `Accepted` derives Debug, so `assert_eq!` really would have printed it.\n\nONE TEST DEFECT FOUND AND FIXED BY THE RED RUN, disclosed because it is the exact vacuity class epic rail 6 names. `a_cancel_carrying_a_payload_reports_trailing_bytes` first ran on a FRESH state, so the sequence guard answered FrameOutOfOrder before the payload check was ever reached: the test would have passed on the mere fact of a refusal while never touching its subject. It now launches first, and the comment says why the launch is load-bearing. `assert_refused` comparing the EXACT reason is what caught it; an `is_err()` assertion would not have.\n\nDELIVERABLE-SHAPE DEVIATION, disclosed: the step names control.rs only; I split the bounded cursor into payload.rs. control.rs with the cursor inlined measured over the 250-line cap, and epic rail 5 says split by responsibility rather than reformat. Counts now: protocol.rs 205, frames.rs 223, payload.rs 100, control.rs 204 -- all <=250.",
+      "startedAt": "2026-08-10T07:50:19.191Z",
+      "completedAt": "2026-08-10T07:54:12.815Z"
     },
     {
       "stepId": "step-6",
@@ -134,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:44.701Z",
-  "updatedAt": "2026-08-10T07:48:35.373Z",
+  "updatedAt": "2026-08-10T07:54:12.815Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -150,7 +166,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:40:12.237Z",
@@ -158,7 +176,7 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
     "firstClaimAt": "2026-08-10T07:40:19.261Z",
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "planningNotes": {
     "approachesConsidered": "REFUSAL VOCABULARY: SEPARATE ENUM, NOT AN EXTENSION OF DescriptorReason. Rejected extending DescriptorReason with protocol cases. Descriptor refusals and protocol refusals are different layers, and the global rail requires a test to pin WHICH layer refused. One merged enum makes that unpinnable — a descriptor test and a protocol test would assert against the same vocabulary, so a refusal migrating between layers keeps both green. Chose a separate closed `ProtocolReason` plus `ProtocolError { reason, code }` mirroring DescriptorError's shape (accessors only, no string field).\n\nTHE WIRE MUST NAME THE LAYER. Because three layers can now refuse — descriptor (3a), protocol (this task), native (the core, via 3c) — a REFUSED frame that carries only a number cannot tell a reader which one spoke. Chose an explicit `RefusalLayer` discriminant on the frame alongside the layer-local reason ordinal and the numeric code. That is what makes 'which layer refused' assertable on the wire rather than only in Rust types, and it is why the frame does not simply reuse NativeOp for everything.\n\nDoD ITEM 4 — READ THIS, IT IS THE ONE PLACE I AM DELIBERATELY DIVERGING IN FORM. The item says hostile frames must be proved to refuse 'asserted as the absence of any lifecycle-core call in a recorded call log'. This task has no session and never touches the core's Job or process constructors, so wiring a core recording double into the sweep and asserting it is empty would be VACUOUSLY true — nothing here could ever call it, which is exactly the detached-assertion defect the global rail names. Chose a STRICTLY STRONGER proof instead: make authority unreachable by TYPE. Decoding yields `Accepted::Launch(LaunchRequest)` or `Accepted::Cancel`, and a LaunchRequest is the ONLY value that can later reach a process launch. The sweep asserts that every hostile case returns Err with its exact reason AND that no Accepted value is produced. A call log can be satisfied by code that simply has not called yet; unconstructibility cannot. The literal call-log form becomes meaningful in 3c, whose DoD already requires it where the session actually holds the calls. THE WORKER MUST STATE THIS DIVERGENCE AND ITS REASONING EXPLICITLY IN THE COMPLETION NOTES so QA judges it knowingly — do not silently substitute.\n\nI/O SEAM. Chose a narrow byte-channel trait (read into a caller-owned buffer, write a slice) defined in frames.rs, injectable so the whole sweep runs with no pipe, no process and no Windows. Rejected reusing HandleCalls (no read/write) and rejected std::io::Read/Write directly, because the sweep needs to script short reads and partial writes, which a bare Read impl makes awkward to assert against.\n\nLaunchRequest CARRIES paths and argv; ProtocolError MUST NOT. These are not in tension: the launch REQUEST is the payload whose whole purpose is to carry an executable and arguments, while the REFUSAL is forbidden from echoing them. Keeping them in separate types is what makes the rail enforceable by construction.",

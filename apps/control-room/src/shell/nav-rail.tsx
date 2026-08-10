@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { JSX } from "react";
 
 /** Nav rail, top to bottom (spec line 58). Timeline and graph are not rail items. */
@@ -33,9 +34,14 @@ export interface NavRailProps {
   readonly activeItem?: NavLabel | undefined;
   readonly narrow: boolean;
   readonly onNavigate?: ((label: NavLabel) => void) | undefined;
+  readonly unavailableReason?: string | undefined;
 }
 
-export function NavRail({ activeItem, narrow, onNavigate }: NavRailProps): JSX.Element {
+export function NavRail({
+  activeItem, narrow, onNavigate, unavailableReason,
+}: NavRailProps): JSX.Element {
+  const unavailableId = useId();
+  const unavailable = unavailableReason !== undefined;
   return (
     <nav
       aria-label="Primary"
@@ -46,12 +52,17 @@ export function NavRail({ activeItem, narrow, onNavigate }: NavRailProps): JSX.E
         <span aria-hidden="true" className="cr-shell-brand-mark">M</span>
         <span className="cr-shell-brand-name">Moe</span>
       </div>
+      {unavailable ? (
+        <p className="cr-shell-nav-unavailable" id={unavailableId}>{unavailableReason}</p>
+      ) : null}
       <div className="cr-shell-nav-items">
         {CONTROL_ROOM_NAV_ITEMS.map((label) => (
           <button
-            aria-current={activeItem === label ? "page" : undefined}
+            aria-current={!unavailable && activeItem === label ? "page" : undefined}
+            aria-describedby={unavailable ? unavailableId : undefined}
             aria-label={label}
             data-testid={`cr.nav.${navId(label)}`}
+            disabled={unavailable}
             key={label}
             onClick={() => { onNavigate?.(label); }}
             type="button"
