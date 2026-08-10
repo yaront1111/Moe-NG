@@ -162,6 +162,17 @@ describe("the scenario ledger's own arithmetic", () => {
   });
 });
 
+/**
+ * Both branches of main.tsx:40 — `live ? <LiveControlRoom/> : <ControlRoomScaffold/>` —
+ * plus the board the live branch mounts. Named as a constant so the sweep over it can
+ * assert it is non-empty rather than silently generating no cases.
+ */
+const SERVED_ENTRY_POINTS: readonly (readonly [string, string])[] = Object.freeze([
+  ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
+  ["apps/control-room/src/live/live-app.tsx", "the ?live=1 path"],
+  ["apps/control-room/src/live/live-board.tsx", "the live board it mounts"],
+] as const);
+
 describe("the ledger's UNKNOWNs still describe real gaps", () => {
   /**
    * Every scan below is worthless if it walked an empty tree, and an empty tree is
@@ -218,11 +229,18 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
    * The day either path passes a loading prop, this goes RED and demands the record
    * be re-measured rather than letting the UNKNOWN outlive its gap.
    */
-  it.each([
-    ["apps/control-room/src/preview/control-room-preview.tsx", "the fixture path"],
-    ["apps/control-room/src/live/live-app.tsx", "the ?live=1 path"],
-    ["apps/control-room/src/live/live-board.tsx", "the live board it mounts"],
-  ])("%s still composes no pending state (%s)", (file) => {
+  it("guards every served entry point, so the sweep below cannot cover nothing", () => {
+    // `it.each` over an emptied list generates ZERO tests and the suite still passes
+    // green — the swept-case defect epic rail 6 names. Pinning the set is the guard
+    // on the guard, and pinning it as a whole list is what makes a substitution fail.
+    expect(SERVED_ENTRY_POINTS.map(([file]) => file)).toEqual([
+      "apps/control-room/src/preview/control-room-preview.tsx",
+      "apps/control-room/src/live/live-app.tsx",
+      "apps/control-room/src/live/live-board.tsx",
+    ]);
+  });
+
+  it.each(SERVED_ENTRY_POINTS)("%s still composes no pending state (%s)", (file) => {
     const path = join(repoRoot(), file);
     // Fail closed on a rename: a guard reading a file that no longer exists would
     // otherwise assert over an empty string and pass while proving nothing.
@@ -239,6 +257,17 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
  */
 describe("the DoD 2 invariant ledger", () => {
   const SPEC = readFileSync(join(HERE, "journeys.spec.ts"), "utf8");
+
+  /**
+   * Titles of the tests journeys.spec.ts actually DECLARES, taken only from
+   * line-anchored `test("..."` openers. A plain substring search would also match a
+   * title quoted inside a doc comment, which would let a COVERED invariant point at
+   * prose instead of an executing test — a vacuity this ledger cannot afford, since
+   * claiming coverage from a comment is the same class of lie as omitting loading.
+   */
+  const declaredTitles = new Set(
+    [...SPEC.matchAll(/^test\("((?:[^"\\]|\\.)*)"/gmu)].map(([, title]) => title),
+  );
 
   it("records exactly the seven invariants DoD 2 names, in its order", () => {
     expect(DOD2_INVARIANTS.map((invariant) => invariant.id)).toEqual([
@@ -276,15 +305,15 @@ describe("the DoD 2 invariant ledger", () => {
    */
   it("resolves every COVERED invariant to real tests in journeys.spec.ts", () => {
     // Non-vacuity first: a spec file that failed to read, or whose declaration style
-    // changed, would make every `includes` below pass over nothing.
-    expect((SPEC.match(/^test\(/gmu) ?? []).length).toBeGreaterThan(0);
+    // changed, would make every membership check below pass over nothing.
+    expect(declaredTitles.size).toBeGreaterThan(0);
     const covered = coveredInvariants();
     expect(covered.length).toBeGreaterThan(0);
     for (const invariant of covered) {
       expect(invariant.bar.trim(), `${invariant.id} bar`).not.toBe("");
       expect(invariant.provenBy.length, `${invariant.id} provenBy`).toBeGreaterThan(0);
       for (const title of invariant.provenBy) {
-        expect(SPEC.includes(`test("${title}"`), `${invariant.id} -> ${title}`).toBe(true);
+        expect(declaredTitles.has(title), `${invariant.id} -> ${title}`).toBe(true);
       }
     }
   });
