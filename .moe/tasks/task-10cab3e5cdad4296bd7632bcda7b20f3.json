@@ -94,7 +94,7 @@
     {
       "stepId": "step-6",
       "description": "GREEN: packages/scheduler/src/fairness/fairness-aging.ts plus its LF `.js` bridge. Implement compatible-opportunity aging as a pure function over validated inputs: it raises an item's effective standing as compatible opportunities pass it by, bounded so no item waits longer than the stated bound. Consume `validateBypassClaim` for attestation evidence rather than trusting a caller-supplied flag; an unverifiable attestation is UNKNOWN and confers nothing.\n\nAging must not become a second authority: it changes SELECTION ORDER only, never capacity, never a cap, never a dimension identity. If a promotion would breach a capacity or a cap revision, the capacity wins and aging refuses — assert that precedence explicitly, because the opposite ordering is an easy and invisible way to let aging quietly raise a cap. Target <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-aging.ts",
         "packages/scheduler/src/fairness/fairness-aging.js"
@@ -103,46 +103,81 @@
         "packages/scheduler/src/fairness/fairness-aging.ts",
         "packages/scheduler/src/fairness/fairness-aging.js"
       ],
-      "startedAt": "2026-08-10T08:10:16.157Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-aging.ts",
+        "packages/scheduler/src/fairness/fairness-aging.js",
+        "packages/scheduler/src/fairness/fairness-aging.test.ts"
+      ],
+      "note": "GREEN. 25/25 aging tests pass; whole package `pnpm --filter @moe/scheduler test` = 41 files / 1016 tests, exit 0. `npx tsc --project packages/scheduler/tsconfig.json` exit 0. fairness-aging.ts is 218 physical lines by `grep -c ''`; LF `.js` bridge verified by `od -c` (ends `t s \" ; \\n`).\n\n`ageWorkItem` is pure over validated inputs and returns a standing, never a mutation. levelsPromoted = floor(provenBypasses / quantum) clamped to the item's distance from P0; forcing is earned at bypassesToForced(basePriority), which is (rank+1) quanta — so P0 forces at 8 and P3 at 32, matching bucketsToForced.\n\nAGING IS NOT A SECOND AUTHORITY, and the enforcement is structural rather than a comment:\n- checkPromotionHeadroom is gated on `promoted`, so a full resource refuses a PROMOTION but still reports an unpromoted standing. An unconditional capacity refusal would satisfy the obvious test while quietly severing the tie between promotion and capacity — which is why step 5 has a second test asserting the unpromoted case is NOT refused.\n- The headroom check runs AFTER the standing is computed but BEFORE it is returned, so no promoted value can escape past a capacity or a revised cap.\n- A revision that drained the item, or one scoped to another dimension, refuses outright; aging never edits a dimension identity.\n\nEVIDENCE IS CONSUMED, NOT TRUSTED. validateBypassClaim supplies provenBypasses — counted from attestations, never read off claimedBypasses — and an unverifiable attestation propagates its UNKNOWN untouched, so no promotion is computed at all. I added one check the contract cannot make: the claim must name the SAME claimant as the work item being aged (INVALID_IDENTITY/OPPORTUNITY_EVIDENCE). Without it a caller could hand another item's genuine, fully attested evidence to this item and earn a real promotion from it — every individual attestation would validate, so the evidence contract alone cannot catch it.\n\nSAFE ARITHMETIC — deliberately NO guard here, and the reason is recorded in the module rather than left implicit. provenBypasses is bounded by the attestation cardinality readFairnessItems already enforces (MAX_AUTHORITY_ITEMS = 128), and the ladder arithmetic is a floor-divide over that, so nothing accumulates across calls and nothing can leave the safe range. This is the opposite of the rotation deficits, which DO accumulate and have three guarded sites. Adding a guard here would be an untestable branch; asserting the bound holds is the honest form.\n\nFORCED-HEAD interaction is a visible withholding: when another item already holds the forced head, the class promotion still stands and `forcedWithheld` is true, so the fact is recorded rather than silently dropped. `forcedWithheld` stays false when no forcing was earned, so it cannot degenerate into a general \"something blocked me\" flag.\n\nOne typecheck-only fix in the test during this step: `FAIRNESS_PRIORITY_LADDER.length` is the literal type `4` under `as const`, so the monotonicity accumulator needed an explicit `number` annotation. No assertion changed.",
+      "startedAt": "2026-08-10T08:10:16.157Z",
+      "completedAt": "2026-08-10T08:11:39.374Z"
     },
     {
       "stepId": "step-7",
       "description": "Publish from the scheduler root, matching the pattern the contracts already use. packages/scheduler/src/index.ts currently exports the five fairness validators at :103-107 and their types at :221-239. Add a curated named block for the new rotation and aging surfaces in the same style — explicit named exports, never a wildcard. Keep the file's existing organisation and do not reorder or reformat neighbouring exports; the index is shared and a reflow makes the diff unreviewable and invites a conflict with another task editing it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "note": "Published from the scheduler root. `pnpm --filter @moe/scheduler test` = 41 files / 1029 tests, exit 0. tsc exit 0.\n\nindex.ts: 24 lines, PURE INSERTIONS, `git diff --stat` shows \"24 ++++++\" and zero deletions — no neighbouring export reordered or reflowed, as the step required for a contended file. Two curated named blocks in the existing style, no wildcard: 12 runtime values (7 rotation, 5 aging) and 6 types.\n\nAN EDIT OUTSIDE THE PLAN'S FILE LIST, and it was forced rather than chosen. packages/scheduler/src/index-surface.test.ts is this package's root-surface guard: it pins EXPECTED_EXPORTS.length and asserts Object.keys(scheduler).sort() equals that list exactly, \"with no loss and no addition\". Publishing anything from index.ts necessarily reddens it. I ran it and confirmed the failure before touching it — 1 failed / 71 passed, the diff showing precisely my 12 additions — so this is a red MY diff caused in the file that exists to police that diff, not a foreign red and not disclosable under path attribution. Reverting index.ts would be the only alternative, and that abandons step 7. Updated: the hand-transcribed list (12 entries in sorted position, each with its runtime kind), the hand-written count 53 -> 65, and the provenance comment that itemises where the count comes from.\n\nTHE COUNT GUARD IS BLIND TO TYPES, so I did not stop at making it green. Object.keys sees runtime values only: all 6 new type exports could have been omitted from index.ts and every guard in that file would still have passed. Added an it() that calls rotateOnce, validateRotationRequest, resourceRotationOrder, validateResourceCapacity, ageWorkItem and bypassesToForced through the BARE SPECIFIER \"@moe/scheduler\" and annotates each returned value with its published type — FairnessRotationOutcome, FairnessRotationDisposition, FairnessRotationSelection, FairnessRotationInputs, FairnessResourceCapacity, FairnessAgedStanding. An unpublished type is then a tsc error rather than a silently green test. This matches the mechanism the file already documents at :278-283 for the contract families, so it extends the existing guard rather than adding a parallel one.\n\nThe same test also pins the four mirrored constants AT THE PACKAGE ROOT (ceiling 10_000, service cost 1, forced bound 32, ladder P0..P3), so constant drift is now caught at the published surface as well as inside the modules.\n\nOne substantive check that came out of writing it: FAIR_ITEM in that file is P1, so 8 proven bypasses promote it to P0 but do NOT force it — forcing a P1 needs two quanta. Asserting [\"P0\", false] rather than a bare truthiness check is what makes the case distinguish promotion from forcing.",
+      "startedAt": "2026-08-10T08:11:42.021Z",
+      "completedAt": "2026-08-10T08:14:18.232Z"
     },
     {
       "stepId": "step-8",
       "description": "DoD 3 — prove production does not import DEVELOPMENT_ONLY testkit code, and prove the guard is real. The structural fact is favourable: `@moe/scheduler`'s dependencies are exactly @moe/context, @moe/contracts and @moe/core, with NO devDependencies and no @moe/testkit, so a testkit import cannot even resolve. But absence of a dependency is not an asserted property. Add an assertion over the owned fairness sources that no production module references @moe/testkit or the DEVELOPMENT_ONLY reference path, scoped to non-test files, with a hand-written non-zero floor on the number of files scanned so a mis-resolved directory read cannot pass by scanning nothing. Note packages/scheduler/src/package-boundary.test.ts already exists as this package's boundary guard — read it first and extend the existing mechanism if it fits rather than adding a parallel one.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ],
+      "note": "DoD 3 asserted. Extended packages/scheduler/src/package-boundary.test.ts — the package's existing boundary guard — rather than adding a parallel mechanism. Full suite 41 files / 1045 tests, exit 0; tsc exit 0.\n\nREUSING THE EXISTING TOKENIZER IS LOAD-BEARING, NOT STYLISTIC — this is the finding from step 2 that decides the whole step. Three ALREADY-COMMITTED production sources cite the reference path in PROSE to record what they were deliberately not derived from: fairness-contract.ts:11, fairness-evidence.ts:7, fairness-ring.ts:9. A raw text scan for \"@moe/testkit\" or the reference path would flag all three as violations while proving nothing about imports. package-boundary.test.ts:210-232 moduleSpecifiers already parses real import/require/export-from specifiers and ignores comments, strings and template prose, so the guard is built on it.\n\nFOUR ASSERTIONS, each closing a different way the guard could be fake:\n1. 7 forbidden-import fixtures — package, deep package, relative ../../testkit/src/, side-effect, export-from, dynamic import, CommonJS require with Windows separators — must all be DETECTED. Without these the scan could be wired to a function that never returns true.\n2. 6 prose fixtures must NOT be detected, and three of them are the VERBATIM comment lines from the three citing files. So the false-positive mode is pinned against the real bytes, not an invented approximation.\n3. The scan over packages/scheduler/src non-test sources reports zero violations, with a hand-written floor of 60 files (measured 66 by `find packages/scheduler/src -name '*.ts' ! -name '*.test.ts' | wc -l`) AND five named witnesses that must appear in the scanned list: the three citing files plus the two new engine modules. The floor alone is not enough — it proves the walk found SOMETHING, not that it found the files this task is about. Both fixture tables also have hand-written counts (7 and 6) so a table that silently emptied cannot pass.\n4. A manifest assertion pinning the dependency set to exactly [\"@moe/context\",\"@moe/contracts\",\"@moe/core\"] with no devDependencies. The step called the structural fact favourable; this is what stops it from silently ceasing to be true. The plan's reasoning was that a testkit import \"could not even resolve\" — but that is a property of one line in package.json, and an unresolvable import is a build failure rather than an asserted property. Now adding @moe/testkit to the manifest reddens this test immediately, instead of quietly making the import legal.\n\nScope note: package-boundary.test.ts is outside packages/scheduler/src/fairness/**, but step 8 names the file and directs extending it. The alternative — a parallel scanner inside fairness/ — would have had to re-implement the tokenizer, and a naive version of it would have failed on the three prose citations.",
+      "startedAt": "2026-08-10T08:14:21.563Z",
+      "completedAt": "2026-08-10T08:15:57.101Z"
     },
     {
       "stepId": "step-9",
       "description": "Mutation drills. Run each, confirm the NAMED test reddens, revert, confirm green, record the failing assertion text. (a) Remove the empty-queue skip so the WDRR loop idles on an empty turn — the work-conserving test must redden; this is the property most likely to be silently wrong. (b) Derive rotation order from array position instead of resourceId — the permuted-ring determinism test must redden. (c) Remove the MAX_SAFE_INTEGER guard on deficit accumulation — the safe-arithmetic refusal must redden. (d) Let aging promote past a capacity or cap limit — the precedence test must redden. (e) Accept an unverifiable attestation as evidence — the UNKNOWN case must redden. (f) Change only the refusing LAYER on one refusal, leaving the code — a layer assertion must redden independently, proving both halves are pinned separately.\n\nThe four new modules are UNTRACKED, so `git diff` is blind to them — hash with `git hash-object` before and after rather than trusting an empty diff, and re-run the suite after each restore, because a foreign whole-tree completion hook can commit a drill edit while `git status` looks clean.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.ts",
         "packages/scheduler/src/fairness/fairness-aging.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts"
+      ],
+      "note": "SEVEN drills run, each reddening its NAMED test, each restored byte-identically. Full suite green after restore: 41 files / 1045 tests.\n\nDrill harness: every mutation asserted an ANCHOR COUNT of exactly 1 before writing (an anchor matching 0 or 2 sites aborts rather than mutating the wrong line), restore was `cp` from a byte copy held OUTSIDE the repo in /tmp, and each restore was confirmed by `git hash-object`. Final `cmp -s` proved all three production files byte-identical to pre-drill.\n\n(a) queueHeads `continue` -> `break` (idles on an empty turn):\n    x serves a lower-weight queue while the highest-weight resource is empty\n(a') pick `continue` -> `return null` (stops instead of skipping past a blocked head) — added because (a) alone only covers the EMPTY case, not the BLOCKED one, and work conservation needs both:\n    x keeps serving other resources when one head is not dispatchable\n    x never selects from a resource whose in-flight units reached its capacity\n(b) rotation order derived from entry array position instead of resourceId:\n    x selects the same sequence when entries are re-serialized into a different interleaving  — and ONLY that test, which is the point\n(c) safeAdd guard removed:\n    x refuses when carrying a residual deficit onto the next head would leave the safe range\n    x refuses when advancing a round would push a deficit past the safe range\n(d) aging headroom check made unconditional-pass:\n    x refuses a promotion at a resource that is already at capacity\n    x refuses a promotion that a cap revision has already closed\n(e) unverifiable attestation coerced to zero instead of propagating UNKNOWN:\n    x returns UNKNOWN naming the missing observation and confers no promotion (plus the two sibling evidence refusals through the same branch)\n(f) LAYER changed, code left alone — the decisive one for epic rail 6:\n    \"AssertionError: expected 'WORK_ITEM' to be 'RING'\", failing at line 437 `expect(issue.layer)` while line 436 `expect(issue.code)` PASSED. Both halves are pinned independently; neither is carrying the other.\n(g) a real DEVELOPMENT_ONLY import injected into fairness-aging.ts:\n    x keeps DEVELOPMENT_ONLY reference code out of scheduler production sources, naming the offending path. The step-8 guard is live, not decorative.\n\nA REAL GAP THE DRILLS EXPOSED, FIXED BEFORE DRILLING. My step-3 determinism fixture used [a1,b1,a2,b2] vs [a1,a2,b1,b2]. Both lead with res.a, so an implementation deriving order from entry array position selects identically on both and the test would have passed a broken implementation — the exact vacuity risk 3 in the plan names, present in my own test. Regrouped to [b1,b2,a1,a2], which inverts which resource appears first while preserving both per-resource FIFO queues. Drill (b) then reddens exactly that one test, which is the proof the fixture now bites. This is the only test change in this step.\n\nFOREIGN WHOLE-TREE COMMIT — DISCLOSED, NOT REPAIRED. While I was working, commit fec9488 \"feat(task-14ab762db8494959b93b070b9d3b3730): Frozen broker protocol version...\" swept my in-progress files into another task's completion commit. Per the project rail I have NOT amended it, reset, or created a claiming commit. I verified the captured bytes are the CLEAN ones rather than a drill mutation, which was the real risk given the timing: `git rev-parse HEAD:<path>` equals `git hash-object <worktree path>` for all seven swept files (rotation .ts/.js, rotation-input .ts/.js, aging .ts/.js, aging.test.ts), the committed rotation-input still carries the MAX_AUTHORITY_COUNT guard at :80, the committed queueHeads still carries `if (index < 0) continue;` at :98, and the only \"@moe/testkit\" occurrence in the committed aging module is the prose at :9, not an import.\n\nStill uncommitted and mine to commit at step 10: fairness-rotation.test.ts, index.ts, index-surface.test.ts, package-boundary.test.ts. No scratch, probe or backup artifact exists anywhere in the repo — the drill copies lived in /tmp and are deleted.",
+      "startedAt": "2026-08-10T08:15:59.560Z",
+      "completedAt": "2026-08-10T08:19:10.598Z"
     },
     {
       "stepId": "step-10",
       "description": "Verify and self-review. (1) Run the gate fresh and last: `pnpm --filter @moe/scheduler test`, plus `pnpm --filter @moe/scheduler typecheck`. Confirm the test count GREW by your cases. (2) The KNOWN baseline failure is packages/scheduler/src/package-boundary.test.ts (\"unterminated regular expression source token\" scanning apps/daemon/src/daemon-main.ts) — compare against the step-1 baseline and disclose it verbatim as pre-existing; do NOT claim it as yours and do NOT fix it here. Any OTHER red in this package is yours. (3) Hand-measure each new production file with `grep -c ''` and confirm <=250. (4) Path-attributed baseline: repo-wide typecheck and test at merge-base and HEAD, intersect the failing-path delta with owned paths, confirm EMPTY. (5) Adversarial review: does selection ever idle while a compatible entry is queued? Does any ordering depend on array position rather than a derived key? Can any deficit or age accumulate past the safe-integer range? Can aging raise a cap or a capacity? Does any refusal assert only that it failed rather than the exact code AND layer? Did any constant I mirrored from the reference drift from its cited value? Did I import @moe/testkit anywhere in production? (6) Confirm the four new `.js` bridges exist with a trailing LF, verified by `od -c`. (7) Stage and commit by explicit pathspec over the seven owned paths only, then `git diff --cached --name-only` to confirm nothing foreign is staged — the index on this board is shared and index.ts in particular is contended.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-rotation.ts",
         "packages/scheduler/src/fairness/fairness-aging.ts",
         "packages/scheduler/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/fairness/fairness-rotation-input.ts",
+        "packages/scheduler/src/fairness/fairness-aging.ts",
+        "packages/scheduler/src/fairness/fairness-rotation.test.ts",
+        "packages/scheduler/src/fairness/fairness-aging.test.ts"
+      ],
+      "note": "Verified and self-reviewed. Committed 3e03279 over 7 explicit pathspecs; `git diff --cached --name-only` confirmed nothing foreign staged.\n\nGATE, run fresh and last: `pnpm --filter @moe/scheduler test` = 41 files / 1047 tests, exit 0. `pnpm --filter @moe/scheduler typecheck` exit 0. Count GREW from the step-1 baseline of 39/935 by exactly my 112 cases.\n\nBASELINE RED: DOES NOT EXIST. The plan told me to disclose package-boundary.test.ts failing on a shebang tokenizer. I re-measured at step 1 and it is fixed at HEAD (that file skips a leading `#!` at :147-156). I will not fabricate a disclosure in the opposite direction; the package baseline was fully green, so every red in it would have been mine.\n\nPER-FILE CAP, hand-measured by `grep -c ''`: fairness-rotation.ts 248, fairness-rotation-input.ts 250, fairness-aging.ts 224. All <= 250.\n\nBRIDGES: three new `.js`, each one line ending in a trailing LF confirmed by `od -c`.\n\nPATH-ATTRIBUTED BASELINE — three foreign reds at HEAD, intersection with owned paths EMPTY:\n1. `pnpm --recursive --no-bail typecheck` — adapters/jetbrains: \"error TS18003: No inputs were found in config file 'D:/projexts/moe-next/adapters/jetbrains/tsconfig.json'\". The whole directory is UNTRACKED (`?? adapters/jetbrains/`) with an empty src and has never been committed — another agent's live scaffold.\n2. Same run — apps/daemon: \"src/recovery/recovery-key-provider.test.ts(422,60): error TS2339: Property 'requestBytes' does not exist on type 'CommandDecisionRecord'\" and \"src/recovery/recovery-key-provider.ts(3,29): error TS6133: 'readAnchoredIncarnation' is declared but its value is never read\". recovery-key-provider.ts is UNTRACKED and its siblings are modified — in-flight foreign work.\n   packages/scheduler typecheck: **Done** in the same run.\n3. `pnpm test` (repo-wide) = 224 passed / 1 failed of 225 files, 4467 passed of 4469 tests. The one red is tests/fault/foundation/j1-linear.test.ts > \"incident:hot-claim-loop-on-gated-work\": expected PRODUCTION_BEHAVIOR_ABSENT, received PASS_EXPECTED.\n\nI DID NOT ACCEPT (3) AS FOREIGN ON REASONING, because it names the scheduler and my diff adds scheduler root exports — this is exactly the \"a test that prepared for a capability breaks when the capability lands\" trap. produceAbsenceOutcome is a RATCHET: it re-evaluates the probe against @moe/scheduler's LIVE export names and flips to PASS the moment a matching name exists. probe:scheduler-hot-claim-admission matches /Claim|CLAIM/u. So I measured instead of arguing: I replaced index.ts with `git show HEAD:...` (my 24 lines fully reverted) and re-ran the fault test — IT STILL FAILED, identically. The trigger is the pre-existing `export { validateBypassClaim }` at index.ts:104, landed by task-e8e27f76. None of my 12 new export names contains Claim/CLAIM. Restored index.ts and confirmed its hash afterwards. The manifest debt belongs to the contract task; updating packages/testkit is outside my owned paths, so I disclose it rather than fix it.\n\nADVERSARIAL REVIEW FOUND TWO REAL FAIL-OPENS, both fixed and both drilled live:\nA. bypassesToForced is exported from the package ROOT. `FAIRNESS_PRIORITY_LADDER.indexOf(priority)` answers -1 for a class outside the ladder, computing (-1+1)*8 = ZERO bypasses — forced for free. Unreachable through ageWorkItem (validateWorkItem constrains priority to the closed set) but trivially reachable by an untyped consumer of a published function. Now returns FAIRNESS_FORCED_BYPASS_BOUND: unknown demands the MAXIMUM evidence, never none. Drill (removing the guard) reddens with \"expected +0 to be 32\".\nB. readCapacities accepted capacity records for resources the ring does not declare, and their inFlightUnits were summed into the per-dimension ceiling and compared against a revised cap — letting an input the ring cannot verify decide whether the ring dispatches at all. Now REFUSED (UNDECLARED_RESOURCE/RESOURCE), which pairs with the UNKNOWN used for a MISSING record: same code, disposition distinguishes verdict from absence. Drill reddens the named test.\n\nRemaining checklist answers: selection never idles while a servable head exists (two drills prove the empty-queue and blocked-head halves separately); no ordering reads array position across queues (drill (b) reddens only the re-serialization test); every accumulation passes safeAdd at MAX_AUTHORITY_COUNT — including the summed in-flight total, a site neither the plan nor my own test list had; aging cannot raise a capacity or a cap, and a forced head cannot bypass the dimension ceiling; every refusal asserts code AND layer, proven independent by the layer-only drill; the mirrored constants are pinned at both the module and the package root; no @moe/testkit import exists in production and the guard is live under injection. Concurrency: every function is pure over deep-frozen inputs with no IO or shared mutable state, so there is no check-then-act and nothing to race.\n\nCommitted bytes == gated bytes verified for all 11 files via `git r",
+      "startedAt": "2026-08-10T08:19:19.546Z",
+      "completedAt": "2026-08-10T08:25:46.922Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-767ae903",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f3560083",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -173,16 +208,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-10T08:10:16.157Z",
+  "updatedAt": "2026-08-10T08:27:04.382Z",
   "contextFetchedBy": [
     "architect-da724bb7",
-    "worker-767ae903"
+    "worker-767ae903",
+    "qa-f3560083"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:45:35.201Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 10
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -208,7 +244,12 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T07:46:07.770Z",
@@ -223,5 +264,25 @@
     "escalatedAt": "2026-08-10T07:49:27.008Z"
   },
   "planApprovedAt": "2026-08-10T07:46:09.818Z",
-  "workStartedAt": "2026-08-10T07:49:41.761Z"
+  "workStartedAt": "2026-08-10T07:49:41.761Z",
+  "reviewStartedAt": "2026-08-10T08:26:41.215Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  41 passed (41)\n      Tests  1047 passed (1047)\n   Start at  11:25:50\n   Duration  1.37s (transform 10.19s, setup 0ms, import 14.06s, tests 1.81s, environment 4ms)\n\n=== EXIT=0 ===",
+    "reportedAt": "2026-08-10T08:26:41.215Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/fairness/fairness-rotation.test.ts",
+    "packages/scheduler/src/fairness/fairness-rotation.ts",
+    "packages/scheduler/src/fairness/fairness-rotation-input.ts",
+    "packages/scheduler/src/fairness/fairness-rotation.js",
+    "packages/scheduler/src/fairness/fairness-rotation-input.js",
+    "packages/scheduler/src/fairness/fairness-aging.test.ts",
+    "packages/scheduler/src/fairness/fairness-aging.ts",
+    "packages/scheduler/src/fairness/fairness-aging.js",
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/index-surface.test.ts",
+    "packages/scheduler/src/package-boundary.test.ts"
+  ]
 }

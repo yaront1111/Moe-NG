@@ -22,12 +22,12 @@
     "Do not implement concurrent-idempotence proofs, the forcible-kill detached-grandchild proof, or the final acceptance sweep. Those belong to SPIDR sibling 3d."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Depends on BOTH task-05bf0e0fe7e84afb8584588ecf96db14 (3a: package, workspace wiring, descriptors) and task-14ab762db8494959b93b070b9d3b3730 (3b: protocol vocabularies and bounded framing). Neither is implemented. This task wires descriptors plus protocol plus session into the broker loop and consumes symbols from both, so starting first means writing against types that do not exist.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool. The brief PLANNING status immediately before this was a transit hop only.\n\nUNBLOCK CONDITION: promote to PLANNING when BOTH 3a and 3b are DONE. Verify by compiling rather than by reading status fields, and re-measure the landed ProcessCalls/frame/vocabulary symbols before planning -- every prior task in this chain found a stale claim in its own description.",
+  "reopenReason": "UNBLOCKED by architect-8ee37119, 2026-08-10, on this task's OWN stated condition. Its blockedReason named both prerequisites and said \"Neither is implemented. This task wires descriptors plus protocol plus session into the broker loop and consumes symbols from both, so starting first means writing against types that do not exist.\" Both are now implemented and committed.\n\nDEPENDENCIES SATISFIED:\n- task-05bf0e0fe7e84afb8584588ecf96db14 (3a: package, workspace wiring, CRT descriptor acquisition) = DONE.\n- task-14ab762db8494959b93b070b9d3b3730 (3b: frozen protocol version, closed vocabularies, bounded framing, hostile-frame sweep) = DONE, landed minutes ago.\n\nSYMBOLS VERIFIED ON DISK AND COMMITTED AT HEAD, not inferred from DONE status. The broker is a RUST crate at packages/runner/src/platform/windows/native/broker/. `git ls-tree -r HEAD` returns Cargo.toml plus src/{lib,main,boundary,control,descriptors,diagnostics,frames,payload}.rs and src/bin/handle_probe.rs. The crate root wires ten modules and re-exports exactly the surfaces this task consumes:\n  pub use control::{AcceptState, Accepted, Inbound, LaunchRequest};\n  pub use descriptors::{...};            <- 3a's contribution\n  pub use frames::{...};                 <- 3b's contribution\n  pub use protocol::{...};\n  pub use refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES};\n  pub use status::{Completed, Outbound, Started, Status};\n  pub use boundary::{acquire, startup_block, SystemHandles};\n`status::{Started, Completed}` is precisely the vocabulary this task's title needs for \"STARTED after proof, natural COMPLETED\", and `refusal::{RefusalLayer, Refused}` gives it the exact-code-and-layer discipline the epic rail requires.\n\nREACHABILITY, the check that distinguishes a sound unblock from the one I got wrong on task-b6e3dd2a earlier today: this task extends the SAME Rust crate the prerequisites landed in. Composition is an in-crate `mod`/`use`, with no cross-package manifest edge to prove. That is why this unblock is safe.\n\nGAP RE-VERIFIED: `git ls-tree` over the crate's src returns NO session or job module. Not a silent duplicate of landed work.\n\nFOR THE PLANNING ARCHITECT: re-measure before naming symbols; read src/lib.rs first for the exact re-export list, and src/status.rs and src/refusal.rs before designing the session state machine. This is Rust, not TypeScript, so the repo's .js-bridge and 250-line TS conventions do not apply here — check what the crate's own committed modules do for size and test layout. The remaining broker sibling, task-e18b1284 (hardening: concurrent termination idempotence, detached-grandchild kill proof), is still blocked on THIS task; landing it also brings the task-af3d7bc8 shell to 1 open child.",
   "createdBy": "WORKER",
   "parentTaskId": "task-af3d7bc8af2146cf92d98557ed0e90c0",
   "priority": "CRITICAL",
@@ -35,8 +35,9 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:39:24.343Z",
-  "updatedAt": "2026-08-10T06:40:48.028Z",
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-10T06:40:48.028Z",
-  "blockedReason": "Depends on BOTH task-05bf0e0fe7e84afb8584588ecf96db14 (3a: package, workspace wiring, descriptors) and task-14ab762db8494959b93b070b9d3b3730 (3b: protocol vocabularies and bounded framing). Neither is implemented. This task wires descriptors plus protocol plus session into the broker loop and consumes symbols from both, so starting first means writing against types that do not exist.\n\nBlocked rather than left in BACKLOG deliberately: a periodic daemon sweep auto-promotes BACKLOG tasks into the claimable PLANNING pool. The brief PLANNING status immediately before this was a transit hop only.\n\nUNBLOCK CONDITION: promote to PLANNING when BOTH 3a and 3b are DONE. Verify by compiling rather than by reading status fields, and re-measure the landed ProcessCalls/frame/vocabulary symbols before planning -- every prior task in this chain found a stale claim in its own description."
+  "updatedAt": "2026-08-10T08:20:41.966Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null
 }

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import type { CommandDecisionResponse, CommitExpectedVersionDecisionInput } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readAnchoredIncarnation } from "./recovery-incarnation-anchor.js";
@@ -231,19 +232,20 @@ describe("a crash between the succession record and the pointer advance heals", 
     const state = harness();
     const first = opened(await open(state.store));
 
+    // Methods are bound to the TARGET: `SqliteEventStore` reads a `#core`
+    // private field, which throws on a proxy receiver.
     const wedged = new Proxy(state.store, {
-      get(target, property, receiver): unknown {
-        if (property !== "commitExpectedVersionDecision") {
-          return Reflect.get(target, property, receiver) as unknown;
+      get(target, property): unknown {
+        if (property === "commitExpectedVersionDecision") {
+          return (input: CommitExpectedVersionDecisionInput): CommandDecisionResponse => {
+            if (input.commandKind === RECOVERY_KEY_EPOCH_COMMAND_KIND) {
+              throw new Error("process died before the pointer advanced");
+            }
+            return target.commitExpectedVersionDecision(input);
+          };
         }
-        return (input: { readonly commandKind: string }): unknown => {
-          if (input.commandKind === RECOVERY_KEY_EPOCH_COMMAND_KIND) {
-            throw new Error("process died before the pointer advanced");
-          }
-          return target.commitExpectedVersionDecision(
-            input as Parameters<SqliteEventStore["commitExpectedVersionDecision"]>[0],
-          );
-        };
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
       },
     });
     await expect(open(wedged)).rejects.toThrow("process died before the pointer advanced");
@@ -269,6 +271,8 @@ describe("a crash between the succession record and the pointer advance heals", 
  */
 type Injection = {
   readonly name: string;
+  /** Runs BEFORE the write count is snapshotted, so seeding is not mistaken for a write. */
+  readonly arrange?: (state: Harness) => Promise<void>;
   readonly run: (state: Harness) => Promise<RecoveryKeyEpochResult>;
 };
 
@@ -310,6 +314,12 @@ const seedDanglingPointer = (store: SqliteEventStore): void => {
   });
 };
 
+/** Establishes a real epoch, then crosses the connection boundary a restart crosses. */
+const coldStartThenRestart = async (state: Harness): Promise<void> => {
+  opened(await open(state.store));
+  state.reopen();
+};
+
 const INJECTIONS: readonly Injection[] = Object.freeze([
   {
     name: "input names a predecessor the provider must never accept",
@@ -334,39 +344,28 @@ const INJECTIONS: readonly Injection[] = Object.freeze([
       })),
   },
   {
+    arrange: ({ store }): Promise<void> => Promise.resolve(seedUnreadablePointer(store)),
     name: "a durable pointer exists but has drifted",
-    run: ({ store }): Promise<RecoveryKeyEpochResult> => {
-      seedUnreadablePointer(store);
-      return open(store);
-    },
+    run: ({ store }): Promise<RecoveryKeyEpochResult> => open(store),
   },
   {
+    arrange: ({ store }): Promise<void> => Promise.resolve(seedDanglingPointer(store)),
     name: "the pointer names a head nothing ever anchored",
-    run: ({ store }): Promise<RecoveryKeyEpochResult> => {
-      seedDanglingPointer(store);
-      return open(store);
-    },
+    run: ({ store }): Promise<RecoveryKeyEpochResult> => open(store),
   },
   {
+    arrange: coldStartThenRestart,
     name: "the anchored predecessor does not prove itself",
-    run: async (state): Promise<RecoveryKeyEpochResult> => {
-      opened(await open(state.store));
-      return open(state.reopen(), {}, fakePort(), wrapCrypto({ verify: () => Promise.resolve(false) }));
-    },
+    run: ({ store }): Promise<RecoveryKeyEpochResult> =>
+      open(store, {}, fakePort(), wrapCrypto({ verify: () => Promise.resolve(false) })),
   },
   {
+    arrange: coldStartThenRestart,
     name: "the successor key epoch cannot be minted",
-    run: async (state): Promise<RecoveryKeyEpochResult> => {
-      opened(await open(state.store));
-      return open(
-        state.reopen(),
-        {},
-        fakePort(),
-        wrapCrypto({
-          generateSigningKey: () => Promise.reject(new Error("no key epoch")),
-        }),
-      );
-    },
+    run: ({ store }): Promise<RecoveryKeyEpochResult> =>
+      open(store, {}, fakePort(), wrapCrypto({
+        generateSigningKey: () => Promise.reject(new Error("no key epoch")),
+      })),
   },
 ]);
 
@@ -390,6 +389,7 @@ describe("every declared failure injection refuses with its own code and layer",
     const generated: string[] = [];
     for (const injection of INJECTIONS) {
       const state = harness();
+      await injection.arrange?.(state);
       const before = decisionCount(state.store);
       const result = await injection.run(state);
       answers.push(answerOf(result));
@@ -407,26 +407,58 @@ describe("every declared failure injection refuses with its own code and layer",
   });
 });
 
+/**
+ * Every readable byte the provider made durable — decision results and event
+ * payloads — read back out of the store. Built from the production rows rather
+ * than from a shape constructed here, because a test that inspects its own
+ * object learns nothing about what was written. (Request bytes are not part of
+ * `CommandDecisionRecord`; the store publishes only their digest, so they cannot
+ * be read back and are not claimed to be covered.)
+ */
+const durableCorpus = (store: SqliteEventStore): string => {
+  const decoder = new TextDecoder();
+  return [
+    ...store.readCommandDecisionsAfter(0n, 1000).items.map((d) => decoder.decode(d.resultBytes)),
+    ...store.readEventsAfter(0n, 1000).items.map((event) => decoder.decode(event.payload)),
+  ].join("\n");
+};
+
+/** DER prefix of a PKCS8-wrapped Ed25519 private key, hex-encoded. */
+const PKCS8_ED25519_PREFIX = "302e020100300506032b657004220420";
+const HEX_RUN = /[0-9a-f]{64,}/g;
+
 describe("no private key material reaches anything durable", () => {
-  it("keeps the handle non-enumerable and out of the anchored bytes", async () => {
-    const { store } = harness();
-    const epoch = opened(await open(store));
+  it("keeps the handle non-enumerable and out of every committed byte", async () => {
+    const state = harness();
+    const first = opened(await open(state.store));
+    // Reopened too, so the corpus includes the succession record and the second
+    // anchor — the rows a cold start alone would never produce.
+    const second = opened(await open(state.reopen()));
 
-    const descriptor = Object.getOwnPropertyDescriptor(epoch, "keyHandle");
-    expect(descriptor?.enumerable).toBe(false);
-    expect(typeof epoch.keyHandle).toBe("object");
-    expect(Object.keys(JSON.parse(JSON.stringify(epoch)) as object)).not.toContain("keyHandle");
+    for (const epoch of [first, second]) {
+      const descriptor = Object.getOwnPropertyDescriptor(epoch, "keyHandle");
+      expect(descriptor?.enumerable).toBe(false);
+      expect(typeof epoch.keyHandle).toBe("object");
+      expect(Object.keys(JSON.parse(JSON.stringify(epoch)) as object)).not.toContain("keyHandle");
+    }
 
-    // Read from the ACTUAL committed rows rather than a shape built here, so a
-    // future refactor that turned the provider into a secret store is caught.
-    const durable = store
-      .readCommandDecisionsAfter(0n, 1000)
-      .items.map((decision) => new TextDecoder().decode(decision.resultBytes))
-      .join("\n");
-    expect(durable).toContain(epoch.publicKeySpkiHex);
+    const durable = durableCorpus(state.store);
+    expect(durable).toContain(first.publicKeySpkiHex);
+    expect(durable).toContain(second.publicKeySpkiHex);
     expect(durable).not.toContain("PRIVATE KEY");
-    for (const forbidden of ["privateKey", "keyHandle", "pkcs8", "d\":"]) {
+    expect(durable).not.toContain(PKCS8_ED25519_PREFIX);
+    // `"d":` is the JWK private scalar; the leading quote keeps it from matching
+    // the tail of a legitimate key such as `backupGenerationDigest":`.
+    for (const forbidden of ["privateKey", "keyHandle", "pkcs8", '"d":']) {
       expect(durable).not.toContain(forbidden);
     }
+
+    // Structural, not just name-based: every long hex run the provider wrote
+    // must decode to a 32-byte digest, a 44-byte Ed25519 SPKI or a 64-byte
+    // Ed25519 signature. A PKCS8 Ed25519 private key is 48 bytes and would
+    // introduce a fourth length, so smuggling one in cannot stay invisible.
+    const lengths = [...durable.matchAll(HEX_RUN)].map((match) => match[0].length / 2);
+    expect(lengths.length).toBeGreaterThan(0);
+    expect([...new Set(lengths)].sort((left, right) => left - right)).toEqual([32, 44, 64]);
   });
 });

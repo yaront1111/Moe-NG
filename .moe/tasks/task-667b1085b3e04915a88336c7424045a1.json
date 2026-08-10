@@ -134,8 +134,8 @@
       "completedAt": "2026-08-10T08:00:38.935Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f3560083",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -184,7 +184,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T08:05:13.891Z",
+  "updatedAt": "2026-08-10T08:12:46.536Z",
   "contextFetchedBy": [
     "worker-a2c7f85f",
     "qa-f3560083"
@@ -195,7 +195,9 @@
     "plannedDistinctFileCount": 3,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-10T08:12:46.536Z",
+    "wallClockMs": 71070435
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -275,7 +277,7 @@
     "tests/e2e/control-room/journeys.spec.ts",
     "tests/e2e/control-room/journey-coverage.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-10T07:42:00.130Z",
+  "reviewCompletedAt": "2026-08-10T08:12:46.536Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Truth, provenance, keyboard, narrow-window, loading, degraded, and latency invariants pass globally. — the LOADING invariant is neither asserted nor recorded as UNKNOWN; five of seven asserted, one recorded, one silently omitted.",
@@ -334,5 +336,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-10T08:12:46.536Z",
+  "reviewSummary": "APPROVE on re-review; my reject is discharged. Full evidence: chan-ced99359, msg-4fb99df4.\n\nBOTH GATES RE-RUN BY ME at 5e12da8, owned tree clean before and after, HEAD identical across both: test:e2e 4 files/68 tests exit 0; test:e2e:browser 10 passed exit 0, all ten named ok by title so discovery is proven by name. HEAD moved twice since; git log 5e12da8..HEAD over owned paths is empty and sha256 still matches, so gated bytes are HEAD bytes.\n\nDEFECT CLOSED. LOADING_RECORD has cause SURFACE_NOT_COMPOSED, a named owner, a missingInput naming all four ids. DOD2_INVARIANTS carries all seven in DoD order; LOADING and LATENCY derive status from their records instead of hand-copying it.\n\nFIVE OF MY OWN DRILLS, all red at the aimed assertion, sha256 byte-identical after restore. Q1 the drill I named: flipping LOADING to COVERED is refused at TWO layers - tsc TS2322 \"missing... bar, provenBy\" plus 3 red tests. Q2 MINE, the exact defect I rejected for: renaming the LOADING id out of the ledger reddens the hand-written seven-name list AND the UNKNOWN-id set - it now polices its own omission. Q3 missingInput cut to 3 chars. Q4 loading={false} added to the REAL preview file, rot guard red. Q5 renamed a proving test, COVERED-resolution red.\n\n3 OF 20 UNCHANGED: exactly CR-J1-002, CR-A11Y-001, CR-CMD-001 against a whole-list pin of all twenty ids.\n\nNOT DONE, and why not a reject: my TO PASS asked for a line stating DoD 3's transcript clause unproven. Absent from the notes, but journey-coverage.ts:117 records CR-J2-003 UNKNOWN, cause NO_DAEMON_BACKED_BROWSER_LANE, owner UNOWNED, missingInput naming that gap, under a twenty-id pin. A missing recap of a fact the ledger carries is not the failure I rejected for. Stating it here instead: DOD 3 CLAUSE 2 IS UNPROVEN, recorded as CR-J2-003.\n\nGOVERNOR ITEM OPEN: DoD 1/2/3 as written are not fully satisfiable here. Approved because every gap is measured, typed, owned and reddenable - not because the DoD is met."
 }

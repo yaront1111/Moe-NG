@@ -163,7 +163,7 @@
       "completedAt": "2026-08-10T08:09:09.085Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -183,14 +183,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:38:44.701Z",
-  "updatedAt": "2026-08-10T08:10:07.095Z",
+  "updatedAt": "2026-08-10T08:19:33.866Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
   "blockedResourceId": null,
   "contextFetchedBy": [
     "architect-5aba94da",
-    "worker-131786b8"
+    "worker-131786b8",
+    "qa-f3560083"
   ],
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -213,7 +214,9 @@
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 6,
     "firstClaimAt": "2026-08-10T07:40:19.261Z",
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-10T08:19:33.866Z",
+    "wallClockMs": 2354605
   },
   "planningNotes": {
     "approachesConsidered": "REFUSAL VOCABULARY: SEPARATE ENUM, NOT AN EXTENSION OF DescriptorReason. Rejected extending DescriptorReason with protocol cases. Descriptor refusals and protocol refusals are different layers, and the global rail requires a test to pin WHICH layer refused. One merged enum makes that unpinnable — a descriptor test and a protocol test would assert against the same vocabulary, so a refusal migrating between layers keeps both green. Chose a separate closed `ProtocolReason` plus `ProtocolError { reason, code }` mirroring DescriptorError's shape (accessors only, no string field).\n\nTHE WIRE MUST NAME THE LAYER. Because three layers can now refuse — descriptor (3a), protocol (this task), native (the core, via 3c) — a REFUSED frame that carries only a number cannot tell a reader which one spoke. Chose an explicit `RefusalLayer` discriminant on the frame alongside the layer-local reason ordinal and the numeric code. That is what makes 'which layer refused' assertable on the wire rather than only in Rust types, and it is why the frame does not simply reuse NativeOp for everything.\n\nDoD ITEM 4 — READ THIS, IT IS THE ONE PLACE I AM DELIBERATELY DIVERGING IN FORM. The item says hostile frames must be proved to refuse 'asserted as the absence of any lifecycle-core call in a recorded call log'. This task has no session and never touches the core's Job or process constructors, so wiring a core recording double into the sweep and asserting it is empty would be VACUOUSLY true — nothing here could ever call it, which is exactly the detached-assertion defect the global rail names. Chose a STRICTLY STRONGER proof instead: make authority unreachable by TYPE. Decoding yields `Accepted::Launch(LaunchRequest)` or `Accepted::Cancel`, and a LaunchRequest is the ONLY value that can later reach a process launch. The sweep asserts that every hostile case returns Err with its exact reason AND that no Accepted value is produced. A call log can be satisfied by code that simply has not called yet; unconstructibility cannot. The literal call-log form becomes meaningful in 3c, whose DoD already requires it where the session actually holds the calls. THE WORKER MUST STATE THIS DIVERGENCE AND ITS REASONING EXPLICITLY IN THE COMPLETION NOTES so QA judges it knowingly — do not silently substitute.\n\nI/O SEAM. Chose a narrow byte-channel trait (read into a caller-owned buffer, write a slice) defined in frames.rs, injectable so the whole sweep runs with no pipe, no process and no Windows. Rejected reusing HandleCalls (no read/write) and rejected std::io::Read/Write directly, because the sweep needs to script short reads and partial writes, which a bare Read impl makes awkward to assert against.\n\nLaunchRequest CARRIES paths and argv; ProtocolError MUST NOT. These are not in tension: the launch REQUEST is the payload whose whole purpose is to carry an executable and arguments, while the REFUSAL is forbidden from echoing them. Keeping them in separate types is what makes the rail enforceable by construction.",
@@ -249,5 +252,8 @@
     "packages/runner/src/platform/windows/native/broker/src/status.rs",
     "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
     "packages/runner/src/platform/windows/native/broker/src/diagnostics.rs"
-  ]
+  ],
+  "completedAt": "2026-08-10T08:19:33.866Z",
+  "reviewCompletedAt": "2026-08-10T08:19:33.866Z",
+  "reviewSummary": "APPROVE. Full evidence: chan-ced99359, msg-7ee51d8f.\n\nGATE RE-RUN BY ME, both legs, twice (before and after my drills): cargo test --locked exit 0, 8+38+1+1 = 48 tests, 0 failed 0 ignored; cargo build --locked --release exit 0. Matches outputTail; crate clean throughout.\n\nTRACKED-AT-HEAD checked by git rev-parse HEAD:<path> on each of the nine, not by an empty diff - three were untracked earlier this session, and swept-elsewhere vs never-committed look identical from a diff. The worker's commit f362fe5 is five owned paths and nothing foreign; the other four landed via foreign hook sweeps (global rail 5, not a defect).\n\nDoD7: grep -c '' across the crate - 94/204/222/95/223/104/85/100/205/146/182/157/127, all under 250. dist/ is gitignore:4; no exe, pdb, log or transcript tracked under native/.\n\nFIVE OF MY OWN DRILLS, all red at the aimed assertion, sha256 byte-identical after restore.\nR1, the drill DoD 5 names: deleted one entry from ProtocolReason::ALL -> RED on the_sweep_reaches_every_reason_in_the_production_vocabulary while every individual case still passed. The cross-check is against the production enum, not the case list.\nR2 PROTOCOL_VERSION 1->2 -> RED on the frozen-version test and all five byte-exact encodings.\nR3 MINE: 2 MiB allocated ahead of the bound check -> RED on a_declared_length_near_u32_max. The allocator-delta assertion is live, so DoD 2 is proven by measurement, not by absence of a crash.\nR4 moved UnknownOpcode to Framing -> RED on two, incl \"wrong layer for\".\nR5 added a String field to Refused -> will not compile three ways: E0204 Copy, E0080 size_of==8, three E0063.\n\nDoD 4 FORM CHANGE ACCEPTED, premise measured: the only core uses are NativeError/NativeOp and UnknownExit, no job/process call exists, so a call log would be empty for a VALID frame too. Non-vacuous the other way: frame_sweep.rs:423 proves a well-formed launch DOES reach Accepted::Launch.\n\nDoD5 counts hand-written: 53, per-class 39/6/2/3/1/1/1."
 }

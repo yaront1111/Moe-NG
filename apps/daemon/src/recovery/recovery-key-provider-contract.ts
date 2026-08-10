@@ -24,11 +24,9 @@ import type {
  * protection faults, an unreadable epoch pointer, and an input fault; the last
  * because succession's input refusal reads "must name exactly one predecessor
  * incarnation", and a provider request must NOT name one, so reusing it would be
- * false evidence.
- *
- * Split across three modules (this one, `recovery-key-epoch-store.ts` and
- * `recovery-key-provider.ts`) purely to hold the per-file line cap, for the same
- * reason `recovery-incarnation-contract.ts` documents.
+ * false evidence. Split across three modules (this one,
+ * `recovery-key-epoch-store.ts` and `recovery-key-provider.ts`) purely to hold
+ * the per-file line cap, as `recovery-incarnation-contract.ts` documents.
  */
 export const RECOVERY_KEY_EPOCH_SCHEMA_VERSION = "moe-recovery-key-epoch/1" as const;
 export const RECOVERY_KEY_PROVIDER_LAYER = "RECOVERY_KEY_PROVIDER" as const;
@@ -52,8 +50,7 @@ export const RECOVERY_KEY_PROTECTION_MECHANISMS = Object.freeze([
   "WIN32_DACL_EXPLICIT_OWNER_ONLY",
   "POSIX_MODE_0700_OWNER_ONLY",
 ] as const);
-export type RecoveryKeyProtectionMechanism =
-  (typeof RECOVERY_KEY_PROTECTION_MECHANISMS)[number];
+export type RecoveryKeyProtectionMechanism = (typeof RECOVERY_KEY_PROTECTION_MECHANISMS)[number];
 
 /** Bounded on purpose: an unrecognised `process.platform` reads as OTHER. */
 export const RECOVERY_KEY_HOST_PLATFORMS = Object.freeze([
