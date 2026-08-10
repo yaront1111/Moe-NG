@@ -36,6 +36,10 @@ import type {
   FairnessRingQueueEntry, FairnessRingResource, FairnessWorkItem,
 } from "@moe/scheduler";
 import type {
+  FairnessAgedStanding, FairnessResourceCapacity, FairnessRotationDisposition,
+  FairnessRotationInputs, FairnessRotationOutcome, FairnessRotationSelection,
+} from "@moe/scheduler";
+import type {
   SupersessionBoundDispositionField, SupersessionBudgetFacts, SupersessionCarryRefusal,
   SupersessionDispositionFamily, SupersessionDispositionLayer, SupersessionDispositionResult,
   SupersessionDispositionSet, SupersessionFamilyDisposition,
@@ -45,7 +49,8 @@ import type {
 type ExportKind = "array" | "function" | "number" | "record";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
- * values + 11 fairness contract values + 6 supersession disposition values.
+ * values + 11 fairness contract values + 6 supersession disposition values +
+ * 12 fairness rotation and aging values.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -53,8 +58,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
+  ["FAIRNESS_BYPASSES_PER_LEVEL", "number"],
   ["FAIRNESS_CONTRACT_ISSUE_CODES", "array"], ["FAIRNESS_CONTRACT_LAYERS", "array"],
-  ["FAIRNESS_DISPATCHABILITY_STATES", "array"], ["FAIRNESS_PRIORITY_CLASSES", "array"],
+  ["FAIRNESS_DIMENSION_CEILING", "number"],
+  ["FAIRNESS_DISPATCHABILITY_STATES", "array"],
+  ["FAIRNESS_FORCED_BYPASS_BOUND", "number"], ["FAIRNESS_PRIORITY_CLASSES", "array"],
+  ["FAIRNESS_PRIORITY_LADDER", "array"], ["FAIRNESS_ROTATION_DISPOSITIONS", "array"],
+  ["FAIRNESS_SERVICE_COST", "number"],
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
@@ -62,9 +72,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
-  ["adapterFail", "function"], ["analyzeGraphStructure", "function"],
+  ["adapterFail", "function"], ["ageWorkItem", "function"],
+  ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
-  ["buildSupersessionDispositions", "function"], ["cancelReservation", "function"],
+  ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
+  ["cancelReservation", "function"],
   ["carryWaitProjection", "function"],
   ["createTraversalCounter", "function"], ["deriveReservationId", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
@@ -73,15 +85,18 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
+  ["resourceRotationOrder", "function"], ["rotateOnce", "function"],
   ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
-  ["validateGraphSnapshot", "function"], ["validateRing", "function"],
-  ["validateRingResource", "function"], ["validateWorkItem", "function"],
+  ["validateGraphSnapshot", "function"], ["validateResourceCapacity", "function"],
+  ["validateRing", "function"],
+  ["validateRingResource", "function"], ["validateRotationRequest", "function"],
+  ["validateWorkItem", "function"],
   ["validateWorkItemSet", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(53);
+  expect(EXPECTED_EXPORTS.length).toBe(65);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -339,6 +354,63 @@ it("validates every fairness family through the root exports", () => {
   if (!revised.ok) throw new Error(fairnessCodes(revised).join(","));
   const revision: FairnessCapRevision = revised.value;
   expect(revision.migrations.length).toBe(1);
+});
+
+/**
+ * Rotation and aging are exercised through the bare specifier for the same
+ * reason the families above are: the export-count guards see runtime values
+ * only, so a type published nowhere would leave them green. Annotating each
+ * returned value turns an unpublished type into a tsc error.
+ */
+it("rotates and ages through the root exports", () => {
+  const ringInput = {
+    ringId: "ring-1", dimensionId: "dim-1",
+    resources: [{ resourceId: "res-a", weight: 2 }],
+    entries: [{ workItemId: "wi-a", resourceId: "res-a", deficitCounter: 0 }],
+  };
+  const capacity: FairnessResourceCapacity =
+    { resourceId: "res-a", capacityUnits: 4, inFlightUnits: 0 };
+  const rotated = scheduler.rotateOnce({
+    ring: ringInput, workItems: [FAIR_ITEM], capacities: [capacity],
+    forcedHead: null, capRevision: null,
+  });
+  if (!rotated.ok) throw new Error(fairnessCodes(rotated).join(","));
+  const outcome: FairnessRotationOutcome = rotated.value;
+  const disposition: FairnessRotationDisposition = outcome.disposition;
+  const selection: FairnessRotationSelection | null = outcome.selection;
+  expect([disposition, selection?.workItemId]).toEqual(["SELECTED", "wi-a"]);
+  expect(scheduler.FAIRNESS_ROTATION_DISPOSITIONS).toContain(disposition);
+
+  const inputs = scheduler.validateRotationRequest({
+    ring: ringInput, workItems: [FAIR_ITEM], capacities: [capacity],
+    forcedHead: null, capRevision: null,
+  });
+  if (!inputs.ok) throw new Error(fairnessCodes(inputs).join(","));
+  const validated: FairnessRotationInputs = inputs.value;
+  expect(validated.totalInFlight).toBe(0);
+  const order = scheduler.resourceRotationOrder(ringInput);
+  expect(order.ok && order.value).toEqual(["res-a"]);
+  expect(scheduler.validateResourceCapacity(capacity).ok).toBe(true);
+
+  const aged = scheduler.ageWorkItem({
+    workItem: FAIR_ITEM, capacity, capRevision: null, forcedHead: null,
+    bypassClaim: {
+      workItemId: "wi-a", claimedBypasses: 8,
+      attestations: Array.from({ length: 8 }, (_, index) => ({
+        opportunityRef: `opp-${index}`, winnerWorkItemId: "wi-b",
+        observationRef: `obs-${index}`,
+      })),
+    },
+  });
+  if (!aged.ok) throw new Error(fairnessCodes(aged).join(","));
+  const standing: FairnessAgedStanding = aged.value;
+  // FAIR_ITEM is P1, so one quantum promotes it to P0 and forcing needs two.
+  expect([standing.effectivePriority, standing.forced]).toEqual(["P0", false]);
+  expect(scheduler.bypassesToForced("P1")).toBe(scheduler.FAIRNESS_BYPASSES_PER_LEVEL * 2);
+  expect([scheduler.FAIRNESS_DIMENSION_CEILING, scheduler.FAIRNESS_SERVICE_COST])
+    .toEqual([10_000, 1]);
+  expect(scheduler.FAIRNESS_FORCED_BYPASS_BOUND).toBe(32);
+  expect(scheduler.FAIRNESS_PRIORITY_LADDER).toEqual(["P0", "P1", "P2", "P3"]);
 });
 
 it("refuses hostile fairness input from the root and names the refusing layer", () => {

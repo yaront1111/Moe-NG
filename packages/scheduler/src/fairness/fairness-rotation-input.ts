@@ -12,7 +12,7 @@
  * revision applies to THIS ring. No issue code is minted, and none can be:
  * `FairnessContractIssueCode` is a closed union over a frozen tuple in
  * ./fairness-contract.ts, which this task does not own, so every refusal maps
- * onto an existing member and the two non-obvious mappings say why in place.
+ * onto an existing member and each non-obvious mapping says why in place.
  */
 import { MAX_AUTHORITY_COUNT, exactRecord, isCount } from "../authority/authority-kernel.js";
 import { validateCapRevision } from "./fairness-cap-revision.js";
@@ -57,9 +57,8 @@ export interface FairnessRotationInputs {
 }
 
 const CAPACITY_KEYS = Object.freeze(["resourceId", "capacityUnits", "inFlightUnits"] as const);
-const REQUEST_KEYS = Object.freeze([
-  "ring", "workItems", "capacities", "forcedHead", "capRevision",
-] as const);
+const REQUEST_KEYS =
+  Object.freeze(["ring", "workItems", "capacities", "forcedHead", "capRevision"] as const);
 
 export function refuseRotation(
   code: FairnessContractIssueCode, layer: FairnessContractLayer,
@@ -72,7 +71,7 @@ export function refuseRotation(
  * Bounded addition, ceilinged at MAX_AUTHORITY_COUNT rather than
  * Number.MAX_SAFE_INTEGER: every counter this package emits must survive a round
  * trip through `isCount` (authority-kernel.ts:150), which stops there. A sum
- * above it would pass a MAX_SAFE_INTEGER guard and then be refused by the very
+ * above it passes a MAX_SAFE_INTEGER guard and is then refused by the very
  * contract that produced it, bricking the ring.
  */
 export function safeAdd(left: number, right: number): number | null {
@@ -106,11 +105,12 @@ export function validateResourceCapacity(
 }
 
 /**
- * A ring resource with no capacity record yields UNKNOWN naming the exact
- * missing input, never an assumed capacity. UNDECLARED_RESOURCE is the closest
- * member of the closed tuple — the resource is undeclared in the CAPACITIES
- * input — and the UNKNOWN disposition is what distinguishes it from the
- * RING-layer REFUSED that fairness-ring.ts raises under the same code.
+ * The capacities input must describe exactly the ring's declared resources. A
+ * MISSING record is UNKNOWN naming the absent input, never an assumed capacity;
+ * an EXTRA one is REFUSED, being a verdict rather than an absence. Both use
+ * UNDECLARED_RESOURCE, the closest member of the closed tuple, and the
+ * DISPOSITION tells them apart — and tells both apart from the RING-layer
+ * REFUSED that fairness-ring.ts raises under the same code.
  */
 function readCapacities(
   value: unknown, ring: FairnessRing,
@@ -124,6 +124,14 @@ function readCapacities(
     if (byResource.has(capacity.value.resourceId)) {
       return refuseRotation("FAIRNESS_CONTRACT_DUPLICATE_IDENTITY", "RESOURCE",
         "a capacity record repeats a resource", [capacity.value.resourceId]);
+    }
+    if (!ring.resources.some((each) => each.resourceId === capacity.value.resourceId)) {
+      // An extra record's inFlightUnits would sum into the per-dimension
+      // ceiling, letting input the ring cannot verify decide whether it
+      // dispatches at all.
+      return refuseRotation("FAIRNESS_CONTRACT_UNDECLARED_RESOURCE", "RESOURCE",
+        "a capacity record names a resource the ring does not declare",
+        [capacity.value.resourceId]);
     }
     byResource.set(capacity.value.resourceId, capacity.value);
   }
@@ -200,8 +208,7 @@ function checkCapRevision(
 }
 
 function sumInFlight(
-  capacities: ReadonlyMap<string, FairnessResourceCapacity>,
-): number | FairnessContractRefusal {
+  capacities: ReadonlyMap<string, FairnessResourceCapacity>): number | FairnessContractRefusal {
   let total = 0;
   for (const capacity of capacities.values()) {
     const next = safeAdd(total, capacity.inFlightUnits);

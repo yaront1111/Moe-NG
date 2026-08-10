@@ -87,6 +87,12 @@ interface AgingInputs {
  */
 export function bypassesToForced(priority: FairnessPriorityClass): number {
   const rank = FAIRNESS_PRIORITY_LADDER.indexOf(priority);
+  // A class outside the ladder is unreachable through ageWorkItem, because
+  // validateWorkItem constrains priority to the contract's closed set. But this
+  // is exported from the package root, so an untyped caller can reach it, and
+  // `indexOf` would answer -1 -> ZERO bypasses -> forced for free. An unknown
+  // class demands the MAXIMUM evidence instead: unknown never buys standing.
+  if (rank < 0) return FAIRNESS_FORCED_BYPASS_BOUND;
   return (rank + 1) * FAIRNESS_BYPASSES_PER_LEVEL;
 }
 

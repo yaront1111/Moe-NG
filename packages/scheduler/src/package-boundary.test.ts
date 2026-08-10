@@ -8,6 +8,13 @@ const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const schedulerRoot = join(repositoryRoot, "packages", "scheduler");
 const sourceExtension = /\.(?:[cm]?[jt]s|[jt]sx|astro|mdx|svelte|vue)$/u;
 const forbiddenInternalPath = /(?:@moe\/scheduler\/|scheduler[\\/]src[\\/])/u;
+/**
+ * DEVELOPMENT_ONLY reference code. `@moe/scheduler` declares only @moe/context,
+ * @moe/contracts and @moe/core and has no devDependencies, so a testkit import
+ * could not resolve — but an unresolvable import is a build failure, not an
+ * asserted property, and the manifest is one edit away from making it resolve.
+ */
+const forbiddenDevelopmentOnlyPath = /(?:@moe\/testkit|testkit[\\/]src[\\/])/u;
 
 interface SourceToken {
   readonly kind: "identifier" | "punctuation" | "string";
@@ -235,6 +242,18 @@ function containsForbiddenSchedulerImport(contents: string): boolean {
   return moduleSpecifiers(contents).some((specifier) => forbiddenInternalPath.test(specifier));
 }
 
+/**
+ * Reuses the same tokenizer rather than text-matching, and that is load-bearing
+ * here, not stylistic: three landed production sources — fairness-contract.ts:11,
+ * fairness-evidence.ts:7 and fairness-ring.ts:9 — cite the reference PATH inside
+ * doc comments to record what they were deliberately NOT derived from. A raw
+ * grep would report those three as violations while proving nothing.
+ */
+function containsDevelopmentOnlyImport(contents: string): boolean {
+  return moduleSpecifiers(contents).some(
+    (specifier) => forbiddenDevelopmentOnlyPath.test(specifier));
+}
+
 const forbiddenImportCases: ReadonlyArray<readonly [string, string]> = [
   ["static value import-from", 'import { fence } from "@moe/scheduler/authority/private.js";'],
   ["import type-from", 'import type { Lease } from "../../scheduler/src/authority/lease.js";'],
@@ -346,6 +365,85 @@ it.each([
   "source.vue",
 ])("scans package-capable source extension in %s", (fileName) => {
   expect(sourceExtension.test(fileName)).toBe(true);
+});
+
+const developmentOnlyImportCases: ReadonlyArray<readonly [string, string]> = [
+  ["a package import", 'import { selectNext } from "@moe/testkit";'],
+  ["a deep package import", 'import { PRIORITY_LADDER } from "@moe/testkit/scheduler-fairness/fairness-policy.js";'],
+  ["a relative reference import", 'import { boundFor } from "../../testkit/src/scheduler-fairness/fairness-selection.js";'],
+  ["a side-effect import", 'import "@moe/testkit";'],
+  ["an export-from", 'export { DEFAULT_M_D } from "@moe/testkit";'],
+  ["a dynamic import", 'const reference = await import("@moe/testkit");'],
+  ["a CommonJS require", 'const reference = require("..\\\\testkit\\\\src\\\\scheduler-fairness\\\\index.js");'],
+];
+
+const developmentOnlyProseCases: ReadonlyArray<readonly [string, string]> = [
+  ["the citation in fairness-contract.ts:11", " * in packages/testkit/src/scheduler-fairness. Three differences carry the design:"],
+  ["the citation in fairness-evidence.ts:7", " * packages/testkit/src/scheduler-fairness/fairness-codec.ts decodes a caller's"],
+  ["the citation in fairness-ring.ts:9", " * packages/testkit/src/scheduler-fairness returns nothing outside its tests, so"],
+  ["a block-comment citation", '/** Mirrors BYPASSES_PER_LEVEL at @moe/testkit fairness-policy.ts:25. */'],
+  ["a commented-out import", '// import { selectNext } from "@moe/testkit";'],
+  ["a constant naming the path", 'const cited = "packages/testkit/src/scheduler-fairness/fairness-policy.ts:8";'],
+];
+
+it("covers forbidden and cited DEVELOPMENT_ONLY cases", () => {
+  expect(developmentOnlyImportCases.length).toBe(7);
+  expect(developmentOnlyProseCases.length).toBe(6);
+});
+
+it.each(developmentOnlyImportCases)("detects a DEVELOPMENT_ONLY import as %s", (_label, contents) => {
+  expect(containsDevelopmentOnlyImport(contents)).toBe(true);
+});
+
+it.each(developmentOnlyProseCases)("allows %s", (_label, contents) => {
+  expect(containsDevelopmentOnlyImport(contents)).toBe(false);
+});
+
+/**
+ * DoD 3. The floor is hand-written from `find packages/scheduler/src -name
+ * '*.ts' ! -name '*.test.ts' | wc -l` = 66 at the time of writing, kept a little
+ * below so ordinary growth does not churn it. Without a floor, a mis-resolved
+ * directory read scans zero files and the empty violation list reads as proof.
+ */
+const MINIMUM_PRODUCTION_SOURCES_SCANNED = 60;
+
+it("keeps DEVELOPMENT_ONLY reference code out of scheduler production sources", async () => {
+  const scanned: string[] = [];
+  const violations: string[] = [];
+  for (const file of await sourceFiles(join(schedulerRoot, "src"))) {
+    if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) continue;
+    const repositoryPath = relative(repositoryRoot, file);
+    scanned.push(repositoryPath);
+    if (containsDevelopmentOnlyImport(await readFile(file, "utf8"))) {
+      violations.push(repositoryPath);
+    }
+  }
+  expect(violations).toEqual([]);
+  expect(scanned.length).toBeGreaterThanOrEqual(MINIMUM_PRODUCTION_SOURCES_SCANNED);
+  // Named witnesses: the three sources that CITE the reference in prose, and the
+  // two new engine modules. A scan that silently stopped covering them would
+  // otherwise pass on the floor alone.
+  for (const witness of [
+    join("packages", "scheduler", "src", "fairness", "fairness-contract.ts"),
+    join("packages", "scheduler", "src", "fairness", "fairness-evidence.ts"),
+    join("packages", "scheduler", "src", "fairness", "fairness-ring.ts"),
+    join("packages", "scheduler", "src", "fairness", "fairness-rotation.ts"),
+    join("packages", "scheduler", "src", "fairness", "fairness-aging.ts"),
+  ]) {
+    expect(scanned).toContain(witness);
+  }
+});
+
+it("declares no dependency that could resolve a DEVELOPMENT_ONLY import", async () => {
+  const packageJson = JSON.parse(await readFile(join(schedulerRoot, "package.json"), "utf8")) as {
+    readonly dependencies?: Readonly<Record<string, string>>;
+    readonly devDependencies?: Readonly<Record<string, string>>;
+  };
+  const declared = [
+    ...Object.keys(packageJson.dependencies ?? {}),
+    ...Object.keys(packageJson.devDependencies ?? {}),
+  ];
+  expect(declared).toEqual(["@moe/context", "@moe/contracts", "@moe/core"]);
 });
 
 it("exports only the supported scheduler root", async () => {

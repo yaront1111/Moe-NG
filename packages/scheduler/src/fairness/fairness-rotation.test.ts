@@ -136,9 +136,12 @@ describe("rotation determinism", () => {
     entry("wi.a1", "res.a"), entry("wi.b1", "res.b"),
     entry("wi.a2", "res.a"), entry("wi.b2", "res.b"),
   ];
+  // Same per-resource FIFO queues, but res.b appears FIRST. That inversion is
+  // the point: a grouping that still led with res.a would select identically
+  // under an array-position-derived order too, and the case would prove nothing.
   const grouped = [
-    entry("wi.a1", "res.a"), entry("wi.a2", "res.a"),
     entry("wi.b1", "res.b"), entry("wi.b2", "res.b"),
+    entry("wi.a1", "res.a"), entry("wi.a2", "res.a"),
   ];
 
   it("selects the same sequence on repeated identical runs", () => {
@@ -235,6 +238,21 @@ describe("rotation capacity bounds", () => {
       capacities: [capacity("res.a", 1, 2)],
     })));
     expect(issue.code).toBe("FAIRNESS_CONTRACT_CARDINALITY_EXCEEDED");
+    expect(issue.layer).toBe("RESOURCE");
+  });
+
+  it("refuses a capacity record for a resource the ring does not declare", () => {
+    // A verdict, not an absence — so REFUSED where a missing record is UNKNOWN.
+    // Its inFlightUnits would otherwise be summed into the per-dimension
+    // ceiling, letting an unverifiable input decide whether the ring dispatches.
+    const result = rotateOnce(request({
+      ring: ringOf([resource("res.a", 1)], [entry("wi.a1", "res.a")]),
+      workItems: [item("wi.a1", "res.a")],
+      capacities: [capacity("res.a", 4), capacity("res.ghost", 9_999, 9_999)],
+    }));
+    const issue = soleIssue(result);
+    expect((result as FairnessContractRefusal).disposition).toBe("REFUSED");
+    expect(issue.code).toBe("FAIRNESS_CONTRACT_UNDECLARED_RESOURCE");
     expect(issue.layer).toBe("RESOURCE");
   });
 

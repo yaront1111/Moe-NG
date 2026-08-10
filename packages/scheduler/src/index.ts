@@ -104,6 +104,22 @@ export { validateRing, validateRingResource } from "./fairness/fairness-ring.js"
 export { validateBypassClaim } from "./fairness/fairness-evidence.js";
 export { validateCapRevision } from "./fairness/fairness-cap-revision.js";
 export {
+  FAIRNESS_DIMENSION_CEILING,
+  FAIRNESS_ROTATION_DISPOSITIONS,
+  FAIRNESS_SERVICE_COST,
+  resourceRotationOrder,
+  rotateOnce,
+  validateResourceCapacity,
+  validateRotationRequest,
+} from "./fairness/fairness-rotation.js";
+export {
+  FAIRNESS_BYPASSES_PER_LEVEL,
+  FAIRNESS_FORCED_BYPASS_BOUND,
+  FAIRNESS_PRIORITY_LADDER,
+  ageWorkItem,
+  bypassesToForced,
+} from "./fairness/fairness-aging.js";
+export {
   SUPERSESSION_BOUND_DISPOSITION_FIELDS, SUPERSESSION_DISPOSITION_FAMILIES,
   SUPERSESSION_DISPOSITION_LAYERS, SUPERSESSION_REFUSAL_CODES,
 } from "./supersession/supersession-disposition-contract.js";
@@ -233,6 +249,14 @@ export type {
   FairnessCapMigration,
   FairnessCapRevision,
 } from "./fairness/fairness-cap-revision.js";
+export type {
+  FairnessResourceCapacity,
+  FairnessRotationDisposition,
+  FairnessRotationInputs,
+  FairnessRotationOutcome,
+  FairnessRotationSelection,
+} from "./fairness/fairness-rotation.js";
+export type { FairnessAgedStanding } from "./fairness/fairness-aging.js";
 
 export type {
   SupersessionBoundDispositionField,

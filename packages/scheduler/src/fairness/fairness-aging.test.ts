@@ -114,6 +114,15 @@ describe("aging constants", () => {
     expect(bypassesToForced("P2")).toBe(24);
     expect(bypassesToForced("P3")).toBe(32);
   });
+
+  it("demands the maximum evidence for a class outside the ladder, never zero", () => {
+    // Unreachable through ageWorkItem — validateWorkItem constrains priority to
+    // the closed set — but bypassesToForced is published on the package root, so
+    // an untyped caller can reach it. indexOf would answer -1, which computes to
+    // ZERO bypasses and forces for free. Unknown must never buy standing.
+    const outsideLadder = "P9" as unknown as Parameters<typeof bypassesToForced>[0];
+    expect(bypassesToForced(outsideLadder)).toBe(FAIRNESS_FORCED_BYPASS_BOUND);
+  });
 });
 
 describe("aging promotion bound", () => {
