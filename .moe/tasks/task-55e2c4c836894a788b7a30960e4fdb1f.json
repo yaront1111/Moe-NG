@@ -21,8 +21,85 @@
     "Keep every Rust production source focused, target and hard-cap <=250 physical lines; split before 400. Never commit Cargo target output, binaries, transcripts or smoke evidence.",
     "Do not implement concurrent-idempotence proofs, the forcible-kill detached-grandchild proof, or the final acceptance sweep. Those belong to SPIDR sibling 3d."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY. Re-measure the two prerequisites' landed symbols before naming any — every prior task in this chain found a stale claim in its own description.\n\nCRATE AS LANDED, packages/runner/src/platform/windows/native/broker/src (line counts by `grep -c ''`): lib.rs 104, main.rs 85, boundary.rs 94, control.rs 204, descriptors.rs 222, diagnostics.rs 95, frames.rs 223, payload.rs 100, protocol.rs 205, refusal.rs 146, status.rs 182, verify.rs 157. Tests: descriptor_block.rs 401, frame_sweep.rs 1038, handle_inheritance.rs 446, node_loadability.rs 132 — tests are exempt from the per-file cap, production is not.\n\n3b's VOCABULARIES you must consume, not restate: status.rs exports `Outbound`, `Started`, `Completed`, `Status`; refusal.rs exports `RefusalLayer`, `Refused`, `REFUSED_PAYLOAD_BYTES` (= 1 + 2 + 4 bytes, i.e. layer + operation + numeric code, which is exactly the DoD 4 shape). control.rs exports `AcceptState`, `Accepted`, `Inbound`, `LaunchRequest`.\n\nTHE CALL-TABLE SEAM ALREADY EXISTS AND A SECOND ONE IS A RAIL VIOLATION: `pub trait HandleCalls` in verify.rs with RAII `OwnedDescriptor`/`Descriptors` generic over it, real impl `SystemHandles` in boundary.rs. It mirrors the core's `Win32Calls`/`SystemWin32`. Inject through THAT seam.\n\nAlso reuse `PIPE_FILE_TYPE` from verify.rs — boundary.rs holds `const _: () = assert!(PIPE_FILE_TYPE == FILE_TYPE_PIPE);` so a wrong literal fails the BUILD rather than refusing every descriptor at runtime. Never write the literal 3.\n\nRecord the baseline: the locked broker test command and a release build, both exit 0.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "READ-ONLY. Pin the core surface you delegate to — moe-windows-job-core at packages/runner/src/platform/windows/native/src/. Its lib.rs re-exports: `OwnedHandle`; `Job`; from lifecycle `SignalledProof`, `Waited`, `ExitCode`, `UnknownExit`, `ExitStatus`, `Identity`, `wait_for_process`, `query_exit_status`, `terminate_process`, `query_identity`, `wait_until_job_is_empty`; `ContainedProcess`; `CreatedProcess`, `ProcessSpec`; `unwind_after_membership`, `unwind_before_membership`; plus the win32 trait set.\n\nTHIS IS WHY DoD 6 IS SATISFIABLE WITHOUT INVENTION: `SignalledProof` IS the core's confirmed signalled-wait proof, and `ExitStatus`/`UnknownExit` already model \"we could not observe it\". The session must CONSUME those types and must never reconstruct an exit code from a raw query — a still-running process must yield the UNKNOWN reason code, not a number.\n\n`wait_until_job_is_empty(job)` is the ActiveProcesses==0 precondition DoD 3 names — do not hand-roll a query loop.\n\nEvery Win32 lifecycle operation is delegated: `ProcessSpec`/`CreatedProcess` for launch, `Job` for the job, `wait_for_process`/`query_exit_status`/`terminate_process`/`query_identity` for lifecycle, `unwind_*` for teardown ordering. Read spec.rs and lifecycle.rs before designing the state machine.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, the STARTED discipline (DoD 1). Create broker/tests/session.rs with scripted call tables over the core's `Win32Calls + ProcessCalls` and the broker's `HandleCalls`.\n\nTHE ASSERTION SHAPE IS THE POINT AND IS EASY TO GET WRONG: for each proof arm, assert `STARTED` is ABSENT FROM THE RECORDED fd1 OUTPUT — not merely that an error was returned. A test asserting \"an error came back\" passes even if STARTED was also written to the stream first, which is the exact defect DoD 1 was written against. Record the fd1 byte stream and assert no STARTED frame appears in it.\n\nFail each arm in turn, one test per arm: exact Job limit flags not proved; explicit assignment not proved; membership not proved; retained-handle process identity not proved; the single successful resume not proved. Five arms, five tests.\n\nThen the positive: with every arm proved, STARTED appears exactly once on fd1. Assert once-ness, not presence — a duplicate STARTED is a distinct defect.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED, COMPLETED and exit reporting (DoD 3 and DoD 6). Extend broker/tests/session.rs.\n\nDoD 3 demands FOUR SEPARATE TESTS, explicitly not one combined path: fail each precondition independently and assert COMPLETED is ABSENT and the result stays UNKNOWN by its stable reason code. The four are (a) the retained root handle waited, (b) the exit queried exactly, (c) provider fd4 and fd5 at EOF, (d) Job ActiveProcesses==0 via the core's `wait_until_job_is_empty`. A single shared path that satisfies all four fails this DoD item as written.\n\nDoD 6: supply a STILL-RUNNING process and assert the UNKNOWN reason code rather than a number — proving the session consumes the core's `SignalledProof`/`ExitStatus` instead of reconstructing a code from a raw query. This is the test that distinguishes real delegation from a plausible reimplementation.\n\nDoD 4: assert every refusal frame carries ONLY the closed operation vocabulary and a numeric Win32 code. Assert POSITIVELY that the frame bytes contain no executable path, argv, cwd, environment or handle value — `REFUSED_PAYLOAD_BYTES` is 1+2+4, so a frame of any other length is itself a failure and is the cheapest structural guard.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD RED, the five termination paths (DoD 5). Still in broker/tests/session.rs. The five: CANCEL on fd0; instructed timeout; fd0 EOF; malformed control AFTER a successful launch; helper shutdown.\n\nEach gets its OWN call-log assertion proving terminate-and-reap happened EXACTLY ONCE — a call-count table per path, five distinct assertions. The DoD says outright that a single shared path satisfying all five fails the item, so do not factor them into one helper that asserts once.\n\nExactly-once is the property: assert the terminate call count is 1 and the reap count is 1, not merely that termination occurred. Double-termination is the defect this guards, and it is invisible to a \"did it terminate\" assertion.\n\nAlso assert UNKNOWN is PRESERVED on any leg whose outcome could not be observed — an unobservable leg must never be upgraded to a definite outcome (taskRail 3). Note the malformed-control path is specifically AFTER a successful launch, so the session must already hold the Job when it refuses.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN: create broker/src/session.rs and declare it in lib.rs with a curated `pub use`, matching the existing `mod` + `pub use` layout (lib.rs is 104 lines and wires ten modules already — follow that shape exactly).\n\nThe session owns the SOLE dedicated Job handle for one launch, builds the core's `ProcessSpec` from the validated `LaunchRequest`, duplicates ONLY fd3/fd4/fd5 into the inherited allowlist, and delegates every Win32 operation to the core.\n\nRESTATE NO SYSCALL (DoD 2, and grep-checkable): the broker must contain no CreateJobObject, AssignProcessToJobObject, CreateProcessW, ResumeThread, TerminateProcess or WaitForSingleObject call site of its own. Every one goes through `Job`, `ProcessSpec`/`CreatedProcess`, `wait_for_process`, `query_exit_status`, `terminate_process`, `wait_until_job_is_empty`.\n\nORDERING IS THE DELIVERABLE: STARTED is written to fd1 only after all five proof arms hold; COMPLETED only after all four preconditions hold. Never infer success from the absence of an error (taskRail 3).\n\nJob-handle closure is CRASH SAFETY, NOT SUCCESS EVIDENCE (taskRail 1): ordinary completion AND cancel must both query ActiveProcesses==0 before returning authority-neutral completion. Closing the handle and calling it done is the specific mistake this rail names.\n\nHard cap 250 physical lines by `grep -c ''`. descriptors.rs sits at 222 and frames.rs at 223, so this crate runs close to the cap — if the state machine and the frame emission together approach it, split the emission into its own module rather than overflowing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/session.rs",
+        "packages/runner/src/platform/windows/native/broker/src/lib.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/session.rs"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Wire the real loop in broker/src/main.rs (85 lines, 165 of headroom): descriptors from 3a, protocol from 3b, session from this task. main.rs is the thin entry point — keep the state machine in session.rs and let main sequence acquire -> accept -> run -> teardown.\n\nProvider bytes on fd3/fd4/fd5 are NEVER mixed with or parsed as control (taskRail 5); fd2 diagnostics stays bounded and non-authoritative — diagnostics.rs (95 lines) already exists for that, so compose it rather than writing to fd2 directly.\n\nUse the existing `acquire`/`startup_block`/`SystemHandles` boundary and the `HandleCalls` seam; do not introduce a second call table (the crate seam memory records this as a rail violation, and it applies to 3c by name).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/main.rs"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Mutation drills, then restore byte-exact. Each must redden a NAMED test; record the failing assertion text. (a) Emit STARTED before the resume arm is proved — the corresponding absence test must redden; this is DoD 1's whole point and the drill that proves the tests assert absence from the STREAM rather than an error return. (b) Emit COMPLETED with ActiveProcesses>0 — the fourth precondition test must redden. (c) Reconstruct an exit code from a raw query instead of consuming the core's proof — the still-running-process test must redden with a number instead of UNKNOWN. (d) Terminate twice on the CANCEL path — that path's call-count assertion must redden while the other four stay green, proving the five are genuinely independent. (e) Add an argv or path byte to a refusal frame — the payload-length and content assertions must redden. (f) Upgrade one UNKNOWN leg to a definite outcome — the preservation assertion must redden.\n\nboth new files are UNTRACKED, so `git diff` is blind to them — hash with `git hash-object` before and after rather than trusting an empty diff, and re-run the suite after each restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/session.rs"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Verify and self-review. (1) Run the LOCKED broker test command and a RELEASE build; both must exit 0 (DoD 7). (2) DoD 2 is grep-checkable, so check it: `grep -rn \"CreateJobObject\\|AssignProcessToJobObject\\|CreateProcessW\\|ResumeThread\\|TerminateProcess\\|WaitForSingleObject\" broker/src/` must return NOTHING. Paste the empty result as evidence. (3) Record `grep -c ''` for every production .rs you touched and confirm each is <=250; state the counts explicitly per DoD 7. (4) Confirm no Cargo `target/` output, executable, transcript or generated smoke evidence is staged — the native tree HAS a target/ directory, so this is a live hazard, not a theoretical one. (5) Adversarial review: does STARTED ever reach fd1 on an unproved arm? Does COMPLETED ever emit with any precondition unmet? Is Job-handle closure anywhere treated as success evidence rather than crash safety? Does any refusal frame carry an executable, argv, cwd, environment or handle value, or exceed REFUSED_PAYLOAD_BYTES? Are the five termination paths genuinely five call-log assertions rather than one shared path? Did I introduce a second call table beside `HandleCalls`? Did I write the literal 3 anywhere instead of `PIPE_FILE_TYPE`? (6) SCOPE FENCE per taskRail 7: concurrent-idempotence proofs, the forcible-kill detached-grandchild proof and the acceptance sweep belong to sibling task-e18b1284 — do not implement them here. (7) Commit by explicit pathspec over the four owned paths only, then `git diff --cached --name-only` to confirm nothing foreign is staged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/session.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,9 +112,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:39:24.343Z",
-  "updatedAt": "2026-08-10T08:20:41.966Z",
+  "updatedAt": "2026-08-10T08:36:07.624Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
-  "blockedResourceId": null
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-10T08:33:45.690Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 4
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T08:36:05.578Z",
+  "planningNotes": {
+    "approachesConsidered": "RESTATING WIN32 CALLS IN THE BROKER — REJECTED by DoD 2 and taskRail 2, and uniquely easy to check: the DoD itself names the six forbidden call sites, so the verification is a grep that must return empty. Everything routes through moe-windows-job-core.\n\nRECONSTRUCTING AN EXIT CODE FROM A RAW QUERY — REJECTED. The core already ships `SignalledProof`, `ExitStatus` and `UnknownExit`, so the honest path is consuming those types. DoD 6 tests it with a still-running process expecting the UNKNOWN reason code rather than a number, which is exactly the assertion a reimplementation fails.\n\nONE COMBINED COMPLETION TEST — REJECTED explicitly by DoD 3, which requires the four preconditions be failed INDEPENDENTLY in four separate tests and says a single combined path fails the item. Same for DoD 5's five termination paths: five distinct call-log assertions, not one shared helper.\n\nASSERTING \"AN ERROR WAS RETURNED\" FOR THE STARTED ARMS — REJECTED, and this is the subtlest trap in the task. DoD 1 says \"absence from the stream, never merely that an error was returned\": a test that only checks the return value passes even if STARTED was written to fd1 first. The tests must record the fd1 byte stream and assert no STARTED frame appears.\n\nA SECOND CALL TABLE — REJECTED. `HandleCalls` + `OwnedDescriptor`/`Descriptors` + `SystemHandles` already exist in verify.rs/boundary.rs, mirroring the core's Win32Calls/SystemWin32. `mem:decision-broker-crate-seam-as-landed` records that a second table in this crate is duplicated authority and reads as a rail violation, and names 3c specifically.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-10 after both prerequisites reached DONE. This is a RUST crate, so the repo's TypeScript conventions (.js bridges, the 250-line TS guard) do not apply — but the 250-line cap DOES, via DoD 7 and taskRail 6.\n\nBROKER CRATE, packages/runner/src/platform/windows/native/broker/src, `grep -c ''`: lib.rs 104, main.rs 85, boundary.rs 94, control.rs 204, descriptors.rs 222, diagnostics.rs 95, frames.rs 223, payload.rs 100, protocol.rs 205, refusal.rs 146, status.rs 182, verify.rs 157. Tests: descriptor_block.rs 401, frame_sweep.rs 1038, handle_inheritance.rs 446, node_loadability.rs 132 — tests exempt, production not. descriptors.rs at 222 and frames.rs at 223 show this crate runs close to the cap; plan to split rather than overflow.\n\n3b's LANDED VOCABULARIES (consume, never restate): status.rs `Outbound`, `Started`, `Completed`, `Status`; refusal.rs `RefusalLayer`, `Refused`, `REFUSED_PAYLOAD_BYTES = 1 + 2 + 4`; control.rs `AcceptState`, `Accepted`, `Inbound`, `LaunchRequest`. That payload constant is exactly DoD 4's shape — layer + operation + numeric code — so a refusal frame of any other length is structurally wrong and is the cheapest guard against leaking argv or a path.\n\nCORE DELEGATION SURFACE, native/src/lib.rs re-exports: `OwnedHandle`; `Job`; from lifecycle `SignalledProof`, `Waited`, `ExitCode`, `UnknownExit`, `ExitStatus`, `Identity`, `wait_for_process`, `query_exit_status`, `terminate_process`, `query_identity`, `wait_until_job_is_empty`; `ContainedProcess`; `CreatedProcess`, `ProcessSpec`; `unwind_after_membership`, `unwind_before_membership`. `SignalledProof` IS DoD 6's \"confirmed signalled-wait proof\" and `wait_until_job_is_empty` IS DoD 3's ActiveProcesses==0 precondition — neither needs inventing.\n\nTHE SEAM: `pub trait HandleCalls` (verify.rs) with RAII `OwnedDescriptor`/`Descriptors` generic over it, real impl `SystemHandles` (boundary.rs). Inject through it.\n\nBUILD-TIME TRAP ALREADY CLOSED: verify.rs declares `pub const PIPE_FILE_TYPE: u32 = 3;` and boundary.rs holds `const _: () = assert!(PIPE_FILE_TYPE == FILE_TYPE_PIPE);`, so a wrong literal fails the build instead of refusing every descriptor at runtime. Reuse the constant; never write 3.\n\nCOMMIT HAZARD: the native tree contains a `target/` directory. DoD 7 forbids committing Cargo output, executables, transcripts or smoke evidence, so this is a live risk rather than boilerplate.",
+    "risks": "1. \"AN ERROR WAS RETURNED\" INSTEAD OF \"ABSENT FROM THE STREAM\". DoD 1's five proof arms are the highest-risk item: a return-value assertion passes while STARTED was already written to fd1. Record and inspect the fd1 bytes. Drill (a) exists solely to prove the tests assert stream absence.\n\n2. COLLAPSING THE INDEPENDENT TESTS. DoD 3 (four preconditions) and DoD 5 (five termination paths) both state that a single shared path fails the item. The natural engineering instinct is to factor them into one helper, which silently fails the DoD as written.\n\n3. EXACTLY-ONCE IS NOT \"IT TERMINATED\". Double-termination is invisible to a did-it-terminate assertion; assert call COUNTS of 1 per path. Drill (d) reddens one path while the other four stay green, proving independence.\n\n4. JOB-HANDLE CLOSURE MISTAKEN FOR SUCCESS EVIDENCE. taskRail 1 names this directly: closing the handle is crash safety, and both ordinary completion and cancel must query ActiveProcesses==0 first. Treating closure as completion is a plausible-looking authority leak.\n\n5. RECONSTRUCTING AN EXIT CODE. Reaching past `SignalledProof`/`ExitStatus` to a raw query produces a number where UNKNOWN is correct. Drill (c) targets it.\n\n6. REFUSAL FRAME LEAKAGE. DoD 4 forbids executable, argv, cwd, environment and handle data. `REFUSED_PAYLOAD_BYTES` = 7 makes any leak detectable by length alone — assert the length as well as the content.\n\n7. LINE CAP IN A TIGHT CRATE. Two existing modules sit at 222 and 223 against a hard 250. Split the frame emission out of session.rs rather than overflowing, and hand-measure with `grep -c ''`.\n\n8. COMMITTING BUILD OUTPUT. A `target/` directory exists in this tree; an accidental `git add` of it violates DoD 7 outright.\n\n9. SCOPE BLEED INTO 3d. Concurrent idempotence, the detached-grandchild kill proof and the acceptance sweep belong to task-e18b1284 (taskRail 7). They are adjacent enough to feel in-scope while writing the termination paths."
+  },
+  "budget": {
+    "wallClockMs": 8100000
+  },
+  "planApprovedAt": "2026-08-10T08:36:07.624Z"
 }
