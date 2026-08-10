@@ -75,9 +75,13 @@ function create(command: GoalCreateCommand): GoalReducerResult {
     version: 1, witness,
   })]);
 }
+function nextGraphEpoch(state: GoalState): number {
+  return state.graphEpoch + 1;
+}
+
 function activatedState(state: GoalState, activeGraphRevisionRef: string): GoalState {
   return clonedState(state, { activeGraphRevisionRef,
-    graphEpoch: state.graphEpoch + 1, lifecycle: "EXECUTION_ENABLED" as const,
+    graphEpoch: nextGraphEpoch(state), lifecycle: "EXECUTION_ENABLED" as const,
     version: state.version + 1 });
 }
 
@@ -94,8 +98,10 @@ function advanceEpoch(state: GoalState, command: GoalAdvanceGraphEpochCommand): 
   const { graphEpoch, predecessorGraphRevisionRef, successorGraphRevisionRef } = command;
   if (!validRef(predecessorGraphRevisionRef) || !validRef(successorGraphRevisionRef)
     || !Number.isSafeInteger(graphEpoch)) return unknownFailure();
-  if (predecessorGraphRevisionRef !== state.activeGraphRevisionRef
-    || graphEpoch !== state.graphEpoch + 1) return illegal(state, command.kind);
+  if (predecessorGraphRevisionRef !== state.activeGraphRevisionRef) {
+    return illegal(state, command.kind);
+  }
+  if (graphEpoch !== nextGraphEpoch(state)) return illegal(state, command.kind);
   const next = activatedState(state, successorGraphRevisionRef);
   return accepted(next, [deepFreeze({ activeGraphRevisionRef: successorGraphRevisionRef,
     commandId: command.commandId, graphEpoch: next.graphEpoch,

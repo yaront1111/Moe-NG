@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GoalCommand, GoalReducerResult, GoalState } from "./goal-contract.js";
-import { reduceGoal } from "./goal-reducer.js";
+import { GOAL_TRANSITIONS, reduceGoal } from "./goal-reducer.js";
 
 const ACTIVE_REF = "graph-revision-1";
 const SUCCESSOR_REF = "graph-revision-2";
@@ -42,9 +42,11 @@ function expectRefusal(
   result: GoalReducerResult,
   code: "ILLEGAL_TRANSITION" | "UNKNOWN_ERROR",
 ): void {
+  expect({
+    code: result.ok ? undefined : result.error.code,
+    layer: result.ok ? undefined : result.layer,
+  }).toEqual({ code, layer: "GOAL" });
   expect(result.ok).toBe(false);
-  if (result.ok) return;
-  expect({ code: result.error.code, layer: result.layer }).toEqual({ code, layer: "GOAL" });
   expect(Object.hasOwn(result, "state")).toBe(false);
 }
 
@@ -110,10 +112,12 @@ describe("goal graph epoch advance", () => {
   });
 
   it("does not admit an epoch advance from DRAFT", () => {
+    expect(GOAL_TRANSITIONS["goal.advance_graph_epoch"]).toEqual(["EXECUTION_ENABLED"]);
     expectRefusal(reduceGoal(state("DRAFT"), advance()), "ILLEGAL_TRANSITION");
   });
 
   it("keeps initial activation admitted from DRAFT", () => {
+    expect(GOAL_TRANSITIONS["goal.activate_initial_graph"]).toEqual(["DRAFT"]);
     const draft = state("DRAFT");
     const result = reduceGoal(draft, {
       commandId: "cmd-activate",
