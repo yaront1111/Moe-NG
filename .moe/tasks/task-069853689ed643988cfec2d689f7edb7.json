@@ -18,9 +18,90 @@
     "Tests assert the exact stable reason code and the refusing layer, and any generated sweep asserts it produced a non-zero number of cases.",
     "Target <=250 physical lines per production source, split before 400; this cap is per file, not per task."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE (read-only). The governor asked to be checked and said plainly \"if a symbol this slice needs is missing, report blocked and I return this without argument\". I checked; everything verifies. Confirm before writing.\n\nCORE VOCABULARY IS PUBLISHED ON THE @moe/core ROOT — consume it from the package root, never by deep import, and never mint a second copy. packages/core/src/index.ts:239-242 exports from ./supersession/supersession-engine.js:\n  values: SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession\n  types:  SupersessionAcceptedResult, SupersessionDecision, SupersessionDisposition, SupersessionDispositionKind, SupersessionInput, SupersessionPredecessorBinding, SupersessionRefusal, SupersessionResult, SupersessionSafeCarry, SupersessionSuccessorBinding\nI verified the engine's internals match those names rather than merely suggesting them (the governor's specific caution): supersession-engine.ts:8 declares SUPERSESSION_DISPOSITION_KINDS = [\"ADD\",\"CARRY\",\"REQUALIFY\",\"REEXECUTE\",\"CHANGE\",\"REMOVE\"], :12 SUPERSESSION_KERNEL_LAYER = \"SUPERSESSION_KERNEL\", :234 decideSupersession. SIX kinds — that count is DoD 1's \"declared kind count\".\n\nSCHEDULER PRIMITIVES ALL PRESENT, compose them and reimplement none:\n  authority/lease-drain.ts:29 DrainTerminalTarget, :31 DrainDisposition, :118 parseDisposition, :142 applyDrainReason, :194 releaseWork\n  authority/resource-model.ts SLOT_STATES, published at index.ts:67\n  budget/budget-reservation.ts, published at index.ts:78 and :168; plus budget-settlement.ts\n  attempt lifecycle vocabulary in @moe/contracts runtime-vocabulary.ts\n\nABSENT AS CLAIMED: packages/scheduler/src/supersession/ does not exist; nothing under packages/scheduler/src consumes a supersession disposition today.\n\nROOT SURFACE HAZARD: index-surface.test.ts:57 pins expect(EXPECTED_EXPORTS.length).toBe(36) and :61 deep-compares with toEqual. Re-read both AT EDIT TIME — export literals have moved repeatedly on this board today. Transcribe from your module source, never from the namespace object.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RE-MEASURE DONE. Architect's symbol claims all CONFIRMED, but a claim the plan never checked is FALSE and blocks the slice.\n\nCONFIRMED PRESENT (read on disk, not inferred):\n- packages/core/src/index.ts:239-242 exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER, decideSupersession + 10 Supersession* types from ./supersession/supersession-engine.js.\n- supersession-engine.ts:8 = [\"ADD\",\"CARRY\",\"REQUALIFY\",\"REEXECUTE\",\"CHANGE\",\"REMOVE\"] (6 kinds); :12 SUPERSESSION_KERNEL_LAYER=\"SUPERSESSION_KERNEL\"; :234 decideSupersession; refusal codes REVISION_REBOUND / SUPERSESSION_CONSEQUENCE_CHANGED at :51-55. File is 250 lines.\n- lease-drain.ts:29/31/118/142/194 (DrainTerminalTarget, DrainDisposition, parseDisposition, applyDrainReason, releaseWork) all present.\n- resource-model.ts:24 SLOT_STATES; lease-resource.ts; budget-reservation.ts:173/220/231; budget-settlement.ts:146/191/225/240 all present.\n- admission-wait.ts:10 is the out-of-scope comment line the plan describes, inside a header that forbids scheduling/enqueue/transition/clock.\n- packages/scheduler/src/supersession/ absent as claimed.\n\nFALSE, UNCHECKED CLAIM — @moe/core AND @moe/contracts ARE NOT SCHEDULER DEPENDENCIES:\n- packages/scheduler/package.json dependencies = { \"@moe/context\": \"workspace:*\" } only.\n- packages/scheduler/node_modules/@moe/ contains only `context`.\n- tsconfig.base.json declares NO `paths`.\nMeasured by probe (probe file created then deleted; tree clean):\n  import from \"@moe/core\"      -> src/supersession/dep-probe.ts(1,48): error TS2307: Cannot find module '@moe/core' or its corresponding type declarations.\n  import from \"@moe/contracts\" -> src/supersession/dep-probe.ts(2,39): error TS2307: Cannot find module '@moe/contracts' or its corresponding type declarations.\n  deep relative \"../../../core/src/index.js\" -> ../core/src/goal/goal-reducer.ts(19,8): error TS6059: File '.../packages/core/src/goal/goal-contract.ts' is not under 'rootDir' '.../packages/scheduler/src'. (cascades across all of core)\n  @moe/context re-exports only its own 5 modules; no core, no contracts.\n\nSECOND, INDEPENDENT RED: packages/scheduler/src/fairness/ is UNTRACKED foreign work (git log for that path is empty) and currently produces ~18 TS errors (TS7006/TS6133/TS18046/TS2532) under the task's exact verification command. Plan step-8: \"Foreign red inside @moe/scheduler itself is a BLOCK, not a disclosure.\"\n\nReporting blocked next rather than forking the vocabulary (task rail 1 / planningNotes forbid hand-copying the six kinds) or editing the unowned packages/scheduler/package.json + running a repo-wide pnpm install in a shared worktree with live agents.",
+      "startedAt": "2026-08-10T06:58:01.936Z",
+      "completedAt": "2026-08-10T07:00:33.405Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "DESIGN THE DISPOSITION SET (read-only), then two modules under packages/scheduler/src/supersession/, each with its sibling .js bridge (every scheduler subdirectory carries 1:1 bridges; a missing one fails neither tsc nor vitest and breaks only plain Node).\n\n  supersession-disposition-contract.ts  — the set shape, the refusal vocabulary and layer, canonical ordering, and THE ONE SHARED DIGEST FUNCTION\n  supersession-dispositions.ts          — the four family producers: attempt, effect, resource, budget\n\nDoD 2 is the subtle one and it has three separate obligations, all easy to half-satisfy:\n  (a) DETERMINISTIC — identical inputs produce a byte-identical set.\n  (b) CANONICAL ORDERING, not discovery ordering. Sort by an explicit total key (kind, then a stable identity), never by Map/Set iteration order or input arrival. A test must feed the same facts in two different input orders and assert byte-identical output; without that, discovery order passes as canonical whenever the fixture happens to be sorted.\n  (c) THE DIGEST COVERS EXACTLY THE BOUND FIELD LIST, THROUGH ONE SHARED FUNCTION. Declare the bound field list as a frozen constant, derive the digest from it, and assert a field added to the disposition but absent from the list is caught — otherwise a later field silently escapes the hash.\n\nBind to the core vocabulary rather than restating it: iterate SUPERSESSION_DISPOSITION_KINDS imported from @moe/core so a seventh kind added upstream forces a compile or test failure here. A hand-copied list of six strings would silently diverge, which is the fork the rails forbid.\n\nRefusal codes come from @moe/contracts — DoD 4 says \"an existing code\". Read runtime-vocabulary.ts and pick; do not mint a scheduler-local code. The refusing layer must be named on every refusal.\n\nTarget <=250 physical lines per production source measured with `grep -c ''` (PowerShell Measure-Object -Line skips blank lines); split into a third module before 400 rather than growing either file.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — packages/scheduler/src/supersession/supersession-dispositions.test.ts, written before implementation. One test file; the 250-line target binds production sources, not tests.\n\nDoD 1, COMPLETENESS OVER THE KIND SET: assert the produced set covers every member of SUPERSESSION_DISPOSITION_KINDS imported from @moe/core, and that a kind with NO disposition is a REFUSAL, never a silent omission. The sweep must assert its case count is non-zero AND equals the declared kind count (six today, but read it from the imported constant — never hardcode 6, or the test stops tracking the vocabulary the moment it grows).\n\nDoD 2, determinism: same inputs twice -> byte-identical set and digest. Then the ordering test described in step 2 — same facts, two input orders, identical output.\n\nDoD 4, refusals, each pinning the EXACT @moe/contracts code AND the refusing layer:\n  - a CHANGED authority, resource or budget fact refuses carry rather than disposing;\n  - an UNKNOWN fact refuses and NEVER upgrades to a safe carry;\n  - a PARTIAL disposition set never reports complete.\nAssert on the whole { code, layer } object, not a .length or truthiness check, so a swapped or extra refusal fails.\n\nDoD 3, composition rather than reimplementation: drive the drain path through the real parseDisposition / applyDrainReason / releaseWork from authority/lease-drain.ts and the resource and budget paths through the real lease-resource / resource-model and budget-reservation / budget-settlement. Put doubles at those modules' own input boundaries. A test helper that recomputes drain or budget authority is the epic rail 6 defect and makes the whole suite decorative.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/supersession/supersession-dispositions.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/supersession/supersession-dispositions.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN 1 — packages/scheduler/src/supersession/supersession-disposition-contract.ts plus its .js bridge.\n\nHolds: the disposition-set shape (immutable, readonly fields, frozen arrays); the frozen bound-field-list constant; the single shared digest function every producer calls; the canonical ordering comparator; and the refusal shape carrying an @moe/contracts code plus the refusing layer.\n\nONE DIGEST FUNCTION, used everywhere. DoD 2 says the digest covers exactly the bound field list \"through one shared function\" — a second digest path, even a convenience wrapper that stringifies differently, defeats the byte-identical guarantee and is the most likely way this DoD item is silently failed.\n\nImport SUPERSESSION_DISPOSITION_KINDS and the Supersession* types from the @moe/core PACKAGE ROOT. Do not deep-import ./supersession/supersession-engine.js — the root export exists precisely so this slice does not have to, and Clause 1 is satisfied in both directions here.\n\nThis module carries NO scheduling authority: it describes, orders, hashes and refuses. It must not decide admission, rotation or readiness.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/supersession/supersession-disposition-contract.ts",
+        "packages/scheduler/src/supersession/supersession-disposition-contract.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/supersession/supersession-disposition-contract.ts",
+        "packages/scheduler/src/supersession/supersession-disposition-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN 2 — packages/scheduler/src/supersession/supersession-dispositions.ts plus its .js bridge. The four family producers.\n\n  ATTEMPT and EFFECT — compose the attempt lifecycle vocabulary from @moe/contracts runtime-vocabulary.ts, which already carries SUCCEEDED / FAILED / CANCELLED / SUPERSEDED / RELEASED / UNKNOWN. Do not add a state.\n  RESOURCE — compose authority/lease-resource.ts and authority/resource-model.ts (SLOT_STATES), with lease-fencing.ts and lease-state.ts as needed.\n  BUDGET — compose budget/budget-reservation.ts and budget/budget-settlement.ts.\n  DRAIN, inside the resource family — compose lease-drain.ts's parseDisposition (:118), applyDrainReason (:142) and releaseWork (:194). DRAIN IS ALREADY BUILT; reimplementing it is an explicit rejection under DoD 3.\n\nEvery producer returns either a complete disposition for its kind or a refusal naming an existing @moe/contracts code and the refusing layer. Fail closed: a fact that cannot be classified is UNKNOWN and refuses — it never becomes a safe carry, and a partial set never reports complete.\n\nAll output frozen and readonly; ordering applied through the shared comparator; digest through the shared function only.\n\n<=250 lines target, split before 400. If the four families will not fit, add a third module rather than growing this one — a per-file split is always the right answer to an oversized source.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/supersession/supersession-dispositions.ts",
+        "packages/scheduler/src/supersession/supersession-dispositions.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/supersession/supersession-dispositions.ts",
+        "packages/scheduler/src/supersession/supersession-dispositions.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD 5 — LAND THE CONSUMER EDGE. Read this whole step before touching admission-wait.ts; the DoD's phrasing understates what is there.\n\nWHAT IS ACTUALLY AT packages/scheduler/src/admission/admission-wait.ts:10: not a call site and not a TODO, but a line inside an \"EXPLICITLY OUT OF SCOPE, owned elsewhere\" comment block — \"supersession carry of wait/blocker projections -> graph supersession engine\". DoD 5 requires converting that deferral into one durable call site so the edge is landed rather than merely exported.\n\nTHE CONSTRAINT THAT MAKES THIS DELICATE: that module's own header states \"Nothing in this module schedules, enqueues, or transitions anything\" and \"There is no clock here.\" Wiring the carry must NOT give admission-wait scheduling authority. Land the edge as REPRESENTATION AND VALIDATION only — it may compute or validate the carry disposition for a wait/blocker projection and refuse; it must not enqueue, transition, or consult a clock. If the only way you can see to satisfy DoD 5 requires admission-wait to schedule something, STOP and report_blocked rather than widening that module's authority — its scope comment is a deliberate boundary, not an oversight.\n\nUpdate the out-of-scope comment in the same edit so it no longer defers something now wired; a stale scope comment is how the next reader concludes the edge is still missing.\n\nAdd one test proving the call site is REAL: exercise it through admission-wait's own surface and assert the supersession refusal propagates with its code and layer intact. \"It compiles\" is not a landed edge — Clause 1 exists because exporting a symbol is not composition.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/admission/admission-wait.ts",
+        "packages/scheduler/src/supersession/supersession-dispositions.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD 6 — publish through the curated root block and update the pinned surface.\n\nAdd a curated NAMED export block to packages/scheduler/src/index.ts for the new surface, matching the existing style (the file exports by explicit named blocks per area, e.g. SLOT_STATES at :67 and budget-reservation at :78/:168). Do not export *.\n\nTHEN UPDATE packages/scheduler/src/index-surface.test.ts, which pins the root namespace twice: a hand-written list deep-compared with toEqual (:61) and expect(EXPECTED_EXPORTS.length).toBe(36) (:57). Both fail until updated. RE-READ THE LITERAL AT EDIT TIME rather than trusting 36 — comparable counts moved three times in one session on this board today. Add each new RUNTIME value exactly once and bump by the exact runtime delta; TYPE-ONLY exports do not inflate the count.\n\nTranscribe the added names FROM YOUR MODULE SOURCE, never from the namespace object at runtime. Generating the expected list from the thing under test makes the assertion vacuous — it would pass no matter what you exported, which is precisely the defect the hand-written list exists to prevent.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "VERIFY, MUTATION-DRILL, ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test\n\nBoth legs exit 0 with nonzero discovery. Path-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/scheduler itself is a BLOCK, not a disclosure.\n\nMUTATION DRILLS — each guard must be reddenable; revert and confirm green between each:\n  1. Drop one kind from the produced set -> the completeness test must go RED as a REFUSAL, not pass with a shorter set.\n  2. Replace canonical ordering with input order -> the two-input-orders test must go RED. If it stays green the fixture was already sorted and that test is decorative.\n  3. Add a field to a disposition without adding it to the bound field list -> the digest-coverage test must go RED.\n  4. Turn an UNKNOWN fact into a safe carry -> the DoD 4 test must go RED naming its code and layer.\n  5. Delete a .js bridge -> plain Node breaks while vitest stays green (vitest resolves NodeNext .js specifiers back to .ts and is blind to this).\nAfter each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`.\n\nAdversarial review:\n- Did I reimplement drain, resource or budget authority anywhere, including in a test helper? DoD 3 rejection.\n- Did I hardcode 6 kinds instead of iterating the imported SUPERSESSION_DISPOSITION_KINDS?\n- Is there exactly ONE digest function?\n- Did I mint a scheduler-local reason code where an @moe/contracts code exists?\n- Did admission-wait.ts acquire scheduling authority, a clock, or an enqueue? It must not.\n- Is the index-surface expected list hand-written, not derived from the namespace?\n- Per-file `grep -c ''` at or below 250.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND CURRENTLY PRE-LOADED — 27 foreign files were staged by another agent earlier this session and a foreign whole-tree commit already swept one file today. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/supersession/supersession-dispositions.ts",
+        "packages/scheduler/src/supersession/supersession-disposition-contract.ts",
+        "packages/scheduler/src/supersession/supersession-dispositions.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a2c7f85f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -45,13 +126,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T15:18:09.347Z",
-  "updatedAt": "2026-08-09T20:57:23.579Z",
+  "updatedAt": "2026-08-10T07:00:33.405Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T15:18:51.806Z"
+    "firstClaimAt": "2026-08-09T15:18:51.806Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-21f667ae",
-    "architect-db2146e3"
+    "architect-db2146e3",
+    "worker-a2c7f85f"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -67,5 +152,35 @@
       "releasedBy": "architect-21f667ae",
       "reason": "Explicit architect handoff after verified slice-order dependency block."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T06:51:24.983Z",
+  "planningNotes": {
+    "approachesConsidered": "DEEP-IMPORTING @moe/core's supersession engine — REJECTED. The vocabulary is published on the core package ROOT at packages/core/src/index.ts:239-242, so the slice composes it from there. The governor's note is right that Clause 1 is satisfied in BOTH directions here (capability exists AND has a published consumer edge), which is exactly why no follow-on publish task is needed and no deep import is justified.\n\nHAND-COPYING THE SIX DISPOSITION KINDS — REJECTED, and this is the fork the rails forbid in its most tempting form. The plan iterates SUPERSESSION_DISPOSITION_KINDS imported from @moe/core so a seventh kind upstream forces a failure here. A literal list of six strings would diverge silently, and DoD 1's \"equals the declared kind count\" would keep passing against the stale local copy.\n\nTWO MODULES, NOT FOUR — chosen on cohesion and file budget. The contract module owns the set shape, the frozen bound-field list, the single digest function, the canonical comparator and the refusal shape; the producer module owns the four families. Four family-per-file modules would be 8 files with bridges before tests, index and the consumer edge, past the 10-file cap. The worker is told to add a third module rather than let either exceed 400 lines.\n\nTREATING DoD 5 AS AN EXPORT — REJECTED, and the DoD's own wording forbids it (\"landed, not merely exported\"). But note what admission-wait.ts:10 actually is: a line inside an EXPLICITLY OUT OF SCOPE comment block, not a call site or TODO. Landing the edge means converting a deferral into a real call — while respecting that module's stated invariant that it never schedules, enqueues, transitions, or reads a clock. The plan makes that boundary explicit and tells the worker to report blocked rather than widen it.\n\nGENERATING THE index-surface EXPECTED LIST FROM THE NAMESPACE — REJECTED. It would pass no matter what was exported. The hand-written list exists precisely to prevent that, so the plan requires transcription from module source.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-10. The governor asked to be verified rather than trusted; every claim holds.\n\nCORE VOCABULARY IS ROOT-PUBLISHED. packages/core/src/index.ts:239-242 exports SUPERSESSION_DISPOSITION_KINDS, SUPERSESSION_KERNEL_LAYER and decideSupersession as values, plus ten Supersession* types, all from ./supersession/supersession-engine.js. I checked the engine's INTERNALS rather than inferring from the export names (the governor's specific caution): supersession-engine.ts:8 SUPERSESSION_DISPOSITION_KINDS = [\"ADD\",\"CARRY\",\"REQUALIFY\",\"REEXECUTE\",\"CHANGE\",\"REMOVE\"]; :11 SupersessionDispositionKind derived from it; :12 SUPERSESSION_KERNEL_LAYER = \"SUPERSESSION_KERNEL\"; :14/:19 predecessor and successor bindings, the successor EXTENDING the predecessor; :23 SupersessionSafeCarry; :234 decideSupersession(currentValue: unknown, inputValue: unknown). SIX kinds is DoD 1's declared kind count — read it from the constant, never hardcode it.\n\nSCHEDULER PRIMITIVES ALL PRESENT: authority/lease-drain.ts:29 DrainTerminalTarget, :31 DrainDisposition, :41 ReleaseHandoff, :53 ReleaseRequest, :63 ReleaseResult, :118 parseDisposition, :142 applyDrainReason, :194 releaseWork. authority/resource-model.ts SLOT_STATES, root-published at index.ts:67. budget/budget-reservation.ts root-published at index.ts:78 and :168, alongside budget-settlement.ts. Attempt lifecycle vocabulary in @moe/contracts runtime-vocabulary.ts.\n\nABSENT AS CLAIMED: packages/scheduler/src/supersession/ does not exist; nothing under packages/scheduler/src consumes a supersession disposition today.\n\nTHE CONSUMER EDGE IS A COMMENT, NOT A STUB. admission-wait.ts:10 sits inside a header block titled \"EXPLICITLY OUT OF SCOPE, owned elsewhere\" and reads \"supersession carry of wait/blocker projections -> graph supersession engine\". The same header states \"Nothing in this module schedules, enqueues, or transitions anything\" and \"There is no clock here.\" Both constrain how DoD 5 may be satisfied.\n\nROOT SURFACE IS PINNED TWICE: index-surface.test.ts:57 expect(EXPECTED_EXPORTS.length).toBe(36) and :61 a toEqual deep-compare against a hand-written list. Both redden on any new root VALUE export until transcribed by hand.\n\nBRIDGE RULE: every scheduler subdirectory carries a 1:1 sibling .js per .ts (admission 6/6, authority 7/7, budget 5/5, convergence 3/3, readiness 6/6). A missing bridge fails neither tsc nor vitest and breaks only plain Node.",
+    "risks": "1. FORKING THE KIND VOCABULARY by hand-copying six strings. DoD 1's count assertion would keep passing against the stale local copy while upstream grew. Iterate the imported constant.\n\n2. DISCOVERY ORDER PASSING AS CANONICAL. If the ordering test feeds facts in one order only, a Map-iteration implementation passes whenever the fixture happens to be sorted. The two-input-orders test is the only thing that catches it, and drill 2 proves that test is not decorative.\n\n3. A SECOND DIGEST PATH. DoD 2 requires one shared function over exactly the bound field list. A convenience wrapper that stringifies differently silently breaks byte-identity; a field added to a disposition but not to the bound list silently escapes the hash.\n\n4. REIMPLEMENTING DRAIN. It is already built in lease-drain.ts and DoD 3 makes reimplementing it — in the module OR in a test helper — an explicit rejection.\n\n5. WIDENING admission-wait's AUTHORITY. Its header forbids scheduling, enqueueing, transitioning and clocks. DoD 5 must be satisfied as representation and validation only; if it cannot be, report blocked rather than crossing that boundary.\n\n6. A STALE SCOPE COMMENT. If the out-of-scope line at admission-wait.ts:10 is left in place after wiring, the next reader concludes the edge is still missing.\n\n7. MINTING A SCHEDULER-LOCAL REASON CODE. DoD 4 says an EXISTING @moe/contracts code.\n\n8. index-surface EXPECTED LIST DERIVED FROM THE NAMESPACE would be vacuous. Transcribe from module source; re-read the 36 literal at edit time.\n\n9. MISSING .js BRIDGE — invisible to tsc and vitest, breaks only plain Node.\n\n10. SHARED INDEX. 27 foreign files were staged by another agent this session and a foreign whole-tree commit already swept one of my files. Commit by explicit pathspec and verify the staged list.",
+    "keyFiles": [
+      "packages/core/src/index.ts",
+      "packages/core/src/supersession/supersession-engine.ts",
+      "packages/scheduler/src/authority/lease-drain.ts",
+      "packages/scheduler/src/authority/resource-model.ts",
+      "packages/scheduler/src/budget/budget-reservation.ts",
+      "packages/scheduler/src/admission/admission-wait.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-10T06:57:50.572Z",
+    "escalatedAt": "2026-08-10T06:57:50.572Z"
+  },
+  "planApprovedAt": "2026-08-10T06:51:27.042Z",
+  "workStartedAt": "2026-08-10T06:58:01.936Z"
 }

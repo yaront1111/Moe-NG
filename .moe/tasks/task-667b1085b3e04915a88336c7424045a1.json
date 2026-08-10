@@ -15,8 +15,82 @@
     "Every fact is text/icon/color encoded, keyboard accessible, provenance-drillable, and honest under degraded data.",
     "IDE adapters remain thin optional launch/discover/embed shells with no product logic. Keep modules below 400 lines; explicit owned paths only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE (read-only). The governor's unblock records an honest human override rather than a clean gate clearance; verify both halves before writing.\n\nCONFIRMED DEAD, so do not re-block on them:\n  Browser exists — @playwright/test 1.62.1 in package.json:33; script test:e2e:browser at :19; tests/e2e/control-room/ holds playwright.config.ts, harness.ts, static-ports.ts, control-room-smoke.spec.ts, harness.test.ts, tsconfig.json.\n  Contrast is measurable — 63 colour literals across six stylesheets, and WCAG contrast already asserted at apps/control-room/src/styles/design-system.test.ts:70.\n\nCONFIRMED STILL STANDING, verified by me:\n  All FIVE graph ids return ZERO production files: cr.graph.ghost, cr.graph.refusal, cr.graph.disposition, cr.graph.revisiondiff, cr.banner.revision. The graph tab is still GraphPlaceholder and committed tests still ban the cr.graph. prefix.\n  task-779d6804 (Graph operator journeys) is ARCHIVED. An archived dependency can never satisfy itself — waiting on it is waiting forever.\n\nTHE EXISTING SMOKE IS ALMOST EMPTY: control-room-smoke.spec.ts is 30 lines with ONE test, \"serving the built control-room bundle mounts its shell root element\". Treat the harness as real and the coverage as absent. Read harness.ts and static-ports.ts before writing a spec — they own how the bundle is served and how ports are chosen, and reimplementing either inside a spec is the reimplementation epic rail 6 forbids.\n\nGATE NAME DISCREPANCY, resolve it and say which you ran: the task's Verification field says `pnpm test:e2e`, but that script is `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` — NOT Playwright. The Playwright gate DoD 4 actually names is `pnpm test:e2e:browser` (`tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts`). Run BOTH; DoD 4 is satisfied by the browser one.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "SCOPE THE GATE HONESTLY (read-only design step). This is the decision the whole task turns on, and it is already made — implement it, do not relitigate it.\n\nCOVER: the journeys whose surfaces actually exist, driven through the real Playwright browser against the real built bundle.\nRECORD AS TYPED UNKNOWN: every graph scenario, naming task-779d6804 as the missing owner.\n\nCLAUSE 2 IS THE FENCE. A graph journey driven against GraphPlaceholder would be \"a proof that only proves the shapes\", which Clause 2 calls worse than no proof, because it retires the scenario while certifying nothing. Equally forbidden: a narrowed DoD presented as complete, a mock-backed graph journey, and authority reimplemented inside the test. NEVER create a component to give a scenario something to find — a stub carrying a real cr.graph.* or cr.banner.revision id is fabricated evidence, and the frame already refuses to do this.\n\nENUMERATE THE SCENARIO MATRIX EXPLICITLY as a frozen list, each entry carrying status COVERED or UNKNOWN plus, for UNKNOWN, its missing input and owning task. DoD 1 names twenty scenario cases: the count must be visible and asserted, so a reader can see at a glance how many are genuinely covered versus recorded. A gate that silently drops the graph cases would read as complete.\n\nThree ids the governor notes NOW EXIST and therefore move into COVERED — verify each on disk yourself before relying on it: cr.runs (runs/runs-surface.tsx), cr.resources (resources/resources-surface.tsx), cr.banner.circuitbreaker (shell/circuit-breaker-banner.tsx).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "BUILD THE SCENARIO LEDGER — tests/e2e/control-room/journey-coverage.ts, the artifact that makes this gate honest rather than narrowed.\n\nA frozen list of every J1-J6 acceptance criterion and every one of the twenty scenario-matrix cases, each entry: { id, journey, status: \"COVERED\" | \"UNKNOWN\", missingInput?, owner? }.\n\nRules that keep it from rotting:\n  - Every UNKNOWN MUST carry a non-empty missingInput and an owner. An UNKNOWN that does not say what is missing is indistinguishable from a silent pass.\n  - The five graph ids are UNKNOWN with owner task-779d6804 and missingInput naming the absent surface. State in a comment that the task is ARCHIVED, so a later reader does not wait on it.\n  - Assert the total case count equals twenty (DoD 1's number), and assert COVERED + UNKNOWN sums to that total. A case quietly deleted must fail.\n  - Assert the COVERED count is greater than zero — a ledger where everything is UNKNOWN is not a gate.\n  - Assert every COVERED id actually resolves to a production file on disk, so a scenario cannot be marked covered for a surface that does not exist. This is the check that would have caught the graph half automatically.\n\nLATENCY, per the human's decision in the planning REPL: record it as a typed UNKNOWN with reason REFERENCE_MACHINE_UNDEFINED and missingInput stating that no reference machine is named in the repo or the pinned spec, so a p95/p99 bar would certify nothing. Assert status is UNKNOWN and missingInput is non-empty, so the record cannot later be flipped to a silent pass. Do NOT write an absolute latency assertion and do NOT invent a reference machine — that remains an open human decision.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journey-coverage.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/journey-coverage.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WRITE THE COVERED JOURNEY SPECS — tests/e2e/control-room/journeys.spec.ts, driven through the real browser against the real built bundle via the existing harness.\n\nCompose harness.ts and static-ports.ts; do not reimplement bundle serving or port selection inside the spec. Follow control-room-smoke.spec.ts's existing setup shape.\n\nCover the J1-J6 criteria whose surfaces exist, and the DoD 2 invariants that are genuinely checkable in a browser:\n  TRUTH and PROVENANCE — every displayed fact is text-encoded and provenance-drillable.\n  KEYBOARD — every action reachable and operable by keyboard; assert focus actually moves, not merely that a handler exists.\n  NARROW WINDOW — resize to the narrow breakpoint and assert action parity rather than mere presence.\n  LOADING and DEGRADED — drive the degraded and cursor-gap fixtures and assert the surface stays honest: UNKNOWN renders as UNKNOWN, never as a confident value or a blank.\n\nDoD 3, and it is the strongest claim here: assert NO ACTION EXISTS WITHOUT AN ALLOWED DAEMON COMMAND. Enumerate every rendered cr.action.* in each journey and assert each maps to a nextAllowedCommand. Assert the enumerated count is greater than zero first — a sweep that finds no actions would otherwise pass trivially. Also assert no transcript enters clean review.\n\nA browser test that only asserts an element is present proves the DOM rendered, not that the journey works. Assert observable OUTCOMES of real interactions — what changed after the click, where focus landed, what the surface says now.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journeys.spec.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/journeys.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ASSERT THE LEDGER FROM THE GATE — tests/e2e/control-room/journey-coverage.test.ts, a fast non-browser test so the ledger's own invariants fail loudly and quickly.\n\nAssert everything named in step 3: total equals twenty; COVERED plus UNKNOWN equals total; COVERED count greater than zero; every UNKNOWN carries a non-empty missingInput and an owner; every COVERED id resolves to a production file on disk; latency is UNKNOWN with a non-empty missingInput.\n\nAlso assert the five graph ids are STILL ABSENT from production sources. This is what stops the record rotting: the day someone ships cr.graph.ghost, this test goes red and tells the next agent the ledger needs updating, instead of the UNKNOWN quietly outliving the gap it described. Do the same for cr.banner.revision.\n\nAssert on whole objects rather than counts alone where a swap would otherwise pass silently.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS — prove each guard is reddenable. Run each, confirm the NAMED assertion kills it, revert, confirm green before the next.\n\n  1. Mark a graph scenario COVERED in the ledger -> the \"every COVERED id resolves to a production file\" assertion must go RED. This is the drill that proves the gate cannot be narrowed into a false pass.\n  2. Delete one scenario entry -> the total-equals-twenty assertion must go RED.\n  3. Blank an UNKNOWN's missingInput -> the non-empty assertion must go RED.\n  4. Flip latency from UNKNOWN to COVERED -> its status assertion must go RED.\n  5. Remove a nextAllowedCommand binding from a rendered action -> the DoD 3 action/command assertion must go RED. If it stays green, that assertion is enumerating zero actions and the non-zero precondition is missing.\n  6. Strip the keyboard handler from one action -> the keyboard invariant must go RED, proving it asserts focus movement rather than element presence.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journey-coverage.ts",
+        "tests/e2e/control-room/journeys.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "RUN THE REAL GATE AND CAPTURE EVIDENCE AT ONE EXACT COMMIT (DoD 4).\n\nRun BOTH, fresh and foreground, and report which satisfies which DoD item:\n  pnpm test:e2e            # tsc foundation + vitest over tests/e2e — the Verification field's script\n  pnpm test:e2e:browser    # tsc control-room + playwright — THE Playwright gate DoD 4 names\n\nDoD 4 requires the gate to exit 0 AT ONE EXACT COMMIT. Record the commit SHA and confirm the working tree is clean over the owned paths at the moment of the run — evidence captured across a dirty tree does not identify what was tested. Capture the Playwright run's output verbatim, including the passed/failed counts, and confirm the test count is non-zero: a Playwright config that matches no spec exits 0 and reads exactly like success.\n\nCLEAN UP: tests/e2e/control-room/test-results/ already exists and Playwright writes into it. Confirm nothing from it enters the commit — epic rail 5 forbids generated evidence files in commits. Check `git status --porcelain tests/e2e/control-room/` before staging.\n\nOWNED PATHS ARE tests/e2e/control-room/** AND RELEASE EVIDENCE PATHS ONLY. Do not touch apps/control-room/src — if a journey fails because a production surface is wrong, that is a finding to report, not a fix to make here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journeys.spec.ts",
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL REVIEW AND COMPLETION EVIDENCE. This task's honesty is the deliverable, so the evidence must state its own limits.\n\nSTATE PLAINLY IN THE COMPLETION EVIDENCE, do not bury it:\n  - How many of the twenty scenario cases are COVERED and how many are UNKNOWN.\n  - That all five graph ids and cr.banner.revision are UNKNOWN because the surfaces do not exist, owner task-779d6804, WHICH IS ARCHIVED — so a governor reading this knows the owner must be revived or re-created before those cases can ever close.\n  - That latency is UNKNOWN pending a human decision on the reference machine, decided in the planning REPL on 2026-08-10, and that no absolute p95/p99 assertion was written because one would certify nothing.\n  - Which gate command was run for DoD 4 and at which commit SHA.\n\nDo NOT describe this gate as satisfying DoD 1 in full. It does not, and Clause 2 forbids a narrowed DoD presented as complete. It satisfies DoD 1 for the journeys whose surfaces exist and records the rest — say exactly that.\n\nAdversarial review:\n- Did I create any component, stub or fixture to give a scenario something to find? Absolutely forbidden.\n- Does any journey assert against a mock where a real surface exists?\n- Does any spec reimplement harness or port logic instead of composing harness.ts / static-ports.ts?\n- Does any assertion pass over zero cases — zero actions enumerated, zero specs matched, zero elements swept?\n- Did I touch apps/control-room/src? I must NOT have.\n- Are generated test-results excluded from the commit?\n- Files under 400 lines.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH 27 FOREIGN FILES earlier in this session. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/journey-coverage.ts",
+        "tests/e2e/control-room/journeys.spec.ts",
+        "tests/e2e/control-room/journey-coverage.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -66,13 +140,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:55:22.197Z",
-  "updatedAt": "2026-08-10T06:44:22.908Z",
+  "updatedAt": "2026-08-10T06:59:09.070Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-1721c07f"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T12:28:16.101Z"
+    "firstClaimAt": "2026-08-09T12:28:16.101Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 3
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -88,5 +164,27 @@
       "releasedBy": "architect-1721c07f",
       "reason": "Explicit architect handoff after completing the required Clause 2 prerequisite decomposition. Keep the task BLOCKED. Holding the assignment would only park my slot; the task needs its prerequisites built and one human decision, not an architect sitting on it. Releasing to plan other work."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T06:59:07.012Z",
+  "planningNotes": {
+    "approachesConsidered": "BLOCKING AGAIN ON THE GRAPH HALF — REJECTED, and it would have been the wrong call rather than the safe one. The hard dependency task-779d6804 (Graph operator journeys) is ARCHIVED. An archived dependency can never satisfy itself, so blocking on it is waiting forever, and the governor's unblock already records the human override honestly. The compliant path is to cover what exists and RECORD the rest as typed UNKNOWN naming the missing owner, per epic rail 4.\n\nDRIVING GRAPH JOURNEYS AGAINST GraphPlaceholder — REJECTED, and this is the trap the task is built around. All five graph ids return zero production files; the tab is still a placeholder and committed tests ban the cr.graph. prefix. A journey against the placeholder would be Clause 2's \"proof that only proves the shapes\", which is called worse than no proof because it RETIRES the scenario while certifying nothing. Creating a stub to satisfy a sweep is fabricated evidence and is forbidden outright.\n\nAN ABSOLUTE p95/p99 LATENCY BAR — REJECTED by human decision in the planning REPL, 2026-08-10. No reference machine is named in the repo or the pinned spec, so a bar would pass or fail on whatever hardware happened to run it. Two alternatives were offered — pinning this dev workstation as the reference, or a machine-independent relative-ratio budget — and the human chose to record latency as a typed UNKNOWN with reason REFERENCE_MACHINE_UNDEFINED. Naming the reference machine stays an open human decision.\n\nA SCENARIO LEDGER AS A COMMENT OR A SKIPPED TEST — REJECTED. A skipped test reads as green while proving nothing, and a comment cannot fail. The ledger is executable data with its own assertions, including one that every COVERED id resolves to a real production file — which is what makes narrowing this gate into a false pass structurally impossible rather than merely discouraged.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-10. Both halves of the governor's unblock verify.\n\nTHE HARNESS IS REAL BUT THE COVERAGE IS ABSENT. tests/e2e/control-room/ holds playwright.config.ts, harness.ts, static-ports.ts, tsconfig.json, harness.test.ts and control-room-smoke.spec.ts — but the smoke spec is THIRTY lines carrying ONE test, \"serving the built control-room bundle mounts its shell root element\". There is infrastructure and essentially no journey coverage. A test-results/ directory already exists, so Playwright has run here.\n\nTWO GATE SCRIPTS, AND THE TASK NAMES THE WRONG ONE. package.json: test:e2e = \"tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e\" (NOT Playwright); test:e2e:browser = \"tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts\". The task's Verification field says `pnpm test:e2e`, but DoD 4 demands a Playwright gate — that is test:e2e:browser. Run both and say which satisfied DoD 4.\n\nTHE GRAPH GAP IS TOTAL. `grep -rl` across apps/control-room/src excluding tests returns NOTHING for all five of cr.graph.ghost, cr.graph.refusal, cr.graph.disposition, cr.graph.revisiondiff and cr.banner.revision. The graph tab is GraphPlaceholder.\n\nTHE OWNER CANNOT ACT. task-779d6804 \"Graph operator journeys\" is ARCHIVED — confirmed by reading the task record, not inferred. This must be stated in the completion evidence so a governor knows the owner has to be revived or re-created before those scenarios can ever close.\n\nTHREE PREVIOUSLY-MISSING IDS NOW EXIST and move into scope: cr.runs (runs/runs-surface.tsx), cr.resources (resources/resources-surface.tsx), cr.banner.circuitbreaker (shell/circuit-breaker-banner.tsx — I verified this one directly while planning a sibling task; it renders aria-live=\"polite\" role=\"status\").\n\nCONTRAST IS ALREADY COVERED ELSEWHERE at apps/control-room/src/styles/design-system.test.ts:70 (contrast(\"#ffffff\", tone) >= 4.5), with 63 colour literals across six stylesheets. Do not duplicate it here; styles/ is not an owned path for this task.",
+    "risks": "1. A NARROWED DoD PRESENTED AS COMPLETE. The single failure mode this task must avoid. The completion evidence must state the COVERED/UNKNOWN split explicitly and must not claim DoD 1 in full.\n\n2. A STUB CREATED TO SATISFY A SWEEP. Fabricated evidence, forbidden outright. No component, fixture or placeholder may be created to give a graph scenario something to find.\n\n3. AN UNKNOWN THAT OUTLIVES ITS GAP. The ledger asserts the five graph ids are still absent, so the day someone ships one the gate goes red and demands the record be updated — instead of the UNKNOWN quietly becoming false.\n\n4. A PLAYWRIGHT CONFIG MATCHING NO SPEC EXITS 0 and reads exactly like success. Assert a non-zero test count and capture the run output verbatim.\n\n5. PRESENCE ASSERTIONS MASQUERADING AS JOURNEYS. `expect(el).toBeVisible()` proves the DOM rendered, not that the journey works. Assert outcomes of real interactions — what changed, where focus went.\n\n6. THE DoD 3 SWEEP PASSING OVER ZERO ACTIONS. Enumerate cr.action.* and assert the count is greater than zero BEFORE asserting each maps to a nextAllowedCommand.\n\n7. GENERATED EVIDENCE IN THE COMMIT. tests/e2e/control-room/test-results/ already exists and Playwright writes there; epic rail 5 forbids generated files in commits.\n\n8. FIXING PRODUCTION FROM AN E2E TASK. Owned paths are tests/e2e/control-room/** and release evidence only. A failing journey caused by a bad surface is a finding to report, not a fix to make here.\n\n9. SHARED INDEX. 27 foreign files were staged by another agent this session and a foreign whole-tree commit already swept one of my files. Commit by explicit pathspec and verify the staged list.",
+    "keyFiles": [
+      "tests/e2e/control-room/harness.ts",
+      "tests/e2e/control-room/static-ports.ts",
+      "tests/e2e/control-room/playwright.config.ts",
+      "tests/e2e/control-room/control-room-smoke.spec.ts",
+      "apps/control-room/src/shell/circuit-breaker-banner.tsx",
+      "apps/control-room/src/runs/runs-surface.tsx",
+      "apps/control-room/src/resources/resources-surface.tsx",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-10T06:59:09.070Z"
 }

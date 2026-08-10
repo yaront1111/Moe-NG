@@ -19,9 +19,87 @@
     "An epoch or predecessor reference that cannot be verified is UNKNOWN and refuses; it never defaults to 0, to 1, or to the current value.",
     "Every pre-existing assertion in goal-reducer.test.ts and goal-invariants.test.ts must pass unchanged except those the new command genuinely invalidates. Both files are already over 250 lines; do not grow them further — put new coverage in a focused new test file."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE (read-only). Every claim in this description verifies — unusual on this board, confirm anyway.\n\n  for f in packages/core/src/goal/*.ts; do echo \"$(grep -c '' $f) $f\"; done\n\nVERIFIED 2026-08-10: goal-contract.ts 216, goal-reducer.ts 247, goal-validation.ts 245, goal-reducer.test.ts 300, goal-invariants.test.ts 281. Both production files sit against the 250 target with NO headroom — this task cannot add behaviour before it extracts.\n\nTHE EPOCH AUTHORITY IS LANDED, compose it and mint no second counter: goal-contract.ts:130 graphEpoch on GoalState and :155 on the GoalExecutionEnabled event; goal-reducer.ts:94 seeds 0 on DRAFT; :106-115 activate() sets graphEpoch: state.graphEpoch + 1, rebinds activeGraphRevisionRef, moves DRAFT -> EXECUTION_ENABLED and emits the event carrying the epoch; :175 reseeds 0 on reopen_as_revision; goal-validation.ts:228-238 validates safe-integer, >= 0, DRAFT implies 0, COMPLETED implies > 0, active implies > 0 with a valid ref.\n\nTHE GAP IS ONE LINE. goal-reducer.ts:40 inside the frozen GOAL_TRANSITIONS map reads \"goal.activate_initial_graph\": Object.freeze([\"DRAFT\"]). Nothing else admits an epoch advance, so the epoch can only ever be 0 or 1.\n\nSTAY OUT OF packages/core/src/planning ENTIRELY. task-aedcd01a owns the graph-revision half and runs in parallel; the two directories are disjoint and that disjointness is the whole reason this split exists. You may READ planning/ for patterns — planning-results.ts and graph-revision-results.ts are named below — but write nothing there.\n\nCHECK THE BRIDGE CONVENTION BEFORE CREATING A MODULE: `ls packages/core/src/goal/` and see whether sibling .js bridges exist there. packages/core/src/planning and src/supersession carry them; if goal/ does too, your new module needs one, and a missing bridge fails neither tsc nor vitest — it breaks only plain Node.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Re-measured at HEAD bec1cc6c: goal-contract.ts 216, goal-reducer.ts 247, goal-validation.ts 245. Confirmed landed graphEpoch authority and initial activation path. goal/ has sibling .js bridges for every .ts production module, so goal-results.js is required. No files modified.",
+      "startedAt": "2026-08-10T06:58:53.465Z",
+      "completedAt": "2026-08-10T06:59:43.698Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "EXTRACT FIRST, ADD NOTHING YET. This step must leave behaviour byte-identical; keeping it pure is what makes the next steps reviewable.\n\nCreate packages/core/src/goal/goal-results.ts (plus its .js bridge if the directory convention has them) and move the inline helpers currently at goal-reducer.ts:48-85: deepFreeze, rejected, unknownFailure, illegal, versionConflict, accepted, clonedState. DoD 4 names this extraction as the required remedy.\n\nMIRROR packages/core/src/planning/planning-results.ts — it already exports exactly this helper family (rejected :22, unknownFailure :26, illegal :30, versionConflict :41, accepted :78, clonedState :89) for the sibling aggregate. Follow its shape so the two aggregates read the same way.\n\nADOPT THE LAYER DISCRIMINANT WHILE YOU ARE HERE, because the rail requires it and the sibling already solved it. packages/core/src/planning/graph-revision-results.ts:16-18 does exactly this: `return Object.freeze({ error, layer: GRAPH_REVISION_LAYER, ok: false })`, under the comment \"Every refusal names its layer here once, because RuntimeError cannot carry the source.\" @moe/contracts RuntimeError DROPS its validated `source`, so a test cannot recover the layer from the error — it must come from a production field on the result. Give goal-results.ts a GOAL layer constant and carry it on every refusal.\n\nNOTE this widens GoalReducerResult with a `layer` field. Pre-existing assertions in goal-reducer.test.ts and goal-invariants.test.ts must still pass — DoD 3 and the rails require it. If an assertion compares a refusal by whole-object equality it will now see the extra field; that is the one class of pre-existing test the change genuinely invalidates, and it should be updated rather than worked around.\n\nAFTER extracting, measure: `grep -c '' packages/core/src/goal/goal-reducer.ts` should drop from 247 to roughly 209. Run the full core suite and confirm it is still green BEFORE adding any behaviour.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-results.ts",
+        "packages/core/src/goal/goal-reducer.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/goal/goal-results.ts"
+      ],
+      "startedAt": "2026-08-10T06:59:51.306Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — create a NEW focused test file, packages/core/src/goal/goal-epoch-advance.test.ts. The rails forbid growing goal-reducer.test.ts (300 lines) or goal-invariants.test.ts (281); new coverage goes here.\n\nCases, each refusal pinning the EXACT stable @moe/contracts code AND the refusing layer read from the production result field, never reconstructed by a helper:\n  - HAPPY PATH: from the live execution lifecycle, the new command increments graphEpoch by exactly 1 and rebinds activeGraphRevisionRef to the named successor. Assert the emitted event carries the new epoch, matching the :113 pattern.\n  - PREDECESSOR MISMATCH (DoD 2): a command whose predecessor reference does not equal the goal's current activeGraphRevisionRef REFUSES, and state is BYTE-IDENTICAL afterwards. Assert the state object deep-equals the pre-command state — not merely that ok is false. A refusal that mutates is the defect worth catching.\n  - STALE, EQUAL, SKIPPED and NON-INTEGER epochs each refuse (DoD 3). Assert each separately; collapsing them into one branch is how a skipped epoch later reads as merely stale.\n  - UNKNOWN predecessor or epoch refuses and NEVER defaults to 0, to 1, or to the current value.\n  - LIFECYCLE FENCE: the new command is NOT admitted from DRAFT, and goal.activate_initial_graph remains admitted from DRAFT ONLY with behaviour unchanged.\n\nDoD 5: the generated sweep must assert a NON-ZERO case count — an emptied sweep must fail rather than pass silently.\n\nAssert refusals by whole-object equality on { code, layer } so a swapped code or a missing layer fails.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-epoch-advance.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/goal/goal-epoch-advance.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN 1 — declare the command in packages/core/src/goal/goal-contract.ts (216 lines, the only file here with headroom).\n\nAdd the new command kind to GoalCommandKind and its command interface: it must name BOTH the successor revision reference it activates AND the predecessor revision reference it replaces. The predecessor field is what makes DoD 2 checkable — without it the reducer has nothing to compare against activeGraphRevisionRef.\n\nDo NOT add a second epoch field anywhere. The graph revision persists a BOUND REFERENCE to the epoch it was activated at; the goal aggregate remains the sole counter. That is the rail, and it is also why task-aedcd01a's half consumes this rather than computing its own.\n\nDo not change the GoalExecutionEnabled event shape if the existing one already carries graphEpoch (:155 says it does) — reuse it, or add a sibling event only if the semantics genuinely differ. An advance is not an initial activation, so if you emit a distinct event kind, say why in a comment.\n\nKeep goal-contract.ts at or below 250 after the change.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-contract.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN 2 — admit and handle the command in packages/core/src/goal/goal-reducer.ts (now ~209 lines after step 2).\n\nAdd the kind to the frozen GOAL_TRANSITIONS map at :40 admitted from the LIVE EXECUTION LIFECYCLE (EXECUTION_ENABLED, and CLOSING only if the DoD's \"live execution lifecycle\" genuinely includes it — read the existing entries and match their intent rather than guessing). Leave \"goal.activate_initial_graph\": [\"DRAFT\"] EXACTLY as it is; DoD 3 requires its behaviour unchanged.\n\nWrite the handler by composing activate() at :106-115 rather than copying it: same graphEpoch: state.graphEpoch + 1 increment, same clonedState/accepted shape, same event emission carrying next.graphEpoch. What differs is the admitted lifecycle and the predecessor check.\n\nTHE PREDECESSOR CHECK IS THE NEW BEHAVIOUR: refuse unless the command's predecessor reference equals the goal's current activeGraphRevisionRef. Refuse through the extracted helpers so the layer is carried automatically. On refusal return without constructing a next state at all — that is how DoD 2's byte-identical guarantee is met structurally rather than by care.\n\nFail closed: an epoch or predecessor reference that cannot be verified is UNKNOWN and refuses. Never default to 0, to 1, or to the current value.\n\nMeasure after: `grep -c '' packages/core/src/goal/goal-reducer.ts` must be at or below 250. If it is not, extract more into goal-results.ts — never grow past the cap.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-reducer.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GREEN 3 — extend validation in packages/core/src/goal/goal-validation.ts, which is 245 lines and has FOUR lines of headroom. Read this step before editing it.\n\nThe existing epoch invariants at :228-238 (safe integer, >= 0, DRAFT implies 0, COMPLETED implies > 0, active implies > 0 with a valid activeGraphRevisionRef) already cover most of what an advance must preserve — verify which ones hold unchanged before writing anything, because the cheapest correct outcome here is NO new predicate at all.\n\nIf a new invariant IS required, you have four lines. Do not spend them: extract a cohesive group of existing predicates into a focused sibling module the way step 2 extracted the reducer helpers, then add. DoD 4 requires goal-validation.ts at or below 250 AFTER the change, and the rail is explicit that a green suite is NOT evidence here because packages/core/src/goal/ is not swept by planning-source-size.test.ts. Hand-measure with `grep -c ''`.\n\nWhatever you add must keep the aggregate's existing guarantee that an active goal has graphEpoch > 0 AND a valid activeGraphRevisionRef — an advance changes both together or neither.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-validation.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "MUTATION DRILLS — DoD 5 requires each new guard be provably reddenable. Run each, confirm the NAMED case kills it, revert, confirm green before the next, and record the exact failing assertion.\n\n  1. Drop the predecessor-mismatch check -> the DoD 2 case must go RED, and specifically on the code-and-layer assertion, not merely on ok.\n  2. Make the refusal path build and return a next state before refusing -> the byte-identical-state assertion must go RED. If it stays green that assertion is only checking ok:false and must be rewritten.\n  3. Change the increment to state.graphEpoch + 2 -> the skipped-epoch case must go RED.\n  4. Admit the new command from DRAFT -> the lifecycle-fence case must go RED.\n  5. Remove the layer field from one refusal helper -> every refusal test must go RED. This is the drill that proves the layer assertions read a production discriminant rather than a value the test supplied.\n  6. Empty the generated case list -> the non-zero count assertion must go RED.\n\nSHARED-WORKTREE HAZARD: a foreign completion hook can whole-tree commit your mutation while it is on disk — that happened to a file of mine earlier in this session. After each revert check BOTH `git diff -- <file>` AND `git status --porcelain <file>`; a clean diff alone is not proof.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-results.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "VERIFY AND ADVERSARIAL REVIEW. Run the exact gate LAST, fresh and foreground:\n\n  pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test\n\nBoth legs exit 0 with nonzero discovery. Path-attributed baseline per global rail 3: record repo-wide failures at merge-base and HEAD, require (HEAD minus merge-base) intersected with owned paths to be EMPTY, disclose foreign red verbatim. Foreign red inside @moe/core itself is a BLOCK, not a disclosure.\n\nHAND-MEASURE EVERY TOUCHED PRODUCTION FILE with `grep -c ''` and report the numbers in your completion evidence:\n  goal-reducer.ts, goal-validation.ts, goal-contract.ts, goal-results.ts — each at or below 250.\nA green suite is NOT evidence of the cap: packages/core/src/goal/ is not swept by planning-source-size.test.ts. PowerShell Measure-Object -Line skips blank lines and will report headroom you do not have.\n\nAdversarial review:\n- Did I touch anything under packages/core/src/planning? I must NOT have — task-aedcd01a owns it and runs in parallel. Confirm with `git diff --stat`.\n- Did goal.activate_initial_graph's admitted set or behaviour change? DoD 3 forbids it.\n- Is there exactly ONE epoch counter, still owned by the goal aggregate?\n- Does every refusal carry its layer from the production result field rather than a test-side reconstruction?\n- Did the extraction in step 2 change behaviour? It must have been pure.\n- Do all pre-existing assertions in goal-reducer.test.ts and goal-invariants.test.ts still pass, except any genuinely invalidated by the added `layer` field — and did I update those rather than delete them?\n- Clause 1: record task-aedcd01ad91245d9a036d9dac3b76a22 as the consumer that binds a graph revision's activation to the epoch this command issues.\n\nCOMMIT BY EXPLICIT PATHSPEC, then run `git diff --cached --name-only` and confirm it is EXACTLY your owned paths. THE INDEX IS SHARED AND WAS PRE-LOADED WITH 27 FOREIGN FILES earlier in this session. Never git add -A.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/goal/goal-reducer.ts",
+        "packages/core/src/goal/goal-validation.ts",
+        "packages/core/src/goal/goal-results.ts",
+        "packages/core/src/goal/goal-epoch-advance.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-0a751aff",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -33,5 +111,38 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T20:57:57.134Z",
-  "updatedAt": "2026-08-10T06:28:40.751Z"
+  "updatedAt": "2026-08-10T06:59:51.306Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-10T06:51:41.418Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
+  },
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-10T06:54:06.010Z",
+  "planningNotes": {
+    "approachesConsidered": "GROWING goal-reducer.ts TO ADD THE HANDLER — IMPOSSIBLE, and the reason this task is shaped the way it is. The file is 247 lines against a 250 target and goal-validation.ts is 245. There is no room for a handler or a predicate, so the extraction is a precondition rather than a cleanup. DoD 4 names the remedy precisely and I verified the target: goal-reducer.ts:48-85 holds deepFreeze, rejected, unknownFailure, illegal, versionConflict, accepted and clonedState — roughly 38 lines, taking the file to about 209 and leaving real headroom.\n\nCOPYING activate() INTO A NEW HANDLER — REJECTED in favour of composing its pattern. The two differ only in admitted lifecycle and the predecessor requirement; duplicating the increment would be the second counter the rail forbids in disguise.\n\nPUTTING THE LAYER ON THE ERROR — IMPOSSIBLE, and this is the rail's specific warning. @moe/contracts RuntimeError DROPS its validated `source`, so a test cannot recover the refusing layer from the error object. The sibling aggregate already solved it: graph-revision-results.ts:16-18 returns Object.freeze({ error, layer: GRAPH_REVISION_LAYER, ok: false }) under the comment \"Every refusal names its layer here once, because RuntimeError cannot carry the source.\" The extracted goal-results.ts adopts the same discriminant, which is why the extraction and the layer requirement land in one step rather than two.\n\nADDING A NEW VALIDATION PREDICATE BY DEFAULT — DELIBERATELY DEFERRED. goal-validation.ts:228-238 already asserts safe-integer, >= 0, DRAFT implies 0, COMPLETED implies > 0, and active implies > 0 with a valid ref. Several of those hold unchanged across an advance, so the cheapest correct outcome may be NO new predicate. With four lines of headroom the worker is told to check first and extract before adding, rather than spending the margin reflexively.\n\nPUTTING NEW COVERAGE IN THE EXISTING TEST FILES — REJECTED by rail. goal-reducer.test.ts is 300 lines and goal-invariants.test.ts 281; both are already over. New coverage goes in a focused new file.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-10. Every claim in this description verifies exactly, which is rare on this board — the split was authored by an architect who had just measured it.\n\nSIZES, `grep -c ''`: goal-contract.ts 216 (the only file with headroom), goal-reducer.ts 247, goal-validation.ts 245, goal-reducer.test.ts 300, goal-invariants.test.ts 281.\n\nTHE GAP IS ONE LINE. goal-reducer.ts:40, inside the frozen GOAL_TRANSITIONS map satisfying Readonly<Record<GoalCommandKind, readonly GoalLifecycle[]>>, reads \"goal.activate_initial_graph\": Object.freeze([\"DRAFT\"]). Neighbouring entries show the vocabulary: goal.close admits [\"EXECUTION_ENABLED\",\"CLOSING\"], goal.resume admits [\"DRAFT\",\"EXECUTION_ENABLED\"]. Nothing advances the epoch from the live lifecycle, so it can only ever be 0 or 1.\n\nTHE COUNTER TO COMPOSE, read in full at goal-reducer.ts:106-115: activate() takes a deep-frozen witness, calls clonedState with activeGraphRevisionRef from the witness, graphEpoch: state.graphEpoch + 1, lifecycle EXECUTION_ENABLED and version + 1, then returns accepted(next, [GoalExecutionEnabled carrying next.graphEpoch]). The new handler differs only in admitted lifecycle and the predecessor check.\n\nTHE EXTRACTION TARGET, goal-reducer.ts:48-85: deepFreeze (recursive, Reflect.ownKeys), rejected, unknownFailure (UNKNOWN_ERROR), illegal (ILLEGAL_TRANSITION with aggregateKind GOAL), versionConflict (EXPECTED_VERSION_CONFLICT), accepted, clonedState. Note illegal and versionConflict already pass a `source: { aggregate: \"GOAL\", state }` that RuntimeError discards — which is exactly why the layer must move onto the result.\n\nTHE MIRROR EXISTS: packages/core/src/planning/planning-results.ts exports the same family for the sibling aggregate — rejected :22, unknownFailure :26, illegal :30, versionConflict :41, idempotencyConflict :52, finalizing :60, unsupported :69, accepted :78, idle :85, clonedState :89. goal-results.ts should read like it.\n\nTHE LAYER PATTERN EXISTS: graph-revision-results.ts:16-18, quoted above.\n\nPARALLELISM: task-aedcd01a owns packages/core/src/planning and is being planned concurrently. The directories are disjoint, which is the entire justification for the split. Read planning/ for patterns; write nothing there.",
+    "risks": "1. ADDING BEHAVIOUR BEFORE EXTRACTING. Both production files are at the cap; a handler added first cannot fit and the worker will be tempted to let the file run over. Extract, verify green, then add.\n\n2. THE EXTRACTION SILENTLY CHANGING BEHAVIOUR. deepFreeze is recursive over Reflect.ownKeys; moving it must preserve that exactly. The whole core suite must be green after step 2 with zero behaviour change.\n\n3. THE `layer` FIELD BREAKING PRE-EXISTING WHOLE-OBJECT ASSERTIONS. This is the one class of existing test the change genuinely invalidates — update those, do not delete them, and do not work around by omitting the layer.\n\n4. A REFUSAL THAT MUTATES. DoD 2 requires byte-identical state on refusal. Returning before constructing any next state makes it structural; a test asserting only ok:false will not catch a violation, so the assertion must deep-equal the prior state (drill 2 proves it).\n\n5. COLLAPSING STALE / EQUAL / SKIPPED / NON-INTEGER into one branch. They are four separate DoD 3 cases; merged, a skipped epoch later reads as merely stale.\n\n6. A GREEN SUITE READ AS CAP EVIDENCE. packages/core/src/goal/ is NOT swept by planning-source-size.test.ts, so nothing fails when a file crosses 250. Hand-measure with `grep -c ''`; Measure-Object -Line undercounts by skipping blank lines.\n\n7. TOUCHING packages/core/src/planning. task-aedcd01a owns it in parallel; a shared-worktree collision there is precisely what this split exists to prevent.\n\n8. SHARED INDEX. 27 foreign files were staged by another agent this session and a foreign whole-tree commit already swept one of my files. Commit by explicit pathspec and verify the staged list.",
+    "keyFiles": [
+      "packages/core/src/goal/goal-reducer.ts",
+      "packages/core/src/goal/goal-validation.ts",
+      "packages/core/src/goal/goal-contract.ts",
+      "packages/core/src/planning/planning-results.ts",
+      "packages/core/src/planning/graph-revision-results.ts",
+      "packages/core/src/goal/goal-reducer.test.ts",
+      "packages/core/src/goal/goal-invariants.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-10T06:54:08.062Z",
+  "contextFetchedBy": [
+    "worker-0a751aff"
+  ],
+  "workStartedAt": "2026-08-10T06:58:53.465Z"
 }

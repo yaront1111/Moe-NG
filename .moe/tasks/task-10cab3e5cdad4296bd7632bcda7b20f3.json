@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-705f0380",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -48,7 +48,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.501Z",
-  "updatedAt": "2026-08-10T06:47:55.707Z",
+  "updatedAt": "2026-08-10T06:48:43.238Z",
   "contextFetchedBy": [
     "architect-da724bb7"
   ],
@@ -58,5 +58,16 @@
   "blockedReason": "RE-BLOCKED as the unblock instruction requires. Prerequisite: task-e8e27f768477426c927fd14c808f3299 (Production scheduler fairness primitives: WorkItem, ring, resource, opportunity-evidence, cap-revision contracts).\n\nI did NOT author a new task, deliberately. The required output — \"a NEW PREREQUISITE PRODUCTION TASK via moe.create_task\" — was ALREADY SATISFIED before I claimed this. governor-f70d1157 created exactly that task at human direction on 2026-08-10 to governor-42b952c9's audit spec. Measured now:\n  task-e8e27f76 | epicId epic-e0c54bddb3004bf29e98b2a43cea2dc2 (identical to this task's)\n  status WORKING, 8 plan steps\n  owns packages/scheduler/src/fairness/** — the exact paths this instruction names\nA second one would be a silent duplicate colliding with a task ACTIVELY WORKING those paths in a shared worktree: the \"gap claimed present, actually closed\" half of the staleness rail, and the more damaging half here.\n\nDisclosure: I planned task-e8e27f76 myself minutes ago (three contract modules with .js bridges, root publication proven by the existing plain-Node worker probe). It went WORKING while I was on this task.\n\nBLOCK CONDITION UNCHANGED AND STILL TRUE. Re-verified: packages/scheduler/src/fairness/ DOES NOT EXIST. No WDRR, ring or resource-queue production code anywhere under packages/scheduler/src. I also confirmed the reference genuinely excludes the subject — grep for ring|Ring|resourceQueue|ResourceQueue|WDRR|deficit over packages/testkit/src/scheduler-fairness returns nothing outside tests. Implementing from it would invent policy and authority, the Clause 2 failure the block names.\n\nUNBLOCK CONDITION, per the instruction's own words and never on a status flip including this one: task-e8e27f76 reaches DONE and the five contract families are verifiable by grep or probe under packages/scheduler/src/fairness/. This task then consumes them.\n\nBlast radius behind this, unchanged: task-005c9896, task-2561a780, task-b863bae8, task-a1e7f75e.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-10T06:47:55.707Z"
+  "blockedAt": "2026-08-10T06:47:55.707Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "The unblock instruction's required output is SATISFIED, but not by me — I verified it was already done and deliberately did not duplicate it. governor-f70d1157 had already created the prerequisite: task-e8e27f768477426c927fd14c808f3299 (Production scheduler fairness primitives), same epicId epic-e0c54bddb3004bf29e98b2a43cea2dc2, owning packages/scheduler/src/fairness/**. I planned it (8 steps: three contract modules with .js bridges, root publication proven by the existing plain-Node worker probe) and it is now WORKING. This task is re-BLOCKED naming that id, which is exactly the instruction's second half.",
+      "whatRemains": "Nothing until the prerequisite lands. Unblock ONLY when task-e8e27f76 is DONE and the five contract families are verifiable by grep or probe under packages/scheduler/src/fairness/ — per the instruction's own words, never on a status flip. Then this task is plannable and CONSUMES those contracts; it must not reimplement them.",
+      "pitfalls": "1. DO NOT create another prerequisite task. The instruction says to author one; it already exists and is WORKING those exact paths. A second would be a silent duplicate colliding in the shared worktree — the 'gap claimed present, actually closed' half of the staleness rail.\n2. DO NOT implement fairness from the DEVELOPMENT_ONLY reference. I confirmed it genuinely excludes the subject: grep for ring|Ring|resourceQueue|ResourceQueue|WDRR|deficit over packages/testkit/src/scheduler-fairness returns nothing outside tests. Building from it would invent policy and authority — the Clause 2 failure the original block names.\n3. MECHANISM HAZARD, still live and recorded in the original block: moe.unblock_worker flips the TASK out of BLOCKED as a side effect of unblocking a WORKER. At 11:40Z that silently re-queued this task while a human was only freeing a stuck session. If you find this task PLANNING again, verify the primitives exist on disk before believing the status.\n4. When it does become plannable, the contracts carry NO authority by design (their DoD 4 forbids any exported function deciding rotation order, deficit accounting or aging). All of that scheduling behaviour is THIS task's scope.",
+      "openQuestions": "None blocking. One thing the next architect should confirm rather than assume: whether the prerequisite's three-module grouping (fairness-contract / fairness-ring / fairness-evidence) landed as planned or was split further — the worker was told to add a fourth module if any file would exceed 400 lines. Read the actual exports off packages/scheduler/src/index.ts rather than my plan text.",
+      "releasedAt": "2026-08-10T06:48:43.236Z",
+      "releasedBy": "architect-705f0380",
+      "reason": "Explicit handoff, not idle. The task is BLOCKED with a durable reason and needs no architect until its prerequisite lands; releasing frees the architect slot so I can keep draining the PLANNING pool."
+    }
+  ]
 }
