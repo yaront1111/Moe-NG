@@ -8,6 +8,7 @@ import {
 import {
   LEGACY_SCHEMA_MANIFEST_VERSION,
   SCHEMA_V2_MANIFEST_VERSION,
+  SCHEMA_V3_MANIFEST_VERSION,
   SCHEMA_VERSION,
 } from "./store-internals.js";
 import {
@@ -18,6 +19,7 @@ import {
   SCHEMA_OBJECT_SQL,
   SCHEMA_V1_OBJECT_SQL,
   SCHEMA_V2_OBJECT_SQL,
+  SCHEMA_V3_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
 import { readScalar } from "./store-rows.js";
 
@@ -25,7 +27,7 @@ function validateMigrationSource(
   database: DatabaseSync,
   manifest: Readonly<Record<string, string>>,
   manifestVersion: string,
-  schemaVersion: 1 | 2,
+  schemaVersion: 1 | 2 | 3,
 ): void {
   validateExactSchemaObjects(database, manifest, schemaVersion);
   validateSchemaManifestMetadata(database, manifestVersion);
@@ -110,12 +112,28 @@ function migrateV2ToV3(database: DatabaseSync): void {
 
   database.exec(`
     DROP TABLE domain_events;
-    ${SCHEMA_OBJECT_SQL.domain_events};
-    ${SCHEMA_OBJECT_SQL.projections};
-    ${SCHEMA_OBJECT_SQL.inbox_receipts};
-    ${SCHEMA_OBJECT_SQL.event_subscriptions};
-    ${SCHEMA_OBJECT_SQL.cursor_generations};
+    ${SCHEMA_V3_OBJECT_SQL.domain_events};
+    ${SCHEMA_V3_OBJECT_SQL.projections};
+    ${SCHEMA_V3_OBJECT_SQL.inbox_receipts};
+    ${SCHEMA_V3_OBJECT_SQL.event_subscriptions};
+    ${SCHEMA_V3_OBJECT_SQL.cursor_generations};
   `);
+  database
+    .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+    .run(SCHEMA_V3_MANIFEST_VERSION, "schema_manifest_version");
+  database.exec("PRAGMA user_version = 3;");
+}
+
+/**
+ * Purely additive, and the only leg that accepts a POPULATED source. The
+ * earlier legs refuse durable history because they rebuild domain_events and
+ * cannot reconcile the rows they would rewrite; this one creates one new table
+ * and touches nothing that already exists, so an upgrade in place is provable
+ * rather than hoped for.
+ */
+function migrateV3ToV4(database: DatabaseSync): void {
+  validateMigrationSource(database, SCHEMA_V3_OBJECT_SQL, SCHEMA_V3_MANIFEST_VERSION, 3);
+  database.exec(`${SCHEMA_OBJECT_SQL.recovery_bindings};`);
   database
     .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
     .run(SQLITE_SCHEMA_MANIFEST_VERSION, "schema_manifest_version");
@@ -146,12 +164,13 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
     installFreshSchema(database);
     return;
   }
-  if (currentVersion !== 1 && currentVersion !== 2) {
+  if (currentVersion !== 1 && currentVersion !== 2 && currentVersion !== 3) {
     throw new DurableStoreError(
       "DATABASE_IDENTITY_MISMATCH",
       `schema version ${currentVersion} is not a recognized migration source`,
     );
   }
   if (currentVersion === 1) migrateV1ToV2(database);
-  migrateV2ToV3(database);
+  if (currentVersion <= 2) migrateV2ToV3(database);
+  migrateV3ToV4(database);
 }

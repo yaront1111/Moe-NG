@@ -61,3 +61,24 @@ export type {
 } from "./backup-generation-contracts.js";
 export { createBackupGeneration, verifyBackupGeneration } from "./backup-generation.js";
 export type { BackupGenerationCreateResult } from "./backup-generation.js";
+export {
+  RECOVERY_BINDING_CODEC_LAYER,
+  RECOVERY_BINDING_CODEC_VERSION,
+  RECOVERY_BINDING_SLOTS,
+  RECOVERY_INSTALL_LAYERS,
+  RECOVERY_INSTALL_REASON_CODES,
+  RECOVERY_INSTALL_TRANSACTION_LAYER,
+} from "./recovery-install-contracts.js";
+export type {
+  RecoveryBindingReadResult,
+  RecoveryBindingRecord,
+  RecoveryBindingSlot,
+  RecoveryInstallLayer,
+  RecoveryInstallReasonCode,
+  RecoveryInstallResult,
+} from "./recovery-install-contracts.js";
+export { decodeRecoveryBinding, encodeRecoveryBinding } from "./recovery-install-codec.js";
+export type {
+  RecoveryBindingDecodeResult,
+  RecoveryBindingEncodeResult,
+} from "./recovery-install-contracts.js";

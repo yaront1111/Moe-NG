@@ -20,6 +20,10 @@ import type {
 } from "./store-contracts.js";
 import { createDecisionLedgerCore } from "./decision-ledger.js";
 import type { DecisionLedgerCore } from "./decision-ledger.js";
+import type {
+  RecoveryBindingReadResult,
+  RecoveryInstallResult,
+} from "./recovery-install-contracts.js";
 import type { CommitApply, CommitApplyContext } from "./event-ledger-transaction.js";
 import { requireIdentifier } from "./store-input.js";
 import { readScalar, requireRowString } from "./store-rows.js";
@@ -277,6 +281,15 @@ export class SqliteEventStore {
 
   public getHealth(): StoreHealth {
     return this.#core.getHealth();
+  }
+
+  /** Atomic recovery-install: one transaction, or the prior slot left untouched. */
+  public installRecoveryBinding(input: unknown): RecoveryInstallResult {
+    return this.#core.installRecoveryBinding(input);
+  }
+
+  public readRecoveryBinding(slot: unknown): RecoveryBindingReadResult {
+    return this.#core.readRecoveryBinding(slot);
   }
 
   public readAggregateEvents(

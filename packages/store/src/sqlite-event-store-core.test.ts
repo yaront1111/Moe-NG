@@ -23,7 +23,7 @@ describe("SqliteEventStore core", () => {
       expect(health.foreignKeys).toBe(true);
       expect(health.journalMode).toBe("memory");
       expect(health.quickCheck).toBe("ok");
-      expect(health.userVersion).toBe(3);
+      expect(health.userVersion).toBe(4);
       expect(Number.parseFloat(health.sqliteVersion)).toBeGreaterThanOrEqual(3.51);
       expect(health).toMatchObject({
         applicationId: storeModule.SQLITE_APPLICATION_ID,

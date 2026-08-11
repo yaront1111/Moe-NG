@@ -85,16 +85,16 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/3" });
-      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/3");
-      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(14);
+      ).toEqual({ value: "moe-sqlite-schema/4" });
+      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
+      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(15);
       validateSchema(database);
-      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 3);
+      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 4);
 
       const domainSql = schemaManifest.SCHEMA_OBJECT_SQL.domain_events;
       expect(domainSql).toContain("global_position INTEGER PRIMARY KEY AUTOINCREMENT");
@@ -124,7 +124,7 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       validateSchema(migrated);
     } finally {
       migrated.close();
@@ -143,11 +143,11 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path, "project-1");
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
       expect(migrated.prepare("SELECT project_id FROM store_project_binding").get()).toEqual({
         project_id: "project-1",
       });
-      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 3);
+      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 4);
     } finally {
       migrated.close();
     }
@@ -184,7 +184,7 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const tamper = new DatabaseSync(path);
     try {
-      tamper.exec("PRAGMA user_version = 4");
+      tamper.exec("PRAGMA user_version = 5");
     } finally {
       tamper.close();
     }

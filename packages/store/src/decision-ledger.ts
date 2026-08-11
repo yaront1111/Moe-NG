@@ -14,9 +14,13 @@ import type {
   StoreHealth,
 } from "./store-contracts.js";
 import type { CommitApply } from "./event-ledger-transaction.js";
-import { DecisionTransactionStore } from "./decision-ledger-transaction.js";
+import { RecoveryInstallStore } from "./recovery-install.js";
+import type {
+  RecoveryBindingReadResult,
+  RecoveryInstallResult,
+} from "./recovery-install-contracts.js";
 
-class DecisionLedgerStore extends DecisionTransactionStore {
+class DecisionLedgerStore extends RecoveryInstallStore {
   public constructor(
     database: DatabaseSync,
     databasePath: string | null,
@@ -45,6 +49,7 @@ export interface DecisionLedgerCore {
   readonly getCommandDecision: (key: CommandDecisionKey) => CommandDecisionRecord | null;
   readonly getCommandReceipt: (commandId: string) => CommandReceipt | null;
   readonly getHealth: () => StoreHealth;
+  readonly installRecoveryBinding: (input: unknown) => RecoveryInstallResult;
   readonly readAggregateEvents: (
     aggregateId: string,
     afterAggregateSequence?: number,
@@ -63,6 +68,7 @@ export interface DecisionLedgerCore {
     maxDecodedBytes?: number,
   ) => CursorPage<StoredEvent, bigint>;
   readonly readPendingOutbox: (limit?: number) => readonly PendingOutboxMessage[];
+  readonly readRecoveryBinding: (slot: unknown) => RecoveryBindingReadResult;
   readonly readPendingOutboxPage: (
     afterOutboxPosition: bigint,
     limit?: number,
@@ -96,6 +102,7 @@ export function createDecisionLedgerCore(
     getCommandDecision: (key: CommandDecisionKey) => ledger.getCommandDecision(key),
     getCommandReceipt: (commandId: string) => ledger.getCommandReceipt(commandId),
     getHealth: () => ledger.getHealth(),
+    installRecoveryBinding: (input: unknown) => ledger.installRecoveryBinding(input),
     readAggregateEvents: (
       aggregateId: string,
       afterAggregateSequence?: number,
@@ -120,6 +127,7 @@ export function createDecisionLedgerCore(
       maxDecodedBytes?: number,
     ) => ledger.readEventsAfter(afterGlobalPosition, limit, maxDecodedBytes),
     readPendingOutbox: (limit?: number) => ledger.readPendingOutbox(limit),
+    readRecoveryBinding: (slot: unknown) => ledger.readRecoveryBinding(slot),
     readPendingOutboxPage: (
       afterOutboxPosition: bigint,
       limit?: number,

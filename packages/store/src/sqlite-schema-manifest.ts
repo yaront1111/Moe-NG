@@ -1,4 +1,5 @@
 import { MAX_BLOB_BYTES } from "./store-contracts.js";
+import { SCHEMA_V4_RECOVERY_OBJECT_SQL } from "./sqlite-schema-recovery-manifest.js";
 
 export const SCHEMA_V1_OBJECT_SQL = Object.freeze({
   aggregate_heads: `
@@ -177,7 +178,7 @@ export const SCHEMA_V2_OBJECT_SQL = Object.freeze({
   `,
 });
 
-export const SCHEMA_OBJECT_SQL = Object.freeze({
+export const SCHEMA_V3_OBJECT_SQL = Object.freeze({
   ...SCHEMA_V2_OBJECT_SQL,
   domain_events: `
     CREATE TABLE domain_events (
@@ -231,4 +232,10 @@ export const SCHEMA_OBJECT_SQL = Object.freeze({
       reason TEXT NOT NULL
     ) STRICT
   `,
+});
+
+/** v4 is v3 plus the recovery binding rows; no v3 object is redefined. */
+export const SCHEMA_OBJECT_SQL = Object.freeze({
+  ...SCHEMA_V3_OBJECT_SQL,
+  ...SCHEMA_V4_RECOVERY_OBJECT_SQL,
 });
