@@ -25,3 +25,11 @@ export type {
   StdioToolEntry,
   StdioToolSurface,
 } from "./stdio/stdio-tool-schemas.js";
+export { createHttpMcpAdapter } from "./http/http-server.js";
+export type {
+  HttpAdapterOptions,
+  HttpAuthOutcome,
+  HttpDispatchPort,
+  HttpMcpAdapter,
+} from "./http/http-server.js";
+export type { HttpSessionPort } from "./http/http-session.js";
