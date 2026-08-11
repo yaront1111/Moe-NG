@@ -45,12 +45,21 @@ import type {
   SupersessionDispositionSet, SupersessionFamilyDisposition,
   SupersessionNodeFacts, SupersessionRefusalCode, SupersessionResourceFacts,
 } from "@moe/scheduler";
+import type {
+  DerivedExpansionEvidence, ExpansionAdmissionIssue, ExpansionAdmissionIssueCode,
+  ExpansionAdmissionOrigin, ExpansionAdmissionRefusal, ExpansionAdmissionRequest,
+  ExpansionAdmissionResult, ExpansionAdmissionUnwind, ExpansionBoundFacts, ExpansionBudgetFacts,
+  ExpansionCapacityFact, ExpansionChildFacts, ExpansionEvidenceIssue, ExpansionEvidenceIssueCode,
+  ExpansionEvidenceLayer, ExpansionEvidenceRefusal, ExpansionEvidenceResult, ExpansionFairnessFacts,
+  ExpansionInputFact, ExpansionLineageFacts, ExpansionPreparation, ExpansionResourceFacts,
+  ExpansionRestoredMeter,
+} from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
- * 12 fairness rotation and aging values.
+ * 12 fairness rotation and aging values + 7 expansion admission values.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -58,13 +67,15 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
+  ["EXPANSION_ADMISSION_ISSUE_CODES", "array"], ["EXPANSION_ADMISSION_ORIGINS", "array"],
+  ["EXPANSION_EVIDENCE_ISSUE_CODES", "array"], ["EXPANSION_EVIDENCE_LAYERS", "array"],
   ["FAIRNESS_BYPASSES_PER_LEVEL", "number"],
   ["FAIRNESS_CONTRACT_ISSUE_CODES", "array"], ["FAIRNESS_CONTRACT_LAYERS", "array"],
   ["FAIRNESS_DIMENSION_CEILING", "number"],
   ["FAIRNESS_DISPATCHABILITY_STATES", "array"],
   ["FAIRNESS_FORCED_BYPASS_BOUND", "number"], ["FAIRNESS_PRIORITY_CLASSES", "array"],
   ["FAIRNESS_PRIORITY_LADDER", "array"], ["FAIRNESS_ROTATION_DISPOSITIONS", "array"],
-  ["FAIRNESS_SERVICE_COST", "number"],
+  ["FAIRNESS_SERVICE_COST", "number"], ["FORBIDDEN_VERDICT_KEYS", "array"],
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
@@ -72,13 +83,14 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
-  ["adapterFail", "function"], ["ageWorkItem", "function"],
+  ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
   ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"],
-  ["createTraversalCounter", "function"], ["deriveReservationId", "function"],
+  ["createTraversalCounter", "function"], ["deriveExpansionEvidence", "function"],
+  ["deriveReservationId", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
@@ -96,7 +108,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(65);
+  expect(EXPECTED_EXPORTS.length).toBe(72);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -503,6 +515,222 @@ it("publishes the supersession vocabularies as frozen closed sets", () => {
   for (const vocabulary of [
     scheduler.SUPERSESSION_BOUND_DISPOSITION_FIELDS, scheduler.SUPERSESSION_DISPOSITION_FAMILIES,
     scheduler.SUPERSESSION_DISPOSITION_LAYERS, scheduler.SUPERSESSION_REFUSAL_CODES,
+  ]) {
+    expect(Object.isFrozen(vocabulary)).toBe(true);
+  }
+});
+
+/**
+ * Expansion admission. Same rule as the two blocks above, and it is the whole
+ * reason a happy path is driven here rather than only in the cross-package
+ * integration suite: `tests/` is collected by vitest but typechecked by NO gate,
+ * so a type published nowhere would leave an annotation there silently green.
+ * Every expansion type is therefore annotated HERE, on a value that came through
+ * the bare specifier, where `pnpm --filter @moe/scheduler typecheck` can see it.
+ *
+ * The fixtures are rebuilt inline rather than imported from
+ * ../admission/admission-fixtures.js on purpose: the package `exports` map is
+ * exclusive, so a real consumer could not reach them either, and a surface test
+ * that leaned on an unreachable helper would be proving the wrong reachability.
+ */
+const DIGEST_A = "a".repeat(64);
+const DIGEST_B = "b".repeat(64);
+
+function healthyReceipt(): Record<string, unknown> {
+  return {
+    proposalId: "prop-1", revision: 3, goalVersion: 7, graphEpoch: 11,
+    observedAtSequence: 100, horizonSequence: 90,
+    parentScope: ["a", "b", "c", "d"],
+    childScopes: [
+      {
+        childKey: "child-1", scope: ["a", "b"], oracleKind: "OBSERVED", completion: "CLOSED",
+        inputs: [{ inputKey: "in-1", materialization: "MATERIALIZED", digest: DIGEST_A }],
+      },
+      {
+        childKey: "child-2", scope: ["c"], oracleKind: "DERIVED", completion: "CLOSED",
+        inputs: [{ inputKey: "in-2", materialization: "MATERIALIZED", digest: DIGEST_B }],
+      },
+    ],
+    sourceDigests: [DIGEST_A, DIGEST_B],
+  };
+}
+
+function contractFor(producerNodeKey: string, consumerNodeKey: string): Record<string, unknown> {
+  return {
+    producerNodeKey, consumerNodeKey, edgeKind: "ARTIFACT_CONSUMPTION",
+    graphBindingDigest: "c".repeat(64),
+    producer: {
+      kind: "ARTIFACT_CONSUMPTION", artifactOrInterfaceRef: "artifact:shared", digest: DIGEST_B,
+    },
+    consumer: {
+      kind: "PRECONDITION", criterionRef: `criterion:${consumerNodeKey}`, contractHash: DIGEST_A,
+    },
+    minimumQualifyingMilestone: "RESULT_SEALED",
+    satisfactionPredicate: {
+      predicateRef: "predicate:sealed", schemaId: "moe.predicate.sealed", schemaVersion: 1,
+      parametersDigest: DIGEST_B,
+    },
+    stability: "REVOCABLE",
+    satisfactionWitnesses: [{
+      witnessRef: `witness:${producerNodeKey}`, witnessVersion: 1, witnessDigest: DIGEST_A,
+      sourceOperationClass: "ARTIFACT_SEAL",
+    }],
+    consumptionHorizon: "RESULT_SEAL",
+    necessity: {
+      failedConsumerCriterionRef: `criterion:${consumerNodeKey}`, failureKind: "MISSING_ARTIFACT",
+      truthClass: "DAEMON_VERIFIED",
+    },
+    alternativeRuling: { kind: "NOT_APPLICABLE", reason: "no compatible substitute" },
+    alternateProducers: [], truthClass: "DAEMON_VERIFIED",
+    invalidationFacts: [{
+      sourceFactRef: `fact:${producerNodeKey}`, sourceFactVersion: 1, sourceFactDigest: DIGEST_A,
+    }],
+    recheckPredicateRef: "predicate:sealed",
+  };
+}
+
+/** dev-node-a -> dev-node-b -> dev-node-c, completion dev-node-c. */
+function graphPart(): Record<string, unknown> {
+  const edges = [
+    { edgeKey: "dev-edge-ab", producerNodeKey: "dev-node-a", consumerNodeKey: "dev-node-b", kind: "HARD" },
+    { edgeKey: "dev-edge-bc", producerNodeKey: "dev-node-b", consumerNodeKey: "dev-node-c", kind: "HARD" },
+  ];
+  const snapshot = {
+    nodes: ["dev-node-a", "dev-node-b", "dev-node-c"].map((nodeKey) => ({ nodeKey, executionBearing: true })),
+    edges, completionNodeKey: "dev-node-c",
+  };
+  return {
+    proposedSnapshot: snapshot, sequentialBaselineSnapshot: snapshot,
+    contracts: edges.map((edge) => ({
+      edgeKey: edge.edgeKey, edgeKind: "ARTIFACT_CONSUMPTION",
+      contract: contractFor(edge.producerNodeKey, edge.consumerNodeKey),
+      necessityWitness: { edgeKey: edge.edgeKey, truthClass: "DAEMON_VERIFIED" },
+    })),
+  };
+}
+
+function admissionRequest(): ExpansionAdmissionRequest {
+  return {
+    receipt: healthyReceipt(),
+    lineage: { expansionDepth: 2, nodesAddedInExpansion: 2 },
+    graph: graphPart(),
+    rotation: {
+      ring: {
+        ringId: "ring.main", dimensionId: "dim.alpha",
+        resources: [{ resourceId: "res.a", weight: 1 }, { resourceId: "res.b", weight: 1 }],
+        entries: [
+          { workItemId: "item.a", resourceId: "res.a", deficitCounter: 1 },
+          { workItemId: "item.b", resourceId: "res.b", deficitCounter: 1 },
+        ],
+      },
+      workItems: ["item.a", "item.b"].map((workItemId) => ({
+        workItemId, dimensionId: "dim.alpha", priority: "P2",
+        resourceId: workItemId === "item.a" ? "res.a" : "res.b",
+        dispatchability: { state: "DISPATCHABLE", observationRef: `obs.${workItemId}` },
+      })),
+      capacities: [
+        { resourceId: "res.a", capacityUnits: 4, inFlightUnits: 0 },
+        { resourceId: "res.b", capacityUnits: 4, inFlightUnits: 0 },
+      ],
+      forcedHead: null, capRevision: null,
+    },
+    bypassClaim: null,
+    budget: {
+      view: {
+        accountId: "acct.1", state: "OPEN", version: 4,
+        meters: [{ meter: "tokens", available: 1000, reserved: 0, quarantined: 0, committed: 0 }],
+      },
+      admission: {
+        admissionRef: "adm.1", expectedVersion: 4,
+        amounts: [
+          { purpose: "EXECUTION", meter: "tokens", quantity: 10 },
+          { purpose: "VERIFICATION", meter: "tokens", quantity: 5 },
+          { purpose: "INDEPENDENT_REVIEW", meter: "tokens", quantity: 5 },
+          { purpose: "FINAL_ACCEPTANCE", meter: "tokens", quantity: 5 },
+          { purpose: "CONTINGENCY", meter: "tokens", quantity: 5 },
+        ],
+      },
+      gate: { allowance: { decisionRef: "dec.1", outcome: "ALLOW" }, approval: null },
+    },
+    resources: {
+      requestId: "req.1",
+      declaredResources: [{ resourceId: "res.a", capacityUnits: 1, external: false, fenceable: true }],
+      capacitySnapshot: { "res.a": 4 }, epoch: 1,
+      eligibilityEventSequenceRef: "seq.1", continuouslyEligibleSinceRef: "since.1",
+      callerObservation: "obs.1",
+    },
+  };
+}
+
+it("derives expansion evidence through the root and names every derived type", () => {
+  const result: ExpansionEvidenceResult = scheduler.deriveExpansionEvidence(healthyReceipt());
+  if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+  const evidence: DerivedExpansionEvidence = result.value;
+  const children: readonly ExpansionChildFacts[] = evidence.childFacts;
+  const inputs: readonly ExpansionInputFact[] = children[0]!.inputs;
+  expect([evidence.proposalId, evidence.childWidth, evidence.childKeys.length]).toEqual(["prop-1", 2, 2]);
+  expect([children.length, inputs[0]!.inputKey]).toEqual([2, "in-1"]);
+});
+
+it("refuses a caller-declared verdict from the root, naming code and layer", () => {
+  const refused = scheduler.deriveExpansionEvidence({ ...healthyReceipt(), eligible: true });
+  expect(refused.ok).toBe(false);
+  if (refused.ok) throw new Error("expected a refusal");
+  const refusal: ExpansionEvidenceRefusal = refused;
+  const issue: ExpansionEvidenceIssue = refusal.issues[0]!;
+  const code: ExpansionEvidenceIssueCode = issue.code;
+  const layer: ExpansionEvidenceLayer = issue.layer;
+  expect([code, layer, refusal.disposition]).toEqual([
+    "EXPANSION_CALLER_DECLARED_VERDICT", "EVIDENCE", "REFUSED",
+  ]);
+  expect(scheduler.EXPANSION_EVIDENCE_ISSUE_CODES).toContain(code);
+  expect(scheduler.EXPANSION_EVIDENCE_LAYERS).toContain(layer);
+});
+
+it("admits one expansion through the root and names every prepared type", () => {
+  const result: ExpansionAdmissionResult = scheduler.admitExpansion(admissionRequest());
+  if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+  const preparation: ExpansionPreparation = result.preparation;
+  const bound: ExpansionBoundFacts = preparation.bound;
+  const lineage: ExpansionLineageFacts = bound.lineage;
+  const fairness: ExpansionFairnessFacts = bound.fairness;
+  const capacities: readonly ExpansionCapacityFact[] = bound.capacitySnapshot;
+  const budget: ExpansionBudgetFacts = bound.budgetReservation;
+  const resources: ExpansionResourceFacts = bound.resourceReservation;
+  expect(preparation.identity).toMatch(/^[0-9a-f]{64}$/u);
+  // childWidth is DERIVED from the receipt; the caller supplied only the other two.
+  expect(lineage).toEqual({ expansionDepth: 2, childWidth: 2, nodesAddedInExpansion: 2 });
+  expect([fairness.disposition, fairness.capRevisionRef]).toEqual(["SELECTED", null]);
+  expect(capacities.map((one) => one.resourceId)).toEqual(["res.a", "res.b"]);
+  expect([budget.accountId, budget.admissionRef]).toEqual(["acct.1", "adm.1"]);
+  expect(resources.resourceIds).toEqual(["res.a"]);
+  // Reservation is not activation: no run, lease, effect or slot appears anywhere.
+  expect(JSON.stringify(bound)).not.toMatch(/lease|dispatch|activat/iu);
+});
+
+it("refuses a malformed admission from the root and holds nothing back", () => {
+  const result: ExpansionAdmissionResult = scheduler.admitExpansion(null);
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: ExpansionAdmissionRefusal = result;
+  const issue: ExpansionAdmissionIssue = refusal.issues[0]!;
+  const origin: ExpansionAdmissionOrigin = issue.origin;
+  const unwind: ExpansionAdmissionUnwind = refusal.unwind;
+  const restored: readonly ExpansionRestoredMeter[] | null = unwind.restoredMeters;
+  const code: ExpansionAdmissionIssueCode = "EXPANSION_ADMISSION_REQUEST_MALFORMED";
+  expect([issue.code, origin, refusal.disposition]).toEqual([code, "REQUEST", "REFUSED"]);
+  // Nothing was reserved before the parse, so nothing can have been given back.
+  expect([unwind.budgetReservationCancelled, restored]).toEqual([false, null]);
+  expect(scheduler.EXPANSION_ADMISSION_ISSUE_CODES).toContain(code);
+  expect(scheduler.EXPANSION_ADMISSION_ORIGINS).toContain(origin);
+});
+
+it("publishes the expansion vocabularies as frozen closed sets", () => {
+  expect([...scheduler.FORBIDDEN_VERDICT_KEYS]).toContain("oracleEligible");
+  for (const vocabulary of [
+    scheduler.EXPANSION_ADMISSION_ISSUE_CODES, scheduler.EXPANSION_ADMISSION_ORIGINS,
+    scheduler.EXPANSION_EVIDENCE_ISSUE_CODES, scheduler.EXPANSION_EVIDENCE_LAYERS,
+    scheduler.FORBIDDEN_VERDICT_KEYS,
   ]) {
     expect(Object.isFrozen(vocabulary)).toBe(true);
   }

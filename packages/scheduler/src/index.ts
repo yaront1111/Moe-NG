@@ -123,6 +123,30 @@ export {
   SUPERSESSION_BOUND_DISPOSITION_FIELDS, SUPERSESSION_DISPOSITION_FAMILIES,
   SUPERSESSION_DISPOSITION_LAYERS, SUPERSESSION_REFUSAL_CODES,
 } from "./supersession/supersession-disposition-contract.js";
+
+/**
+ * The scheduler half of the expansion admission protocol: derive evidence from a
+ * sealed receipt, then admit ONE proposal all-or-none.
+ *
+ * CURATED, NOT COMPLETE. expansion-preparation.ts and expansion-receipt.ts export
+ * their parsers and refusal constructors (parseExpansionRequest, prepare, digestOf,
+ * own, issue, refuse, checkKeys, RECEIPT_KEYS, HEX_64 and the rest) so the two
+ * composers can share them; none is published. admitExpansion IS the entry point,
+ * and a consumer that could call `prepare` directly would skip every pure check
+ * that makes the composition all-or-none.
+ *
+ * FORBIDDEN_VERDICT_KEYS is published because it is a declared CASE LIST, not
+ * plumbing: a refusal matrix must sweep it from the production constant, or the
+ * sweep silently shrinks when the vocabulary grows.
+ */
+export { admitExpansion } from "./expansion/expansion-admission.js";
+export { deriveExpansionEvidence } from "./expansion/expansion-evidence.js";
+export {
+  EXPANSION_ADMISSION_ISSUE_CODES, EXPANSION_ADMISSION_ORIGINS,
+} from "./expansion/expansion-preparation.js";
+export {
+  EXPANSION_EVIDENCE_ISSUE_CODES, EXPANSION_EVIDENCE_LAYERS, FORBIDDEN_VERDICT_KEYS,
+} from "./expansion/expansion-receipt.js";
 export { buildSupersessionDispositions, carryWaitProjection }
   from "./supersession/supersession-dispositions.js";
 
@@ -257,6 +281,19 @@ export type {
   FairnessRotationSelection,
 } from "./fairness/fairness-rotation.js";
 export type { FairnessAgedStanding } from "./fairness/fairness-aging.js";
+
+export type {
+  ExpansionAdmissionIssue, ExpansionAdmissionIssueCode, ExpansionAdmissionOrigin,
+  ExpansionAdmissionRefusal, ExpansionAdmissionRequest, ExpansionAdmissionResult,
+  ExpansionAdmissionUnwind, ExpansionBoundFacts, ExpansionBudgetFacts, ExpansionCapacityFact,
+  ExpansionFairnessFacts, ExpansionLineageFacts, ExpansionPreparation, ExpansionResourceFacts,
+  ExpansionRestoredMeter,
+} from "./expansion/expansion-preparation.js";
+export type {
+  DerivedExpansionEvidence, ExpansionChildFacts, ExpansionEvidenceIssue,
+  ExpansionEvidenceIssueCode, ExpansionEvidenceLayer, ExpansionEvidenceRefusal,
+  ExpansionEvidenceResult, ExpansionInputFact,
+} from "./expansion/expansion-receipt.js";
 
 export type {
   SupersessionBoundDispositionField,

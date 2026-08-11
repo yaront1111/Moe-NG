@@ -225,6 +225,40 @@ export type {
   TransitionExpansionHoldCommand,
 } from "./expansion/expansion-planning-hold.js";
 
+/**
+ * The core half of the expansion admission protocol: bind one scheduler-admitted
+ * expansion to an approval identity, then approve it manually.
+ *
+ * CURATED, NOT COMPLETE. `canonicalBytes`, `expansionIdentityOf` and
+ * `refuseExpansionPreparation` are exported from their modules so the approval
+ * module can re-derive and refuse, and they stay unpublished on purpose: a
+ * consumer that could recompute the canonical identity itself would be able to
+ * fork the identity authority these two modules exist to hold, and a consumer
+ * never needs to construct a refusal it is supposed to receive.
+ */
+export {
+  EXPANSION_PREPARATION_CODES, EXPANSION_PREPARATION_COMPONENTS, EXPANSION_PREPARATION_LAYERS,
+  prepareExpansion,
+} from "./expansion/expansion-preparation.js";
+export type {
+  ExpansionAdmittedFacts, ExpansionApprovalCriteria, ExpansionBudgetReservationFacts,
+  ExpansionFairnessFacts, ExpansionFenceFacts, ExpansionFundingFacts, ExpansionPolicyFacts,
+  ExpansionPreparation, ExpansionPreparationCode, ExpansionPreparationComponent,
+  ExpansionPreparationInput, ExpansionPreparationLayer, ExpansionPreparationRefusal,
+  ExpansionPreparationResult, ExpansionPreparationSources, ExpansionPreparedFacts,
+  ExpansionResourceReservationFacts,
+} from "./expansion/expansion-preparation.js";
+
+export {
+  EXPANSION_APPROVAL_CODES, EXPANSION_APPROVAL_COMPONENTS, EXPANSION_APPROVAL_LAYERS,
+  approveExpansionManually,
+} from "./expansion/expansion-approval.js";
+export type {
+  ExpansionApprovalBinding, ExpansionApprovalClaim, ExpansionApprovalCode,
+  ExpansionApprovalComponent, ExpansionApprovalLayer, ExpansionApprovalRefusal,
+  ExpansionApprovalRequest, ExpansionApprovalResult,
+} from "./expansion/expansion-approval.js";
+
 export {
   PLANNING_EXPANSION_ERROR_CODES, PLANNING_EXPANSION_LAYERS, PLANNING_EXPANSION_TARGETS,
   inspectPlanningExpansionContract, snapshotPlanningRunContractState, validExpansionCreateCommand,
