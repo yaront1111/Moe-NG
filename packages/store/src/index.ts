@@ -82,3 +82,29 @@ export type {
   RecoveryBindingDecodeResult,
   RecoveryBindingEncodeResult,
 } from "./recovery-install-contracts.js";
+export {
+  RECOVERY_ANCHOR_ALLOWED_OPERATIONS,
+  RECOVERY_ANCHOR_CODEC_VERSION,
+  RECOVERY_ANCHOR_LAYER,
+  RECOVERY_ANCHOR_REASON_CODES,
+  RECOVERY_ANCHOR_STATES,
+} from "./recovery-anchor-contracts.js";
+export type {
+  RecoveryAnchorArtifact,
+  RecoveryAnchorDiscardResult,
+  RecoveryAnchorInspectResult,
+  RecoveryAnchorInstallResult,
+  RecoveryAnchorPayload,
+  RecoveryAnchorPrepareResult,
+  RecoveryAnchorReasonCode,
+  RecoveryAnchorRecord,
+  RecoveryAnchorState,
+} from "./recovery-anchor-contracts.js";
+export {
+  discardRecoveryAnchor,
+  inspectRecoveryAnchor,
+  installRecoveryAnchor,
+  prepareRecoveryAnchor,
+  resumeRecoveryAnchor,
+  selectInactiveSlot,
+} from "./recovery-anchor.js";

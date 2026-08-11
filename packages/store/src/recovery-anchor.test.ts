@@ -1,26 +1,47 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { RECOVERY_BINDING_SLOTS } from "./recovery-install-contracts.js";
+import { SqliteEventStore } from "./index.js";
+import {
+  RECOVERY_BINDING_SLOTS,
+  RECOVERY_INSTALL_REASON_CODES,
+} from "./recovery-install-contracts.js";
 import {
   RECOVERY_ANCHOR_CODEC_VERSION,
+  RECOVERY_ANCHOR_DATABASE_NAME,
+  RECOVERY_ANCHOR_FAULT_POINTS,
   RECOVERY_ANCHOR_FILE_NAME,
   RECOVERY_ANCHOR_LAYER,
   RECOVERY_ANCHOR_REASON_CODES,
   RECOVERY_ANCHOR_SLOTS_DIR_NAME,
+  RECOVERY_ANCHOR_SLOT_MANIFEST_NAME,
   RECOVERY_ANCHOR_STATES,
 } from "./recovery-anchor-contracts.js";
 import type {
   RecoveryAnchorInstallResult,
   RecoveryAnchorPrepareResult,
   RecoveryAnchorRecord,
+  RecoveryBindingSlotName,
 } from "./recovery-anchor-contracts.js";
+import { publishFileAtomically } from "./recovery-anchor-fs.js";
 import {
+  discardRecoveryAnchor,
+  inspectRecoveryAnchor,
   installRecoveryAnchor,
   prepareRecoveryAnchor,
+  resumeRecoveryAnchor,
   selectInactiveSlot,
 } from "./recovery-anchor.js";
 
@@ -50,9 +71,23 @@ function anchorRoot(label: string): string {
 }
 
 /**
- * The restored payload the installer writes into the inactive slot. Bytes are
- * deliberately distinctive so the DoD 1 exclusion assertion can search for the
- * anchor's own identity inside them without matching incidental noise.
+ * A real restored database. The installer opens what it writes and runs the
+ * landed install transaction against it, so these bytes have to be a genuine
+ * bootstrapped store rather than a marker string.
+ */
+function restoredDatabaseBytes(): Uint8Array {
+  const directory = mkdtempSync(join(tmpdir(), "moe-recovery-anchor-source-"));
+  directories.push(directory);
+  const path = join(directory, "restored.sqlite");
+  SqliteEventStore.openForProject(path, PROJECT_ID).close();
+  return readFileSync(path);
+}
+
+/**
+ * The restored payload the installer writes into the inactive slot. Artifact
+ * bytes carry a generation marker so a slot holding two generations at once is
+ * detectable; the database carries its generation as the incarnation the
+ * install transaction stamps into it.
  */
 function payload(marker: string): Record<string, unknown> {
   return {
@@ -60,7 +95,7 @@ function payload(marker: string): Record<string, unknown> {
       { bytes: encoder.encode(`artifact-one-${marker}`), logicalPath: "artifacts/one.bin" },
       { bytes: encoder.encode(`artifact-two-${marker}`), logicalPath: "artifacts/nested/two.bin" },
     ],
-    databaseBytes: encoder.encode(`database-${marker}`),
+    databaseBytes: restoredDatabaseBytes(),
   };
 }
 
@@ -90,6 +125,56 @@ function installedAnchor(result: RecoveryAnchorInstallResult): RecoveryAnchorRec
   if (!result.ok) throw new Error("unreachable");
   expect(result.outcome).toBe("INSTALLED");
   return result.anchor;
+}
+
+/**
+ * A second restore over an existing anchor. A new command for the same
+ * generation MUST carry a fresh incarnation and key epoch (DoD 5), so every
+ * follow-on install in these tests rotates both rather than reusing the fence.
+ */
+function secondInstall(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return request({
+    incarnationRef: OTHER_INCARNATION_REF,
+    keyEpochRef: OTHER_KEY_EPOCH_REF,
+    restoreCommandId: "restore-command-second",
+    ...overrides,
+  });
+}
+
+/**
+ * The generation markers carried by a slot's ARTIFACTS. The database is
+ * excluded deliberately — it is real SQLite and carries its generation as the
+ * stamped incarnation instead, asserted separately by `slotIncarnation`.
+ * A slot answering with more than one marker is the mixed state DoD 3 forbids.
+ */
+function markersIn(root: string, slot: RecoveryBindingSlotName): Set<string> {
+  const slotRoot = join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, slot);
+  const markers = new Set<string>();
+  let artifacts = 0;
+  for (const [path, bytes] of walkFiles(slotRoot)) {
+    if (path.endsWith(".sqlite") || path.endsWith(RECOVERY_ANCHOR_SLOT_MANIFEST_NAME)) continue;
+    artifacts += 1;
+    const matched = /-(gen\d+)$/u.exec(bytes.toString("utf8"));
+    if (matched === null) throw new Error(`slot artifact ${path} carries no generation marker`);
+    markers.add(matched[1] as string);
+  }
+  // A slot that lost its artifacts would otherwise answer with an empty set and
+  // compare equal to nothing, which reads as a pass.
+  expect(artifacts, `slot ${slot} holds no artifacts`).toBe(2);
+  return markers;
+}
+
+/** The incarnation the install transaction stamped into a slot's database. */
+function slotIncarnation(root: string, slot: RecoveryBindingSlotName): string | null {
+  const path = join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, slot, RECOVERY_ANCHOR_DATABASE_NAME);
+  const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+  try {
+    const read = store.readRecoveryBinding(RECOVERY_BINDING_SLOTS[0]);
+    if (!read.ok) throw new Error(`slot ${slot} database refused: ${read.code}`);
+    return read.outcome === "FOUND" ? read.binding.incarnationRef : null;
+  } finally {
+    store.close();
+  }
 }
 
 /** Every file under `root`, as [path relative to root, bytes]. */
@@ -261,6 +346,353 @@ describe("recovery anchor exclusion from the restored payload", () => {
     expect(relative(join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME), anchorPath).startsWith("..")).toBe(
       true,
     );
+  });
+});
+
+describe("recovery anchor install ordering", () => {
+  it("crosses every declared boundary exactly once, in the declared order", async () => {
+    const observed: string[] = [];
+    installedAnchor(
+      await installRecoveryAnchor(
+        request({ injectFault: (point: string) => void observed.push(point) }),
+      ),
+    );
+
+    // The ORDER is the crash-safety property, not the end state: an install
+    // that reached INSTALLED by persisting after the switch would still end
+    // with a correct-looking anchor.
+    expect(observed).toEqual([...RECOVERY_ANCHOR_FAULT_POINTS]);
+  });
+
+  it("declares the eight boundaries DoD 3 names, without duplicates", () => {
+    expect(RECOVERY_ANCHOR_FAULT_POINTS.length).toBe(8);
+    expect(new Set(RECOVERY_ANCHOR_FAULT_POINTS).size).toBe(8);
+    expect([...RECOVERY_ANCHOR_FAULT_POINTS]).toEqual([
+      "PREPARE",
+      "INACTIVE_INSTALL",
+      "TRANSACTION",
+      "FILE_FSYNC",
+      "DIRECTORY_PERSISTENCE",
+      "VERIFICATION",
+      "SWITCH",
+      "INSTALLED_MARKER",
+    ]);
+  });
+
+  it("writes nothing into the current slot before the switch", async () => {
+    const root = anchorRoot("untouched");
+    installedAnchor(
+      await installRecoveryAnchor(request({ anchorRoot: root, payload: payload("gen1") })),
+    );
+    const settled = installedAnchor(
+      await installRecoveryAnchor(
+        secondInstall({ anchorRoot: root, payload: payload("gen2") }),
+      ),
+    );
+
+    // gen2 landed in the slot gen1 was NOT occupying, so a reader that never
+    // saw the switch still had an intact gen1 underneath it the whole time.
+    expect(settled.currentSlot).toBe(RECOVERY_BINDING_SLOTS[0]);
+    expect(markersIn(root, settled.currentSlot)).toEqual(new Set(["gen2"]));
+    expect(slotIncarnation(root, settled.currentSlot)).toBe(OTHER_INCARNATION_REF);
+    const displaced = selectInactiveSlot(settled.currentSlot);
+    expect(markersIn(root, displaced)).toEqual(new Set(["gen1"]));
+    expect(slotIncarnation(root, displaced)).toBe(INCARNATION_REF);
+  });
+});
+
+describe("recovery anchor failure injection", () => {
+  /**
+   * Hand-written, and the split is the assertion: every boundary up to and
+   * including the switch must leave the PRIOR slot current, and only the
+   * installed-marker boundary — which runs after the switch has landed — may
+   * expose the newly restored one. A production reorder moves a row here.
+   */
+  const EXPECTED_AFTER_FAULT: Readonly<Record<string, "PRIOR" | "RESTORED">> = {
+    DIRECTORY_PERSISTENCE: "PRIOR",
+    FILE_FSYNC: "PRIOR",
+    INACTIVE_INSTALL: "PRIOR",
+    INSTALLED_MARKER: "RESTORED",
+    PREPARE: "PRIOR",
+    SWITCH: "PRIOR",
+    TRANSACTION: "PRIOR",
+    VERIFICATION: "PRIOR",
+  };
+
+  it("expects an outcome for exactly the declared boundaries", () => {
+    expect(Object.keys(EXPECTED_AFTER_FAULT).sort()).toEqual(
+      [...RECOVERY_ANCHOR_FAULT_POINTS].sort(),
+    );
+    expect(Object.values(EXPECTED_AFTER_FAULT).filter((v) => v === "RESTORED").length).toBe(1);
+  });
+
+  it.each(RECOVERY_ANCHOR_FAULT_POINTS)(
+    "exposes one whole verified slot when the install dies at %s",
+    async (point) => {
+      const root = anchorRoot(`fault-${point}`);
+      installedAnchor(
+        await installRecoveryAnchor(request({ anchorRoot: root, payload: payload("gen1") })),
+      );
+
+      const crash = new Error(`injected fault at ${point}`);
+      await expect(
+        installRecoveryAnchor(
+          secondInstall({
+            anchorRoot: root,
+            injectFault: (reached: string) => {
+              if (reached === point) throw crash;
+            },
+            payload: payload("gen2"),
+          }),
+        ),
+      ).rejects.toThrow(`injected fault at ${point}`);
+
+      // A NEW reader, not the process that died: crash safety is what survives.
+      const inspected = await inspectRecoveryAnchor(root);
+      expect(inspected.ok, inspected.ok ? "inspected" : `${inspected.layer}/${inspected.code}`).toBe(
+        true,
+      );
+      if (!inspected.ok || inspected.outcome !== "INSPECTED") {
+        throw new Error(`expected INSPECTED, got ${inspected.outcome}`);
+      }
+
+      const prior = EXPECTED_AFTER_FAULT[point] === "PRIOR";
+      expect(inspected.slotVerified).toBe(true);
+      expect(markersIn(root, inspected.currentSlot)).toEqual(new Set([prior ? "gen1" : "gen2"]));
+      // The stamped incarnation and the artifacts must name the SAME
+      // generation: that pairing is what "never mixed slots" actually means.
+      expect(slotIncarnation(root, inspected.currentSlot)).toBe(
+        prior ? INCARNATION_REF : OTHER_INCARNATION_REF,
+      );
+      expect(inspected.anchor.currentSlot).toBe(inspected.currentSlot);
+      // Never mutating authority: a half-finished restore stays quiesced.
+      expect(inspected.anchor.restoredReadiness).toBe("RECOVERY_REQUIRED");
+      expect(inspected.mutatingOpenAllowed).toBe(false);
+      // The slot verified, so the anchor's refusal is the standing one rather
+      // than a verification fault — a distinct, named code either way.
+      expect(inspected.mutatingOpenRefusal.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+      expect(inspected.mutatingOpenRefusal.layer).toBe(RECOVERY_ANCHOR_LAYER);
+      expect([...inspected.allowedOperations].sort()).toEqual(["DISCARD", "INSPECT", "RESUME"]);
+    },
+  );
+});
+
+describe("recovery anchor fence and resume", () => {
+  function refused(
+    result: { readonly ok: boolean } & Partial<{ code: string; layer: string }>,
+  ): { readonly code: string; readonly layer: string } {
+    expect(result.ok, "expected a refusal").toBe(false);
+    return { code: result.code as string, layer: result.layer as string };
+  }
+
+  it("reuses the prepared identity when the same command is prepared again", async () => {
+    const root = anchorRoot("reprepare");
+    const first = prepared(await prepareRecoveryAnchor(request({ anchorRoot: root })));
+    const second = prepared(await prepareRecoveryAnchor(request({ anchorRoot: root })));
+
+    expect(second.preparedIdentity).toBe(first.preparedIdentity);
+    expect(second.anchorDigest).toBe(first.anchorDigest);
+    // No second anchor: a fence that can be minted twice is a cache.
+    expect(readdirSync(root).filter((entry) => entry === RECOVERY_ANCHOR_FILE_NAME).length).toBe(1);
+  });
+
+  it("does not downgrade a completed install when the same command is prepared again", async () => {
+    const root = anchorRoot("prepare-settled");
+    const live = installedAnchor(await installRecoveryAnchor(request({ anchorRoot: root })));
+
+    // Rebuilding the record instead of returning the stored one would stamp
+    // state PREPARED over a finished install and un-mark a completed recovery.
+    const again = prepared(await prepareRecoveryAnchor(request({ anchorRoot: root })));
+    expect(again.state).toBe("INSTALLED");
+    expect(again.anchorDigest).toBe(live.anchorDigest);
+
+    const inspected = await inspectRecoveryAnchor(root);
+    if (!inspected.ok || inspected.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(inspected.anchor.state).toBe("INSTALLED");
+  });
+
+  it("resumes a prepared command through to INSTALLED on the same identity", async () => {
+    const root = anchorRoot("resume");
+    const preparedRecord = prepared(await prepareRecoveryAnchor(request({ anchorRoot: root })));
+    const resumed = installedAnchor(await resumeRecoveryAnchor(request({ anchorRoot: root })));
+
+    expect(resumed.preparedIdentity).toBe(preparedRecord.preparedIdentity);
+    expect(resumed.state).toBe("INSTALLED");
+  });
+
+  it("resumes repeatedly without minting a new identity", async () => {
+    const root = anchorRoot("resume-twice");
+    const first = installedAnchor(await resumeRecoveryAnchor(request({ anchorRoot: root })));
+    const again = installedAnchor(await resumeRecoveryAnchor(request({ anchorRoot: root })));
+
+    expect(again.preparedIdentity).toBe(first.preparedIdentity);
+  });
+
+  it("never re-enters the protocol against an install that already completed", async () => {
+    const root = anchorRoot("resume-settled");
+    const live = installedAnchor(await installRecoveryAnchor(request({ anchorRoot: root })));
+
+    // After the switch currentSlot === targetSlot, so a resume that re-ran the
+    // install would clear and rewrite the LIVE slot. Comparing markers cannot
+    // see that — the rewrite lands the same bytes. A sentinel can: it only
+    // survives if the slot was left alone.
+    const sentinel = join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, live.currentSlot, "sentinel.txt");
+    writeFileSync(sentinel, "written between install and resume");
+
+    installedAnchor(await resumeRecoveryAnchor(request({ anchorRoot: root })));
+    expect(existsSync(sentinel)).toBe(true);
+  });
+
+  it("refuses to resume under a different restore command", async () => {
+    const root = anchorRoot("resume-foreign");
+    prepared(await prepareRecoveryAnchor(request({ anchorRoot: root })));
+
+    const outcome = refused(
+      await resumeRecoveryAnchor(
+        request({
+          anchorRoot: root,
+          incarnationRef: OTHER_INCARNATION_REF,
+          keyEpochRef: OTHER_KEY_EPOCH_REF,
+          restoreCommandId: "restore-command-foreign",
+        }),
+      ),
+    );
+    expect(outcome.code).toBe("RECOVERY_ANCHOR_COMMAND_MISMATCH");
+    // Pinned to the LITERAL, not to RECOVERY_ANCHOR_LAYER. Comparing production's
+    // constant against itself is a tautology that survives any layer change.
+    expect(outcome.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  // Each leg names which half of the fence is being reused, so a guard that
+  // only checks the incarnation cannot pass the whole table.
+  const REUSED_FENCE_LEGS = [
+    ["both halves", INCARNATION_REF, KEY_EPOCH_REF],
+    ["the incarnation alone", INCARNATION_REF, OTHER_KEY_EPOCH_REF],
+    ["the key epoch alone", OTHER_INCARNATION_REF, KEY_EPOCH_REF],
+  ] as const;
+
+  it.each(REUSED_FENCE_LEGS)(
+    "refuses a new command on the identical generation that reuses %s",
+    async (_label, incarnationRef, keyEpochRef) => {
+      const root = anchorRoot("fence");
+      installedAnchor(await installRecoveryAnchor(request({ anchorRoot: root })));
+
+      const outcome = refused(
+        await prepareRecoveryAnchor(
+          request({
+            anchorRoot: root,
+            incarnationRef,
+            keyEpochRef,
+            restoreCommandId: "restore-command-replay",
+          }),
+        ),
+      );
+      expect(outcome.code).toBe("RECOVERY_ANCHOR_INCARNATION_REUSED");
+      expect(outcome.layer).toBe(RECOVERY_ANCHOR_LAYER);
+      // Not the install layer's UNIQUE violation: no database was consulted.
+      expect(RECOVERY_INSTALL_REASON_CODES).not.toContain(outcome.code);
+    },
+  );
+
+  it("admits a new command on the identical generation with both halves fresh", async () => {
+    const root = anchorRoot("fence-fresh");
+    const first = installedAnchor(await installRecoveryAnchor(request({ anchorRoot: root })));
+    const second = prepared(
+      await prepareRecoveryAnchor(
+        request({
+          anchorRoot: root,
+          incarnationRef: OTHER_INCARNATION_REF,
+          keyEpochRef: OTHER_KEY_EPOCH_REF,
+          restoreCommandId: "restore-command-fresh",
+        }),
+      ),
+    );
+
+    expect(second.generationDigest).toBe(first.generationDigest);
+    expect(second.preparedIdentity).not.toBe(first.preparedIdentity);
+  });
+});
+
+describe("recovery anchor discard", () => {
+  it("clears the slot that is not current and leaves the live one verified", async () => {
+    const root = anchorRoot("discard");
+    installedAnchor(await installRecoveryAnchor(request({ anchorRoot: root, payload: payload("gen1") })));
+    const live = installedAnchor(
+      await installRecoveryAnchor(secondInstall({ anchorRoot: root, payload: payload("gen2") })),
+    );
+
+    const result = await discardRecoveryAnchor(root);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== "DISCARDED") {
+      throw new Error(`expected DISCARDED, got ${result.outcome}`);
+    }
+    expect(result.discardedSlot).toBe(selectInactiveSlot(live.currentSlot));
+
+    const inspected = await inspectRecoveryAnchor(root);
+    if (!inspected.ok || inspected.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(inspected.currentSlot).toBe(live.currentSlot);
+    expect(inspected.slotVerified).toBe(true);
+    expect(markersIn(root, live.currentSlot)).toEqual(new Set(["gen2"]));
+  });
+
+  it("answers ABSENT for a root that carries no anchor", async () => {
+    const result = await discardRecoveryAnchor(anchorRoot("discard-empty"));
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe("ABSENT");
+  });
+});
+
+describe("recovery anchor atomic publish", () => {
+  it("leaves the previous bytes readable when the publish cannot complete", async () => {
+    const root = anchorRoot("atomic");
+    const target = join(root, "published.json");
+    writeFileSync(target, "PREVIOUS");
+
+    // Occupy the staging name with a DIRECTORY, so opening it for write fails
+    // partway through the publish. A publish that wrote the final path directly
+    // would already have destroyed PREVIOUS by the time it noticed.
+    mkdirSync(`${target}.staging`);
+    await expect(publishFileAtomically(target, encoder.encode("NEXT"))).rejects.toThrow();
+
+    expect(readFileSync(target, "utf8")).toBe("PREVIOUS");
+  });
+});
+
+describe("recovery anchor root publication", () => {
+  const PUBLISHED = [
+    "RECOVERY_ANCHOR_ALLOWED_OPERATIONS",
+    "RECOVERY_ANCHOR_CODEC_VERSION",
+    "RECOVERY_ANCHOR_LAYER",
+    "RECOVERY_ANCHOR_REASON_CODES",
+    "RECOVERY_ANCHOR_STATES",
+    "discardRecoveryAnchor",
+    "inspectRecoveryAnchor",
+    "installRecoveryAnchor",
+    "prepareRecoveryAnchor",
+    "resumeRecoveryAnchor",
+    "selectInactiveSlot",
+  ] as const;
+
+  // Deliberately withheld: layout constants and the injection seam are internal.
+  // A consumer passes an anchorRoot and lets this module own the layout.
+  const WITHHELD = [
+    "RECOVERY_ANCHOR_DATABASE_NAME",
+    "RECOVERY_ANCHOR_FAULT_POINTS",
+    "RECOVERY_ANCHOR_FILE_NAME",
+    "RECOVERY_ANCHOR_SLOTS_DIR_NAME",
+    "RECOVERY_ANCHOR_SLOT_MANIFEST_NAME",
+  ] as const;
+
+  it("publishes exactly the anchor surface a restore controller composes", async () => {
+    const root: Record<string, unknown> = await import("./index.js");
+    for (const name of PUBLISHED) {
+      expect(root[name], `${name} is not published`).toBeDefined();
+    }
+    // Negative control: without this, the assertion above passes for a barrel
+    // that re-exported the whole module and published far more than intended.
+    for (const name of WITHHELD) {
+      expect(root[name], `${name} leaked onto the root`).toBeUndefined();
+    }
   });
 });
 
