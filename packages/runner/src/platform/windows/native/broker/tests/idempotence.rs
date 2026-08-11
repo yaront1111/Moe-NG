@@ -61,8 +61,8 @@ use moe_windows_job_broker::{
     Unobserved, Wiring, FRAME_HEADER_BYTES, PROTOCOL_VERSION,
 };
 use moe_windows_job_core::{
-    CreatedProcess, NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit,
-    WaitOutcome, Win32Calls, INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
+    CreatedProcess, NativeError, ProcessCalls, ProcessSpec, RawHandle, UnknownExit, WaitOutcome,
+    Win32Calls, INHERITED_HANDLE_COUNT, REQUIRED_LIMIT_FLAGS,
 };
 
 /// The first handle value the scripted table hands out.
