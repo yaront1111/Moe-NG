@@ -1,0 +1,36 @@
+{
+  "id": "task-bb7876d5cff7415fa35339ed99d343a0",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Narrow the contracts-distribution absence probe so publishing a vocabulary stops faking a capability",
+  "description": "Objective: make the design-18.3 fault ratchet report the truth again. `pnpm test:fault` is currently RED with no owner, and the failure is a probe false positive rather than a production regression.\n\nFILED BY architect-8ee37119 on 2026-08-11 after task-2411ed9c landed DONE with this red disclosed but unfixed. Nobody holds it, so the gate stays failing and the underlying defect will recur.\n\nMEASURED AT HEAD, just now:\n- `pnpm test:fault` -> Test Files 2 failed | 1 passed (3); Tests 2 failed | 41 passed (43); exit 1.\n- `packages/testkit/src/foundation/foundation-incident-schedules.ts:74-79` is UNCHANGED:\n    probe(\"probe:contracts-distribution-handshake\", \"@moe/contracts\",\n          [\"verifyDistributionManifest\", \"checkDistributionCompatibility\"],\n          \"Distribution|DISTRIBUTION\")\n- `grep -rn \"verifyDistributionManifest\\|checkDistributionCompatibility\"` across packages and apps returns EXACTLY ONE hit: line 78, the probe's own declaration. Neither capability exists anywhere in the repo.\n- `git show HEAD:packages/contracts/src/index.ts | grep -c distribution` -> 3. The vocabulary is published and in production use.\n\nTHE DEFECT. The probe takes named capability symbols AND a fallback pattern. Because the two named symbols do not exist, the bare pattern \"Distribution|DISTRIBUTION\" is doing all the detection, and it matches ANY distribution-shaped identifier. task-2411ed9c published a pure VOCABULARY - constants, types and a refusal constructor that grant no capability whatsoever - and the probe therefore reports the distribution handshake as PRESENT. j4 incident:stale-assets-refuse-handshake consequently expects PRODUCTION_BEHAVIOR_ABSENT and gets PASS_EXPECTED.\n\nAuthorship was established independently THREE times - by worker-a2c7f85f, by QA, and by me - each confirming that reverting ONLY packages/contracts/src/index.ts makes j4 pass while the other failure persists.\n\nWHAT TO DO, and the narrow form matters: narrow the fallback pattern for THIS ROW ONLY so it requires evidence of the actual handshake capability rather than any distribution-shaped identifier. After the change j4 must return to PRODUCTION_BEHAVIOR_ABSENT, which is the TRUE reading - the handshake genuinely does not exist. Prove it: j4 red before, PRODUCTION_BEHAVIOR_ABSENT after, and the other 41 cases unchanged.\n\nDO NOT flip the row to PASS_EXPECTED. That asserts a capability grep proves absent, which is epic rail 4's inventing-a-pass. DO NOT rename the published symbols; they are consumed in production by adapters/jetbrains/src/jetbrains-distribution-gate.ts.\n\nTHE SYSTEMIC HALF, which is why this is worth a task rather than a one-line fix. The three sibling probes use the identical bare-pattern style - \"Claim|CLAIM\" (probe:scheduler-claim), \"Timer|TIMER\" (probe:scheduler-timer-reentrancy), \"Review|REVIEW\" (probe:core-review-assignment). Distribution is simply the FIRST vocabulary-only publication to reach a package root; any future task that publishes a noun-shaped vocabulary trips its sibling the same way. Decide deliberately whether to narrow only this row or all four, and record the reasoning. Narrowing one fixes the outage; narrowing all four prevents the next one.\n\nPRIOR ART for the shape of this work: task-c7c6cf92b3f24f95b721d49bad7d7d22 (\"Retire the scheduler-authority-lease absence entry and drive...\") is DONE and is the established pattern for correcting an absence-probe entry. Read it before designing.\n\nAUTHORISATION NOTE: this touches a mandatory design-18.3 ratchet. When I found it, no governor was alive to grant the edit and I deliberately did not make it unilaterally. A governor is alive again (governor-42b952c9), so confirm the grant before implementing rather than assuming this task's existence is the authorisation.\n\nOwned paths: packages/testkit/src/foundation/foundation-incident-schedules.ts.\n\nVerification: pnpm test:fault exits 0, with the before/after j4 verdict recorded verbatim.",
+  "definitionOfDone": [
+    "`pnpm test:fault` exits 0, with the before state (2 failed | 41 passed) and the after state recorded verbatim in completion evidence.",
+    "j4 incident:stale-assets-refuse-handshake returns PRODUCTION_BEHAVIOR_ABSENT — the true reading, since grep proves verifyDistributionManifest and checkDistributionCompatibility exist nowhere. The row is NOT flipped to PASS_EXPECTED, which would assert a capability that does not exist.",
+    "The other 41 fault cases are unchanged and still pass, proven by comparing the case list before and after rather than by the exit code alone.",
+    "The narrowed probe still FIRES correctly when the capability genuinely appears: a test or drill introduces a stub named verifyDistributionManifest and confirms the probe flips to detecting it, so narrowing did not simply disable the row.",
+    "The decision on the three sibling probes (\"Claim|CLAIM\", \"Timer|TIMER\", \"Review|REVIEW\") is recorded with reasoning — narrowed too, or deliberately left, and why.",
+    "No published contracts symbol is renamed or removed; adapters/jetbrains/src/jetbrains-distribution-gate.ts still compiles and its package gate still passes."
+  ],
+  "taskRails": [
+    "This is a mandatory design-18.3 ratchet. Confirm the governor's grant before editing it; the existence of this task is not the authorisation.",
+    "Never flip an absence row to PASS_EXPECTED to make a suite green. If the capability is absent, the row must say absent — epic rail 4 forbids inventing a pass.",
+    "Narrowing must not disable the probe. Prove it still fires by introducing the real capability symbol in a drill and confirming detection, then reverting.",
+    "Do not rename or remove any published @moe/contracts symbol; they are consumed in production by the JetBrains adapter's distribution gate.",
+    "Change the probe pattern only. Production behaviour is not in scope and no distribution semantics may move."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 6.95,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-11T08:08:02.907Z",
+  "updatedAt": "2026-08-11T08:08:02.907Z"
+}

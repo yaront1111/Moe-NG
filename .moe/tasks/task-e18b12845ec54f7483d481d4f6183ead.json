@@ -25,20 +25,23 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY. Re-measure the three prerequisites' landed symbols — every prior task in this chain found a stale claim in its own description.\n\nCRATE AS 3C LEFT IT, `grep -c ''` on broker/src: boundary 173, completion 167, control 204, descriptors 222, diagnostics 95, frames 223, launch 167, lib 111, main 154, payload 100, protocol 205, refusal 146, session 214, settle 123, status 182, verify 157, watch 148. Tests: descriptor_block 401, frame_sweep 1038, handle_inheritance 446, node_loadability 132, session 1123 — tests are exempt from the 250 cap; production sources are NOT, and several sit near it.\n\nSURFACES YOU BUILD ON, from completion.rs: `Precondition` (:37), `Unobserved` (:65), `Completion` (:103), `Stopped` (:113), `Outcome` (:152), re-exported from lib.rs alongside `session::{Session, ShutdownSignal, Wiring}`, `status::{Completed, Outbound, Started, Status}`, `refusal::{RefusalLayer, Refused, REFUSED_PAYLOAD_BYTES}`, `control::{AcceptState, Accepted, Inbound, LaunchRequest}` and `boundary::{acquire, startup_block, PipeChannel, SystemHandles}`. `Unobserved` is the vocabulary for a leg whose outcome could not be seen — use it rather than inventing an UNKNOWN.\n\nDO NOT REDO 3C'S WORK. It already proved STARTED-after-proof, the four independent COMPLETED preconditions, and the five termination paths INDIVIDUALLY. Your DoD 1 is explicit that the sequential case is already covered and does not satisfy this item. Build the concurrency and containment proofs on top.\n\nPRECEDENT FOR A COOPERATING CHILD: src/bin/handle_probe.rs (127 lines) is the pattern 3a used for its absence proof — a real binary the test launches. Read it before writing the spawner in step 4.\n\nRecord the baseline: locked broker test command and release build, both exit 0.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-10T09:51:25.363Z"
+      "note": "RE-MEASURED ON DISK, and the description's claims held this time — no stale claim found, which is itself worth recording since every prior task in this chain hit one.\n\nBASELINE, both legs fresh:\n- `cargo test --locked ... -p moe-windows-job-broker` exit 0. 77 named test lines. Per target: lib 0, handle_probe 0, main 0, descriptor_block 8, frame_sweep 38, handle_inheritance 1, node_loadability 1, session 29, doc 0.\n- `cargo build --locked --release ...` exit 0.\n\nLINE COUNTS `grep -c ''` on broker/src, identical to the plan's figures: boundary 173, completion 167, control 204, descriptors 222, diagnostics 95, frames 223, launch 167, lib 111, main 154, payload 100, protocol 205, refusal 146, session 214, settle 123, status 182, verify 157, watch 148, bin/handle_probe 127. Tests: descriptor_block 401, frame_sweep 1038, handle_inheritance 446, node_loadability 132, session 1123.\n\nSYMBOLS CONFIRMED IN HEAD, read rather than inferred: completion.rs Precondition:37 / Unobserved:65 / Completion:103 / Stopped:113 (7 variants, ALL fixed-length) / Outcome:152. lib.rs re-exports exactly the six groups the description lists.\n\nFOUR MEASUREMENTS THAT CHANGE THE DESIGN, none of which were in the plan:\n\n1. THE CORE ALREADY OWNS THE (pid, creation_time) PRIMITIVE. `ProcessCalls::creation_time(RawHandle) -> u64` and `wait_for_process(RawHandle, u32) -> WaitOutcome` are on the public trait and `SystemWin32` implements both. So the kill proof can DELEGATE every process query to the core instead of restating GetProcessTimes or WaitForSingleObject in test code. The only Win32 the containment test needs of its own is `OpenProcess`, and it needs that precisely because the core deliberately has no open-by-PID (lifecycle.rs:10-14 states the reason: a PID is reused, so an operation that reopened one could act on an unrelated process). That absence is the rail this task's DoD 2 exists to honour, so the test supplies the lookup and delegates the judgement.\n\n2. THE PROVIDER'S IDENTITY COMES FROM THE PRODUCTION SURFACE FOR FREE. The STARTED frame on fd1 carries pid (u32 LE) then creation_time (u64 LE), 12 bytes, and status.rs:71-101 pins that layout. So the forcible-kill test reads the provider's identity pair from the broker's own STARTED frame rather than computing it — the identity under test is the one production published.\n\n3. 3C'S KNOWN LIMITATION HELPS THIS TASK RATHER THAN BLOCKING IT. watch.rs:23-43 documents that `take_instruction` BLOCKS on a real pipe held open and silent. For the forcible-kill test that is exactly the behaviour needed: a Node parent that sends LAUNCH and then stays silent keeps the broker parked and holding the Job until we kill it. Recorded so a later reader does not \"fix\" it into a flake.\n\n4. THE REAL-BROKER TEST NEEDS NO NESTED RELEASE BUILD. node_loadability.rs builds release into a sibling target dir because its own DoD pins the release binary. Mine does not, so `CARGO_BIN_EXE_moe-windows-job-broker` (debug) is used directly — which sidesteps `mem:gotcha-nested-cargo-build-deadlocks-on-target-dir` entirely rather than working around it. Six pipes still require a real Node parent: std::process::Command cannot express more than three stdio, so Node remains the only way to populate lpReserved2 with six.\n\nDESIGN CONSEQUENCE FOR STEP 2, settled here so the concurrency is honest. The session is single-threaded by construction, so the race is between the SESSION thread and two peer threads, released at one rendezvous placed inside the double's first `wait_for_process` — a point that is always reached, unlike a rendezvous inside the fd0 read, which the timeout path would skip and deadlock. Writing CANCEL after fd0 is marked ended must be REFUSED by the channel double, because a parent that closed its write end physically cannot then write: that makes cancel-vs-EOF a genuine lock race with a physically meaningful outcome either way, instead of a fake one where pending bytes always drain before EOF.",
+      "startedAt": "2026-08-10T09:51:25.363Z",
+      "completedAt": "2026-08-10T09:58:50.828Z"
     },
     {
       "stepId": "step-2",
       "description": "DoD 1 — GENUINE CONCURRENCY. Create broker/tests/idempotence.rs driving CANCEL on fd0, fd0 EOF, and an instructed timeout so they ACTUALLY RACE. taskRail 2 is explicit that serialising them defeats the entire purpose, and DoD 1 says a test that runs the three one after another does NOT satisfy the item.\n\nMake the race real: start three threads, hold them at a `Barrier` (or equivalent rendezvous) so all three are released into the session at once, then join. A `sleep`-staggered sequence is the failure mode to avoid — it is sequential wearing concurrency's clothes.\n\nAssert EXACTLY-ONCE by call-count table: terminate count == 1 and reap count == 1 across the whole race, not merely that the session ended. Double-termination is the defect here and it is invisible to a \"did it terminate\" assertion.\n\nRun the race repeatedly (a bounded loop, e.g. 50-200 iterations) so a scheduling-order-dependent double-terminate surfaces rather than passing on one lucky interleaving. A single iteration proves almost nothing about a race.\n\nAssert `Unobserved` is PRESERVED on any leg whose outcome could not be seen — a racing loser must not be upgraded to a definite outcome.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs"
       ],
       "newFiles": [
         "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs"
-      ]
+      ],
+      "startedAt": "2026-08-10T09:58:54.556Z"
     },
     {
       "stepId": "step-3",
@@ -105,7 +108,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-10T06:40:05.834Z",
-  "updatedAt": "2026-08-10T09:51:25.363Z",
+  "updatedAt": "2026-08-10T09:58:54.556Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -113,9 +116,12 @@
   "metrics": {
     "firstClaimAt": "2026-08-10T09:33:22.283Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-10T09:35:19.803Z",
   "planningNotes": {

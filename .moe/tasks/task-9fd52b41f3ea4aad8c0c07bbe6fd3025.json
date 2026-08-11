@@ -134,8 +134,8 @@
       "completedAt": "2026-08-10T09:47:41.121Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f3560083",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,7 +160,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.804Z",
-  "updatedAt": "2026-08-10T09:50:32.820Z",
+  "updatedAt": "2026-08-10T09:59:23.473Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "worker-a2c7f85f",
@@ -170,7 +170,9 @@
     "firstClaimAt": "2026-08-10T08:14:04.502Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-10T09:59:23.473Z",
+    "wallClockMs": 6318971
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -229,5 +231,8 @@
     "adapters/jetbrains/src/jetbrains-runtime-entrypoint.test.ts",
     "adapters/jetbrains/src/jetbrains-distribution-gate.ts",
     "adapters/jetbrains/src/jetbrains-distribution-gate.js"
-  ]
+  ],
+  "completedAt": "2026-08-10T09:59:23.473Z",
+  "reviewCompletedAt": "2026-08-10T09:59:23.473Z",
+  "reviewSummary": "APPROVE. Full evidence: msg-49a8f6a6 in the general channel.\n\nGATES RE-RUN BY ME: typecheck exit 0; adapter test 2 files/43 tests exit 0; pnpm test:integration (PowerShell) 41 pass/0 fail exit 0. Matches outputTail. All 8 owned files confirmed at HEAD by `git rev-parse HEAD:<path>`, not by an empty diff — all were untracked mid-session. e93b479 = 9 files/1189 insertions/0 deletions; lockfile carries only the jetbrains importer. HEAD moved twice under me; `git log e93b479..HEAD -- adapters/jetbrains` empty.\n\nDoD 1: gate precedes every port; drill (a) 10 red, \"expected CONTROL_ROOM_EMBEDDED to deeply equal DISTRIBUTION_MISMATCH\". DoD 2: production imports are only @moe/contracts, @moe/ide-adapter-contract and its own sibling — no control-room-client, MCP, WebSocket, rendering or lifecycle state. DoD 3: six cases by name, passing. DoD 4: 43 + 41 exit 0.\n\nDESIGN CALL CHECKED BY MEASUREMENT. My probe from adapters/jetbrains returns reachable:[] for verifyDistributionSet + 4 siblings. The verifier has NO manifestVersion reference (parser only, unreachable) and keys componentKind by componentId at :199, so those legs are unanswerable there. The API-range leg duplicates a 3-field equality against a different party's expectation; the barrel publishes no comparison function.\n\nSIX DRILLS RE-RUN BY ME, anchor-guarded, scratch outside the repo, restores checked against the HEAD blob: (a) 10 red; (b) \"expected 1 to be +0\"; (e) exactly 1 red, single-field layer diff, code identical; (g) 4 red, reason pinned; (h) \"expected 2 to be 1\"; (i) \"expected endpoint to be null\". Restores MATCH 910c0e97/60ae7852, tree clean.\n\nSweeps use hand-written counts and ordered toEqual plus a positive control at :396. Foreign j1/j4 reds settled by construction: probe scoped to package \"@moe/contracts\". Disclosed `vitest list` defect does NOT reproduce (exit 0, 43 entries, 0 node_modules). Bash integration red is environmental. Per-file: index.ts 176, gate 113."
 }

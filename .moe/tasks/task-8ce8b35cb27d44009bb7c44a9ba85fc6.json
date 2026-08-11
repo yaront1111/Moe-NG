@@ -1,0 +1,38 @@
+{
+  "id": "task-8ce8b35cb27d44009bb7c44a9ba85fc6",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Publish the Streamable HTTP MCP surface on the @moe/mcp root",
+  "description": "Objective: make the already-built Streamable HTTP MCP adapter reachable from the @moe/mcp package root, so a consumer can compose it without a deep import.\n\nMEASURED ON DISK 2026-08-11 by governor-f70d1157 (D:/projexts/moe-next):\n- packages/mcp/package.json exports is exactly { \".\": \"./src/index.ts\" } — one entry, no subpath. A deep import of ./src/http/** is therefore not merely rail-forbidden, it is unresolvable through the package specifier.\n- packages/mcp/src/index.ts publishes stdio ONLY: MOE_MCP_PACKAGE_VERSION (:1), a stdio-server block (:3), StdioServerOptions (:10), StdioAuthOutcome + StdioDispatchPort (:11), and two further stdio blocks (:12, :21). Zero HTTP names.\n- The HTTP implementation is present and complete under packages/mcp/src/http/: createHttpMcpAdapter (http-server.ts:244), HttpAdapterOptions (http-server.ts:49), HttpMcpAdapter (http-server.ts:58), HttpDispatchPort (http-tool-bridge.ts:46, re-exported http-server.ts:47), HttpAuthOutcome (http-server.ts:47), HttpSessionPort (http-session.ts:55).\n- The .js runtime bridges already exist beside every one of those sources (http-server.js, http-session.js, http-tool-bridge.js, http-resume.js), landed by task-17b03331 — so this task adds no bridge, it only re-exports.\n\nDeliverable: extend packages/mcp/src/index.ts with the HTTP value and type surface named above, and pin it with a root-surface test in the style the package already uses (mcp-runtime-entrypoint.test.ts), plus a plain-Node importability probe. A vitest-only proof is NOT sufficient: vitest resolves a NodeNext \".js\" specifier back to \".ts\", so a green vitest run cannot show the published root actually loads under plain Node. Probe the bare specifier \"@moe/mcp\" from node and assert each new name is defined.\n\nNOT in scope: behaviour changes to the HTTP server, session or tool bridge; new transports; daemon host wiring; any edit under apps/.\n\nOwned paths: packages/mcp/src/index.ts, packages/mcp/src/index.js, and one focused root-surface test under packages/mcp/src/.\n\nHard dependencies: NONE. This is buildable today and runs in parallel with the Windows Job chain.\n\nWHY THIS TASK EXISTS: task-49ed1e6d73544fc6ae09b3951a573848 (Foundation MCP dispatch host) is BLOCKED on two separate measured causes. One is the Windows chain, ten links deep behind a single in-flight worker. The other is this export gap, which its own block reason states verbatim: \"the HTTP MCP surface [must be] published from @moe/mcp root (with its root/runtime test)\". Nothing about that second cause depends on the first. Landing it now means that when the chain finally arrives, 49ed1e6d has one blocker left instead of two.\n\nVerification: pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test && pnpm typecheck",
+  "definitionOfDone": [
+    "packages/mcp/src/index.ts re-exports, from the package root, the value createHttpMcpAdapter and the types HttpAdapterOptions, HttpMcpAdapter, HttpDispatchPort, HttpAuthOutcome and HttpSessionPort, each resolved through a NodeNext \".js\" specifier into src/http/**.",
+    "A root-surface test asserts the published namespace by a HAND-WRITTEN name list, not by iterating the module's own keys. A test that derives its expectation from Object.keys(namespace) passes unchanged when a name is dropped and proves nothing.",
+    "A plain-Node probe imports the bare specifier \"@moe/mcp\" (no deep path, no vitest resolver) and asserts typeof createHttpMcpAdapter === \"function\". Record the exact command and its output. Because vitest maps \".js\" back to \".ts\", a green vitest run is NOT evidence for this item.",
+    "Each published TYPE is proven reachable by annotating a value with it through the bare specifier and typechecking. A type-only export is invisible to any runtime key/count assertion, so the runtime probe above cannot cover this item.",
+    "The stdio surface published before this change is still present and unchanged: assert the pre-existing stdio names alongside the new HTTP ones in the same test, so a re-export that shadows or drops one fails.",
+    "No file under packages/mcp/src/http/ and no file under apps/ is modified. Show the diff by explicit pathspec.",
+    "pnpm --filter @moe/mcp typecheck && pnpm --filter @moe/mcp test && pnpm typecheck all exit 0, run from the repository root so the repo-wide leg is genuinely repo-wide."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 58,
+  "comments": [
+    {
+      "id": "comment-8fe2f5918c584e6c943232310cb3f60d",
+      "author": "governor-f70d1157",
+      "content": "GOVERNOR HANDOFF — why this is claimable today, and what will NOT settle it.\n\nThis task is OFF the critical chain. Board 2026-08-11: 89 DONE, 1 WORKING, 9 BLOCKED — and eight of those nine are a single serial line behind one live worker:\n\n  task-e18b1284 (WORKING 1/8) -> task-af3d7bc8 (SPIDR shell, other 3 children DONE) -> task-4d1f8ba5 -> task-acf73253 -> task-6cbff010 -> task-44d4873e -> task-8f9305b9 -> task-5e43a9e2 -> task-49ed1e6d -> task-97554aa4 (canary)\n\ntask-49ed1e6d is blocked on TWO independent measured causes, not one. Its block reason names the second verbatim: \"the HTTP MCP surface [must be] published from @moe/mcp root (with its root/runtime test)\". Nothing about that depends on Windows Job Objects. Landing it now converts 49ed1e6d from two walls to one.\n\nPLANNING TRAPS, all three verified on disk today:\n\n1. A vitest run cannot settle DoD 3. Vitest resolves a NodeNext \".js\" specifier back to the \".ts\" source, so a green suite proves the TypeScript resolves — never that the published root loads under plain Node. Only `node -e` against the bare specifier \"@moe/mcp\" is evidence. This exact gap is what the .js-bridge task family (task-f6440f26, task-386fcb4c, task-17b03331, task-eb9ff081, task-535e773b) was created to close; do not re-open it.\n\n2. DoD 4 exists because a type-only export is INVISIBLE to any runtime key or count assertion. Of the six names published here, five are types. A namespace-count test would pass with all five missing. Prove each by annotating a value through the bare specifier and typechecking.\n\n3. DoD 2 forbids deriving the expected name list from Object.keys(namespace). A test that reads the module's own keys and compares them to itself passes unchanged when a name is dropped — it is a transcript, not a guard. Hand-write the list.\n\nNo bridge work is needed: http-server.js, http-session.js, http-tool-bridge.js and http-resume.js already sit beside their sources (landed by task-17b03331). This is a re-export plus its proof.",
+      "timestamp": "2026-08-11T07:56:50.777Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-11T07:55:43.645Z",
+  "updatedAt": "2026-08-11T07:56:50.777Z"
+}

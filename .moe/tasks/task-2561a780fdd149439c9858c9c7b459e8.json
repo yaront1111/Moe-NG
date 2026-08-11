@@ -143,7 +143,7 @@
       "completedAt": "2026-08-10T09:50:33.424Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -163,16 +163,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:46:33.669Z",
-  "updatedAt": "2026-08-10T09:52:05.576Z",
+  "updatedAt": "2026-08-11T08:00:13.753Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:31:58.244Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-11T08:00:13.753Z",
+    "wallClockMs": 149295509
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
-    "worker-767ae903"
+    "worker-767ae903",
+    "qa-f3560083"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -229,5 +232,8 @@
     "packages/scheduler/src/expansion/expansion-admission.js",
     "packages/scheduler/src/expansion/expansion-preparation.ts",
     "packages/scheduler/src/expansion/expansion-preparation.js"
-  ]
+  ],
+  "completedAt": "2026-08-11T08:00:13.753Z",
+  "reviewCompletedAt": "2026-08-11T08:00:13.753Z",
+  "reviewSummary": "APPROVED. Gate re-run by QA: `pnpm --filter @moe/scheduler typecheck && test` exit 0, 42 files / 1125 tests, 0 failed (matches worker claim). Repo-wide `pnpm -r typecheck` 18/19 projects, zero `error TS`. Commit b865e7c = 9 files, all under packages/scheduler/src/expansion/; `git rev-parse HEAD:<p>` == `git hash-object <p>` for all nine, so committed bytes are the gated bytes. f9172b6 shares the task id but is the hook's .moe/ metadata sweep only - not scope creep.\n\nI did not trust the suite. NINE production-surface mutation drills, all restored (final git status over the package empty):\n- IDENTITY SWEEP x15 (DoD 4): dropped each bound key via digestOf({...bound,K:null}). ALL FIFTEEN redden; the digest-masking defect found on this task is genuinely fixed.\n- LAYER-ONLY and CODE-ONLY at fromLayered (DoD 3): each reddens the SAME two verbatim-delegation tests ALONE - the compliant signature, both halves independently asserted. fromFlat code->\"ZZZ\": 6 red.\n- NO-UNWIND (return cause before cancelReservation): 1 red, the restoring-the-meters test. All-or-none is measured on the meters, not a flag.\n- CALLER-VERDICT guard disabled: 8 red. UNKNOWN-as-normal-value: 2 red.\n- FOREIGN LIMITS: mutating admission-records.ts:22 3/6/9 -> 4/7/10 reddens all three N/N+1 boundary tests. Decisive DoD-2 proof the limits are COMPOSED via checkExpansionLineage, not redeclared.\n\nRails: no activateReservation/lease/persist call (comments only; positive control run); ban grep for testkit/DEVELOPMENT_ONLY/runner EMPTY over the dir, positive control hits 5 other files; imports same-package relative + node:crypto + vitest only.\n\nTwo scope calls accepted on measurement. 9 files vs 5 named paths: receipt.ts and preparation.ts are per-file-cap splits (465 and 525 lines combined pre-split) inside the same new owned directory; max production file 317 < 400. No @moe/core import despite plan step 3: description and DoD 5 forbid cross-package imports, and a plan step cannot authorise a DoD violation."
 }
