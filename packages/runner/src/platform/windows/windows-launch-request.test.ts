@@ -125,6 +125,10 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
     ["a reserved device name", "C:\\Windows\\NUL"],
     ["a reserved device name with an extension", "C:\\Windows\\CON.txt"],
     ["a serial device name", "C:\\Windows\\COM1"],
+    ["an alternate data stream", "C:\\Windows\\tool.exe:stream"],
+    ["a trailing dot Win32 would trim", "C:\\Windows\\tool.exe."],
+    ["a trailing space Win32 would trim", "C:\\Windows\\tool.exe "],
+    ["an empty path segment", "C:\\Windows\\\\tool.exe"],
     ["a lone surrogate", "C:\\Windows\\\ud800.exe"],
     ["a non-NFC form", "C:\\Windows\\cafe\u0301.exe"],
     ["an empty string", ""],
@@ -146,7 +150,7 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
   it("generated a case for every hostile path shape, in both positions", () => {
     // A sweep that silently produced zero cases would pass while testing
     // nothing, so the count is pinned by hand rather than derived.
-    expect(badPaths.length).toBe(18);
+    expect(badPaths.length).toBe(22);
   });
 
   it("accepts a drive-absolute path at exactly the bound", () => {
@@ -165,6 +169,11 @@ describe("argv is an array with the shell disabled, and is bounded", () => {
   it.each([
     ["a string instead of an array", "-n 1"],
     ["a non-string entry", [1]],
+    ["a sparse array", Array(1)],
+    [
+      "an accessor entry",
+      Object.defineProperty(["safe"], "0", { get: () => "-n", enumerable: true }),
+    ],
     ["an entry with an embedded NUL", ["-n\u00001"]],
     ["an entry with a lone surrogate", ["\udfff"]],
     ["too many entries", Array.from({ length: MAX_ARGV_ENTRIES + 1 }, () => "-n")],

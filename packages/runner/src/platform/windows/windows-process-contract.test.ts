@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   BROKER_LAYER_BY_WIRE,
+  brokerLayerFromWire,
+} from "./windows-process-broker-contract.js";
+import {
   WINDOWS_PROCESS_CODES,
   WINDOWS_PROCESS_LAYERS,
   WINDOWS_PROCESS_TRUTH_CLASSES,
-  brokerLayerFromWire,
   isWindowsProcessCode,
   isWindowsProcessLayer,
   processIdentity,

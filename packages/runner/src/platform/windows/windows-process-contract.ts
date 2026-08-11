@@ -15,6 +15,8 @@
  * cap and is not this task's to grow.
  */
 
+import { type BrokerRefusal } from "./windows-process-broker-contract.js";
+
 export const WINDOWS_PROCESS_BOUNDARY_VERSION = "moe-windows-process-boundary/1" as const;
 
 /**
@@ -80,40 +82,6 @@ export const WINDOWS_PROCESS_CODES = Object.freeze([
   "PROCESS_BOUNDARY_IDENTITY_UNPROVEN",
 ] as const);
 export type WindowsProcessCode = (typeof WINDOWS_PROCESS_CODES)[number];
-
-/**
- * The broker's three refusing layers and their FROZEN 1-BASED wire bytes
- * (refusal.rs `RefusalLayer::wire`). One-based on purpose: a zero byte is then
- * an unrecognised layer rather than an accidentally valid one.
- */
-export const BROKER_LAYER_BY_WIRE = Object.freeze({
-  1: "BROKER_DESCRIPTOR",
-  2: "BROKER_PROTOCOL",
-  3: "BROKER_NATIVE",
-} as const satisfies Readonly<Record<number, WindowsProcessLayer>>);
-
-/** The layer a refusal wire byte names, or null. Null is the closed-set answer. */
-export function brokerLayerFromWire(byte: number): WindowsProcessLayer | null {
-  if (byte === 1 || byte === 2 || byte === 3) {
-    return BROKER_LAYER_BY_WIRE[byte];
-  }
-  return null;
-}
-
-/**
- * A refusal as it arrived on fd1: which broker layer, its LAYER-LOCAL reason
- * ordinal, and the operating system's numeric code (0 when the refusal was the
- * broker's own rather than Win32's).
- *
- * `reason` is meaningless without `layer`, which is the point — descriptor
- * reason 0 and protocol reason 0 are different refusals, and a number alone
- * could not tell them apart.
- */
-export interface BrokerRefusal {
-  readonly layer: WindowsProcessLayer;
-  readonly reason: number;
-  readonly code: number;
-}
 
 /**
  * PID PAIRED WITH CREATION TIME, never a PID alone. Windows reuses PIDs, so a

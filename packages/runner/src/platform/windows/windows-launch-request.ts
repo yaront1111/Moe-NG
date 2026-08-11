@@ -66,13 +66,26 @@ function refuse(code: WindowsProcessCode, message: string): WindowsProcessUnknow
 }
 
 function argvRejection(argv: unknown): WindowsProcessUnknown | null {
-  if (!Array.isArray(argv) || argv.length > MAX_ARGV_ENTRIES) {
-    return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is not a bounded array");
+  try {
+    if (!Array.isArray(argv) || argv.length > MAX_ARGV_ENTRIES) {
+      return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is not a bounded array");
+    }
+    if (Object.keys(argv).length !== argv.length) {
+      return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is sparse or carries extra data");
+    }
+    for (let index = 0; index < argv.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(argv, String(index));
+      if (descriptor === undefined || !("value" in descriptor)) {
+        return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "an argument is not a plain data entry");
+      }
+      if (!isBoundedText(descriptor.value, MAX_ARGUMENT_CHARS)) {
+        return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "an argument is not bounded well-formed text");
+      }
+    }
+    return null;
+  } catch {
+    return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv could not be read as bounded plain data");
   }
-  if (!argv.every((argument) => isBoundedText(argument, MAX_ARGUMENT_CHARS))) {
-    return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "an argument is not bounded well-formed text");
-  }
-  return null;
 }
 
 /**
@@ -81,6 +94,19 @@ function argvRejection(argv: unknown): WindowsProcessUnknown | null {
  * a hostile object passes validation and is then recorded as something else.
  */
 function readEnvironment(
+  environment: unknown,
+): readonly (readonly [string, string])[] | WindowsProcessUnknown {
+  try {
+    return readEnvironmentRecord(environment);
+  } catch {
+    return refuse(
+      "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+      "the environment could not be read as bounded plain data",
+    );
+  }
+}
+
+function readEnvironmentRecord(
   environment: unknown,
 ): readonly (readonly [string, string])[] | WindowsProcessUnknown {
   if (typeof environment !== "object" || environment === null || Array.isArray(environment)) {
@@ -128,6 +154,17 @@ function readEnvironment(
  * by leaving a field out than by supplying a bad one.
  */
 export function encodeLaunchPayload(request: unknown): Uint8Array | WindowsProcessUnknown {
+  try {
+    return encodeChecked(request);
+  } catch {
+    return refuse(
+      "PROCESS_BOUNDARY_REQUEST_MALFORMED",
+      "the request could not be read as an exact plain-data record",
+    );
+  }
+}
+
+function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
   const snapshot = snapshotExactRecord(request, REQUEST_KEYS);
   if (snapshot === null) {
     return refuse(

@@ -132,6 +132,16 @@ describe("encodeFrame lays the header out byte for byte", () => {
 });
 
 describe("the reader refuses hostile headers", () => {
+  it("reads a byte-exact 258-byte little-endian declaration", () => {
+    const reader = createFrameReader("CONTROL");
+    reader.push(bytes(0x01, 0x09, 0x02, 0x01, 0x00, 0x00, ...new Uint8Array(258)));
+    const read = reader.next();
+    expect(read.kind).toBe("FRAME");
+    if (read.kind !== "FRAME") return;
+    expect(read.frame.opcode).toBe(0x09);
+    expect(read.frame.payload.length).toBe(258);
+  });
+
   it("refuses a wrong version byte with its own exact code", () => {
     const reader = createFrameReader("STATUS");
     reader.push(bytes(0x02, 0x01, 0x00, 0x00, 0x00, 0x00));

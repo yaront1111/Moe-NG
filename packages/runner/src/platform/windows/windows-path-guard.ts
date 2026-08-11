@@ -77,10 +77,8 @@ export function isLocalAbsolutePath(value: unknown): value is string {
   if (!DRIVE_ABSOLUTE.test(value) || value.includes("/")) {
     return false;
   }
-  return value
-    .slice(3)
-    .split("\\")
-    .every((segment) => isUsableSegment(segment));
+  const tail = value.slice(3);
+  return tail === "" || tail.split("\\").every((segment) => isUsableSegment(segment));
 }
 
 /**
@@ -90,7 +88,14 @@ export function isLocalAbsolutePath(value: unknown): value is string {
  * for containing `CON`.
  */
 function isUsableSegment(segment: string): boolean {
-  if (segment === "." || segment === "..") {
+  if (
+    segment === "" ||
+    segment === "." ||
+    segment === ".." ||
+    segment.includes(":") ||
+    segment.endsWith(".") ||
+    segment.endsWith(" ")
+  ) {
     return false;
   }
   const stem = segment.split(".")[0] ?? "";
