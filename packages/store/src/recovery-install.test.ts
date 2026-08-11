@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { DurableStoreError, SqliteEventStore } from "./index.js";
+import { DurableStoreError, SqliteEventStore, encodeRecoveryBinding } from "./index.js";
 import {
   RECOVERY_BINDING_CODEC_LAYER,
   RECOVERY_BINDING_CODEC_VERSION,
@@ -287,6 +287,59 @@ describe("recovery install transaction surface", () => {
       } finally {
         reopened.close();
       }
+    }
+  });
+
+  it("refuses a row whose stored bytes name a slot other than the one it is filed under", () => {
+    const path = databasePath("diverged-slot");
+    const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      installed(store.installRecoveryBinding(binding("ACTIVE", REF_X)));
+    } finally {
+      store.close();
+    }
+
+    // The bytes of a record identical to the stored one EXCEPT its slot.
+    const foreign = encodeRecoveryBinding(binding("PENDING", REF_X));
+    expect(foreign.ok).toBe(true);
+    if (!foreign.ok) throw new Error(`expected encoded bytes, got ${foreign.layer}/${foreign.code}`);
+
+    // POSITIVE CONTROL, so the refusal below cannot be an earlier layer
+    // answering: filed under the slot they name, these exact bytes are what
+    // production itself writes, and they read back FOUND.
+    const control = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      expect(installed(control.installRecoveryBinding(binding("PENDING", REF_X))).digest).toBe(
+        foreign.digest,
+      );
+      expect(found(control.readRecoveryBinding("PENDING")).incarnationRef).toBe(REF_X);
+    } finally {
+      control.close();
+    }
+
+    // Bytes AND digest move together, so they still agree; incarnation_ref,
+    // key_epoch_ref and binding_codec_version are untouched and still agree with
+    // the bytes too. Nothing but the slot cross-check can see this row: the
+    // decoded bytes are the authority, not the key the row is filed under.
+    const tamper = new DatabaseSync(path);
+    try {
+      const changed = tamper
+        .prepare("UPDATE recovery_bindings SET binding_bytes = ?, binding_digest = ? WHERE slot = ?")
+        .run(foreign.bytes, foreign.digest, "ACTIVE");
+      expect(Number(changed.changes)).toBe(1);
+    } finally {
+      tamper.close();
+    }
+
+    const reopened = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      const refused = reopened.readRecoveryBinding("ACTIVE");
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.code).toBe("RECOVERY_BINDING_ROW_DIVERGED");
+      expect(refused.layer).toBe(RECOVERY_INSTALL_TRANSACTION_LAYER);
+    } finally {
+      reopened.close();
     }
   });
 
