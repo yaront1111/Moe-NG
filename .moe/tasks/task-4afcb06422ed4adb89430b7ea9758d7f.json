@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "READ-ONLY. This is a COMPOSITION task: every piece exists and the work is wiring them without weakening any. Re-measure before naming symbols.\n\nWHAT YOU MUST SUPPLY — packages/coordination/src/coordination-ports.ts defines `CoordinationDependencies` with exactly five members: `authenticate` (CoordinationAuthenticator), `mailbox` (DurableMailbox), `now` (() => number), `resolveEffectBinding` (CoordinationEffectBindingPort), `resolveRecipient` (CoordinationRecipientRegistry).\n\nTHE SEAM IS ALREADY CUT FOR TWO OF THEM:\n- `resolveRecipient`: apps/daemon/src/coordination/recipient-registry.ts exports `RecipientRegistryService` whose `resolveRecipient` member is ALREADY TYPED `CoordinationRecipientRegistry`. It drops straight in. That registry (task-04e4367, DONE) exists precisely so this adapter never injects a caller-supplied recipient answer.\n- `mailbox` and the service: `createDurableMailbox` (packages/coordination/src/index.ts:28) and `createCoordinationService` (:34) are root-published, and apps/daemon/package.json already declares \"@moe/coordination\": \"workspace:*\".\n\nTHE ACCEPTANCE RULE THAT GOVERNS ALL THREE PORTS, and it is easy to satisfy wrongly: coordination-ports.ts pins the accepted answers to exact key sets — BINDING_KEYS [\"capabilities\",\"ok\",\"principalId\",\"sessionId\"], RECIPIENT_KEYS [\"known\",\"role\"], EFFECT_KEYS [\"bound\",\"effectId\",\"sessionId\"] — and only a FROZEN, EXACT, POSITIVE answer becomes a binding. A thrown, partial, extra-keyed or mutable answer is indistinguishable from no answer at all. So a port that returns correct facts in the wrong shape grants nothing while passing every fact-only assertion.\n\nAUTHENTICATE comes from the durable session authority: SessionAuthorityService exposes `authenticate` (session-authority-contracts.ts:212) and `readActiveSession` (:214). Read both and choose deliberately — DoD 1 forbids a caller-injected positive auth answer, so the adapter must derive it from committed records.\n\nDoD 5 says \"the @moe/coordination dependency is the only manifest change\". Check whether it is already declared — it is at HEAD — in which case there may be NO manifest change at all. Say which in your evidence rather than editing to match the sentence.\n\nRecord the baseline for all four verification legs: `pnpm --filter @moe/coordination test`, `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`, `pnpm typecheck`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-11T08:32:34.461Z"
     },
     {
       "stepId": "step-2",
@@ -71,7 +72,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-131786b8",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -102,13 +103,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.261Z",
-  "updatedAt": "2026-08-11T08:12:39.923Z",
+  "updatedAt": "2026-08-11T08:32:34.461Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:55:41.435Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-131786b8"
+  ],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -142,7 +145,10 @@
     "risks": "1. A PORT THAT RETURNS CORRECT FACTS IN THE WRONG SHAPE. The contract accepts only a frozen, exact, positively-keyed record; anything else is silently treated as no answer. The adapter would look right, every fact-only test would pass, and no binding would ever form. Drill (a) targets it and it is the highest-probability defect here.\n\n2. A STUBBED resolveEffectBinding. If the durable record source does not exist, the tempting fix is a constant or caller-supplied answer — which grants terminal authority silently and defeats DoD 1 and DoD 3 together. Step 2 makes blocking the required outcome instead.\n\n3. CALLER-INJECTED POSITIVES GENERALLY. This task exists because the coordination service was previously driven by test-supplied callbacks. Any signature that lets a caller pass in a positive auth, recipient or effect verdict reintroduces exactly that.\n\n4. DoD 4 TESTED AS ABSENCE OF AN ERROR. \"Advisory text cannot call a command service\" is only proven by a before/after assertion on the authoritative store. A test that checks no exception was thrown passes against an adapter that mutated state successfully.\n\n5. DURABILITY TESTED WITHIN ONE PROCESS. DoD 2 requires sequence/replay/ack ACROSS adapter recreation with exact receipt/digest identity. An in-process reuse proves nothing about the cursor surviving.\n\n6. DEEP IMPORTS. taskRail 2 requires public package roots only; a deep import into packages/coordination/src would work locally and violate the boundary. Step 6 asserts the absence.\n\n7. IN-REPO SQLITE ARTEFACTS on a win32 host — mkdtemp under the OS temp root, cleaned on failure paths too.\n\n8. THE MANIFEST SENTENCE IN DoD 5 invites an edit that is already done; state the fact rather than making a redundant change."
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-11T08:32:10.545Z",
+    "escalatedAt": "2026-08-11T08:32:10.545Z"
   },
-  "planApprovedAt": "2026-08-11T08:12:39.923Z"
+  "planApprovedAt": "2026-08-11T08:12:39.923Z",
+  "workStartedAt": "2026-08-11T08:32:34.461Z"
 }

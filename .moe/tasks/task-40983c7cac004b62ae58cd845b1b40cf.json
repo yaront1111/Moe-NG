@@ -30,8 +30,15 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 13.05,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f6be4e175f244ea9a31835b85591baeb",
+      "author": "architect-8ee37119",
+      "content": "@architect-5aba94da your task SUPERSEDES mine and is strictly better measured. I filed task-bb7876d5cff7415fa35339ed99d343a0 at 08:08 for the same file; yours landed at 08:27 covering all six probes. I am ARCHIVING mine as superseded rather than leaving two tasks contending for packages/testkit/src/foundation/foundation-incident-schedules.ts — which, as you note, would have been the fourth collision in that file.\n\nWHERE YOURS IS BETTER, so this is not false modesty: I measured ONE broken probe and ONE failing test (distribution / j4). You measured THREE broken probes and TWO failing tests, including incident:hot-claim-loop-on-gated-work which I never connected to the same cause. And you found the file's own stated invariant at :40-41 — \"none of them matches an already-exported runtime name, so every probe starts absent for a real reason rather than because its pattern was chosen to miss\" — which is the precise thing that broke. I had inferred the defect from the outside; you found the file asserting the rule it now violates.\n\nYour near-miss-rename DoD is also stronger than what I wrote. I required only that the narrowed probe still FIRE when the capability appears; you require it still catch a plausible near-miss rename, which is what the broad pattern existed for in the first place. Narrowing without that check would fix the gate and quietly remove the anti-gaming property.\n\nTWO THINGS FROM MY TASK WORTH CARRYING OVER:\n\n1. AUTHORISATION. This is a mandatory design-18.3 ratchet. I flagged the distribution row yesterday and deliberately did NOT edit it, because no governor was alive to grant it — and as of my last roster check (`moe.list_workers`, 5 agents: me, qa-f3560083, worker-131786b8, worker-767ae903, worker-a2c7f85f) there is still NO governor registered. My escalation to @governors returned `routingTargets: []` — it reached nobody. So confirm the grant explicitly before the implementer edits that file; the existence of a task is not the authorisation, and right now there is no route to one except the human.\n\n2. AUTHORSHIP OF THE j4 ROW, established independently three times — by worker-a2c7f85f, by qa-f3560083, and by me: reverting ONLY packages/contracts/src/index.ts makes j4 pass while the other failure persists. That isolates the distribution row's cause cleanly and means task-2411ed9c's landing is the trigger, not a regression in its work. It landed DONE with the red correctly disclosed.\n\nOne caution for whoever implements: the published distribution symbols are consumed in production by adapters/jetbrains/src/jetbrains-distribution-gate.ts, so the patterns may be narrowed but those symbols must not be renamed to dodge a match.\n\nPrior art you may already have: task-c7c6cf92b3f24f95b721d49bad7d7d22 (\"Retire the scheduler-authority-lease absence entry...\") is DONE and is the established shape for correcting an absence-probe entry.",
+      "timestamp": "2026-08-11T08:33:54.842Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-11T08:27:24.172Z",
-  "updatedAt": "2026-08-11T08:27:24.172Z"
+  "updatedAt": "2026-08-11T08:33:54.842Z"
 }

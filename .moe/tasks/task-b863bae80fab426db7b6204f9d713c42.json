@@ -116,16 +116,23 @@
     {
       "stepId": "step-7",
       "description": "Verify and self-review. (1) Run the exact gate fresh and last: `pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test`; confirm the Test Files count grew. (2) THE LAYERING CHECK IS A DELIVERABLE, not a formality: `grep -rn \"@moe/scheduler\" packages/core/src/expansion/` must return NOTHING. Paste the empty result. An import there is a dependency cycle and will fail the build, but assert it explicitly because the pull toward it is strong — the admitted facts genuinely come from the scheduler, just not as symbols. (3) Hand-measure each new production file with `grep -c ''` against the 400-line bar. (4) Path-attributed baseline repo-wide; intersect the failing-path delta with owned paths; confirm EMPTY; disclose foreign red verbatim. (5) Adversarial review: can policy ALLOW alone approve anything (DoD 5 requires automatic approval be ABSENT)? Does any result carry child run, lease, effect, slot, allocation activation or dispatch authority? Is the identity deep-frozen? Does every one of the thirteen bound fact families change the identity when perturbed? Does any refusal mutate its inputs? Did I duplicate supersession/funding/fence authority instead of consuming the landed records (taskRail 2)? Did I confuse packages/core/src/expansion/expansion-preparation.ts with the scheduler's same-named file? (6) Record task-9634ed3b72014fe781591c7df9674da2 as the durable consumer per DoD 5. (7) Commit by explicit pathspec over the five owned paths; `git diff --cached --name-only` must list exactly those.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/expansion/expansion-approval.ts",
         "packages/core/src/expansion/expansion-approval.test.ts"
       ],
-      "startedAt": "2026-08-11T08:29:51.838Z"
+      "modifiedFiles": [
+        "packages/core/src/expansion/expansion-preparation.ts",
+        "packages/core/src/expansion/expansion-approval.ts",
+        "packages/core/src/expansion/expansion-approval.test.ts"
+      ],
+      "note": "(1) EXACT GATE, run fresh and last: `pnpm --filter @moe/core typecheck` exit 0; `pnpm --filter @moe/core test` exit 0, 26 test files / 471 tests passed. Baseline recorded in step 1 was 25 / 382, so the Test Files count GREW by one and tests by 89.\n\n(2) LAYERING CHECK, with a positive control because an empty grep proves nothing on its own (mem:pattern-positive-control-a-ban-grep-before-trusting-empty). `grep -rnE \"^\\s*import .*@moe/scheduler|from \\\"@moe/scheduler\" packages/core/src/expansion/` -> NO OUTPUT, exit 1. The SAME grep shape run where the edge really exists hits immediately: packages/scheduler/src/supersession/supersession-disposition-contract.ts:22 `import { SUPERSESSION_DISPOSITION_KINDS, ... } from \"@moe/core\"`. Stronger still, `grep -n \"from \\\"@moe/\" packages/core/src/expansion/*.ts` returns exactly ONE line, and it is the pre-existing expansion-planning-hold.ts:7 importing @moe/contracts — my two production files import no @moe/* package at all, only relative core-internal paths.\n\n(3) LINE COUNTS by `grep -c ''`: expansion-preparation.ts 360, expansion-approval.ts 313. Both under the 400 cap; both above the 250 target, disclosed rather than hidden. The only split available would create a third production module outside the five owned paths.\n\n(4) PATH-ATTRIBUTED BASELINE. `pnpm -r typecheck` exit 0 across all 14 workspaces. `pnpm test` exit 1: 2 failed of 4713, both in tests/fault/foundation — incident:hot-claim-loop-on-gated-work (j1-linear.test.ts) and incident:stale-assets-refuse-handshake (j4-replan-stale.test.ts), each \"expected { kind: 'PASS_EXPECTED' } to deeply equal { kind: 'PRODUCTION_BEHAVIOR_ABSENT' }\".\n\nAttributed two independent ways. FIRST, by probe scope in one read (mem:gotcha-fault-schedule-ratchet-flips-when-a-probed-export-lands): foundation-incident-schedules.ts:57-61 scopes probe:scheduler-hot-claim-admission to @moe/scheduler, and :74-78 scopes probe:contracts-distribution-handshake to @moe/contracts. Neither is @moe/core, and my modules are not even on @moe/core's export surface. SECOND, by measurement rather than argument: I physically moved all three of my files off disk, re-ran both fault suites, and both still fail (\"Tests 2 failed | 27 passed\"), then moved them back and re-verified their hashes. The failing-path delta between baseline and HEAD intersected with my owned paths is EMPTY. Foreign red disclosed verbatim, never hidden and never fabricated green.\n\n(5) ADVERSARIAL REVIEW, settled by grep on the real files rather than by reading my own intent.\n- Can policy ALLOW alone approve? NO. `grep -n policyDecision expansion-approval.ts` gives five hits: a doc line, a key-tuple entry, and three comparisons. `bound.policyDecision.decision` is read at exactly one place (:182) and it is an EQUALITY check between the stored and the freshly re-derived decision — a refusal path. The other two (:230-231) read policyRevisionRef and decisionDigest, not the decision. `grep -n \"ok: true\"` finds one type line and ONE return (:311), inside decide(), reachable only past actorKind === \"HUMAN\", validity CURRENT, all byte matches, applyApprovalCommand success, and decision === \"APPROVE\". Drill (a) confirms it empirically.\n- Child authority in any result? None; asserted positively by a recursive key sweep on success AND on every refusal, with the collected key count asserted non-zero so the walk cannot pass vacuously.\n- Identity deep-frozen? Yes, via the landed recursive deepFreeze; drill (d) proves Object.freeze alone reddens.\n- Does every bound family move the identity? Yes — the 27-key sweep in step 6 found zero unfalsifiable bindings, with a positive control proving the sweep can go green.\n- Does any refusal mutate its inputs? No; drill (e) proves the assertion detects it when it does.\n- Did I duplicate supersession/funding/fence authority (taskRail 2)? No. The only producer of supersessionAuthorityHash is `decided.decision.authorityHash` from decideSupersession (expansion-preparation.ts:323). The approval reducer never computes it — it re-runs prepareExpansion and compares. `createHash` appears exactly twice, once per module, each for that module's OWN identity under its own domain string.\n- Did I confuse the two same-named files? No; both this module's header and the test header name the scheduler's expansion-preparation.ts explicitly as a DIFFERENT module.\n- ONE DEFECT FOUND AND FIXED IN THIS STEP. `verifyPreparation` compared the stored policyDecision against the re-derived one via canonical-byte serialisation. The stored value is arbitrary caller data at that point, so a deeply nested one would have thrown a RangeError out of the recursive serialiser instead of refusing — an exception, not a fail-closed refusal, which epic rail 4 forbids. Replaced with a closed-shape check plus three scalar comparisons (POLICY_FACT_KEYS). The remaining sameBytes call sites all operate on values already validated and length-capped at 128.\n\n(6) CONSUMER EDGE — DISCLOSED, NOT SILENTLY SATISFIED. ",
+      "startedAt": "2026-08-11T08:29:51.838Z",
+      "completedAt": "2026-08-11T08:34:35.397Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-767ae903",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,12 +157,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:47:20.581Z",
-  "updatedAt": "2026-08-11T08:29:51.838Z",
+  "updatedAt": "2026-08-11T08:35:17.011Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:35:30.968Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-8c9073cd",
@@ -183,7 +190,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-11T08:03:37.525Z",
@@ -198,5 +206,18 @@
     "escalatedAt": "2026-08-11T08:04:06.431Z"
   },
   "planApprovedAt": "2026-08-11T08:03:39.575Z",
-  "workStartedAt": "2026-08-11T08:04:22.516Z"
+  "workStartedAt": "2026-08-11T08:04:22.516Z",
+  "reviewStartedAt": "2026-08-11T08:35:17.011Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nTC_EXIT=0\n$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  26 passed (26)\n      Tests  471 passed (471)\n   Start at  11:34:46\n   Duration  797ms (transform 5.60s, setup 0ms, import 8.23s, tests 813ms, environment 2ms)\n\nTEST_EXIT=0\n\nBaseline before this task (recorded step 1, same command): 25 test files / 382 tests. Grew by one file and 89 tests.",
+    "reportedAt": "2026-08-11T08:35:17.011Z"
+  },
+  "filesModified": [
+    "packages/core/src/expansion/expansion-approval.test.ts",
+    "packages/core/src/expansion/expansion-preparation.ts",
+    "packages/core/src/expansion/expansion-preparation.js",
+    "packages/core/src/expansion/expansion-approval.ts"
+  ]
 }

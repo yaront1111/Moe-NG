@@ -19,7 +19,7 @@
     "Change the probe pattern only. Production behaviour is not in scope and no distribution semantics may move."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,5 +32,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-11T08:08:02.907Z",
-  "updatedAt": "2026-08-11T08:08:02.907Z"
+  "updatedAt": "2026-08-11T08:34:10.790Z"
 }
