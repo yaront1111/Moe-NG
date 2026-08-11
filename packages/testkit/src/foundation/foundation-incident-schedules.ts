@@ -52,13 +52,24 @@ export const FOUNDATION_INCIDENT_PROBES: readonly FoundationAbsenceProbe[] = Obj
     "probe:core-release-handoff",
     "@moe/core",
     ["releaseWithHandoff", "reduceWorkHandoff", "HANDOFF_TRANSITIONS"],
-    "Handoff|HANDOFF",
+    // Not a bare "Handoff": @moe/core already names ExpansionHandoffBinding
+    // (packages/core/src/index.ts:221). That one is a type and so cannot reach
+    // a namespace object, but the vocabulary is live in that package and a
+    // runtime companion would collide. Bound to release/work handoff instead.
+    "[Rr]elease(?:With)?Handoff|[Ww]orkHandoff|[Hh]andoffTransition"
+      + "|release_with_handoff|work_handoff|handoff_transition"
+      + "|(?:WORK|RELEASE)_HANDOFF|HANDOFF_TRANSITION",
   ),
   probe(
     "probe:scheduler-hot-claim-admission",
     "@moe/scheduler",
     ["admitClaim", "claimWorkItem", "reduceClaim"],
-    "Claim|CLAIM",
+    // Not a bare "Claim": @moe/scheduler already exports validateBypassClaim
+    // (fairness bypass, a different subject entirely). Bound to the admission
+    // verbs and to claim-of-work, which nothing publishes.
+    "(?:[Aa]dmit|[Rr]educe)(?:Claim|_claim)|(?:ADMIT|REDUCE)_CLAIM"
+      + "|[Cc]laim(?:Work|Admission)|claim_(?:work|admission)"
+      + "|CLAIM_(?:WORK|ADMISSION)",
   ),
   probe(
     "probe:scheduler-timer-reentrancy",
@@ -76,7 +87,16 @@ export const FOUNDATION_INCIDENT_PROBES: readonly FoundationAbsenceProbe[] = Obj
     "probe:contracts-distribution-handshake",
     "@moe/contracts",
     ["verifyDistributionManifest", "checkDistributionCompatibility"],
-    "Distribution|DISTRIBUTION",
+    // Not a bare "Distribution": @moe/contracts already publishes six runtime
+    // constants under that noun, among them DISTRIBUTION_MANIFEST_VERSION, and
+    // they are consumed in production by
+    // adapters/jetbrains/src/jetbrains-distribution-gate.ts. Bound to the
+    // capability's verbs, and NOT to a bare DistributionManifest: that type is
+    // published too, so a future parseDistributionManifest decoder would be the
+    // fourth collision.
+    "(?:[Vv]erify|[Cc]heck)(?:Distribution|_distribution)|(?:VERIFY|CHECK)_DISTRIBUTION"
+      + "|[Dd]istribution(?:Handshake|Compat)|distribution_(?:handshake|compat)"
+      + "|DISTRIBUTION_(?:HANDSHAKE|COMPAT)",
   ),
 ]);
 
