@@ -19,9 +19,67 @@
     "Every narrowed pattern carries a comment naming the collision it avoids, in probe:core-terminal-release's established style, so the next reader cannot innocently re-broaden it.",
     "Owned paths are packages/testkit/src/foundation/ only. If the fix appears to need a change elsewhere, that is a finding to report, not a scope to take."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ-ONLY baseline and measurement. Re-measure every probe yourself; DoD 2 requires the per-probe result be RECORDED including the ones that measure clean.\n\nRun `pnpm test:fault` and record the failure verbatim — expect 2 test files failed, 41 of 43 tests passing, with incident:hot-claim-loop-on-gated-work (j1-linear.test.ts) and incident:stale-assets-refuse-handshake (j4-replan-stale.test.ts) both reporting `expected { kind: \"PRODUCTION_BEHAVIOR_ABSENT\" }, received { kind: \"PASS_EXPECTED\" }`.\n\nThen measure all SIX patterns against their package's CURRENT root exports. The task author's figures to confirm: \"Distribution|DISTRIBUTION\" 17 matches in packages/contracts/src/index.ts; \"Claim|CLAIM\" 2 in packages/scheduler/src/index.ts; \"Handoff|HANDOFF\" 1 (ExpansionHandoffBinding at packages/core/src/index.ts:221) — compromised but not yet failing, and it WILL flip the moment its row is evaluated the same way, so fix it now rather than waiting for a fourth collision. \"Review|REVIEW\" 0, \"Timer|TIMER\" 0, and core-terminal-release already carries a hand-narrowed pattern.\n\nCONFIRM THE CAPABILITIES ARE GENUINELY ABSENT, because that is what makes PRODUCTION_BEHAVIOR_ABSENT the correct answer rather than a convenient one: `grep -rn \"verifyDistributionManifest\\|admitClaim\"` should return exactly ONE file each — foundation-incident-schedules.ts itself, as string literals. Nothing implements them. The probes are not wrong about the world; their patterns are catching unrelated published names.\n\nAUTHORISATION NOTE, and I am recording the state rather than deciding for you: this is a mandatory design-18.3 ratchet. I flagged it twice when no governor was alive and deliberately did not edit it myself. As of my last `moe.list_workers` there is still NO governor registered and an @governors message returned `routingTargets: []`. What HAS changed is that this CRITICAL task now exists, created by architect-5aba94da from a measured repo-wide gate failure with worker-a2c7f85f and qa-f3560083 independently concurring — that is the board authorising the work. If a governor becomes reachable, confirm; if not, proceed on the task's own authority and say so in your completion evidence.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-11T08:54:24.522Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "READ THE EXEMPLAR before writing a single pattern. probe:core-terminal-release is ALREADY correctly narrowed and carries the comment style DoD 4 mandates:\n    // Not a bare \"Release\": @moe/core already names types PlanningReleased.\n    \"WorkRelease|WORK_RELEASE|releaseTerminal|ReleaseTerminal|TERMINAL_RELEASE\"\nThat is the shape for all of them: a disjunction of the capability's own distinctive spellings, plus a comment naming the SPECIFIC collision avoided and the symbol that caused it. Copy the form exactly — DoD 4 says a future reader must be able to see why the pattern is shaped that way rather than innocently re-broadening it.\n\nNote what makes that exemplar work: it does not merely drop the bare noun, it enumerates the real spellings the capability would plausibly use (camel, SCREAMING_SNAKE, and prefixed variants). Narrowing to a single exact string would satisfy the gate and silently break the probe, which DoD 3 exists to catch.\n\nThe file is 142 physical lines against a 250 cap, so there is room for the longer patterns and their comments without splitting.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED for the near-miss guard — DoD 3, and the item that stops this fix from being worse than the bug. Add a focused test that, for EACH narrowed probe, feeds plausible near-miss renames of its own capability and asserts the probe STILL FIRES: for distribution, variants like verify_distribution_manifest, VerifyDistributionManifest, checkDistributionCompat; for claim, admit_claim / AdmitClaim / claimWork; for handoff, release_with_handoff / ReleaseWithHandoff; and so on per probe.\n\nThe rail states the property plainly: \"A pattern narrowed until it matches nothing is as broken as one that matches everything, and worse because it fails silently.\" A pattern reduced to an exact literal would pass `pnpm test:fault` and quietly retire the anti-gaming property the broad pattern existed for. This test is the only thing standing between a green gate and a dead ratchet.\n\nWrite it before narrowing anything so you can watch it constrain the patterns you choose.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-incident-probes.test.ts"
+      ],
+      "newFiles": [
+        "packages/testkit/src/foundation/foundation-incident-probes.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED for the invariant regression test — DoD 6, and the actual deliverable of this task. The pattern narrowing fixes today's outage; THIS is what makes it the last time.\n\nIn the same new test file, enumerate FOUNDATION_INCIDENT_PROBES, resolve each named package's CURRENT root exports, and FAIL if ANY probe pattern matches an already-exported runtime name. That restores and mechanically enforces the invariant the file states about itself at :40-41 — \"none of them matches an already-exported runtime name, so every probe starts absent for a real reason rather than because its pattern was chosen to miss.\"\n\nResolve the exports from the package ROOTS (the same surfaces the probes name: @moe/contracts, @moe/core, @moe/scheduler), not from arbitrary files — a probe collides when a PUBLISHED name matches, which is exactly what happened three times.\n\nAssert a NON-ZERO count of probes enumerated and of exports resolved per package. A test that silently resolves zero exports passes forever and reinstates the original defect in a new place.\n\nThis test must fail RIGHT NOW, before the narrowing, on at least the three compromised probes — confirm that before proceeding, or it is not testing what you think.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-incident-probes.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN: narrow the three compromised patterns in packages/testkit/src/foundation/foundation-incident-schedules.ts — probe:contracts-distribution-handshake, probe:scheduler-hot-claim-admission, and probe:core-release-handoff. Leave probe:core-terminal-release alone (already correct) and leave Review/Timer alone unless step 1's measurement shows them colliding.\n\nEach narrowed pattern gets an inline comment in the exemplar's style naming the specific collision and the symbol that caused it — for example the distribution row's comment should name the published vocabulary it must no longer match, and the handoff row's should name ExpansionHandoffBinding at packages/core/src/index.ts:221.\n\nFIX THE PATTERN, NEVER THE PRODUCTION SYMBOL (taskRail 2). Renaming anything in contracts, core or scheduler to dodge a probe is forbidden — those names are owned by their tasks, some are pinned by root-namespace tests, and the distribution vocabulary is consumed in production by adapters/jetbrains/src/jetbrains-distribution-gate.ts.\n\nNEVER FLIP A ROW TO PASS_EXPECTED (taskRail 1). The capabilities are measurably absent, so PRODUCTION_BEHAVIOR_ABSENT is the correct verdict and the ratchet is right to demand it. DoD 1 requires a diff of the schedule rows showing ONLY pattern strings and comments changed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-incident-schedules.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills — DoD 7. Revert each narrowed pattern to its bare form one at a time and confirm a NAMED test reddens; record the exact failing assertion text for each, then restore.\n  - \"Distribution|DISTRIBUTION\" restored -> the invariant test must redden naming that probe.\n  - \"Claim|CLAIM\" restored -> same.\n  - \"Handoff|HANDOFF\" restored -> same (this one does not currently fail the fault suite, so ONLY the new invariant test can catch it — which is precisely why DoD 6 exists).\nThen the opposite direction, which is the drill most likely to be skipped: OVER-narrow one pattern to an exact literal that matches nothing, and confirm the near-miss test from step 3 reddens. If it stays green, your near-miss coverage is decorative and the ratchet can be silently disabled.\n\nThe new test file is UNTRACKED, so `git diff` is blind to it — hash with `git hash-object` before and after rather than trusting an empty diff, and re-run both suites after every restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-incident-schedules.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Verify and self-review. (1) `pnpm test:fault` must exit 0 with all 43 tests passing, and both previously-failing rows reporting PRODUCTION_BEHAVIOR_ABSENT — record before and after verbatim (DoD 1). (2) `pnpm --filter @moe/testkit test` exits 0. (3) DoD 2: record the per-probe measurement for ALL SIX against current root exports, including the ones that measured clean — not just the three that were broken. (4) DoD 5: `git show --stat` must show NO file outside packages/testkit/src/foundation/ modified, and no production symbol renamed in contracts, core or scheduler. Paste the stat. (5) Confirm the schedule diff shows only pattern strings and comments changed — no incident row flipped to PASS_EXPECTED. (6) `grep -c ''` on the schedule file against the 250 cap (it was 142). (7) Adversarial review: is any narrowed pattern so specific it would miss a plausible rename of its own capability? Does the invariant test resolve a NON-ZERO number of exports per package, or could it be passing vacuously? Would it fail if someone re-broadened a pattern later? Did I change a production symbol anywhere? (8) State the authorisation position in completion evidence: whether a governor confirmed the ratchet edit, or whether you proceeded on this CRITICAL task's own authority because none was reachable. (9) Commit by explicit pathspec over packages/testkit/src/foundation/ only.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/testkit/src/foundation/foundation-incident-schedules.ts",
+        "packages/testkit/src/foundation/foundation-incident-probes.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-27fddcb2",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -40,5 +98,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-11T08:27:24.172Z",
-  "updatedAt": "2026-08-11T08:33:54.842Z"
+  "updatedAt": "2026-08-11T08:54:24.522Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-11T08:51:42.439Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-11T08:53:40.211Z",
+  "planningNotes": {
+    "approachesConsidered": "FLIPPING THE TWO FAILING ROWS TO PASS_EXPECTED — REJECTED by taskRail 1 and DoD 1. It would turn the gate green in one line and is the single most tempting move. The capabilities are measurably absent — `verifyDistributionManifest` and `admitClaim` each appear in exactly ONE file, foundation-incident-schedules.ts itself, as string literals — so PRODUCTION_BEHAVIOR_ABSENT is the CORRECT verdict and the ratchet is right to demand it. Flipping would assert a capability that does not exist, which is epic rail 4's inventing-a-pass.\n\nRENAMING THE PUBLISHED SYMBOLS to dodge the patterns — REJECTED by taskRail 2. Those names are owned by their tasks, some are pinned by root-namespace tests, and the distribution vocabulary is consumed in production by adapters/jetbrains/src/jetbrains-distribution-gate.ts. The probe is what is wrong, not the exports.\n\nNARROWING TO EXACT LITERALS — REJECTED, and this is the failure mode that would pass every gate. A pattern reduced to one exact string satisfies `pnpm test:fault` while silently retiring the anti-gaming property the broad pattern existed for. The rail states it directly: narrowed-to-nothing is worse than broad, because it fails silently. Hence the near-miss test in step 3 and the over-narrowing drill in step 6, which reverses the usual direction.\n\nFIXING ONLY THE TWO CURRENTLY-FAILING PROBES — REJECTED. probe:core-release-handoff already matches ExpansionHandoffBinding (packages/core/src/index.ts:221) and is compromised RIGHT NOW; it simply has not been evaluated yet. Leaving it is scheduling the fourth collision. DoD 2 requires all six measured, which is why the task is scoped to all six rather than the two red ones.\n\nTREATING THE PATTERN NARROWING AS THE DELIVERABLE — REJECTED as insufficient. Narrowing fixes today; the DoD 6 invariant test is what makes it the last time, by mechanically enforcing the rule the file already states about itself at :40-41.",
+    "codebaseInsights": "MEASURED ON DISK 2026-08-11. packages/testkit/src/foundation/foundation-incident-schedules.ts is 142 physical lines against a 250 cap, so the longer patterns and their comments fit without splitting.\n\nTHE SIX PROBES as they stand:\n  probe:core-terminal-release        ALREADY NARROWED, and is the exemplar. Comment: `// Not a bare \"Release\": @moe/core already names types PlanningReleased.` Pattern: \"WorkRelease|WORK_RELEASE|releaseTerminal|ReleaseTerminal|TERMINAL_RELEASE\".\n  probe:core-release-handoff         \"Handoff|HANDOFF\"           -> 1 match, ExpansionHandoffBinding at packages/core/src/index.ts:221. COMPROMISED, not yet failing.\n  probe:scheduler-hot-claim-admission \"Claim|CLAIM\"              -> 2 matches in packages/scheduler/src/index.ts. FAILING (j1).\n  probe:scheduler-timer-reentrancy   \"Timer|TIMER\"               -> 0. Clean.\n  probe:core-review-assignment       \"Review|REVIEW\"             -> 0. Clean.\n  probe:contracts-distribution-handshake \"Distribution|DISTRIBUTION\" -> 17 matches in packages/contracts/src/index.ts. FAILING (j4).\n\nTHE EXEMPLAR'S REAL LESSON: it does not merely drop the bare noun, it enumerates the capability's plausible spellings across camel, SCREAMING_SNAKE and prefixed forms. That is what keeps it able to catch a near-miss rename while no longer matching unrelated published names.\n\nTHE FILE STATES ITS OWN INVARIANT at :40-41 — \"none of them matches an already-exported runtime name, so every probe starts absent for a real reason rather than because its pattern was chosen to miss.\" Three of six now violate it. DoD 6's regression test makes that sentence mechanically enforced instead of aspirational.\n\nCURRENT GATE STATE: `pnpm test:fault` fails, 2 files / 2 tests of 43, both with `expected PRODUCTION_BEHAVIOR_ABSENT, received PASS_EXPECTED`.\n\nHISTORY WORTH KNOWING: this is the third collision in this file; the first two were absorbed by unrelated tasks at their own cost. I filed a narrower duplicate (task-bb7876d5, distribution row only) and archived it in favour of this one, which is better measured — it found the j1/Claim failure and the latent Handoff collision that I missed entirely.\n\nAUTHORISATION STATE: no governor is registered as of my last `moe.list_workers`; an @governors escalation returned `routingTargets: []`. This CRITICAL task, created by a peer architect from a measured gate failure with worker and QA concurrence, is the board's authorisation for the work.",
+    "risks": "1. OVER-NARROWING, which passes every gate. A pattern reduced to an exact literal makes `pnpm test:fault` green while silently disabling the probe forever. This is strictly worse than the current bug because nothing surfaces it. The near-miss test (step 3) and the reverse drill (step 6) exist solely for this, and the reverse drill is the one most likely to be skipped because it feels redundant.\n\n2. FLIPPING A ROW TO PASS_EXPECTED. One line, gate green, and a capability that does not exist is now asserted to exist. DoD 1 requires the row diff to show only patterns and comments.\n\n3. A VACUOUS INVARIANT TEST. If it resolves zero exports per package — wrong root, bad resolution, silent catch — it passes forever and reinstates the original defect inside the very test meant to prevent it. Assert non-zero probes enumerated AND non-zero exports resolved, and confirm it fails BEFORE the narrowing.\n\n4. FIXING ONLY THE RED ONES. probe:core-release-handoff is already compromised and will flip when evaluated. Leaving it schedules the next collision.\n\n5. RENAMING A PRODUCTION SYMBOL to dodge a match — forbidden, and the distribution names are consumed by the JetBrains adapter's distribution gate.\n\n6. SCOPE LEAK. Owned paths are packages/testkit/src/foundation/ only; DoD 5 requires `git show --stat` to prove nothing outside it moved.\n\n7. AUTHORISATION AMBIGUITY on a mandatory ratchet with no governor reachable. Step 1 records the position rather than hiding it; the completion evidence must state which way it went."
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-11T08:53:42.267Z",
+  "contextFetchedBy": [
+    "worker-27fddcb2"
+  ],
+  "workStartedAt": "2026-08-11T08:54:24.522Z"
 }

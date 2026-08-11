@@ -16,12 +16,12 @@
     "Root publication must be curated and exact; no wildcard collision or deep-import workaround."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human requested all newly decomposed Expansion admission protocol slices move to PLANNING.",
+  "reopenReason": "UNBLOCKED by architect-8ee37119, 2026-08-11. This is a Clause 2 acceptance task, so I verified the CERTIFIED CAPABILITIES on disk symbol by symbol rather than reading dependency status off the board. All five dependencies are DONE and all four capabilities are now PRESENT.\n\nDEPENDENCIES (block said 0 of 5 DONE): task-7f089e11 DONE, task-fcad40b6 DONE, task-93b0314e DONE, task-2561a780 DONE, task-b863bae8 DONE (landed minutes ago).\n\nCAPABILITIES (block said 3 of 4 ABSENT), each re-measured:\n- CAP 1 expansion hold/request = PRESENT, unchanged. EXPANSION_HOLD_CAUSES, EXPANSION_HOLD_COMMAND_KINDS, EXPANSION_HOLD_ERROR_CODES, EXPANSION_HOLD_LAYERS and reduceExpansionPlanningHold are published from the core root at packages/core/src/index.ts:217-218. Its owner task-7f089e11 is now DONE, so the \"can still be rejected\" caveat is discharged.\n- CAP 2 hold-bound PlanningRun EXPANSION submission = NOW PRESENT. planning-run-reducer.ts:99 routes `if (command.runKind === \"EXPANSION\") return createExpansion(command);` BEFORE the :100 refusal, which now catches REVISION only. planning-run-submission.ts:118 does the same with proposeExpansion before the :119 refusal. The multi-node fence at :158 is gated on run KIND — `state.runKind !== \"EXPANSION\" && bearing.length > 1` — so an EXPANSION run is inherently multi-node while INITIAL keeps its single-node guarantee.\n  *** A WARNING FOR ANYONE RE-MEASURING THIS. Grepping for PLANNING_KIND_UNSUPPORTED still returns both lines and looks exactly like the original ABSENT finding. It is not: the EXPANSION branch PRECEDES the refusal in both files. Read the surrounding lines, not the token. I nearly re-blocked this task on that grep. ***\n- CAP 3 all-or-none scheduler admission/preparation = NOW PRESENT in PRODUCTION: packages/scheduler/src/expansion/ holds expansion-admission.ts, expansion-preparation.ts, expansion-evidence.ts and expansion-receipt.ts. The block's TRAP still stands and I honoured it — packages/testkit/src/scheduler-fairness/** is the non-authoritative oracle and does NOT count; these matches are under packages/scheduler/src.\n- CAP 4 manual approval binding = NOW PRESENT: packages/core/src/expansion/expansion-approval.ts and expansion-preparation.ts, landed by task-b863bae8. Excluded testkit from the grep.\n\nFOR THE PLANNING ARCHITECT: this is a Clause 2 acceptance task, so its job is to CERTIFY capability that other tasks shipped — never to reimplement authority inside a test, narrow the DoD, or accept a mock-backed journey. If any capability turns out to be shallower than its symbols suggest, the required output is prerequisite production tasks with the gap measured symbol by symbol, not a narrowed proof. Re-measure before naming symbols; every line reference above is from today and this board's surfaces move fast.",
   "createdBy": "WORKER",
   "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
   "priority": "HIGH",
@@ -29,17 +29,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T13:47:45.147Z",
-  "updatedAt": "2026-08-09T15:00:11.417Z",
+  "updatedAt": "2026-08-11T08:50:55.385Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:54:04.572Z"
   },
   "contextFetchedBy": [
     "architect-d46fcb95"
   ],
-  "blockedReason": "BLOCKED. Clause 2 acceptance task: 0 of 5 hard dependencies are DONE and 3 of 4 certified capabilities are absent on disk. Measured symbol by symbol 2026-08-09, not read off the board.\n\nDEPENDENCIES: task-7f089e11 = REVIEW (7/7, unapproved); task-fcad40b6 = PLANNING (0 steps); task-93b0314e, task-2561a780, task-b863bae8 = BLOCKED. Description requires all five DONE.\n\nCAP 1 expansion hold/request = PRESENT. packages/core/src/expansion/expansion-planning-hold.ts ships EXPANSION_HOLD_COMMAND_KINDS/CAUSES/ERROR_CODES/LAYERS, published from the core root at index.ts:222,230. Its owner is in REVIEW and can still be rejected.\n\nCAP 2 hold-bound PlanningRun EXPANSION submission = ABSENT. planning-run-reducer.ts:77 and planning-run-submission.ts:52 both still hard-refuse every non-INITIAL kind with PLANNING_KIND_UNSUPPORTED. EXPANSION exists only as a forward-compatibility enum member (planning-command-contract.ts:8).\n\nCAP 3 all-or-none scheduler admission/preparation = ABSENT. packages/scheduler/src/fairness does not exist; grep EXPANSION_ADMISSION|admitExpansion|prepareExpansion over packages/scheduler/src returns ZERO.\n*** TRAP: FairnessTicket/WDRR/capRevision DO match, but only under packages/testkit/src/scheduler-fairness/**. This epic's own architectureNotes call that \"a non-authoritative oracle, not production scheduler state.\" Do not mistake it for the shipped capability. ***\n\nCAP 4 manual approval binding = ABSENT. grep ExpansionApproval|EXPANSION_APPROVAL|manualApprovalBinding across every packages/*/src returns ZERO.\n\ntests/integration/ holds only control-room and distribution; no expansion suite.\n\nDO NOT create prerequisites - all four producers already exist. A fifth would be the duplicate the rails warn about.\n\nPlanning now forces a mock-backed journey or authority reimplemented in the integration test, both forbidden by task rail 2 and Clause 2.\n\nGOVERNOR: reclaim only after all five are DONE and committed, then re-probe caps 2-4 by symbol.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:55:44.444Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Probed all four certified capabilities on disk, symbol by symbol, and recorded the block. CAP 1 (expansion hold/request) is PRESENT at packages/core/src/expansion/expansion-planning-hold.ts and published from the core root at index.ts:222,230, but its owner task-7f089e11 is in REVIEW (7/7, unapproved). CAP 2, 3 and 4 are ABSENT. Dependency statuses re-measured: 0 of 5 are DONE.",
