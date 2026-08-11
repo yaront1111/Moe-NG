@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { readFileSync, readdirSync } from "node:fs";
+
+import { SqliteEventStore } from "@moe/store";
 
 import {
   createStoreDependencies,
@@ -13,6 +15,8 @@ import {
 } from "../daemon-store-dependencies.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission, SpawnRequest } from "./agent-wrapper.js";
+import { createNodeVerifier } from "./node-verifier.js";
+import type { VerifierRunCapture } from "./node-verifier.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -135,16 +139,83 @@ async function main(): Promise<void> {
     }),
   });
 
+  // Daemon-side verification: a bounded child process running the spec's test
+  // in its workspace, output captured and sha-256'd for the receipt binding.
+  const runTest = (brief: NodeMission): Promise<VerifierRunCapture> =>
+    new Promise((resolveRun) => {
+      const child = spawn(brief.test, [], {
+        cwd: brief.workspace, shell: true, stdio: ["ignore", "pipe", "pipe"],
+      });
+      const chunks: Buffer[] = [];
+      let total = 0;
+      const collect = (chunk: Buffer): void => {
+        total += chunk.byteLength;
+        if (total <= 262_144) chunks.push(chunk);
+      };
+      child.stdout.on("data", collect);
+      child.stderr.on("data", collect);
+      const timer = setTimeout(() => child.kill(), 120_000);
+      const finish = (exitCode: number | null): void => {
+        clearTimeout(timer);
+        const output = Buffer.concat(chunks).toString("utf8");
+        resolveRun({
+          exitCode,
+          output,
+          sha256: createHashSha256(output),
+        });
+      };
+      child.on("exit", (code) => finish(code));
+      child.on("error", () => finish(null));
+    });
+
+  const verifier = createNodeVerifier({
+    deps: provider.provide(),
+    mintId: () => randomUUID(),
+    nodeMission,
+    nodes: () => {
+      const dir = config.nodeSpecsDir;
+      if (dir === undefined) return [];
+      try {
+        return readdirSync(dir).filter((name) => name.endsWith(".json")).map((name) => {
+          const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
+            { nodeRef?: unknown };
+          return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
+        }).filter((entry): entry is { nodeRef: string } => entry !== null);
+      } catch {
+        return [];
+      }
+    },
+    operatorCredential: config.credential,
+    projectId: config.projectId,
+    runTest,
+    store: SqliteEventStore.open(config.storePath),
+  });
+
   const once = process.env["MOE_WRAPPER_ONCE"] === "1";
   const intervalMs = Number(process.env["MOE_WRAPPER_INTERVAL_MS"] ?? "15000");
   for (;;) {
+    // Verify BEFORE staffing: a clean submission earns its acceptance (or its
+    // failure round) before any new agent is spawned against stale state.
+    for (const verdict of await verifier.verifyOnce()) {
+      process.stdout.write(`[verifier] ${verdict.nodeRef}: ${verdict.outcome} (${verdict.detail})\n`);
+    }
     const report = wrapper.runOnce();
     for (const entry of report.spawned) {
       process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}\n`);
     }
-    if (once) { await wrapper.settle(); return; }
+    if (once) {
+      await wrapper.settle();
+      for (const verdict of await verifier.verifyOnce()) {
+        process.stdout.write(`[verifier] ${verdict.nodeRef}: ${verdict.outcome} (${verdict.detail})\n`);
+      }
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
+}
+
+function createHashSha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 const meta = import.meta as ImportMeta & { readonly main?: boolean };

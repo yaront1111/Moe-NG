@@ -45,6 +45,9 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
 
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
 
+/** The finding rule the daemon's verifier records when a node's test run fails. */
+export const VERIFIER_FAILURE_RULE = "verifier-test-failed";
+
 export interface AffordancePortConfig {
   /** Canonical UTC instant used only to judge claim expiry; defaults to now. */
   readonly clock?: () => string;
@@ -169,10 +172,11 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       }
     }
 
-    // Code nodes appear only behind a durably approved plan; each unaccepted
-    // node is a claimable step whose real dispatches are the review family
-    // offers minted at the node's own review-ledger version. An accepted node
-    // is COMMITTED at that version — the ledger's fact, not the spec's.
+    // Code nodes appear only behind a durably approved plan. Lifecycle, all
+    // ledger-derived: READY (nothing submitted, or the LATEST round is a
+    // verifier failure — recode), BLOCKED on "verification" (a clean round is
+    // in and the daemon has not verified it yet — the verifier's queue, so a
+    // coding agent is never staffed onto it), COMMITTED (accepted).
     if (config.nodes !== undefined && ledger.kinds.has("approval.decide")) {
       for (const spec of config.nodes()) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
@@ -184,13 +188,19 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           }));
           continue;
         }
+        const latestVerifierFailure = review.lineage.records
+          .filter((record) => record.finding.ruleId === VERIFIER_FAILURE_RULE)
+          .reduce((latest, record) => Math.max(latest, record.round), 0);
+        const awaitingVerify = review.version > 0 && latestVerifierFailure !== review.version;
         offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
         offers.push(offer(
           "integration.accept_output", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION,
         ));
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, claim, kind: NODE_DELIVER_KIND,
-          missing: [], status: "READY" as const, version: review.version,
+          missing: awaitingVerify ? ["verification"] : [],
+          status: awaitingVerify ? ("BLOCKED" as const) : ("READY" as const),
+          version: review.version,
         }));
       }
     }
