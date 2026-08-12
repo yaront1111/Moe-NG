@@ -28,18 +28,15 @@ const principal = createPrincipal({
   kind: "HUMAN",
   profileRevisionId: "pr-1",
 })!;
+const SESSION_FACTS = Object.freeze({
+  sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1",
+  transportIds: ["local-ipc"], status: "ACTIVE", expiresAt: 1_000, generation: 1,
+});
 
 function session(binding = CURRENT, overrides: Record<string, unknown> = {}) {
   return createSession({
     ...binding,
-    sessionId: "s-1",
-    principalId: "p-1",
-    profileRevisionId: "pr-1",
-    clientKeyId: "k-1",
-    transportIds: ["local-ipc"],
-    status: "ACTIVE",
-    expiresAt: 1_000,
-    generation: 1,
+    ...SESSION_FACTS,
     ...overrides,
   });
 }
@@ -154,31 +151,11 @@ describe("recovery-bound identity records", () => {
   });
 
   it("contains an accessor recovery ref", () => {
-    const missing = {
-      ...CURRENT,
-      sessionId: "s-1",
-      principalId: "p-1",
-      profileRevisionId: "pr-1",
-      clientKeyId: "k-1",
-      transportIds: ["local-ipc"],
-      status: "ACTIVE",
-      expiresAt: 1_000,
-      generation: 1,
-    };
+    const missing = { ...CURRENT, ...SESSION_FACTS };
     delete (missing as { keyEpochRef?: string }).keyEpochRef;
     expect(createSession(missing)).toBeNull();
 
-    const value = {
-      ...CURRENT,
-      sessionId: "s-1",
-      principalId: "p-1",
-      profileRevisionId: "pr-1",
-      clientKeyId: "k-1",
-      transportIds: ["local-ipc"],
-      status: "ACTIVE",
-      expiresAt: 1_000,
-      generation: 1,
-    };
+    const value = { ...CURRENT, ...SESSION_FACTS };
     Object.defineProperty(value, "keyEpochRef", {
       enumerable: true,
       get: () => { throw new Error("hostile ref"); },
@@ -186,17 +163,7 @@ describe("recovery-bound identity records", () => {
     expect(() => createSession(value)).not.toThrow();
     expect(createSession(value)).toBeNull();
 
-    const returning = {
-      ...CURRENT,
-      sessionId: "s-1",
-      principalId: "p-1",
-      profileRevisionId: "pr-1",
-      clientKeyId: "k-1",
-      transportIds: ["local-ipc"],
-      status: "ACTIVE",
-      expiresAt: 1_000,
-      generation: 1,
-    };
+    const returning = { ...CURRENT, ...SESSION_FACTS };
     Object.defineProperty(returning, "keyEpochRef", {
       enumerable: true,
       get: () => CURRENT.keyEpochRef,
