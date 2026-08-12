@@ -1361,9 +1361,13 @@ describe("hostile authentication inputs", () => {
       nonce: "72".repeat(16),
       requestId: "request-returning-accessor",
     });
+    let reads = 0;
     const accessor = Object.defineProperty({ ...valid }, "requestId", {
       enumerable: true,
-      get: () => valid.requestId,
+      get: () => {
+        reads += 1;
+        return valid.requestId;
+      },
     });
     const before = eventCount(state.store);
 
@@ -1372,6 +1376,7 @@ describe("hostile authentication inputs", () => {
       code: "AUTHENTICATION_FAILED",
       layer: "BINDING",
     });
+    expect(reads).toBe(0);
     expect(eventCount(state.store)).toBe(before);
   });
 });
