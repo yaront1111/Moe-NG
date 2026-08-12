@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import defaultProvider, { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import {
   PROJECT_ID,
   anchorInto,
@@ -19,8 +19,8 @@ import {
  * `import { runRestoreQuiesce }` would prove the module exists, which was never
  * in doubt; it would prove nothing about anything IMPORTING it in production.
  * Everything below resolves the controller the way the daemon resolves it at
- * runtime — through `createStoreDependencies`, the factory the bin's
- * `--dependencies=src/daemon-store-dependencies.js` provider itself calls.
+ * runtime — through `createStoreDependencies`, the factory the source-run bin's
+ * `--dependencies=src/daemon-store-dependencies.ts` provider itself calls.
  *
  * Removing the wiring in that provider must turn THIS file red while a direct
  * import test would still pass. That asymmetry is the whole assertion.
@@ -56,8 +56,9 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
     h.store.close();
 
     const provider = dependenciesFor(h.storePath);
+    const entryModule = await import("../daemon-store-dependencies." + "ts");
 
-    expect(typeof defaultProvider.restore).toBe("function");
+    expect(typeof entryModule.default.restore).toBe("function");
     expect(typeof provider.restore).toBe("function");
     // The command adapter surface is untouched: this is internal authority, and
     // the core contract is explicit that restore_quiesce is not a protocol command.
