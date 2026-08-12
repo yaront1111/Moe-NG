@@ -1,17 +1,17 @@
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { RECOVERY_BINDING_CODEC_VERSION } from "@moe/store";
 
 import { OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
-  PRINCIPAL_ID,
   PROJECT_ID,
   SEEDED_EVENT_TYPES,
   anchorInto,
   anchoredIncarnation,
   cleanupRestoreHarnesses,
   committedEventTypes,
-  mintIncarnation,
+
   openHarnessStore,
   projectLifecycle,
   restoreHarness,
@@ -72,7 +72,7 @@ describe("restore controller — composes the REAL core reducer", () => {
       details: { actualVersion: 3, expectedVersion: 4 },
       recoveryCategory: "REFRESH",
       retryability: "AFTER_REFRESH",
-      truthClass: "VERIFIED",
+      truthClass: "DAEMON_VERIFIED",
     });
   });
 
@@ -119,6 +119,29 @@ describe("restore controller — composes the REAL core reducer", () => {
       version: 4,
     });
     expect(committedEventTypes(h.store)).toEqual([...SEEDED_EVENT_TYPES, "ProjectQuiesced"]);
+  });
+
+  it("uses one durable head observation for both reducer and transaction", async () => {
+    const h = await restoreHarness("single-head");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+    let headReads = 0;
+    const counted = new Proxy(h.store, {
+      get(target, property): unknown {
+        if (property === "getAggregateVersion") {
+          return (aggregateId: string): number => {
+            headReads += 1;
+            return target.getAggregateVersion(aggregateId);
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const result = runRestoreQuiesce(counted, restoreRequest(h, binding));
+
+    expect(result.ok).toBe(true);
+    expect(headReads).toBe(1);
   });
 });
 
@@ -197,6 +220,23 @@ describe("restore controller — refusals name their code and their layer", () =
     expectRefusal(result, "BACKUP_GENERATION", "INVENTORY_MISMATCH");
   });
 
+  it("maps throwing generation evidence to the backup layer for every command", async () => {
+    const generated: string[] = [];
+    for (const operation of ["resume", "discard"] as const) {
+      const h = await restoreHarness(`throwing-trust-${operation}`);
+      const binding = await anchoredIncarnation(h, "restore-cmd-1");
+      const trust = new Proxy({}, { get: () => { throw new Error("hostile evidence"); } });
+      const port = createRestorePort(h.store, PROJECT_ID);
+
+      const result = port[operation](restoreRequest(h, binding, { trust }));
+
+      expectRefusal(result, "BACKUP_GENERATION", "REQUEST_SHAPE_INVALID");
+      generated.push(operation);
+    }
+    expect(generated.length).toBeGreaterThan(0);
+    expect(generated).toEqual(["resume", "discard"]);
+  });
+
   it("refuses an incarnation nothing anchored", async () => {
     const h = await restoreHarness("unanchored");
     const binding = await anchoredIncarnation(h, "restore-cmd-1");
@@ -221,12 +261,24 @@ describe("restore controller — refusals name their code and their layer", () =
     expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_KEY_EPOCH_MISMATCH");
   });
 
+  it("refuses a command id the anchored incarnation was not minted for", async () => {
+    const h = await restoreHarness("command-binding");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+
+    const result = runRestoreQuiesce(
+      h.store,
+      restoreRequest(h, binding, { restoreCommandId: "restore-cmd-2" }),
+    );
+
+    expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_COMMAND_NOT_BOUND");
+  });
+
   it("refuses a generation the anchored incarnation is not bound to", async () => {
     const h = await restoreHarness("unbound");
     const other = await restoreHarness("unbound-other");
     // Minted for a DIFFERENT generation, then anchored in this store: the row
     // exists, so only the cross-check between the two can refuse it.
-    const foreign = await mintIncarnation(other.generationDigest, "restore-cmd-1");
+    const foreign = await h.mint(other.generationDigest, "restore-cmd-1");
     anchorInto(h.store, foreign);
 
     const result = runRestoreQuiesce(h.store, restoreRequest(h, foreign));
@@ -249,6 +301,7 @@ describe("restore controller — refusals name their code and their layer", () =
   it("declares exactly the reason codes this layer can raise", () => {
     expect([...RESTORE_CONTROLLER_REASON_CODES]).toEqual([
       "RESTORE_ALREADY_SETTLED",
+      "RESTORE_COMMAND_NOT_BOUND",
       "RESTORE_FENCE_REPLAYED",
       "RESTORE_GENERATION_NOT_BOUND",
       "RESTORE_INCARNATION_UNANCHORED",
@@ -351,6 +404,16 @@ describe("restore controller — inspect and discard", () => {
     expect(h.store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
   });
 
+  it("surfaces a closed store with its durable code and layer", async () => {
+    const h = await restoreHarness("inspect-closed");
+    const port = createRestorePort(h.store, PROJECT_ID);
+    h.store.close();
+
+    const result = port.inspect();
+
+    expectRefusal(result, "DURABLE_STORE", "STORE_CLOSED");
+  });
+
   it("reports the installed record without advancing anything", async () => {
     const h = await restoreHarness("inspect-installed");
     const binding = await anchoredIncarnation(h, "restore-cmd-1");
@@ -379,6 +442,31 @@ describe("restore controller — inspect and discard", () => {
     expect(committedEventTypes(h.store)).toEqual(eventsBefore);
   });
 
+  it("refuses an installed record whose prepared identity does not bind its fields", async () => {
+    const h = await restoreHarness("inspect-identity");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+    const installed = h.store.installRecoveryBinding({
+      bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+      incarnationRef: binding.incarnationRef,
+      installedAt: "2026-08-11T00:00:00.000Z",
+      keyEpochRef: binding.keyEpochRef,
+      payload: new TextEncoder().encode(JSON.stringify({
+        generationDigest: h.generationDigest,
+        incarnationRef: binding.incarnationRef,
+        keyEpochRef: binding.keyEpochRef,
+        preparedIdentity: "f".repeat(64),
+        restoreCommandId: binding.restoreCommandId,
+        schemaVersion: RESTORE_CONTROLLER_SCHEMA_VERSION,
+      })),
+      slot: "ACTIVE",
+    });
+    expect(installed.ok).toBe(true);
+
+    const result = createRestorePort(h.store, PROJECT_ID).inspect();
+
+    expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_RECORD_UNREADABLE");
+  });
+
   it("discards a restore that never installed, writing nothing", async () => {
     const h = await restoreHarness("discard-open");
     const binding = await anchoredIncarnation(h, "restore-cmd-1");
@@ -398,6 +486,31 @@ describe("restore controller — inspect and discard", () => {
       }),
     );
     expect(h.store.getAggregateVersion(PROJECT_ID)).toBe(versionBefore);
+    expect(h.store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
+  });
+
+  it("refuses to discard an epoch the anchored incarnation does not carry", async () => {
+    const h = await restoreHarness("discard-epoch");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+    const port = createRestorePort(h.store, PROJECT_ID);
+
+    const result = port.discard(
+      restoreRequest(h, binding, { keyEpochRef: "a".repeat(64) }),
+    );
+
+    expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_KEY_EPOCH_MISMATCH");
+    expect(h.store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
+  });
+
+  it("refuses to discard a command the anchored incarnation was not minted for", async () => {
+    const h = await restoreHarness("discard-command");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+
+    const result = createRestorePort(h.store, PROJECT_ID).discard(
+      restoreRequest(h, binding, { restoreCommandId: "restore-cmd-2" }),
+    );
+
+    expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_COMMAND_NOT_BOUND");
     expect(h.store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
   });
 

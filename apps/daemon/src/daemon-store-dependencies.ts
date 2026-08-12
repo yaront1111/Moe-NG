@@ -22,6 +22,8 @@ import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
+import { createRestorePort } from "./recovery/restore-controller-commands.js";
+import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { REVIEW_SCHEMA_VERSION } from "./review/review-contracts.js";
@@ -33,37 +35,10 @@ import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import type { WorkClaimOutcome } from "./work/work-claim-services.js";
 import { buildCommandRegistry } from "./http/http-contract.js";
-import type {
-  CommandAdapterDeps,
-  CommandDecisionPort,
-  CommandHandler,
-  CommandRegistryEntry,
-  DecisionPortResult,
-  DurableDecision,
-} from "./http/http-contract.js";
-import type {
-  StreamPageRequest,
-  StreamReseatRequest,
-  SubscriptionPort,
-} from "./http/event-stream-contract.js";
-
-/**
- * The production dependency provider: committed authority only, composed, never minted.
- *
- * Commands run through the committed domain services (`runBootstrapCommand`,
- * `runReviewCommand`) against a real `SqliteEventStore`, which own idempotent replay and
- * the durable decision ledger. A domain refusal stays a refusal — `authority: "NONE"`
- * is never presented as a durable decision. The subscription port is the committed
- * store implementation; on a store with no published cursor generation it refuses
- * `SUBSCRIPTION_GENERATION_MISSING`, which is the honest arm until the projection
- * pipeline lands.
- *
- * Known impedance, disclosed: the wire envelope's `requestDigest` cannot participate in
- * store-side digest-conflict detection because `BootstrapRequest`/`ReviewRequest` key
- * sets are closed; conflict detection runs over the canonical request bytes instead.
- * There is also no committed session machinery (`session.open` has no handler anywhere),
- * so authentication is a single operator credential compared in constant time.
- */
+import type { CommandAdapterDeps, CommandDecisionPort, CommandHandler,
+  CommandRegistryEntry, DecisionPortResult, DurableDecision } from "./http/http-contract.js";
+import type { StreamPageRequest, StreamReseatRequest,
+  SubscriptionPort } from "./http/event-stream-contract.js";
 
 const CAPABILITIES = {
   ADMIN: "project.admin",
@@ -93,14 +68,12 @@ const REVIEW_FAMILY: Readonly<Record<ReviewCommandKind, string>> = Object.freeze
   "review.submit": CAPABILITIES.REVIEW,
 });
 
-/** Session lifecycle is an operator concern until scoped delegation lands. */
 const SESSION_FAMILY: Readonly<Record<SessionCommandKind, string>> = Object.freeze({
   "session.close": CAPABILITIES.ADMIN,
   "session.open": CAPABILITIES.ADMIN,
   "session.renew": CAPABILITIES.ADMIN,
 });
 
-/** Claiming work is every agent's right; the fence is per-item, not per-role. */
 const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freeze({
   "work.claim": CAPABILITIES.WORK,
   "work.release": CAPABILITIES.WORK,
@@ -110,16 +83,7 @@ const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freez
 type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind;
 
-/**
- * The capabilities an agent session needs to execute one wired kind: the kind's
- * own family capability plus work.write, because an agent that cannot claim,
- * renew, and release its item cannot participate in the work register at all.
- * Unknown kinds return null so a caller cannot mint capabilities for a command
- * this provider never wired.
- */
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
-  // The pseudo-kind for delivering a code node: the agent reviews and accepts
-  // its own output through the wired review family, and claims through work.
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -136,7 +100,6 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
     : Object.freeze([family, CAPABILITIES.WORK]);
 }
 
-/** Exact top-level payload keys each command admits; an unlisted key is refused upstream. */
 const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
@@ -173,14 +136,12 @@ const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
 export interface StoreDependencyConfig {
   readonly clock?: () => string;
   readonly credential: string;
-  /** Directory of operator-authored code-node specs (*.json); absent = no nodes. */
   readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
   readonly projectId: string;
   readonly storePath: string;
 }
 
-/** Thrown before any socket exists; surfaces as DAEMON_ENTRY_PROVIDER_THREW. */
 export const STORE_DEPENDENCIES_ENV_MISSING = "STORE_DEPENDENCIES_ENV_MISSING" as const;
 
 const ENV_KEYS = ["MOE_STORE_PATH", "MOE_PROJECT_ID", "MOE_DAEMON_CREDENTIAL"] as const;
@@ -203,11 +164,6 @@ export function readStoreDependencyEnv(
 
 const encoder = new TextEncoder();
 
-/**
- * Reads operator-authored node specs (*.json with at least {nodeRef, title})
- * fresh on every call. A malformed file is SKIPPED, never invented into a
- * node; an unreadable directory reads as no nodes.
- */
 function nodeSpecLoader(directory: string): () => readonly { nodeRef: string; title: string }[] {
   return () => {
     let entries: string[];
@@ -272,10 +228,14 @@ function refusal(
   } as const);
 }
 
-/** Builds the provider. Opens the store once; `close` releases both handles. */
+type StoreDependencyProvider = DaemonDependencyProvider & {
+  close(): void;
+  restore(): RestorePort;
+};
+
 export function createStoreDependencies(
   config: StoreDependencyConfig,
-): DaemonDependencyProvider & { close(): void } {
+): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
   const store = SqliteEventStore.openForProject(config.storePath, config.projectId);
   let subscriptionDatabase: DatabaseSync | null = null;
@@ -356,8 +316,6 @@ export function createStoreDependencies(
     },
   };
 
-  // Real credential resolution: operator secret OR an open unexpired session whose
-  // credential hash matches — both resolved by the committed session ledger fold.
   const authenticator = createSessionAuthenticator(store, {
     clock: () => Date.now(),
     operatorCapabilities: OPERATOR_CAPABILITIES,
@@ -369,7 +327,6 @@ export function createStoreDependencies(
   const provide = (): CommandAdapterDeps =>
     Object.freeze({ authenticator, decisions, registry });
 
-  /** Default stream reader; the transport seam owns real subscriber lifecycle later. */
   const DEFAULT_READER = "control-room-1";
 
   const subscriptions = (): SubscriptionPort => {
@@ -377,14 +334,9 @@ export function createStoreDependencies(
     subscriptionDatabase = database;
     database.exec("PRAGMA busy_timeout = 5000;");
     const board = createBoardProjectionService({ database, store });
-    // Idempotent: publishes generation 1 once, then seats the default reader. An
-    // already-registered reader refuses SUBSCRIPTION_INPUT_INVALID — expected on
-    // every boot after the first, so only unexpected refusals surface.
     const baseline = board.ensureBaseline("daemon provider startup");
     if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
     return Object.freeze({
-      // Fold-on-read: pages always reflect every committed event. The fold refusal
-      // (if any) is deliberately not masked by a possibly-stale page read.
       readPage: (request: StreamPageRequest) => {
         const folded = board.foldOnce();
         if (folded.outcome !== "FOLDED") return folded;
@@ -410,19 +362,19 @@ export function createStoreDependencies(
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
     provide,
+    restore: () => createRestorePort(store, config.projectId),
     subscriptions,
   });
 }
 
-let envProvider: (DaemonDependencyProvider & { close(): void }) | null = null;
+let envProvider: StoreDependencyProvider | null = null;
 
-function fromEnv(): DaemonDependencyProvider & { close(): void } {
+function fromEnv(): StoreDependencyProvider {
   envProvider = envProvider ?? createStoreDependencies(readStoreDependencyEnv(process.env));
   return envProvider;
 }
 
-/** Bin entry: `--dependencies=src/daemon-store-dependencies.js`. Env is read lazily. */
-const provider: DaemonDependencyProvider = Object.freeze({
+const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restore"> = Object.freeze({
   affordances: () => {
     const port = fromEnv().affordances;
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
@@ -434,6 +386,7 @@ const provider: DaemonDependencyProvider = Object.freeze({
     return port();
   },
   provide: () => fromEnv().provide(),
+  restore: () => fromEnv().restore(),
   subscriptions: () => {
     const port = fromEnv().subscriptions;
     if (port === undefined) throw new Error("unreachable: subscriptions is always wired");

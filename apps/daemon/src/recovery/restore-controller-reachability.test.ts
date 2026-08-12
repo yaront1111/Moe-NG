@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import defaultProvider, { createStoreDependencies } from "../daemon-store-dependencies.js";
 import {
   PROJECT_ID,
   anchorInto,
   cleanupRestoreHarnesses,
   committedEventTypes,
-  mintIncarnation,
+
   restoreHarness,
   restoreRequest,
 } from "./restore-test-harness.js";
@@ -57,6 +57,7 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
 
     const provider = dependenciesFor(h.storePath);
 
+    expect(typeof defaultProvider.restore).toBe("function");
     expect(typeof provider.restore).toBe("function");
     // The command adapter surface is untouched: this is internal authority, and
     // the core contract is explicit that restore_quiesce is not a protocol command.
@@ -65,15 +66,16 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
 
   it("drives the core reducer through the provider, never through a direct import", async () => {
     const h = await restoreHarness("reach-drive");
-    const binding = await mintIncarnation(h.generationDigest, "restore-cmd-1");
+    const binding = await h.mint(h.generationDigest, "restore-cmd-1");
     anchorInto(h.store, binding);
     h.store.close();
 
     const provider = dependenciesFor(h.storePath);
     const result = provider.restore().resume(restoreRequest(h, binding));
 
-    if (!result.ok) throw new Error("expected the provider-resolved controller to quiesce");
-    expect(result.disposition).toBe("QUIESCED");
+    if (!result.ok || result.disposition !== "QUIESCED") {
+      throw new Error("expected the provider-resolved controller to quiesce");
+    }
     expect(result.event).toMatchObject({
       commandId: "restore-cmd-1",
       kind: "ProjectQuiesced",
@@ -94,7 +96,7 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
 
   it("surfaces a refusal through the provider with its code and its layer", async () => {
     const h = await restoreHarness("reach-refuse");
-    const binding = await mintIncarnation(h.generationDigest, "restore-cmd-1");
+    const binding = await h.mint(h.generationDigest, "restore-cmd-1");
     anchorInto(h.store, binding);
     const eventsBefore = committedEventTypes(h.store);
     h.store.close();
