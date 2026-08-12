@@ -187,4 +187,3 @@ export function failureOf(result: ClaudeLaunchResult): { code: string; layer: st
   if (result.code === null || result.layer === null) throw new Error("failure omitted code or layer");
   return { code: result.code, layer: result.layer };
 }
-
