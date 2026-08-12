@@ -68,6 +68,27 @@ export {
   type RuntimePinningMethod,
 } from "../providers/claude/claude-observation.js";
 export {
+  CLAUDE_LAUNCHER_VERSION,
+  CLAUDE_LAUNCH_ERROR_CODES,
+  CLAUDE_LAUNCH_LAYERS,
+  CLAUDE_LAUNCH_TRUTH_CLASSES,
+  launchClaude,
+  type ClaudeLaunchDuplicate,
+  type ClaudeLaunchErrorCode,
+  type ClaudeLaunchExit,
+  type ClaudeLaunchFailure,
+  type ClaudeLaunchLayer,
+  type ClaudeLaunchLimits,
+  type ClaudeLaunchObservation,
+  type ClaudeLaunchObserved,
+  type ClaudeLaunchOptions,
+  type ClaudeLaunchRequest,
+  type ClaudeLaunchResult,
+  type ClaudeLaunchTruthClass,
+  type ClaudeLauncherDependencies,
+  type ClaudeStreamEvidence,
+} from "../providers/claude/claude-launcher.js";
+export {
   CLAUDE_STREAM_ANOMALIES,
   CLAUDE_STREAM_DISPOSITIONS,
   CLAUDE_STREAM_RECORD_VERSION,

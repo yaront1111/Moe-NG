@@ -36,7 +36,10 @@ import type {
 import type {
   ArtifactFsPort, ArtifactRef, ArtifactStore, BuildEvidenceReceiptInput, BuildEvidenceReceiptResult,
   BuildObservationInput, BuildObservationResult, BuildVerificationRecipeResult, CandidateTreeEntry,
-  CandidateTreePort, ClaudeProcessExit, ClaudeRawRetention, ClaudeReconciledOutcome,
+  CandidateTreePort, ClaudeLaunchErrorCode, ClaudeLaunchFailure, ClaudeLaunchLayer,
+  ClaudeLaunchLimits, ClaudeLaunchObservation, ClaudeLaunchOptions, ClaudeLaunchRequest,
+  ClaudeLaunchResult, ClaudeLaunchTruthClass, ClaudeLauncherDependencies, ClaudeProcessExit,
+  ClaudeRawRetention, ClaudeReconciledOutcome,
   ClaudeReconciliation, ClaudeStreamAnomaly, ClaudeStreamDisposition, ClaudeStreamEvent,
   ClaudeStreamRecord, CrashClassification, DeclaredInput, DischargedObligation, DrainAdvance,
   DrainDisposition, DrainReason, DrainTerminalTarget, EvidenceFailure, EvidenceObligationKind,
@@ -138,7 +141,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["VERIFIER_PROCESS_ERROR_CODES", "array"], ["VERIFIER_PROCESS_LAYERS", "array"],
   ["VERIFIER_REAP_GRACE_MS", "number"], ["createNodeProcessLauncher", "function"],
   ["hermeticVerifierEnvironment", "function"], ["runVerifierProcess", "function"],
-  // providers/claude/: reconciliation, capability profile, runtime observation, stream vocabulary.
+  // providers/claude/: reconciliation, capability profile, runtime observation, stream and launcher.
   ["CLAUDE_CAPABILITIES", "array"], ["CLAUDE_CAPABILITY_PROFILE_VERSION", "string"],
   ["CLAUDE_CAPABILITY_STATUSES", "array"], ["CLAUDE_CONTEXT_POLICIES", "array"],
   ["CLAUDE_OBSERVATION_ERROR_CODES", "array"], ["CLAUDE_PROOF_METHODS", "array"],
@@ -149,6 +152,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["RUNTIME_PINNING_METHODS", "array"], ["buildProviderRuntimeObservation", "function"],
   ["observationDigestInput", "function"], ["reconcileClaudeRun", "function"],
   ["runtimePinningIsAuthoritative", "function"],
+  ["CLAUDE_LAUNCHER_VERSION", "string"], ["CLAUDE_LAUNCH_ERROR_CODES", "array"],
+  ["CLAUDE_LAUNCH_LAYERS", "array"], ["CLAUDE_LAUNCH_TRUTH_CLASSES", "array"],
+  ["launchClaude", "function"],
   // platform/: the OS-neutral boundary vocabulary and the Linux classifier.
   ["LINUX_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_BOUNDARIES", "array"],
   ["PLATFORM_ERROR_CODES", "array"], ["PLATFORM_LAYERS", "array"],
@@ -167,7 +173,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(150);
+  expect(EXPECTED_EXPORTS.length).toBe(155);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -448,6 +454,48 @@ function commitFixture(): ActivationCommit {
   if (activated.kind !== "ACTIVATED") throw new Error(codeOf(refusalOf(activated)));
   return activated.commit;
 }
+
+/**
+ * Publication/composition contract only. Durable grant CAS belongs to daemon dispatch task
+ * task-6cbff01023b14b26a78fc5e3eb1dd8a9; canary task-97554aa4293e40eab56c0b642e18513a
+ * eventually certifies that composed edge.
+ */
+it("lets a root-only consumer construct and narrow the Claude launcher", async () => {
+  const commit = commitFixture();
+  const observation = observationFixture("CONTENT_ADDRESSED_COPY");
+  const deps: ClaudeLauncherDependencies = {
+    prepareRuntime: async () => ({ ok: true, preparationVersion: "moe-claude-runtime-pin/1",
+      quotedObservationDigest: observation.observationDigest,
+      freshObservationDigest: observation.observationDigest, pinnedClosureDigest: DIGEST,
+      pinnedRoot: "C:\\pins", pinRootIdentity: DIGEST, executablePath: "C:\\pins\\claude.exe",
+      observation, bindingDigest: DIGEST }),
+    resolveDuplicate: () => { throw new Error("duplicate port must not run"); },
+    validateCommit: runner.validateActivationCommit,
+    consumeGrant: runner.consumeActivationGrant,
+    openBoundary: () => { throw new Error("boundary must not open"); },
+    registerLock: () => { throw new Error("registration must not run"); },
+    observeProcess: () => { throw new Error("observation must not run"); },
+    now: () => AT, delay: async () => await new Promise(() => undefined),
+  };
+  const limits: ClaudeLaunchLimits = { stdoutBytes: 8, stderrBytes: 8, tailBytes: 4, timeoutMs: 10 };
+  const request = { runtime: { quotedObservation: observation, installedRoot: "C:\\installed",
+    pinRoot: "C:\\pins", fs: {}, facts: {}, clock: {} }, duplicateDelivery: null, effect: commit.intent,
+    attempt: commit.attempt, grant: commit.grant, claim: CLAIM_RECORD,
+    wrapperIdentity: "wrapper:other", bootstrapCredentialDigest: DIGEST,
+    priorRegistration: null, argv: [], cwd: "C:\\work", environment: {},
+    reconciliation: null, limits } satisfies Record<keyof ClaudeLaunchRequest, unknown>;
+  const options: ClaudeLaunchOptions = { platform: "win32", deps };
+  const result: ClaudeLaunchResult = await runner.launchClaude(request, options);
+  if (result.kind !== "REFUSED") throw new Error(`expected refusal, received ${result.kind}`);
+  const failure: ClaudeLaunchFailure = result;
+  const code: ClaudeLaunchErrorCode = failure.code;
+  const layer: ClaudeLaunchLayer = failure.layer;
+  const truth: ClaudeLaunchTruthClass = failure.truthClass;
+  expect({ code, layer, truth }).toEqual({
+    code: "GRANT_WRAPPER_MISMATCH", layer: "GRANT", truth: "UNKNOWN",
+  });
+  expect({} as ClaudeLaunchObservation).toBeDefined();
+});
 
 function recordsOf(overrides: Overrides = {}): Overrides {
   const commit = commitFixture();
