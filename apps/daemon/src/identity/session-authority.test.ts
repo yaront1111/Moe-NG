@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SESSION_AUTH_LAYERS } from "@moe/core";
-import { SqliteEventStore } from "@moe/store";
+import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +33,10 @@ import {
   sessionAuthorityRequestDigest,
   sessionClientKeyId,
 } from "./session-authority-protocol.js";
+import {
+  commitAuthorityDecision,
+  sessionAggregateId,
+} from "./session-authority-store.js";
 import { createSessionAuthority } from "./session-authority.js";
 
 const PROJECT_ID = "project-session-authority";
@@ -40,6 +44,15 @@ const PRINCIPAL_ID = "agent-session-authority";
 const PROFILE_REVISION_ID = "profile-session-authority-v1";
 const NOW = Date.parse("2026-08-09T12:00:00.000Z");
 const TRANSPORT_IDS = Object.freeze(["coordination.v1", "terminal.v1"]);
+const RECOVERY_ONE = Object.freeze({
+  incarnation: "81".repeat(32),
+  keyEpoch: "91".repeat(32),
+});
+const RECOVERY_TWO = Object.freeze({
+  incarnation: "82".repeat(32),
+  keyEpoch: "92".repeat(32),
+});
+const RECOVERY_PAYLOAD = new TextEncoder().encode("authority-recovery-payload");
 
 const directories: string[] = [];
 const stores: SqliteEventStore[] = [];
@@ -55,6 +68,7 @@ function harness(): Harness {
   directories.push(directory);
   const path = join(directory, "store.sqlite");
   const opened = SqliteEventStore.openForProject(path, PROJECT_ID);
+  installRecovery(opened, RECOVERY_ONE);
   stores.push(opened);
   const state: Harness = {
     path,
@@ -68,6 +82,20 @@ function harness(): Harness {
     },
   };
   return state;
+}
+
+function installRecovery(
+  store: SqliteEventStore,
+  binding: typeof RECOVERY_ONE | typeof RECOVERY_TWO,
+): void {
+  expect(store.installRecoveryBinding({
+    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+    incarnationRef: binding.incarnation,
+    installedAt: "2026-08-12T00:00:00.000Z",
+    keyEpochRef: binding.keyEpoch,
+    payload: RECOVERY_PAYLOAD,
+    slot: "ACTIVE",
+  })).toMatchObject({ ok: true, outcome: "INSTALLED" });
 }
 
 afterEach(() => {
@@ -140,6 +168,8 @@ function openRequest(
   const challenge = canonicalSessionProofBytes({
     principalId: PRINCIPAL_ID,
     projectId: PROJECT_ID,
+    recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+    keyEpochRef: RECOVERY_ONE.keyEpoch,
     sessionId: facts.sessionId,
     credentialId: facts.credentialId,
     generation: 1,
@@ -199,12 +229,16 @@ interface AuthorityFacts {
     readonly status: "ACTIVE" | "CLOSED";
     readonly expiresAt: number;
     readonly generation: number;
+    readonly recoveryIncarnationRef: string;
+    readonly keyEpochRef: string;
   };
   readonly credential: {
     readonly credentialId: string;
     readonly sessionId: string;
     readonly generation: number;
     readonly revoked: boolean;
+    readonly recoveryIncarnationRef: string;
+    readonly keyEpochRef: string;
   };
   readonly publicKey: {
     readonly algorithm: "Ed25519";
@@ -252,6 +286,8 @@ function authenticationRequest(
   const challenge = canonicalSessionProofBytes({
     principalId,
     projectId,
+    recoveryIncarnationRef: authority.session.recoveryIncarnationRef,
+    keyEpochRef: authority.session.keyEpochRef,
     sessionId,
     credentialId,
     generation,
@@ -357,6 +393,8 @@ function rotationRequest(
   const challenge = canonicalSessionProofBytes({
     principalId: authentication.principalId,
     projectId: authentication.projectId,
+    recoveryIncarnationRef: authority.session.recoveryIncarnationRef,
+    keyEpochRef: authority.session.keyEpochRef,
     sessionId: authentication.sessionId,
     credentialId: authentication.credentialId,
     generation: authentication.generation,
@@ -463,10 +501,12 @@ describe("session proof protocol v1", () => {
     expect(Object.isFrozen(SESSION_AUTHORITY_DAEMON_LAYERS)).toBe(true);
   });
 
-  it("pins the exact domain and eleven u32be-framed challenge fields in order", () => {
+  it("pins the exact domain and thirteen u32be-framed challenge fields in order", () => {
     const bytes = canonicalSessionProofBytes({
       principalId: "p",
       projectId: "q",
+      recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+      keyEpochRef: RECOVERY_ONE.keyEpoch,
       sessionId: "s",
       credentialId: "c",
       generation: 1,
@@ -479,7 +519,10 @@ describe("session proof protocol v1", () => {
     });
     expect(Buffer.from(bytes).toString("hex")).toBe(
       "6d6f652e73657373696f6e2d70726f6f662e7631" +
-        "00000001700000000171000000017300000001630000000131" +
+        "00000001700000000171" +
+        `00000040${Buffer.from(RECOVERY_ONE.incarnation).toString("hex")}` +
+        `00000040${Buffer.from(RECOVERY_ONE.keyEpoch).toString("hex")}` +
+        "000000017300000001630000000131" +
         "0000004030303030303030303030303030303030303030303030303030303030" +
         "303030303030303030303030303030303030303030303030303030303030303030303030" +
         "00000001740000000172" +
@@ -488,7 +531,30 @@ describe("session proof protocol v1", () => {
         "0000000130000000203232323232323232323232323232323232323232323232" +
         "323232323232323232",
     );
-    expect(bytes).toHaveLength(232);
+    expect(bytes).toHaveLength(368);
+  });
+
+  it("frames both recovery refs into the signed challenge as load-bearing fields", () => {
+    const challenge = (recoveryIncarnationRef: string, keyEpochRef: string): Uint8Array =>
+      canonicalSessionProofBytes({
+        principalId: "p",
+        projectId: "q",
+        recoveryIncarnationRef,
+        keyEpochRef,
+        sessionId: "s",
+        credentialId: "c",
+        generation: 1,
+        clientKeyId: "00".repeat(32),
+        transportId: "t",
+        requestId: "r",
+        requestDigest: "11".repeat(32),
+        issuedAt: 0,
+        nonce: "22".repeat(16),
+      });
+
+    const current = challenge(RECOVERY_ONE.incarnation, RECOVERY_ONE.keyEpoch);
+    expect(challenge(RECOVERY_TWO.incarnation, RECOVERY_ONE.keyEpoch)).not.toEqual(current);
+    expect(challenge(RECOVERY_ONE.incarnation, RECOVERY_TWO.keyEpoch)).not.toEqual(current);
   });
 });
 
@@ -519,12 +585,16 @@ describe("durable session authority lifecycle", () => {
         status: "ACTIVE",
         expiresAt: NOW + SESSION_TTL_MS,
         generation: 1,
+        recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+        keyEpochRef: RECOVERY_ONE.keyEpoch,
       },
       credential: {
         credentialId: "credential-one",
         sessionId: "session-one",
         generation: 1,
         revoked: false,
+        recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+        keyEpochRef: RECOVERY_ONE.keyEpoch,
       },
       publicKey: {
         algorithm: "Ed25519",
@@ -672,6 +742,89 @@ describe("proof canonicalization and clock boundaries", () => {
   });
 });
 
+describe("recovery-bound proof authority", () => {
+  it("issues against the selected row and rejects a prior proof at RECOVERY_BINDING", () => {
+    const state = harness();
+    installRecovery(state.store, RECOVERY_ONE);
+    const authority = createSessionAuthority(state.store, {
+      projectId: PROJECT_ID,
+      clock: () => NOW,
+    });
+    createPrincipal(authority);
+    const key = clientKey();
+    const opened = authority.openSession(openRequest(openFacts("recovery-current"), key));
+    expect(opened).toMatchObject({
+      authority: {
+        credential: {
+          keyEpochRef: RECOVERY_ONE.keyEpoch,
+          recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+        },
+        session: {
+          keyEpochRef: RECOVERY_ONE.keyEpoch,
+          recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+        },
+      },
+      ok: true,
+    });
+    if (!opened.ok) throw new Error("expected recovery-bound opening to succeed");
+
+    const priorProof = authenticationRequest(opened.authority as AuthorityFacts, key, {
+      nonce: "7a".repeat(16),
+      requestId: "request-recovery-prior",
+    });
+    installRecovery(state.store, RECOVERY_TWO);
+    expect(authority.authenticate(priorProof)).toEqual({
+      code: "SESSION_REPLAYED",
+      layer: "RECOVERY_BINDING",
+      ok: false,
+    });
+  });
+
+  it("keeps a legacy SessionAuthorityOpened event without recovery refs unreadable", () => {
+    const state = harness();
+    installRecovery(state.store, RECOVERY_ONE);
+    const key = clientKey();
+    const sessionId = "session-legacy-unbound";
+    const committed = commitAuthorityDecision(state.store, {
+      aggregateId: sessionAggregateId(sessionId),
+      commandId: "command-legacy-unbound",
+      commandKind: "OPEN_SESSION",
+      correlationId: "correlation-legacy-unbound",
+      decidedAt: new Date(NOW).toISOString(),
+      eventPayload: {
+        projectId: PROJECT_ID,
+        principalId: PRINCIPAL_ID,
+        principalKind: "AGENT",
+        profileRevisionId: PROFILE_REVISION_ID,
+        sessionId,
+        credentialId: "credential-legacy-unbound",
+        clientKeyId: key.clientKeyId,
+        publicKeySpkiHex: key.publicKeySpkiHex,
+        transportIds: TRANSPORT_IDS,
+        createdAt: NOW,
+        expiresAt: NOW + SESSION_TTL_MS,
+        absoluteExpiresAt: NOW + SESSION_ABSOLUTE_LIFETIME_MS,
+      },
+      eventType: "SessionAuthorityOpened",
+      expectedVersion: 0,
+      principalId: PRINCIPAL_ID,
+      projectId: PROJECT_ID,
+      requestFacts: { legacy: true },
+      resultFacts: { legacy: true },
+    });
+    expect(committed).toMatchObject({ ok: true });
+
+    const authority = createSessionAuthority(state.store, {
+      projectId: PROJECT_ID,
+      clock: () => NOW,
+    });
+    expect(authority.readSessionAuthority(sessionId)).toEqual({
+      code: "SESSION_AUTHORITY_UNREADABLE",
+      status: "UNKNOWN",
+    });
+  });
+});
+
 describe("concrete authentication and durable replay", () => {
   it("returns frozen core facts and allows the same request only with a fresh nonce", () => {
     const state = harness();
@@ -703,6 +856,8 @@ describe("concrete authentication and durable replay", () => {
         sessionId: opened.authority.session.sessionId,
         clientKeyId: opened.key.clientKeyId,
         transportId: TRANSPORT_IDS[0],
+        recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+        keyEpochRef: RECOVERY_ONE.keyEpoch,
       },
       sessionVersion: 1,
       authorityDigest: expect.stringMatching(/^[0-9a-f]{64}$/),
@@ -811,6 +966,8 @@ describe("concrete authentication and durable replay", () => {
     const challenge = canonicalSessionProofBytes({
       principalId: request.principalId,
       projectId: request.projectId,
+      recoveryIncarnationRef: opened.authority.session.recoveryIncarnationRef,
+      keyEpochRef: opened.authority.session.keyEpochRef,
       sessionId: request.sessionId,
       credentialId: request.credentialId,
       generation: request.generation,
@@ -843,7 +1000,7 @@ describe("concrete authentication and durable replay", () => {
   });
 });
 
-describe("seven-layer authentication refusal matrix", () => {
+describe("eight-layer authentication refusal matrix", () => {
   it("covers every core layer exactly with its stable code and no session-authority mutation", () => {
     const state = harness();
     let now = NOW;
@@ -885,6 +1042,7 @@ describe("seven-layer authentication refusal matrix", () => {
 
     const transport = openAuthority(authority, "matrix-transport");
     const expired = openAuthority(authority, "matrix-expired");
+    const recovery = openAuthority(authority, "matrix-recovery");
     const rows = [
       {
         code: "AUTHENTICATION_FAILED",
@@ -948,6 +1106,18 @@ describe("seven-layer authentication refusal matrix", () => {
         }),
       ),
     });
+    installRecovery(state.store, RECOVERY_TWO);
+    rows.push({
+      code: "SESSION_REPLAYED",
+      layer: "RECOVERY_BINDING",
+      result: authority.authenticate(
+        authenticationRequest(recovery.authority, recovery.key, {
+          issuedAt: now,
+          nonce: "5a".repeat(16),
+          requestId: "request-prior-recovery",
+        }),
+      ),
+    });
 
     expect(rows).toHaveLength(SESSION_AUTH_LAYERS.length);
     expect(rows.map((row) => row.layer).sort()).toEqual([...SESSION_AUTH_LAYERS].sort());
@@ -961,6 +1131,7 @@ describe("seven-layer authentication refusal matrix", () => {
     expect(state.store.readEvents(closed.result.receipt.aggregateId)).toHaveLength(2);
     expect(state.store.readEvents(transport.result.receipt.aggregateId)).toHaveLength(1);
     expect(state.store.readEvents(expired.result.receipt.aggregateId)).toHaveLength(1);
+    expect(state.store.readEvents(recovery.result.receipt.aggregateId)).toHaveLength(1);
   });
 });
 
@@ -1023,11 +1194,18 @@ describe("renew, rotate, close, and active reads", () => {
       ok: true,
       revokedCredential: { ...authFirst.authority.credential, revoked: true },
       authority: {
-        session: { generation: 2, clientKeyId: authFirstNextKey.clientKeyId },
+        session: {
+          generation: 2,
+          clientKeyId: authFirstNextKey.clientKeyId,
+          recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+          keyEpochRef: RECOVERY_ONE.keyEpoch,
+        },
         credential: {
           credentialId: `${authFirst.authority.credential.credentialId}-next`,
           generation: 2,
           revoked: false,
+          recoveryIncarnationRef: RECOVERY_ONE.incarnation,
+          keyEpochRef: RECOVERY_ONE.keyEpoch,
         },
         publicKey: {
           algorithm: "Ed25519",

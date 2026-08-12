@@ -10,6 +10,8 @@ import {
   OPENER,
   PROJECT_ID,
   SESSION_ID,
+  TEST_RECOVERY_INCARNATION_REF,
+  TEST_RECOVERY_KEY_EPOCH_REF,
   closeStores,
   commitRaw,
   envelope,
@@ -17,6 +19,7 @@ import {
   openDefaultSession,
   openPayload,
   openStore,
+  openUnboundStore,
   send,
 } from "./session-test-fixtures.js";
 
@@ -64,13 +67,23 @@ describe("session.open", () => {
       capabilities: ["review.submit", "work.claim"],
       credentialSha256: hashOf(CREDENTIAL),
       expiresAt: EXPIRES_AT,
+      keyEpochRef: TEST_RECOVERY_KEY_EPOCH_REF,
       principalId: OPENER,
+      recoveryIncarnationRef: TEST_RECOVERY_INCARNATION_REF,
       sessionId: SESSION_ID,
       status: "OPEN",
       version: 1,
     });
     // The plaintext credential must appear NOWHERE in the durably stored result.
     expect(Buffer.from(outcome.decision.resultBytes).toString("utf8")).not.toContain(CREDENTIAL);
+  });
+
+  it("refuses opening when the selected recovery binding is unavailable", () => {
+    const store = openUnboundStore();
+    expect(refusalOf(send(store, envelope("session.open", 0, openPayload())))).toEqual({
+      code: "SESSION_RECOVERY_BINDING_UNAVAILABLE",
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
   });
 
   it("replays the same commandId as REPLAYED without a second decision", () => {

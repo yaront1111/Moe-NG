@@ -90,7 +90,11 @@ export const WIRE_PROTOCOL_VERSION =
 export type WireProtocolVersion = typeof WIRE_PROTOCOL_VERSION;
 
 /** The three verdicts kept distinct: a caller we do not know is not a caller we deny. */
-export type AuthVerdict = "AUTHENTICATED" | "UNAUTHENTICATED" | "UNAUTHORIZED";
+export type AuthVerdict =
+  | "AUTHENTICATED"
+  | "REFUSED"
+  | "UNAUTHENTICATED"
+  | "UNAUTHORIZED";
 
 export interface AuthenticatedPrincipal {
   readonly capabilities: readonly string[];
@@ -100,6 +104,7 @@ export interface AuthenticatedPrincipal {
 
 export type AuthenticationResult =
   | { readonly principal: AuthenticatedPrincipal; readonly verdict: "AUTHENTICATED" }
+  | { readonly refusal: PortRefusal; readonly verdict: "REFUSED" }
   | { readonly verdict: "UNAUTHENTICATED" };
 
 /**
@@ -206,7 +211,7 @@ export interface HttpPortRefused {
   readonly ok: false;
   readonly outcome: "PORT_REFUSED";
   readonly refusal: PortRefusal;
-  readonly stage: "DISPATCH";
+  readonly stage: "AUTHENTICATE" | "DISPATCH";
 }
 
 export interface HttpAccepted {

@@ -7,6 +7,7 @@ import type {
   AuthenticationResult,
   Authenticator,
 } from "../http/http-contract.js";
+import { readCurrentRecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
 import { readSessionLedger } from "./session-read-model.js";
 import type { SessionRecord } from "./session-read-model.js";
 
@@ -43,6 +44,16 @@ const UNAUTHENTICATED: AuthenticationResult = Object.freeze({
   verdict: "UNAUTHENTICATED" as const,
 });
 
+const RECOVERY_REPLAYED: AuthenticationResult = Object.freeze({
+  refusal: Object.freeze({
+    code: "SESSION_REPLAYED",
+    detail: "The session belongs to a prior recovery incarnation or key epoch.",
+    httpStatus: 401,
+    layer: "IDENTITY",
+  }),
+  verdict: "REFUSED" as const,
+});
+
 function sha256(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
 }
@@ -77,10 +88,9 @@ function authenticated(
 /**
  * Builds the seam's `Authenticator` over the durable session ledger.
  *
- * Refusal is silent by contract — the seam's `AuthenticationResult` has no reason arm, so a
- * wrong credential, a closed session, an expired session and a corrupt ledger all answer the
- * same `UNAUTHENTICATED`. That is the right amount of information for an unauthenticated caller;
- * the DISTINCTIONS live in the durable command surface, which tests pin by stable reason code.
+ * Unknown, malformed, closed, expired, and unreadable credentials stay silent. Only a
+ * structurally valid credential bound to an earlier recovery identity receives the fixed typed
+ * replay refusal, allowing ingress to preserve that identity-layer fact without exposing input.
  */
 export function createSessionAuthenticator(
   store: SqliteEventStore,
@@ -89,6 +99,7 @@ export function createSessionAuthenticator(
   const authenticate = (credential: string | null): AuthenticationResult => {
     if (credential === null || credential.length === 0) return UNAUTHENTICATED;
     if (constantTimeEquals(credential, config.operatorCredential)) {
+      if (readCurrentRecoveryAuthenticationBinding(store) === null) return UNAUTHENTICATED;
       return authenticated(
         config.operatorCapabilities,
         config.operatorPrincipalId,
@@ -110,6 +121,14 @@ export function createSessionAuthenticator(
       match = session;
     }
     if (match === null || match.status !== "OPEN") return UNAUTHENTICATED;
+    const current = readCurrentRecoveryAuthenticationBinding(store);
+    if (current === null) return UNAUTHENTICATED;
+    if (
+      match.recoveryIncarnationRef !== current.recoveryIncarnationRef
+      || match.keyEpochRef !== current.keyEpochRef
+    ) {
+      return RECOVERY_REPLAYED;
+    }
     const expiresAtMs = Date.parse(match.expiresAt);
     // Exclusive expiry, matching @moe/core's `isSessionUsableAt`: unusable at exactly expiresAt.
     if (!Number.isFinite(expiresAtMs) || config.clock() >= expiresAtMs) return UNAUTHENTICATED;

@@ -8,7 +8,7 @@ import type {
   CoordinationAddress, CoordinationEndpoint, CoordinationEnvelopeKind, CoordinationRole,
   CoordinationSendResult,
 } from "@moe/coordination";
-import { SqliteEventStore } from "@moe/store";
+import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -28,6 +28,20 @@ const TRANSPORT_ID = "coordination.v1";
 const TRANSPORT_IDS = Object.freeze([TRANSPORT_ID]);
 const NOW = Date.parse("2026-08-11T09:00:00.000Z");
 const TTL_MS = 3_600_000;
+const RECOVERY_INCARNATION_REF = "61".repeat(32);
+const RECOVERY_KEY_EPOCH_REF = "62".repeat(32);
+
+function installRecovery(store: SqliteEventStore): void {
+  const installed = store.installRecoveryBinding({
+    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+    incarnationRef: RECOVERY_INCARNATION_REF,
+    installedAt: "2026-08-12T00:00:00.000Z",
+    keyEpochRef: RECOVERY_KEY_EPOCH_REF,
+    payload: new TextEncoder().encode("coordination-recovery-binding"),
+    slot: "ACTIVE",
+  });
+  if (!installed.ok) throw new Error(`recovery setup failed: ${installed.code}`);
+}
 
 const directories: string[] = [];
 const stores: SqliteEventStore[] = [];
@@ -51,6 +65,7 @@ function harness(): Harness {
   directories.push(directory);
   const path = join(directory, "store.sqlite");
   const opened = SqliteEventStore.openForProject(path, PROJECT_ID);
+  installRecovery(opened);
   stores.push(opened);
   const state: Harness = {
     adapter: undefined as unknown as CoordinationAdapter,
@@ -117,6 +132,8 @@ interface OpenedSession {
   readonly generation: number;
   readonly key: ClientKey;
   readonly sessionId: string;
+  readonly recoveryIncarnationRef: string;
+  readonly keyEpochRef: string;
 }
 
 function createPrincipal(state: Harness): void {
@@ -146,6 +163,7 @@ function openSession(state: Harness, suffix: string): OpenedSession {
     clientKeyId: key.clientKeyId, credentialId, generation: 1, issuedAt: state.now, nonce,
     principalId: PRINCIPAL_ID, projectId: PROJECT_ID, requestDigest, requestId: commandId,
     sessionId, transportId: TRANSPORT_ID,
+    recoveryIncarnationRef: RECOVERY_INCARNATION_REF, keyEpochRef: RECOVERY_KEY_EPOCH_REF,
   });
   const opened = state.adapter.sessions.openSession({
     clientKeyId: key.clientKeyId, commandId, correlationId: `correlation-open-${suffix}`,
@@ -157,6 +175,8 @@ function openSession(state: Harness, suffix: string): OpenedSession {
   return Object.freeze({
     credentialId, expiresAt: opened.authority.session.expiresAt,
     generation: opened.authority.session.generation, key, sessionId,
+    recoveryIncarnationRef: opened.authority.session.recoveryIncarnationRef,
+    keyEpochRef: opened.authority.session.keyEpochRef,
   });
 }
 
@@ -196,7 +216,8 @@ function presentationOf(
     clientKeyId: session.key.clientKeyId, credentialId: session.credentialId,
     generation: session.generation, issuedAt: state.now, nonce, principalId: PRINCIPAL_ID,
     projectId: PROJECT_ID, requestDigest, requestId, sessionId: session.sessionId,
-    transportId: TRANSPORT_ID,
+    transportId: TRANSPORT_ID, recoveryIncarnationRef: session.recoveryIncarnationRef,
+    keyEpochRef: session.keyEpochRef,
   });
   return {
     clientKeyId: session.key.clientKeyId, credentialId: session.credentialId,

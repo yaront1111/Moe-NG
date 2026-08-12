@@ -8,6 +8,7 @@
  */
 
 import { createHash, createPublicKey, verify } from "node:crypto";
+import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import {
   SESSION_AUTHORITY_MAX_ID_BYTES,
@@ -33,7 +34,8 @@ const MAX_CANONICAL_DEPTH = 8;
 
 /** The exact, ordered v1 challenge fields. Reordering them changes every signature. */
 const CHALLENGE_ORDER = [
-  "principalId", "projectId", "sessionId", "credentialId", "generation",
+  "principalId", "projectId", "recoveryIncarnationRef", "keyEpochRef",
+  "sessionId", "credentialId", "generation",
   "clientKeyId", "transportId", "requestId", "requestDigest", "issuedAt", "nonce",
 ] as const;
 
@@ -286,9 +288,10 @@ export function readPresentedAuthentication(
 export function presentedChallenge(
   request: PresentedAuthentication,
   proof: SessionProof,
+  binding: RecoveryAuthenticationBinding,
 ): SessionProofChallengeFields {
   const { proof: presented, ...fields } = request;
-  return { ...fields, issuedAt: proof.issuedAt, nonce: proof.nonce };
+  return { ...fields, ...binding, issuedAt: proof.issuedAt, nonce: proof.nonce };
 }
 
 /** Scopes are accepted exactly as presented: already sorted, unique, and bounded. */

@@ -13,11 +13,14 @@ import {
 } from "./identity-session.js";
 
 const PRINCIPAL = { principalId: "p-1", kind: "HUMAN", profileRevisionId: "pr-1" };
+const RECOVERY = { recoveryIncarnationRef: "a".repeat(64), keyEpochRef: "b".repeat(64) };
 const SESSION = {
+  ...RECOVERY,
   sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1",
   transportIds: ["local-ipc"], status: "ACTIVE", expiresAt: 1_000, generation: 1,
 };
 const GRANT = {
+  ...RECOVERY,
   capabilityId: "c-1", principalId: "p-1", projectId: "proj-1", commandKind: "goal.create",
   targetAggregateId: "agg-1", transportId: "local-ipc", requiresRecentStepUp: false,
 };
@@ -127,6 +130,7 @@ describe("session usability boundaries", () => {
 describe("credential rotation", () => {
   const session = createSession(SESSION)!;
   const credential = createCredential({
+    ...RECOVERY,
     credentialId: "cr-1",
     sessionId: "s-1",
     generation: 1,
@@ -171,7 +175,7 @@ describe("credential rotation", () => {
   ] as [Record<string, unknown>, string, string][])(
     "refuses rotation when %o with next id %s (%s)",
     (overrides, nextId) => {
-      const base = { credentialId: "cr-1", sessionId: "s-1", generation: 1, revoked: false };
+      const base = { ...RECOVERY, credentialId: "cr-1", sessionId: "s-1", generation: 1, revoked: false };
       const subject = createCredential({ ...base, ...overrides })!;
       expect(rotateCredential(session, subject, nextId)).toBeNull();
     },
@@ -217,6 +221,7 @@ describe("capability canonicalization", () => {
 describe("capability matching is exact", () => {
   const grants = canonicalizeCapabilities([GRANT])!;
   const query = {
+    ...RECOVERY,
     principalId: "p-1",
     projectId: "proj-1",
     commandKind: "goal.create",
@@ -234,6 +239,8 @@ describe("capability matching is exact", () => {
     ["commandKind", "goal.close"],
     ["targetAggregateId", "agg-2"],
     ["transportId", "public-http"],
+    ["recoveryIncarnationRef", "c".repeat(64)],
+    ["keyEpochRef", "d".repeat(64)],
   ])("denies when %s differs", (field, value) => {
     expect(matchCapability(grants, { ...query, [field]: value })).toBeNull();
   });

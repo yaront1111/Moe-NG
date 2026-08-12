@@ -61,6 +61,7 @@ function authentication(credential: string | null): AuthenticationResult {
 }
 
 async function start(options: {
+  readonly authenticationResult?: AuthenticationResult;
   readonly result?: ReadDocumentWorkDossierResult;
   readonly withPort?: boolean;
 } = {}): Promise<Harness> {
@@ -72,7 +73,7 @@ async function start(options: {
     authenticator: {
       authenticate: (credential) => {
         authCalls.count += 1;
-        return authentication(credential);
+        return options.authenticationResult ?? authentication(credential);
       },
     },
     decisions: {
@@ -207,6 +208,35 @@ it.each([null, "wrong-credential", "stale-session"])(
     }
   },
 );
+
+it("preserves a typed recovery replay refusal on the authenticated read seam", async () => {
+  const refusal = Object.freeze({
+    code: "SESSION_REPLAYED",
+    detail: "The session belongs to a prior recovery incarnation or key epoch.",
+    httpStatus: 401,
+    layer: "IDENTITY",
+  });
+  const harness = await start({
+    authenticationResult: Object.freeze({ refusal, verdict: "REFUSED" as const }),
+  });
+  try {
+    expect(await send(harness.listener, { body: Buffer.from([0x7b, 0xff]) })).toStrictEqual({
+      body: {
+        httpStatus: 401,
+        ok: false,
+        outcome: "PORT_REFUSED",
+        refusal,
+        stage: "AUTHENTICATE",
+      },
+      status: 401,
+    });
+    expect(harness.portCalls).toStrictEqual([]);
+    expect(harness.decisionCalls.count).toBe(0);
+    expect(harness.registryCalls.count).toBe(0);
+  } finally {
+    await harness.listener.close();
+  }
+});
 
 it("checks protocol compatibility before decoding the body", async () => {
   const harness = await start();

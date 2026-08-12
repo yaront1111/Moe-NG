@@ -1,8 +1,17 @@
 import {
+  createCredential,
+  createPrincipal,
+  createSession,
   isCurrentGeneration,
   isSessionUsableAt,
 } from "./identity-session.js";
 import type { Credential, Principal, Session } from "./identity-session.js";
+import {
+  createRecoveryAuthenticationBinding,
+  sameRecoveryAuthenticationBinding,
+  snapshotRecoveryAuthenticationBindings,
+} from "./recovery-authentication-binding.js";
+import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
 
 export const SESSION_AUTH_LAYERS = Object.freeze([
   "BINDING",
@@ -10,6 +19,7 @@ export const SESSION_AUTH_LAYERS = Object.freeze([
   "REPLAY",
   "GENERATION",
   "SESSION_STATE",
+  "RECOVERY_BINDING",
   "EXPIRY",
   "TRANSPORT",
 ] as const);
@@ -35,6 +45,8 @@ export interface ProofChallenge {
   readonly requestDigest: string;
   readonly credentialId: string;
   readonly clientKeyId: string;
+  readonly recoveryIncarnationRef: string;
+  readonly keyEpochRef: string;
 }
 
 export type ReplayOutcome = "FRESH" | "REPLAYED";
@@ -50,11 +62,13 @@ export interface SessionAuthenticationInput {
   readonly requestDigest: string;
   readonly presentedCredentialId: string;
   readonly proof: PresentedProof | null;
+  readonly currentRecoveryBinding: RecoveryAuthenticationBinding | null;
+  readonly capabilityRecoveryCandidates: readonly RecoveryAuthenticationBinding[];
   readonly verifyProof: (challenge: ProofChallenge) => boolean;
   readonly checkReplay: (challenge: ProofChallenge) => ReplayOutcome;
 }
 
-export interface AuthenticatedSessionFacts {
+export interface AuthenticatedSessionFacts extends RecoveryAuthenticationBinding {
   readonly principalId: string;
   readonly principalKind: string;
   readonly profileRevisionId: string;
@@ -79,48 +93,24 @@ interface BoundSession {
   readonly requestDigest: string;
   readonly verifyProof: SessionAuthenticationInput["verifyProof"];
   readonly checkReplay: SessionAuthenticationInput["checkReplay"];
+  readonly currentRecoveryBinding: RecoveryAuthenticationBinding;
+  readonly capabilityRecoveryCandidates: readonly RecoveryAuthenticationBinding[];
 }
 
 function isNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function snapshotRecords(
-  principal: Principal,
-  session: Session,
-  credential: Credential,
-): Pick<BoundSession, "principal" | "session" | "credential"> {
-  const transportIds = session.transportIds;
-  if (!Array.isArray(transportIds)) throw new TypeError("invalid session transports");
-  return Object.freeze({
-    principal: Object.freeze({
-      principalId: principal.principalId,
-      kind: principal.kind,
-      profileRevisionId: principal.profileRevisionId,
-    }),
-    session: Object.freeze({
-      sessionId: session.sessionId,
-      principalId: session.principalId,
-      profileRevisionId: session.profileRevisionId,
-      clientKeyId: session.clientKeyId,
-      transportIds: Object.freeze([...transportIds]),
-      status: session.status,
-      expiresAt: session.expiresAt,
-      generation: session.generation,
-    }),
-    credential: Object.freeze({
-      credentialId: credential.credentialId,
-      sessionId: credential.sessionId,
-      generation: credential.generation,
-      revoked: credential.revoked,
-    }),
-  });
-}
-
 function snapshotBindings(input: SessionAuthenticationInput): BoundSession | null {
-  const rawPrincipal = input.principal;
-  const rawSession = input.session;
-  const rawCredential = input.credential;
+  const principal = createPrincipal(input.principal);
+  const session = createSession(input.session);
+  const credential = createCredential(input.credential);
+  const currentRecoveryBinding = createRecoveryAuthenticationBinding(
+    input.currentRecoveryBinding,
+  );
+  const capabilityRecoveryCandidates = snapshotRecoveryAuthenticationBindings(
+    input.capabilityRecoveryCandidates,
+  );
   const proof = input.proof;
   const projectId = input.projectId;
   const transportId = input.transportId;
@@ -128,18 +118,15 @@ function snapshotBindings(input: SessionAuthenticationInput): BoundSession | nul
   const requestId = input.requestId;
   const requestDigest = input.requestDigest;
   const presentedCredentialId = input.presentedCredentialId;
-  if (rawPrincipal === null || rawSession === null || rawCredential === null) return null;
-  const { principal, session, credential } = snapshotRecords(
-    rawPrincipal,
-    rawSession,
-    rawCredential,
-  );
+  if (principal === null || session === null || credential === null) return null;
+  if (currentRecoveryBinding === null || capabilityRecoveryCandidates === null) return null;
   if (proof === null || typeof proof !== "object") return null;
   if (!Number.isSafeInteger(now)) return null;
   if (!isNonEmpty(projectId) || !isNonEmpty(transportId)) return null;
   if (!isNonEmpty(requestId) || !isNonEmpty(requestDigest)) return null;
   if (!isNonEmpty(presentedCredentialId)) return null;
   if (credential.sessionId !== session.sessionId) return null;
+  if (!sameRecoveryAuthenticationBinding(session, credential)) return null;
   if (principal.principalId !== session.principalId) return null;
   if (principal.profileRevisionId !== session.profileRevisionId) return null;
   if (presentedCredentialId !== credential.credentialId) return null;
@@ -158,6 +145,8 @@ function snapshotBindings(input: SessionAuthenticationInput): BoundSession | nul
     requestDigest,
     verifyProof: input.verifyProof,
     checkReplay: input.checkReplay,
+    currentRecoveryBinding,
+    capabilityRecoveryCandidates,
   });
 }
 
@@ -186,6 +175,8 @@ function accept(bound: BoundSession): SessionAuthenticationResult {
   return Object.freeze({
     ok: true as const,
     facts: Object.freeze({
+      recoveryIncarnationRef: bound.currentRecoveryBinding.recoveryIncarnationRef,
+      keyEpochRef: bound.currentRecoveryBinding.keyEpochRef,
       principalId: bound.principal.principalId,
       principalKind: bound.principal.kind,
       profileRevisionId: bound.principal.profileRevisionId,
@@ -203,6 +194,8 @@ function authenticateBoundSession(bound: BoundSession): SessionAuthenticationRes
     requestDigest: bound.requestDigest,
     credentialId: bound.credential.credentialId,
     clientKeyId: bound.session.clientKeyId,
+    recoveryIncarnationRef: bound.session.recoveryIncarnationRef,
+    keyEpochRef: bound.session.keyEpochRef,
   });
   if (!observeProof(bound, challenge)) return refuse("AUTHENTICATION_FAILED", "PROOF");
   const replay = observeReplay(bound, challenge);
@@ -212,6 +205,18 @@ function authenticateBoundSession(bound: BoundSession): SessionAuthenticationRes
     return refuse("SESSION_REPLAYED", "GENERATION");
   }
   if (bound.session.status !== "ACTIVE") return refuse("SESSION_REPLAYED", "SESSION_STATE");
+  if (!sameRecoveryAuthenticationBinding(bound.session, bound.currentRecoveryBinding)) {
+    return refuse("SESSION_REPLAYED", "RECOVERY_BINDING");
+  }
+  const candidates = bound.capabilityRecoveryCandidates;
+  if (
+    candidates.length > 0 &&
+    !candidates.some((candidate) =>
+      sameRecoveryAuthenticationBinding(candidate, bound.currentRecoveryBinding)
+    )
+  ) {
+    return refuse("SESSION_REPLAYED", "RECOVERY_BINDING");
+  }
   if (!isSessionUsableAt(bound.session, bound.now)) return refuse("SESSION_EXPIRED", "EXPIRY");
   if (!bound.session.transportIds.includes(bound.transportId)) {
     return refuse("CAPABILITY_DENIED", "TRANSPORT");

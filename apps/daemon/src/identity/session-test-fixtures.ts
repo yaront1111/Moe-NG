@@ -1,4 +1,4 @@
-import { SqliteEventStore } from "@moe/store";
+import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 
 import { credentialSha256Of } from "./session-authenticator.js";
 import { SESSION_SCHEMA_VERSION, decodeSessionRequestBytes } from "./session-contracts.js";
@@ -24,16 +24,36 @@ export const CREDENTIAL = "client-generated-bearer-credential-alpha";
 export const EXPIRES_AT = "2026-08-09T12:00:00.000Z";
 export const EXPIRES_AT_MS = Date.parse(EXPIRES_AT);
 export const CAPABILITIES = ["work.claim", "review.submit"] as const;
+export const TEST_RECOVERY_INCARNATION_REF = "71".repeat(32);
+export const TEST_RECOVERY_KEY_EPOCH_REF = "72".repeat(32);
 
 export const hashOf = credentialSha256Of;
 
 const encoder = new TextEncoder();
 const openStores: SqliteEventStore[] = [];
 
-export function openStore(): SqliteEventStore {
+export function openUnboundStore(): SqliteEventStore {
   const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
   openStores.push(store);
   return store;
+}
+
+export function openStore(): SqliteEventStore {
+  const store = openUnboundStore();
+  installTestRecoveryBinding(store);
+  return store;
+}
+
+export function installTestRecoveryBinding(store: SqliteEventStore): void {
+  const installed = store.installRecoveryBinding({
+    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+    incarnationRef: TEST_RECOVERY_INCARNATION_REF,
+    installedAt: "2026-08-12T00:00:00.000Z",
+    keyEpochRef: TEST_RECOVERY_KEY_EPOCH_REF,
+    payload: new TextEncoder().encode("session-test-recovery-binding"),
+    slot: "ACTIVE",
+  });
+  if (!installed.ok) throw new Error(`test recovery install failed: ${installed.code}`);
 }
 
 export function closeStores(): void {

@@ -1,3 +1,9 @@
+import {
+  createRecoveryAuthenticationBinding,
+  sameRecoveryAuthenticationBinding,
+} from "./recovery-authentication-binding.js";
+import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+
 /**
  * Daemon-owned identity records.
  *
@@ -18,7 +24,7 @@ export interface Principal {
   readonly profileRevisionId: string;
 }
 
-export interface Session {
+export interface Session extends RecoveryAuthenticationBinding {
   readonly sessionId: string;
   readonly principalId: string;
   readonly profileRevisionId: string;
@@ -29,7 +35,7 @@ export interface Session {
   readonly generation: number;
 }
 
-export interface Credential {
+export interface Credential extends RecoveryAuthenticationBinding {
   readonly credentialId: string;
   readonly sessionId: string;
   readonly generation: number;
@@ -46,8 +52,12 @@ const PRINCIPAL_KEYS = ["principalId", "kind", "profileRevisionId"] as const;
 const SESSION_KEYS = [
   "sessionId", "principalId", "profileRevisionId", "clientKeyId",
   "transportIds", "status", "expiresAt", "generation",
+  "recoveryIncarnationRef", "keyEpochRef",
 ] as const;
-const CREDENTIAL_KEYS = ["credentialId", "sessionId", "generation", "revoked"] as const;
+const CREDENTIAL_KEYS = [
+  "credentialId", "sessionId", "generation", "revoked",
+  "recoveryIncarnationRef", "keyEpochRef",
+] as const;
 
 function isId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -78,7 +88,9 @@ function readExact(
     }
     const copy: Record<string, unknown> = {};
     for (const key of keys) {
-      copy[key] = (value as Record<string, unknown>)[key];
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      copy[key] = descriptor.value;
     }
     return copy;
   } catch {
@@ -101,9 +113,23 @@ export function createPrincipal(value: unknown): Principal | null {
 
 /** Sorted and deduplicated so two equivalent sessions compare identically. */
 function readTransports(value: unknown): readonly string[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
-  if (!value.every(isId)) return null;
-  return Object.freeze([...new Set(value as string[])].sort());
+  try {
+    if (!Array.isArray(value) || value.length === 0) return null;
+    if (Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
+    const keys = Object.keys(value);
+    if (keys.length !== value.length) return null;
+    const transports: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (keys[index] !== String(index)) return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      if (!isId(descriptor.value)) return null;
+      transports.push(descriptor.value);
+    }
+    return Object.freeze([...new Set(transports)].sort());
+  } catch {
+    return null;
+  }
 }
 
 export function createSession(value: unknown): Session | null {
@@ -116,7 +142,13 @@ export function createSession(value: unknown): Session | null {
   if (!(SESSION_STATUSES as readonly unknown[]).includes(raw.status)) return null;
   if (typeof raw.expiresAt !== "number" || !Number.isSafeInteger(raw.expiresAt)) return null;
   if (raw.expiresAt < 0 || !isPositiveInteger(raw.generation)) return null;
+  const recovery = createRecoveryAuthenticationBinding({
+    recoveryIncarnationRef: raw.recoveryIncarnationRef,
+    keyEpochRef: raw.keyEpochRef,
+  });
+  if (recovery === null) return null;
   return Object.freeze({
+    ...recovery,
     sessionId: raw.sessionId,
     principalId: raw.principalId,
     profileRevisionId: raw.profileRevisionId,
@@ -133,7 +165,13 @@ export function createCredential(value: unknown): Credential | null {
   if (raw === null) return null;
   if (!isId(raw.credentialId) || !isId(raw.sessionId)) return null;
   if (!isPositiveInteger(raw.generation) || typeof raw.revoked !== "boolean") return null;
+  const recovery = createRecoveryAuthenticationBinding({
+    recoveryIncarnationRef: raw.recoveryIncarnationRef,
+    keyEpochRef: raw.keyEpochRef,
+  });
+  if (recovery === null) return null;
   return Object.freeze({
+    ...recovery,
     credentialId: raw.credentialId,
     sessionId: raw.sessionId,
     generation: raw.generation,
@@ -151,7 +189,8 @@ export function isCurrentGeneration(session: Session, credential: Credential): b
   return (
     credential.sessionId === session.sessionId &&
     credential.generation === session.generation &&
-    !credential.revoked
+    !credential.revoked &&
+    sameRecoveryAuthenticationBinding(session, credential)
   );
 }
 
@@ -174,6 +213,8 @@ export function rotateCredential(
     session: Object.freeze({ ...session, generation }),
     previous: Object.freeze({ ...credential, revoked: true }),
     current: Object.freeze({
+      recoveryIncarnationRef: session.recoveryIncarnationRef,
+      keyEpochRef: session.keyEpochRef,
       credentialId: nextCredentialId,
       sessionId: session.sessionId,
       generation,

@@ -25,8 +25,17 @@ export type {
   SessionStatus,
 } from "./identity-session.js";
 
-export { canonicalizeCapabilities, matchCapability } from "./identity-capability.js";
+export {
+  canonicalizeCapabilities,
+  matchCapability,
+} from "./identity-capability.js";
 export type { CapabilityGrant, CapabilityQuery } from "./identity-capability.js";
+
+export type {
+  KeyEpochRef,
+  RecoveryAuthenticationBinding,
+  RecoveryIncarnationRef,
+} from "./recovery-authentication-binding.js";
 
 export { authenticateSession, SESSION_AUTH_LAYERS } from "./authenticate-session.js";
 export type {

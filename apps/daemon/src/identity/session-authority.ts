@@ -3,7 +3,7 @@
  *
  * It composes the pure `@moe/core` session seam rather than restating its
  * refusal precedence: the daemon owns concrete Ed25519 verification and durable
- * replay evidence, and core owns the seven-layer decision. No caller can inject
+ * replay evidence, and core owns the eight-layer decision. No caller can inject
  * a positive verifier, replay, session, or capability answer, and this module
  * carries no command, recipient, effect, mailbox, or lifecycle authority.
  */
@@ -14,11 +14,7 @@ import {
 } from "@moe/core";
 import type { ProofChallenge, ReplayOutcome } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
-
-import {
-  SESSION_ABSOLUTE_LIFETIME_MS,
-  SESSION_TTL_MS,
-} from "./session-authority-contracts.js";
+import { SESSION_ABSOLUTE_LIFETIME_MS, SESSION_TTL_MS } from "./session-authority-contracts.js";
 import type {
   PrincipalMutationResult, ReplayReceipt, RotationResult, SessionAuthenticationOutcome,
   SessionAuthorityCode, SessionAuthorityEventType, SessionAuthorityLayer, SessionAuthorityOptions,
@@ -27,9 +23,8 @@ import type {
 } from "./session-authority-contracts.js";
 import {
   isBoundedId, isSessionDigest, isUnsignedSafeInteger, presentedChallenge, readExactRecord,
-  readPresentedAuthentication, readSessionProof, readTransportScopes,
-  sessionAuthorityRequestDigest, sessionClientKeyId, sessionReplayDigest,
-  verifySessionProofOverChallenge,
+  readPresentedAuthentication, readSessionProof, readTransportScopes, sessionAuthorityRequestDigest,
+  sessionClientKeyId, sessionReplayDigest, verifySessionProofOverChallenge,
 } from "./session-authority-protocol.js";
 import type { PresentedAuthentication } from "./session-authority-protocol.js";
 import {
@@ -37,10 +32,10 @@ import {
   readSessionFold, receiptOf, sessionAggregateId,
 } from "./session-authority-store.js";
 import type { AuthorityCommit, SessionFold } from "./session-authority-store.js";
-
+import { projectRecoveryAuthenticationBinding, readCurrentRecoveryAuthenticationBinding }
+  from "./recovery-authentication-binding.js";
 type MutationKind = "RENEW_SESSION" | "ROTATE_CREDENTIAL" | "CLOSE_SESSION";
 type Facts = Readonly<Record<string, unknown>>;
-
 interface AuthorizedMutation {
   readonly at: number;
   readonly commandId: string;
@@ -161,6 +156,8 @@ export function createSessionAuthority(
     if (sessionClientKeyId(publicKeySpkiHex) !== clientKeyId) return PROOF;
     const proof = readSessionProof(raw.proof, at);
     if (proof === null) return PROOF;
+    const recovery = readCurrentRecoveryAuthenticationBinding(store);
+    if (recovery === null) return BINDING;
     const { kind, profileRevisionId } = owner.principal;
     const expected = sessionAuthorityRequestDigest({
       kind: "OPEN_SESSION", projectId, principalId, profileRevisionId, sessionId, credentialId,
@@ -171,7 +168,7 @@ export function createSessionAuthority(
       principalId, projectId, sessionId, credentialId, generation: 1,
       clientKeyId, transportId, requestId: commandId, requestDigest, proof: raw.proof,
     });
-    const challenge = presentedChallenge(selfProof, proof);
+    const challenge = presentedChallenge(selfProof, proof, recovery);
     if (!verifySessionProofOverChallenge(publicKeySpkiHex, challenge, proof.signatureHex)) {
       return PROOF;
     }
@@ -183,6 +180,7 @@ export function createSessionAuthority(
         projectId, principalId, principalKind: kind, profileRevisionId, sessionId, credentialId,
         clientKeyId, publicKeySpkiHex, transportIds: scopes, createdAt: at,
         expiresAt: at + SESSION_TTL_MS, absoluteExpiresAt: at + SESSION_ABSOLUTE_LIFETIME_MS,
+        recoveryIncarnationRef: recovery.recoveryIncarnationRef, keyEpochRef: recovery.keyEpochRef,
       },
       eventType: "SessionAuthorityOpened",
       expectedVersion: 0,
@@ -210,6 +208,7 @@ export function createSessionAuthority(
     if (snapshot.principal.principalId !== request.principalId) return BINDING;
     const proof = readSessionProof(request.proof, at);
     if (proof === null) return PROOF;
+    const currentRecoveryBinding = readCurrentRecoveryAuthenticationBinding(store);
     // The session is durable, but its bound key is the one this credential was
     // issued against: a superseded generation must reach core's GENERATION
     // layer instead of being turned away as an unbound key.
@@ -217,6 +216,7 @@ export function createSessionAuthority(
     const credential = createCredential({
       credentialId: held.credentialId, sessionId: snapshot.session.sessionId,
       generation: held.generation, revoked: held.revoked,
+      recoveryIncarnationRef: held.recoveryIncarnationRef, keyEpochRef: held.keyEpochRef,
     });
     if (session === null || credential === null) return BINDING;
     const burned: { receipt: ReplayReceipt | null } = { receipt: null };
@@ -225,6 +225,7 @@ export function createSessionAuthority(
       projectId: request.projectId, transportId: request.transportId, now: at,
       requestId: request.requestId, requestDigest: request.requestDigest,
       presentedCredentialId: request.credentialId,
+      currentRecoveryBinding, capabilityRecoveryCandidates: [],
       proof: {
         credentialId: request.credentialId, commandId: request.requestId,
         requestDigest: request.requestDigest, clientKeyId: request.clientKeyId,
@@ -232,9 +233,11 @@ export function createSessionAuthority(
       verifyProof: (challenge: ProofChallenge): boolean =>
         challenge.credentialId === held.credentialId &&
         challenge.clientKeyId === held.clientKeyId &&
+        challenge.recoveryIncarnationRef === held.recoveryIncarnationRef &&
+        challenge.keyEpochRef === held.keyEpochRef &&
         verifySessionProofOverChallenge(
           held.publicKeySpkiHex,
-          presentedChallenge(request, proof),
+          presentedChallenge(request, proof, projectRecoveryAuthenticationBinding(challenge)),
           proof.signatureHex,
         ),
       checkReplay: (): ReplayOutcome => {
@@ -339,7 +342,11 @@ export function createSessionAuthority(
       nextClientKeyId, nextPublicKeySpkiHex,
     }));
     if (refused(authorized)) return authorized;
-    const challenge = presentedChallenge(authorized.request, authorized.proof);
+    const challenge = presentedChallenge(
+      authorized.request,
+      authorized.proof,
+      projectRecoveryAuthenticationBinding(authorized.fold.snapshot.session),
+    );
     if (!verifySessionProofOverChallenge(nextPublicKeySpkiHex, challenge, nextSignatureHex)) {
       return PROOF;
     }

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import { SqliteEventStore } from "@moe/store";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -26,6 +28,9 @@ const provider = createStoreDependencies({
   projectId: "proj-wrapper",
   storePath: join(directory, "store.db"),
 });
+const setupStore = SqliteEventStore.openForProject(join(directory, "store.db"), "proj-wrapper");
+installTestRecoveryBinding(setupStore);
+setupStore.close();
 
 afterAll(() => {
   provider.close();

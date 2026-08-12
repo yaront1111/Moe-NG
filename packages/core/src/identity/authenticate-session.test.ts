@@ -18,12 +18,15 @@ import {
   SESSION_AUTH_LAYERS as ROOT_SESSION_AUTH_LAYERS,
 } from "../index.js";
 
+const RECOVERY = { recoveryIncarnationRef: "a".repeat(64), keyEpochRef: "b".repeat(64) };
+
 const principal = createPrincipal({
   principalId: "p-1",
   kind: "HUMAN",
   profileRevisionId: "pr-1",
 })!;
 const session = createSession({
+  ...RECOVERY,
   sessionId: "s-1",
   principalId: "p-1",
   profileRevisionId: "pr-1",
@@ -34,6 +37,7 @@ const session = createSession({
   generation: 1,
 })!;
 const credential = createCredential({
+  ...RECOVERY,
   credentialId: "cr-1",
   sessionId: "s-1",
   generation: 1,
@@ -60,6 +64,8 @@ function input(
     requestDigest: "d".repeat(64),
     presentedCredentialId: "cr-1",
     proof,
+    currentRecoveryBinding: RECOVERY,
+    capabilityRecoveryCandidates: [],
     verifyProof: () => true,
     checkReplay: () => "FRESH",
     ...overrides,
@@ -83,8 +89,9 @@ const REFUSAL_CASES = Object.freeze([
   { name: "replay outcome unknown", overrides: { checkReplay: unknownReplay }, code: "AUTHENTICATION_FAILED", layer: "REPLAY" },
   { name: "replay guard throws", overrides: { checkReplay: () => { throw new Error("replay"); } }, code: "AUTHENTICATION_FAILED", layer: "REPLAY" },
   { name: "proof replayed", overrides: { checkReplay: () => "REPLAYED" }, code: "SESSION_REPLAYED", layer: "REPLAY" },
-  { name: "credential generation stale", overrides: { credential: createCredential({ credentialId: "cr-1", sessionId: "s-1", generation: 2, revoked: false }) }, code: "SESSION_REPLAYED", layer: "GENERATION" },
-  { name: "session closed", overrides: { session: createSession({ sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "CLOSED", expiresAt: 1_000, generation: 1 }) }, code: "SESSION_REPLAYED", layer: "SESSION_STATE" },
+  { name: "credential generation stale", overrides: { credential: createCredential({ ...RECOVERY, credentialId: "cr-1", sessionId: "s-1", generation: 2, revoked: false }) }, code: "SESSION_REPLAYED", layer: "GENERATION" },
+  { name: "session closed", overrides: { session: createSession({ ...RECOVERY, sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "CLOSED", expiresAt: 1_000, generation: 1 }) }, code: "SESSION_REPLAYED", layer: "SESSION_STATE" },
+  { name: "recovery binding stale", overrides: { currentRecoveryBinding: { ...RECOVERY, keyEpochRef: "c".repeat(64) } }, code: "SESSION_REPLAYED", layer: "RECOVERY_BINDING" },
   { name: "session expired", overrides: { now: 1_000 }, code: "SESSION_EXPIRED", layer: "EXPIRY" },
   { name: "transport unlisted", overrides: { transportId: "remote-http" }, code: "CAPABILITY_DENIED", layer: "TRANSPORT" },
 ] satisfies readonly RefusalCase[]);
@@ -104,7 +111,7 @@ const MALFORMED_SCALAR_CASES = Object.freeze([
 describe("session authentication refusals", () => {
   it("pins the generated case count and every declared layer", () => {
     expect(Object.isFrozen(REFUSAL_CASES)).toBe(true);
-    expect(REFUSAL_CASES).toHaveLength(10);
+    expect(REFUSAL_CASES).toHaveLength(11);
     expect([...new Set(REFUSAL_CASES.map(({ layer }) => layer))]).toEqual([
       ...SESSION_AUTH_LAYERS,
     ]);
@@ -197,6 +204,7 @@ describe("successful session authentication", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`unexpected ${result.code}`);
     expect(result.facts).toEqual({
+      ...RECOVERY,
       principalId: "p-1",
       principalKind: "HUMAN",
       profileRevisionId: "pr-1",
@@ -230,6 +238,7 @@ describe("successful session authentication", () => {
       layer: "PROOF",
     });
     expect(observed).toEqual({
+      ...RECOVERY,
       commandId: "request-1",
       requestDigest: "d".repeat(64),
       credentialId: "cr-1",

@@ -9,6 +9,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 
 const CREDENTIAL = "mcp-operator-credential";
@@ -23,6 +24,9 @@ const provider = createStoreDependencies({
   projectId: PROJECT,
   storePath,
 });
+const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
+installTestRecoveryBinding(setupStore);
+setupStore.close();
 const eventSource = SqliteEventStore.open(storePath);
 const database = new DatabaseSync(storePath);
 

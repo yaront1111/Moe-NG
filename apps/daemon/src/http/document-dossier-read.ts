@@ -2,7 +2,7 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 
 import type { ReadDocumentWorkDossierResult } from "../documents/document-work-service.js";
 import { authenticateHttpRequest } from "./http-adapter.js";
-import type { Authenticator, HttpRefused } from "./http-contract.js";
+import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 
 export const DOCUMENT_DOSSIER_PATH = "/documents/dossier/read" as const;
 
@@ -27,7 +27,7 @@ type DocumentDossierListenerCode =
 
 export type DocumentDossierReadDispatch =
   | {
-      readonly body: HttpRefused | ReadDocumentWorkDossierResult;
+      readonly body: HttpPortRefused | HttpRefused | ReadDocumentWorkDossierResult;
       readonly httpStatus: number;
       readonly kind: "REPLY";
     }
@@ -42,7 +42,7 @@ function listenerRefusal(code: DocumentDossierListenerCode): DocumentDossierRead
 
 function reply(
   httpStatus: number,
-  body: HttpRefused | ReadDocumentWorkDossierResult,
+  body: HttpPortRefused | HttpRefused | ReadDocumentWorkDossierResult,
 ): DocumentDossierReadDispatch {
   return Object.freeze({ body, httpStatus, kind: "REPLY" as const });
 }

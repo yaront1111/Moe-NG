@@ -8,8 +8,13 @@ import type {
   ProofChallenge,
   ReplayOutcome,
 } from "./authenticate-session.js";
-import { matchCapability } from "./identity-capability.js";
+import {
+  canonicalizeCapabilities,
+  matchCapability,
+  matchingCapabilityRecoveryBindings,
+} from "./identity-capability.js";
 import type { CapabilityGrant } from "./identity-capability.js";
+import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
 
 export type {
   PresentedProof,
@@ -27,13 +32,14 @@ export interface AuthenticateCommandInput {
   readonly transportId: string;
   readonly now: number;
   readonly proof: PresentedProof | null;
+  readonly currentRecoveryBinding: RecoveryAuthenticationBinding | null;
   readonly verifyProof: (challenge: ProofChallenge) => boolean;
   readonly checkReplay: (challenge: ProofChallenge) => ReplayOutcome;
   readonly recentStepUpAt: number | null;
 }
 
 /** Derived identity and scope facts only. Confers no business authority. */
-export interface AuthorizationContext {
+export interface AuthorizationContext extends RecoveryAuthenticationBinding {
   readonly principalId: string;
   readonly principalKind: string;
   readonly profileRevisionId: string;
@@ -71,6 +77,8 @@ function authorizeCapability(
     commandKind: input.envelope.commandKind,
     targetAggregateId: input.envelope.targetAggregateId,
     transportId: facts.transportId,
+    recoveryIncarnationRef: facts.recoveryIncarnationRef,
+    keyEpochRef: facts.keyEpochRef,
   });
   if (grant === null) return deny("CAPABILITY_DENIED", correlationId);
   if (grant.requiresRecentStepUp) {
@@ -82,6 +90,8 @@ function authorizeCapability(
   return Object.freeze({
     ok: true as const,
     context: Object.freeze({
+      recoveryIncarnationRef: facts.recoveryIncarnationRef,
+      keyEpochRef: facts.keyEpochRef,
       principalId: facts.principalId,
       principalKind: facts.principalKind,
       profileRevisionId: facts.profileRevisionId,
@@ -102,25 +112,40 @@ function authorizeCapability(
 export function authenticateCommand(
   input: AuthenticateCommandInput,
 ): AuthenticateCommandResult {
-  const correlationId = input.envelope?.correlationId ?? "";
-  const envelope = input.envelope;
-  if (typeof envelope !== "object" || envelope === null || input.capabilities === null) {
+  let correlationId = "";
+  try {
+    const envelope = input.envelope;
+    correlationId = envelope?.correlationId ?? "";
+    const capabilities = canonicalizeCapabilities(input.capabilities);
+    if (typeof envelope !== "object" || envelope === null || capabilities === null) {
+      return deny("AUTHENTICATION_FAILED", correlationId);
+    }
+    const candidates = matchingCapabilityRecoveryBindings(capabilities, {
+      principalId: input.principal?.principalId ?? "",
+      projectId: input.projectId,
+      commandKind: envelope.commandKind,
+      targetAggregateId: envelope.targetAggregateId,
+      transportId: input.transportId,
+    });
+    const authentication = authenticateSession({
+      principal: input.principal,
+      session: input.session,
+      credential: input.credential,
+      projectId: input.projectId,
+      transportId: input.transportId,
+      now: input.now,
+      requestId: envelope.commandId,
+      requestDigest: envelope.requestDigest,
+      presentedCredentialId: envelope.sessionCredential,
+      proof: input.proof,
+      currentRecoveryBinding: input.currentRecoveryBinding,
+      capabilityRecoveryCandidates: candidates,
+      verifyProof: input.verifyProof,
+      checkReplay: input.checkReplay,
+    });
+    if (!authentication.ok) return deny(authentication.code, correlationId);
+    return authorizeCapability(input, authentication.facts, capabilities, correlationId);
+  } catch {
     return deny("AUTHENTICATION_FAILED", correlationId);
   }
-  const authentication = authenticateSession({
-    principal: input.principal,
-    session: input.session,
-    credential: input.credential,
-    projectId: input.projectId,
-    transportId: input.transportId,
-    now: input.now,
-    requestId: envelope.commandId,
-    requestDigest: envelope.requestDigest,
-    presentedCredentialId: envelope.sessionCredential,
-    proof: input.proof,
-    verifyProof: input.verifyProof,
-    checkReplay: input.checkReplay,
-  });
-  if (!authentication.ok) return deny(authentication.code, correlationId);
-  return authorizeCapability(input, authentication.facts, input.capabilities, correlationId);
 }

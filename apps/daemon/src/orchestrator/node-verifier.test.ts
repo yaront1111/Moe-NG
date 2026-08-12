@@ -7,6 +7,7 @@ import { buildReviewPackage } from "@moe/review";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { runReviewCommand } from "../review/review-services.js";
@@ -32,6 +33,7 @@ const provider = createStoreDependencies({
 // Project-asserted handle: the clean-round seeds are durable WRITES.
 import { SqliteEventStore } from "@moe/store";
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
+installTestRecoveryBinding(store);
 
 afterAll(() => {
   store.close();

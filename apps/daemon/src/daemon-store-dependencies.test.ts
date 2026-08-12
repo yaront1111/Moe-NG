@@ -7,6 +7,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
+import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import {
   STORE_DEPENDENCIES_ENV_MISSING,
   createStoreDependencies,
@@ -30,6 +31,9 @@ const provider = createStoreDependencies({
   projectId: PROJECT,
   storePath,
 });
+const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
+installTestRecoveryBinding(setupStore);
+setupStore.close();
 const deps = provider.provide();
 
 afterAll(() => {

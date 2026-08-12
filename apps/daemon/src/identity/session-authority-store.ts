@@ -7,32 +7,24 @@
  */
 
 import { createCredential, createPrincipal, createSession } from "@moe/core";
-import type { Principal } from "@moe/core";
+import type { Principal, RecoveryAuthenticationBinding } from "@moe/core";
 import { DurableStoreError } from "@moe/store";
 import type { CommandDecisionKey, EffectsCommittedDecision } from "@moe/store";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
-import {
-  SESSION_AUTHORITY_SCHEMA_VERSION,
-  SESSION_PROOF_ALGORITHM,
-} from "./session-authority-contracts.js";
+import { SESSION_AUTHORITY_SCHEMA_VERSION, SESSION_PROOF_ALGORITHM }
+  from "./session-authority-contracts.js";
 import type {
-  MutationReceipt,
-  ReplayReceipt,
-  SessionAuthorityCode,
-  SessionAuthorityEventType,
-  SessionAuthorityRefusal,
-  SessionAuthoritySnapshot,
+  MutationReceipt, ReplayReceipt, SessionAuthorityCode, SessionAuthorityEventType,
+  SessionAuthorityRefusal, SessionAuthoritySnapshot,
 } from "./session-authority-contracts.js";
 import {
-  isBoundedId,
-  isCanonicalSessionPublicKey,
-  isSessionDigest,
-  isUnsignedSafeInteger,
+  isBoundedId, isCanonicalSessionPublicKey, isSessionDigest, isUnsignedSafeInteger,
   readExactRecord,
 } from "./session-authority-protocol.js";
+import { isRecoveryAuthenticationRef } from "./recovery-authentication-binding.js";
 
-export interface CredentialRecord {
+export interface CredentialRecord extends RecoveryAuthenticationBinding {
   readonly credentialId: string;
   readonly generation: number;
   readonly clientKeyId: string;
@@ -97,7 +89,7 @@ const UNKNOWN_REPLAY = Object.freeze({ outcome: "UNKNOWN" as const });
 const OPENED_KEYS = [
   "projectId", "principalId", "principalKind", "profileRevisionId", "sessionId",
   "credentialId", "clientKeyId", "publicKeySpkiHex", "transportIds", "createdAt",
-  "expiresAt", "absoluteExpiresAt",
+  "expiresAt", "absoluteExpiresAt", "recoveryIncarnationRef", "keyEpochRef",
 ] as const;
 const ROTATED_KEYS = ["credentialId", "generation", "clientKeyId", "publicKeySpkiHex"] as const;
 const PRINCIPAL_KEYS = ["principalId", "kind", "profileRevisionId"] as const;
@@ -152,11 +144,22 @@ interface Draft {
   generation: number;
 }
 
-function credentialOf(raw: Record<string, unknown>, generation: number): CredentialRecord | null {
+function credentialOf(
+  raw: Record<string, unknown>,
+  generation: number,
+  recovery?: RecoveryAuthenticationBinding,
+): CredentialRecord | null {
   const { clientKeyId, credentialId, publicKeySpkiHex } = raw;
   if (typeof credentialId !== "string" || typeof clientKeyId !== "string") return null;
   if (!isCanonicalSessionPublicKey(publicKeySpkiHex)) return null;
-  return { credentialId, generation, clientKeyId, publicKeySpkiHex, revoked: false };
+  const recoveryIncarnationRef = recovery?.recoveryIncarnationRef ?? raw.recoveryIncarnationRef;
+  const keyEpochRef = recovery?.keyEpochRef ?? raw.keyEpochRef;
+  if (!isRecoveryAuthenticationRef(recoveryIncarnationRef)) return null;
+  if (!isRecoveryAuthenticationRef(keyEpochRef)) return null;
+  return {
+    credentialId, generation, clientKeyId, publicKeySpkiHex, revoked: false,
+    recoveryIncarnationRef, keyEpochRef,
+  };
 }
 
 function openDraft(payload: Record<string, unknown>): Draft | null {
@@ -176,8 +179,8 @@ function openDraft(payload: Record<string, unknown>): Draft | null {
 function applyRotation(draft: Draft, payload: Record<string, unknown>): boolean {
   const raw = readExactRecord(payload, ROTATED_KEYS);
   if (raw === null || raw.generation !== draft.generation + 1) return false;
-  const next = credentialOf(raw, raw.generation);
   const previous = draft.credentials.at(-1);
+  const next = previous === undefined ? null : credentialOf(raw, raw.generation, previous);
   if (next === null || previous === undefined || previous.revoked) return false;
   draft.credentials[draft.credentials.length - 1] = { ...previous, revoked: true };
   draft.credentials.push(next);
@@ -214,10 +217,14 @@ function snapshotOf(draft: Draft, version: number): SessionAuthoritySnapshot | n
     sessionId, principalId, profileRevisionId,
     clientKeyId: current.clientKeyId, transportIds,
     status: draft.status, expiresAt: draft.expiresAt, generation: draft.generation,
+    recoveryIncarnationRef: current.recoveryIncarnationRef,
+    keyEpochRef: current.keyEpochRef,
   });
   const credential = createCredential({
     credentialId: current.credentialId, sessionId,
     generation: current.generation, revoked: current.revoked,
+    recoveryIncarnationRef: current.recoveryIncarnationRef,
+    keyEpochRef: current.keyEpochRef,
   });
   if (principal === null || session === null || credential === null) return null;
   if (!isBoundedId(projectId) || !isUnsignedSafeInteger(createdAt)) return null;

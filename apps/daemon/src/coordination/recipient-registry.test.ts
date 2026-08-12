@@ -7,7 +7,7 @@ import {
   COORDINATION_ROLES, coordinationCapability, createCoordinationService, createDurableMailbox,
 } from "@moe/coordination";
 import type { CoordinationAddress, CoordinationRole } from "@moe/coordination";
-import { SqliteEventStore } from "@moe/store";
+import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -29,6 +29,20 @@ const TRANSPORT_ID = "coordination.v1";
 const TRANSPORT_IDS = Object.freeze([TRANSPORT_ID]);
 const NOW = Date.parse("2026-08-10T12:00:00.000Z");
 const NOT_KNOWN = { known: false, role: null };
+const RECOVERY_INCARNATION_REF = "63".repeat(32);
+const RECOVERY_KEY_EPOCH_REF = "64".repeat(32);
+
+function installRecovery(store: SqliteEventStore): void {
+  const installed = store.installRecoveryBinding({
+    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+    incarnationRef: RECOVERY_INCARNATION_REF,
+    installedAt: "2026-08-12T00:00:00.000Z",
+    keyEpochRef: RECOVERY_KEY_EPOCH_REF,
+    payload: new TextEncoder().encode("recipient-recovery-binding"),
+    slot: "ACTIVE",
+  });
+  if (!installed.ok) throw new Error(`recovery setup failed: ${installed.code}`);
+}
 
 const directories: string[] = [];
 const stores: SqliteEventStore[] = [];
@@ -48,6 +62,7 @@ function harness(): Harness {
   directories.push(directory);
   const path = join(directory, "store.sqlite");
   const opened = SqliteEventStore.openForProject(path, PROJECT_ID);
+  installRecovery(opened);
   stores.push(opened);
   const state: Harness = {
     path,
@@ -116,6 +131,8 @@ interface OpenedSession {
   readonly credentialId: string;
   readonly expiresAt: number;
   readonly generation: number;
+  readonly recoveryIncarnationRef: string;
+  readonly keyEpochRef: string;
 }
 
 function createPrincipalIn(sessions: SessionAuthorityService): void {
@@ -149,6 +166,7 @@ function openSessionIn(
     principalId: PRINCIPAL_ID, projectId, sessionId, credentialId, generation: 1,
     clientKeyId: key.clientKeyId, transportId: TRANSPORT_ID, requestId: commandId,
     requestDigest, issuedAt: at, nonce: "12".repeat(16),
+    recoveryIncarnationRef: RECOVERY_INCARNATION_REF, keyEpochRef: RECOVERY_KEY_EPOCH_REF,
   });
   const opened = sessions.openSession({
     commandId, correlationId: `correlation-open-${suffix}`, principalId: PRINCIPAL_ID,
@@ -162,6 +180,8 @@ function openSessionIn(
     sessionId, key, credentialId,
     expiresAt: opened.authority.session.expiresAt,
     generation: opened.authority.session.generation,
+    recoveryIncarnationRef: opened.authority.session.recoveryIncarnationRef,
+    keyEpochRef: opened.authority.session.keyEpochRef,
   });
 }
 
@@ -179,6 +199,7 @@ function foreignSessions(state: Harness, sessionId: string): SessionAuthoritySer
   const directory = mkdtempSync(join(tmpdir(), "moe-recipient-foreign-"));
   directories.push(directory);
   const store = SqliteEventStore.openForProject(join(directory, "store.sqlite"), FOREIGN_PROJECT_ID);
+  installRecovery(store);
   stores.push(store);
   const sessions = createSessionAuthority(store, {
     projectId: FOREIGN_PROJECT_ID, clock: () => state.now,
@@ -195,7 +216,8 @@ function authentication(
     principalId: PRINCIPAL_ID, projectId: PROJECT_ID, sessionId: session.sessionId,
     credentialId: session.credentialId, generation: session.generation,
     clientKeyId: session.key.clientKeyId, transportId: TRANSPORT_ID, requestId, requestDigest,
-    issuedAt: NOW, nonce,
+    issuedAt: NOW, nonce, recoveryIncarnationRef: session.recoveryIncarnationRef,
+    keyEpochRef: session.keyEpochRef,
   });
   return Object.freeze({
     principalId: PRINCIPAL_ID, projectId: PROJECT_ID, sessionId: session.sessionId,
@@ -236,6 +258,7 @@ function rotateSession(state: Harness, session: OpenedSession, nonce: string): v
     credentialId: session.credentialId, generation: session.generation,
     clientKeyId: session.key.clientKeyId, transportId: TRANSPORT_ID, requestId: commandId,
     requestDigest, issuedAt: NOW, nonce,
+    recoveryIncarnationRef: session.recoveryIncarnationRef, keyEpochRef: session.keyEpochRef,
   });
   const rotated = state.sessions.rotateCredential({
     commandId, correlationId: `correlation-${commandId}`, authentication: presented,

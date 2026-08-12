@@ -9,12 +9,14 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
+import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { readAffordanceRequest } from "./affordance-contract.js";
 import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
 
 const PROJECT = "proj-affordance";
 const directory = mkdtempSync(join(tmpdir(), "moe-affordance-"));
 const store = SqliteEventStore.openForProject(join(directory, "store.db"), PROJECT);
+installTestRecoveryBinding(store);
 
 let minted = 0;
 const port = createAffordancePort({

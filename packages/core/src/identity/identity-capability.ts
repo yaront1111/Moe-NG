@@ -1,6 +1,9 @@
 import { RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import type { RuntimeCommandKind } from "@moe/contracts";
 
+import { createRecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+
 /**
  * `@moe/contracts` exports the frozen kind tuple but not its `isCommandKind`
  * guard, so the membership set is built locally.
@@ -18,7 +21,7 @@ function isCommandKind(value: unknown): value is RuntimeCommandKind {
  * transport) tuple. There is deliberately no wildcard, prefix, or hierarchy
  * syntax: matching is full tuple equality and nothing else.
  */
-export interface CapabilityGrant {
+export interface CapabilityGrant extends RecoveryAuthenticationBinding {
   readonly capabilityId: string;
   readonly principalId: string;
   readonly projectId: string;
@@ -28,7 +31,7 @@ export interface CapabilityGrant {
   readonly requiresRecentStepUp: boolean;
 }
 
-export interface CapabilityQuery {
+export interface CapabilityQuery extends RecoveryAuthenticationBinding {
   readonly principalId: string;
   readonly projectId: string;
   readonly commandKind: string;
@@ -39,11 +42,13 @@ export interface CapabilityQuery {
 const GRANT_KEYS = [
   "capabilityId", "principalId", "projectId", "commandKind",
   "targetAggregateId", "transportId", "requiresRecentStepUp",
+  "recoveryIncarnationRef", "keyEpochRef",
 ] as const;
 
-const TUPLE_KEYS = [
+const SCOPE_KEYS = [
   "principalId", "projectId", "commandKind", "targetAggregateId", "transportId",
 ] as const;
+const TUPLE_KEYS = [...SCOPE_KEYS, "recoveryIncarnationRef", "keyEpochRef"] as const;
 
 /**
  * Identifier charset for scope fields.
@@ -71,9 +76,30 @@ function readGrantFields(value: unknown): Record<string, unknown> | null {
     if (!GRANT_KEYS.every((key) => Object.hasOwn(value, key))) return null;
     const copy: Record<string, unknown> = {};
     for (const key of GRANT_KEYS) {
-      copy[key] = (value as Record<string, unknown>)[key];
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      copy[key] = descriptor.value;
     }
     return copy;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotGrantEntries(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value)) return null;
+    if (Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
+    const keys = Object.keys(value);
+    if (keys.length !== value.length) return null;
+    const entries: unknown[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (keys[index] !== String(index)) return null;
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      entries.push(descriptor.value);
+    }
+    return entries;
   } catch {
     return null;
   }
@@ -87,7 +113,13 @@ function readGrant(value: unknown): CapabilityGrant | null {
   if (!isScopeId(raw.transportId)) return null;
   if (!isCommandKind(raw.commandKind)) return null;
   if (typeof raw.requiresRecentStepUp !== "boolean") return null;
+  const recovery = createRecoveryAuthenticationBinding({
+    recoveryIncarnationRef: raw.recoveryIncarnationRef,
+    keyEpochRef: raw.keyEpochRef,
+  });
+  if (recovery === null) return null;
   return Object.freeze({
+    ...recovery,
     capabilityId: raw.capabilityId,
     principalId: raw.principalId,
     projectId: raw.projectId,
@@ -102,6 +134,7 @@ function grantKey(grant: CapabilityGrant): string {
   return [
     grant.capabilityId, grant.principalId, grant.projectId, grant.commandKind,
     grant.targetAggregateId, grant.transportId, String(grant.requiresRecentStepUp),
+    grant.recoveryIncarnationRef, grant.keyEpochRef,
   ].join("|");
 }
 
@@ -113,10 +146,11 @@ function grantKey(grant: CapabilityGrant): string {
  * invalid grant so a partially trusted set can never be produced.
  */
 export function canonicalizeCapabilities(value: unknown): readonly CapabilityGrant[] | null {
-  if (!Array.isArray(value)) return null;
+  const entries = snapshotGrantEntries(value);
+  if (entries === null) return null;
   const byKey = new Map<string, CapabilityGrant>();
   const byId = new Map<string, string>();
-  for (const entry of value) {
+  for (const entry of entries) {
     const grant = readGrant(entry);
     if (grant === null) return null;
     const key = grantKey(grant);
@@ -142,4 +176,21 @@ export function matchCapability(
     }
   }
   return null;
+}
+
+/** Recovery refs from grants matching every non-recovery scope field. */
+export function matchingCapabilityRecoveryBindings(
+  grants: readonly CapabilityGrant[],
+  query: Omit<CapabilityQuery, keyof RecoveryAuthenticationBinding>,
+): readonly RecoveryAuthenticationBinding[] {
+  const bindings = new Map<string, RecoveryAuthenticationBinding>();
+  for (const grant of grants) {
+    if (!SCOPE_KEYS.every((key) => grant[key] === query[key])) continue;
+    const key = `${grant.recoveryIncarnationRef}:${grant.keyEpochRef}`;
+    bindings.set(key, Object.freeze({
+      recoveryIncarnationRef: grant.recoveryIncarnationRef,
+      keyEpochRef: grant.keyEpochRef,
+    }));
+  }
+  return Object.freeze([...bindings.values()]);
 }

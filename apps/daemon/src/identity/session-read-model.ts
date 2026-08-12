@@ -8,6 +8,7 @@ import {
   isIsoInstant,
   isPlainJsonObject,
 } from "./session-contracts.js";
+import { isRecoveryAuthenticationRef } from "./recovery-authentication-binding.js";
 
 /**
  * The read half of the session composition: every committed session decision for one project,
@@ -29,7 +30,9 @@ export interface SessionRecord {
   readonly capabilities: readonly string[];
   readonly credentialSha256: string;
   readonly expiresAt: string;
+  readonly keyEpochRef: string;
   readonly principalId: string;
+  readonly recoveryIncarnationRef: string;
   readonly sessionId: string;
   readonly status: "OPEN" | "CLOSED";
   readonly version: number;
@@ -69,7 +72,9 @@ interface OpenedFacts {
   readonly capabilities: readonly string[];
   readonly credentialSha256: string;
   readonly expiresAt: string;
+  readonly keyEpochRef: string;
   readonly principalId: string;
+  readonly recoveryIncarnationRef: string;
   readonly sessionId: string;
 }
 
@@ -85,12 +90,16 @@ function parseOpened(value: JsonValue): OpenedFacts | undefined {
   if (capabilities === undefined) return undefined;
   if (!isCredentialSha256(value["credentialSha256"])) return undefined;
   if (!isIsoInstant(value["expiresAt"])) return undefined;
+  if (!isRecoveryAuthenticationRef(value["keyEpochRef"])) return undefined;
+  if (!isRecoveryAuthenticationRef(value["recoveryIncarnationRef"])) return undefined;
   if (!isRef(value["principalId"]) || !isRef(value["sessionId"])) return undefined;
   return {
     capabilities,
     credentialSha256: value["credentialSha256"],
     expiresAt: value["expiresAt"],
+    keyEpochRef: value["keyEpochRef"],
     principalId: value["principalId"],
+    recoveryIncarnationRef: value["recoveryIncarnationRef"],
     sessionId: value["sessionId"],
   };
 }

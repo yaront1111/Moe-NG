@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { authenticateCommand, canonicalizeCapabilities, createCredential, createPrincipal, createSession } from "./index.js";
 import type { AuthenticateCommandInput } from "./index.js";
 
+const RECOVERY = { recoveryIncarnationRef: "a".repeat(64), keyEpochRef: "b".repeat(64) };
+
 const ENVELOPE = {
   commandId: "cmd-1",
   commandKind: "goal.create",
@@ -17,13 +19,16 @@ const ENVELOPE = {
 
 const principal = createPrincipal({ principalId: "p-1", kind: "HUMAN", profileRevisionId: "pr-1" })!;
 const session = createSession({
+  ...RECOVERY,
   sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1",
   transportIds: ["local-ipc"], status: "ACTIVE", expiresAt: 1_000, generation: 1,
 })!;
 const credential = createCredential({
+  ...RECOVERY,
   credentialId: "cr-1", sessionId: "s-1", generation: 1, revoked: false,
 })!;
 const capabilities = canonicalizeCapabilities([{
+  ...RECOVERY,
   capabilityId: "c-1", principalId: "p-1", projectId: "proj-1", commandKind: "goal.create",
   targetAggregateId: "agg-1", transportId: "local-ipc", requiresRecentStepUp: false,
 }])!;
@@ -39,6 +44,7 @@ function input(overrides: Partial<AuthenticateCommandInput> = {}): AuthenticateC
     transportId: "local-ipc",
     now: 500,
     proof: { credentialId: "cr-1", commandId: "cmd-1", requestDigest: "d".repeat(64), clientKeyId: "k-1" },
+    currentRecoveryBinding: RECOVERY,
     verifyProof: () => true,
     checkReplay: () => "FRESH",
     recentStepUpAt: null,
@@ -100,7 +106,7 @@ describe("structural and binding faults are AUTHENTICATION_FAILED", () => {
     [{ session: null }, "missing session"],
     [{ credential: null }, "missing credential"],
     [{ envelope: { ...ENVELOPE, sessionCredential: "cr-other" } }, "bearer/credential swap"],
-    [{ credential: createCredential({ credentialId: "cr-1", sessionId: "s-other", generation: 1, revoked: false }) }, "credential bound to another session"],
+    [{ credential: createCredential({ ...RECOVERY, credentialId: "cr-1", sessionId: "s-other", generation: 1, revoked: false }) }, "credential bound to another session"],
     [{ principal: createPrincipal({ principalId: "p-2", kind: "HUMAN", profileRevisionId: "pr-1" }) }, "principal/session mismatch"],
     [{ principal: createPrincipal({ principalId: "p-1", kind: "HUMAN", profileRevisionId: "pr-9" }) }, "profile revision mismatch"],
     [{ proof: { credentialId: "cr-1", commandId: "cmd-1", requestDigest: "d".repeat(64), clientKeyId: "k-9" } }, "client key mismatch"],
@@ -148,9 +154,9 @@ describe("structural and binding faults are AUTHENTICATION_FAILED", () => {
 describe("replay and expiry precedence", () => {
   it.each([
     [{ checkReplay: () => "REPLAYED" as const }, "proven replayed proof"],
-    [{ credential: createCredential({ credentialId: "cr-1", sessionId: "s-1", generation: 1, revoked: true }) }, "revoked credential"],
-    [{ session: createSession({ sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "ACTIVE", expiresAt: 1_000, generation: 2 }) }, "stale credential generation"],
-    [{ session: createSession({ sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "CLOSED", expiresAt: 1_000, generation: 1 }) }, "closed session"],
+    [{ credential: createCredential({ ...RECOVERY, credentialId: "cr-1", sessionId: "s-1", generation: 1, revoked: true }) }, "revoked credential"],
+    [{ session: createSession({ ...RECOVERY, sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "ACTIVE", expiresAt: 1_000, generation: 2 }) }, "stale credential generation"],
+    [{ session: createSession({ ...RECOVERY, sessionId: "s-1", principalId: "p-1", profileRevisionId: "pr-1", clientKeyId: "k-1", transportIds: ["local-ipc"], status: "CLOSED", expiresAt: 1_000, generation: 1 }) }, "closed session"],
   ] as [Partial<AuthenticateCommandInput>, string][])("reports SESSION_REPLAYED for %o (%s)", (overrides) => {
     expectDenied(overrides, "SESSION_REPLAYED");
   });
@@ -189,6 +195,7 @@ describe("scope faults are CAPABILITY_DENIED", () => {
 
   it("denies a capability granted to another principal", () => {
     const foreign = canonicalizeCapabilities([{
+      ...RECOVERY,
       capabilityId: "c-2", principalId: "p-9", projectId: "proj-1", commandKind: "goal.create",
       targetAggregateId: "agg-1", transportId: "local-ipc", requiresRecentStepUp: false,
     }]);
@@ -197,6 +204,7 @@ describe("scope faults are CAPABILITY_DENIED", () => {
 
   describe("required step-up", () => {
     const stepUp = canonicalizeCapabilities([{
+      ...RECOVERY,
       capabilityId: "c-1", principalId: "p-1", projectId: "proj-1", commandKind: "goal.create",
       targetAggregateId: "agg-1", transportId: "local-ipc", requiresRecentStepUp: true,
     }])!;

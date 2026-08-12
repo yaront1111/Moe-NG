@@ -21,10 +21,9 @@ import type { SqliteEventStore } from "@moe/store";
 /**
  * The HTTP seam's credential authenticator over the durable session ledger.
  *
- * The seam's `AuthenticationResult` deliberately carries no refusal reason, so every refusal
- * case here asserts the exact verdict object; the reason-code distinctions live in the command
- * suite. Expiry cases pin the EXCLUSIVE boundary (unusable at exactly `expiresAt`), matching
- * `@moe/core`'s `isSessionUsableAt`.
+ * Unknown and structurally invalid credentials remain indistinguishable. Recovery replay is the
+ * one typed refusal so HTTP can preserve the stable identity-layer reason. Expiry cases pin the
+ * EXCLUSIVE boundary (unusable at exactly `expiresAt`), matching `@moe/core` semantics.
  */
 
 afterEach(closeStores);

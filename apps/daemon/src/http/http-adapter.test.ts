@@ -61,6 +61,36 @@ it("refuses an unauthenticated request before the body is decoded", () => {
   expect(wired.calls.count).toBe(0);
 });
 
+it("preserves a typed identity replay refusal before decode or downstream effects", () => {
+  const refusal = Object.freeze({
+    code: "SESSION_REPLAYED",
+    detail: "The session belongs to a prior recovery incarnation or key epoch.",
+    httpStatus: 401,
+    layer: "IDENTITY",
+  });
+  const handler = recordingHandler();
+  const decisions = decisionPort();
+  const wired: CommandAdapterDeps = {
+    authenticator: {
+      authenticate: () => Object.freeze({ refusal, verdict: "REFUSED" as const }),
+    },
+    decisions,
+    registry: registryOf("goal.create", handler.handler, PAYLOAD_KEYS),
+  };
+  const result = handleCommandRequest(wired, request({ body: UNDECODABLE_BODY }));
+
+  expect(result).toMatchObject({
+    httpStatus: 401,
+    outcome: "PORT_REFUSED",
+    refusal: { code: "SESSION_REPLAYED", layer: "IDENTITY" },
+    stage: "AUTHENTICATE",
+  });
+  if (result.outcome !== "PORT_REFUSED") return;
+  expect(result.refusal).toBe(refusal);
+  expect(decisions.effects).toHaveLength(0);
+  expect(handler.calls.count).toBe(0);
+});
+
 it("refuses an unauthenticated oversize body with the authentication code, not the bound", () => {
   const wired = deps();
   const oversize = new Uint8Array(MAX_JSON_BODY_BYTES + 1);

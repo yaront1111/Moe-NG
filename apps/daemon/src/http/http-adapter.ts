@@ -23,6 +23,7 @@ import type {
   CommandRegistryEntry,
   HttpCommandRequest,
   HttpCommandResult,
+  HttpPortRefused,
   HttpRefusalStage,
   HttpRefused,
 } from "./http-contract.js";
@@ -90,7 +91,7 @@ function refuse(stage: HttpRefusalStage, error: RuntimeError): HttpRefused {
   });
 }
 
-export type HttpAccessResult = HttpRefused | {
+export type HttpAccessResult = HttpPortRefused | HttpRefused | {
   readonly ok: true;
   readonly principal: AuthenticatedPrincipal;
 };
@@ -102,6 +103,15 @@ export function authenticateHttpRequest(
   protocolVersion: unknown,
 ): HttpAccessResult {
   const authenticated = authenticator.authenticate(credential);
+  if (authenticated.verdict === "REFUSED") {
+    return Object.freeze({
+      httpStatus: authenticated.refusal.httpStatus,
+      ok: false as const,
+      outcome: "PORT_REFUSED" as const,
+      refusal: authenticated.refusal,
+      stage: "AUTHENTICATE" as const,
+    });
+  }
   if (authenticated.verdict !== "AUTHENTICATED") {
     return refuse("AUTHENTICATE", AUTHENTICATION_FAILED);
   }

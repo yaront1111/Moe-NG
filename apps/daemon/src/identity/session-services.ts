@@ -21,6 +21,7 @@ import type {
   HandlerTable,
   SessionOutcome,
 } from "./session-ledger.js";
+import { readCurrentRecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
 import type { SessionRecord } from "./session-read-model.js";
 
 /**
@@ -71,6 +72,14 @@ const openSession: CommandHandler = (context): SessionOutcome => {
   if (!isIsoInstant(expiresAt)) {
     return refuse(request.kind, "SESSION_EXPIRED_AT_INVALID", "DAEMON_INGRESS");
   }
+  const recoveryBinding = readCurrentRecoveryAuthenticationBinding(store);
+  if (recoveryBinding === null) {
+    return refuse(
+      request.kind,
+      "SESSION_RECOVERY_BINDING_UNAVAILABLE",
+      "DAEMON_PREREQUISITE",
+    );
+  }
   if (ledger.unreadable) {
     return refuse(request.kind, "SESSION_LEDGER_UNREADABLE", "DAEMON_PREREQUISITE");
   }
@@ -87,9 +96,11 @@ const openSession: CommandHandler = (context): SessionOutcome => {
     capabilities: [...capabilities],
     credentialSha256,
     expiresAt,
+    keyEpochRef: recoveryBinding.keyEpochRef,
     // The session principal is the principal that OPENED it: the envelope's authenticated
     // `principalId`, not a payload field a caller could point at someone else.
     principalId: request.principalId,
+    recoveryIncarnationRef: recoveryBinding.recoveryIncarnationRef,
     sessionId,
   };
   return commitAccepted(store, request, {

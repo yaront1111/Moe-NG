@@ -280,10 +280,11 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<typeof daemon.WIRE_PROTOCOL_VERSION>().toEqualTypeOf<WireProtocolVersion>();
     expectTypeOf<AuthenticationResult>().toEqualTypeOf<
       | { readonly principal: AuthenticatedPrincipal; readonly verdict: "AUTHENTICATED" }
+      | { readonly refusal: PortRefusal; readonly verdict: "REFUSED" }
       | { readonly verdict: "UNAUTHENTICATED" }
     >();
     expectTypeOf<AuthVerdict>().toEqualTypeOf<
-      "AUTHENTICATED" | "UNAUTHENTICATED" | "UNAUTHORIZED"
+      "AUTHENTICATED" | "REFUSED" | "UNAUTHENTICATED" | "UNAUTHORIZED"
     >();
     expectTypeOf<CommandAdapterDeps["authenticator"]>().toEqualTypeOf<Authenticator>();
     expectTypeOf<CommandAdapterDeps["decisions"]>().toEqualTypeOf<CommandDecisionPort>();

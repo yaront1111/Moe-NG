@@ -2,6 +2,7 @@ import type {
   AuthenticatedSessionFacts,
   Credential,
   Principal,
+  RecoveryAuthenticationBinding,
   Session,
   SessionAuthCode,
   SessionAuthLayer,
@@ -58,7 +59,7 @@ export interface SessionProof {
   readonly signatureHex: string;
 }
 
-export interface SessionProofChallengeFields {
+export interface SessionProofChallengeFields extends RecoveryAuthenticationBinding {
   readonly principalId: string;
   readonly projectId: string;
   readonly sessionId: string;
