@@ -108,6 +108,7 @@ export function boundaryHarness(options: {
   const stderr = new PassThrough();
   const stdin = new PassThrough();
   const finish = (stream: PassThrough, bytes: Uint8Array, fail: boolean): void => {
+    if (stream.destroyed || stream.writableEnded) return;
     if (fail) stream.destroy(new Error("scripted stream failure"));
     else stream.end(bytes);
   };
@@ -148,6 +149,10 @@ export function dependencies(harness: BoundaryHarness, log: string[]): ClaudeLau
       log.push("validate"); return validateActivationCommit(effect, attempt, grant);
     },
     consumeGrant: (grant, wrapper) => { log.push("consume"); return consumeActivationGrant(grant, wrapper); },
+    acquireLock: async () => {
+      log.push("lock");
+      return { ok: true, lease: Object.freeze({ release: async () => { log.push("unlock"); } }) };
+    },
     openBoundary: (request) => {
       log.push("open"); harness.requests.push(request); harness.trigger(); return harness.boundary;
     },

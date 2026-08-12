@@ -78,6 +78,8 @@ export {
   type ClaudeLaunchExit,
   type ClaudeLaunchFailure,
   type ClaudeLaunchLayer,
+  type ClaudeLaunchLockLease,
+  type ClaudeLaunchLockResult,
   type ClaudeLaunchLimits,
   type ClaudeLaunchObservation,
   type ClaudeLaunchObserved,

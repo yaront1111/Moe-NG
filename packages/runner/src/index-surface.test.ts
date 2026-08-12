@@ -37,7 +37,8 @@ import type {
   ArtifactFsPort, ArtifactRef, ArtifactStore, BuildEvidenceReceiptInput, BuildEvidenceReceiptResult,
   BuildObservationInput, BuildObservationResult, BuildVerificationRecipeResult, CandidateTreeEntry,
   CandidateTreePort, ClaudeLaunchErrorCode, ClaudeLaunchFailure, ClaudeLaunchLayer,
-  ClaudeLaunchLimits, ClaudeLaunchObservation, ClaudeLaunchOptions, ClaudeLaunchRequest,
+  ClaudeLaunchLimits, ClaudeLaunchLockLease, ClaudeLaunchLockResult, ClaudeLaunchObservation,
+  ClaudeLaunchOptions, ClaudeLaunchRequest,
   ClaudeLaunchResult, ClaudeLaunchTruthClass, ClaudeLauncherDependencies, ClaudeProcessExit,
   ClaudeRawRetention, ClaudeReconciledOutcome,
   ClaudeReconciliation, ClaudeStreamAnomaly, ClaudeStreamDisposition, ClaudeStreamEvent,
@@ -463,6 +464,8 @@ function commitFixture(): ActivationCommit {
 it("lets a root-only consumer construct and narrow the Claude launcher", async () => {
   const commit = commitFixture();
   const observation = observationFixture("CONTENT_ADDRESSED_COPY");
+  const lease: ClaudeLaunchLockLease = { release: async () => undefined };
+  const lock: ClaudeLaunchLockResult = { ok: true, lease };
   const deps: ClaudeLauncherDependencies = {
     prepareRuntime: async () => ({ ok: true, preparationVersion: "moe-claude-runtime-pin/1",
       quotedObservationDigest: observation.observationDigest,
@@ -472,6 +475,7 @@ it("lets a root-only consumer construct and narrow the Claude launcher", async (
     resolveDuplicate: () => { throw new Error("duplicate port must not run"); },
     validateCommit: runner.validateActivationCommit,
     consumeGrant: runner.consumeActivationGrant,
+    acquireLock: async () => lock,
     openBoundary: () => { throw new Error("boundary must not open"); },
     registerLock: () => { throw new Error("registration must not run"); },
     observeProcess: () => { throw new Error("observation must not run"); },

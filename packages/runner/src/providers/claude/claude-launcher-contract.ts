@@ -16,6 +16,7 @@ export const CLAUDE_LAUNCHER_VERSION = "moe-claude-launcher/1" as const;
 const LOCAL_CODES = [
   "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "CLAUDE_LAUNCH_REQUEST_MALFORMED",
   "CLAUDE_LAUNCH_RUNTIME_THROWN", "CLAUDE_LAUNCH_BOUNDARY_THROWN",
+  "CLAUDE_LAUNCH_LOCK_UNKNOWN",
   "CLAUDE_LAUNCH_OUTPUT_TRUNCATED", "CLAUDE_LAUNCH_STREAM_ERROR",
   "CLAUDE_LAUNCH_TIMEOUT", "CLAUDE_LAUNCH_CANCELLED", "CLAUDE_LAUNCH_CLEANUP_UNKNOWN",
 ] as const;
@@ -29,6 +30,14 @@ export const CLAUDE_LAUNCH_TRUTH_CLASSES = Object.freeze(["PROVEN", "UNKNOWN", "
 export type ClaudeLaunchErrorCode = (typeof CLAUDE_LAUNCH_ERROR_CODES)[number];
 export type ClaudeLaunchLayer = (typeof CLAUDE_LAUNCH_LAYERS)[number];
 export type ClaudeLaunchTruthClass = (typeof CLAUDE_LAUNCH_TRUTH_CLASSES)[number];
+
+export interface ClaudeLaunchLockLease {
+  release(): Promise<void>;
+}
+export type ClaudeLaunchLockResult =
+  | { readonly ok: true; readonly lease: ClaudeLaunchLockLease }
+  | { readonly ok: false; readonly code: ClaudeLaunchErrorCode;
+      readonly layer: ClaudeLaunchLayer; readonly message: string };
 
 export interface ClaudeLaunchLimits {
   readonly stdoutBytes: number;
@@ -121,6 +130,7 @@ export interface ClaudeLauncherDependencies {
   resolveDuplicate(value: unknown): DuplicateDeliveryOutcome;
   validateCommit(effect: unknown, attempt: unknown, grant: unknown): CommitCheck;
   consumeGrant(grant: unknown, wrapperIdentity: unknown): GrantOutcome;
+  acquireLock(lockIdentity: string): Promise<ClaudeLaunchLockResult>;
   openBoundary(request: unknown, options?: { readonly timeoutMs?: number }): WindowsProcessBoundary | WindowsProcessUnknown;
   registerLock(registration: unknown, claim: unknown, prior: unknown): LaunchLockOutcome;
   observeProcess(exit: unknown, reconciliation: unknown): ProcessObservationOutcome;

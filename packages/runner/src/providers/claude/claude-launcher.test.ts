@@ -7,13 +7,14 @@ import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
 import {
   CLAUDE_LAUNCHER_VERSION,
   CLAUDE_LAUNCH_ERROR_CODES,
+  acquireWindowsLaunchLock,
   launchClaude,
   type ClaudeLaunchRequest,
   type ClaudeLauncherDependencies,
 } from "./claude-launcher.js";
 import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import {
-  CLAIM, COMMIT, DIGEST, PROCESS, boundaryHarness, dependencies,
+  CLAIM, COMMIT, DIGEST, PROCESS, PROVEN, boundaryHarness, dependencies,
   failureOf, prepared, request, runtimeRequest, sha256,
 } from "./claude-launcher-test-fixtures.js";
 describe("Windows Claude launcher", () => {
@@ -29,7 +30,24 @@ describe("Windows Claude launcher", () => {
     expect(CLAUDE_LAUNCHER_VERSION).toBe("moe-claude-launcher/1");
     expect(CLAUDE_LAUNCH_ERROR_CODES).toContain("CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED");
     expect(CLAUDE_LAUNCH_ERROR_CODES).toContain("CLAUDE_LAUNCH_CLEANUP_UNKNOWN");
+    expect(CLAUDE_LAUNCH_ERROR_CODES).toContain("CLAUDE_LAUNCH_LOCK_UNKNOWN");
     expect(Object.isFrozen(CLAUDE_LAUNCH_ERROR_CODES)).toBe(true);
+  });
+
+  it("holds one real OS-exclusive launch lock until its lease is released", async () => {
+    const identity = `launcher-test-${process.pid}-${Date.now()}`;
+    const first = await acquireWindowsLaunchLock(identity);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(`first lock refused: ${first.code}`);
+    try {
+      const duplicate = await acquireWindowsLaunchLock(identity);
+      expect(duplicate).toMatchObject({
+        ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+      });
+    } finally { await first.lease.release(); }
+    const afterRelease = await acquireWindowsLaunchLock(identity);
+    expect(afterRelease.ok).toBe(true);
+    if (afterRelease.ok) await afterRelease.lease.release();
   });
 
   it("refuses a non-Windows host before reading the request or calling a port", async () => {
@@ -44,7 +62,9 @@ describe("Windows Claude launcher", () => {
     const log: string[] = [];
     const boundary = boundaryHarness({ stdout: Buffer.from("alpha"), stderr: Buffer.from("beta!") });
     const result = await launchClaude(request(), { platform: "win32", deps: dependencies(boundary, log) });
-    expect(log).toEqual(["runtime", "validate", "consume", "open", "register", "observe"]);
+    expect(log).toEqual([
+      "runtime", "validate", "consume", "register", "lock", "open", "register", "observe", "unlock",
+    ]);
     expect(boundary.log).toEqual(["close"]);
     expect(boundary.requests).toHaveLength(1);
     expect(Object.keys(boundary.requests[0] as object).sort()).toEqual(["argv", "cwd", "environment", "executable"]);
@@ -171,6 +191,9 @@ describe("Windows Claude launcher", () => {
     expect(failureOf(result)).toEqual({
       code: "PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED", layer: "WINDOWS_PROCESS_REQUEST",
     });
+    expect(log).toEqual([
+      "runtime", "validate", "consume", "register", "lock", "unlock",
+    ]);
     expect(boundary.log).toEqual([]);
   });
 
@@ -195,7 +218,7 @@ describe("Windows Claude launcher", () => {
     }
   });
 
-  it("closes an opened boundary when durable registration refuses", async () => {
+  it("refuses prior launch registration before locking or opening the provider", async () => {
     const log: string[] = [];
     const boundary = boundaryHarness();
     const prior = {
@@ -207,9 +230,84 @@ describe("Windows Claude launcher", () => {
       platform: "win32", deps: dependencies(boundary, log),
     });
     expect(failureOf(result)).toEqual({ code: "LAUNCH_LOCK_CREDENTIAL_REUSED", layer: "LAUNCH_LOCK" });
-    expect(log).toContain("open");
-    expect(log).toContain("register");
-    expect(boundary.log).toEqual(["close"]);
+    expect(log).toEqual(["runtime", "validate", "consume", "register"]);
+    expect(boundary.log).toEqual([]);
+  });
+
+  it("refuses an OS-exclusive lock conflict before opening the provider", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const deps = { ...dependencies(boundary, log), acquireLock: async () => {
+      log.push("lock");
+      return Object.freeze({ ok: false as const, code: "LAUNCH_LOCK_IDENTITY_CONFLICT" as const,
+        layer: "LAUNCH_LOCK" as const, message: "the OS lock is already held" });
+    } };
+    const result = await launchClaude(request(), { platform: "win32", deps });
+    expect(failureOf(result)).toEqual({
+      code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+    });
+    expect(log).toEqual(["runtime", "validate", "consume", "register", "lock"]);
+    expect(boundary.log).toEqual([]);
+  });
+
+  it("lets only one concurrent delivery cross the real OS lock into the provider", async () => {
+    let finish!: (outcome: WindowsProcessOutcome) => void;
+    let opened!: () => void;
+    const openedPromise = new Promise<void>((resolve) => { opened = resolve; });
+    const completed = new Promise<WindowsProcessOutcome>((resolve) => { finish = resolve; });
+    const identity = `concurrent-${process.pid}-${Date.now()}`;
+    const claim = { ...CLAIM, lockIdentity: identity };
+    const firstLog: string[] = [];
+    const firstBoundary = boundaryHarness({ completed });
+    const firstBase = dependencies(firstBoundary, firstLog);
+    const firstDeps = { ...firstBase, acquireLock: acquireWindowsLaunchLock,
+      openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+        const result = firstBase.openBoundary(value, options); opened(); return result;
+      } };
+    const first = launchClaude(request({ claim }), { platform: "win32", deps: firstDeps });
+    await openedPromise;
+
+    const secondLog: string[] = [];
+    const secondBoundary = boundaryHarness();
+    let second;
+    let firstResult;
+    try {
+      second = await launchClaude(request({ claim }), { platform: "win32", deps: {
+        ...dependencies(secondBoundary, secondLog), acquireLock: acquireWindowsLaunchLock,
+      } });
+    } finally {
+      finish(PROVEN);
+      firstResult = await first;
+    }
+    expect(failureOf(second)).toEqual({
+      code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+    });
+    expect(secondLog).not.toContain("open");
+    expect(secondBoundary.log).toEqual([]);
+
+    expect(firstResult.truthClass).toBe("PROVEN");
+    expect(firstLog.filter((entry) => entry === "open")).toHaveLength(1);
+    expect(firstBoundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+  });
+
+  it("closes and unlocks when post-start durable registration refuses", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const base = dependencies(boundary, log);
+    let calls = 0;
+    const deps = { ...base, registerLock: (registration: unknown, claim: unknown, prior: unknown) => {
+      calls += 1;
+      return calls === 1 ? base.registerLock(registration, claim, prior) :
+        base.registerLock(registration, claim, registration);
+    } };
+    const result = await launchClaude(request(), { platform: "win32", deps });
+    expect(failureOf(result)).toEqual({
+      code: "LAUNCH_LOCK_CREDENTIAL_REUSED", layer: "LAUNCH_LOCK",
+    });
+    expect(log.filter((entry) => entry === "open")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "register")).toHaveLength(2);
+    expect(boundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
   });
 
   it("cancels and closes when the started observation throws", async () => {
@@ -220,6 +318,99 @@ describe("Windows Claude launcher", () => {
     });
     expect(failureOf(result)).toEqual({ code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER" });
     expect(boundary.log).toEqual(["cancel", "close"]);
+  });
+
+  it("contains a rejected completion promise and cleans up exactly once", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness({
+      completed: Promise.reject(new Error("completion transport rejected")),
+    });
+    const result = await launchClaude(request(), {
+      platform: "win32", deps: dependencies(boundary, log),
+    });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+    });
+    expect(boundary.log.filter((entry) => entry === "cancel")).toHaveLength(1);
+    expect(boundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
+  });
+
+  it("contains a rejected timer promise and cleans up exactly once", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness({ completed: new Promise(() => undefined) });
+    const deps = { ...dependencies(boundary, log), delay: async () => {
+      throw new Error("timer transport rejected");
+    } };
+    const result = await launchClaude(request(), { platform: "win32", deps });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+    });
+    expect(boundary.log.filter((entry) => entry === "cancel")).toHaveLength(1);
+    expect(boundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
+  });
+
+  it("downgrades an unproven OS-lock release after closing the provider", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const deps = { ...dependencies(boundary, log), acquireLock: async () => {
+      log.push("lock");
+      return { ok: true as const, lease: Object.freeze({ release: async () => {
+        log.push("unlock"); throw new Error("lock release rejected");
+      } }) };
+    } };
+    const result = await launchClaude(request(), { platform: "win32", deps });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
+    });
+    expect(boundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
+  });
+
+  it("contains post-close observation callbacks and still releases the OS lock", async () => {
+    const cases = [
+      { name: "process observation", alter: (deps: ClaudeLauncherDependencies) => ({ ...deps,
+        observeProcess: () => { throw new Error("observation port rejected"); } }) },
+      { name: "completed timestamp", alter: (deps: ClaudeLauncherDependencies) => {
+        let calls = 0;
+        return { ...deps, now: () => {
+          calls += 1;
+          if (calls === 3) throw new Error("clock rejected");
+          return `2026-08-12T08:00:0${calls}.000Z`;
+        } };
+      } },
+    ] as const;
+    expect(cases.length).toBe(2);
+    for (const item of cases) {
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const result = await launchClaude(request(), {
+        platform: "win32", deps: item.alter(dependencies(boundary, log)),
+      });
+      expect(failureOf(result), item.name).toEqual({
+        code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+      });
+      expect(boundary.log.filter((entry) => entry === "close"), item.name).toHaveLength(1);
+      expect(log.filter((entry) => entry === "unlock"), item.name).toHaveLength(1);
+    }
+  });
+
+  it("contains a throwing stream accessor and still cancels, closes, and unlocks", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    Object.defineProperty(boundary.boundary, "providerStdout", {
+      configurable: true, get: () => { throw new Error("stdout accessor rejected"); },
+    });
+    const result = await launchClaude(request(), {
+      platform: "win32", deps: dependencies(boundary, log),
+    });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+    });
+    expect(boundary.log.filter((entry) => entry === "cancel")).toHaveLength(1);
+    expect(boundary.log.filter((entry) => entry === "close")).toHaveLength(1);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
   });
 
   it("passes through process-intake refusal only after awaited cleanup", async () => {
@@ -282,6 +473,7 @@ describe("Windows Claude launcher", () => {
       const result = await launchClaude(request(item.overrides), launchOptions);
       expect(failureOf(result)).toEqual({ code: item.code, layer: item.layer });
       expect(item.harness.log.filter((entry) => entry === "close")).toHaveLength(1);
+      expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
       ran += 1;
     }
     expect(ran).toBe(cases.length);

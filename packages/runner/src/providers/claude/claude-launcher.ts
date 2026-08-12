@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdir, open, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Readable } from "node:stream";
 import { canonicalDigest, deepFreeze } from "../../canonical.js";
 import { openWindowsProcessBoundary, type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
@@ -15,6 +18,7 @@ import { prepareClaudeRuntimePin,
 import { CLAUDE_LAUNCHER_VERSION, type ClaudeLaunchDuplicate, type ClaudeLaunchErrorCode,
   type ClaudeLaunchExit, type ClaudeLaunchFailure, type ClaudeLaunchLayer,
   type ClaudeLaunchObservation, type ClaudeLaunchOptions, type ClaudeLaunchResult,
+  type ClaudeLaunchLockLease, type ClaudeLaunchLockResult,
   type ClaudeLauncherDependencies, type ClaudeStreamEvidence } from "./claude-launcher-contract.js";
 import { snapshotClaudeLaunchRequest,
   type ClaudeLaunchSnapshot } from "./claude-launcher-input.js";
@@ -24,6 +28,7 @@ const defaults: ClaudeLauncherDependencies = Object.freeze({
   resolveDuplicate: resolveDuplicateDelivery,
   validateCommit: validateActivationCommit,
   consumeGrant: consumeActivationGrant,
+  acquireLock: acquireWindowsLaunchLock,
   openBoundary: openWindowsProcessBoundary,
   registerLock: registerLaunchLock,
   observeProcess: intakeProcessObservation,
@@ -49,11 +54,37 @@ function duplicate(outcome: Exclude<DuplicateDeliveryOutcome, { readonly kind: "
 function directFailure(code: ClaudeLaunchErrorCode, layer: ClaudeLaunchLayer, message: string): ClaudeLaunchFailure {
   return deepFreeze({ kind: "REFUSED", ok: false, truthClass: "UNKNOWN", code, layer, message });
 }
+const LOCK_ROOT = join(tmpdir(), "moe-claude-launch-locks");
+export async function acquireWindowsLaunchLock(lockIdentity: string): Promise<ClaudeLaunchLockResult> {
+  const path = join(LOCK_ROOT, `${createHash("sha256").update(lockIdentity).digest("hex")}.lock`);
+  let handle;
+  try {
+    await mkdir(LOCK_ROOT, { recursive: true });
+    handle = await open(path, "wx", 0o600);
+  } catch (error) {
+    const conflict = (error as NodeJS.ErrnoException).code === "EEXIST";
+    return deepFreeze({ ok: false, code: conflict ? "LAUNCH_LOCK_IDENTITY_CONFLICT" :
+      "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
+      message: conflict ? "the OS-exclusive launch lock is already held" :
+        "the OS-exclusive launch lock could not be acquired" });
+  }
+  let released = false;
+  const lease: ClaudeLaunchLockLease = Object.freeze({ release: async (): Promise<void> => {
+    if (released) return;
+    released = true;
+    let failed = false;
+    try { await handle.close(); } catch { failed = true; }
+    try { await unlink(path); } catch { failed = true; }
+    if (failed) throw new Error("OS-exclusive launch lock release is unproven");
+  } });
+  return Object.freeze({ ok: true, lease });
+}
 interface OpenedLaunch {
   readonly request: ClaudeLaunchSnapshot;
   readonly runtime: PreparedClaudeRuntime;
   readonly activationDigest: string;
   readonly consumedGrant: ActivationGrant;
+  readonly lock: ClaudeLaunchLockLease;
   readonly boundary: WindowsProcessBoundary;
   readonly deps: ClaudeLauncherDependencies;
   readonly signal: AbortSignal | undefined;
@@ -91,7 +122,8 @@ type Terminal =
   | { readonly kind: "COMPLETED"; readonly outcome: WindowsProcessOutcome }
   | { readonly kind: "TIMEOUT" }
   | { readonly kind: "CANCELLED" }
-  | { readonly kind: "STREAM_ERROR" };
+  | { readonly kind: "STREAM_ERROR" }
+  | { readonly kind: "THROWN" };
 function cancellation(signal: AbortSignal | undefined): { promise: Promise<Terminal>; dispose(): void } {
   if (signal === undefined) return { promise: new Promise(() => undefined), dispose: () => undefined };
   let resolve!: (value: Terminal) => void;
@@ -105,6 +137,7 @@ function terminalReason(terminal: Terminal): readonly [ClaudeLaunchErrorCode, Cl
   if (terminal.kind === "TIMEOUT") return ["CLAUDE_LAUNCH_TIMEOUT", "LAUNCHER"];
   if (terminal.kind === "CANCELLED") return ["CLAUDE_LAUNCH_CANCELLED", "LAUNCHER"];
   if (terminal.kind === "STREAM_ERROR") return ["CLAUDE_LAUNCH_STREAM_ERROR", "OUTPUT"];
+  if (terminal.kind === "THROWN") return ["CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER"];
   if (terminal.outcome.truthClass === "UNKNOWN") return [terminal.outcome.code, terminal.outcome.layer];
   return null;
 }
@@ -114,19 +147,26 @@ const isProven = (value: WindowsProcessOutcome | null): value is Extract<Windows
 async function waitForTerminal(
   opened: OpenedLaunch, stdout: Promise<CapturedStream>, stderr: Promise<CapturedStream>,
 ): Promise<Terminal> {
-  const cancelled = cancellation(opened.signal);
-  const streamFault = (capture: Promise<CapturedStream>): Promise<Terminal> => capture.then((result) =>
-    result.failed ? Promise.resolve({ kind: "STREAM_ERROR" }) : new Promise(() => undefined));
+  let cancelled: ReturnType<typeof cancellation> | null = null;
   const timer = new AbortController();
   try {
+    cancelled = cancellation(opened.signal);
+    const streamFault = (capture: Promise<CapturedStream>): Promise<Terminal> => capture.then((result) =>
+      result.failed ? Promise.resolve({ kind: "STREAM_ERROR" }) : new Promise(() => undefined));
     const terminal = await Promise.race([
       opened.boundary.completed.then((outcome) => ({ kind: "COMPLETED", outcome }) as const),
       opened.deps.delay(opened.request.limits.timeoutMs, timer.signal).then(() => ({ kind: "TIMEOUT" }) as const),
       cancelled.promise, Promise.race([streamFault(stdout), streamFault(stderr)]),
     ]);
-    if (terminal.kind !== "COMPLETED") opened.boundary.cancel();
+    if (terminal.kind !== "COMPLETED") try { opened.boundary.cancel(); } catch { return { kind: "THROWN" }; }
     return terminal;
-  } finally { timer.abort(); cancelled.dispose(); }
+  } catch {
+    try { opened.boundary.cancel(); } catch { /* cleanup still runs */ }
+    return { kind: "THROWN" };
+  } finally {
+    timer.abort();
+    try { cancelled?.dispose(); } catch { /* cancellation cleanup is best effort */ }
+  }
 }
 
 function buildLaunchObservation(
@@ -151,6 +191,36 @@ function buildLaunchObservation(
 }
 
 interface RegisteredLaunch { readonly registration: LaunchLockRegistration; readonly startedAt: string }
+function preflightLaunchLock(
+  request: ClaudeLaunchSnapshot, deps: ClaudeLauncherDependencies,
+): LaunchLockRegistration | ClaudeLaunchFailure {
+  try {
+    const checked = deps.registerLock({
+      lockIdentity: (request.claim as { lockIdentity?: unknown }).lockIdentity,
+      wrapperIdentity: request.wrapperIdentity, processIdentity: `pending:${request.wrapperIdentity}`,
+      bootstrapCredentialDigest: request.bootstrapCredentialDigest, registeredAt: deps.now(),
+    }, request.claim, request.priorRegistration);
+    return checked.kind === "REFUSED" ? delegated(checked.failure) : checked.registration;
+  } catch {
+    return directFailure("CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", "launch-lock preflight threw");
+  }
+}
+async function acquireLaunchLock(
+  registration: LaunchLockRegistration, deps: ClaudeLauncherDependencies,
+): Promise<ClaudeLaunchLockLease | ClaudeLaunchFailure> {
+  try {
+    const acquired = await deps.acquireLock(registration.lockIdentity);
+    return acquired.ok ? acquired.lease : directFailure(acquired.code, acquired.layer, acquired.message);
+  } catch {
+    return directFailure("CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", "OS-exclusive lock acquisition threw");
+  }
+}
+async function releaseLock(
+  lease: ClaudeLaunchLockLease, fallback: ClaudeLaunchResult,
+): Promise<ClaudeLaunchResult> {
+  try { await lease.release(); return fallback; }
+  catch { return directFailure("CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", "OS-exclusive lock release is unproven"); }
+}
 async function startAndRegister(opened: OpenedLaunch): Promise<RegisteredLaunch | ClaudeLaunchFailure> {
   try {
     const started = await opened.boundary.started;
@@ -165,15 +235,26 @@ async function startAndRegister(opened: OpenedLaunch): Promise<RegisteredLaunch 
     return registered.kind === "REFUSED" ? delegated(registered.failure) :
       { registration: registered.registration, startedAt };
   } catch {
-    opened.boundary.cancel();
+    try { opened.boundary.cancel(); } catch { /* close remains authoritative */ }
     return directFailure("CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process lifecycle threw");
   }
 }
 
 async function settleClaudeLaunch(opened: OpenedLaunch): Promise<ClaudeLaunchResult> {
   const { request, boundary, deps } = opened;
-  const stdoutPromise = captureStream(boundary.providerStdout, request.limits.stdoutBytes, request.limits.tailBytes);
-  const stderrPromise = captureStream(boundary.providerStderr, request.limits.stderrBytes, request.limits.tailBytes);
+  let stdoutPromise: Promise<CapturedStream>;
+  let stderrPromise: Promise<CapturedStream>;
+  try {
+    stdoutPromise = captureStream(boundary.providerStdout, request.limits.stdoutBytes, request.limits.tailBytes);
+    stderrPromise = captureStream(boundary.providerStderr, request.limits.stderrBytes, request.limits.tailBytes);
+  } catch {
+    try { boundary.cancel(); } catch { /* close remains authoritative */ }
+    let failure = directFailure(
+      "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process stream access threw");
+    try { await boundary.close(); }
+    catch { failure = directFailure("CLAUDE_LAUNCH_CLEANUP_UNKNOWN", "LAUNCHER", "process cleanup threw"); }
+    return await releaseLock(opened.lock, failure);
+  }
   let terminal: Terminal | null = null;
   const started = await startAndRegister(opened);
   const registration = "registration" in started ? started.registration : null;
@@ -190,8 +271,8 @@ async function settleClaudeLaunch(opened: OpenedLaunch): Promise<ClaudeLaunchRes
         terminal.outcome.code === closed.code && terminal.outcome.layer === closed.layer)) {
     primaryFailure = directFailure("CLAUDE_LAUNCH_CLEANUP_UNKNOWN", "LAUNCHER", "process cleanup is unproven");
   }
-  if (registration === null) return primaryFailure ?? directFailure(
-    "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process registration was not observed");
+  if (registration === null) return await releaseLock(opened.lock, primaryFailure ?? directFailure(
+    "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process registration was not observed"));
 
   const reason = primaryFailure === null && terminal !== null ? terminalReason(terminal) : null;
   const terminalOutcome = terminal?.kind === "COMPLETED" ? terminal.outcome : null;
@@ -200,21 +281,30 @@ async function settleClaudeLaunch(opened: OpenedLaunch): Promise<ClaudeLaunchRes
   const identityConflict = completion !== null && proofs.some((proof) =>
     `windows:${proof.identity.pid}:${proof.identity.creationTime}` !== registration.processIdentity ||
     proof.exitCode !== completion.exitCode);
-  const observed = deps.observeProcess(completion === null ? { kind: "UNOBSERVED" } :
-    { kind: "EXITED", code: completion.exitCode }, request.reconciliation);
-  if (observed.kind === "REFUSED") return delegated(observed.failure);
+  let observed;
+  try { observed = deps.observeProcess(completion === null ? { kind: "UNOBSERVED" } :
+    { kind: "EXITED", code: completion.exitCode }, request.reconciliation); }
+  catch { return await releaseLock(opened.lock, directFailure(
+    "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process observation threw")); }
+  if (observed.kind === "REFUSED") return await releaseLock(opened.lock, delegated(observed.failure));
   let uncertainty = primaryFailure === null ? reason : [primaryFailure.code, primaryFailure.layer] as const;
   if (identityConflict) uncertainty = ["PROCESS_BOUNDARY_IDENTITY_UNPROVEN", "WINDOWS_PROCESS_TRANSPORT"];
   if (uncertainty === null && (stdout.failed || stderr.failed)) uncertainty = ["CLAUDE_LAUNCH_STREAM_ERROR", "OUTPUT"];
   if (uncertainty === null && (stdout.evidence.truncated || stderr.evidence.truncated)) {
     uncertainty = ["CLAUDE_LAUNCH_OUTPUT_TRUNCATED", "OUTPUT"];
   }
-  const truthClass = uncertainty === null && observed.observation.proven ? "PROVEN" : "UNKNOWN";
-  const observation = buildLaunchObservation(opened, registration, [stdout, stderr],
-    observed.observation.processExit, truthClass, uncertainty, startedAt);
-  return deepFreeze({ kind: "OBSERVED", ok: true, truthClass,
-    code: uncertainty?.[0] ?? null, layer: uncertainty?.[1] ?? null,
-    consumedGrant: opened.consumedGrant, registration, observation });
+  let result: ClaudeLaunchResult;
+  try {
+    const truthClass = uncertainty === null && observed.observation.proven ? "PROVEN" : "UNKNOWN";
+    const observation = buildLaunchObservation(opened, registration, [stdout, stderr],
+      observed.observation.processExit, truthClass, uncertainty, startedAt);
+    result = deepFreeze({ kind: "OBSERVED" as const, ok: true as const, truthClass,
+      code: uncertainty?.[0] ?? null, layer: uncertainty?.[1] ?? null,
+      consumedGrant: opened.consumedGrant, registration, observation });
+  } catch {
+    result = directFailure("CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "observation binding threw");
+  }
+  return await releaseLock(opened.lock, result);
 }
 
 export async function launchClaude(value: unknown, options: ClaudeLaunchOptions = {}): Promise<ClaudeLaunchResult> {
@@ -239,12 +329,18 @@ export async function launchClaude(value: unknown, options: ClaudeLaunchOptions 
   if (commit.kind === "REFUSED") return delegated(commit.failure);
   const grant = deps.consumeGrant(request.grant, request.wrapperIdentity);
   if (grant.kind === "REFUSED") return delegated(grant.failure);
+  const preflight = preflightLaunchLock(request, deps);
+  if ("kind" in preflight) return preflight;
+  const lock = await acquireLaunchLock(preflight, deps);
+  if ("kind" in lock) return lock;
   let opened: WindowsProcessBoundary | WindowsProcessUnknown;
   try {
     opened = deps.openBoundary({ executable: runtime.executablePath, argv: request.argv,
       cwd: request.cwd, environment: request.environment }, { timeoutMs: request.limits.timeoutMs });
-  } catch { return directFailure("CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process boundary threw before opening"); }
-  if ("truthClass" in opened) return directFailure(opened.code, opened.layer, opened.message);
+  } catch { return await releaseLock(lock, directFailure(
+    "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER", "process boundary threw before opening")); }
+  if ("truthClass" in opened) return await releaseLock(lock,
+    directFailure(opened.code, opened.layer, opened.message));
   return await settleClaudeLaunch({ request, runtime, activationDigest: commit.activationDigest,
-    consumedGrant: grant.grant, boundary: opened, deps, signal });
+    consumedGrant: grant.grant, lock, boundary: opened, deps, signal });
 }
