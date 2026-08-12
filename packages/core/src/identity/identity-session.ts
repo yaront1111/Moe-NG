@@ -3,6 +3,7 @@ import {
   sameRecoveryAuthenticationBinding,
 } from "./recovery-authentication-binding.js";
 import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+import { snapshotExactArray, snapshotExactRecord } from "./identity-snapshot.js";
 
 /**
  * Daemon-owned identity records.
@@ -74,32 +75,8 @@ function isPositiveInteger(value: unknown): value is number {
  * set, or throws while being read — which is how revoked proxies and hostile
  * getters are contained rather than propagated.
  */
-function readExact(
-  value: unknown,
-  keys: readonly string[],
-): Record<string, unknown> | null {
-  try {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      return null;
-    }
-    const actual = Object.keys(value);
-    if (actual.length !== keys.length || !keys.every((key) => Object.hasOwn(value, key))) {
-      return null;
-    }
-    const copy: Record<string, unknown> = {};
-    for (const key of keys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      copy[key] = descriptor.value;
-    }
-    return copy;
-  } catch {
-    return null;
-  }
-}
-
 export function createPrincipal(value: unknown): Principal | null {
-  const raw = readExact(value, PRINCIPAL_KEYS);
+  const raw = snapshotExactRecord(value, PRINCIPAL_KEYS);
   if (raw === null) return null;
   const { principalId, kind, profileRevisionId } = raw;
   if (!isId(principalId) || !isId(profileRevisionId)) return null;
@@ -113,27 +90,13 @@ export function createPrincipal(value: unknown): Principal | null {
 
 /** Sorted and deduplicated so two equivalent sessions compare identically. */
 function readTransports(value: unknown): readonly string[] | null {
-  try {
-    if (!Array.isArray(value) || value.length === 0) return null;
-    if (Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
-    const keys = Object.keys(value);
-    if (keys.length !== value.length) return null;
-    const transports: string[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      if (keys[index] !== String(index)) return null;
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      if (!isId(descriptor.value)) return null;
-      transports.push(descriptor.value);
-    }
-    return Object.freeze([...new Set(transports)].sort());
-  } catch {
-    return null;
-  }
+  const entries = snapshotExactArray(value);
+  if (entries === null || entries.length === 0 || !entries.every(isId)) return null;
+  return Object.freeze([...new Set(entries)].sort());
 }
 
 export function createSession(value: unknown): Session | null {
-  const raw = readExact(value, SESSION_KEYS);
+  const raw = snapshotExactRecord(value, SESSION_KEYS);
   if (raw === null) return null;
   const transportIds = readTransports(raw.transportIds);
   if (transportIds === null) return null;
@@ -161,7 +124,7 @@ export function createSession(value: unknown): Session | null {
 }
 
 export function createCredential(value: unknown): Credential | null {
-  const raw = readExact(value, CREDENTIAL_KEYS);
+  const raw = snapshotExactRecord(value, CREDENTIAL_KEYS);
   if (raw === null) return null;
   if (!isId(raw.credentialId) || !isId(raw.sessionId)) return null;
   if (!isPositiveInteger(raw.generation) || typeof raw.revoked !== "boolean") return null;

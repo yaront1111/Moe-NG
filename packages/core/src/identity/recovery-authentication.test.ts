@@ -127,6 +127,34 @@ function commandInput(capabilityBinding = CURRENT): AuthenticateCommandInput {
   } as unknown as AuthenticateCommandInput;
 }
 
+const OWN_PROPERTY_VARIANTS = Object.freeze([
+  ["hidden", (value: object) => Object.defineProperty(value, "hiddenExtra", { value: true })],
+  ["symbol", (value: object) => Object.defineProperty(value, Symbol("extra"), {
+    enumerable: true,
+    value: true,
+  })],
+] as const);
+
+function expectStructuralCommandRefusal(overrides: Partial<AuthenticateCommandInput>): void {
+  let proofCalls = 0;
+  let replayCalls = 0;
+  const result = authenticateCommand(commandInput());
+  const refused = authenticateCommand({
+    ...commandInput(),
+    ...overrides,
+    verifyProof: () => { proofCalls += 1; return true; },
+    checkReplay: () => { replayCalls += 1; return "FRESH"; },
+  });
+  expect(result.ok).toBe(true);
+  expect(refused).toMatchObject({
+    error: { code: "AUTHENTICATION_FAILED" },
+    layer: "BINDING",
+    ok: false,
+  });
+  expect("context" in refused).toBe(false);
+  expect({ proofCalls, replayCalls }).toEqual({ proofCalls: 0, replayCalls: 0 });
+}
+
 describe("recovery-bound identity records", () => {
   it("accepts, freezes, and rotates exact current public refs", () => {
     const issuedSession = session();
@@ -199,6 +227,63 @@ describe("recovery-bound identity records", () => {
       value: function* smuggledTransport() { yield "remote-http"; },
     });
     expect(session(CURRENT, { transportIds })).toBeNull();
+  });
+
+  it.each(OWN_PROPERTY_VARIANTS)(
+    "rejects %s extra own properties across command authentication records",
+    (_name, attach) => {
+      const rawSession = attach({ ...session()! });
+      const rawCredential = attach({ ...credential()! });
+      const rawGrant = attach({ ...grant() });
+      const rawCurrent = attach({ ...CURRENT });
+      const cases: readonly Partial<AuthenticateCommandInput>[] = [
+        { session: rawSession as AuthenticateCommandInput["session"] },
+        { credential: rawCredential as AuthenticateCommandInput["credential"] },
+        { capabilities: [rawGrant] as AuthenticateCommandInput["capabilities"] },
+        { currentRecoveryBinding: rawCurrent as AuthenticateCommandInput["currentRecoveryBinding"] },
+      ];
+      expect(cases).toHaveLength(4);
+      for (const overrides of cases) expectStructuralCommandRefusal(overrides);
+    },
+  );
+
+  it.each(OWN_PROPERTY_VARIANTS)(
+    "rejects %s extra own properties on command authentication arrays",
+    (_name, attach) => {
+      const transportIds = attach(["local-ipc"]);
+      const rawSession = { ...session()!, transportIds };
+      const grants = attach([{ ...grant() }]);
+      const cases: readonly Partial<AuthenticateCommandInput>[] = [
+        { session: rawSession as AuthenticateCommandInput["session"] },
+        { capabilities: grants as AuthenticateCommandInput["capabilities"] },
+      ];
+      expect(cases).toHaveLength(2);
+      for (const overrides of cases) expectStructuralCommandRefusal(overrides);
+    },
+  );
+
+  it.each(OWN_PROPERTY_VARIANTS)(
+    "rejects %s extra own properties on recovery-candidate arrays",
+    (_name, attach) => {
+      let proofCalls = 0;
+      let replayCalls = 0;
+      const result = authenticateSession({
+        ...sessionInput(),
+        capabilityRecoveryCandidates: attach([{ ...CURRENT }]),
+        verifyProof: () => { proofCalls += 1; return true; },
+        checkReplay: () => { replayCalls += 1; return "FRESH"; },
+      } as SessionAuthenticationInput);
+      expect(result).toEqual({
+        code: "AUTHENTICATION_FAILED",
+        layer: "BINDING",
+        ok: false,
+      });
+      expect({ proofCalls, replayCalls }).toEqual({ proofCalls: 0, replayCalls: 0 });
+    },
+  );
+
+  it("generates both own-property variants", () => {
+    expect(OWN_PROPERTY_VARIANTS).toHaveLength(2);
   });
 });
 

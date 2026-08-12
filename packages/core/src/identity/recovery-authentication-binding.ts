@@ -1,4 +1,5 @@
 import type { RestoreQuiesceWitness } from "../project/project-contract.js";
+import { snapshotExactArray, snapshotExactRecord } from "./identity-snapshot.js";
 
 export type RecoveryIncarnationRef = RestoreQuiesceWitness["recoveryIncarnationRef"];
 export type KeyEpochRef = string;
@@ -19,48 +20,28 @@ export function isRecoveryAuthenticationRef(value: unknown): value is string {
 export function createRecoveryAuthenticationBinding(
   value: unknown,
 ): RecoveryAuthenticationBinding | null {
-  try {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-    const keys = Object.keys(value);
-    if (keys.length !== BINDING_KEYS.length) return null;
-    const copy: Record<string, unknown> = {};
-    for (const key of BINDING_KEYS) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      copy[key] = descriptor.value;
-    }
-    if (!isRecoveryAuthenticationRef(copy.recoveryIncarnationRef)) return null;
-    if (!isRecoveryAuthenticationRef(copy.keyEpochRef)) return null;
-    return Object.freeze({
-      recoveryIncarnationRef: copy.recoveryIncarnationRef,
-      keyEpochRef: copy.keyEpochRef,
-    });
-  } catch {
-    return null;
-  }
+  const copy = snapshotExactRecord(value, BINDING_KEYS);
+  if (copy === null) return null;
+  if (!isRecoveryAuthenticationRef(copy.recoveryIncarnationRef)) return null;
+  if (!isRecoveryAuthenticationRef(copy.keyEpochRef)) return null;
+  return Object.freeze({
+    recoveryIncarnationRef: copy.recoveryIncarnationRef,
+    keyEpochRef: copy.keyEpochRef,
+  });
 }
 
 export function snapshotRecoveryAuthenticationBindings(
   value: unknown,
 ): readonly RecoveryAuthenticationBinding[] | null {
-  try {
-    if (!Array.isArray(value)) return null;
-    if (Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
-    const ownKeys = Object.keys(value);
-    if (ownKeys.length !== value.length) return null;
-    if (!ownKeys.every((key, index) => key === String(index))) return null;
-    const snapshots: RecoveryAuthenticationBinding[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      const snapshot = createRecoveryAuthenticationBinding(descriptor.value);
-      if (snapshot === null) return null;
-      snapshots.push(snapshot);
-    }
-    return Object.freeze(snapshots);
-  } catch {
-    return null;
+  const entries = snapshotExactArray(value);
+  if (entries === null) return null;
+  const snapshots: RecoveryAuthenticationBinding[] = [];
+  for (const entry of entries) {
+    const snapshot = createRecoveryAuthenticationBinding(entry);
+    if (snapshot === null) return null;
+    snapshots.push(snapshot);
   }
+  return Object.freeze(snapshots);
 }
 
 export function sameRecoveryAuthenticationBinding(

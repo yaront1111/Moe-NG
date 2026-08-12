@@ -3,6 +3,7 @@ import type { RuntimeCommandKind } from "@moe/contracts";
 
 import { createRecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
 import type { RecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+import { snapshotExactArray, snapshotExactRecord } from "./identity-snapshot.js";
 
 /**
  * `@moe/contracts` exports the frozen kind tuple but not its `isCommandKind`
@@ -70,39 +71,11 @@ function isScopeId(value: unknown): value is string {
  * silent rejection.
  */
 function readGrantFields(value: unknown): Record<string, unknown> | null {
-  try {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-    if (Object.keys(value).length !== GRANT_KEYS.length) return null;
-    if (!GRANT_KEYS.every((key) => Object.hasOwn(value, key))) return null;
-    const copy: Record<string, unknown> = {};
-    for (const key of GRANT_KEYS) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      copy[key] = descriptor.value;
-    }
-    return copy;
-  } catch {
-    return null;
-  }
+  return snapshotExactRecord(value, GRANT_KEYS);
 }
 
 function snapshotGrantEntries(value: unknown): readonly unknown[] | null {
-  try {
-    if (!Array.isArray(value)) return null;
-    if (Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
-    const keys = Object.keys(value);
-    if (keys.length !== value.length) return null;
-    const entries: unknown[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      if (keys[index] !== String(index)) return null;
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor === undefined || !("value" in descriptor)) return null;
-      entries.push(descriptor.value);
-    }
-    return entries;
-  } catch {
-    return null;
-  }
+  return snapshotExactArray(value);
 }
 
 function readGrant(value: unknown): CapabilityGrant | null {
