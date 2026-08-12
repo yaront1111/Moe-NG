@@ -1329,15 +1329,19 @@ describe("hostile authentication inputs", () => {
         throw new Error("hostile getter");
       },
     });
+    const symbolExtra = Object.defineProperty({ ...valid }, Symbol("extra"), { value: true });
+    const hiddenExtra = Object.defineProperty({ ...valid }, "extra", { value: true });
     const cases: readonly unknown[] = [
       { ...valid, extra: true },
       { ...valid, verifyProof: () => true, checkReplay: () => "FRESH" },
       cyclic,
       throwing,
       accessor,
+      symbolExtra,
+      hiddenExtra,
     ];
     const before = eventCount(state.store);
-    expect(cases).toHaveLength(5);
+    expect(cases).toHaveLength(7);
     for (const entry of cases) {
       expect(authority.authenticate(entry)).toEqual({
         ok: false,
@@ -1345,6 +1349,29 @@ describe("hostile authentication inputs", () => {
         layer: "BINDING",
       });
     }
+    expect(eventCount(state.store)).toBe(before);
+  });
+
+  it("rejects a nonthrowing request accessor without durable replay evidence", () => {
+    const state = harness();
+    const authority = createSessionAuthority(state.store, { projectId: PROJECT_ID, clock: () => NOW });
+    createPrincipal(authority);
+    const opened = openAuthority(authority, "returning-accessor");
+    const valid = authenticationRequest(opened.authority, opened.key, {
+      nonce: "72".repeat(16),
+      requestId: "request-returning-accessor",
+    });
+    const accessor = Object.defineProperty({ ...valid }, "requestId", {
+      enumerable: true,
+      get: () => valid.requestId,
+    });
+    const before = eventCount(state.store);
+
+    expect(authority.authenticate(accessor)).toEqual({
+      ok: false,
+      code: "AUTHENTICATION_FAILED",
+      layer: "BINDING",
+    });
     expect(eventCount(state.store)).toBe(before);
   });
 });

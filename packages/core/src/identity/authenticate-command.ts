@@ -7,6 +7,7 @@ import type {
   PresentedProof,
   ProofChallenge,
   ReplayOutcome,
+  SessionAuthLayer,
 } from "./authenticate-session.js";
 import {
   canonicalizeCapabilities,
@@ -53,15 +54,24 @@ export interface AuthorizationContext extends RecoveryAuthenticationBinding {
 
 export type AuthenticateCommandResult =
   | { readonly ok: true; readonly context: AuthorizationContext }
-  | { readonly ok: false; readonly error: RuntimeError };
+  | {
+      readonly ok: false;
+      readonly error: RuntimeError;
+      readonly layer: SessionAuthLayer | "CAPABILITY";
+    };
 
 /** Step-up must be strictly newer than this window before `now`. */
 const STEP_UP_WINDOW = 300;
 
-function deny(code: string, correlationId: string): AuthenticateCommandResult {
+function deny(
+  code: string,
+  correlationId: string,
+  layer: SessionAuthLayer | "CAPABILITY",
+): AuthenticateCommandResult {
   return Object.freeze({
     ok: false as const,
     error: createRuntimeError({ code, correlationId }),
+    layer,
   });
 }
 
@@ -80,11 +90,11 @@ function authorizeCapability(
     recoveryIncarnationRef: facts.recoveryIncarnationRef,
     keyEpochRef: facts.keyEpochRef,
   });
-  if (grant === null) return deny("CAPABILITY_DENIED", correlationId);
+  if (grant === null) return deny("CAPABILITY_DENIED", correlationId, "CAPABILITY");
   if (grant.requiresRecentStepUp) {
     const at = input.recentStepUpAt;
     if (at === null || !Number.isSafeInteger(at) || at <= input.now - STEP_UP_WINDOW) {
-      return deny("CAPABILITY_DENIED", correlationId);
+      return deny("CAPABILITY_DENIED", correlationId, "CAPABILITY");
     }
   }
   return Object.freeze({
@@ -118,7 +128,7 @@ export function authenticateCommand(
     correlationId = envelope?.correlationId ?? "";
     const capabilities = canonicalizeCapabilities(input.capabilities);
     if (typeof envelope !== "object" || envelope === null || capabilities === null) {
-      return deny("AUTHENTICATION_FAILED", correlationId);
+      return deny("AUTHENTICATION_FAILED", correlationId, "BINDING");
     }
     const candidates = matchingCapabilityRecoveryBindings(capabilities, {
       principalId: input.principal?.principalId ?? "",
@@ -143,9 +153,11 @@ export function authenticateCommand(
       verifyProof: input.verifyProof,
       checkReplay: input.checkReplay,
     });
-    if (!authentication.ok) return deny(authentication.code, correlationId);
+    if (!authentication.ok) {
+      return deny(authentication.code, correlationId, authentication.layer);
+    }
     return authorizeCapability(input, authentication.facts, capabilities, correlationId);
   } catch {
-    return deny("AUTHENTICATION_FAILED", correlationId);
+    return deny("AUTHENTICATION_FAILED", correlationId, "BINDING");
   }
 }

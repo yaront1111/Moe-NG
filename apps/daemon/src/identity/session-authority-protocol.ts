@@ -90,9 +90,8 @@ export function isUnsignedSafeInteger(value: unknown): value is number {
 }
 
 /**
- * Reads an untrusted record exactly once into a plain own-property map, so a
- * revoked proxy, a throwing getter, or an extra key is contained as `null`
- * instead of propagating into the protocol.
+ * Reads untrusted own data descriptors into a plain map. Accessors, symbols,
+ * revoked proxies, and extra or hidden keys are contained as `null`.
  */
 export function readExactRecord(
   value: unknown,
@@ -100,12 +99,21 @@ export function readExactRecord(
 ): Record<string, unknown> | null {
   try {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-    const actual = Object.keys(value);
-    if (actual.length !== keys.length || !keys.every((key) => Object.hasOwn(value, key))) {
+    const actual = Reflect.ownKeys(value);
+    if (
+      actual.length !== keys.length
+      || !actual.every((key) => typeof key === "string" && keys.includes(key))
+    ) {
       return null;
     }
     const copy: Record<string, unknown> = {};
-    for (const key of keys) copy[key] = (value as Record<string, unknown>)[key];
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+        return null;
+      }
+      copy[key] = descriptor.value;
+    }
     return copy;
   } catch {
     return null;

@@ -226,7 +226,8 @@ describe("failures carry no business authority", () => {
   it("returns a registry-shaped error with no effect, event, or outbox data", () => {
     const result = authenticateCommand(input({ projectId: "proj-9" }));
     if (result.ok) throw new Error("expected denial");
-    expect(Object.keys(result)).toEqual(["ok", "error"]);
+    expect(Object.keys(result)).toEqual(["ok", "error", "layer"]);
+    expect(result.layer).toBe("CAPABILITY");
     const serialized = JSON.stringify(result.error).toLowerCase();
     for (const forbidden of ["outbox", "event", "effect", "authorization", "capabilityid"]) {
       expect(serialized).not.toContain(forbidden);

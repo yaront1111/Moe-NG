@@ -23,6 +23,9 @@ const EARLIER = Object.freeze([
   Object.freeze({ recoveryIncarnationRef: "c".repeat(64), keyEpochRef: "d".repeat(64) }),
   Object.freeze({ recoveryIncarnationRef: "e".repeat(64), keyEpochRef: "f".repeat(64) }),
 ]);
+const EARLIER_GRANT_BINDINGS = Object.freeze(EARLIER.map((binding) =>
+  Object.freeze({ ...binding })
+));
 const principal = createPrincipal({
   principalId: "p-1",
   kind: "HUMAN",
@@ -271,11 +274,19 @@ describe("the recovery fence precedes expiry and capability", () => {
     });
   });
 
-  it("classifies an otherwise matching stale grant as replay", () => {
-    const result = authenticateCommand(commandInput(EARLIER[0]));
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected stale grant denial");
-    expect(result.error.code).toBe("SESSION_REPLAYED");
+  it.each(EARLIER_GRANT_BINDINGS)(
+    "classifies earlier-install grant %# as recovery-binding replay",
+    (binding) => {
+      const result = authenticateCommand(commandInput(binding));
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected stale grant denial");
+      expect(result.error.code).toBe("SESSION_REPLAYED");
+      expect(result.layer).toBe("RECOVERY_BINDING");
+    },
+  );
+
+  it("generates exactly two stale-grant cases", () => {
+    expect(EARLIER_GRANT_BINDINGS).toHaveLength(2);
   });
 
   it("publishes current refs but no secret material in authorization context", () => {
