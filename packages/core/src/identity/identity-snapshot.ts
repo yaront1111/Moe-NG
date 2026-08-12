@@ -37,11 +37,11 @@ export function snapshotExactArray(value: unknown): readonly unknown[] | null {
   try {
     if (!Array.isArray(value)) return null;
     const length = dataValue(value, "length", false);
-    if (!Number.isSafeInteger(length) || (length as number) < 0) return null;
+    if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0) return null;
     const actual = Reflect.ownKeys(value);
-    if (actual.length !== (length as number) + 1 || actual.at(-1) !== "length") return null;
+    if (actual.length !== length + 1 || actual.at(-1) !== "length") return null;
     const snapshot: unknown[] = [];
-    for (let index = 0; index < (length as number); index += 1) {
+    for (let index = 0; index < length; index += 1) {
       if (actual[index] !== String(index)) return null;
       snapshot.push(dataValue(value, String(index), true));
     }
