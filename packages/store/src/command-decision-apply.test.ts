@@ -39,9 +39,11 @@ function atomic(store: SqliteEventStore): AtomicDecisionStore {
 describe("atomic command decision apply", () => {
   it("commits the canonical decision and caller projection together", () => {
     const opened = store();
+    let applyCalls = 0;
     const response = atomic(opened).commitExpectedVersionDecisionWithApply(
       proposedDecision(),
       ({ database }) => {
+        applyCalls += 1;
         database.exec("CREATE TABLE restore_projection (value TEXT NOT NULL) STRICT");
         database.prepare("INSERT INTO restore_projection (value) VALUES (?)").run("QUIESCED");
       },
@@ -51,6 +53,7 @@ describe("atomic command decision apply", () => {
       decision: { effectDisposition: "EFFECTS_COMMITTED", resultCode: "EFFECTS_COMMITTED" },
       disposition: "DECIDED",
     });
+    expect(applyCalls).toBe(1);
     expect(opened.getCommandDecision(proposedDecision().key)).not.toBeNull();
   });
 
