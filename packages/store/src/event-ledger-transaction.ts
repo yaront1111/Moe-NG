@@ -56,6 +56,31 @@ function isThenable(value: unknown): boolean {
   return typeof (value as { then?: unknown }).then === "function";
 }
 
+/** Runs a synchronous caller projection inside an already-open commit transaction. */
+export function applyCommitWithinTransaction(
+  database: DatabaseSync,
+  apply: CommitApply,
+  stored: StoredCommitResult,
+): void {
+  let returned: unknown;
+  try {
+    returned = apply({
+      database,
+      summary: toCommitResult(stored, "COMMITTED"),
+    });
+  } catch (error) {
+    throw new DurableStoreError("PROJECTION_APPLY_FAILED", describeApplyFailure(error), {
+      cause: error,
+    });
+  }
+  if (isThenable(returned)) {
+    throw new DurableStoreError(
+      "PROJECTION_APPLY_FAILED",
+      "the commit apply must be synchronous; this transaction cannot await a thenable",
+    );
+  }
+}
+
 /** Internal command transaction layer behind the public event-ledger facade. */
 export class EventTransactionStore extends EventRecoveryStore {
   public commit(rawInput: CommitInput): CommitResult {
@@ -121,28 +146,8 @@ export class EventTransactionStore extends EventRecoveryStore {
     }
     const stored = this.writeCommitEffects(input, requestSha256, previousVersion);
     if (apply !== null) {
-      this.applyWithinCommit(apply, stored);
+      applyCommitWithinTransaction(this.database, apply, stored);
     }
     return { disposition: "COMMITTED", stored };
-  }
-
-  private applyWithinCommit(apply: CommitApply, stored: StoredCommitResult): void {
-    let returned: unknown;
-    try {
-      returned = apply({
-        database: this.database,
-        summary: toCommitResult(stored, "COMMITTED"),
-      });
-    } catch (error) {
-      throw new DurableStoreError("PROJECTION_APPLY_FAILED", describeApplyFailure(error), {
-        cause: error,
-      });
-    }
-    if (isThenable(returned)) {
-      throw new DurableStoreError(
-        "PROJECTION_APPLY_FAILED",
-        "the commit apply must be synchronous; this transaction cannot await a thenable",
-      );
-    }
   }
 }

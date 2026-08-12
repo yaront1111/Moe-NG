@@ -158,39 +158,76 @@ const RECORD_KEYS = Object.freeze([
 const isRef = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 200;
 
+function snapshotDataRecord(
+  value: unknown,
+  allowed: readonly string[],
+  required: readonly string[],
+): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const keys = Reflect.ownKeys(value);
+  if (!keys.every((key) => typeof key === "string" && allowed.includes(key))) return null;
+  if (!required.every((key) => keys.includes(key))) return null;
+  const snapshot: Record<string, unknown> = {};
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !("value" in descriptor)) return null;
+    snapshot[key as string] = descriptor.value;
+  }
+  return snapshot;
+}
+
+function snapshotArray<T>(
+  value: unknown,
+  valid: (entry: unknown) => entry is T,
+): readonly T[] | null {
+  if (!Array.isArray(value)) return null;
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) return null;
+  const length = lengthDescriptor.value;
+  if (!Number.isSafeInteger(length) || length < 0) return null;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1 || keys[length] !== "length") return null;
+  const entries: T[] = [];
+  for (let index = 0; index < length; index += 1) {
+    if (keys[index] !== String(index)) return null;
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !("value" in descriptor) || !valid(descriptor.value)) return null;
+    entries.push(descriptor.value);
+  }
+  return Object.freeze(entries);
+}
+
 function hasExactStringKeys(value: object, allowed: readonly string[]): boolean {
   const keys = Reflect.ownKeys(value);
   return keys.every((key) => typeof key === "string" && allowed.includes(key));
 }
 
-function validFaults(value: unknown): value is readonly RestoreControllerFaultPoint[] | undefined {
-  return value === undefined || (
-    Array.isArray(value) &&
-    value.every((point) => RESTORE_CONTROLLER_FAULT_POINTS.includes(point))
-  );
+function isFaultPoint(value: unknown): value is RestoreControllerFaultPoint {
+  return RESTORE_CONTROLLER_FAULT_POINTS.includes(value as RestoreControllerFaultPoint);
 }
 
 /** Bounded exact-shape snapshot; unknown keys and fault names fail closed. */
 export function snapshotRestoreRequest(value: unknown): RestoreControllerRequest | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   try {
-    if (!hasExactStringKeys(value, REQUEST_KEYS)) return null;
-    const raw = value as Record<string, unknown>;
+    const required = REQUEST_KEYS.filter((key) => key !== "faults");
+    const raw = snapshotDataRecord(value, REQUEST_KEYS, required);
+    if (raw === null) return null;
     if (![raw.restoreCommandId, raw.projectId, raw.correlationId, raw.principalId, raw.decidedAt]
       .every(isRef)) return null;
     if (!HEX64.test(String(raw.incarnationRef)) || !HEX64.test(String(raw.keyEpochRef))) return null;
-    if (!Array.isArray(raw.logicalPaths) || raw.logicalPaths.some((entry) => typeof entry !== "string")) {
-      return null;
-    }
-    if (!validFaults(raw.faults)) return null;
+    const logicalPaths = snapshotArray(raw.logicalPaths, (entry): entry is string =>
+      typeof entry === "string");
+    if (logicalPaths === null) return null;
+    const faults = raw.faults === undefined ? undefined : snapshotArray(raw.faults, isFaultPoint);
+    if (faults === null) return null;
     return Object.freeze({
       container: raw.container,
       correlationId: raw.correlationId as string,
       decidedAt: raw.decidedAt as string,
-      ...(raw.faults === undefined ? {} : { faults: Object.freeze([...raw.faults]) }),
+      ...(faults === undefined ? {} : { faults }),
       incarnationRef: raw.incarnationRef as string,
       keyEpochRef: raw.keyEpochRef as string,
-      logicalPaths: Object.freeze([...raw.logicalPaths]),
+      logicalPaths,
       principalId: raw.principalId as string,
       projectId: raw.projectId as string,
       restoreCommandId: raw.restoreCommandId as string,

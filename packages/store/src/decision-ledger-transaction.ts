@@ -7,6 +7,8 @@ import { invalidInput } from "./store-input.js";
 import { INTERNAL_IDENTIFIER_PREFIX } from "./store-internals.js";
 import type { SnapshotDecisionMetadata, StoredCommandDecision } from "./store-internals.js";
 import { toCommandDecisionResponse } from "./store-rows.js";
+import { applyCommitWithinTransaction } from "./event-ledger-transaction.js";
+import type { CommitApply } from "./event-ledger-transaction.js";
 import {
   commitAcceptedDecisionEffect,
   commitRejectedDecisionEffect,
@@ -39,6 +41,20 @@ interface DecisionAttempt {
 export class DecisionTransactionStore extends DecisionReplayStore {
   public commitExpectedVersionDecision(
     rawInput: CommitExpectedVersionDecisionInput,
+  ): CommandDecisionResponse {
+    return this.commitDecision(rawInput, null);
+  }
+
+  public commitExpectedVersionDecisionWithApply(
+    rawInput: CommitExpectedVersionDecisionInput,
+    apply: CommitApply,
+  ): CommandDecisionResponse {
+    return this.commitDecision(rawInput, apply);
+  }
+
+  private commitDecision(
+    rawInput: CommitExpectedVersionDecisionInput,
+    apply: CommitApply | null,
   ): CommandDecisionResponse {
     this.requireOpen();
     if (this.projectId === null || !this.writeProjectAsserted) {
@@ -87,10 +103,14 @@ export class DecisionTransactionStore extends DecisionReplayStore {
     }
     return this.runDecisionTransaction(
       planDecision(request, identities, metadata, preflight.observedVersion),
+      apply,
     );
   }
 
-  private runDecisionTransaction(plan: DecisionPlan): CommandDecisionResponse {
+  private runDecisionTransaction(
+    plan: DecisionPlan,
+    apply: CommitApply | null,
+  ): CommandDecisionResponse {
     try {
       this.database.exec("BEGIN IMMEDIATE");
     } catch (error) {
@@ -107,7 +127,7 @@ export class DecisionTransactionStore extends DecisionReplayStore {
         return this.commitAndRespond(attempt, historical, "REPLAYED");
       }
       this.assertDecisionNamespaceFree(plan.identities);
-      return this.commitAndRespond(attempt, this.decideUnderLock(plan), "DECIDED");
+      return this.commitAndRespond(attempt, this.decideUnderLock(plan, apply), "DECIDED");
     } catch (error) {
       throw this.classifyDecisionFailure(error, attempt.commitAttempted);
     }
@@ -141,7 +161,10 @@ export class DecisionTransactionStore extends DecisionReplayStore {
     }
   }
 
-  private decideUnderLock(plan: DecisionPlan): StoredCommandDecision {
+  private decideUnderLock(
+    plan: DecisionPlan,
+    apply: CommitApply | null,
+  ): StoredCommandDecision {
     const { identities, metadata, request } = plan;
     const observedVersion = this.assertAggregateTail(request.targetAggregateId);
     let effect: CanonicalDecisionEffect;
@@ -160,10 +183,14 @@ export class DecisionTransactionStore extends DecisionReplayStore {
         observedVersion,
       );
     }
-    return writeCanonicalDecision(
+    const decision = writeCanonicalDecision(
       { prepare: (sql) => this.database.prepare(sql) },
       { effect, identities, metadata, observedVersion, request },
     );
+    if (apply !== null && effect.effectDisposition === "EFFECTS_COMMITTED") {
+      applyCommitWithinTransaction(this.database, apply, effect.receipt);
+    }
+    return decision;
   }
 
   private effectContext(): DecisionEffectContext {

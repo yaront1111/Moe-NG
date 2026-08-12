@@ -263,6 +263,13 @@ export class SqliteEventStore {
     return this.#core.commitExpectedVersionDecision(input);
   }
 
+  public commitExpectedVersionDecisionWithApply(
+    input: CommitExpectedVersionDecisionInput,
+    apply: CommitApply,
+  ): CommandDecisionResponse {
+    return this.#core.commitExpectedVersionDecisionWithApply(input, apply);
+  }
+
   public commitWithApply(input: CommitInput, apply: CommitApply): CommitResult {
     return this.#core.commitWithApply(input, apply);
   }

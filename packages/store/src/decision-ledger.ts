@@ -44,6 +44,10 @@ export interface DecisionLedgerCore {
   readonly commitExpectedVersionDecision: (
     input: CommitExpectedVersionDecisionInput,
   ) => CommandDecisionResponse;
+  readonly commitExpectedVersionDecisionWithApply: (
+    input: CommitExpectedVersionDecisionInput,
+    apply: CommitApply,
+  ) => CommandDecisionResponse;
   readonly commitWithApply: (input: CommitInput, apply: CommitApply) => CommitResult;
   readonly getAggregateVersion: (aggregateId: string) => number;
   readonly getCommandDecision: (key: CommandDecisionKey) => CommandDecisionRecord | null;
@@ -96,6 +100,10 @@ export function createDecisionLedgerCore(
     commit: (input: CommitInput) => ledger.commit(input),
     commitExpectedVersionDecision: (input: CommitExpectedVersionDecisionInput) =>
       ledger.commitExpectedVersionDecision(input),
+    commitExpectedVersionDecisionWithApply: (
+      input: CommitExpectedVersionDecisionInput,
+      apply: CommitApply,
+    ) => ledger.commitExpectedVersionDecisionWithApply(input, apply),
     commitWithApply: (input: CommitInput, apply: CommitApply) =>
       ledger.commitWithApply(input, apply),
     getAggregateVersion: (aggregateId: string) => ledger.getAggregateVersion(aggregateId),

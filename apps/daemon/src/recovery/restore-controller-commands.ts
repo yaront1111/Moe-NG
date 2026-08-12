@@ -7,6 +7,7 @@ import {
   snapshotRestoreRequest,
 } from "./restore-controller-contract.js";
 import type {
+  RestoreControllerRequest,
   RestoreDiscardResult,
   RestoreInspection,
   RestoreResult,
@@ -14,6 +15,7 @@ import type {
 import {
   readInstalledRestore,
   runRestoreQuiesce,
+  runSnapshottedRestoreQuiesce,
   verifyRestoreGeneration,
 } from "./restore-controller.js";
 
@@ -63,6 +65,13 @@ export function inspectRestore(store: SqliteEventStore): RestoreInspection {
 export function discardRestore(store: SqliteEventStore, request: unknown): RestoreDiscardResult {
   const snapshot = snapshotRestoreRequest(request);
   if (snapshot === null) return controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID");
+  return discardSnapshottedRestore(store, snapshot);
+}
+
+function discardSnapshottedRestore(
+  store: SqliteEventStore,
+  snapshot: RestoreControllerRequest,
+): RestoreDiscardResult {
   const installed = readInstalledRestore(store);
   if (!installed.ok) return installed;
   if (installed.outcome === "INSTALLED") return controllerRefusal("RESTORE_ALREADY_SETTLED");
@@ -96,23 +105,23 @@ export function discardRestore(store: SqliteEventStore, request: unknown): Resto
  * refused at the shape layer rather than silently re-scoped.
  */
 export function createRestorePort(store: SqliteEventStore, projectId: string): RestorePort {
-  const scoped = (request: unknown): unknown | null => {
+  const scoped = (request: unknown): RestoreControllerRequest | null => {
     const snapshot = snapshotRestoreRequest(request);
-    return snapshot === null || snapshot.projectId !== projectId ? null : request;
+    return snapshot === null || snapshot.projectId !== projectId ? null : snapshot;
   };
   return Object.freeze({
     discard: (request: unknown): RestoreDiscardResult => {
       const inScope = scoped(request);
       return inScope === null
         ? controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID")
-        : discardRestore(store, inScope);
+        : discardSnapshottedRestore(store, inScope);
     },
     inspect: (): RestoreInspection => inspectRestore(store),
     resume: (request: unknown): RestoreResult => {
       const inScope = scoped(request);
       return inScope === null
         ? controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID")
-        : resumeRestore(store, inScope);
+        : runSnapshottedRestoreQuiesce(store, inScope);
     },
   });
 }

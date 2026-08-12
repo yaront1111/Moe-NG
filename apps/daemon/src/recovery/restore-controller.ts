@@ -29,6 +29,7 @@ import type {
 type EncodedBinding = Extract<ReturnType<typeof encodeRecoveryBinding>, { readonly ok: true }>;
 type ProjectAccepted = Extract<ReturnType<typeof reduceProject>, { readonly ok: true }>;
 type CommitApply = Parameters<SqliteEventStore["commitWithApply"]>[1];
+type DecisionInput = Parameters<SqliteEventStore["commitExpectedVersionDecision"]>[0];
 type VerifiedGeneration = Extract<ReturnType<typeof verifyBackupGeneration>, { ok: true }>
   | RestoreRefused;
 
@@ -52,6 +53,12 @@ export function readInstalledRestore(store: SqliteEventStore): RestoreInspection
   if (read.outcome === "ABSENT") return Object.freeze({ ok: true, outcome: "ABSENT" });
   const record = decodeRestoreRecord(read.binding.payload);
   if (record === null) return controllerRefusal("RESTORE_RECORD_UNREADABLE");
+  if (
+    record.incarnationRef !== read.binding.incarnationRef
+    || record.keyEpochRef !== read.binding.keyEpochRef
+  ) {
+    return controllerRefusal("RESTORE_RECORD_UNREADABLE");
+  }
   return Object.freeze({
     bindingDigest: read.bindingDigest,
     ok: true,
@@ -164,6 +171,34 @@ function commitAccepted(
   return commitTransaction(store, request, preparedIdentity, encoded, event, verdict, expectedVersion);
 }
 
+function decisionInput(
+  request: RestoreControllerRequest,
+  preparedIdentity: string,
+  event: ProjectAccepted["events"][number],
+  verdict: ProjectAccepted,
+  expectedVersion: number,
+): DecisionInput {
+  const commandId = `restore-quiesce:${preparedIdentity}`;
+  return {
+    commandKind: "recovery.restore_quiesce",
+    committedResultBytes: encoder.encode(JSON.stringify(verdict.state)),
+    correlationId: request.correlationId,
+    decidedAt: request.decidedAt,
+    events: [{
+      eventId: `${commandId}:quiesced`,
+      eventType: event.kind,
+      payload: encoder.encode(JSON.stringify(event)),
+    }],
+    expectedVersion,
+    key: { commandId, principalId: request.principalId, projectId: request.projectId },
+    requestBytes: encoder.encode(JSON.stringify({
+      kind: "recovery.restore_quiesce",
+      preparedIdentity,
+    })),
+    targetAggregateId: request.projectId,
+  };
+}
+
 function commitTransaction(
   store: SqliteEventStore,
   request: RestoreControllerRequest,
@@ -173,25 +208,16 @@ function commitTransaction(
   verdict: ProjectAccepted,
   expectedVersion: number,
 ): RestoreResult {
-  const commandId = `restore-quiesce:${preparedIdentity}`;
   const apply: CommitApply = (context): void => {
     writeBindingRow(context.database, encoded);
     if (declares(request, "INSIDE_COMMIT_APPLY")) throw new Error("restore interrupted");
   };
   try {
-    const committed = store.commitWithApply({
-      aggregateId: request.projectId,
-      commandBytes: encoder.encode(JSON.stringify({ kind: "recovery.restore_quiesce", preparedIdentity })),
-      commandId,
-      committedAt: request.decidedAt,
-      events: [{
-        eventId: `${commandId}:quiesced`,
-        eventType: event.kind,
-        payload: encoder.encode(JSON.stringify(event)),
-      }],
-      expectedVersion,
-    }, apply);
-    if (committed.disposition !== "COMMITTED") return controllerRefusal("RESTORE_RECORD_UNREADABLE");
+    const input = decisionInput(request, preparedIdentity, event, verdict, expectedVersion);
+    const committed = store.commitExpectedVersionDecisionWithApply(input, apply);
+    if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+      return restoreRefusal("DURABLE_STORE", committed.decision.resultCode);
+    }
   } catch (error) {
     if (declares(request, "INSIDE_COMMIT_APPLY")) return controllerRefusal("RESTORE_INTERRUPTED");
     if (error instanceof DurableStoreError) return restoreRefusal("DURABLE_STORE", error.code);
@@ -208,9 +234,10 @@ function commitTransaction(
   });
 }
 
-export function runRestoreQuiesce(store: SqliteEventStore, input: unknown): RestoreResult {
-  const request = snapshotRestoreRequest(input);
-  if (request === null) return controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID");
+export function runSnapshottedRestoreQuiesce(
+  store: SqliteEventStore,
+  request: RestoreControllerRequest,
+): RestoreResult {
   const verified = verifyRestoreGeneration(request);
   if (!verified.ok) return verified;
   const generationDigest = verified.manifest.generationDigest;
@@ -247,4 +274,11 @@ export function runRestoreQuiesce(store: SqliteEventStore, input: unknown): Rest
   const verdict = decide(store, request, generationDigest, expectedVersion);
   if (!verdict.ok) return restoreRefusal("PROJECT_REDUCER", verdict.error.code, verdict.error);
   return commitAccepted(store, request, preparedIdentity, record, verdict, expectedVersion);
+}
+
+export function runRestoreQuiesce(store: SqliteEventStore, input: unknown): RestoreResult {
+  const request = snapshotRestoreRequest(input);
+  return request === null
+    ? controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID")
+    : runSnapshottedRestoreQuiesce(store, request);
 }

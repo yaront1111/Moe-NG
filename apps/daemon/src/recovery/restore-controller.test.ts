@@ -51,27 +51,31 @@ function expectRefusal(result: { readonly ok: boolean }, layer: string, code: st
 }
 
 describe("restore controller — composes the REAL core reducer", () => {
-  it("surfaces the core's own EXPECTED_VERSION_CONFLICT once the project head moved", async () => {
+  it("surfaces the core's own ILLEGAL_TRANSITION once the project is quiesced", async () => {
     const h = await restoreHarness("version");
     const first = await anchoredIncarnation(h, "restore-cmd-1");
     expect(runRestoreQuiesce(h.store, restoreRequest(h, first)).ok).toBe(true);
 
     // A brand-new restore command with a wholly fresh fence. The first quiesce
-    // advanced the event stream, so the reducer is asked at the store's real
-    // head against a folded state one version behind — and refuses itself.
+    // is visible through the canonical fold, so only the real reducer owns the
+    // refusal from QUIESCED.
     const second = await anchoredIncarnation(h, "restore-cmd-2");
     const result = runRestoreQuiesce(h.store, restoreRequest(h, second));
 
-    expectRefusal(result, "PROJECT_REDUCER", "EXPECTED_VERSION_CONFLICT");
+    expectRefusal(result, "PROJECT_REDUCER", "ILLEGAL_TRANSITION");
     if (result.ok) throw new Error("expected a refusal");
     // Only `createRuntimeError` produces this envelope. A local lifecycle check
     // admitting the same states could not carry the registry metadata, and would
     // never have refused a lifecycle that is still admissible.
     expect(result.error).toMatchObject({
-      code: "EXPECTED_VERSION_CONFLICT",
-      details: { actualVersion: 3, expectedVersion: 4 },
+      code: "ILLEGAL_TRANSITION",
+      details: {
+        aggregateKind: "PROJECT",
+        commandKind: "recovery.restore_quiesce",
+        sourceState: "QUIESCED",
+      },
       recoveryCategory: "REFRESH",
-      retryability: "AFTER_REFRESH",
+      retryability: "AFTER_FACT_CHANGE",
       truthClass: "DAEMON_VERIFIED",
     });
   });
