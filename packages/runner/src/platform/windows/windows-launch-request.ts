@@ -65,14 +65,18 @@ function refuse(code: WindowsProcessCode, message: string): WindowsProcessUnknow
   return unknownOutcome(code, "WINDOWS_PROCESS_REQUEST", message);
 }
 
-function argvRejection(argv: unknown): WindowsProcessUnknown | null {
+function readArgv(argv: unknown): readonly string[] | WindowsProcessUnknown {
   try {
     if (!Array.isArray(argv) || argv.length > MAX_ARGV_ENTRIES) {
       return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is not a bounded array");
     }
-    if (Object.keys(argv).length !== argv.length) {
-      return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is sparse or carries extra data");
+    if (
+      Object.getOwnPropertyDescriptor(argv, Symbol.iterator) !== undefined ||
+      Object.keys(argv).length !== argv.length
+    ) {
+      return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv is sparse or carries extra behavior");
     }
+    const snapshot: string[] = [];
     for (let index = 0; index < argv.length; index += 1) {
       const descriptor = Object.getOwnPropertyDescriptor(argv, String(index));
       if (descriptor === undefined || !("value" in descriptor)) {
@@ -81,8 +85,9 @@ function argvRejection(argv: unknown): WindowsProcessUnknown | null {
       if (!isBoundedText(descriptor.value, MAX_ARGUMENT_CHARS)) {
         return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "an argument is not bounded well-formed text");
       }
+      snapshot.push(descriptor.value);
     }
-    return null;
+    return Object.freeze(snapshot);
   } catch {
     return refuse("PROCESS_BOUNDARY_ARGV_REJECTED", "argv could not be read as bounded plain data");
   }
@@ -179,10 +184,9 @@ function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
       "the executable is not a bounded local drive-absolute path",
     );
   }
-  const argv = snapshot["argv"];
-  const argvFailure = argvRejection(argv);
-  if (argvFailure !== null) {
-    return argvFailure;
+  const argv = readArgv(snapshot["argv"]);
+  if (!Array.isArray(argv)) {
+    return argv as WindowsProcessUnknown;
   }
   const cwd = snapshot["cwd"];
   if (!isLocalAbsolutePath(cwd)) {
@@ -195,7 +199,7 @@ function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
   if (!Array.isArray(environment)) {
     return environment as WindowsProcessUnknown;
   }
-  return sized(encode(executable, argv as readonly string[], cwd, environment));
+  return sized(encode(executable, argv, cwd, environment));
 }
 
 function sized(payload: Uint8Array): Uint8Array | WindowsProcessUnknown {

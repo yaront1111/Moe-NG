@@ -31,6 +31,7 @@ export function isBoundedText(value: unknown, maxChars: number): value is string
 }
 
 const DRIVE_ABSOLUTE = /^[A-Za-z]:\\/u;
+const INVALID_SEGMENT_CHARACTERS = /[\u0000-\u001f<>:"|?*]/u;
 
 /**
  * MS-DOS device names. These resolve to a DEVICE from any directory, so
@@ -41,6 +42,8 @@ const RESERVED_DEVICE_NAMES = new Set([
   "PRN",
   "AUX",
   "NUL",
+  "CONIN$",
+  "CONOUT$",
   "COM1",
   "COM2",
   "COM3",
@@ -92,7 +95,7 @@ function isUsableSegment(segment: string): boolean {
     segment === "" ||
     segment === "." ||
     segment === ".." ||
-    segment.includes(":") ||
+    INVALID_SEGMENT_CHARACTERS.test(segment) ||
     segment.endsWith(".") ||
     segment.endsWith(" ")
   ) {

@@ -162,6 +162,8 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
   it("accepts a device NAME that is only part of a longer component", () => {
     // `CONSOLE.EXE` is not `CON`. An over-broad substring check would reject it.
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONSOLE.EXE" })).toBeInstanceOf(Uint8Array);
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONIN$-LOG.EXE" })).toBeInstanceOf(Uint8Array);
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONOUT$SAFE.EXE" })).toBeInstanceOf(Uint8Array);
   });
 });
 

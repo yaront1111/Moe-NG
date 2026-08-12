@@ -18,6 +18,18 @@ const GOOD = {
   environment: {},
 };
 
+const HOSTILE_WINDOWS_COMPONENTS: readonly (readonly [string, string])[] = Object.freeze([
+  ...["<", ">", '"', "|", "?", "*"].map(
+    (character) => [`invalid-${character.charCodeAt(0)}`, `bad${character}name.exe`] as const,
+  ),
+  ...Array.from({ length: 31 }, (_, index) => [
+    `control-${String(index + 1).padStart(2, "0")}`,
+    `bad${String.fromCharCode(index + 1)}name.exe`,
+  ] as const),
+  ["console-input-device", "CONIN$"],
+  ["console-output-device", "CONOUT$"],
+]);
+
 // ---------------------------------------------------------------------------
 // A scripted broker. Every call it receives is recorded, so a test can prove
 // what was NOT done — which is the only way to assert "no process was created".
@@ -162,6 +174,47 @@ describe("the gates run in order, and each proves what it did NOT reach", () => 
     expect(failure.code).toBe("PROCESS_BOUNDARY_EXECUTABLE_REJECTED");
     expect(failure.layer).toBe("WINDOWS_PROCESS_REQUEST");
     expect(fake.calls).toEqual([]);
+  });
+
+  it("refuses an argv array whose iterator disagrees with its validated entries", () => {
+    const fake = recorder();
+    const argv = ["safe"];
+    Object.defineProperty(argv, Symbol.iterator, {
+      value: function* hostileIterator() {
+        yield "bad\u0000argument";
+      },
+    });
+    const failure = unknownOf(openWindowsProcessBoundary(
+      { ...GOOD, argv },
+      { deps: fake.deps },
+    ));
+    expect(failure.code).toBe("PROCESS_BOUNDARY_ARGV_REJECTED");
+    expect(failure.layer).toBe("WINDOWS_PROCESS_REQUEST");
+    expect(fake.calls).toEqual([]);
+  });
+
+  it.each(HOSTILE_WINDOWS_COMPONENTS)(
+    "refuses hostile Windows component %s in both path positions before resolution",
+    (_, component) => {
+      for (const field of ["executable", "cwd"] as const) {
+        const fake = recorder();
+        const failure = unknownOf(openWindowsProcessBoundary(
+          { ...GOOD, [field]: `C:\\Windows\\${component}` },
+          { deps: fake.deps },
+        ));
+        expect(failure.code).toBe(
+          field === "executable"
+            ? "PROCESS_BOUNDARY_EXECUTABLE_REJECTED"
+            : "PROCESS_BOUNDARY_CWD_REJECTED",
+        );
+        expect(failure.layer).toBe("WINDOWS_PROCESS_REQUEST");
+        expect(fake.calls).toEqual([]);
+      }
+    },
+  );
+
+  it("generates every invalid Win32 character, control, and console device case", () => {
+    expect(HOSTILE_WINDOWS_COMPONENTS.length).toBe(39);
   });
 
   it("refuses a hostile request proxy before resolution instead of throwing", () => {
