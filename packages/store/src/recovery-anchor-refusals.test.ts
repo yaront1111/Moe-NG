@@ -4,7 +4,15 @@
  * with its OWN stable code at layer RECOVERY_ANCHOR, so a test can say which
  * fault was found rather than only that something was wrong.
  */
-import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,7 +26,12 @@ import {
   RECOVERY_ANCHOR_SLOT_MANIFEST_NAME,
 } from "./recovery-anchor-contracts.js";
 import type { RecoveryAnchorRecord } from "./recovery-anchor-contracts.js";
-import { inspectRecoveryAnchor, installRecoveryAnchor } from "./recovery-anchor.js";
+import {
+  discardRecoveryAnchor,
+  inspectRecoveryAnchor,
+  installRecoveryAnchor,
+  prepareRecoveryAnchor,
+} from "./recovery-anchor.js";
 
 const encoder = new TextEncoder();
 /** Built from a char code so no escaping layer can collapse it to a plain name. */
@@ -172,6 +185,56 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_DATABASE_MISMATCH");
+  });
+});
+
+describe("recovery anchor fails closed on an unreadable anchor file", () => {
+  /**
+   * The anchor still EXISTS but readFile faults — the file is replaced with a
+   * directory, the cross-platform stand-in for EACCES/EBUSY/EIO. Missing and
+   * unreadable must not collapse into one answer: absent means "no anchor",
+   * while unreadable proves nothing about which slot is live, and a prepare
+   * that read it as absent would aim the next install at the LIVE slot.
+   */
+  async function unreadableAnchorRoot(label: string): Promise<string> {
+    const { root } = await installedRoot(label);
+    const path = join(root, RECOVERY_ANCHOR_FILE_NAME);
+    unlinkSync(path);
+    mkdirSync(path);
+    return root;
+  }
+
+  it("refuses to prepare a new restore rather than treating the anchor as absent", async () => {
+    const root = await unreadableAnchorRoot("unreadable-prepare");
+    // A request that WOULD legitimately prepare (fresh command, fresh fence)
+    // were the stored anchor readable, so only the read fault can refuse it.
+    const result = await prepareRecoveryAnchor(
+      request(root, {
+        incarnationRef: "2b".repeat(32),
+        keyEpochRef: "5e".repeat(32),
+        restoreCommandId: "restore-command-after-fault",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("RECOVERY_ANCHOR_UNREADABLE");
+    expect(result.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  it("refuses to discard rather than answering ABSENT", async () => {
+    const root = await unreadableAnchorRoot("unreadable-discard");
+    const result = await discardRecoveryAnchor(root);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("RECOVERY_ANCHOR_UNREADABLE");
+  });
+
+  it("refuses to inspect rather than answering ABSENT", async () => {
+    const root = await unreadableAnchorRoot("unreadable-inspect");
+    const result = await inspectRecoveryAnchor(root);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("RECOVERY_ANCHOR_UNREADABLE");
   });
 });
 

@@ -33,8 +33,11 @@ import {
 import { EventLedgerStore } from "./event-ledger.js";
 
 export class DecisionReadModelStore extends EventLedgerStore {
+  // A snapshot read like its paged sibling below: decoding a decision loads
+  // its receipt and validates the aggregate tail across several SELECTs, which
+  // must all observe one WAL snapshot or a concurrent commit reads as corrupt.
   public getCommandDecision(rawKey: CommandDecisionKey): CommandDecisionRecord | null {
-    return this.readOperation("read scoped command decision", () => {
+    return this.readSnapshotOperation("read scoped command decision", () => {
       if (this.projectId === null) {
         throw new DurableStoreError(
           "PROJECT_SCOPE_REQUIRED",

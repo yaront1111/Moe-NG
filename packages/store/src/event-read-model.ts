@@ -18,15 +18,18 @@ export { RECEIPT_OUTBOX_QUERY } from "./event-read-materialization.js";
  * decode, materialization, and query layers; it adds no query or decoding behavior.
  */
 export class EventReadModelStore extends EventReadQueryStore {
+  // Snapshot reads, not bare reads: assertAggregateTail issues two SELECTs
+  // (head, then tail), and without one WAL snapshot a writer committing
+  // between them would surface as a false STORE_CORRUPT on a healthy store.
   public getAggregateVersion(aggregateId: string): number {
-    return this.readOperation("read aggregate version", () => {
+    return this.readSnapshotOperation("read aggregate version", () => {
       this.assertCachedProjectBinding();
       return this.assertAggregateTail(requireIdentifier(aggregateId, "aggregateId"));
     });
   }
 
   public getCommandReceipt(commandId: string): CommandReceipt | null {
-    return this.readOperation("read command receipt", () => {
+    return this.readSnapshotOperation("read command receipt", () => {
       this.assertReceiptReadBinding();
       const safeCommandId = requireIdentifier(commandId, "commandId");
       const receipt = this.loadReceipt(safeCommandId);

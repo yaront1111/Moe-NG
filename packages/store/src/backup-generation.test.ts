@@ -37,6 +37,13 @@ const bytes = (value: string): Uint8Array => new TextEncoder().encode(value);
 const sha256Hex = (value: Uint8Array): string =>
   createHash("sha256").update(value).digest("hex");
 
+/** The same directory under NTFS, a different string under `resolve()`. */
+function driveCaseAlias(path: string): string {
+  const drive = path[0] ?? "";
+  const flipped = drive === drive.toUpperCase() ? drive.toLowerCase() : drive.toUpperCase();
+  return flipped + path.slice(1);
+}
+
 interface Harness {
   readonly root: string;
   readonly databasePath: string;
@@ -452,6 +459,19 @@ describe("createBackupGeneration — refusals", () => {
       name: "destination aliases the source database",
       reason: "DESTINATION_UNSAFE",
     },
+    // NTFS resolves both spellings of the drive letter to the same directory,
+    // while string comparison sees two unrelated paths — so without folding,
+    // the recursive delete would aim at the directory holding the database.
+    // win32-only: on POSIX the case-variant genuinely IS a different path.
+    ...(process.platform === "win32"
+      ? [
+          {
+            mutate: (h: Harness) => request(h, { destinationPath: driveCaseAlias(h.root) }),
+            name: "destination contains the database behind a drive-letter case alias",
+            reason: "DESTINATION_UNSAFE",
+          },
+        ]
+      : []),
   ];
 
   it("covers every declared refusal exactly once", () => {

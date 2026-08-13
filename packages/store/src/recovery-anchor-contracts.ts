@@ -71,6 +71,7 @@ export type RecoveryAnchorOperation = (typeof RECOVERY_ANCHOR_ALLOWED_OPERATIONS
  */
 export const RECOVERY_ANCHOR_REASON_CODES = Object.freeze([
   "RECOVERY_ANCHOR_REQUEST_INVALID",
+  "RECOVERY_ANCHOR_UNREADABLE",
   "RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED",
   "RECOVERY_ANCHOR_DIGEST_MISMATCH",
   "RECOVERY_ANCHOR_COMMAND_MISMATCH",
@@ -209,6 +210,15 @@ const refusal = (code: RecoveryAnchorReasonCode, reason: string): RecoveryAnchor
 export const RECOVERY_ANCHOR_REQUEST_INVALID = refusal(
   "RECOVERY_ANCHOR_REQUEST_INVALID",
   "A recovery anchor request must carry exactly the declared install fields.",
+);
+/**
+ * The anchor file EXISTS but could not be read. Distinct from absence on
+ * purpose: absent means "no restore was ever prepared here", while unreadable
+ * proves nothing about which slot is live, so no operation may proceed on it.
+ */
+export const RECOVERY_ANCHOR_UNREADABLE = refusal(
+  "RECOVERY_ANCHOR_UNREADABLE",
+  "The stored recovery anchor exists but could not be read; its selection is unknown.",
 );
 export const RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED = refusal(
   "RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED",

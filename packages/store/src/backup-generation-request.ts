@@ -95,13 +95,27 @@ export function sealBackupRequest(input: unknown): SealedRequest | BackupGenerat
 }
 
 /**
+ * Comparable form of a path for the safety check below. `resolve` normalizes
+ * separators and relative segments but PRESERVES case, while NTFS resolves
+ * names case-insensitively — so on win32 the resolved string is case-folded,
+ * or `c:\data` would pass as unrelated to `C:\data\store.db` and the guarded
+ * recursive delete would aim at the directory holding the live database.
+ * POSIX filesystems are genuinely case-sensitive, so no folding there: two
+ * differently-cased paths really are two different directories.
+ */
+function comparablePath(value: string): string {
+  const resolved = resolve(value);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+/**
  * A destination may not be, contain, or live inside the database it captures.
  * Compared on resolved absolute paths with a trailing separator, so `/data/dbx`
  * is not mistaken for a child of `/data/db`.
  */
 export function destinationIsUnsafe(destinationPath: string, databasePath: string): boolean {
-  const destination = resolve(destinationPath);
-  const database = resolve(databasePath);
+  const destination = comparablePath(destinationPath);
+  const database = comparablePath(databasePath);
   return (
     destination === database ||
     database.startsWith(destination + sep) ||

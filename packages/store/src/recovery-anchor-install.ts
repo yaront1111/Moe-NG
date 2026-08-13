@@ -18,6 +18,7 @@ import {
   RECOVERY_ANCHOR_SLOT_MANIFEST_NAME,
   RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION,
   RECOVERY_ANCHOR_SLOT_UNVERIFIABLE,
+  RECOVERY_ANCHOR_UNREADABLE,
 } from "./recovery-anchor-contracts.js";
 import type {
   RecoveryAnchorInstallResult,
@@ -33,6 +34,7 @@ import {
   publishFileAtomically,
   readBackMatches,
   readFileIfPresent,
+  readFileIfReadable,
 } from "./recovery-anchor-fs.js";
 import {
   decodeAnchorRecord,
@@ -71,7 +73,16 @@ function artifactPath(slotRoot: string, logicalPath: string): string {
 export async function readStoredAnchor(
   root: string,
 ): Promise<RecoveryAnchorRecord | RecoveryAnchorRefused | null> {
-  const bytes = await readFileIfPresent(anchorPath(root));
+  let bytes: Buffer | null;
+  try {
+    bytes = await readFileIfPresent(anchorPath(root));
+  } catch {
+    // Only ENOENT means "no anchor". An anchor that EXISTS but cannot be read
+    // proves nothing about which slot is live, and answering "absent" here
+    // would skip fence-reuse detection and aim the next install at the live
+    // slot — the one thing this module exists to never do.
+    return RECOVERY_ANCHOR_UNREADABLE;
+  }
   return bytes === null ? null : decodeAnchorRecord(bytes);
 }
 
@@ -87,7 +98,7 @@ function slotManifestBytes(anchor: RecoveryAnchorRecord): Uint8Array {
 }
 
 async function readSlotManifest(slotRoot: string): Promise<RecoveryAnchorSlotManifest | null> {
-  const bytes = await readFileIfPresent(join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME));
+  const bytes = await readFileIfReadable(join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME));
   if (bytes === null) return null;
   try {
     const parsed: unknown = JSON.parse(bytes.toString("utf8"));
@@ -163,7 +174,9 @@ export async function verifySlot(
   }
 
   const databasePath = join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME);
-  if ((await readFileIfPresent(databasePath)) === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  if ((await readFileIfReadable(databasePath)) === null) {
+    return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  }
   const store = SqliteEventStore.openForProject(databasePath, projectId);
   try {
     const read = store.readRecoveryBinding(ANCHOR_BINDING_ROW_SLOT);

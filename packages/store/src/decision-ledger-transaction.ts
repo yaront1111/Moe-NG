@@ -74,7 +74,9 @@ export class DecisionTransactionStore extends DecisionReplayStore {
       return invalidInput("targetAggregateId uses Moe's reserved internal identifier namespace");
     }
     const identities = identifyDecisionRequest(request);
-    const preflight = this.readOperation("preflight expected-version decision", () => {
+    // One read snapshot for the two-SELECT tail check; a commit landing between
+    // them must stay an ordinary race, not a STORE_CORRUPT preflight verdict.
+    const preflight = this.readSnapshotOperation("preflight expected-version decision", () => {
       this.assertDurableProjectBinding();
       return {
         historical: this.loadCommandDecisionByKey(request.key),

@@ -83,9 +83,30 @@ export async function readBackMatches(path: string, expectedDigest: string): Pro
   return digestBytes(observed) === expectedDigest;
 }
 
+/**
+ * Absent means null; any OTHER failure propagates to the caller. Collapsing an
+ * I/O fault into "no file" would let a transiently unreadable anchor read as
+ * "no anchor exists" — and an install prepared on that answer targets the LIVE
+ * slot. Only the caller knows which refusal an unreadable file maps to.
+ */
 export async function readFileIfPresent(path: string): Promise<Buffer | null> {
   try {
     return await readFile(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/**
+ * Verification-side read: absence and an I/O fault both answer null, because
+ * the caller maps null to a refusal either way — a slot that cannot be read
+ * back is unproven, never verified. This is NOT for the anchor file, where
+ * absent and unreadable mean different things.
+ */
+export async function readFileIfReadable(path: string): Promise<Buffer | null> {
+  try {
+    return await readFileIfPresent(path);
   } catch {
     return null;
   }
