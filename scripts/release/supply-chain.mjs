@@ -115,7 +115,10 @@ function unsafeExistingPath(/** @type {string} */ root) {
 }
 function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, evidenceRoot: string}} */ request) {
   const root = resolve(request.evidenceRoot); const target = resolve(request.evidencePath);
-  if (relative(root, target).startsWith("..") || unsafeExistingPath(root)) return releaseRefusal("OUTPUT_PATH_INVALID");
+  // Walk the TARGET chain, not just the root's: it covers every existing ancestor up to
+  // the filesystem root, so a junction planted between evidenceRoot and the target
+  // (e.g. dist/release/<sha>) refuses instead of silently redirecting durable evidence.
+  if (relative(root, target).startsWith("..") || unsafeExistingPath(target)) return releaseRefusal("OUTPUT_PATH_INVALID");
   if (existsSync(target)) {
     return Buffer.from(readFileSync(target)).equals(Buffer.from(request.bytes))
       ? { ok: true, reused: true } : releaseRefusal("EVIDENCE_PUBLICATION_CONFLICT");
