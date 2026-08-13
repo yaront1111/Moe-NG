@@ -19,12 +19,12 @@
     "Keep each production source focused, target <=250 physical lines and split before 400; preserve foreign work and stage only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Prerequisite task-2d969616 is now QA-approved DONE with fresh core 28/579 and scheduler 42/1219 verification. Architect must re-measure and consume the landed public scheduler bridge rather than invent a daemon mapper.",
   "createdBy": "WORKER",
   "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
   "priority": "HIGH",
@@ -39,17 +39,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:21:56.200Z",
-  "updatedAt": "2026-08-13T16:03:19.191Z",
+  "updatedAt": "2026-08-13T22:12:55.665Z",
   "contextFetchedBy": [
     "architect-a9210e34"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T16:01:23.174Z"
   },
-  "blockedReason": "Hard prerequisite is not landed. Live Moe context at 2026-08-13 shows task-2d9696160e674f26a8d422c45829d80e WORKING on step 1, not DONE. Fresh probe `rg -n 'bindExpansionAdmission|validateOpportunityAttestation' packages/scheduler apps/daemon tests/integration` returned no matches, so the production admission-to-preparation bridge and validated opportunity surface this daemon task must consume are absent. The task's own sequencing comment explicitly forbids PLANNING before that dependency is DONE. Planning now would invent the daemon mapper and repeat the rejected test-owned authority. Requeue only after dependency DONE and re-measure its public @moe/scheduler root exports.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T16:02:17.081Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Fetched full task and dependency contexts, loaded planning/exploration guidance, and re-measured the prerequisite. task-2d9696160e674f26a8d422c45829d80e is WORKING step 1; a fresh rg probe found neither bindExpansionAdmission nor validateOpportunityAttestation. Reported this daemon task BLOCKED with the exact dependency and notified governors.",

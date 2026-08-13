@@ -18,7 +18,7 @@
     "Use only public package roots across boundaries; target <=250 physical lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -44,15 +44,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:11.801Z",
-  "updatedAt": "2026-08-13T21:26:52.793Z",
+  "updatedAt": "2026-08-13T21:37:58.646Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:00:46.726Z"
   },
   "contextFetchedBy": [
     "architect-a42f4965"
   ],
-  "blockedReason": null,
+  "blockedReason": "Hard dependency task-311 is still REVIEW, not QA-approved DONE. Its bytes are now committed at b64e336/50c492a/284d5dd and expose the typed five-record ClaimSuccessors, but the task's own governor sequencing comment explicitly requires waiting for QA DONE and re-measurement after review. Submitting df298 while the producer can still be rejected would couple the durable codec to unapproved authority. No plan submitted; re-promote immediately after task-311 reaches DONE.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T21:37:41.106Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured task-311 status and committed surface; it is committed with typed five-record closure but still REVIEW. Reported df298 BLOCKED and updated Serena handoff.",
+      "whatRemains": "QA approve task-311, then remeasure public root/store seams and submit df298 plan.",
+      "pitfalls": "Do not plan against REVIEW bytes or duplicate claim/activation authority.",
+      "openQuestions": "Whether QA accepts task-311 unchanged.",
+      "releasedAt": "2026-08-13T21:37:58.645Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit dependency-review handoff complete; free architect capacity until task-311 is QA-approved DONE."
+    }
+  ]
 }

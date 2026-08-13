@@ -1,0 +1,37 @@
+{
+  "id": "task-a9fd91c373c244c78df97945965a8038",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Foundation attempt ingress composition",
+  "description": "Objective: land the authenticated production command edge that selects exactly one Foundation execution-bearing node and invokes Durable Claude attempt dispatch without caller-supplied authority. Deliverable: after daemon command-registry extraction and the shared effect.activate composition land, register the bounded Foundation attempt command through the real HTTP Authenticator/decision registry, derive the one-node claim/activation request from durable graph/session facts, and delegate to task-6cbff010's service. NOT in scope: launcher internals, activation-ledger codec, verification/review, multi-node support, or schema. Current measured gap: only the advisory board work.claim service is registered; pure claimWork/activateEffect/launchClaude have no authenticated daemon production caller, and daemon-store-dependencies.ts is 397 lines.",
+  "definitionOfDone": [
+    "The real daemon HTTP/command registry exposes one bounded Foundation attempt command with exact capability, payload allow-list, family, and stable refusal mapping; authentication runs before payload authority.",
+    "The handler derives project/principal/session and current graph/node/claim facts from durable production readers, never accepts caller-selected grant, runtime closure, slot, budget, lease, attempt, effect, or process registration authority.",
+    "Exactly one low-risk execution-bearing node delegates to task-6cbff010; zero or more than one refuses with an exact daemon code/layer before claim/activation/provider effects.",
+    "Replay uses the store command-decision identity and returns the original dispatch record; conflicting command bytes refuse, with raw event/decision counts and zero duplicate launch invocation.",
+    "Focused production-ingress tests use real SqliteEventStore + Authenticator and assert exact code/stage/layer, positive generated case counts, zero residue, and one accepted control; daemon gates and plain-Node provider construction pass."
+  ],
+  "taskRails": [
+    "Hard-depend on daemon command-registry extraction task-9cba79a1d75141cf8e78764f4db44fad, the production effect.activate composition task-e33747f982e0452a9f9d784fd1cb914d, and task-6cbff010.",
+    "Do not grow daemon-store-dependencies.ts past 400 or reimplement registry/authentication in a new test helper.",
+    "Use public package roots, TDD exact stable reason codes/layers, target <=250 lines and split before 400.",
+    "Multi-node/fan-out remains typed UNSUPPORTED with zero authority."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "priority": "CRITICAL",
+  "order": 50.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T21:35:14.536Z",
+  "updatedAt": "2026-08-13T22:13:22.559Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T22:13:22.559Z",
+  "blockedReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved."
+}

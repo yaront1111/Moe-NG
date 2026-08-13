@@ -1,0 +1,37 @@
+{
+  "id": "task-996e5318c3a64caa9f5eb661ace927a3",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Foundation activation ledger bridge",
+  "description": "Objective: adapt the shared durable EffectActivationCommitted authority from task-df29871bfc2441659efb3f763ddb23db to the Foundation Claude dispatch without duplicating its codec or transaction. Deliverable: daemon production ports that consume df298's strict activation reader/commit adapter for the Foundation request, perform durable UNUSED-to-consumed grant CAS plus preflight/observed launch-registration updates as append-only exact-version events, and expose the current effect/session binding derived from the committed ACTIVE intent and active lease ownerSessionRef. Consumers: task-6cbff01023b14b26a78fc5e3eb1dd8a9 and the coordination adapter. NOT in scope: physical launch, HTTP registry, graph admission, result manifests, schema/DDL, or reimplementing claim/activation reducers. Hard dependency: df298 DONE and task-c81953d210f14cdeb9f6070a443b6750 public launcher overlay.",
+  "definitionOfDone": [
+    "The bridge imports df298's production activation record/strict reader and never defines a competing EffectActivationCommitted codec, aggregate identity, or initial commit.",
+    "Grant consumption and pending/observed process registration are durable exact-version transitions bound to activation digest, grantId, wrapper, attempt, lock and process identity; replay returns the byte-identical stored transition and conflicts refuse with exact code/layer before provider open.",
+    "A frozen typed effect/session reader returns BOUND only when the durable activation is coherent ACTIVE/RUNNING, the lease is ACTIVE and unexpired, query effectId equals intentId, and sessionId equals lease.ownerSessionRef; absent/stale/terminal/cross-project/malformed/unreadable evidence is ABSENT or UNKNOWN with exact stable code/layer.",
+    "Real SqliteEventStore concurrency/injected-throw tests assert positive race counts, one winning CAS/registration chain, raw public event/decision counts, and no partial durable authority; no ad-hoc SQLite objects or DatabaseSync access.",
+    "The coordination adapter production port maps only BOUND to the exact frozen positive binding and preserves the existing COORDINATION_TERMINAL_BINDING_INVALID/ADDRESS refusal for every negative/unknown case; task-6cbff010 consumes the same ports."
+  ],
+  "taskRails": [
+    "Hard-depend on task-df29871 and task-c81953d2; block rather than copying their authority.",
+    "Use existing @moe/store event/decision/expected-version transactions only; no schema or DDL.",
+    "TDD exact codes/layers and nonzero generated cases; public roots across packages; target <=250 lines and split before 400.",
+    "Derive session identity only from the committed lease ownerSessionRef and effect identity only from committed intentId; caller values may only be equality checks."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Hard dependencies task-df29871 and task-c81953d2 are not DONE. Keep out of planning until both durable activation authority and the public launcher overlay are QA-approved, then re-measure and consume them without duplication.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "priority": "CRITICAL",
+  "order": 49.95,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T21:34:47.411Z",
+  "updatedAt": "2026-08-13T22:13:22.441Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T22:13:22.441Z",
+  "blockedReason": "Hard dependencies task-df29871 and task-c81953d2 are not DONE. Keep out of planning until both durable activation authority and the public launcher overlay are QA-approved, then re-measure and consume them without duplication."
+}

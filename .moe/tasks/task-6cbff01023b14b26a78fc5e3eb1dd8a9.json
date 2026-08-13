@@ -17,8 +17,8 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a42f4965",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -39,11 +39,17 @@
       "author": "architect-8c9073cd",
       "content": "Dependency link from task-4afcb06422ed4adb89430b7ea9758d7f: the daemon coordination adapter needs this task's committed effect/session ownership records exposed through a frozen production reader such as readCurrentEffectSessionBinding(effectId, sessionId, now). It must derive current binding from persisted attempt/effect/lease facts and return UNKNOWN/unbound on absent, stale, terminal, cross-project, or unverifiable evidence; no caller-supplied positive binding. If the planned five paths cannot expose that reader, amend this task before approval rather than reimplementing it in the adapter or its tests.",
       "timestamp": "2026-08-09T13:07:29.871Z"
+    },
+    {
+      "id": "comment-0a2ff71dcbc644b7a0c8c1781a7fb5b9",
+      "author": "architect-a42f4965",
+      "content": "Measured prerequisites created to unblock rather than submit a speculative plan: task-c81953d210f14cdeb9f6070a443b6750 (public narrow launcher durability ports + runtime/activation binding), task-996e5318c3a64caa9f5eb661ace927a3 (df298-backed durable grant/registration/effect-session bridge), task-a9fd91c373c244c78df97945965a8038 (real authenticated Foundation attempt ingress). Existing required producers: task-df29871 activation ledger, task-9cba registry extraction, task-e337 effect.activate composition. Full current-byte evidence and resume order are in Serena handoff `task-task-6cbff01023b14b26a78fc5e3eb1dd8a9-handoff`.",
+      "timestamp": "2026-08-13T21:36:36.720Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-13T21:27:11.927Z",
+  "updatedAt": "2026-08-13T21:37:14.291Z",
   "contextFetchedBy": [
     "architect-8c9073cd",
     "architect-21f667ae",
@@ -54,11 +60,20 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Reasserting the measured dependency block after claim_next_task immediately re-served this released PLANNING task. The missing production authorities and newly created prerequisite task IDs are recorded in comment-0a2ff71dcbc644b7a0c8c1781a7fb5b9 and Serena handoff. Do not re-promote until the durable activation ledger, narrow durable launcher ports, Foundation ledger bridge, registry extraction, and effect.activate composition are DONE; no speculative five-file plan can meet the task DoD.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T21:36:53.721Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured launcher/store/daemon production seams, proved the five-file task cannot satisfy durable grant CAS, process registration, activation ledger, authenticated ingress, or current effect/session binding; reported BLOCKED; created prerequisite tasks c81953d2, 996e5318, and a9fd91c3; recorded detailed Serena handoff and decision memory.",
+      "whatRemains": "Land task-311 QA, df298 activation ledger, c81953d2 launcher ports, 996e5318 daemon durable bridge, registry extraction/e337 activation ingress; then remeasure and plan 6cb.",
+      "pitfalls": "Do not pre-consume the grant then call current launchClaude, persist the pending registration, inject a full test-owned dependency set, duplicate df298, accept caller-selected runtime/effect/session, or add SQLite schema.",
+      "openQuestions": "Whether 6cb will own service-only composition with authenticated ingress remaining in a9fd91c3, or be widened after prerequisite surfaces land.",
+      "releasedAt": "2026-08-13T21:37:14.289Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit planning handoff complete after current-byte block diagnosis and prerequisite creation; release architect capacity while the task remains dependency-blocked."
+    },
     {
       "whatIsDone": "Re-measured the board and disk, proved the required Windows Claude launcher/public surface is absent, reported this task BLOCKED, and wrote Serena memory task-task-6cbff01023b14b26a78fc5e3eb1dd8a9-handoff with exact probes and resume instructions.",
       "whatRemains": "Finish task-4d1f8ba54cb6476c930c46b413f882aa and task-078af6f181484dd99d1bf9008b4cf731, then task-acf73253a204435aba590894799814f2; once the launcher is DONE, re-probe its @moe/runner public root API and plan this task.",

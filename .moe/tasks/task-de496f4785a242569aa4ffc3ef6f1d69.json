@@ -1,0 +1,34 @@
+{
+  "id": "task-de496f4785a242569aa4ffc3ef6f1d69",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Bind the prepared Claude runtime to the committed activation",
+  "description": "Objective: close the measured hole where a coherent activation for runtime A can launch pinned runtime B. Split out of task-c81953d210f14cdeb9f6070a443b6750 (see comment-31ffc39112a54993987f4363e33584e5 there) because that task's rail 1 forbids changing default launchClaude behavior, its written DoD does not name this guard, and this guard's blast radius is a separate test/fixture surgery.\n\nMEASURED GAP at HEAD 0371ead (commands run, results recorded):\n- `grep -n runtimeObservationDigest packages/runner/src/supervisor/effect-kernel.ts` -> line 196: `EffectIntent.runtimeObservationDigest: string` EXISTS.\n- `packages/runner/src/supervisor/effect-activation.ts:215-217` already compares `request.observedRuntimeDigest !== intent.runtimeObservationDigest` and refuses `PROVIDER_CAPABILITY_CHANGED` with leg `runtimeObservation`. That is the AUTHORITATIVE mapping to preserve; do not mint a new code.\n- `validateActivationCommit` (packages/runner/src/supervisor/effect-grant.ts:110-148) checks intent/attempt states, attempt<->intent binding, grant<->intent binding and grantId derivation ONLY. It never reads `runtimeObservationDigest`. Its `CommitCheck` returns `{kind:\"COHERENT\", ok:true, activationDigest}` and nothing else.\n- `decodeCommit` (claude-launcher-port-results.ts:201-208) therefore yields only `activationDigest: string`.\n- `prepareClaudeRuntimePin` yields `quotedObservationDigest`, `freshObservationDigest`, `bindingDigest` (decodeRuntime, claude-launcher-port-results.ts:173-199).\n- `grep -rn \"runtimeObservationDigest\" packages/runner/src/providers/` -> ZERO hits. launchClaude never compares the two. Gap is real and open.\n\nFIXTURE BLAST RADIUS (measured, plan for it): `claude-launcher-test-fixtures.ts` builds `COMMIT` at module scope from `makeActivationRequest()` whose `runtimeObservationDigest` is `DIGEST.runtime` (effect-test-fixtures.ts:83), while `prepared` is built in `beforeAll` from a real temp executable. The two digests differ today, so a naive guard reddens most of claude-launcher.test.ts. The fixture must be restructured so the activation commit is derived from the SAME prepared runtime observation, or the guard must take the quoted observation digest the intent was built from.\n\nDeliverable: an exact comparison in the launcher at the ACTIVATION phase, strictly before the grant phase and before any physical open, refusing with the authoritative `PROVIDER_CAPABILITY_CHANGED` code at its authoritative layer when the prepared runtime does not match the committed `EffectIntent.runtimeObservationDigest`.\n\nNOT in scope: the authority-port overlay (task-c81953d210f14cdeb9f6070a443b6750 owns it), daemon persistence, schema, ingress.\n\nHard dependencies: none. May land in parallel with task-c81953d210f14cdeb9f6070a443b6750; both are prerequisites of task-996e5318c3a64caa9f5eb661ace927a3 and task-6cbff01023b14b26a78fc5e3eb1dd8a9.",
+  "definitionOfDone": [
+    "The launcher compares the prepared runtime observation against the committed EffectIntent.runtimeObservationDigest at the ACTIVATION phase, strictly after validateCommit succeeds and strictly before the grant phase, the OS lock, and openBoundary.",
+    "A drifted runtime refuses with the authoritative PROVIDER_CAPABILITY_CHANGED code and the layer effect-activation.ts already uses for that refusal; no new error code is minted, and the refusal echoes no runtime path, grant id, or bootstrap credential digest.",
+    "A matching runtime still launches: the existing launcher happy-path and duplicate-delivery behaviour is unchanged, and the fixture is restructured so its activation commit and its prepared runtime carry the same observation digest rather than the guard being weakened to accommodate the fixture.",
+    "Tests assert the exact code AND that the ACTIVATION layer answered, assert zero calls to consumeGrant, acquireLock and openBoundary on drift, and a mutation drill flipping the comparison operand or deleting the guard reddens a named outcome assertion (not only a shape assertion).",
+    "Focused @moe/runner typecheck and tests pass; repo-wide legs are recorded as a merge-base-vs-HEAD path-attributed baseline; no production file in packages/runner/src/providers/claude exceeds 250 physical lines."
+  ],
+  "taskRails": [
+    "Preserve the authoritative PROVIDER_CAPABILITY_CHANGED mapping and layer from packages/runner/src/supervisor/effect-activation.ts; do not mint a launcher-local code for runtime drift and do not reimplement the comparison the supervisor already owns if it can be composed.",
+    "Use TDD. The drift test must pin the exact code and the exact layer, and must prove which layer answered, because validateCommit can also refuse at ACTIVATION with ACTIVATION_COMMIT_INCOHERENT.",
+    "Do not weaken or narrow the guard to make the existing fixture pass; fix the fixture so the committed intent and the prepared runtime share one observation digest.",
+    "Target <=250 physical lines per production source, split before 400. No daemon or store code in this runner task."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 77,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:20:28.370Z",
+  "updatedAt": "2026-08-13T22:23:38.637Z"
+}

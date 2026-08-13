@@ -1,3 +1,5 @@
+import { types } from "node:util";
+
 import { describe, expect, it } from "vitest";
 
 import { claimWork } from "./work-claim.js";
@@ -656,8 +658,14 @@ interface Probe { hits: number }
 interface PoisonSpec {
   readonly label: string;
   readonly apply: (value: Record<string, unknown>, probe: Probe) => unknown;
-  /** `true` when the case is only real if the hostile trap actually fired. */
-  readonly trapsFire: boolean;
+  /**
+   * `true` when the poisoned node is a Proxy. Proxies are refused
+   * CATEGORICALLY — `types.isProxy` answers before any trap can run — so these
+   * cases are asserted to really BE proxies rather than asserted to have fired
+   * a trap. A trap-fired assertion would now be unsatisfiable, and a
+   * transparent proxy has no trap to fire at all yet must still be refused.
+   */
+  readonly proxy: boolean;
 }
 
 function firstKeyOf(value: Record<string, unknown>): string {
@@ -670,12 +678,12 @@ const POISONS: readonly PoisonSpec[] = [
   {
     apply: (value) => ({ ...value, borrowedKey: 1 }),
     label: "an extra own string key",
-    trapsFire: false,
+    proxy: false,
   },
   {
     apply: (value) => ({ ...value, [Symbol("hostile")]: 1 }),
     label: "an own symbol key",
-    trapsFire: false,
+    proxy: false,
   },
   {
     // The getter must never run: the parser reads descriptors, not properties.
@@ -693,12 +701,12 @@ const POISONS: readonly PoisonSpec[] = [
       return clone;
     },
     label: "an accessor where a data property belongs",
-    trapsFire: false,
+    proxy: false,
   },
   {
     apply: (value) => Object.create({ inherited: true }, Object.getOwnPropertyDescriptors(value)),
     label: "a borrowed prototype",
-    trapsFire: false,
+    proxy: false,
   },
   {
     apply: (value, probe) => new Proxy(value, {
@@ -711,7 +719,7 @@ const POISONS: readonly PoisonSpec[] = [
       },
     }),
     label: "a proxy whose ownKeys trap smuggles a key in",
-    trapsFire: true,
+    proxy: true,
   },
   {
     apply: (value, probe) => new Proxy(value, {
@@ -724,7 +732,7 @@ const POISONS: readonly PoisonSpec[] = [
       },
     }),
     label: "a proxy whose descriptor trap yields an accessor",
-    trapsFire: true,
+    proxy: true,
   },
   {
     // The target must be the REAL record: a descriptor trap over a foreign or
@@ -738,7 +746,7 @@ const POISONS: readonly PoisonSpec[] = [
       },
     }),
     label: "a proxy whose descriptor trap throws",
-    trapsFire: true,
+    proxy: true,
   },
   {
     apply: (value, probe) => new Proxy(value, {
@@ -748,7 +756,17 @@ const POISONS: readonly PoisonSpec[] = [
       },
     }),
     label: "a proxy whose getPrototypeOf trap lies",
-    trapsFire: true,
+    proxy: true,
+  },
+  {
+    // The case QA proved was GRANTED: a proxy that lies about nothing forwards
+    // every descriptor, prototype and key check to the real record, so a mirror
+    // built only to survive hostile traps reads it as an ordinary record and
+    // hands the caller's membrane to the scheduler. Refusal must therefore be
+    // categorical — being a proxy is the fault, not what its traps do.
+    apply: (value) => new Proxy(value, {}),
+    label: "a transparent proxy that traps nothing",
+    proxy: true,
   },
 ];
 
@@ -771,8 +789,26 @@ const HOSTILE_TARGETS: readonly HostileTarget[] = [
 interface HostileCase {
   readonly label: string;
   readonly leg: string;
-  readonly trapsFire: boolean;
+  readonly proxy: boolean;
+  /** Where the poison sits, so the case can prove it really planted one. */
+  readonly path: readonly string[];
   readonly build: (probe: Probe) => unknown;
+}
+
+/**
+ * Reads the poisoned node WITHOUT going through it: every parent on these paths
+ * is an ordinary record, so this walk never touches the poisoned node's own
+ * traps and cannot itself be the reason a trap counter moves.
+ */
+function nodeAt(root: unknown, path: readonly string[]): unknown {
+  let node: unknown = root;
+  for (const key of path) {
+    if (typeof node !== "object" || node === null) {
+      throw new Error(`hostile path ${path.join(".")} left the object graph`);
+    }
+    node = (node as Record<string, unknown>)[key];
+  }
+  return node;
 }
 
 const HOSTILE_CASES: readonly HostileCase[] = HOSTILE_TARGETS.flatMap((target) =>
@@ -788,62 +824,132 @@ const HOSTILE_CASES: readonly HostileCase[] = HOSTILE_TARGETS.flatMap((target) =
     },
     label: `${target.label} carrying ${poison.label}`,
     leg: target.leg,
-    trapsFire: poison.trapsFire,
+    path: target.path,
+    proxy: poison.proxy,
   })),
 );
 
-const LIVE_CLAIM_CASES: ReadonlyArray<readonly [string, (probe: Probe) => unknown, boolean]> = [
-  ["a live claim table that is not an array", () => ({ dimension: "default" }), false],
-  ["a sparse live claim table with a hole", () => {
-    const rows: unknown[] = [{ dimension: "default", slotRef: "s", state: "RELEASED" }];
-    rows.length = 3;
-    return rows;
-  }, false],
-  ["a live claim table carrying an extra own key", () => {
-    const rows: unknown[] = [];
-    (rows as unknown as Record<string, unknown>)["smuggledKey"] = 1;
-    return rows;
-  }, false],
-  ["a live claim table whose element is an accessor", (probe) => {
-    const rows: unknown[] = [];
-    Object.defineProperty(rows, "0", {
-      configurable: true,
-      enumerable: true,
-      get: () => {
-        probe.hits += 1;
-        return null;
-      },
-    });
-    return rows;
-  }, false],
-  ["a live claim table with a borrowed prototype", () => Object.setPrototypeOf([], {
-    inherited: true,
-  }), false],
-  ["a proxy live claim table whose descriptor trap throws", (probe) => new Proxy(
-    [{ dimension: "default", slotRef: "s", state: "RELEASED" }],
-    {
+const HELD_CLAIM = { dimension: "default", slotRef: "s", state: "RELEASED" };
+
+/**
+ * `proxyAt` says where the membrane is, and is ASSERTED: an element-level case
+ * that quietly degraded into a plain table would still refuse — on the table's
+ * shape — and read as proxy coverage while proving nothing about elements. The
+ * element cases matter on their own because `countOccupyingSlots` reads element
+ * properties directly, so an element proxy is the last place a `get` trap could
+ * still run inside the authority boundary.
+ */
+interface LiveClaimCase {
+  readonly label: string;
+  readonly build: (probe: Probe) => unknown;
+  readonly proxyAt: "none" | "table" | "element";
+}
+
+const LIVE_CLAIM_CASES: readonly LiveClaimCase[] = [
+  {
+    build: () => ({ dimension: "default" }),
+    label: "a live claim table that is not an array",
+    proxyAt: "none",
+  },
+  {
+    build: () => {
+      const rows: unknown[] = [{ ...HELD_CLAIM }];
+      rows.length = 3;
+      return rows;
+    },
+    label: "a sparse live claim table with a hole",
+    proxyAt: "none",
+  },
+  {
+    build: () => {
+      const rows: unknown[] = [];
+      (rows as unknown as Record<string, unknown>)["smuggledKey"] = 1;
+      return rows;
+    },
+    label: "a live claim table carrying an extra own key",
+    proxyAt: "none",
+  },
+  {
+    build: (probe) => {
+      const rows: unknown[] = [];
+      Object.defineProperty(rows, "0", {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          probe.hits += 1;
+          return null;
+        },
+      });
+      return rows;
+    },
+    label: "a live claim table whose element is an accessor",
+    proxyAt: "none",
+  },
+  {
+    build: () => Object.setPrototypeOf([], { inherited: true }),
+    label: "a live claim table with a borrowed prototype",
+    proxyAt: "none",
+  },
+  {
+    build: (probe) => new Proxy([{ ...HELD_CLAIM }], {
       getOwnPropertyDescriptor: () => {
         probe.hits += 1;
         throw new Error("hostile descriptor trap");
       },
-    },
-  ), true],
+    }),
+    label: "a proxy live claim table whose descriptor trap throws",
+    proxyAt: "table",
+  },
+  {
+    build: () => new Proxy([{ ...HELD_CLAIM }], {}),
+    label: "a transparent proxy live claim table",
+    proxyAt: "table",
+  },
+  {
+    build: () => [new Proxy({ ...HELD_CLAIM }, {})],
+    label: "a live claim table whose element is a transparent proxy",
+    proxyAt: "element",
+  },
+  {
+    build: (probe) => [new Proxy({ ...HELD_CLAIM }, {
+      get: (target, key, receiver) => {
+        probe.hits += 1;
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    })],
+    label: "a live claim table whose element traps every read",
+    proxyAt: "element",
+  },
 ];
+
+function liveClaimProxyAt(table: unknown): "none" | "table" | "element" {
+  if (types.isProxy(table)) return "table";
+  if (!Array.isArray(table)) return "none";
+  const first = Object.getOwnPropertyDescriptor(table, "0");
+  return first !== undefined && "value" in first && types.isProxy(first.value) ? "element" : "none";
+}
 
 describe("work.claim — hostile shapes refuse before any successor exists", () => {
   it("generated a positive, hand-counted case matrix", () => {
-    expect(POISONS.length).toBe(8);
+    expect(POISONS.length).toBe(9);
     expect(HOSTILE_TARGETS.length).toBe(6);
-    expect(HOSTILE_CASES.length).toBe(48);
-    expect(LIVE_CLAIM_CASES.length).toBe(6);
-    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(48);
+    expect(HOSTILE_CASES.length).toBe(54);
+    expect(LIVE_CLAIM_CASES.length).toBe(9);
+    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(54);
+    // Hand-counted so a poison silently dropped from the proxy family — the
+    // family QA proved was granted — shrinks the matrix instead of passing.
+    expect(POISONS.filter((poison) => poison.proxy).length).toBe(5);
+    expect(LIVE_CLAIM_CASES.filter((live) => live.proxyAt !== "none").length).toBe(4);
   });
 
   it.each(HOSTILE_CASES.map((hostile) => [hostile.label, hostile] as const))(
     "refuses %s at its owning leg",
     (_label, hostile) => {
       const probe: Probe = { hits: 0 };
-      const refusal = refusalOf(claimWork(hostile.build(probe)));
+      const payload = hostile.build(probe);
+      // The case is only real if the poison it names is the poison it planted.
+      expect(types.isProxy(nodeAt(payload, hostile.path))).toBe(hostile.proxy);
+      const refusal = refusalOf(claimWork(payload));
       expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
       expect(refusal.failure.leg).toBe(hostile.leg);
       expect(refusal.failure.layer).toBe("AUTHORITY");
@@ -851,28 +957,36 @@ describe("work.claim — hostile shapes refuse before any successor exists", () 
       const keys = Object.keys(refusal);
       expect(keys).not.toContain("successors");
       for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
-      // A trap that never fired is a case that tested nothing; a getter that
-      // DID fire is attacker code the parser was supposed to never invoke.
-      if (hostile.trapsFire) expect(probe.hits).toBeGreaterThan(0);
-      else expect(probe.hits).toBe(0);
+      // Every trap here is attacker code. A proxy is refused for BEING one, so
+      // not one of its traps may run — including the descriptor and ownKeys
+      // traps the parser used to consult before deciding.
+      expect(probe.hits).toBe(0);
     },
   );
 
-  it.each(LIVE_CLAIM_CASES)("refuses %s on the outer record", (_label, build, trapsFire) => {
-    const probe: Probe = { hits: 0 };
-    const refusal = refusalOf(claimWork(withPayload((payload) => {
-      payload["liveClaims"] = build(probe) as never;
-    })));
-    expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
-    expect(refusal.failure.leg).toBe("lease");
-    expect(refusal.failure.layer).toBe("AUTHORITY");
-    expect(refusal.failure.upstreamCode).toBeNull();
-    expect(Object.keys(refusal)).not.toContain("successors");
-    if (trapsFire) expect(probe.hits).toBeGreaterThan(0);
-    else expect(probe.hits).toBe(0);
-  });
+  it.each(LIVE_CLAIM_CASES.map((live) => [live.label, live] as const))(
+    "refuses %s on the outer record",
+    (_label, live) => {
+      const probe: Probe = { hits: 0 };
+      const table = live.build(probe);
+      expect(liveClaimProxyAt(table)).toBe(live.proxyAt);
+      const refusal = refusalOf(claimWork(withPayload((payload) => {
+        payload["liveClaims"] = table as never;
+      })));
+      expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+      expect(refusal.failure.leg).toBe("lease");
+      expect(refusal.failure.layer).toBe("AUTHORITY");
+      expect(refusal.failure.upstreamCode).toBeNull();
+      expect(Object.keys(refusal)).not.toContain("successors");
+      expect(probe.hits).toBe(0);
+    },
+  );
 
-  it("mirrors a section through descriptors, never through a get trap", () => {
+  it("refuses a get-trapping section proxy without ever reading through it", () => {
+    // Descriptor-only reading is necessary but NOT sufficient: this proxy was
+    // granted under it, because a `get` trap that is never consulted is also
+    // never a reason to refuse. Both halves are pinned here — no read happened,
+    // AND the membrane was refused rather than passed to the budget leg.
     let gets = 0;
     const payload = validPayload();
     payload["budget"] = new Proxy(at(payload, "budget"), {
@@ -881,9 +995,13 @@ describe("work.claim — hostile shapes refuse before any successor exists", () 
         return Reflect.get(target, key, receiver) as unknown;
       },
     });
-    const grant = grantOf(claimWork(payload));
+    const refusal = refusalOf(claimWork(payload));
     expect(gets).toBe(0);
-    expect(grant.successors.budgetView).toStrictEqual(EXPECTED_VIEW);
+    expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+    expect(refusal.failure.leg).toBe("budgetReservation");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
+    expect(refusal.failure.upstreamCode).toBeNull();
+    expect(Object.keys(refusal)).not.toContain("successors");
   });
 
   it("refuses an outer payload missing any one of its five sections", () => {

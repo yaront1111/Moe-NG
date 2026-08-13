@@ -17,28 +17,48 @@
     "Use LF one-line runtime bridges and public package roots across package boundaries."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": "architect-a9210e34",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human approved prop-f0c3baf26d1c441c99f4f53018e53f65: the enforced double-quoted runtime bridge is authoritative and the DoD's single-quoted literal is void. The sole block condition is cleared; no scope expansion. Authoritative bridge literal recorded in comment-423669880cfb4319b2cbf6cfab3a1ab7.",
   "createdBy": "WORKER",
   "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
   "priority": "CRITICAL",
   "order": 13.524,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-21366091cdf64be7b0120635b6b0c373",
+      "author": "agent",
+      "content": "Governor action: submitted task-rail proposal prop-f0c3baf26d1c441c99f4f53018e53f65 to resolve the exact single-quote vs repository-enforced double-quote bridge conflict. Keep BLOCKED until human approval lands; then re-enter PLANNING without broad bridge migration.",
+      "timestamp": "2026-08-13T22:12:31.101Z"
+    },
+    {
+      "id": "comment-c44d4f436469411284d38a4fc7453597",
+      "author": "agent",
+      "content": "Stale-presence/capacity ping: task remains blocked only on pending proposal prop-f0c3baf26d1c441c99f4f53018e53f65. Quiet is not crash evidence, so no forced release. Architect should leave an explicit handoff and self-release while human review is pending, then reclaim after approval.",
+      "timestamp": "2026-08-13T22:14:08.539Z"
+    },
+    {
+      "id": "comment-423669880cfb4319b2cbf6cfab3a1ab7",
+      "author": "governor-773e2f5e",
+      "content": "HUMAN APPROVED prop-f0c3baf26d1c441c99f4f53018e53f65 (resolved 2026-08-13T22:18:19Z, resolvedBy human). Block cleared; task returned to PLANNING.\n\nAUTHORITATIVE BRIDGE FORM for this task, superseding DoD item 4's quote style:\n\n    export * from \"./daemon-command-registry.ts\";\n\nExact one-line, LF terminated, DOUBLE quotes. The single-quoted literal written into the DoD is an editorial error and is void.\n\nGovernor-verified evidence: apps/daemon/src/runtime-entrypoint.test.ts:176 defines expectedBridgeSource as `export * from \"./${basename(module, \".ts\")}.ts\";\\n` and the it() at :179 enforces it over a walk of the entire daemon src root — so the new module's bridge is necessarily in that sweep. Census on disk: 6 double-quoted daemon bridges, 0 single-quoted.\n\nScope is NOT expanded: do not migrate runtime-entrypoint.test.ts, and do not touch any existing bridge. Everything else in the DoD stands unchanged — behavior-preserving extraction only, no effect.activate registration, daemon-store-dependencies.ts below 300 physical lines, and the mutation drill on an extracted capability/payload-key mapping must redden a NAMED production-ingress test (epic rail 6: assert the reason code and prove the test is not vacuous).",
+      "timestamp": "2026-08-13T22:18:30.861Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T21:28:19.203Z",
+  "updatedAt": "2026-08-13T22:18:35.865Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:24:38.683Z"
   },
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "governor-773e2f5e"
   ],
-  "blockedReason": "Current-byte rail conflict makes the task mechanically unsatisfiable as written. DoD mandates the exact LF bridge `export * from './daemon-command-registry.ts';\\n` (single quotes), while apps/daemon/src/runtime-entrypoint.test.ts:175-176 computes and enforces `export * from \"./${basename}.ts\";\\n` (double quotes) for every runtime module. daemon-store-dependencies.ts will import the extracted module, so the new bridge is necessarily in that sweep. Repo measurement found all existing daemon bridges use the enforced double-quoted form and zero single-quoted bridges. Using the DoD literal fails the required daemon test; using the enforced repository convention violates the exact DoD. Needed unblock: amend DoD to the current canonical double-quoted bridge `export * from \"./daemon-command-registry.ts\";` (recommended), or explicitly expand scope to migrate runtime-entrypoint.test.ts and every daemon runtime bridge. No speculative plan submitted.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T21:28:19.203Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
