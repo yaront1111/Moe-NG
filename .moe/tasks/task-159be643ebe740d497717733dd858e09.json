@@ -1,0 +1,33 @@
+{
+  "id": "task-159be643ebe740d497717733dd858e09",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Compose production Streamable HTTP MCP host",
+  "description": "Objective: land the real daemon consumer for the already root-published official Streamable HTTP MCP adapter, using the same bounded authenticated dispatch authority as stdio. Deliverable: daemon host/composition code and focused tests that start the official adapter, route requests through production authentication/dispatch, and shut down without alternate command semantics. NOT in scope: custom WebSocket, UI APIs, portability evidence, or new daemon commands. Measured at HEAD 30458af: createHttpMcpAdapter is public from @moe/mcp (task-8ce8b35cb27d44009bb7c44a9ba85fc6), apps/daemon declares @moe/mcp and pnpm-lock links it, but only createStdioMcpServer/connectStdioTransport are called in apps/daemon/src/mcp-main.ts; createHttpMcpAdapter has zero production callers. Coordinate with existing task-49ed1e6d73544fc6ae09b3951a573848 if it becomes buildable; do not duplicate a landed host. Consumers: task-22cfca91c5134b24aaf3e5734444fb93 and task-49ed1e6d73544fc6ae09b3951a573848. Owned paths: a focused apps/daemon/src/mcp-http/** module/test set and minimal daemon executable/manifest wiring.",
+  "definitionOfDone": [
+    "A production daemon entry point constructs createHttpMcpAdapter from the bare @moe/mcp root and connects it to the same authenticated command/query dispatcher used by stdio; no test dispatcher or deep import grants authority.",
+    "Official Streamable HTTP session, resume, cancellation, bounds, and disconnect outcomes preserve exact transport and daemon reason code/layer and commit nothing on refusal.",
+    "Startup and graceful shutdown own the listener/session lifecycle exactly once; restart reuses durable daemon state without custom WebSocket or alternate lifecycle semantics.",
+    "apps/daemon package.json and pnpm-lock dependency edge to @moe/mcp is reverified with a temporary compiled bare-specifier probe deleted in the same command; a focused production-call grep proves the new consumer is non-vacuous.",
+    "pnpm --filter @moe/mcp test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "Use public @moe/mcp and @moe/daemon/store surfaces only; no deep imports across packages.",
+    "Do not create a second dispatcher, authentication policy, or transport vocabulary.",
+    "If task-49ed1e6d lands the same consumer first, report the gap closed rather than duplicate it."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 16,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:58:45.007Z",
+  "updatedAt": "2026-08-13T22:58:45.007Z"
+}

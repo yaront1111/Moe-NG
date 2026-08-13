@@ -1,0 +1,33 @@
+{
+  "id": "task-9fff3d4258ca4bd8b6e167761ee94fdf",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Ship JetBrains adapter distribution host",
+  "description": "Objective: land one real JetBrains host/distribution consumer for the thin adapter so portability evidence can certify an installed artifact rather than its unit-test shape. Deliverable: a minimal plugin/host launcher that imports @moe/jetbrains-adapter, discovers the signed IDE_ADAPTER distribution component, connects to the standalone control room, and preserves teardown/reconnect semantics. NOT in scope: rendering a second UI, lifecycle authority, or packaging other IDEs. Measured at HEAD 30458af: createJetBrainsSession/admitDistribution are public from @moe/jetbrains-adapter (task-9fd52b41f3ea4aad8c0c07bbe6fd3025), but all callers are adapter tests and distribution integration labels IDE_ADAPTER only as a fixture, not a shipped artifact. Consumer: task-22cfca91c5134b24aaf3e5734444fb93. Owned paths: a focused JetBrains host/plugin subtree, adapters/jetbrains package wiring/tests, and packaging asset inventory paths.",
+  "definitionOfDone": [
+    "A production JetBrains host imports createJetBrainsSession from the bare @moe/jetbrains-adapter root and implements only daemon discovery/start, control-room open, and uninstall/reconnect ports; it contains no lifecycle reducer, command authorization, or board rendering.",
+    "Distribution packaging includes a real IDE_ADAPTER component with exact source SHA/schema/compatibility/tool/asset digests and JetBrains startup rejects stale/incompatible sets with DISTRIBUTION_MISMATCH before daemon access.",
+    "A compiled bare-specifier probe verifies the host manifest dependency and pnpm-lock importer; a plain-runtime test loads the shipped adapter/host without Vitest path rewriting.",
+    "Focused tests pin exact JetBrains/IDE/distribution code and layer for absent, stale, start-unverified, open-unknown, concurrent open, and uninstall races, plus one successful reconnect/control-room handoff.",
+    "JetBrains/package and distribution integration gates exit 0."
+  ],
+  "taskRails": [
+    "Keep the IDE shell thin; the standalone control room remains the only UI.",
+    "Do not fabricate an IDE_ADAPTER distribution with a test fixture or placeholder bytes.",
+    "Use official daemon/MCP/HTTP surfaces only; no custom transport."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 18,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:58:45.625Z",
+  "updatedAt": "2026-08-13T22:58:45.625Z"
+}

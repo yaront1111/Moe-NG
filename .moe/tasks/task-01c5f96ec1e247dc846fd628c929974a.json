@@ -1,0 +1,33 @@
+{
+  "id": "task-01c5f96ec1e247dc846fd628c929974a",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Cross-host Linux and macOS effect evidence",
+  "description": "Objective: collect production-surface effect conformance evidence on actual Linux and macOS hosts for every frozen platform boundary, bound to one exact source commit and distribution. Deliverable: host-native fault schedules/evidence receipts and a reproducible cross-host aggregation protocol. NOT in scope: implementing platform classifiers, running off-host fixtures as proof, or weakening Windows behavior. Hard dependencies: Linux boundary task-f01ef545b1554a2cb5df340ce78f6a5c, macOS boundary task-45d12ecfa6ae4938b23af28fe7876a44, doctor task-1cafc7f9fcdc4c9299860b6b1e38275d, and distribution packaging task-739879d0d1ce4a7ea4d1430688cdc4dc. Measured at HEAD 30458af on win32: tests/fault/linux/** and tests/fault/macos/** are absent; archived tasks-e87a735386f643fe92c0eeff09bc4275/e94b2055e281489ea9e97820919f6856 have no landing commits, and their reopen notes explicitly require live Linux/macOS hosts. Consumer: task-22cfca91c5134b24aaf3e5734444fb93. Owned paths: tests/fault/linux/**, tests/fault/macos/**, cross-host evidence manifests/aggregation, and CI/host runner configuration only where approved.",
+  "definitionOfDone": [
+    "On an actual Linux host and an actual macOS host, every hand-written PLATFORM_BOUNDARIES member runs crash-before/after activation and cancellation schedules against the production classifier/runner surface; each schedule asserts exact PROVEN/UNKNOWN code, layer, boundary, and a nonzero case count.",
+    "Each host record binds source commit, distribution manifest/digest, OS/kernel/arch, Node/pnpm/provider runtime closure, fixture/fault schedule digests, timestamps, and raw run receipts; unverifiable or mismatched bindings yield UNKNOWN and never PASS.",
+    "Linux and macOS receipts are canonical, immutable, independently verifiable, and aggregated without trusting caller-selected host claims; missing host evidence leaves only that OS row UNKNOWN.",
+    "No off-host test fixture, emulation label, or design claim is accepted as host proof; Windows stays a separate observation and is not weakened.",
+    "Host-native fault gates and the cross-host verifier exit 0, and task-22cfca91c5134b24aaf3e5734444fb93 is recorded as the acceptance consumer."
+  ],
+  "taskRails": [
+    "This task requires real Linux and macOS execution environments; do not claim completion from win32 alone.",
+    "Use production @moe/runner/platform and distribution/doctor surfaces, not test reimplementations.",
+    "Every refusal/unknown asserts stable code plus layer/boundary and every generated schedule asserts positive cardinality."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 20,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:59:41.305Z",
+  "updatedAt": "2026-08-13T22:59:41.305Z"
+}

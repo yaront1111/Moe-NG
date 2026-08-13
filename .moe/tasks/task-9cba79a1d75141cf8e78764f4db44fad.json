@@ -64,47 +64,71 @@
     {
       "stepId": "step-4",
       "description": "Refactor daemon-store-dependencies.ts to import the extracted factory/operator capabilities, re-export `agentCapabilitiesFor` through the established `./daemon-store-dependencies.js` surface, and call `createDaemonCommandPorts({clock, projectId: config.projectId, store})` exactly once before composing the unchanged authenticator with the returned decisions/registry. Remove the moved imports and bytes rather than leaving duplicate policy. Keep createStoreDependencies, config/env parsing, store lifecycle, subscriptions, affordances, document dossiers, restore, source-entry default provider, and all callers unchanged; verify the host is below 300 physical lines and neither changed production file reaches 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts"
       ],
-      "startedAt": "2026-08-13T22:39:10.456Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "daemon-store-dependencies.ts now 176 physical lines (was 397, target <300 met; new module 247). It imports OPERATOR_CAPABILITIES + createDaemonCommandPorts from ./daemon-command-registry.js, re-exports agentCapabilitiesFor through the established ./daemon-store-dependencies.js surface (agent-wrapper import unchanged), and calls createDaemonCommandPorts({clock, projectId: config.projectId, store}) exactly once, destructuring {decisions, registry} straight into the unchanged authenticator/provide composition. All moved bytes were deleted, not duplicated: capability/family/payload maps, agentCapabilitiesFor, OPERATOR_CAPABILITIES, encoder, DomainRefusal, decisionOf, refusal, requestOf, bootstrapTable, entryOf, buildCommandRegistry call and the decisions port are gone from the host, along with their now-unused imports. createStoreDependencies, env parsing, nodeSpecLoader, store lifecycle, subscriptions, affordances, document dossiers, restore and the default source-entry provider are byte-identical. Focused suite src/daemon-command-registry.test.ts: 92 passed / 92. Test-authoring fixes made while getting there: the ports describe now opens its own store handle+directory in beforeAll (a handle held from collection time kept the shared DB locked and made afterAll rmSync fail EPERM on Windows, killing the vitest worker), and the injected-fields case selects ProjectRegistered rows by type instead of draining the cursor (readPage does not advance on its own, so the drain loop could not terminate). NOTE - foreign state at HEAD: commit 30458af (task-c81953d2, whole-tree) swept my three owned files into its commit; per rail I did not amend or reset. Also at HEAD, 4 foreign suites fail (src/recovery/continuation-binding, continuation-service, restart-reconciliation, restart-reconciliation-idempotence) from recovery-test-fixtures.ts throwing \"the fixture activation must succeed for these seeds to mean anything\"; an import-closure walk from those 4 roots reaches 9 modules, none of them mine.",
+      "startedAt": "2026-08-13T22:39:10.456Z",
+      "completedAt": "2026-08-13T23:06:12.971Z"
     },
     {
       "stepId": "step-5",
       "description": "Add the authoritative runtime bridge with byte-exact one-line LF content `export * from \"./daemon-command-registry.ts\";\\n`. Extend the existing provider regression test with a Windows-safe real child-Node smoke using promisified execFile/process.execPath, `--experimental-strip-types --input-type=module`, shell disabled, windowsHide, bounded timeout/buffer, package cwd, and a unique temporary SQLite path. In the child, install the required production recovery binding, import the default from daemon-store-dependencies.ts (not its export-star bridge), call provide(), traverse its dependency on the new .js bridge, dispatch and replay a valid project.register through production handleCommandRequest, and print a bounded JSON report. Assert exact provider/dependency method shapes, exact 20-entry registry count plus representative project.register capability/payload/handler, exact DECIDED then REPLAYED decision identity/result, and always remove the temp directory only after child exit so Windows handles are closed. Leave runtime-entrypoint.test.ts untouched; its existing generated sweep must discover and byte-check this bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.js",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/daemon-command-registry.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Bridge apps/daemon/src/daemon-command-registry.js written with the authoritative bytes; cat -A shows the single line `export * from \"./daemon-command-registry.ts\";$` (double quotes, LF, no CR). runtime-entrypoint.test.ts was NOT touched and its generated sweep now discovers the new runtime module and byte-checks the bridge - both suites green (2 files / 14 tests). Extended daemon-store-dependencies.test.ts with a real child-Node smoke (now 363 lines): promisified execFile on process.execPath with --experimental-strip-types --input-type=module, shell:false, windowsHide:true, timeout 120s, maxBuffer 1MB, cwd = package root, env carrying a unique temp MOE_STORE_PATH plus MOE_PROJECT_ID/MOE_DAEMON_CREDENTIAL, and it() given a 180s bound so a hang fails by name instead of holding. The child installs the recovery binding through the production store API (store.installRecoveryBinding with RECOVERY_BINDING_CODEC_VERSION, not the test fixture), imports the default export from daemon-store-dependencies.ts (an export-star bridge cannot forward a default), separately imports ./src/daemon-command-registry.js so the new bridge is traversed by Node itself, then dispatches project.register twice through production handleCommandRequest. The parent asserts one exact object: bridgeExports [\"OPERATOR_CAPABILITIES\",\"agentCapabilitiesFor\",\"createDaemonCommandPorts\"], providerKeys [affordances, documentDossiers, provide, restore, subscriptions], depsKeys [authenticator, decisions, registry], registrySize 20, project.register capability project.admin / payloadKeys [\"owner\"] / handler function, first DECIDED and second REPLAYED with identical commandId+EFFECTS_COMMITTED and sameEffect true (no duplicate effect). Temp directory is removed in finally, only after the child exits, so Windows handles are closed. Verbose run confirms the case executes (239ms), not skipped.",
+      "startedAt": "2026-08-13T23:06:15.503Z",
+      "completedAt": "2026-08-13T23:08:00.411Z"
     },
     {
       "stepId": "step-6",
       "description": "Run the single final verification gate in the foreground and record fresh output/exit status: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/daemon exec node --experimental-strip-types --input-type=module -e \"const m=await import('./src/daemon-store-dependencies.ts'); if(typeof m.default?.provide!=='function') process.exit(1); process.stdout.write('DEFAULT_PROVIDER_OK')\" && pnpm typecheck && pnpm test`. Compare repo-wide failures against the stored base and require no new failing path intersecting the six owned paths; report unchanged foreign red verbatim rather than fabricating green. Confirm daemon-store-dependencies.ts <300, daemon-command-registry.ts <=250 target and <400 hard cap, and exact LF bridge bytes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-registry.js",
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-store-dependencies.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Final gate run fresh in one foreground chain, GATE_EXIT=0. Legs: pnpm --filter @moe/daemon typecheck (clean); pnpm --filter @moe/daemon test -> Test Files 67 passed (67), Tests 1221 passed (1221); the plain-Node default-provider probe printed DEFAULT_PROVIDER_OK; pnpm typecheck -> Scope: 18 of 19 workspace projects, clean; pnpm test -> Test Files 250 passed (250), Tests 5476 passed | 1 skipped (5477). Path-attributed comparison against the stored pre-change base (daemon 65 files/1112 tests, root 248 files/5386 tests, all green): the HEAD failing-path set is EMPTY, so its intersection with my six owned paths is empty and there is no foreign red left to report. The two transient foreign reds seen mid-task both cleared: packages/runner/src/providers/claude/claude-launcher-authority.ts TS2379 (uncommitted peer WIP) and 4 src/recovery suites failing on recovery-test-fixtures.ts (now 17 files/318 tests green). Physical lines: daemon-store-dependencies.ts 176 (<300), daemon-command-registry.ts 247 (<=250 target, <400 cap), daemon-command-registry.test.ts 371, daemon-store-dependencies.test.ts 363 - no production source at or over 400. Bridge bytes verified with od -c: exactly `export * from \"./daemon-command-registry.ts\";\\n`, LF, no CR, no trailing bytes. Behaviour-preservation cross-check: whitespace-normalized comparison of the three moved regions against 1e8043f:daemon-store-dependencies.ts shows the refusal/decision region IDENTICAL, the maps+agentCapabilitiesFor+payload-keys+operator region IDENTICAL modulo the added export keyword, and the factory region identical except `projectId: config.projectId` becoming the destructured `projectId`.",
+      "startedAt": "2026-08-13T23:08:05.513Z",
+      "completedAt": "2026-08-13T23:09:27.788Z"
     },
     {
       "stepId": "step-7",
       "description": "Perform the final adversarial review over the owned diff: check exact 20-kind equality, family/schema precedence, request-injection trust boundary, capability-before-payload ordering, replay/idempotency semantics, frozen return values, unexpected-error propagation, import cycles, default-source entry versus named bridge behavior, Windows child cleanup/timeouts, and absence of effect.activate or unrelated policy. Temporarily mutate one production required-capability mapping and one ordered payload allow-list entry separately; for each, prove the named production-ingress characterization test turns red with the exact expected code/stage/layer or row mismatch, then reverse the exact edit and verify original hashes/gates. Inspect `git status --porcelain`; commit only explicit owned pathspecs, never a bare commit, and verify `git show --stat` contains no foreign paths. Submit for QA; if rejected, reproduce the exact production-surface claim, add a red regression, fix only owned paths, and repeat the final gate/review.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-registry.js",
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-store-dependencies.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-13T23:09:33.432Z"
     }
   ],
   "status": "WORKING",
@@ -145,12 +169,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T22:39:10.456Z",
+  "updatedAt": "2026-08-13T23:09:33.432Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:24:38.683Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -164,7 +188,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T22:27:28.602Z",

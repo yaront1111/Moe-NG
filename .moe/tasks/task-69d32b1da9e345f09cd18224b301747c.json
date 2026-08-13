@@ -1,0 +1,33 @@
+{
+  "id": "task-69d32b1da9e345f09cd18224b301747c",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Legacy snapshot decoder and shadow projection contract",
+  "description": "Objective: turn a copied frozen legacy project into production LegacySourceRecord values and a frozen old-to-new shadow projection comparison without test-authored semantic authority. Deliverable: @moe/import snapshot decoder plus explicit projection mapping/comparator and a production read-only CLI/service consumer. NOT in scope: live legacy reads, write-back, dual writes, cutover activation, or portability verdict publication. Measured at HEAD 30458af: buildSourceManifest/applyImport/reconcileImport are public, but all consumers are tests; tests/migration/import/import-determinism.test.ts invents payload {owner:'alice'} from manifest paths, no production decoder exists, and no contract maps imported claims/links/reconciliations to daemon BoardProjection entities. Consumers: task-22cfca91c5134b24aaf3e5734444fb93 and task-4e1fe69630da494eb313e27a4543c5c8. Owned paths: packages/import/** plus a focused production consumer under tools/import/** or scripts/import/**, root script/manifest/lock only if required.",
+  "definitionOfDone": [
+    "A production decoder reads only bytes covered by buildSourceManifest and converts supported legacy files into exact frozen LegacySourceRecord values; malformed, extra, ambiguous, or unsupported bytes return stable import code/layer and never guess a payload.",
+    "A versioned shadow-projection contract explicitly maps supported legacy claims/links/blockers to the frozen new projection vocabulary and returns ordered field-level mismatches; missing/unmapped fields remain UNKNOWN or NEEDS_RECONCILIATION and never activate authority.",
+    "A production read-only CLI/service composes buildSourceManifest -> decoder -> reconcileImport/shadow comparison against a copied snapshot, verifies source hashes before and after, and performs no source write, mtime change, dual write, or activation.",
+    "A committed copied-project corpus contains nonzero real legacy shapes plus exact source manifest/hash expectations; tests assert exact file/record/mismatch counts and mutation-check decoder and comparison guards on the production surface.",
+    "pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test plus the focused migration gate exit 0."
+  ],
+  "taskRails": [
+    "Do not convert manifest paths into invented records in tests; semantic records must come from the production decoder.",
+    "The shadow comparator is advisory/read-only and may not call applyImport with an authority-bearing production store or emit activation commands.",
+    "Preserve source bytes and mtimes; all unsupported/ambiguous facts are typed with exact code and layer."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 17,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:58:45.319Z",
+  "updatedAt": "2026-08-13T22:58:45.319Z"
+}

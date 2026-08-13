@@ -16,8 +16,8 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a42f4965",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,11 +32,23 @@
       "author": "governor-773e2f5e",
       "content": "HUMAN-APPROVED SCOPE AMENDMENT 2026-08-13T22:27Z. Block cleared; task returned to PLANNING. This comment is the authoritative amendment — it overrides the owned-paths clause in the task description.\n\n**OWNED PATHS ARE WIDENED TO INCLUDE the repository root `package.json`,** for the single purpose of defining the `test:migration` script. Everything else in the description's owned-paths clause stands unchanged: `tests/integration/portability/**` and release evidence paths.\n\n**Why the amendment was needed.** The task declares verification `pnpm test:integration && pnpm test:migration`. Measured: `grep -rn '\"test:migration\"' --include=package.json .` returns **zero hits repo-wide** — the script does not exist anywhere. The original owned-paths clause excluded root package.json, so the task was required to pass a gate it was forbidden to create. Mechanically unsatisfiable as written, in the same family as the bridge-literal conflict resolved on task-9cba79a1 earlier today. The human chose to widen scope rather than drop the leg, because dropping `test:migration` would leave the migration/legacy-import half of the shadow comparison with no gate at all — thin for an evidence task.\n\n**Defining that script is step 1 of the plan.** It is production work, not setup: it must actually run the migration/legacy-import shadow comparison, not alias `test:integration` or exit 0 on an empty match. A script that runs zero cases passes while testing nothing — epic rail 6 requires a swept case set to assert it was actually generated.\n\n**Dependency condition, measured, is satisfied.** \"Hard dependencies: every M4 task\" — the M4 epic is 10 DONE with zero other open tasks. This is the last one.\n\n**The capabilities this gate shadow-compares are on disk. Re-measure each before naming a symbol, and verify the dependency edge, not just the export:**\n- Codex provider: `packages/runner/src/providers/codex/` (codex-observation, codex-stream, codex-capabilities, codex-probe, codex-render and others)\n- Legacy import: `packages/import/` (import-apply, import-canonical, import-reconcile, canonical-bytes, index.ts)\n- JetBrains: `adapters/jetbrains/src/index.ts`\n- MCP transports: stdio and Streamable HTTP adapters, both landed and root-published\n\nA root-barrel grep proving an export exists does NOT establish that the consuming package can import it. For each cross-package symbol the plan names, record: the producer declared in the consumer's package.json \"dependencies\", the pnpm-lock.yaml importer entry, and a compiled bare-specifier probe at exit 0 with the probe deleted in the same command.\n\n**Clause 2 still binds.** This is an acceptance/evidence task: name at planning time the production capability it certifies and the task that shipped it, verified by grep/probe rather than by reading the design. Where a capability turns out to be absent or unreachable, the required output is a prerequisite production task with the gap measured symbol by symbol — never a narrowed DoD, never a mock-backed journey, never authority reimplemented inside the test. A proof that only proves the shapes is worse than no proof.\n\n**Known local hazard for whoever runs the gate:** `pnpm test:integration` must be run from PowerShell, not Git Bash. Under MSYS, GNU tar reads `C:\\` as a remote host and the run reports `SOURCE_ARCHIVE_FAILED`, which reads exactly like a genuine red but is not.",
       "timestamp": "2026-08-13T22:35:04.302Z"
+    },
+    {
+      "id": "comment-322ae3b2e9d14edd9ca01198164fba69",
+      "author": "agent",
+      "content": "Stale-presence ping: architect has been quiet past the presence window while holding PLANNING. Quiet is not crash evidence; please report whether portability remeasurement/planning is still active or leave an explicit handoff/self-release if blocked. No forced release.",
+      "timestamp": "2026-08-13T22:58:15.245Z"
+    },
+    {
+      "id": "comment-f6f715c1875545e0bbaa158a9ca26a04",
+      "author": "architect-a42f4965",
+      "content": "Planning audit at HEAD 30458afd: acceptance blocked by absent production consumers/subjects, not by the missing script alone. Created ordered capability prerequisites: task-2159fa19 (Codex root surface), task-159be643 (real HTTP host), task-69d32b1d (legacy bytes decoder + old/new shadow mapping), task-9fff3d42 (shipped JetBrains host), task-45d12ec (macOS boundary), task-01c5f96 (actual Linux/macOS host evidence). Existing task-6cbff010 is the durable provider consumer. Detailed measurements are in the block reason and Serena handoff. UNKNOWN is valid for missing evidence from an existing subject; it cannot certify that the subject/caller/corpus does not exist.",
+      "timestamp": "2026-08-13T23:01:25.555Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-13T22:50:16.315Z",
+  "updatedAt": "2026-08-13T23:01:37.692Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -45,8 +57,19 @@
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh Clause-2 audit at committed HEAD 30458afd found the portability subjects are not all production-composable, despite all other M4 tickets being DONE. @moe/mcp exposes stdio+HTTP, but only stdio is called by apps/daemon; createHttpMcpAdapter has zero production callers. Codex implementation exists under packages/runner/src/providers/codex/**, but operational Codex functions are absent from the bare @moe/runner root and no provider has a durable daemon caller. Linux classification exists, but packages/runner/src/platform/macos/** and real tests/fault/linux|macos host evidence are absent; archived conformance tasks explicitly require actual Linux/macOS hosts. @moe/jetbrains-adapter is test-only and the distribution integration deliberately uses a fake IDE_ADAPTER fixture rather than a shipped component. @moe/import has no production consumer, no legacy-byte -> LegacySourceRecord decoder, no old->new projection mapping; its only migration test synthesizes records from three temporary JSON files, and no copied-real-project corpus exists. A test:migration script can be added under the amendment, but cannot repair these missing authorities. Created prerequisites task-2159fa19 (Codex public surface), task-159be643 (production HTTP host), task-69d32b1d (legacy decoder + shadow projection), task-9fff3d42 (JetBrains shipped host), task-45d12ec (macOS boundary), task-01c5f96 (real Linux/macOS evidence); existing task-6cbff010 remains the durable provider consumer prerequisite. Planning an UNKNOWN-only matrix or test-authored decoder would violate Clause 2 and retire absent capabilities with mock-backed evidence.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T23:01:16.295Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Remeasured every portability subject at HEAD 30458afd, proved the acceptance task is blocked by absent production consumers/corpus/platform evidence, created six prerequisite tasks, reported blocked, commented the task, and wrote Serena handoff/decision memories.",
+      "whatRemains": "Land/re-probe task-2159fa19, task-159be643, task-69d32b1d, task-9fff3d42, task-45d12ec, task-01c5f96, plus the relevant durable provider consumer task-6cbff010; then reclaim, add the real nonempty test:migration script, and plan the shadow gate.",
+      "pitfalls": "Do not replace absent capabilities with UNKNOWN rows, test-synthesized LegacySourceRecord payloads, fake IDE_ADAPTER packaging, off-host platform fixtures, deep imports, or a test:migration alias/zero-case script. Preserve foreign import/release WIP.",
+      "openQuestions": "Cross-host prerequisite needs actual Linux and macOS runners; governors/human must promote and sequence the new BACKLOG tasks.",
+      "releasedAt": "2026-08-13T23:01:37.690Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit architecture handoff after Clause-2 capability audit and prerequisite creation; release architect capacity for the next PLANNING task."
+    }
+  ]
 }

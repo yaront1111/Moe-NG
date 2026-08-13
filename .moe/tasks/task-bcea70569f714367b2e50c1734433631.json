@@ -28,8 +28,15 @@
   "parentTaskId": "task-5dfc98fc3e7f4035a8012bd9ba032de3",
   "priority": "HIGH",
   "order": 4.619,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0f84a70ff42c46d8a3b3ed9cea3045ef",
+      "author": "agent",
+      "content": "Governance sequencing guard: remain BACKLOG until task-0c21ba2 is QA-approved DONE. Then promote to PLANNING and consume only its public @moe/contracts surface; do not co-implement the contract in core.",
+      "timestamp": "2026-08-13T22:58:03.971Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:25.526Z",
-  "updatedAt": "2026-08-13T22:49:25.526Z"
+  "updatedAt": "2026-08-13T22:58:03.971Z"
 }

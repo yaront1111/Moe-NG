@@ -1,0 +1,33 @@
+{
+  "id": "task-45d12ecfa6ae4938b23af28fe7876a44",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "macOS platform observation boundary",
+  "description": "Objective: land the production macOS/darwin platform observation and classification surface that cross-host conformance and the portability shadow gate can evaluate without inheriting Linux facts. Deliverable: focused runner macOS modules, public root seam, and hostile-shape tests. NOT in scope: claiming live macOS execution on this Windows host, packaging certification, spawning processes, or weakening Windows/Linux. Measured at HEAD 30458af: the OS-neutral platform contract and Linux classifier are public from task-f01ef545b1554a2cb5df340ce78f6a5c, but packages/runner/src/platform/macos/** is absent; observeLinuxPlatform deliberately returns PLATFORM_HOST_MISMATCH/PLATFORM_LINUX for darwin. Consumers: archived macOS conformance task-e94b2055e281489ea9e97820919f6856 and task-22cfca91c5134b24aaf3e5734444fb93. Owned paths: packages/runner/src/platform/macos/** plus minimal runner root/surface tests.",
+  "definitionOfDone": [
+    "A macOS classifier covers every frozen PLATFORM_BOUNDARIES member and maps caller-supplied darwin facts to PROVEN or UNKNOWN with stable macOS-specific layer/codes; the exact non-empty boundary set is hand-pinned.",
+    "Missing, stale, hostile, off-host, unsupported-architecture, unpinned-runtime, path/symlink, lock, signal, and recovery facts never become PROVEN and assert exact reason code/layer with zero accessor reads.",
+    "The adapter composes existing provider/workspace/scope/cancellation/recovery shapes and contains no child_process/spawn/kill/clock/random probing or copied lifecycle/authority logic.",
+    "The curated @moe/runner root exposes the macOS surface with exact LF bridges, bare-specifier typecheck, and plain-Node loadability; task-e94b2055e281489ea9e97820919f6856 and task-22cfca91c5134b24aaf3e5734444fb93 are recorded consumers.",
+    "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "This task ships a boundary, not conformance evidence; do not claim a macOS PASS without a macOS host.",
+    "Do not reuse PLATFORM_LINUX layer or Linux verdicts for darwin.",
+    "Target <=250 lines per production file and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 19,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:58:45.931Z",
+  "updatedAt": "2026-08-13T22:58:45.931Z"
+}

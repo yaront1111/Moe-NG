@@ -1,0 +1,33 @@
+{
+  "id": "task-2159fa19c3734d149e0f9026098875b5",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Publish Codex provider runtime surface",
+  "description": "Objective: make the landed Codex runtime adapter operationally reachable from the @moe/runner package root so production consumers and the portability shadow gate can invoke the same immutable observation, probe, stream, render, cancellation, and reconciliation surface rather than deep-importing or reimplementing it. Deliverable: a curated Codex surface module, NodeNext bridge, root exports, and root/runtime surface tests. NOT in scope: daemon dispatch, provider launch, new Codex behavior, or telemetry. Measured at HEAD 30458af: packages/runner/src/providers/codex/** exists from task-a0fa6da4024647d69c25d273b217eaeb, but @moe/runner publishes only ProbeCodexRuntimeInput/report type closure through recovery inventory; operational Codex builders/classifiers are absent from the bare root. Consumers: task-22cfca91c5134b24aaf3e5734444fb93 and the future provider dispatch service. Owned paths: packages/runner/src/surface/codex-surface.ts/.js, packages/runner/src/index.ts, packages/runner/src/index-surface.test.ts, packages/runner/src/runtime-entrypoint.test.ts.",
+  "definitionOfDone": [
+    "The bare @moe/runner root exposes a deliberately curated operational Codex surface covering runtime observation/probe, capability vocabulary, stream recording, render output, cancellation, and reconciliation without exporting test fixtures or internal authority helpers.",
+    "All published values and their directly named type closure resolve through NodeNext .js bridges; a compiled bare-specifier type probe and a plain-Node runtime probe both exit 0.",
+    "Hand-written surface assertions pin the exact non-empty new runtime names and preserve every existing root export; deleting or aliasing one production export makes the focused test red.",
+    "No Codex behavior, provider lifecycle, or authority semantics change; task-22cfca91c5134b24aaf3e5734444fb93 is recorded as the acceptance consumer.",
+    "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "Do not blanket-export providers/codex/**; expose only reviewed public capability values/types.",
+    "Do not add a daemon consumer or claim launch authority in this surface task.",
+    "Every runtime module gets an exact LF .js bridge and plain-Node loadability coverage."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 15,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:58:44.696Z",
+  "updatedAt": "2026-08-13T22:58:44.696Z"
+}
