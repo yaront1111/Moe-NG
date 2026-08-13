@@ -15,6 +15,11 @@
  * refused, never granted with a hedged label.
  */
 
+import type { EffectIntent } from "@moe/runner";
+import type {
+  BudgetAvailableView, LeaseRecord, ProviderSlotReservation, ReservationRecord,
+} from "@moe/scheduler";
+
 /** Cloned per the repo convention: no package root exports `deepFreeze`. */
 export function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -84,6 +89,13 @@ export const WORK_ERROR_CODES = Object.freeze([
   "WORK_SLOT_EXHAUSTED",
   "WORK_BUDGET_REFUSED",
   "WORK_INTENT_REFUSED",
+  /**
+   * `work.claim` owns its effect transition, so a valid command naming another
+   * one is refused rather than forwarded: the supervisor admits
+   * `PENDING -> CANCEL_REQUESTED`, and forwarding published that cancellation
+   * under a `CLAIM_GRANTED` authority label.
+   */
+  "WORK_INTENT_COMMAND_MISMATCH",
   "WORK_STATE_CONFLICT",
 ] as const);
 export type WorkErrorCode = (typeof WORK_ERROR_CODES)[number];
@@ -124,12 +136,22 @@ export function workFailure(
   return deepFreeze({ code, layer, leg, message, ok: false, upstreamCode });
 }
 
-/** The four successor records a granted claim publishes together. */
+/**
+ * The closure a granted claim publishes together: the four causal leg
+ * successors plus the budget view the reserved units actually moved to.
+ * `budgetView` is a SECOND OUTPUT of the budget leg, not a fifth leg — it is
+ * `reserveForAdmission`'s own post-reservation view, retained verbatim, since
+ * recomputing it downstream would be a second unauthorised arithmetic over the
+ * same units. Every field carries its owning package root's record type: an
+ * `unknown` placeholder satisfies any consumer and asserts nothing, which is
+ * exactly how the dropped view went unnoticed.
+ */
 export interface ClaimSuccessors {
-  readonly lease: unknown;
-  readonly providerSlot: unknown;
-  readonly budgetReservation: unknown;
-  readonly effectIntent: unknown;
+  readonly lease: LeaseRecord;
+  readonly providerSlot: ProviderSlotReservation;
+  readonly budgetReservation: ReservationRecord;
+  readonly budgetView: BudgetAvailableView;
+  readonly effectIntent: EffectIntent;
 }
 
 export interface WorkInputRejected {

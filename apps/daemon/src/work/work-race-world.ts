@@ -178,7 +178,10 @@ export function advance(world: World, result: WorkResult): World {
       : { intent: world.intent, record: record as Record<string, unknown> };
   }
   if (result.outcome === "WORK_GRANTED") {
-    return { intent: result.successors.effectIntent as Record<string, unknown>, record: world.record };
+    // `effectIntent` is now the typed EffectIntent, which has no index
+    // signature; the world stores opaque records, so widen through `unknown`.
+    const intent = result.successors.effectIntent as unknown as Record<string, unknown>;
+    return { intent, record: world.record };
   }
   return world;
 }

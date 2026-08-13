@@ -2,6 +2,15 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as daemon from "@moe/daemon";
+// Imported through the PUBLIC package roots, so these assertions also prove the
+// daemon's published closure is expressible without a deep import.
+import type { EffectIntent } from "@moe/runner";
+import type {
+  BudgetAvailableView,
+  LeaseRecord,
+  ProviderSlotReservation,
+  ReservationRecord,
+} from "@moe/scheduler";
 import type {
   AuthenticatedPrincipal,
   AuthenticationResult,
@@ -361,6 +370,16 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<WorkAuthorityLabel>();
     expectTypeOf<WorkFailure["leg"]>().toEqualTypeOf<WorkLeg | null>();
     expectTypeOf<WorkGranted["successors"]>().toEqualTypeOf<ClaimSuccessors>();
+    // Exactly five fields, each the upstream record type rather than `unknown`:
+    // a placeholder field would satisfy any consumer and prove nothing.
+    expectTypeOf<keyof ClaimSuccessors>().toEqualTypeOf<
+      "budgetReservation" | "budgetView" | "effectIntent" | "lease" | "providerSlot"
+    >();
+    expectTypeOf<ClaimSuccessors["lease"]>().toEqualTypeOf<LeaseRecord>();
+    expectTypeOf<ClaimSuccessors["providerSlot"]>().toEqualTypeOf<ProviderSlotReservation>();
+    expectTypeOf<ClaimSuccessors["budgetReservation"]>().toEqualTypeOf<ReservationRecord>();
+    expectTypeOf<ClaimSuccessors["budgetView"]>().toEqualTypeOf<BudgetAvailableView>();
+    expectTypeOf<ClaimSuccessors["effectIntent"]>().toEqualTypeOf<EffectIntent>();
     expectTypeOf<WorkResult>().toEqualTypeOf<
       WorkApplied | WorkContextView | WorkGranted | WorkInputRejected | WorkRefused
     >();

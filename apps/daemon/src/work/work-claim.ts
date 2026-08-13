@@ -1,12 +1,15 @@
-import { reserveForAdmission, reserveProviderSlot } from "@moe/scheduler";
-import { applyEffectCommand } from "@moe/runner";
-
 import {
-  granted,
-  refused,
-  workFailure,
-} from "./work-kernel.js";
-import { fenceWorkLease, isRecord } from "./work-lease.js";
+  reserveForAdmission,
+  reserveProviderSlot,
+  type BudgetAvailableView,
+  type LeaseRecord,
+  type ProviderSlotReservation,
+  type ReservationRecord,
+} from "@moe/scheduler";
+import { applyEffectCommand, type EffectIntent } from "@moe/runner";
+
+import { granted, refused, workFailure } from "./work-kernel.js";
+import { fenceWorkLease } from "./work-lease.js";
 import { checkSlotCeiling } from "./work-slot-ceiling.js";
 import type { ClaimSuccessors, WorkResult } from "./work-kernel.js";
 
@@ -16,19 +19,90 @@ import type { ClaimSuccessors, WorkResult } from "./work-kernel.js";
  * ATOMICITY WITHOUT A DATABASE — persistence is out of scope, so "together or
  * nothing" is a property of the returned value. Successors accumulate in locals
  * and the result is constructed only after all four legs succeed, so a
- * partially built result is unreachable rather than merely untested.
- *
- * This module holds NO mutable module-level state: the caller supplies the
- * current records and receives successors. That is what keeps it pure and
- * restart-safe, and it is why a refused claim can leave no residue anywhere.
+ * partially built result is unreachable rather than merely untested. The module
+ * holds NO mutable module-level state: the caller supplies the current records
+ * and receives successors, which is why a refused claim leaves no residue.
  */
 
 /** A claim requires a live lease; every other lease state is refused. */
 const CLAIM_LEGAL_LEASE_STATES = Object.freeze(["ACTIVE"] as const);
 
-function section(payload: Record<string, unknown>, key: string): Record<string, unknown> | null {
-  const value = payload[key];
-  return isRecord(value) ? value : null;
+/**
+ * The ONLY transition `work.claim` may cause. It is a server-owned literal, not
+ * a forwarded caller value: the supervisor admits `PENDING -> CANCEL_REQUESTED`
+ * too, so forwarding published a cancellation under a `CLAIM_GRANTED` label.
+ */
+const CLAIM_EFFECT_COMMAND = Object.freeze({ kind: "claim" } as const);
+
+const OUTER_KEYS = ["budget", "effect", "lease", "liveClaims", "slot"] as const;
+const LEASE_KEYS = ["proof", "record"] as const;
+const SLOT_KEYS = ["dimension", "requestId", "rows", "slotRef"] as const;
+const BUDGET_KEYS = ["admission", "gate", "view"] as const;
+const EFFECT_KEYS = ["command", "intent"] as const;
+const COMMAND_KEYS = ["kind"] as const;
+
+type Leg<T> = WorkResult | { readonly value: T };
+
+/**
+ * Own-data mirror of a caller record. Values come from DESCRIPTORS, never from
+ * property access, so a caller's getter is never invoked — running attacker
+ * code inside the authority boundary is the failure this exists to prevent. A
+ * borrowed prototype, symbol key, undeclared key, accessor, or proxy trap that
+ * lies or throws refuses rather than degrading to a partial read. `keys ===
+ * null` mirrors whatever own string keys are present; `exact` also demands
+ * every declared key, so a section passes `false` and a MISSING fact still
+ * reaches its own leg carrying that leg's upstream reason code.
+ */
+function mirror(
+  value: unknown,
+  keys: readonly string[] | null,
+  exact: boolean,
+): Record<string, unknown> | null {
+  try {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
+    const own = Reflect.ownKeys(value);
+    if (!own.every((key) => typeof key === "string" && (keys === null || keys.includes(key)))) {
+      return null;
+    }
+    if (exact && keys !== null && own.length !== keys.length) return null;
+    const copy: Record<string, unknown> = {};
+    for (const key of keys ?? (own as readonly string[])) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined) continue;
+      if (!descriptor.enumerable || !("value" in descriptor)) return null;
+      copy[key] = descriptor.value;
+    }
+    return copy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Own-data mirror of a dense array. The own-key count must be exactly the
+ * indices plus `length`, which is what rejects a hole or a smuggled key — and
+ * it also bounds the loop, so a proxy reporting a colossal length cannot spin.
+ */
+function mirrorList(value: unknown): readonly unknown[] | null {
+  try {
+    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
+    const length = Object.getOwnPropertyDescriptor(value, "length");
+    if (length === undefined || typeof length.value !== "number") return null;
+    if (Reflect.ownKeys(value).length !== length.value + 1) return null;
+    const copy: unknown[] = [];
+    for (let index = 0; index < length.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+        return null;
+      }
+      copy.push(descriptor.value);
+    }
+    return copy;
+  } catch {
+    return null;
+  }
 }
 
 function malformed(leg: string, message: string): WorkResult {
@@ -36,32 +110,40 @@ function malformed(leg: string, message: string): WorkResult {
 }
 
 export interface ClaimSections {
-  readonly lease: Record<string, unknown>;
-  readonly slot: Record<string, unknown>;
-  readonly budget: Record<string, unknown>;
-  readonly effect: Record<string, unknown>;
+  readonly lease: unknown;
+  readonly slot: unknown;
+  readonly budget: unknown;
+  readonly effect: unknown;
   readonly liveClaims: readonly unknown[];
 }
 
-/** Reads the payload's shape only; every value stays unvalidated for its own leg. */
+interface BudgetLeg {
+  readonly reservation: ReservationRecord;
+  readonly view: BudgetAvailableView;
+}
+
+/** Mirrors the outer shape only; every section value stays unvalidated for its own leg. */
 export function readClaimSections(payload: unknown): ClaimSections | null {
-  if (!isRecord(payload)) return null;
-  const lease = section(payload, "lease");
-  const slot = section(payload, "slot");
-  const budget = section(payload, "budget");
-  const effect = section(payload, "effect");
-  const liveClaims = payload["liveClaims"];
-  if (lease === null || slot === null || budget === null || effect === null) return null;
-  if (!Array.isArray(liveClaims)) return null;
+  const outer = mirror(payload, OUTER_KEYS, true);
+  if (outer === null) return null;
+  const liveClaims = mirrorList(outer["liveClaims"]);
+  if (liveClaims === null) return null;
+  const { budget, effect, lease, slot } = outer;
   return { budget, effect, lease, liveClaims, slot };
 }
 
-function claimLease(lease: Record<string, unknown>): WorkResult | { readonly value: unknown } {
+function claimLease(section: unknown): Leg<LeaseRecord> {
+  const lease = mirror(section, LEASE_KEYS, false);
+  if (lease === null) return malformed("lease", "the lease section is not an own-data record");
   const gate = fenceWorkLease(lease, "work.claim", CLAIM_LEGAL_LEASE_STATES);
-  return gate.ok ? { value: gate.lease } : gate.result;
+  // `fenceAuthority` already parsed and returned a LeaseRecord; the lease gate
+  // widens it to a plain record, so this narrows back to the parsed type.
+  return gate.ok ? { value: gate.lease as unknown as LeaseRecord } : gate.result;
 }
 
-function claimSlot(slot: Record<string, unknown>): WorkResult | { readonly value: unknown } {
+function claimSlot(section: unknown): Leg<ProviderSlotReservation> {
+  const slot = mirror(section, SLOT_KEYS, false);
+  if (slot === null) return malformed("providerSlot", "the slot section is not own data");
   // The dimension is read from the payload, never defaulted here: the ceiling
   // in `checkSlotCeiling` counts per dimension, so a default would silently
   // merge two ceilings and reserve a slot the count never saw.
@@ -78,13 +160,15 @@ function claimSlot(slot: Record<string, unknown>): WorkResult | { readonly value
   return refused(workFailure(code, "providerSlot", "AUTHORITY", message, upstream));
 }
 
-function claimBudget(budget: Record<string, unknown>): WorkResult | { readonly value: unknown } {
+function claimBudget(section: unknown): Leg<BudgetLeg> {
+  const budget = mirror(section, BUDGET_KEYS, false);
+  if (budget === null) return malformed("budgetReservation", "the budget section is not own data");
   const result = reserveForAdmission(
-    budget["view"] as never,
-    budget["admission"] as never,
-    budget["gate"] as never,
+    budget["view"] as never, budget["admission"] as never, budget["gate"] as never,
   );
-  if (result.ok) return { value: result.reservation };
+  // BOTH outputs of the ONE call. The shifted view is authoritative and is
+  // retained verbatim; reserving again to obtain it would move the units twice.
+  if (result.ok) return { value: { reservation: result.reservation, view: result.view } };
   const issue = result.issues[0];
   const upstream = issue?.code ?? null;
   const message = issue?.message ?? "budget reservation was refused";
@@ -93,44 +177,50 @@ function claimBudget(budget: Record<string, unknown>): WorkResult | { readonly v
   );
 }
 
-function claimIntent(effect: Record<string, unknown>): WorkResult | { readonly value: unknown } {
-  const outcome = applyEffectCommand(effect["intent"], effect["command"]);
-  if (outcome.kind === "TRANSITIONED") return { value: outcome.intent };
-  if (outcome.kind === "MUST_DRAIN") {
-    return refused(
-      workFailure(
-        "WORK_STATE_CONFLICT",
-        "effectIntent",
-        "AUTHORITY",
-        "effect intent requires a drain before it can be claimed",
-        null,
-      ),
-    );
+/** Refuses anything that is not the exact server-owned claim command. */
+function checkClaimCommand(value: unknown): WorkResult | null {
+  const exact = mirror(value, COMMAND_KEYS, true);
+  if (exact !== null && exact["kind"] === "claim") return null;
+  const kind = mirror(value, null, false)?.["kind"];
+  if (typeof kind === "string" && kind !== "claim") {
+    return refused(workFailure(
+      "WORK_INTENT_COMMAND_MISMATCH", "effectIntent", "AUTHORITY",
+      `work.claim causes only the claim transition, never ${kind}`,
+    ));
   }
-  return refused(
-    workFailure(
-      "WORK_INTENT_REFUSED",
-      "effectIntent",
-      "AUTHORITY",
-      outcome.failure.message,
-      outcome.failure.code,
-    ),
-  );
+  return malformed("effectIntent", "the effect command is not the exact claim command");
 }
 
-function isRefusal(value: WorkResult | { readonly value: unknown }): value is WorkResult {
+function claimIntent(section: unknown): Leg<EffectIntent> {
+  const effect = mirror(section, EFFECT_KEYS, false);
+  if (effect === null) return malformed("effectIntent", "the effect section is not own data");
+  const mismatch = checkClaimCommand(effect["command"]);
+  if (mismatch !== null) return mismatch;
+  const outcome = applyEffectCommand(effect["intent"], CLAIM_EFFECT_COMMAND);
+  if (outcome.kind === "TRANSITIONED") return { value: outcome.intent };
+  if (outcome.kind === "MUST_DRAIN") {
+    return refused(workFailure(
+      "WORK_STATE_CONFLICT", "effectIntent", "AUTHORITY",
+      "effect intent requires a drain before it can be claimed", null,
+    ));
+  }
+  return refused(workFailure(
+    "WORK_INTENT_REFUSED", "effectIntent", "AUTHORITY",
+    outcome.failure.message, outcome.failure.code,
+  ));
+}
+
+function isRefusal<T>(value: Leg<T>): value is WorkResult {
   return !("value" in value) || "outcome" in value;
 }
 
 /**
- * Composes the four legs. Returns one frozen result carrying ALL four
- * successors or NONE of them plus a single refusal naming the failing leg.
+ * Composes the four legs. Returns one frozen result carrying the WHOLE
+ * successor closure or NONE of it plus a single refusal naming the failing leg.
  */
 export function claimWork(payload: unknown): WorkResult {
   const sections = readClaimSections(payload);
-  if (sections === null) {
-    return malformed("lease", "work.claim payload is not the expected section record");
-  }
+  if (sections === null) return malformed("lease", "work.claim payload is not a section record");
 
   const lease = claimLease(sections.lease);
   if (isRefusal(lease)) return lease;
@@ -149,7 +239,8 @@ export function claimWork(payload: unknown): WorkResult {
   if (isRefusal(intent)) return intent;
 
   const successors: ClaimSuccessors = {
-    budgetReservation: budget.value,
+    budgetReservation: budget.value.reservation,
+    budgetView: budget.value.view,
     effectIntent: intent.value,
     lease: lease.value,
     providerSlot: slot.value,

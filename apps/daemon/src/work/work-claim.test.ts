@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { claimWork } from "./work-claim.js";
 import { CLAIM_LEGS } from "./work-kernel.js";
-import type { WorkRefused, WorkResult } from "./work-kernel.js";
+import type { WorkGranted, WorkRefused, WorkResult } from "./work-kernel.js";
 
 /**
  * Every fixture below is HAND-WRITTEN against the upstream contracts and is
@@ -92,9 +92,68 @@ function validPayload(): Record<string, unknown> {
   };
 }
 
+/**
+ * The five successor records a grant publishes. Hand-written, NOT read off
+ * `ClaimSuccessors`: a list derived from the type under test agrees with it by
+ * construction and would keep passing after a field was silently dropped.
+ */
+const SUCCESSOR_KEYS = [
+  "budgetReservation",
+  "budgetView",
+  "effectIntent",
+  "lease",
+  "providerSlot",
+] as const;
+
+const EXPECTED_LEASE = { ...LEASE_RECORD };
+
+const EXPECTED_SLOT = {
+  attemptRef: null,
+  dimension: "default",
+  requestId: "req-1",
+  slotRef: "slot-1",
+  state: "RESERVED",
+};
+
+const EXPECTED_RESERVATION = {
+  accountId: "acct-1",
+  admissionRef: "adm-1",
+  attemptRef: null,
+  lines: [...ADMISSION.amounts],
+  neverStartedProofRef: null,
+  // `reservation:${accountId.length}:${accountId}:${admissionRef}` transcribed
+  // from deriveReservationId rather than called, so a change to the derivation
+  // reddens here instead of agreeing with itself.
+  reservationId: "reservation:6:acct-1:adm-1",
+  state: "RESERVED",
+  version: 0,
+};
+
+/**
+ * The SHIFTED view `reserveForAdmission` actually returned: version 2 -> 3 and
+ * 30 usd moved available -> reserved (10 + 5 + 5 + 5 + 5). Pinning the moved
+ * units is what proves the retained view is the post-reservation one rather
+ * than the caller's input view echoed back or a locally recomputed guess.
+ */
+const EXPECTED_VIEW = {
+  accountId: "acct-1",
+  meters: [{ available: 70, committed: 0, meter: "usd", quarantined: 0, reserved: 30 }],
+  state: "OPEN",
+  version: 3,
+};
+
+const EXPECTED_INTENT = { ...EFFECT_INTENT, state: "CLAIMED", version: 1 };
+
 function refusalOf(result: WorkResult): WorkRefused {
   if (result.ok !== false) throw new Error("expected a refusal, received an ok result");
   if (!("failure" in result)) throw new Error("expected a WorkRefused carrying a failure");
+  return result;
+}
+
+function grantOf(result: WorkResult): WorkGranted {
+  if (!result.ok || result.outcome !== "WORK_GRANTED") {
+    throw new Error(`expected WORK_GRANTED, received ${JSON.stringify(result)}`);
+  }
   return result;
 }
 
@@ -273,7 +332,7 @@ describe("work.claim — the happy path publishes all four successors", () => {
       expect(result.successors[leg]).toBeDefined();
       expect(result.successors[leg]).not.toBeNull();
     }
-    expect(Object.keys(result.successors).sort()).toStrictEqual([...CLAIM_LEGS].sort());
+    expect(Object.keys(result.successors).sort()).toStrictEqual([...SUCCESSOR_KEYS]);
   });
 
   it("reserves the provider slot rather than activating it (design 427)", () => {
@@ -514,4 +573,415 @@ describe("work.claim — the design-427 provider slot ceiling", () => {
       expect(Object.keys(refusal)).not.toContain("successors");
     },
   );
+});
+
+describe("work.claim — the granted successor closure", () => {
+  it("publishes exactly the five successor records and no sixth", () => {
+    expect(SUCCESSOR_KEYS.length).toBe(5);
+    const grant = grantOf(claimWork(validPayload()));
+    expect(Object.keys(grant.successors).sort()).toStrictEqual([...SUCCESSOR_KEYS]);
+  });
+
+  it("carries the fenced ACTIVE lease record", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(grant.successors.lease).toStrictEqual(EXPECTED_LEASE);
+    expect(grant.successors.lease.state).toBe("ACTIVE");
+  });
+
+  it("carries a RESERVED provider slot bound to the payload's own dimension", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(grant.successors.providerSlot).toStrictEqual(EXPECTED_SLOT);
+    expect(grant.successors.providerSlot.attemptRef).toBeNull();
+  });
+
+  it("passes a non-default slot dimension through to the reservation", () => {
+    // A defaulted dimension would still read RESERVED here, so the ceiling and
+    // the reservation would silently disagree about which pool was consumed.
+    const grant = grantOf(claimWork(withPayload((p) => {
+      at(p, "slot")["dimension"] = "gpu";
+    })));
+    expect(grant.successors.providerSlot).toStrictEqual({ ...EXPECTED_SLOT, dimension: "gpu" });
+  });
+
+  it("carries the RESERVED budget reservation", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(grant.successors.budgetReservation).toStrictEqual(EXPECTED_RESERVATION);
+  });
+
+  it("retains the post-reservation budget view, not the caller's input view", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(grant.successors.budgetView).toStrictEqual(EXPECTED_VIEW);
+    expect(grant.successors.budgetView.version).toBe(BUDGET_VIEW.version + 1);
+    const bucket = grant.successors.budgetView.meters[0];
+    expect(bucket?.available).toBe(70);
+    expect(bucket?.reserved).toBe(30);
+    expect(grant.successors.budgetView).not.toStrictEqual(BUDGET_VIEW);
+  });
+
+  it("carries the CLAIMED effect intent one version on", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(grant.successors.effectIntent).toStrictEqual(EXPECTED_INTENT);
+    expect(grant.successors.effectIntent.state).toBe("CLAIMED");
+    expect(grant.successors.effectIntent.version).toBe(EFFECT_INTENT.version + 1);
+  });
+
+  it("freezes every published record and its nested collections", () => {
+    const grant = grantOf(claimWork(validPayload()));
+    expect(Object.isFrozen(grant.successors)).toBe(true);
+    for (const key of SUCCESSOR_KEYS) expect(Object.isFrozen(grant.successors[key])).toBe(true);
+    expect(Object.isFrozen(grant.successors.budgetView.meters)).toBe(true);
+    expect(Object.isFrozen(grant.successors.budgetView.meters[0])).toBe(true);
+    expect(Object.isFrozen(grant.successors.budgetReservation.lines)).toBe(true);
+    expect(Object.isFrozen(grant.successors.budgetReservation.lines[0])).toBe(true);
+  });
+
+  it("publishes copies, never the caller's own section objects", () => {
+    const payload = validPayload();
+    const grant = grantOf(claimWork(payload));
+    expect(grant.successors.lease).not.toBe(at(payload, "lease")["record"]);
+    expect(grant.successors.budgetView).not.toBe(at(payload, "budget")["view"]);
+    expect(grant.successors.budgetReservation).not.toBe(at(payload, "budget")["admission"]);
+    expect(grant.successors.effectIntent).not.toBe(at(payload, "effect")["intent"]);
+    expect(grant.successors.providerSlot).not.toBe(at(payload, "slot"));
+  });
+});
+
+/**
+ * Hostile-shape parsing. Every case is generated, so the count is asserted
+ * against a HAND-WRITTEN number: a generator that quietly produced nothing
+ * would otherwise pass as full coverage.
+ */
+interface Probe { hits: number }
+
+interface PoisonSpec {
+  readonly label: string;
+  readonly apply: (value: Record<string, unknown>, probe: Probe) => unknown;
+  /** `true` when the case is only real if the hostile trap actually fired. */
+  readonly trapsFire: boolean;
+}
+
+function firstKeyOf(value: Record<string, unknown>): string {
+  const key = Reflect.ownKeys(value)[0];
+  if (typeof key !== "string") throw new Error("fixture record has no leading string key");
+  return key;
+}
+
+const POISONS: readonly PoisonSpec[] = [
+  {
+    apply: (value) => ({ ...value, borrowedKey: 1 }),
+    label: "an extra own string key",
+    trapsFire: false,
+  },
+  {
+    apply: (value) => ({ ...value, [Symbol("hostile")]: 1 }),
+    label: "an own symbol key",
+    trapsFire: false,
+  },
+  {
+    // The getter must never run: the parser reads descriptors, not properties.
+    apply: (value, probe) => {
+      const key = firstKeyOf(value);
+      const clone: Record<string, unknown> = { ...value };
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          probe.hits += 1;
+          return value[key];
+        },
+      });
+      return clone;
+    },
+    label: "an accessor where a data property belongs",
+    trapsFire: false,
+  },
+  {
+    apply: (value) => Object.create({ inherited: true }, Object.getOwnPropertyDescriptors(value)),
+    label: "a borrowed prototype",
+    trapsFire: false,
+  },
+  {
+    apply: (value, probe) => new Proxy(value, {
+      getOwnPropertyDescriptor: (target, key) => key === "smuggledKey"
+        ? { configurable: true, enumerable: true, value: 1, writable: true }
+        : Reflect.getOwnPropertyDescriptor(target, key),
+      ownKeys: (target) => {
+        probe.hits += 1;
+        return [...Reflect.ownKeys(target), "smuggledKey"];
+      },
+    }),
+    label: "a proxy whose ownKeys trap smuggles a key in",
+    trapsFire: true,
+  },
+  {
+    apply: (value, probe) => new Proxy(value, {
+      getOwnPropertyDescriptor: (target, key) => {
+        probe.hits += 1;
+        const own = Reflect.getOwnPropertyDescriptor(target, key);
+        return own === undefined
+          ? own
+          : { configurable: true, enumerable: true, get: () => own.value };
+      },
+    }),
+    label: "a proxy whose descriptor trap yields an accessor",
+    trapsFire: true,
+  },
+  {
+    // The target must be the REAL record: a descriptor trap over a foreign or
+    // empty target is refused by the key check first and never fires, so the
+    // case silently degrades into an ordinary malformed record. Caught here by
+    // the trap counter, which is the whole reason it is asserted.
+    apply: (value, probe) => new Proxy(value, {
+      getOwnPropertyDescriptor: () => {
+        probe.hits += 1;
+        throw new Error("hostile descriptor trap");
+      },
+    }),
+    label: "a proxy whose descriptor trap throws",
+    trapsFire: true,
+  },
+  {
+    apply: (value, probe) => new Proxy(value, {
+      getPrototypeOf: () => {
+        probe.hits += 1;
+        return { inherited: true };
+      },
+    }),
+    label: "a proxy whose getPrototypeOf trap lies",
+    trapsFire: true,
+  },
+];
+
+interface HostileTarget {
+  readonly label: string;
+  readonly leg: string;
+  readonly path: readonly string[];
+}
+
+/** Each target names the leg that OWNS it, so a fault cannot drift legs. */
+const HOSTILE_TARGETS: readonly HostileTarget[] = [
+  { label: "the outer payload", leg: "lease", path: [] },
+  { label: "the lease section", leg: "lease", path: ["lease"] },
+  { label: "the slot section", leg: "providerSlot", path: ["slot"] },
+  { label: "the budget section", leg: "budgetReservation", path: ["budget"] },
+  { label: "the effect section", leg: "effectIntent", path: ["effect"] },
+  { label: "the effect command", leg: "effectIntent", path: ["effect", "command"] },
+];
+
+interface HostileCase {
+  readonly label: string;
+  readonly leg: string;
+  readonly trapsFire: boolean;
+  readonly build: (probe: Probe) => unknown;
+}
+
+const HOSTILE_CASES: readonly HostileCase[] = HOSTILE_TARGETS.flatMap((target) =>
+  POISONS.map((poison): HostileCase => ({
+    build: (probe) => {
+      const payload = validPayload();
+      if (target.path.length === 0) return poison.apply(payload, probe);
+      const leaf = target.path[target.path.length - 1];
+      if (leaf === undefined) throw new Error("hostile target path is empty");
+      const parent = at(payload, ...target.path.slice(0, -1));
+      parent[leaf] = poison.apply(at(payload, ...target.path), probe);
+      return payload;
+    },
+    label: `${target.label} carrying ${poison.label}`,
+    leg: target.leg,
+    trapsFire: poison.trapsFire,
+  })),
+);
+
+const LIVE_CLAIM_CASES: ReadonlyArray<readonly [string, (probe: Probe) => unknown, boolean]> = [
+  ["a live claim table that is not an array", () => ({ dimension: "default" }), false],
+  ["a sparse live claim table with a hole", () => {
+    const rows: unknown[] = [{ dimension: "default", slotRef: "s", state: "RELEASED" }];
+    rows.length = 3;
+    return rows;
+  }, false],
+  ["a live claim table carrying an extra own key", () => {
+    const rows: unknown[] = [];
+    (rows as unknown as Record<string, unknown>)["smuggledKey"] = 1;
+    return rows;
+  }, false],
+  ["a live claim table whose element is an accessor", (probe) => {
+    const rows: unknown[] = [];
+    Object.defineProperty(rows, "0", {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        probe.hits += 1;
+        return null;
+      },
+    });
+    return rows;
+  }, false],
+  ["a live claim table with a borrowed prototype", () => Object.setPrototypeOf([], {
+    inherited: true,
+  }), false],
+  ["a proxy live claim table whose descriptor trap throws", (probe) => new Proxy(
+    [{ dimension: "default", slotRef: "s", state: "RELEASED" }],
+    {
+      getOwnPropertyDescriptor: () => {
+        probe.hits += 1;
+        throw new Error("hostile descriptor trap");
+      },
+    },
+  ), true],
+];
+
+describe("work.claim — hostile shapes refuse before any successor exists", () => {
+  it("generated a positive, hand-counted case matrix", () => {
+    expect(POISONS.length).toBe(8);
+    expect(HOSTILE_TARGETS.length).toBe(6);
+    expect(HOSTILE_CASES.length).toBe(48);
+    expect(LIVE_CLAIM_CASES.length).toBe(6);
+    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(48);
+  });
+
+  it.each(HOSTILE_CASES.map((hostile) => [hostile.label, hostile] as const))(
+    "refuses %s at its owning leg",
+    (_label, hostile) => {
+      const probe: Probe = { hits: 0 };
+      const refusal = refusalOf(claimWork(hostile.build(probe)));
+      expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+      expect(refusal.failure.leg).toBe(hostile.leg);
+      expect(refusal.failure.layer).toBe("AUTHORITY");
+      expect(refusal.failure.upstreamCode).toBeNull();
+      const keys = Object.keys(refusal);
+      expect(keys).not.toContain("successors");
+      for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
+      // A trap that never fired is a case that tested nothing; a getter that
+      // DID fire is attacker code the parser was supposed to never invoke.
+      if (hostile.trapsFire) expect(probe.hits).toBeGreaterThan(0);
+      else expect(probe.hits).toBe(0);
+    },
+  );
+
+  it.each(LIVE_CLAIM_CASES)("refuses %s on the outer record", (_label, build, trapsFire) => {
+    const probe: Probe = { hits: 0 };
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      payload["liveClaims"] = build(probe) as never;
+    })));
+    expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+    expect(refusal.failure.leg).toBe("lease");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
+    expect(refusal.failure.upstreamCode).toBeNull();
+    expect(Object.keys(refusal)).not.toContain("successors");
+    if (trapsFire) expect(probe.hits).toBeGreaterThan(0);
+    else expect(probe.hits).toBe(0);
+  });
+
+  it("mirrors a section through descriptors, never through a get trap", () => {
+    let gets = 0;
+    const payload = validPayload();
+    payload["budget"] = new Proxy(at(payload, "budget"), {
+      get: (target, key, receiver) => {
+        gets += 1;
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
+    const grant = grantOf(claimWork(payload));
+    expect(gets).toBe(0);
+    expect(grant.successors.budgetView).toStrictEqual(EXPECTED_VIEW);
+  });
+
+  it("refuses an outer payload missing any one of its five sections", () => {
+    const outerKeys = ["budget", "effect", "lease", "liveClaims", "slot"];
+    expect(outerKeys.length).toBe(5);
+    for (const key of outerKeys) {
+      const refusal = refusalOf(claimWork(withPayload((payload) => {
+        delete payload[key];
+      })));
+      expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+      expect(refusal.failure.leg).toBe("lease");
+      expect(refusal.failure.upstreamCode).toBeNull();
+    }
+  });
+});
+
+/**
+ * `work.claim` owns its transition. Forwarding a caller-selected effect command
+ * let a `requestCancel` ride in on a claim and publish CANCEL_REQUESTED under a
+ * CLAIM_GRANTED authority label.
+ */
+describe("work.claim — the effect command is server-owned", () => {
+  const NON_CLAIM_COMMANDS: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ["arm", { kind: "arm" }],
+    ["activate", { kind: "activate" }],
+    ["requestCancel", { kind: "requestCancel" }],
+    ["consumeGrant", { kind: "consumeGrant" }],
+    ["settle", { adoptedAt: "2026-08-05T00:00:00.000Z", kind: "settle", target: "SUCCEEDED" }],
+  ];
+
+  const MALFORMED_COMMANDS: ReadonlyArray<readonly [string, unknown]> = [
+    ["a claim command carrying an extra key", { extra: 1, kind: "claim" }],
+    ["a command that is not a record", "claim"],
+    ["a null command", null],
+    ["a command carrying no kind", {}],
+    ["a command whose kind is not a string", { kind: 7 }],
+  ];
+
+  it("covers every declared command case and names no claim among them", () => {
+    expect(NON_CLAIM_COMMANDS.length).toBe(5);
+    expect(MALFORMED_COMMANDS.length).toBe(5);
+    expect(NON_CLAIM_COMMANDS.map(([kind]) => kind)).not.toContain("claim");
+  });
+
+  it.each(NON_CLAIM_COMMANDS)("refuses the %s command as a command mismatch", (_kind, command) => {
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      at(payload, "effect")["command"] = command;
+    })));
+    expect(refusal.failure.code).toBe("WORK_INTENT_COMMAND_MISMATCH");
+    expect(refusal.failure.leg).toBe("effectIntent");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
+    expect(refusal.failure.upstreamCode).toBeNull();
+    const keys = Object.keys(refusal);
+    expect(keys).not.toContain("successors");
+    for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
+  });
+
+  it.each(MALFORMED_COMMANDS)("refuses %s as a malformed payload", (_label, command) => {
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      at(payload, "effect")["command"] = command as never;
+    })));
+    expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+    expect(refusal.failure.leg).toBe("effectIntent");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
+    expect(refusal.failure.upstreamCode).toBeNull();
+    expect(Object.keys(refusal)).not.toContain("successors");
+  });
+
+  it("never publishes a cancellation authority for a requestCancel command", () => {
+    const result = claimWork(withPayload((payload) => {
+      at(payload, "effect")["command"] = { kind: "requestCancel" };
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.authority).toBe("NONE");
+    expect(JSON.stringify(result)).not.toContain("CANCEL_REQUESTED");
+  });
+
+  it("lets an earlier leg's refusal win over a non-claim command", () => {
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      at(payload, "lease", "proof")["leaseToken"] = "token-stale";
+      at(payload, "effect")["command"] = { kind: "requestCancel" };
+    })));
+    expect(refusal.failure.code).toBe("WORK_STALE_TOKEN");
+    expect(refusal.failure.leg).toBe("lease");
+    expect(refusal.failure.upstreamCode).toBe("AUTHORITY_STALE_LEASE");
+  });
+
+  it("still refuses at the ceiling when a non-claim command would also refuse", () => {
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      payload["liveClaims"] = Array.from({ length: 4 }, (_unused, index) => ({
+        dimension: "default",
+        slotRef: `held-${index}`,
+        state: "RESERVED",
+      }));
+      at(payload, "effect")["command"] = { kind: "requestCancel" };
+    })));
+    expect(refusal.failure.code).toBe("WORK_SLOT_EXHAUSTED");
+    expect(refusal.failure.leg).toBe("slotCeiling");
+    expect(refusal.failure.upstreamCode).toBeNull();
+  });
 });

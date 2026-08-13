@@ -138,6 +138,11 @@ const PRODUCERS: Readonly<Record<string, () => WorkResult>> = {
     claimWith((p) => {
       at(p, "budget", "admission")["expectedVersion"] = 1;
     }),
+  /** `work.claim` owns its transition, so a caller-selected command is refused. */
+  WORK_INTENT_COMMAND_MISMATCH: () =>
+    claimWith((p) => {
+      at(p, "effect")["command"] = { kind: "requestCancel" };
+    }),
   WORK_INTENT_REFUSED: () =>
     claimWith((p) => {
       at(p, "effect", "intent")["state"] = "SUCCEEDED";
