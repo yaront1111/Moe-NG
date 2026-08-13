@@ -32,6 +32,27 @@ import type {
   RecoveryInventoryOpaqueRef, RecoveryInventoryRegistration, RecoveryInventoryReport,
   RecoveryInventoryResult, RecoveryInventoryWindow,
 } from "@moe/runner";
+/**
+ * The construction closure of the four registration factories, named through the
+ * same root. A daemon that can see `providerLockInventoryRegistration` but cannot
+ * name the shape of its argument cannot compose it, so an under-published closure
+ * has to fail here rather than in the consumer's own repository. `ObservationClock`,
+ * `PlatformIdentity`, `RuntimeClosureEntry` and `RuntimePinningMethod` are NOT
+ * repeated here: the Claude seam already roots them, and Codex's own structurally
+ * identical declarations must not be re-exported under the same names.
+ */
+import type {
+  ArtifactObjectInventoryInput, ArtifactObjectInventoryReading, ClaudeCancelObservation,
+  ClaudeProbePort, ClaudeProbeReport, ClaudeProcessTreeObservation,
+  ClaudeRunEnumerationObservation, ClaudeStructuredSample, ClaudeTokenizerObservation,
+  CodexCancelObservation, CodexContextLimit, CodexCwdObservation, CodexProbePort,
+  CodexProbeReport, CodexProcessTreeObservation, CodexRunEnumerationObservation,
+  CodexStructuredSample, CodexTokenizerObservation, GitIntegrationInventoryInput,
+  GitIntegrationInventoryReading, GitIntegrationRefusal, ProbeClaudeRuntimeInput,
+  ProbeCodexRuntimeInput, ProviderLockInventoryInput, ProviderLockInventoryPort,
+  ProviderProcessRecord, WorkspaceInventoryInput, WorkspaceInventoryListing,
+  WorkspaceInventoryPort, WorkspaceInventoryResultAspect, WorkspaceInventorySource,
+} from "@moe/runner";
 /** The recovery, evidence and Claude observation seams, through the same root. */
 import type {
   ArtifactFsPort, ArtifactRef, ArtifactStore, BuildEvidenceReceiptInput, BuildEvidenceReceiptResult,
@@ -76,8 +97,9 @@ type ExportKind = "array" | "function" | "number" | "regexp" | "string";
 /**
  * Hand-transcribed: 29 runner scope/artifact/workspace values, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
- * process wrapper publishes, and the 11 values the platform boundary seam
- * publishes. Read off the module sources, never off the namespace under test —
+ * process wrapper publishes, the 11 values the platform boundary seam publishes,
+ * and the 4 registration factories the recovery-inventory seam publishes.
+ * Read off the module sources, never off the namespace under test —
  * a list derived from what it checks asserts only that the namespace equals
  * itself.
  */
@@ -170,11 +192,18 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["RECOVERY_INVENTORY_UNKNOWN_REASONS", "array"], ["RECOVERY_INVENTORY_VERSION", "string"],
   ["collectRecoveryInventory", "function"], ["createRecoveryInventoryRegistry", "function"],
   ["isRecoveryInventoryFailure", "function"], ["recoveryInventoryFailure", "function"],
+  // The four registration factories a daemon composes into that aggregate. The
+  // per-class `enumerate*` readers and `*_INVENTORY_VERSION` constants stay
+  // internal: a consumer registers a port, it never calls an enumerator itself.
+  ["artifactObjectInventoryRegistration", "function"],
+  ["gitIntegrationInventoryRegistration", "function"],
+  ["providerLockInventoryRegistration", "function"],
+  ["workspaceInventoryRegistration", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(155);
+  expect(EXPECTED_EXPORTS.length).toBe(159);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {

@@ -20,11 +20,12 @@
     {
       "stepId": "step-1",
       "description": "TDD red: extend the bare-root surface contract to import/name the complete adapter construction type closure and expect exactly four new runtime functions—providerLockInventoryRegistration, workspaceInventoryRegistration, gitIntegrationInventoryRegistration, and artifactObjectInventoryRegistration—raising the hand-maintained namespace cardinality from 155 to 159. Add focused root-composition coverage that constructs all four landed registrations through `@moe/runner` (never a relative/deep substitute), asserts the generated list is nonzero and exactly four with four unique exact RECOVERY_INVENTORY_CLASSES, verifies the root functions are the landed factory identities/no wrappers, snapshots them through caller-injected createRecoveryInventoryRegistry, and proves caller-array mutation cannot alter the frozen registry. Invoke the real aggregate and pin both every proof tuple and the duplicate-registry refusal `RECOVERY_INVENTORY_REQUEST_INVALID` at layer `INVENTORY_ADAPTER`, with a guard that no enumerator ran on that refusal. Run the focused tests now and record the expected failure because the root bindings/type closure are absent.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-13T16:29:51.663Z"
     },
     {
       "stepId": "step-2",
@@ -85,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-68608f71",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -97,14 +98,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:24.022Z",
-  "updatedAt": "2026-08-13T16:21:54.948Z",
+  "updatedAt": "2026-08-13T16:29:51.663Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:12:53.060Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5
   },
   "contextFetchedBy": [
-    "architect-a42f4965"
+    "architect-a42f4965",
+    "worker-68608f71"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -125,5 +127,6 @@
   "budget": {
     "wallClockMs": 3600000
   },
-  "planApprovedAt": "2026-08-13T16:21:54.948Z"
+  "planApprovedAt": "2026-08-13T16:21:54.948Z",
+  "workStartedAt": "2026-08-13T16:29:51.663Z"
 }

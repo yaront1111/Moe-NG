@@ -66,16 +66,22 @@
     {
       "stepId": "step-4",
       "description": "Adversarially review the two-file diff after the green gate. Attack revoked Proxies and throwing ownKeys/getOwnPropertyDescriptor/getPrototypeOf traps at outer and nested snapshot positions, request mutation during observation, null/huge inputs, and accidental movement of the non-Windows gate after snapshotting; confirm downstream exceptions still retain their existing RUNTIME/ACTIVATION/GRANT/LAUNCH_LOCK/LAUNCHER ownership rather than being recast as malformed. Run byte-restored production-surface mutation drills: remove the snapshot catch and require the nine-case allSettled test to red on rejected status; change the malformed code alone and layer alone and require the exact assertions to red separately; move request observation before the platform guard and require the hostile non-Windows test to red; and weaken one zero-port assertion and prove the corresponding injected port call is detected. Assert every drill's positive count, restore exact pre-drill hashes, rerun the exact step-3 command, then commit only `packages/runner/src/providers/claude/claude-launcher.ts` and `packages/runner/src/providers/claude/claude-launcher.test.ts` by explicit pathspec after removing any foreign staged entry.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
       ],
-      "startedAt": "2026-08-13T16:25:41.146Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "Adversarial review + byte-restored mutation drills done. Pre-drill hashes: launcher 72D86E76156E27FBEB3824C52654114B745EA59926FB5A608C062CBB6FEF5FFA, test 58B1AD1A3054E4725549B8E0859DF9FE324FCC3C36B008DF0D507818BC8CB0F2; backups kept outside the repo and each drill restored to the exact same hashes (verified after every drill, temp dir deleted).\nDRILLS (5, each red on the intended assertion): A remove snapshot catch -> nine-case matrix red on status \"rejected\" vs \"fulfilled\". B malformed code drift only (REQUEST_MALFORMED->BOUNDARY_THROWN) -> red on code with layer unchanged. C malformed layer drift only (LAUNCHER->RUNTIME) -> red on layer with code unchanged. D move snapshot before the platform guard -> non-Windows test red (received CLAUDE_LAUNCH_REQUEST_MALFORMED). D2 observe the request before the guard while keeping the UNSUPPORTED return -> non-Windows test red exactly on the trap-count assertion (fired 1 vs 0), proving the ordering assertion is load-bearing on its own. E inject `resolveDuplicate` into the containment path -> nine-case red exactly on the zero-port assertion (deps [\"duplicate\"] vs []).\nADVERSARIAL PROBE through the real default dependency path, plain Node bare root, exit 0: revoked Proxy (Array.isArray throws), getPrototypeOf-throwing trap, get-throwing trap, null, undefined, 300k-element array, 200k-char string, nested revoked proxy — all fulfilled frozen ok:false UNKNOWN CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER, none rejected. Downstream RUNTIME/ACTIVATION/GRANT/LAUNCH_LOCK/LAUNCHER catches untouched; the full runner suite (1696 tests) incl. \"isolates every pre-open refusal and pins its delegated code and layer\" stays green, so no delegated failure is recast as malformed. No lock/handle/child exists before the snapshot, so no cleanup path is bypassed.\nSHARED-WORKTREE HAZARD: foreign whole-tree commit b977702 (task-2d9696160e674f26a8d422c45829d80e, 19:26:23) swept both owned files; per epic rail I did not amend, reset, or create a claiming commit. Committed bytes equal the gated bytes: `git diff HEAD -- <both owned paths>` is empty and the committed blobs contain the try/catch repair and the nine-case matrix with no drill markers. QA should review `git diff 2b15b8f..HEAD -- packages/runner/src/providers/claude/claude-launcher.ts packages/runner/src/providers/claude/claude-launcher.test.ts` (69 insertions, 2 deletions).\nExact step-3 gate re-run fresh after restore: exit 0, tsc clean, 55 files / 1696 tests, smoke printed CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED LAUNCHER.",
+      "startedAt": "2026-08-13T16:25:41.146Z",
+      "completedAt": "2026-08-13T16:29:54.888Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-733c82bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 3,
@@ -112,12 +118,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.737Z",
-  "updatedAt": "2026-08-13T16:25:41.146Z",
+  "updatedAt": "2026-08-13T16:30:32.242Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:34:18.450Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 21,
+    "executedStepCount": 22,
     "rejectCount": 3,
     "reopenCount": 3
   },
@@ -143,7 +149,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T16:19:41.237Z",
@@ -166,20 +173,16 @@
   },
   "planApprovedAt": "2026-08-13T16:19:43.291Z",
   "workStartedAt": "2026-08-12T08:29:20.122Z",
-  "reviewStartedAt": "2026-08-13T15:55:13.882Z",
+  "reviewStartedAt": "2026-08-13T16:30:32.241Z",
   "verification": {
-    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && cd packages/runner && node --experimental-strip-types -e \"import('@moe/runner').then(async m=>{let r=await m.launchClaude({},{platform:'linux'});if(typeof m.launchClaude!='function'||r.truthClass!='UNSUPPORTED'||r.code!='CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED'||r.layer!='LAUNCHER')throw Error(JSON.stringify(r));console.log(r.code,r.layer)})\"",
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && cd packages/runner && node --experimental-strip-types -e \"import('@moe/runner').then(async m=>{let r=await m.launchClaude({},{platform:'linux'});if(r.truthClass!='UNSUPPORTED'||r.code!='CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED'||r.layer!='LAUNCHER')throw Error(JSON.stringify(r));console.log(r.code,r.layer)})\"",
     "exitCode": 0,
-    "outputTail": "Test Files  55 passed (55)\nTests  1695 passed (1695)\nDuration  4.15s\nCLAUDE_LAUNCH_PLATFORM_UNSUPPORTED LAUNCHER\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src",
-    "reportedAt": "2026-08-13T15:55:13.882Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  55 passed (55)\n      Tests  1696 passed (1696)\n   Start at  19:29:16\n   Duration  4.20s (transform 11.09s, setup 0ms, import 16.82s, tests 15.01s, environment 4ms)\n\nCLAUDE_LAUNCH_PLATFORM_UNSUPPORTED LAUNCHER\nTASK_GATE_EXIT=0",
+    "reportedAt": "2026-08-13T16:30:32.241Z"
   },
   "filesModified": [
     "packages/runner/src/providers/claude/claude-launcher.test.ts",
-    "packages/runner/src/providers/claude/claude-launcher-contract.ts",
-    "packages/runner/src/providers/claude/claude-launcher.ts",
-    "packages/runner/src/index-surface.test.ts",
-    "packages/runner/src/providers/claude/claude-launcher.js",
-    "packages/runner/src/surface/claude-surface.ts"
+    "packages/runner/src/providers/claude/claude-launcher.ts"
   ],
   "reviewCompletedAt": "2026-08-13T16:05:20.425Z",
   "rejectionDetails": {
