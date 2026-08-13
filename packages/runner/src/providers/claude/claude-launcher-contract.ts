@@ -5,6 +5,8 @@ import { SUPERVISOR_ERROR_CODES, SUPERVISOR_LAYERS,
 import { type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
 import { CLAUDE_RUNTIME_PIN_ERROR_CODES,
   CLAUDE_RUNTIME_PIN_LAYER } from "./claude-runtime-pin-closure.js";
+import { CLAUDE_LAUNCH_SELECTION_CODES, CLAUDE_LAUNCH_SELECTION_LAYER,
+  type ClaudeLaunchSelection } from "./claude-launch-selection.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 
 export const CLAUDE_LAUNCHER_VERSION = "moe-claude-launcher/1" as const;
@@ -17,13 +19,46 @@ const LOCAL_CODES = [
   "CLAUDE_LAUNCH_TIMEOUT", "CLAUDE_LAUNCH_CANCELLED", "CLAUDE_LAUNCH_CLEANUP_UNKNOWN",
   "CLAUDE_LAUNCH_AUTHORITY_UNUSABLE",
 ] as const;
+/**
+ * The launch-selection vocabulary is SPREAD in from its own module rather than
+ * copied here, the same way the runtime pin's is: the module that emits a code
+ * is the module that should spell it, and the dependency runs one way only —
+ * this file names the selection types, so the selection module must not name
+ * this one back.
+ *
+ * The LAYER is spelled `TELEMETRY_CONFIGURATION` because the requirement names
+ * that literal, while the CODES keep the `CLAUDE_LAUNCH_` prefix every other
+ * launcher-local code carries. Model and effort each get their own three codes
+ * so the two comparisons can be mutation-checked independently; one shared code
+ * would make those two drills indistinguishable.
+ */
 export const CLAUDE_LAUNCH_ERROR_CODES = Object.freeze([
-  ...CLAUDE_RUNTIME_PIN_ERROR_CODES, ...SUPERVISOR_ERROR_CODES, ...WINDOWS_PROCESS_CODES, ...LOCAL_CODES,
+  ...CLAUDE_RUNTIME_PIN_ERROR_CODES, ...SUPERVISOR_ERROR_CODES, ...WINDOWS_PROCESS_CODES,
+  ...LOCAL_CODES, ...CLAUDE_LAUNCH_SELECTION_CODES,
 ] as const);
 export const CLAUDE_LAUNCH_LAYERS = Object.freeze([
   ...SUPERVISOR_LAYERS, CLAUDE_RUNTIME_PIN_LAYER, ...WINDOWS_PROCESS_LAYERS, "LAUNCHER", "OUTPUT",
+  CLAUDE_LAUNCH_SELECTION_LAYER,
 ] as const);
 export const CLAUDE_LAUNCH_TRUTH_CLASSES = Object.freeze(["PROVEN", "UNKNOWN", "UNSUPPORTED"] as const);
+/**
+ * `ClaudeLaunchRequest` names `ClaudeLaunchSelection`, so the selection's whole
+ * type closure travels with it. A published interface carrying a field nobody
+ * can name is a broken publication — a consumer able to declare the request but
+ * not construct that field cannot use it at all.
+ */
+export {
+  CLAUDE_LAUNCH_SELECTION_FLAGS,
+  CLAUDE_LAUNCH_SELECTION_LAYER,
+  CLAUDE_MODEL_EVIDENCE_ABSENT,
+  CLAUDE_MODEL_EVIDENCE_KINDS,
+  CLAUDE_REASONING_EFFORTS,
+  type ClaudeLaunchSelection,
+  type ClaudeLaunchSelectionCode,
+  type ClaudeLaunchSelectionLayer,
+  type ClaudeModelEvidenceKind,
+  type ClaudeReasoningEffort,
+} from "./claude-launch-selection.js";
 export type ClaudeLaunchErrorCode = (typeof CLAUDE_LAUNCH_ERROR_CODES)[number];
 export type ClaudeLaunchLayer = (typeof CLAUDE_LAUNCH_LAYERS)[number];
 export type ClaudeLaunchTruthClass = (typeof CLAUDE_LAUNCH_TRUTH_CLASSES)[number];
@@ -57,6 +92,13 @@ export interface ClaudeLaunchRequest {
   readonly environment: Readonly<Record<string, string>>;
   readonly reconciliation: unknown | null;
   readonly limits: ClaudeLaunchLimits;
+  /**
+   * What this launch claims it is launching. Verified against `argv` before any
+   * runtime preparation, so it cannot be supplied after the fact — and kept
+   * distinct from `runtime`, whose reported version and pinned closure describe
+   * the binary rather than the model it was asked for.
+   */
+  readonly launchSelection: ClaudeLaunchSelection;
 }
 export interface ClaudeStreamEvidence {
   readonly capturedBase64: string;

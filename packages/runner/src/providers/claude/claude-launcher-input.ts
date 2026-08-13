@@ -2,10 +2,31 @@ import { deepFreeze, isPlainRecord } from "../../canonical.js";
 import { snapshotExactRecord } from "../../platform/platform-contract.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 import { type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
+import { snapshotLaunchSelection } from "./claude-launch-selection.js";
 
+/**
+ * This list and `ClaudeLaunchRequest` must name the SAME set: `snapshotExactRecord`
+ * length-checks `Object.keys` against it, so a field added on one side only makes
+ * EVERY request snapshot null and every launch refuse CLAUDE_LAUNCH_REQUEST_MALFORMED
+ * — not just the new path. There is no test for this module, so that drift would
+ * surface as a wave of generic malformed refusals in unrelated suites.
+ */
 const REQUEST_KEYS = ["runtime", "duplicateDelivery", "effect", "attempt", "grant", "claim",
   "wrapperIdentity", "bootstrapCredentialDigest", "priorRegistration", "argv", "cwd", "environment",
-  "reconciliation", "limits"] as const;
+  "reconciliation", "limits", "launchSelection"] as const;
+/**
+ * Compile-time proof that the two sides agree, in BOTH directions. Either alias
+ * resolves to something other than `never` the moment one side gains a name the
+ * other lacks, and a non-`never` type cannot satisfy the `extends never`
+ * constraint — so the drift becomes a named compile error here instead of an
+ * anonymous wave of malformed refusals in someone else's suite.
+ */
+export type RequestKeyIsDeclared<
+  _K extends never = Exclude<(typeof REQUEST_KEYS)[number], keyof ClaudeLaunchRequest>,
+> = true;
+export type DeclaredFieldHasKey<
+  _F extends never = Exclude<keyof ClaudeLaunchRequest, (typeof REQUEST_KEYS)[number]>,
+> = true;
 const LIMIT_KEYS = ["stdoutBytes", "stderrBytes", "tailBytes", "timeoutMs"] as const;
 const RUNTIME_KEYS = ["quotedObservation", "installedRoot", "pinRoot", "fs", "facts", "clock"] as const;
 const AUTHORITY_KEYS = ["duplicateDelivery", "effect", "attempt", "grant", "claim",
@@ -98,13 +119,16 @@ export function snapshotClaudeLaunchRequest(value: unknown): ClaudeLaunchSnapsho
   }
   const limits = snapshotExactRecord(raw["limits"], LIMIT_KEYS);
   const numbers = limits === null ? [] : LIMIT_KEYS.map((key) => limits[key]);
+  const launchSelection = snapshotLaunchSelection(raw["launchSelection"]);
   if (argv === null || environment === null || runtime === null || limits === null ||
+    launchSelection === null ||
     numbers.some((item) => !Number.isSafeInteger(item) || (item as number) <= 0) ||
     (limits["stdoutBytes"] as number) > 1_048_576 || (limits["stderrBytes"] as number) > 1_048_576 ||
     (limits["tailBytes"] as number) > 65_536 || (limits["timeoutMs"] as number) > 600_000 ||
     typeof raw["cwd"] !== "string" || raw["cwd"].length > 32_767 || raw["cwd"].includes("\0") ||
     typeof raw["wrapperIdentity"] !== "string" || !/^[0-9a-f]{64}$/u.test(String(raw["bootstrapCredentialDigest"]))) return null;
-  return Object.freeze({ ...raw, ...authority, runtime, argv, environment, limits: Object.freeze({
+  return Object.freeze({ ...raw, ...authority, runtime, argv, environment, launchSelection,
+    limits: Object.freeze({
     stdoutBytes: limits["stdoutBytes"], stderrBytes: limits["stderrBytes"],
     tailBytes: limits["tailBytes"], timeoutMs: limits["timeoutMs"],
   }) }) as unknown as ClaudeLaunchSnapshot;

@@ -1,0 +1,40 @@
+{
+  "id": "task-e19074f841f9450296799abfba9bfcaa",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Genesis recovery binding for first-boot authentication",
+  "description": "Objective: make a freshly initialised store able to authenticate anyone, so the daemon is usable on first boot. Sourced from Yaron's 2026-08-14 product audit (30-agent sweep with adversarial verification), reported in #general at 23:06:38Z as HIGH and explicitly handed to architect triage; the human did not fix it because it is live-task territory.\n\nMEASURED DEFECT. apps/daemon/src/identity/session-authenticator.ts:102 fences EVERY authentication path on the presence of an ACTIVE recovery binding — the operator credential included, with no exemption. The only production installer of that binding is the restore path, packages/store/src/recovery-anchor-install.ts:114. Therefore a store that has never performed a restore has no ACTIVE binding, every authentication is refused, and no operator can obtain a session. The daemon is unusable on a fresh install. This is a genuine deadlock, not a slow path: the only way to get a binding is to restore, and restoring requires an authenticated session.\n\nREQUIRED DECISION, and this is the architect's call to make explicitly rather than assume: where the genesis binding is minted. Two candidates — at store initialisation, or at first daemon start. Whichever is chosen must be recorded with its reasoning, because the alternative is a security-relevant difference in who can mint authority and when. Do NOT resolve this by exempting the operator credential from the fence without a written argument: task-8a01c025 (Recovery-incarnation command authentication fence, DONE) installed that fence deliberately, and weakening it silently would undo landed security work. If the honest answer is that the fence is correct and the installer is incomplete, fix the installer.\n\nRE-MEASURE BEFORE PLANNING. Both cited files are current as of the audit but the tree moves under a shared worktree; confirm both line references and confirm no other production caller installs a binding before treating restore as the sole installer. The originating tasks task-8a01c025 and task-b6e3dd2a (Crash-safe two-slot recovery anchor installer) are both DONE — read what they established before changing either surface.\n\nNOT IN SCOPE: recovery restore behaviour, anchor two-slot mechanics, key epochs, session lifetime, or the MCP dispatch surface.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test, plus a plain-Node first-boot proof against a store directory that has never been restored.",
+  "definitionOfDone": [
+    "A store created fresh and never restored reaches a successful operator authentication through the real production path; the proof drives a genuinely new store directory and asserts success, not merely that no error was thrown.",
+    "The genesis binding is minted by exactly one named production installer, and the choice between store-init and first-daemon-start is recorded with its security reasoning in planningNotes.",
+    "The task-8a01c025 authentication fence still refuses every case it refused before: existing refusal tests retain their exact stable reason code, layer, and refusing component, and a mutation of the fence reddens a named production-boundary test.",
+    "A store WITH an ACTIVE recovery binding installed by the restore path behaves exactly as it does today - the genesis path must not become a second way to satisfy the fence for an already-bound store.",
+    "Focused daemon and store gates pass, and a plain-Node first-boot smoke over a never-restored store directory exits 0."
+  ],
+  "taskRails": [
+    "This is a security-relevant fence. Every refusal test pins the exact stable reason code, layer, and which component refused - never merely that authentication failed.",
+    "Do not weaken or bypass the session-authenticator fence to make first boot work; mint the missing authority instead, or argue in writing why the fence itself is wrong.",
+    "Re-measure session-authenticator.ts:102 and recovery-anchor-install.ts:114 on current bytes before planning; both line numbers come from an audit at an earlier HEAD.",
+    "Preserve foreign work; stage and commit only explicit owned paths. Target <=250 physical lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-a42f4965",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 9.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T23:20:28.506Z",
+  "updatedAt": "2026-08-13T23:26:59.135Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T23:26:51.902Z"
+  },
+  "contextFetchedBy": [
+    "architect-a42f4965"
+  ]
+}

@@ -16,12 +16,12 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-a9210e34",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Hard dependency task-6cbff010 is not DONE and does not yet expose the required durable released-attempt reader. Planning now would invent safe-release authority; re-promote only after dispatch is QA-approved and its exact public reader is re-measured.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
@@ -29,5 +29,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-13T22:47:49.831Z"
+  "updatedAt": "2026-08-13T23:27:39.312Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T23:27:33.756Z"
+  },
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T23:27:37.173Z",
+  "blockedReason": "Hard dependency task-6cbff010 is not DONE and does not yet expose the required durable released-attempt reader. Planning now would invent safe-release authority; re-promote only after dispatch is QA-approved and its exact public reader is re-measured.",
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ]
 }

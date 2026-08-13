@@ -1,11 +1,18 @@
 /**
- * The durable-authority overlay contract, exercised through the package ROOT.
+ * The durable-authority overlay contract.
  *
- * Every symbol under test is imported from the bare specifier `@moe/runner`,
+ * The published symbols are imported from the bare specifier `@moe/runner`,
  * because a daemon composing this seam has no other way in: the package
  * `exports` map is exclusive, so a deep subpath does not resolve for it at all.
  * The fixtures below are relative because they are internal test data, not part
  * of the seam.
+ *
+ * `createClaudeLauncher` refuses caller-supplied dependencies, so a suite that
+ * needs to script the eight non-authority ports uses `composeDurableLauncher` —
+ * the same production composition the public factory runs, with the shipped
+ * defaults as its base. That narrowing is deliberate: a public caller able to
+ * hand in a whole dependency set would replace the runtime pin, the OS lock and
+ * the Windows physical boundary while the factory still advertised them.
  *
  * The two durable stores here answer from their OWN rows, never from the bytes
  * the caller presented. That is what makes a replay assertion non-vacuous: the
@@ -25,114 +32,14 @@ import {
   type ClaudeRegistrationCommit,
 } from "@moe/runner";
 
-import { type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
-import { classifyRegistrationPhase,
+import { classifyRegistrationPhase, composeDurableLauncher,
   durableRegistrationPort } from "./claude-launcher-authority.js";
-import { type WindowsProcessOutcome } from "../../platform/windows/windows-process-contract.js";
-import { consumeActivationGrant, grantRefusal } from "../../supervisor/effect-grant.js";
-import { parseActivationGrant } from "../../supervisor/effect-parse.js";
-import { launchLockFailure, type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
+import { AT, PASS, PENDING_IDENTITY, STARTED_IDENTITY, authorityOf, composed, durableGrants,
+  durableRegistrations, tracedDeps } from "./claude-launcher-authority-test-fixtures.js";
+import { type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
 import {
-  CLAIM, COMMIT, DIGEST, PROCESS, boundaryHarness, dependencies, failureOf, prepared, request,
-  type BoundaryHarness,
+  CLAIM, COMMIT, DIGEST, boundaryHarness, dependencies, failureOf, prepared, request,
 } from "./claude-launcher-test-fixtures.js";
-
-const STARTED_IDENTITY = `windows:${PROCESS.pid}:${PROCESS.creationTime}`;
-const PENDING_IDENTITY = `pending:${CLAIM.wrapperIdentity}`;
-const AT = "2026-08-12T08:00:00.000Z";
-const PASS = Symbol("fall through to the durable store");
-
-type Row = Record<string, unknown>;
-interface GrantStore {
-  readonly calls: (readonly [unknown, unknown])[];
-  readonly rows: Map<string, Row>;
-  consumeGrantDurably(grant: unknown, wrapperIdentity: unknown): unknown;
-}
-interface RegistrationStore {
-  readonly commits: ClaudeRegistrationCommit[];
-  readonly rows: Map<string, LaunchLockRegistration>;
-  commitProcessRegistration(commit: ClaudeRegistrationCommit): unknown;
-}
-
-/** A one-use CAS over durable rows: the presented bytes only select a row. */
-function durableGrants(
-  seed: Row = { ...COMMIT.grant },
-  script: (grant: unknown) => unknown = () => PASS,
-): GrantStore {
-  const rows = new Map<string, Row>([[String(seed["grantId"]), { ...seed }]]);
-  const calls: (readonly [unknown, unknown])[] = [];
-  return {
-    calls,
-    rows,
-    consumeGrantDurably(grant, wrapperIdentity) {
-      calls.push([grant, wrapperIdentity]);
-      const scripted = script(grant);
-      if (scripted !== PASS) return scripted;
-      const presented = parseActivationGrant(grant);
-      const row = presented === null ? undefined : rows.get(presented.grantId);
-      if (row === undefined) {
-        return grantRefusal("ACTIVATION_COMMIT_INCOHERENT", "ACTIVATION",
-          "no durable activation carries this grant");
-      }
-      const outcome = consumeActivationGrant(row, wrapperIdentity);
-      if (outcome.kind === "CONSUMED") rows.set(outcome.grant.grantId, { ...outcome.grant });
-      return outcome;
-    },
-  };
-}
-
-/** PREFLIGHT reserves the pending identity; STARTED supersedes that reservation. */
-function durableRegistrations(
-  script: (commit: ClaudeRegistrationCommit) => unknown = () => PASS,
-): RegistrationStore {
-  const commits: ClaudeRegistrationCommit[] = [];
-  const rows = new Map<string, LaunchLockRegistration>();
-  return {
-    commits,
-    rows,
-    commitProcessRegistration(commit) {
-      commits.push(commit);
-      const scripted = script(commit);
-      if (scripted !== PASS) return scripted;
-      const { phase, registration } = commit;
-      const held = rows.get(registration.lockIdentity);
-      if (phase === "PREFLIGHT" && held !== undefined &&
-        held.processIdentity !== `pending:${registration.wrapperIdentity}`) {
-        return Object.freeze({ kind: "REFUSED", failure: launchLockFailure(
-          "LAUNCH_LOCK_IDENTITY_CONFLICT", "LAUNCH_LOCK",
-          "this lock already carries a durable process registration", "launchLock.register") });
-      }
-      rows.set(registration.lockIdentity, registration);
-      return Object.freeze({ kind: "REGISTERED", ok: true, registration });
-    },
-  };
-}
-
-function authorityOf(grants: GrantStore, regs: RegistrationStore): ClaudeLauncherAuthority {
-  return {
-    consumeGrantDurably: grants.consumeGrantDurably,
-    commitProcessRegistration: regs.commitProcessRegistration,
-  };
-}
-
-/**
- * `close` and the lock release land in two different fixture logs, so cleanup
- * ORDER is unassertable without one array. This wrapper adds a trace push and
- * nothing else; every port underneath is still the shipped production function.
- */
-function tracedDeps(harness: BoundaryHarness, trace: string[]): ClaudeLauncherDependencies {
-  const base = dependencies(harness, trace);
-  return Object.freeze({
-    ...base,
-    openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }): unknown => {
-      const boundary = base.openBoundary(value, options) as WindowsProcessBoundary;
-      return { ...boundary, close: async (): Promise<WindowsProcessOutcome> => {
-        trace.push("close");
-        return await boundary.close();
-      } };
-    },
-  });
-}
 
 function refusalMessage(result: ClaudeLaunchResult): string {
   if (result.kind !== "REFUSED") throw new Error(`expected REFUSED, received ${result.kind}`);
@@ -158,8 +65,8 @@ describe("durable Claude launcher authority overlay", () => {
     const trace: string[] = [];
     const grants = durableGrants();
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, dependencies(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(result.kind).toBe("OBSERVED");
     if (result.kind !== "OBSERVED") throw new Error("expected observation");
     expect({ truth: result.truthClass, code: result.code, layer: result.layer })
@@ -179,8 +86,8 @@ describe("durable Claude launcher authority overlay", () => {
       trace.push(`commit:${commit.phase}`);
       return PASS;
     });
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: tracedDeps(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, tracedDeps(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(result.kind).toBe("OBSERVED");
     expect(regs.commits.length).toBe(2);
     expect(regs.commits.map((commit) => commit.phase)).toEqual(["PREFLIGHT", "STARTED"]);
@@ -200,8 +107,8 @@ describe("durable Claude launcher authority overlay", () => {
     const trace: string[] = [];
     const grants = durableGrants({ ...COMMIT.grant, state: "CONSUMED", version: 1 });
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, dependencies(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(failureOf(result)).toEqual({ code: "GRANT_ALREADY_CONSUMED", layer: "GRANT" });
     expect(trace).toEqual(["runtime", "validate"]);
     expect(regs.commits.length).toBe(0);
@@ -212,8 +119,8 @@ describe("durable Claude launcher authority overlay", () => {
     const trace: string[] = [];
     const grants = durableGrants({ ...COMMIT.grant, grantId: "cd".repeat(32) });
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, dependencies(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(failureOf(result)).toEqual({
       code: "ACTIVATION_COMMIT_INCOHERENT", layer: "ACTIVATION",
     });
@@ -226,8 +133,8 @@ describe("durable Claude launcher authority overlay", () => {
     const trace: string[] = [];
     const grants = durableGrants({ ...COMMIT.grant, wrapperIdentity: "wrapper-other" });
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, dependencies(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(failureOf(result)).toEqual({ code: "GRANT_WRAPPER_MISMATCH", layer: "GRANT" });
     expect(trace).toEqual(["runtime", "validate"]);
     expect(regs.commits.length).toBe(0);
@@ -238,11 +145,11 @@ describe("durable Claude launcher authority overlay", () => {
     const trace: string[] = [];
     const grants = durableGrants();
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
+    const launch = composed(grants, regs, dependencies(boundaryHarness(), trace));
     const result = await launch(request({ priorRegistration: {
       lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
       processIdentity: STARTED_IDENTITY, bootstrapCredentialDigest: DIGEST, registeredAt: AT,
-    } }), { deps: dependencies(boundaryHarness(), trace) });
+    } }));
     expect(failureOf(result)).toEqual({
       code: "LAUNCH_LOCK_CREDENTIAL_REUSED", layer: "LAUNCH_LOCK",
     });
@@ -255,12 +162,14 @@ describe("durable Claude launcher authority overlay", () => {
   it("refuses a restart from the durable registration before a second open", async () => {
     const grants = durableGrants();
     const regs = durableRegistrations();
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const first = await launch(request(), { deps: dependencies(boundaryHarness(), []) });
+    // Two launcher instances over ONE pair of durable stores: a restart is a new
+    // process reading the rows the dead one wrote, not a second call on a live
+    // object graph.
+    const first = await composed(grants, regs, dependencies(boundaryHarness(), []))(request());
     expect(first.kind).toBe("OBSERVED");
     grants.rows.set(COMMIT.grant.grantId, { ...COMMIT.grant });
     const trace: string[] = [];
-    const second = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const second = await composed(grants, regs, dependencies(boundaryHarness(), trace))(request());
     expect(failureOf(second)).toEqual({
       code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
     });
@@ -295,7 +204,8 @@ const ECHO_REGISTRATION: LaunchLockRegistration = Object.freeze({
   lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
   processIdentity: STARTED_IDENTITY, bootstrapCredentialDigest: DIGEST, registeredAt: AT,
 });
-const CONSUMED_ARM = Object.freeze({
+/** Built on call, never at module evaluation: the activation fixture is shared. */
+const consumedArm = (): Record<string, unknown> => ({
   kind: "CONSUMED", ok: true, versionDelta: 1,
   grant: { ...COMMIT.grant, state: "CONSUMED", version: COMMIT.grant.version + 1 },
 });
@@ -307,13 +217,13 @@ const getTrap = (target: object): unknown =>
 interface Fulfilment { readonly name: string; make(echo: LaunchLockRegistration): unknown }
 const GRANT_HOSTILE: readonly Fulfilment[] = [
   { name: "throws", make: () => { throw new Error("the durable grant store threw"); } },
-  { name: "returns a native Promise", make: () => Promise.resolve(CONSUMED_ARM) },
-  { name: "returns a thenable", make: () => thenable(CONSUMED_ARM) },
-  { name: "returns a wrong kind", make: () => ({ ...CONSUMED_ARM, kind: "ADVANCED" }) },
-  { name: "returns a false ok arm", make: () => ({ ...CONSUMED_ARM, ok: false }) },
-  { name: "returns a versionDelta other than 1", make: () => ({ ...CONSUMED_ARM, versionDelta: 2 }) },
-  { name: "returns a grant that does not parse", make: () => ({ ...CONSUMED_ARM, grant: { no: 1 } }) },
-  { name: "returns a get-trapping proxy", make: () => getTrap({ ...CONSUMED_ARM }) },
+  { name: "returns a native Promise", make: () => Promise.resolve(consumedArm()) },
+  { name: "returns a thenable", make: () => thenable(consumedArm()) },
+  { name: "returns a wrong kind", make: () => ({ ...consumedArm(), kind: "ADVANCED" }) },
+  { name: "returns a false ok arm", make: () => ({ ...consumedArm(), ok: false }) },
+  { name: "returns a versionDelta other than 1", make: () => ({ ...consumedArm(), versionDelta: 2 }) },
+  { name: "returns a grant that does not parse", make: () => ({ ...consumedArm(), grant: { no: 1 } }) },
+  { name: "returns a get-trapping proxy", make: () => getTrap({ ...consumedArm() }) },
 ];
 const REGISTRATION_HOSTILE: readonly Fulfilment[] = [
   { name: "throws", make: () => { throw new Error("the durable registration store threw"); } },
@@ -361,13 +271,13 @@ describe("durable authority containment", () => {
   it.each(MATRIX)("fails closed when $name", async (entry) => {
     const trace: string[] = [];
     const grants = durableGrants(
-      { ...COMMIT.grant },
+      undefined,
       entry.phase === "GRANT" ? () => entry.make(ECHO_REGISTRATION) : () => PASS,
     );
     const regs = durableRegistrations((commit) =>
       commit.phase === entry.phase ? entry.make(commit.registration) : PASS);
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: tracedDeps(boundaryHarness(), trace) });
+    const launch = composed(grants, regs, tracedDeps(boundaryHarness(), trace));
+    const result = await launch(request());
     expect(failureOf(result)).toEqual({ code: entry.code, layer: entry.layer });
     expect(trace.filter((event) => event === "open").length).toBe(entry.opens);
     if (entry.opens === 1) {
@@ -375,23 +285,6 @@ describe("durable authority containment", () => {
       expect(trace.indexOf("close")).toBeLessThan(trace.indexOf("unlock"));
     }
     expectNoSecretEcho(result);
-  });
-
-  it("marks a durable registration whose process identity drifted as unproven", async () => {
-    const grants = durableGrants();
-    const regs = durableRegistrations((commit) => commit.phase === "STARTED"
-      ? Object.freeze({ kind: "REGISTERED", ok: true, registration: {
-          ...commit.registration, processIdentity: "windows:9999:1" } })
-      : PASS);
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), []) });
-    expect(result.kind).toBe("OBSERVED");
-    if (result.kind !== "OBSERVED") throw new Error("expected observation");
-    expect({ truth: result.truthClass, code: result.code, layer: result.layer }).toEqual({
-      truth: "UNKNOWN", code: "PROCESS_BOUNDARY_IDENTITY_UNPROVEN",
-      layer: "WINDOWS_PROCESS_TRANSPORT",
-    });
-    expect(result.registration.processIdentity).toBe("windows:9999:1");
   });
 });
 
@@ -416,12 +309,20 @@ describe("durable authority construction", () => {
 
   it.each(UNUSABLE_AUTHORITIES)("refuses $name without reaching a port", async (entry) => {
     const trace: string[] = [];
-    const launch = createClaudeLauncher(entry.authority);
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    const launch = composeDurableLauncher(dependencies(boundaryHarness(), trace), entry.authority);
+    const result = await launch(request());
     expect(failureOf(result)).toEqual({
       code: "CLAUDE_LAUNCH_AUTHORITY_UNUSABLE", layer: "LAUNCHER",
     });
     expect(trace).toEqual([]);
+    expectNoSecretEcho(result);
+  });
+
+  it("refuses an unusable authority on the PUBLISHED factory too", async () => {
+    const result = await createClaudeLauncher({ consumeGrantDurably: 7 })(request());
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_AUTHORITY_UNUSABLE", layer: "LAUNCHER",
+    });
     expectNoSecretEcho(result);
   });
 
@@ -437,8 +338,8 @@ describe("durable authority construction", () => {
       }
     }
     const authority = new DaemonAuthority();
-    const launch = createClaudeLauncher(authority);
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), []) });
+    const launch = composeDurableLauncher(dependencies(boundaryHarness(), []), authority);
+    const result = await launch(request());
     expect(result.kind).toBe("OBSERVED");
     expect(authority.grants.calls.length).toBe(1);
     expect(authority.regs.commits.map((commit) => commit.phase))
@@ -449,11 +350,11 @@ describe("durable authority construction", () => {
     const grants = durableGrants();
     const regs = durableRegistrations();
     const authority: Record<string, unknown> = { ...authorityOf(grants, regs) };
-    const launch = createClaudeLauncher(authority);
+    const launch = composeDurableLauncher(dependencies(boundaryHarness(), []), authority);
     const swapped = (): never => { throw new Error("swapped after construction"); };
     authority["consumeGrantDurably"] = swapped;
     authority["commitProcessRegistration"] = swapped;
-    const result = await launch(request(), { deps: dependencies(boundaryHarness(), []) });
+    const result = await launch(request());
     expect(result.kind).toBe("OBSERVED");
     expect(grants.calls.length).toBe(1);
     expect(regs.commits.length).toBe(2);
@@ -500,6 +401,75 @@ describe("durable authority construction", () => {
     });
     expect(commits).toEqual([]);
   });
+});
+
+/**
+ * The refusal a deps-bearing option set earns. The code is the launcher's
+ * existing one for an inadmissible options record; the MESSAGE is pinned with it
+ * because that is what separates this policy refusal from the launcher's other
+ * REQUEST_MALFORMED arms. A dedicated code is deliberately NOT added this round:
+ * the only file that could carry it, claude-launcher-contract.ts, holds another
+ * task's uncommitted work, and committing it by pathspec would carry that work.
+ */
+const DEPENDENCIES_REFUSED = "the durable launcher composes its own shipped dependencies";
+
+describe("the published launcher seam", () => {
+  /**
+   * The narrowing QA's probe forced: `deps` used to be merged UNDER the two
+   * authority slots, so a public caller supplying all ten dependencies replaced
+   * the runtime pin, the duplicate resolver, the OS lock, the Windows boundary,
+   * the observation, the clock and the delay — every guarantee the factory
+   * advertises — while keeping the durable seam's appearance.
+   */
+  it("refuses caller dependencies instead of replacing its shipped ports", async () => {
+    const trace: string[] = [];
+    const grants = durableGrants();
+    const regs = durableRegistrations();
+    const launch = createClaudeLauncher(authorityOf(grants, regs));
+    const result = await launch(request(), { deps: dependencies(boundaryHarness(), trace) });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+    });
+    expect(refusalMessage(result)).toBe(DEPENDENCIES_REFUSED);
+    expect({ trace, grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ trace: [], grants: 0, regs: 0 });
+    expectNoSecretEcho(result);
+  });
+
+  it("refuses a partial dependency override just as flatly", async () => {
+    const harness = boundaryHarness();
+    const grants = durableGrants();
+    const regs = durableRegistrations();
+    const launch = createClaudeLauncher(authorityOf(grants, regs));
+    const result = await launch(request(), {
+      deps: { openBoundary: () => harness.boundary } as unknown as ClaudeLauncherDependencies,
+    });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+    });
+    expect(refusalMessage(result)).toBe(DEPENDENCIES_REFUSED);
+    expect(harness.requests).toEqual([]);
+  });
+
+  it("forwards an unusable composed dependency set for the launcher itself to refuse", async () => {
+    const trace: string[] = [];
+    const grants = durableGrants();
+    const regs = durableRegistrations();
+    const complete = dependencies(boundaryHarness(), trace);
+    const { observeProcess, ...incomplete } = complete;
+    expect(typeof observeProcess).toBe("function");
+    const launch = composed(grants, regs, incomplete as unknown as ClaudeLauncherDependencies);
+    const result = await launch(request());
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+    });
+    // The LAUNCHER's own message, not the overlay's: this refusal must come from
+    // the dependency reader downstream, or the overlay would be the layer that
+    // decided and the delegated attribution would be a fiction.
+    expect(refusalMessage(result)).toBe("the launcher dependency capabilities are unusable");
+    expect({ trace, grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ trace: [], grants: 0, regs: 0 });
+  });
 
   /**
    * The overlay reads the caller's options with the launcher's own strict reader
@@ -523,39 +493,20 @@ describe("durable authority construction", () => {
     expect(failureOf(settled.value)).toEqual({
       code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
     });
+    expect(refusalMessage(settled.value)).not.toBe(DEPENDENCIES_REFUSED);
     expect({ fired, grants: grants.calls.length, regs: regs.commits.length })
       .toEqual({ fired: 0, grants: 0, regs: 0 });
   });
 
-  it("forwards unusable caller dependencies for the launcher itself to refuse", async () => {
-    const trace: string[] = [];
-    const grants = durableGrants();
-    const regs = durableRegistrations();
-    const complete = dependencies(boundaryHarness(), trace);
-    const { observeProcess, ...incomplete } = complete;
-    expect(typeof observeProcess).toBe("function");
-    const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(),
-      { deps: incomplete as unknown as ClaudeLauncherDependencies });
-    expect(failureOf(result)).toEqual({
-      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
-    });
-    expect({ trace, grants: grants.calls.length, regs: regs.commits.length })
-      .toEqual({ trace: [], grants: 0, regs: 0 });
-  });
-
   it("refuses a non-Windows host before reaching the durable authority", async () => {
-    const trace: string[] = [];
     const grants = durableGrants();
     const regs = durableRegistrations();
     const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const result = await launch(request(), {
-      platform: "linux", deps: dependencies(boundaryHarness(), trace),
-    });
+    const result = await launch(request(), { platform: "linux" });
     expect(failureOf(result)).toEqual({
       code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER",
     });
-    expect({ trace, grants: grants.calls.length, regs: regs.commits.length })
-      .toEqual({ trace: [], grants: 0, regs: 0 });
+    expect({ grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ grants: 0, regs: 0 });
   });
 });

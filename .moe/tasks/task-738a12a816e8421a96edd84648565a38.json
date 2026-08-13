@@ -18,7 +18,7 @@
     "Use public package roots across boundaries, exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -38,5 +38,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:05.524Z",
-  "updatedAt": "2026-08-13T23:11:51.580Z"
+  "updatedAt": "2026-08-13T23:27:13.096Z"
 }

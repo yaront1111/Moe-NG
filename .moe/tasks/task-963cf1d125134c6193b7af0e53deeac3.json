@@ -1,0 +1,32 @@
+{
+  "id": "task-963cf1d125134c6193b7af0e53deeac3",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Product audit hardening register - triage and slice",
+  "description": "HOLDING REGISTER, NOT A UNIT OF WORK. Do not plan this task as written - it is deliberately oversized and would be rejected on plan shape. Its purpose is to keep eleven verified defects on the board instead of in chat scroll. The required output is SPIDR slices: promote this, slice it into focused tasks, then close this shell through REVIEW transit.\n\nSource: Yaron's 2026-08-14 product audit - 30-agent sweep with adversarial verification across all packages, apps and tools, reported to #general at 23:06:38Z. All repo gates were green at 35f7b7f (typecheck; root 5476; daemon 1104; e2e 68+10; property 43; fault 43; security 17; integration 42). Twelve separate bugs were found and fixed directly with TDD in that sweep - c700749, 8177d7d, 1b9f9b6, 313eb4b, 35f7b7f - so a green suite is exactly what these coexisted with. The items below are the ones the human classified as real but low, and deliberately left.\n\nEVERY ITEM IS VERIFIED REAL. None is speculative. Re-measure each on current bytes before slicing, because the audit ran at an earlier HEAD and this is a shared worktree.\n\n1. STORE - backup publish is rm-then-rename: a crash destroys the old generation before the new one is published. No recoverable state in the window.\n2. STORE - resume re-enters runInstall between the SWITCH publish and the INSTALLED marker.\n3. STORE - persistFileDurably never checks bytesWritten. A short write reports success.\n4. STORE - domain_schema_version sits outside every integrity mechanism. Nothing detects it drifting.\n5. MCP - the HTTP session registry grows unbounded, and close() never releases daemon-side bindings.\n6. IMPORT - dependsOn recursion can overflow the stack on a deep graph.\n7. REVIEW - recordReviewRound with NaN bypasses the append-only guard.\n8. CONTROL-ROOM CLIENT - sets the forbidden origin fetch header; the daemon Origin guard is satisfied only by the vite proxy, so the real client path is untested against it.\n9. SCHEDULER - readiness ordering uses localeCompare, against the determinism contract. Locale-dependent ordering is not deterministic ordering.\n10. SUPPLY CHAIN - toolchain-observation failure is misreported as FROZEN_INSTALL_FAILED, and cleanRoots in a finally block can replace the real result on Windows EBUSY. Two separate ways a truthful failure becomes a wrong one.\n11. PACKAGING - the distribution-startup choke point has no production caller.\n\nREFUTED BUT RECORDED, so nobody re-raises it: aggregateDigest LF framing collides on newline-bearing asset paths. Unreachable today. Tightening the charset would close it permanently and is worth doing if that file is opened for another reason - but it is not a defect now, and a task claiming to fix a live bug here would be false.\n\nNOT IN SCOPE for the slicing pass: the three items the human routed elsewhere - the first-boot authentication deadlock is task-e19074f841f9450296799abfba9bfcaa, the MCP events.read frozen page is recorded on task-49ed1e6d, and the five agent-wrapper-main.ts defects are recorded on task-d23a913f.",
+  "definitionOfDone": [
+    "Each of the eleven items is re-measured on current bytes and recorded as either still-open with its file and line, or already closed with the commit that closed it.",
+    "Every still-open item is either a created focused task with its own DoD, or is explicitly declined in writing with the reason - no item is silently dropped.",
+    "The count is reconciled by hand: eleven items in, and the number of created tasks plus the number of declined items plus the number found already-closed equals eleven.",
+    "This shell is closed through a REVIEW transit hop rather than moved straight to DONE."
+  ],
+  "taskRails": [
+    "This is a register, not an implementation task. Do not write production code against it; slice it and close it.",
+    "Items 9 and 10 are fail-open or wrong-reason-code defects and fall under epic rail 4: their slices must pin exact stable reason codes, not merely that the operation failed.",
+    "Do not create a task for the refuted aggregateDigest item as though it were a live defect."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 99,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T23:21:02.343Z",
+  "updatedAt": "2026-08-13T23:21:02.343Z"
+}

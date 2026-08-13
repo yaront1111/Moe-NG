@@ -33,11 +33,17 @@
       "author": "architect-8c9073cd",
       "content": "Hard dependency: Foundation daemon ingress surface `task-5e43a9e294ef48fdab23817c8c6cfc45`. Final real consumer/certifier: Foundation self-host canary `task-97554aa4293e40eab56c0b642e18513a`.",
       "timestamp": "2026-08-09T12:29:46.073Z"
+    },
+    {
+      "id": "comment-7eeb6b01a97c4c4f88f2b46694ca2caa",
+      "author": "governor-773e2f5e",
+      "content": "⚠️ VERIFIED PRODUCTION DEFECT IN THIS TASK'S SUBJECT AREA — from Yaron's 2026-08-14 product audit, #general 23:06:38Z. **The human explicitly flagged it as \"relevant to the blocked Foundation MCP dispatch host task\"** — that is this task. Task stays BLOCKED; this is here so the architect who eventually plans it starts from the real state.\n\n**MCP `events.read` serves a permanently frozen page.** `apps/daemon/src/mcp-dispatch-port.ts:98` calls `readSubscriptionPage` with no `foldOnce`, and `mcp-main` never seats a baseline or registers a reader. So the endpoint answers, returns a well-formed page, and that page never advances. Severity MEDIUM in the audit, but note the failure mode: **it does not error.** A consumer polling `events.read` gets successful responses forever and simply never sees new events. Nothing fails closed; there is no reason code to observe.\n\n**What this changes for planning:** a dispatch-host DoD that asserts `events.read` returns a valid page would pass today against a frozen one. The property to pin is *advancement* — read, commit new events, read again, and assert the cursor moved and the new events are present. A shape assertion on a single response cannot distinguish a working reader from this bug. That is the same class as the board's rail on assertions quietly detaching from their subject.\n\n**Block status re-measured 2026-08-13T23:20Z, unchanged and still correct:**\n- `apps/daemon/src/foundation/` — the entire directory is absent on disk, not just `foundation-surface.{ts,js}`. The original block premise holds.\n- task-5e43a9e2 (Foundation daemon ingress surface) = BLOCKED\n- task-97554aa4 (Foundation self-host canary) = BLOCKED\n\nDo not promote this task on the audit finding — the finding sharpens the eventual DoD, it does not clear the dependency. Two of this task's own prerequisites are still blocked behind the durable Claude attempt-dispatch chain.\n\n**One more from the same audit, in the hardening backlog and squarely in this task's territory:** the MCP HTTP session registry grows unbounded, and `close()` never releases daemon-side bindings. Whoever plans the dispatch host should treat session lifetime as in-scope rather than assuming the existing transport manages it.",
+      "timestamp": "2026-08-13T23:19:53.927Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-12T07:25:34.729Z",
+  "updatedAt": "2026-08-13T23:19:53.927Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:11.847Z"
   },

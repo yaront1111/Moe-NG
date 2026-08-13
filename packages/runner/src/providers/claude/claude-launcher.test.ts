@@ -135,7 +135,13 @@ describe("Windows Claude launcher", () => {
     expect(boundary.log).toEqual(["close"]);
     expect(boundary.requests).toHaveLength(1);
     expect(Object.keys(boundary.requests[0] as object).sort()).toEqual(["argv", "cwd", "environment", "executable"]);
-    expect(boundary.requests[0]).toMatchObject({ argv: ["--print", "hello"], cwd: "C:\\work" });
+    // Spelled out rather than derived from the fixture: this pins that argv
+    // reaches the boundary VERBATIM, selection flags and all, so a gate that
+    // rewrote or dropped an element would be caught here.
+    expect(boundary.requests[0]).toMatchObject({
+      argv: ["--print", "hello", "--model", "claude-opus-5-20260514", "--reasoning-effort", "high"],
+      cwd: "C:\\work",
+    });
     expect((boundary.requests[0] as Record<string, unknown>)["shell"]).toBeUndefined();
     expect(result.kind).toBe("OBSERVED");
     if (result.kind !== "OBSERVED") throw new Error("expected observation");

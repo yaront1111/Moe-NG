@@ -37,8 +37,10 @@ import {
   type PreparedClaudeRuntime,
 } from "./claude-runtime-pin.js";
 import {
+  CLAUDE_LAUNCH_SELECTION_FLAGS,
   type ClaudeLaunchRequest,
   type ClaudeLaunchResult,
+  type ClaudeLaunchSelection,
   type ClaudeLauncherDependencies,
 } from "./claude-launcher.js";
 
@@ -199,6 +201,42 @@ export function dependencies(harness: BoundaryHarness, log: string[]): ClaudeLau
   };
 }
 
+/**
+ * The default `request()` carries a selection the pre-open gate ACCEPTS, and an
+ * argv that proves it. That is deliberate rather than convenient: `request()`
+ * backs dozens of cases across two suites, most of which pin codes produced by
+ * phases AFTER the gate. A default the gate refused would flip all of them at
+ * once, and each would then be testing the gate instead of its own subject.
+ *
+ * The gate is still proven to fire, by cases that override the selection or the
+ * argv on purpose and by the step-9 drill that DELETES the gate and requires
+ * every pre-existing case to stay green.
+ */
+export const SELECTED_MODEL = "claude-opus-5-20260514";
+export const SELECTED_EFFORT = "high";
+export const SELECTION: ClaudeLaunchSelection = Object.freeze({
+  provider: "claude",
+  selectedModelId: SELECTED_MODEL,
+  modelSnapshotKind: "DATED_SNAPSHOT",
+  modelSnapshotEvidence: "claude-opus-5-20260514/build-2026-05-14",
+  reasoningEffort: SELECTED_EFFORT,
+  profileRevisionId: "profile-revision-19",
+  configurationDigest: "1c".repeat(32),
+  policyDigest: "2d".repeat(32),
+  orchestrationDigest: "3e".repeat(32),
+  concurrencyCeiling: 4,
+});
+/** The argv half of the proof, so a caller never has to spell the flags itself. */
+export const SELECTION_ARGV: readonly string[] = Object.freeze([
+  CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL,
+  CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT,
+]);
+export function selectionWith(
+  overrides: Partial<ClaudeLaunchSelection>,
+): ClaudeLaunchSelection {
+  return Object.freeze({ ...SELECTION, ...overrides });
+}
+
 export function request(overrides: Partial<ClaudeLaunchRequest> = {}): ClaudeLaunchRequest {
   return {
     runtime: runtimeRequest,
@@ -210,11 +248,12 @@ export function request(overrides: Partial<ClaudeLaunchRequest> = {}): ClaudeLau
     wrapperIdentity: CLAIM.wrapperIdentity,
     bootstrapCredentialDigest: DIGEST,
     priorRegistration: null,
-    argv: ["--print", "hello"],
+    argv: ["--print", "hello", ...SELECTION_ARGV],
     cwd: "C:\\work",
     environment: { SYSTEMROOT: "C:\\Windows", LANG: "en_US.UTF-8" },
     reconciliation: null,
     limits: { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 1_000 },
+    launchSelection: SELECTION,
     ...overrides,
   };
 }
