@@ -961,6 +961,19 @@ describe("work.claim — the effect command is server-owned", () => {
     expect(JSON.stringify(result)).not.toContain("CANCEL_REQUESTED");
   });
 
+  it("truncates the caller's command kind rather than echoing it whole", () => {
+    // The kind is caller-controlled and unbounded; without the bound a 20k
+    // command produced a 20k refusal message, so the refusal amplified the
+    // request. The exact cut is pinned in both directions.
+    const refusal = refusalOf(claimWork(withPayload((payload) => {
+      at(payload, "effect")["command"] = { kind: "X".repeat(20_000) };
+    })));
+    expect(refusal.failure.code).toBe("WORK_INTENT_COMMAND_MISMATCH");
+    expect(refusal.failure.message.length).toBeLessThan(128);
+    expect(refusal.failure.message).toContain("X".repeat(32));
+    expect(refusal.failure.message).not.toContain("X".repeat(33));
+  });
+
   it("lets an earlier leg's refusal win over a non-claim command", () => {
     const refusal = refusalOf(claimWork(withPayload((payload) => {
       at(payload, "lease", "proof")["leaseToken"] = "token-stale";
