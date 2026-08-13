@@ -775,6 +775,75 @@ describe("coordination delivery cursors", () => {
   });
 });
 
+describe("coordination ack cursor under contention", () => {
+  /** Reproduces the cross-process interleave the CONTENDED retry loop exists for: a second
+   *  writer lands a HIGHER ack inside persistAck's window between the monotonicity check and
+   *  the commit. The trap arms only around the stale acknowledge, so every armed version read
+   *  and commit belongs to the ack path; the competitor writes through the RAW store, exactly
+   *  like a sibling process sharing the sqlite file. */
+  it("refuses a stale ack that raced a higher one instead of regressing the cursor", () => {
+    const trap = {
+      armed: false, competitor: null as (() => void) | null, fired: false, versionReads: 0,
+    };
+    const inject = (): void => {
+      if (trap.fired || trap.competitor === null) return;
+      trap.fired = true;
+      trap.competitor();
+    };
+    const harness = openHarness((store) => ({
+      // The second armed version read is the CAS-token read in a cursor-then-version ordering;
+      // the commit hook covers an ordering that reads the version once. Either way the
+      // competitor lands after the cursor check and before this writer's commit resolves.
+      commit: (input) => {
+        if (trap.armed) inject();
+        return store.commit(input);
+      },
+      getAggregateVersion: (aggregateId) => {
+        if (trap.armed) {
+          trap.versionReads += 1;
+          if (trap.versionReads === 2) inject();
+        }
+        return store.getAggregateVersion(aggregateId);
+      },
+      getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
+      readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) =>
+        store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes),
+    }));
+    try {
+      expect(send(harness, draft("EVENT", { messageId: "msg-1" })).outcome).toBe("ACCEPTED");
+      expect(send(harness, draft("EVENT", { messageId: "msg-2" })).outcome).toBe("ACCEPTED");
+      const [first, second] = readOwn(harness, REVIEWER);
+      if (first === undefined || second === undefined) throw new Error("expected two items");
+      const competitor = createDurableMailbox(harness.store);
+      let competitorOutcome: string | null = null;
+      trap.competitor = () => {
+        competitorOutcome = competitor.acknowledge({
+          digest: second.digest, mailbox: REVIEWER, messageId: second.envelope.messageId,
+          now: NOW, sequence: second.sequence,
+        }).outcome;
+      };
+      harness.controls.sessionId = REVIEWER.sessionId;
+      harness.controls.capabilities = allCapabilities(REVIEWER.sessionId);
+      trap.armed = true;
+      const stale = harness.service.acknowledge({
+        ...mailboxArgs(REVIEWER), digest: first.digest, messageId: first.envelope.messageId,
+        sequence: first.sequence,
+      });
+      trap.armed = false;
+      // Positive control first: the interleaved higher ack really landed mid-flight.
+      expect(trap.fired).toBe(true);
+      expect(competitorOutcome).toBe("ACKNOWLEDGED");
+      const refused = refusal(stale);
+      expect(refused.code).toBe("COORDINATION_ACK_REGRESSION");
+      expect(refused.layer).toBe("MAILBOX");
+      // The durable cursor must still sit at the higher ack: nothing is re-delivered.
+      expect(readOwn(harness, REVIEWER)).toStrictEqual([]);
+    } finally {
+      harness.store.close();
+    }
+  });
+});
+
 describe("coordination store failure mapping", () => {
   it("maps a store throw and an unknown outcome without claiming delivery", () => {
     const cases: ReadonlyArray<readonly [string, string]> = [

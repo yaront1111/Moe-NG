@@ -177,8 +177,10 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
   }
 
   /**
-   * The monotonicity check is re-read on EVERY attempt, not once before the loop. A second
-   * writer that lands a higher ack while this one is retrying must not be walked backwards.
+   * The monotonicity check is re-read on EVERY attempt, not once before the loop, and the
+   * commit's CAS token is the exact version the cursor was derived from. A second writer
+   * that lands a higher ack after the check therefore makes this commit CONTENDED and the
+   * retry re-checks; a fresher token here would let a stale ack walk the cursor backwards.
    */
   function persistAck(
     mailbox: string, input: MailboxAckInput, committedAt: string,
@@ -188,9 +190,9 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
       digest: input.digest, messageId: input.messageId, sequence: input.sequence,
     });
     for (let attempt = 0; attempt < COORDINATION_LIMITS.maxSendAttempts; attempt += 1) {
-      const cursor = reader.ackCursor(mailbox);
-      if (cursor === null) return corruptRecord();
-      if (input.sequence <= cursor) return regressed();
+      const state = reader.ackState(mailbox);
+      if (state === null) return corruptRecord();
+      if (input.sequence <= state.cursor) return regressed();
       const outcome = commitOnce({
         aggregateId: aggregate, commandBytes: payload,
         commandId: ackCommandId(aggregate, input.sequence), committedAt,
@@ -198,7 +200,7 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
           eventId: ackEventId(aggregate, input.sequence), eventType: MAILBOX_ACK_EVENT_TYPE,
           payload,
         }],
-        expectedVersion: store.getAggregateVersion(aggregate),
+        expectedVersion: state.version,
       });
       if (outcome === CONTENDED) continue;
       if ("outcome" in outcome) return outcome;

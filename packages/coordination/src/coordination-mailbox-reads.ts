@@ -28,9 +28,14 @@ export interface CoordinationEventStore {
 
 export interface MailboxEntry { readonly event: StoredEvent; readonly stamp: MessageStamp }
 
+/** A consistent snapshot of the durable ack record: the cursor together with the aggregate
+ *  version it was derived from, usable as the CAS token of a commit that guards on it. */
+export interface AckState { readonly cursor: number; readonly version: number }
+
 export interface MailboxReader {
   /** Last durably acknowledged sequence, or null when the ack record is unreadable. */
   ackCursor(mailbox: string): number | null;
+  ackState(mailbox: string): AckState | null;
   delivery(entry: MailboxEntry, now: number): CoordinationDelivery | null;
   entryAt(mailbox: string, sequence: number): MailboxEntry | null;
   page(mailbox: string, cursor: number, limit: number, now: number): CoordinationReadResult;
@@ -43,15 +48,22 @@ export function corruptRecord(): CoordinationRefused {
 }
 
 export function createMailboxReader(store: CoordinationEventStore): MailboxReader {
-  /** Recovers ONLY the last durable ack event; the ack aggregate is never replayed in full. */
-  function ackCursor(mailbox: string): number | null {
+  /** Recovers ONLY the last durable ack event; the ack aggregate is never replayed in full.
+   *  The event at the observed version is immutable, so the pair is one consistent snapshot
+   *  even when a concurrent writer appends between the two reads. */
+  function ackState(mailbox: string): AckState | null {
     const aggregate = ackAggregateId(mailbox);
     const version = store.getAggregateVersion(aggregate);
-    if (version === 0) return 0;
+    if (version === 0) return Object.freeze({ cursor: 0, version });
     const last = store.readAggregateEvents(aggregate, version - 1, 1).items[0];
     if (last === undefined) return null;
     const record = decodeAck(last.payload);
-    return record === null ? null : record.sequence;
+    return record === null ? null : Object.freeze({ cursor: record.sequence, version });
+  }
+
+  function ackCursor(mailbox: string): number | null {
+    const state = ackState(mailbox);
+    return state === null ? null : state.cursor;
   }
 
   function entryAt(mailbox: string, sequence: number): MailboxEntry | null {
@@ -107,5 +119,5 @@ export function createMailboxReader(store: CoordinationEventStore): MailboxReade
     });
   }
 
-  return Object.freeze({ ackCursor, delivery, entryAt, page });
+  return Object.freeze({ ackCursor, ackState, delivery, entryAt, page });
 }
