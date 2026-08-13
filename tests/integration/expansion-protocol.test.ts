@@ -1450,6 +1450,24 @@ describe("the bridge partitions every admitted byte into core or the projection"
     expect(leafPaths(bound))
       .toEqual([...EXPLICIT_CORE_FIELDS, ...PROJECTION_ONLY_FIELDS].sort());
   });
+
+  /**
+   * The column table proves each byte is assigned SOMEWHERE exactly once. It does not prove the
+   * carried ones were carried CORRECTLY: swap one mapping for a sibling of the same type and
+   * the partition still balances. Only five explicit fields have a one-byte perturbation case
+   * below, so without this every other explicit mapping could be mis-wired in silence. Both
+   * sides are read from production surfaces — the shipped admission and the shipped binding —
+   * so nothing here reimplements the mapping it is checking.
+   */
+  it("carries every explicit core field from its scheduler source, byte for byte", () => {
+    const facts = journey()["binding"].admitted as Record<string, any>;
+    const carried = EXPLICIT_CORE_FIELDS.map((path) => `${path}=${JSON.stringify(read(facts, path))}`);
+    const source = EXPLICIT_CORE_FIELDS.map((path) => `${path}=${JSON.stringify(read(bound, path))}`);
+    expect(carried.length).toBe(15);
+    expect(carried).toEqual(source);
+    // Distinct values, so a mapping returning one constant everywhere cannot pass.
+    expect(new Set(carried.map((one) => one.split("=")[1])).size).toBeGreaterThan(10);
+  });
 });
 
 interface BridgeCase {
@@ -1609,7 +1627,26 @@ describe("a preparation edited under its own identity is refused, byte by byte",
 describe("the bridge speaks a published, frozen refusal vocabulary", () => {
   it("publishes a hand-pinned closed code set", () => {
     expect(Object.isFrozen(EXPANSION_BINDING_ISSUE_CODES)).toBe(true);
-    expect(EXPANSION_BINDING_ISSUE_CODES.length).toBe(10);
+    expect(EXPANSION_BINDING_ISSUE_CODES.length).toBe(11);
+  });
+
+  /**
+   * The hold the journey creates is REDUCER-PRODUCED, so the bridge can replay its own creation
+   * command and compare. Forging one byte of the presented value while leaving that command —
+   * and all five current-authority values — untouched is the one attack a replay alone cannot
+   * see: the replayed state is honest, and binding it would discard the forged byte in silence.
+   */
+  it("refuses a presented hold that differs from its own creation receipt", () => {
+    const { state } = heldHold(holdCreateCommand());
+    const forged = { ...state as Record<string, unknown>, parentRunRef: "run:forged" };
+    expect(forged["parentRunRef"]).not.toBe((state as Record<string, unknown>)["parentRunRef"]);
+    const refusal = bindExpansionAdmission({
+      currentAuthority: { ...CURRENT_AUTHORITY }, hold: forged, opportunity: { ...OPPORTUNITY },
+      preparation: admitted(admissionRequest()),
+    }) as Record<string, any>;
+    expect([refusal["ok"], refusal["issues"][0].code, refusal["issues"][0].layer,
+      refusal["issues"][0].origin])
+      .toEqual([false, "EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
   });
 
   it("refuses a hold that is no longer ACTIVE, so a terminated hold binds nothing", () => {

@@ -1011,6 +1011,19 @@ const BINDING_CASES: readonly (readonly [string, () => unknown, string, string, 
   ["a terminated hold", () => bindingRequest({
     hold: { ...activeHold(), lifecycle: "RESOLVED", version: 2 },
   }), "EXPANSION_BINDING_HOLD_INACTIVE", "HOLD", "BRIDGE"],
+  /**
+   * WHICH GATE ANSWERS, not merely that one does. Both of these would ALSO be caught by the
+   * presented-versus-replayed comparison further down, with a different code — so without these
+   * two cases the outer lifecycle gate's version and terminal-receipt checks could be deleted
+   * and the suite would stay green. A hold that claims ACTIVE while carrying a successor
+   * version, or a terminal receipt, is a lifecycle contradiction and is named as one.
+   */
+  ["an ACTIVE hold at a version the create reducer never mints",
+    () => bindingRequest({ hold: { ...activeHold(), version: 2 } }),
+    "EXPANSION_BINDING_HOLD_INACTIVE", "HOLD", "BRIDGE"],
+  ["an ACTIVE hold carrying a terminal receipt", () => bindingRequest({
+    hold: { ...activeHold(), terminalReceipt: { command: holdCommand() } },
+  }), "EXPANSION_BINDING_HOLD_INACTIVE", "HOLD", "BRIDGE"],
   ["a current goalVersion the scheduler did not admit",
     () => bindingRequest({ currentAuthority: { ...CURRENT, goalVersion: 8 } }),
     "EXPANSION_BINDING_GOAL_VERSION_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
@@ -1029,7 +1042,7 @@ const BINDING_CASES: readonly (readonly [string, () => unknown, string, string, 
 ];
 
 it("generated one binding case per enumerated perturbation", () => {
-  expect(BINDING_CASES.length).toBe(13);
+  expect(BINDING_CASES.length).toBe(15);
   expect([...new Set(BINDING_CASES.map(([, , code]) => code))].length).toBe(9);
 });
 
@@ -1158,4 +1171,164 @@ it("catches a terminated hold laundered back to ACTIVE, by the daemon's current 
   })));
   expect([issue.code, issue.layer])
     .toEqual(["EXPANSION_BINDING_HOLD_VERSION_MISMATCH", "CURRENT_AUTHORITY"]);
+});
+
+/**
+ * A LEAF THE IDENTITY HASH CANNOT SPEAK.
+ *
+ * `digestOf` is `JSON.stringify`: it THROWS on a BigInt and on a cycle, and it silently DROPS a
+ * symbol, a function and an `undefined`. Either way an unchecked bound leaf defeats the identity
+ * check — the first escapes the bridge as a raw `TypeError` (no code, no layer, nothing a caller
+ * can fail closed on), the second vanishes from the very bytes the identity is supposed to cover.
+ * Every leaf is therefore proven to be a string, a safe count or an explicit null BEFORE anything
+ * hashes it, and the answer is the bridge's own REQUEST code rather than an identity verdict: a
+ * value that cannot be canonicalised was never comparable in the first place.
+ */
+function boundOf(): Record<string, unknown> {
+  return { ...admittedPreparation().bound } as unknown as Record<string, unknown>;
+}
+
+function nested(bound: Record<string, unknown>, key: string): Record<string, unknown> {
+  return { ...(bound[key] as Record<string, unknown>) };
+}
+
+const HOSTILE_BOUND_LEAVES: readonly (readonly [string, () => Record<string, unknown>])[] = [
+  ["a BigInt proposalId", () => ({ ...boundOf(), proposalId: 10n })],
+  ["a BigInt budget line quantity", () => {
+    const bound = boundOf(); const budget = nested(bound, "budgetReservation");
+    const lines = budget["lines"] as readonly Record<string, unknown>[];
+    return { ...bound, budgetReservation: { ...budget, lines: [{ ...lines[0], quantity: 1n }] } };
+  }],
+  ["a BigInt capacity unit", () => {
+    const bound = boundOf();
+    const rows = bound["capacitySnapshot"] as readonly Record<string, unknown>[];
+    return { ...bound, capacitySnapshot: [{ ...rows[0], capacityUnits: 4n }] };
+  }],
+  ["a symbol fairness disposition", () => {
+    const bound = boundOf();
+    return {
+      ...bound, fairness: { ...nested(bound, "fairness"), disposition: Symbol("SELECTED") },
+    };
+  }],
+  ["an undefined provenBypasses", () => ({ ...boundOf(), provenBypasses: undefined })],
+  ["a function qualityDigest", () => ({ ...boundOf(), qualityDigest: () => DIGEST_A })],
+  ["a self-referential lineage depth", () => {
+    const bound = boundOf(); const cycle: Record<string, unknown> = {};
+    cycle["self"] = cycle;
+    return { ...bound, lineage: { ...nested(bound, "lineage"), expansionDepth: cycle } };
+  }],
+  ["an evidenceDigest whose toJSON throws", () => ({
+    ...boundOf(), evidenceDigest: { toJSON: (): never => { throw new Error("hostile leaf"); } },
+  })],
+  ["a negative revision", () => ({ ...boundOf(), revision: -1 })],
+  ["a non-hex qualityDigest", () => ({ ...boundOf(), qualityDigest: "not a digest" })],
+];
+
+it("generated one hostile-leaf case per enumerated bound leaf", () => {
+  expect(HOSTILE_BOUND_LEAVES.length).toBe(10);
+  expect(HOSTILE_BOUND_LEAVES.map(([name]) => name)).toEqual([
+    "a BigInt proposalId", "a BigInt budget line quantity", "a BigInt capacity unit",
+    "a symbol fairness disposition", "an undefined provenBypasses", "a function qualityDigest",
+    "a self-referential lineage depth", "an evidenceDigest whose toJSON throws",
+    "a negative revision", "a non-hex qualityDigest",
+  ]);
+});
+
+it.each(HOSTILE_BOUND_LEAVES)("contains %s as a stable refusal, never a thrown error",
+  (_name, build) => {
+    const request = bindingRequest({
+      preparation: { bound: build(), identity: admittedPreparation().identity },
+    });
+    expect(() => scheduler.bindExpansionAdmission(request)).not.toThrow();
+    const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(request));
+    expect([issue.code, issue.layer, issue.origin])
+      .toEqual(["EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST", "BRIDGE"]);
+  });
+
+/**
+ * THE PRESENTED HOLD IS NOT THE REPLAYED ONE.
+ *
+ * Replaying the creation command proves an ACTIVE hold CAN exist; it proves nothing about the
+ * value actually presented. Binding the replayed state and discarding the presented bytes reads
+ * as safe — the output is reducer-produced either way — but it means a forged field is accepted
+ * in silence, and every later reader believes the daemon verified the value it was handed. So
+ * the presented hold must EQUAL the state its own command produces, field for field and nested
+ * value for nested value, before any byte of it is bound.
+ */
+const FORGED_HOLD_FIELDS:
+  readonly (readonly [string, (hold: ExpansionPlanningHoldState) => unknown])[] = [
+    ["deadline", (hold) => hold.deadline + 1],
+    ["generation", (hold) => hold.generation + 1],
+    ["graphEpoch", (hold) => hold.graphEpoch + 1],
+    ["holdId", () => "hold:forged"],
+    ["holdKind", () => "EXPANSION_PLANNING_FORGED"],
+    ["parentNodeRef", () => "node:forged"],
+    ["parentRevisionRef", () => "revision:forged"],
+    ["parentRunRef", () => "run:forged"],
+    ["planningRunRef", () => "planning:forged"],
+    ["proposalBaseHash", () => DIGEST_B],
+    ["rationale", (hold) => ({ ...hold.rationale, text: "forged rationale" })],
+    ["release", (hold) => ({ ...hold.release, receiptRef: "receipt:forged" })],
+    ["sourceFingerprint", () => DIGEST_A],
+    ["workerHandoff", (hold) => ({ ...hold.workerHandoff, ref: "handoff:forged" })],
+  ];
+
+/**
+ * The universe is the REDUCER'S own state keys, read from a live hold rather than transcribed,
+ * minus the four an earlier gate already answers: the three the outer lifecycle gate refuses,
+ * and the creation receipt, which is the command being replayed rather than a replayed field.
+ */
+it("generated one forged-hold case per hold field no earlier gate answers", () => {
+  expect(FORGED_HOLD_FIELDS.length).toBe(14);
+  const answeredEarlier = ["creationReceipt", "lifecycle", "terminalReceipt", "version"];
+  expect([...FORGED_HOLD_FIELDS.map(([field]) => field), ...answeredEarlier].sort())
+    .toEqual(Object.keys(activeHold()).sort());
+});
+
+it.each(FORGED_HOLD_FIELDS)("refuses a presented hold whose %s was forged", (field, forge) => {
+  const honest = activeHold();
+  const forged = forge(honest);
+  // Not vacuous: the presented byte really differs from the one the reducer produces.
+  expect(forged).not.toEqual((honest as unknown as Record<string, unknown>)[field]);
+  const issue = onlyBindingIssue(
+    scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, [field]: forged } })),
+  );
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+});
+
+it("refuses a presented hold whose nested handoff hides behind an accessor", () => {
+  const honest = activeHold();
+  const workerHandoff = Object.defineProperty(
+    { digest: honest.workerHandoff.digest }, "ref",
+    { configurable: true, enumerable: true, get: () => honest.workerHandoff.ref },
+  );
+  const issue = onlyBindingIssue(
+    scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, workerHandoff } })),
+  );
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+});
+
+it("refuses a presented hold carrying an extra nested key", () => {
+  const honest = activeHold();
+  const release = { ...honest.release, extra: 1 };
+  const issue = onlyBindingIssue(
+    scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, release } })),
+  );
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+});
+
+it("refuses a presented hold whose nested terminal effect list grew an entry", () => {
+  const honest = activeHold();
+  const release = {
+    ...honest.release,
+    terminalEffectRefs: [...honest.release.terminalEffectRefs, "effect:forged"],
+  };
+  const issue = onlyBindingIssue(
+    scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, release } })),
+  );
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
 });

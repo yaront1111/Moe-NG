@@ -7,12 +7,15 @@
  * `expansion-preparation.ts` (which owns the admission REQUEST envelope and the identity bytes)
  * because holding both would put one file over the 400-line cap.
  *
- * THE PARTITION IS THE WHOLE DESIGN. The scheduler's bound facts carry twenty-six leaves.
- * Fifteen are carried into a NAMED core field; the remaining eleven — scheduler-only facts core
+ * THE PARTITION IS THE WHOLE DESIGN. The scheduler's bound facts carry twenty-four leaves.
+ * Fifteen are carried into a NAMED core field; the remaining nine — scheduler-only facts core
  * has no field for — go into ONE canonical projection digested into `admitted.evidenceDigest`.
  * Nothing appears in both. Binding a fact twice is not extra safety but the opposite: an
  * aggregate digest beside an individually bound field makes DROPPING the field undetectable,
- * because perturbing it still moves the digest. That defect was measured on this board.
+ * because perturbing it still moves the digest. That defect was measured on this board. The
+ * partition itself, and the leaf-by-leaf reader that feeds it, live in `expansion-binding-facts`
+ * — split out under the per-file cap along the seam that was already there: this file owns the
+ * ORDER the gates run in and the words a refusal is spoken in, that one owns the bytes.
  *
  * WHAT A CALLER MAY SUPPLY. Raw evidence for validation — one opportunity attestation, one
  * reducer-produced hold, the daemon's own current authority — and never a verdict.
@@ -35,14 +38,13 @@ import type {
   ExpansionAdmittedFacts, ExpansionPlanningHoldState, PlanningExpansionHoldBinding,
 } from "@moe/core";
 
-import {
-  MAX_AUTHORITY_ITEMS, deepFreeze, exactRecord, isCount, isDigest, isRef, readList, stringList,
-} from "../authority/authority-kernel.js";
+import { deepFreeze, exactRecord, isCount, isRef } from "../authority/authority-kernel.js";
 import { isFairnessRefusal } from "../fairness/fairness-contract.js";
 import type { FairnessContractRefusal } from "../fairness/fairness-contract.js";
 import { validateOpportunityAttestation } from "../fairness/fairness-evidence.js";
+import { admittedOf, boundSnapshot, matchesTrusted } from "./expansion-binding-facts.js";
 import { digestOf } from "./expansion-preparation.js";
-import type { ExpansionPreparation } from "./expansion-preparation.js";
+import type { ExpansionBoundFacts, ExpansionPreparation } from "./expansion-preparation.js";
 
 /** Which surface answered. `BRIDGE` is the only one this module speaks for. */
 export const EXPANSION_BINDING_ORIGINS = Object.freeze([
@@ -54,7 +56,8 @@ export type ExpansionBindingOrigin = (typeof EXPANSION_BINDING_ORIGINS)[number];
 export const EXPANSION_BINDING_ISSUE_CODES = Object.freeze([
   "EXPANSION_BINDING_CURRENT_AUTHORITY_UNKNOWN", "EXPANSION_BINDING_GOAL_VERSION_MISMATCH",
   "EXPANSION_BINDING_GRAPH_EPOCH_MISMATCH", "EXPANSION_BINDING_HOLD_ID_MISMATCH",
-  "EXPANSION_BINDING_HOLD_INACTIVE", "EXPANSION_BINDING_HOLD_VERSION_MISMATCH",
+  "EXPANSION_BINDING_HOLD_INACTIVE", "EXPANSION_BINDING_HOLD_STATE_MISMATCH",
+  "EXPANSION_BINDING_HOLD_VERSION_MISMATCH",
   "EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH", "EXPANSION_BINDING_PLANNING_RUN_MISMATCH",
   "EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "EXPANSION_BINDING_REQUEST_MALFORMED",
 ] as const);
@@ -104,26 +107,11 @@ export type ExpansionBindingResult =
   }
   | ExpansionBindingRefusal;
 
-type Data = Record<string, unknown>;
-
 const REQUEST_KEYS =
   Object.freeze(["currentAuthority", "hold", "opportunity", "preparation"] as const);
 const PREPARATION_KEYS = Object.freeze(["identity", "bound"] as const);
 const CURRENT_KEYS = Object.freeze([
   "goalVersion", "graphEpoch", "holdId", "holdVersion", "planningRunRef"] as const);
-/** Key order is the ADMISSION's own literal order, because `digestOf` is order-sensitive. */
-const BOUND_KEYS = Object.freeze([
-  "proposalId", "revision", "goalVersion", "graphEpoch", "observedAtSequence", "childKeys",
-  "sourceDigests", "evidenceDigest", "qualityDigest", "lineage", "fairness", "capacitySnapshot",
-  "provenBypasses", "budgetReservation", "resourceReservation"] as const);
-const LINEAGE_KEYS =
-  Object.freeze(["expansionDepth", "childWidth", "nodesAddedInExpansion"] as const);
-const FAIRNESS_KEYS = Object.freeze([
-  "disposition", "workItemId", "resourceId", "roundsAdvanced", "capRevisionRef"] as const);
-const CAPACITY_KEYS = Object.freeze(["resourceId", "capacityUnits", "inFlightUnits"] as const);
-const BUDGET_KEYS = Object.freeze(["reservationId", "accountId", "admissionRef", "lines"] as const);
-const LINE_KEYS = Object.freeze(["purpose", "meter", "quantity"] as const);
-const RESOURCE_KEYS = Object.freeze(["resourceIds", "epoch", "effectIntentRefs"] as const);
 const HOLD_KEYS = Object.freeze([
   "creationReceipt", "deadline", "generation", "graphEpoch", "holdId", "holdKind", "lifecycle",
   "parentNodeRef", "parentRevisionRef", "parentRunRef", "planningRunRef", "proposalBaseHash",
@@ -169,98 +157,21 @@ function isBindingRefusal(value: unknown): value is ExpansionBindingRefusal {
     && (value as { readonly ok: unknown }).ok === false;
 }
 
-function records(value: unknown, keys: readonly string[]): readonly Data[] | null {
-  const items = readList(value, MAX_AUTHORITY_ITEMS);
-  if (items === null) return null;
-  const output: Data[] = [];
-  for (const item of items) {
-    const parsed = exactRecord(item, keys);
-    if (parsed === null) return null;
-    output.push(parsed);
-  }
-  return output;
-}
-
 /**
- * The admitted facts, rebuilt from own data properties in the admission's own key order.
- * Rebuilding rather than trusting is what makes the identity recomputation meaningful: a getter,
- * a proxy, an array hole or an extra key never reaches the hash, it refuses before it.
- */
-function boundSnapshot(value: unknown): Data | null {
-  const raw = exactRecord(value, BOUND_KEYS);
-  if (raw === null) return null;
-  const lineage = exactRecord(raw["lineage"], LINEAGE_KEYS);
-  const fairness = exactRecord(raw["fairness"], FAIRNESS_KEYS);
-  const budget = exactRecord(raw["budgetReservation"], BUDGET_KEYS);
-  const resource = exactRecord(raw["resourceReservation"], RESOURCE_KEYS);
-  if (lineage === null || fairness === null || budget === null || resource === null) return null;
-  const childKeys = stringList(raw["childKeys"], MAX_AUTHORITY_ITEMS);
-  const digests = stringList(raw["sourceDigests"], MAX_AUTHORITY_ITEMS);
-  const resourceIds = stringList(resource["resourceIds"], MAX_AUTHORITY_ITEMS);
-  const intents = stringList(resource["effectIntentRefs"], MAX_AUTHORITY_ITEMS);
-  const capacitySnapshot = records(raw["capacitySnapshot"], CAPACITY_KEYS);
-  const lines = records(budget["lines"], LINE_KEYS);
-  if (childKeys === null || digests === null || resourceIds === null || intents === null
-    || capacitySnapshot === null || lines === null) return null;
-  return {
-    ...raw, childKeys: [...childKeys], sourceDigests: [...digests], lineage, fairness,
-    capacitySnapshot, budgetReservation: { ...budget, lines },
-    resourceReservation:
-      { ...resource, resourceIds: [...resourceIds], effectIntentRefs: [...intents] },
-  };
-}
-
-/**
- * THE ONE CANONICAL PROJECTION: exactly the eleven scheduler-only leaves core has no field for.
- * Every leaf core carries explicitly is absent here by construction, so each admitted byte is
- * falsifiable in exactly one place.
- */
-function projectionOf(snapshot: Data): Data {
-  const budget = snapshot["budgetReservation"] as Data;
-  const fairness = snapshot["fairness"] as Data;
-  const resource = snapshot["resourceReservation"] as Data;
-  return {
-    budgetLines: budget["lines"], capacitySnapshot: snapshot["capacitySnapshot"],
-    effectIntentRefs: resource["effectIntentRefs"], fairnessDisposition: fairness["disposition"],
-    graphEpoch: snapshot["graphEpoch"], lineage: snapshot["lineage"],
-    provenBypasses: snapshot["provenBypasses"], roundsAdvanced: fairness["roundsAdvanced"],
-    schedulerEvidenceDigest: snapshot["evidenceDigest"],
-  };
-}
-
-/** The fifteen explicitly carried leaves, typed at the boundary rather than cast through it. */
-function admittedOf(snapshot: Data, opportunityRef: string): ExpansionAdmittedFacts | null {
-  const budget = snapshot["budgetReservation"] as Data;
-  const fairness = snapshot["fairness"] as Data;
-  const resource = snapshot["resourceReservation"] as Data;
-  const accountId = budget["accountId"]; const admissionRef = budget["admissionRef"];
-  const reservationId = budget["reservationId"]; const capRevisionRef = fairness["capRevisionRef"];
-  const resourceId = fairness["resourceId"]; const workItemId = fairness["workItemId"];
-  const epoch = resource["epoch"]; const goalVersion = snapshot["goalVersion"];
-  const observedAtSequence = snapshot["observedAtSequence"];
-  const proposalId = snapshot["proposalId"]; const qualityDigest = snapshot["qualityDigest"];
-  const revision = snapshot["revision"];
-  if (!isRef(accountId) || !isRef(admissionRef) || !isRef(reservationId) || !isRef(resourceId)
-    || !isRef(workItemId) || !isRef(proposalId) || !isDigest(qualityDigest) || !isCount(epoch)
-    || !isCount(goalVersion) || !isCount(observedAtSequence) || !isCount(revision)
-    || !(capRevisionRef === null || isRef(capRevisionRef))) return null;
-  return {
-    budgetReservation: { accountId, admissionRef, reservationId, state: "RESERVED" },
-    childKeys: snapshot["childKeys"] as readonly string[],
-    evidenceDigest: digestOf(projectionOf(snapshot)),
-    fairness: { capRevisionRef, opportunityRef, resourceId, workItemId },
-    goalVersion, observedAtSequence, proposalId, qualityDigest,
-    resourceReservation:
-      { epoch, resourceIds: resource["resourceIds"] as readonly string[], state: "HELD" },
-    revision, sourceDigests: snapshot["sourceDigests"] as readonly string[],
-    truthClass: "DAEMON_VERIFIED",
-  };
-}
-
-/**
- * An ACTIVE hold, PROVEN by replaying its own creation command through the core reducer. The
- * outer lifecycle/version/receipt gate runs FIRST, because a terminated hold's creation command
- * still replays into an active state and accepting the replay alone would resurrect it.
+ * An ACTIVE hold, PROVEN by replaying its own creation command through the core reducer. Three
+ * gates, in this order and for three different reasons.
+ *
+ * The outer lifecycle/version/receipt gate runs FIRST, because a terminated hold's creation
+ * command still replays into an active state and accepting the replay alone would resurrect it.
+ *
+ * The replay runs SECOND, and it proves only that an active hold CAN exist — it says nothing
+ * about the value actually presented.
+ *
+ * So the presented value is compared against the replayed state THIRD, field for field and
+ * nested value for nested value. Returning the replayed state and discarding the presented bytes
+ * reads as safe, since the output is reducer-produced either way; it is not. A forged field
+ * would be accepted in silence, and every later reader would believe the daemon verified the
+ * value it was handed. What is bound must be what was presented AND what the reducer produces.
  */
 function activeHoldOf(value: unknown): ExpansionPlanningHoldState | ExpansionBindingRefusal {
   const raw = exactRecord(value, HOLD_KEYS);
@@ -282,6 +193,10 @@ function activeHoldOf(value: unknown): ExpansionPlanningHoldState | ExpansionBin
     return delegated(replayed.code, replayed.layer, "EXPANSION_HOLD",
       "the core hold reducer refused the hold's own creation command");
   }
+  if (!matchesTrusted(value, replayed.state)) {
+    return local("EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD",
+      "the presented hold differs from the state its own creation command produces");
+  }
   return replayed.state;
 }
 
@@ -298,12 +213,12 @@ function currentOf(value: unknown): ExpansionCurrentAuthority | ExpansionBinding
 
 /** Proven mismatch, one code per compared value. Absence was already answered UNKNOWN. */
 function authorityMismatch(
-  current: ExpansionCurrentAuthority, hold: ExpansionPlanningHoldState, snapshot: Data,
+  current: ExpansionCurrentAuthority, hold: ExpansionPlanningHoldState, bound: ExpansionBoundFacts,
 ): ExpansionBindingIssueCode | null {
-  if (current.goalVersion !== snapshot["goalVersion"]) {
+  if (current.goalVersion !== bound.goalVersion) {
     return "EXPANSION_BINDING_GOAL_VERSION_MISMATCH";
   }
-  if (current.graphEpoch !== hold.graphEpoch || current.graphEpoch !== snapshot["graphEpoch"]) {
+  if (current.graphEpoch !== hold.graphEpoch || current.graphEpoch !== bound.graphEpoch) {
     return "EXPANSION_BINDING_GRAPH_EPOCH_MISMATCH";
   }
   if (current.holdId !== hold.holdId) return "EXPANSION_BINDING_HOLD_ID_MISMATCH";
@@ -342,19 +257,19 @@ export function bindExpansionAdmission(value: unknown): ExpansionBindingResult {
       "the expansion binding request is malformed");
   }
   const preparation = exactRecord(request["preparation"], PREPARATION_KEYS);
-  const snapshot = preparation === null ? null : boundSnapshot(preparation["bound"]);
-  if (preparation === null || snapshot === null) {
+  const bound = preparation === null ? null : boundSnapshot(preparation["bound"]);
+  if (preparation === null || bound === null) {
     return local("EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST",
       "the scheduler preparation is not a readable admission preparation");
   }
   const identity = preparation["identity"];
-  if (!isRef(identity) || digestOf(snapshot) !== identity) {
+  if (!isRef(identity) || digestOf(bound) !== identity) {
     return local("EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "PREPARATION",
       "the preparation identity does not cover its own bound facts");
   }
   const opportunity = validateOpportunityAttestation(request["opportunity"]);
   if (isFairnessRefusal(opportunity)) return fromFairness(opportunity);
-  if (opportunity.value.winnerWorkItemId !== (snapshot["fairness"] as Data)["workItemId"]) {
+  if (opportunity.value.winnerWorkItemId !== bound.fairness.workItemId) {
     return local("EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH", "FAIRNESS",
       "the attested opportunity was won by another work item");
   }
@@ -362,15 +277,11 @@ export function bindExpansionAdmission(value: unknown): ExpansionBindingResult {
   if (isBindingRefusal(hold)) return hold;
   const current = currentOf(request["currentAuthority"]);
   if (isBindingRefusal(current)) return current;
-  const stale = authorityMismatch(current, hold, snapshot);
+  const stale = authorityMismatch(current, hold, bound);
   if (stale !== null) {
     return local(stale, "CURRENT_AUTHORITY", "the daemon's current authority is not the bound one");
   }
-  const admitted = admittedOf(snapshot, opportunity.value.opportunityRef);
-  if (admitted === null) {
-    return local("EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST",
-      "an explicitly carried admitted fact is not the shape core accepts");
-  }
+  const admitted = admittedOf(bound, opportunity.value.opportunityRef);
   const planningHoldBinding = holdBindingOf(hold, current.goalVersion);
   if (isBindingRefusal(planningHoldBinding)) return planningHoldBinding;
   return deepFreeze({
