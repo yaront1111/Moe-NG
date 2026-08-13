@@ -38,12 +38,18 @@ export type CommitCheck =
   | { readonly kind: "COHERENT"; readonly ok: true; readonly activationDigest: string }
   | { readonly kind: "REFUSED"; readonly failure: SupervisorFailure };
 
+export type RuntimeBindingCheck =
+  | { readonly kind: "BOUND"; readonly ok: true }
+  | { readonly kind: "REFUSED"; readonly failure: SupervisorFailure };
+
+type Refusal = { readonly kind: "REFUSED"; readonly failure: SupervisorFailure };
+
 export function grantRefusal(
   code: SupervisorErrorCode,
   layer: SupervisorLayer,
   message: string,
   leg: string | null = null,
-): { readonly kind: "REFUSED"; readonly failure: SupervisorFailure } {
+): Refusal {
   return Object.freeze({
     kind: "REFUSED" as const,
     failure: supervisorFailure(code, layer, message, { state: null, command: null, leg }),
@@ -145,4 +151,45 @@ export function validateActivationCommit(
     return incoherent("the grant id does not derive from these successors");
   }
   return Object.freeze({ kind: "COHERENT" as const, ok: true as const, activationDigest });
+}
+
+const BOUND: RuntimeBindingCheck = Object.freeze({ kind: "BOUND" as const, ok: true as const });
+
+/**
+ * The one runtime-observation comparison. The activation authority asks it while
+ * revalidating a whole request, and the wrapper asks it again holding a prepared
+ * runtime; a second copy of this `!==` would keep answering after someone moved
+ * the first copy's code or layer, so there is exactly one.
+ *
+ * Digest strings only, compared exactly: a value that merely coerces to the
+ * expected digest is drift, and neither operand ever enters the refusal.
+ */
+export function refuseRuntimeObservationDrift(
+  expectedRuntimeObservationDigest: string,
+  observedRuntimeDigest: unknown,
+): Refusal | null {
+  if (observedRuntimeDigest === expectedRuntimeObservationDigest) return null;
+  return grantRefusal(
+    "PROVIDER_CAPABILITY_CHANGED",
+    "ACTIVATION",
+    "runtime observation digest does not match the quote",
+    "runtimeObservation",
+  );
+}
+
+/**
+ * The wrapper-side entry. A launcher holds the committed effect and the runtime
+ * it actually prepared, never a whole activation request, so it parses the
+ * intent here rather than reimplementing the comparison at its own layer.
+ */
+export function validateRuntimeBinding(
+  effectValue: unknown,
+  observedRuntimeDigest: unknown,
+): RuntimeBindingCheck {
+  const intent = parseEffectIntent(effectValue);
+  if (intent === null) {
+    return grantRefusal("EFFECT_INTENT_MALFORMED", "KERNEL", "effect intent does not parse");
+  }
+  return refuseRuntimeObservationDrift(intent.runtimeObservationDigest, observedRuntimeDigest)
+    ?? BOUND;
 }

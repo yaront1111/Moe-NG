@@ -8,6 +8,11 @@ import {
   type CommitCheck,
   type GrantOutcome,
 } from "./effect-activation.js";
+import {
+  refuseRuntimeObservationDrift,
+  validateRuntimeBinding,
+  type RuntimeBindingCheck,
+} from "./effect-grant.js";
 import { EFFECT_CALLER_CONTRACT } from "./effect-kernel.js";
 import { applyEffectCommand } from "./effect-lifecycle.js";
 import {
@@ -23,7 +28,7 @@ import {
   makeWitness,
 } from "./effect-test-fixtures.js";
 
-type AnyOutcome = ActivationOutcome | GrantOutcome | CommitCheck;
+type AnyOutcome = ActivationOutcome | GrantOutcome | CommitCheck | RuntimeBindingCheck;
 
 function refusal(outcome: AnyOutcome): { code: string; layer: string; leg: string | null } {
   if (outcome.kind !== "REFUSED") {
@@ -336,5 +341,90 @@ describe("redaction", () => {
   it("keeps the claim timestamp out of the refusal detail", () => {
     const outcome = activateEffect(makeActivationRequest({ lockIdentity: "lock-other" }));
     expect(JSON.stringify(outcome)).not.toContain(AT);
+  });
+});
+
+/**
+ * The wrapper enforces the same runtime binding the activation leg enforces, so
+ * the comparison is extracted rather than copied: one helper, two call sites. A
+ * second `!==` would drift silently the day either the code or the layer moved.
+ */
+describe("runtime observation binding", () => {
+  it("binds when the observed digest is the committed digest", () => {
+    expect(refuseRuntimeObservationDrift(DIGEST.runtime, DIGEST.runtime)).toBeNull();
+  });
+
+  it("refuses drift with the activation leg's own code, layer and leg", () => {
+    const outcome = refuseRuntimeObservationDrift(DIGEST.runtime, DIGEST.runtimeDrifted);
+    if (outcome === null) throw new Error("expected a runtime observation refusal");
+    expect(refusal(outcome)).toEqual({
+      code: "PROVIDER_CAPABILITY_CHANGED",
+      layer: "ACTIVATION",
+      leg: "runtimeObservation",
+    });
+  });
+
+  const NOT_THE_DIGEST: ReadonlyArray<{ readonly label: string; readonly observed: unknown }> = [
+    { label: "absent", observed: undefined },
+    { label: "null", observed: null },
+    { label: "a number", observed: 42 },
+    { label: "an array of the digest", observed: [DIGEST.runtime] },
+    {
+      label: "a value that merely coerces to the digest",
+      observed: { toString: () => DIGEST.runtime, valueOf: () => DIGEST.runtime },
+    },
+    { label: "one character different", observed: `${DIGEST.runtime.slice(0, -1)}f` },
+    { label: "the digest with trailing whitespace", observed: `${DIGEST.runtime} ` },
+  ];
+
+  it("generates a case for every near-miss the comparison must reject", () => {
+    expect(NOT_THE_DIGEST.length).toBe(7);
+    expect(NOT_THE_DIGEST.map((entry) => entry.label)).toEqual([
+      "absent", "null", "a number", "an array of the digest",
+      "a value that merely coerces to the digest", "one character different",
+      "the digest with trailing whitespace",
+    ]);
+  });
+
+  it.each(NOT_THE_DIGEST)("refuses when the observation is $label", ({ observed }) => {
+    const outcome = refuseRuntimeObservationDrift(DIGEST.runtime, observed);
+    if (outcome === null) throw new Error("expected a runtime observation refusal");
+    expect(refusal(outcome).code).toBe("PROVIDER_CAPABILITY_CHANGED");
+    expect(refusal(outcome).layer).toBe("ACTIVATION");
+  });
+
+  it("refuses an unparseable effect at the kernel before it can compare a digest", () => {
+    const seen = refusal(validateRuntimeBinding({ intentId: "intent-1" }, DIGEST.runtime));
+    expect(seen.code).toBe("EFFECT_INTENT_MALFORMED");
+    expect(seen.layer).toBe("KERNEL");
+    expect(seen.leg).toBeNull();
+  });
+
+  it("refuses a parseable intent whose committed runtime is not the prepared one", () => {
+    const seen = refusal(validateRuntimeBinding(makeIntent(), DIGEST.runtimeDrifted));
+    expect(seen.code).toBe("PROVIDER_CAPABILITY_CHANGED");
+    expect(seen.layer).toBe("ACTIVATION");
+    expect(seen.leg).toBe("runtimeObservation");
+  });
+
+  it("returns a frozen BOUND arm when the prepared runtime is the committed one", () => {
+    const bound: RuntimeBindingCheck = validateRuntimeBinding(
+      makeIntent({ runtimeObservationDigest: DIGEST.runtimeDrifted }),
+      DIGEST.runtimeDrifted,
+    );
+    expect(bound).toEqual({ kind: "BOUND", ok: true });
+    expect(Object.isFrozen(bound)).toBe(true);
+  });
+
+  it("never echoes either digest operand", () => {
+    const outcomes = [
+      refuseRuntimeObservationDrift(DIGEST.runtime, DIGEST.runtimeDrifted),
+      validateRuntimeBinding(makeIntent(), DIGEST.runtimeDrifted),
+    ];
+    for (const outcome of outcomes) {
+      const serialized = JSON.stringify(outcome);
+      expect(serialized).not.toContain(DIGEST.runtime);
+      expect(serialized).not.toContain(DIGEST.runtimeDrifted);
+    }
   });
 });

@@ -484,8 +484,8 @@ const HELD_DISPOSITION: Overrides = {
   reasons: ["WORK_CANCEL"], strongestReason: "WORK_CANCEL", terminalTarget: "CANCELLED",
 };
 
-function commitFixture(): ActivationCommit {
-  const activated: ActivationOutcome = runner.activateEffect(activationRequest());
+function commitFixture(overrides: Readonly<Record<string, unknown>> = {}): ActivationCommit {
+  const activated: ActivationOutcome = runner.activateEffect(activationRequest(overrides));
   if (activated.kind !== "ACTIVATED") throw new Error(codeOf(refusalOf(activated)));
   return activated.commit;
 }
@@ -497,8 +497,15 @@ function commitFixture(): ActivationCommit {
  */
 it("lets a root-only consumer construct and narrow the Claude launcher", async () => {
   expect(runner.CLAUDE_LAUNCH_ERROR_CODES).toContain("CLAUDE_LAUNCH_DEPENDENCY_THROWN");
-  const commit = commitFixture();
   const observation = observationFixture("CONTENT_ADDRESSED_COPY");
+  // The launcher binds the prepared runtime to the committed activation before
+  // it reaches the grant, so this commit has to name the runtime `prepareRuntime`
+  // reports below; otherwise that binding guard answers and the GRANT leg this
+  // test is about would never run.
+  const commit = commitFixture({
+    intent: { ...intentIn("ARMED"), runtimeObservationDigest: observation.observationDigest },
+    observedRuntimeDigest: observation.observationDigest,
+  });
   const lease: ClaudeLaunchLockLease = { release: async () => undefined };
   const lock: ClaudeLaunchLockResult = { ok: true, lease };
   const deps: ClaudeLauncherDependencies = {

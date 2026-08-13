@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { deepFreeze } from "../../canonical.js";
 import { openWindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
 import { resolveDuplicateDelivery } from "../../supervisor/duplicate-delivery.js";
-import { consumeActivationGrant, validateActivationCommit } from "../../supervisor/effect-grant.js";
+import { consumeActivationGrant, validateActivationCommit, validateRuntimeBinding,
+  type RuntimeBindingCheck } from "../../supervisor/effect-grant.js";
 import { registerLaunchLock } from "../../supervisor/launch-lock.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
@@ -55,6 +56,7 @@ const PHASE = Object.freeze({
   duplicate: "the duplicate-delivery authority did not answer usably",
   runtime: "runtime preparation did not answer usably",
   activation: "the activation-commit authority did not answer usably",
+  binding: "the prepared runtime is not the runtime this activation committed",
   grant: "the activation-grant authority did not answer usably",
   preflight: "durable launch-lock preflight did not answer usably",
   lock: "the OS-exclusive launch lock did not answer usably",
@@ -137,6 +139,20 @@ export async function launchClaude(
   if (commit.kind === "REFUSED") return directFailure(commit.code, commit.layer, PHASE.activation);
   if (commit.kind === "MALFORMED") {
     return directFailure("CLAUDE_LAUNCH_DEPENDENCY_THROWN", "ACTIVATION", PHASE.activation);
+  }
+  // A coherent activation for runtime A must not launch pinned runtime B. This
+  // is the supervisor's own comparison, not a launcher-local copy, so the code
+  // and layer pass through untranslated. The quoted digest is the operand: the
+  // fresh one covers the pinned closure and can never equal the quote. Direct
+  // import, so the throw containment every port already has is added here.
+  let bound: RuntimeBindingCheck;
+  try {
+    bound = validateRuntimeBinding(request.effect, runtime.value.quotedObservationDigest);
+  } catch {
+    return directFailure("CLAUDE_LAUNCH_DEPENDENCY_THROWN", "ACTIVATION", PHASE.binding);
+  }
+  if (bound.kind === "REFUSED") {
+    return directFailure(bound.failure.code, bound.failure.layer, PHASE.binding);
   }
   const grant = contained(
     () => ports.consumeGrant(request.grant, request.wrapperIdentity), decodeGrant);

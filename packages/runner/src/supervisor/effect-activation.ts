@@ -15,6 +15,7 @@ import {
   deriveGrantId,
   grantRefusal,
   initialGrantBinding,
+  refuseRuntimeObservationDrift,
 } from "./effect-grant.js";
 import {
   parseAttemptSlice,
@@ -209,14 +210,13 @@ function revalidate(request: ParsedRequest): ActivationOutcome | null {
     const message = "a dependency witness is not current";
     return refuse("ACTIVATION_DEPENDENCY_WITNESS_STALE", message, "dependencyWitness");
   }
-  // Digest strings only: the wrapper resolves the runtime closure and compares
-  // it to the quote-bound observation, so drift is a string inequality here and
-  // the concrete digests never enter the refusal (design 798).
-  if (request.observedRuntimeDigest !== intent.runtimeObservationDigest) {
-    const message = "runtime observation digest does not match the quote";
-    return refuse("PROVIDER_CAPABILITY_CHANGED", message, "runtimeObservation");
-  }
-  return null;
+  // Digest strings only, and the SAME comparison the wrapper makes once it has
+  // resolved the runtime closure: drift is one string inequality shared by both
+  // sites, and the concrete digests never enter the refusal (design 798).
+  return refuseRuntimeObservationDrift(
+    intent.runtimeObservationDigest,
+    request.observedRuntimeDigest,
+  );
 }
 
 export function activateEffect(requestValue: unknown): ActivationOutcome {

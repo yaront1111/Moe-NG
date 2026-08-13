@@ -14,9 +14,16 @@ import {
   type WindowsProcessOutcome,
   type WindowsProcessUnknown,
 } from "../../platform/windows/windows-process-contract.js";
-import { activateEffect } from "../../supervisor/effect-activation.js";
+import {
+  activateEffect,
+  type ActivationCommit,
+} from "../../supervisor/effect-activation.js";
 import { consumeActivationGrant, validateActivationCommit } from "../../supervisor/effect-grant.js";
-import { makeActivationRequest, makeClaim } from "../../supervisor/effect-test-fixtures.js";
+import {
+  makeActivationRequest,
+  makeClaim,
+  makeIntent,
+} from "../../supervisor/effect-test-fixtures.js";
 import { registerLaunchLock } from "../../supervisor/launch-lock.js";
 import { resolveDuplicateDelivery } from "../../supervisor/duplicate-delivery.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
@@ -40,45 +47,70 @@ export const PROCESS = Object.freeze({ pid: 4242, creationTime: 1343095155416927
 export const PROVEN: WindowsProcessOutcome = Object.freeze({
   truthClass: "PROVEN", identity: PROCESS, exitCode: 0,
 });
-const COMMIT_RESULT = activateEffect(makeActivationRequest());
-if (COMMIT_RESULT.kind !== "ACTIVATED") throw new Error("production activation fixture refused");
-export const COMMIT = COMMIT_RESULT.commit;
 export const CLAIM = makeClaim();
-
-let tempRoot = "";
-export let runtimeRequest: ClaudeRuntimePinRequest;
-export let prepared: PreparedClaudeRuntime;
 
 export const sha256 = (bytes: Uint8Array | string): string =>
   createHash("sha256").update(bytes).digest("hex");
 
-beforeAll(async () => {
-  tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-launcher-")));
-  const installedRoot = join(tempRoot, "Claude");
-  const executable = join(installedRoot, "claude.exe");
-  mkdirSync(installedRoot, { recursive: true });
-  writeFileSync(executable, "MZ-claude-launcher-test");
-  const observation = buildProviderRuntimeObservation({
-    resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: executable, sha256: sha256("MZ-claude-launcher-test") }],
+function activatedCommit(request: Record<string, unknown>, label: string): ActivationCommit {
+  const outcome = activateEffect(request);
+  if (outcome.kind !== "ACTIVATED") {
+    throw new Error(`production ${label} activation fixture refused: ${outcome.failure.code}`);
+  }
+  return outcome.commit;
+}
+
+/**
+ * The quote is built at module scope, not in `beforeAll`, so the activations
+ * derived from it stay module-scope constants: a consumer that reads
+ * `COMMIT.grant` while building its own module-scope fixture would otherwise see
+ * `undefined`. Only the async pin still needs the hook.
+ */
+const tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-launcher-")));
+const installedRoot = join(tempRoot, "Claude");
+const executable = join(installedRoot, "claude.exe");
+mkdirSync(installedRoot, { recursive: true });
+writeFileSync(executable, "MZ-claude-launcher-test");
+const QUOTE = buildProviderRuntimeObservation({
+  resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: executable, sha256: sha256("MZ-claude-launcher-test") }],
+  reportedVersion: "claude-cli/1.2.3",
+  adapterCapabilitySchemaDigest: canonicalDigest({ schema: "claude-capability/1" }),
+  pinningMethod: "CONTENT_ADDRESSED_COPY",
+  platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
+  clock: { observedAt: () => "2026-08-12T08:00:00.000Z" },
+});
+if (!QUOTE.ok) throw new Error(`production quote fixture refused: ${QUOTE.code}`);
+const QUOTED_DIGEST = QUOTE.observation.observationDigest;
+
+/** The activation whose committed intent names the runtime `prepared` really pins. */
+export const COMMIT = activatedCommit(makeActivationRequest({
+  intent: makeIntent({ runtimeObservationDigest: QUOTED_DIGEST }),
+  observedRuntimeDigest: QUOTED_DIGEST,
+}), "matched");
+
+/**
+ * A fully COHERENT activation that simply names a DIFFERENT runtime. Drift is
+ * expressed on the observed side, never by mutating the committed record: the
+ * grant id derives from the whole intent, so a tampered intent would be refused
+ * ACTIVATION_COMMIT_INCOHERENT first and the runtime guard would never run.
+ */
+export const DRIFTED_COMMIT = activatedCommit(makeActivationRequest(), "drifted");
+
+export const runtimeRequest: ClaudeRuntimePinRequest = {
+  quotedObservation: QUOTE.observation,
+  installedRoot,
+  pinRoot: join(tempRoot, "pins"),
+  fs: createNodeClaudeRuntimeFs(),
+  facts: { observe: async () => ({
+    platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
     reportedVersion: "claude-cli/1.2.3",
     adapterCapabilitySchemaDigest: canonicalDigest({ schema: "claude-capability/1" }),
-    pinningMethod: "CONTENT_ADDRESSED_COPY",
-    platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
-    clock: { observedAt: () => "2026-08-12T08:00:00.000Z" },
-  });
-  if (!observation.ok) throw new Error(`production quote fixture refused: ${observation.code}`);
-  runtimeRequest = {
-    quotedObservation: observation.observation,
-    installedRoot,
-    pinRoot: join(tempRoot, "pins"),
-    fs: createNodeClaudeRuntimeFs(),
-    facts: { observe: async () => ({
-      platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
-      reportedVersion: "claude-cli/1.2.3",
-      adapterCapabilitySchemaDigest: canonicalDigest({ schema: "claude-capability/1" }),
-    }) },
-    clock: { observedAt: () => "2026-08-12T08:00:01.000Z" },
-  };
+  }) },
+  clock: { observedAt: () => "2026-08-12T08:00:01.000Z" },
+};
+export let prepared: PreparedClaudeRuntime;
+
+beforeAll(async () => {
   const pinned = await prepareClaudeRuntimePin(runtimeRequest);
   if (!pinned.ok) throw new Error(`production runtime fixture refused: ${pinned.code}`);
   prepared = pinned;

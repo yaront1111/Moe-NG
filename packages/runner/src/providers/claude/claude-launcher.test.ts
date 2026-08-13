@@ -15,7 +15,7 @@ import {
 } from "./claude-launcher.js";
 import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import {
-  CLAIM, COMMIT, DIGEST, PROCESS, PROVEN, boundaryHarness, dependencies,
+  CLAIM, COMMIT, DIGEST, DRIFTED_COMMIT, PROCESS, PROVEN, boundaryHarness, dependencies,
   failureOf, prepared, request, runtimeRequest, sha256,
   type BoundaryHarness,
 } from "./claude-launcher-test-fixtures.js";
@@ -228,8 +228,11 @@ describe("Windows Claude launcher", () => {
       ["argv", { argv: hostileArgv }, (deps) => deps, "CLAUDE_LAUNCH_REQUEST_MALFORMED", "LAUNCHER"],
       ["environment", { environment: hostileEnvironment }, (deps) => deps, "CLAUDE_LAUNCH_REQUEST_MALFORMED", "LAUNCHER"],
       ["nested", { effect: hostileEffect }, (deps) => deps, "CLAUDE_LAUNCH_REQUEST_MALFORMED", "LAUNCHER"],
+      ["runtimeDrift", { effect: DRIFTED_COMMIT.intent, attempt: DRIFTED_COMMIT.attempt,
+        grant: DRIFTED_COMMIT.grant }, (deps) => deps, "PROVIDER_CAPABILITY_CHANGED", "ACTIVATION"],
     ];
-    expect(cases.length).toBe(8);
+    expect(cases.length).toBe(9);
+    expect(cases.map(([name]) => name)).toContain("runtimeDrift");
     let ran = 0;
     for (const [, overrides, alter, code, layer] of cases) {
       const log: string[] = [];
@@ -960,5 +963,101 @@ describe("Windows Claude launcher", () => {
       .toEqual({ kind: "OBSERVED", truthClass: "PROVEN", code: null });
     expect(harness.log).toEqual(["close"]);
     expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
+  });
+});
+
+/**
+ * A coherent activation for runtime A must not be able to launch pinned runtime
+ * B. The drifted fixture is a fully COHERENT activation that simply names a
+ * different runtime, so `validateCommit` has nothing to say about it and the
+ * refusal can only come from the binding guard.
+ */
+describe("the prepared runtime is bound to the committed activation", () => {
+  const encoded = (value: string): string => JSON.stringify(value).slice(1, -1);
+  const drifted = (): ClaudeLaunchRequest => request({
+    effect: DRIFTED_COMMIT.intent,
+    attempt: DRIFTED_COMMIT.attempt,
+    grant: DRIFTED_COMMIT.grant,
+  });
+
+  it("refuses a coherent activation that names a runtime the wrapper did not prepare", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(drifted(), { platform: "win32", deps: dependencies(boundary, log) });
+    expect(failureOf(result)).toEqual({ code: "PROVIDER_CAPABILITY_CHANGED", layer: "ACTIVATION" });
+    // Exact equality, never `not.toContain("open")`: this single assertion says
+    // the guard ran AFTER runtime preparation and validateCommit and BEFORE
+    // consume, the durable preflight, the OS lock and openBoundary.
+    expect(log).toEqual(["runtime", "validate"]);
+    expect(boundary.log).toEqual([]);
+    expect(boundary.requests).toEqual([]);
+  });
+
+  it("separates the two ACTIVATION refusals by code, because the layer cannot", async () => {
+    const drift = await launchClaude(drifted(),
+      { platform: "win32", deps: dependencies(boundaryHarness(), []) });
+    const incoherent = await launchClaude(
+      request({ attempt: { ...COMMIT.attempt, state: "LAUNCH_REQUESTED" } }),
+      { platform: "win32", deps: dependencies(boundaryHarness(), []) },
+    );
+    expect(failureOf(drift)).toEqual({ code: "PROVIDER_CAPABILITY_CHANGED", layer: "ACTIVATION" });
+    expect(failureOf(incoherent)).toEqual({ code: "ACTIVATION_COMMIT_INCOHERENT", layer: "ACTIVATION" });
+    expect(failureOf(drift).layer).toBe(failureOf(incoherent).layer);
+    expect(failureOf(drift).code).not.toBe(failureOf(incoherent).code);
+  });
+
+  it("echoes no runtime path, digest operand, grant id or bootstrap credential", async () => {
+    const result = await launchClaude(drifted(),
+      { platform: "win32", deps: dependencies(boundaryHarness(), []) });
+    const serialized = JSON.stringify(result);
+    const secrets: readonly string[] = [
+      prepared.executablePath, prepared.pinnedRoot, prepared.quotedObservationDigest,
+      prepared.freshObservationDigest, prepared.bindingDigest,
+      DRIFTED_COMMIT.intent.runtimeObservationDigest, DRIFTED_COMMIT.grant.grantId, DIGEST,
+    ];
+    expect(secrets).toHaveLength(8);
+    for (const secret of secrets) {
+      expect(secret.length).toBeGreaterThan(0);
+      expect(serialized).not.toContain(encoded(secret));
+    }
+  });
+
+  it("still launches when the committed runtime IS the prepared one", async () => {
+    expect(COMMIT.intent.runtimeObservationDigest).toBe(prepared.quotedObservationDigest);
+    expect(DRIFTED_COMMIT.intent.runtimeObservationDigest)
+      .not.toBe(prepared.quotedObservationDigest);
+    const log: string[] = [];
+    const boundary = boundaryHarness({ stdout: Buffer.from("alpha") });
+    const result = await launchClaude(request(), { platform: "win32", deps: dependencies(boundary, log) });
+    expect({ kind: result.kind, truthClass: result.truthClass, code: result.code })
+      .toEqual({ kind: "OBSERVED", truthClass: "PROVEN", code: null });
+    expect(log).toEqual([
+      "runtime", "validate", "consume", "register", "lock", "open", "register", "observe", "unlock",
+    ]);
+  });
+
+  /**
+   * Duplicate delivery returns before the runtime phase and opens no process, so
+   * a drifted commit must still adopt rather than be refused: there is nothing
+   * to bind a runtime to when no runtime was prepared.
+   */
+  it("leaves duplicate adoption untouched, because adoption prepares no runtime", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude({
+      ...drifted(),
+      duplicateDelivery: {
+        claim: CLAIM,
+        registration: {
+          lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
+          processIdentity: "windows:4242:134309515541692727",
+          bootstrapCredentialDigest: DIGEST, registeredAt: "2026-08-12T08:00:00.000Z",
+        },
+        lockState: "HELD", effectState: "ACTIVE",
+      },
+    }, { platform: "win32", deps: dependencies(boundary, log) });
+    expect(result.kind).toBe("ADOPTED");
+    expect(log).toEqual(["duplicate"]);
+    expect(boundary.log).toEqual([]);
   });
 });
