@@ -1,16 +1,11 @@
-import { WINDOWS_PROCESS_CODES, WINDOWS_PROCESS_LAYERS,
-  type WindowsProcessUnknown } from "../../platform/windows/windows-process-contract.js";
-import { type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
-import { type DuplicateDeliveryOutcome } from "../../supervisor/duplicate-delivery.js";
-import { type CommitCheck, type GrantOutcome } from "../../supervisor/effect-grant.js";
+import { WINDOWS_PROCESS_CODES,
+  WINDOWS_PROCESS_LAYERS } from "../../platform/windows/windows-process-contract.js";
 import { SUPERVISOR_ERROR_CODES, SUPERVISOR_LAYERS,
   type ActivationGrant } from "../../supervisor/effect-kernel.js";
-import { type LaunchLockOutcome, type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
-import { type ProcessObservationOutcome } from "../../supervisor/process-observation.js";
+import { type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
 import { CLAUDE_RUNTIME_PIN_ERROR_CODES,
   CLAUDE_RUNTIME_PIN_LAYER } from "./claude-runtime-pin-closure.js";
-import { type ClaudeRuntimePinRequest,
-  type ClaudeRuntimePinResult } from "./claude-runtime-pin.js";
+import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 
 export const CLAUDE_LAUNCHER_VERSION = "moe-claude-launcher/1" as const;
 const LOCAL_CODES = [
@@ -126,17 +121,23 @@ export interface ClaudeLaunchObserved {
   readonly observation: ClaudeLaunchObservation;
 }
 export type ClaudeLaunchResult = ClaudeLaunchFailure | ClaudeLaunchDuplicate | ClaudeLaunchObserved;
+/**
+ * EVERY port answers `unknown`. These are injected capabilities that may cross a
+ * process, a package or a test boundary, so a declared return type is a claim
+ * about someone else's code rather than a fact. Typing them honestly forces the
+ * launcher to decode before it branches — see `claude-launcher-port-results.ts`.
+ */
 export interface ClaudeLauncherDependencies {
-  prepareRuntime(request: ClaudeRuntimePinRequest): Promise<ClaudeRuntimePinResult>;
-  resolveDuplicate(value: unknown): DuplicateDeliveryOutcome;
-  validateCommit(effect: unknown, attempt: unknown, grant: unknown): CommitCheck;
-  consumeGrant(grant: unknown, wrapperIdentity: unknown): GrantOutcome;
-  acquireLock(lockIdentity: string): Promise<ClaudeLaunchLockResult>;
-  openBoundary(request: unknown, options?: { readonly timeoutMs?: number }): WindowsProcessBoundary | WindowsProcessUnknown;
-  registerLock(registration: unknown, claim: unknown, prior: unknown): LaunchLockOutcome;
-  observeProcess(exit: unknown, reconciliation: unknown): ProcessObservationOutcome;
-  now(): string;
-  delay(milliseconds: number, signal?: AbortSignal): Promise<void>;
+  prepareRuntime(request: ClaudeRuntimePinRequest): unknown;
+  resolveDuplicate(value: unknown): unknown;
+  validateCommit(effect: unknown, attempt: unknown, grant: unknown): unknown;
+  consumeGrant(grant: unknown, wrapperIdentity: unknown): unknown;
+  acquireLock(lockIdentity: string): unknown;
+  openBoundary(request: unknown, options?: { readonly timeoutMs?: number }): unknown;
+  registerLock(registration: unknown, claim: unknown, prior: unknown): unknown;
+  observeProcess(exit: unknown, reconciliation: unknown): unknown;
+  now(): unknown;
+  delay(milliseconds: number, signal?: AbortSignal): unknown;
 }
 export interface ClaudeLaunchOptions {
   readonly platform?: string;

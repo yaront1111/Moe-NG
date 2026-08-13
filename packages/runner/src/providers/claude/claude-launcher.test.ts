@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { openWindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
+import { openWindowsProcessBoundary,
+  type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
 import { type WindowsProcessOutcome, type WindowsProcessUnknown } from "../../platform/windows/windows-process-contract.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
@@ -16,6 +17,7 @@ import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import {
   CLAIM, COMMIT, DIGEST, PROCESS, PROVEN, boundaryHarness, dependencies,
   failureOf, prepared, request, runtimeRequest, sha256,
+  type BoundaryHarness,
 } from "./claude-launcher-test-fixtures.js";
 type ReflectionTrap = "ownKeys" | "getOwnPropertyDescriptor";
 interface TrapCounter { fired: number }
@@ -581,5 +583,382 @@ describe("Windows Claude launcher", () => {
       ran += 1;
     }
     expect(ran).toBe(cases.length);
+  });
+
+  const SECRET = "secret-token";
+  const PRE = ["runtime", "validate", "consume", "register", "lock"];
+  const OPENED = [...PRE, "open"];
+  type HostileVariant = "reflection" | "optimistic";
+  const HOSTILE_VARIANTS: readonly HostileVariant[] = ["reflection", "optimistic"];
+
+  function hostileFulfilled(
+    variant: HostileVariant, optimistic: Record<string, unknown>, counter: TrapCounter,
+  ): unknown {
+    if (variant === "optimistic") return optimistic;
+    const raise = (): never => { counter.fired += 1; throw new Error(`hostile ${SECRET}`); };
+    return new Proxy({ kind: "REGISTERED", ok: true, truthClass: "PROVEN", code: "DECOY" },
+      { getOwnPropertyDescriptor: raise, ownKeys: raise, has: raise, getPrototypeOf: raise });
+  }
+
+  function tracedHarness(
+    log: string[], options: Parameters<typeof boundaryHarness>[0] = {},
+  ): BoundaryHarness {
+    const harness = boundaryHarness(options);
+    const inner = harness.boundary;
+    return { log: harness.log, requests: harness.requests, trigger: harness.trigger,
+      boundary: { started: inner.started, completed: inner.completed,
+        providerStdin: inner.providerStdin, providerStdout: inner.providerStdout,
+        providerStderr: inner.providerStderr,
+        cancel: () => { log.push("cancel"); inner.cancel(); },
+        close: async () => { log.push("close"); return await inner.close(); } } };
+  }
+
+  interface SeamPlan {
+    readonly name: string;
+    readonly code: string;
+    readonly layer: string;
+    readonly trace: readonly string[];
+    readonly optimistic: Record<string, unknown>;
+    readonly overrides: Partial<ClaudeLaunchRequest>;
+    build(log: string[], hostile: unknown): {
+      readonly deps: ClaudeLauncherDependencies; readonly harness: BoundaryHarness;
+    };
+  }
+
+  type Alter = (base: ClaudeLauncherDependencies, log: string[], hostile: unknown) =>
+    Partial<ClaudeLauncherDependencies>;
+
+  const seam = (name: string, code: string, layer: string, trace: readonly string[],
+    optimistic: Record<string, unknown>, alter: Alter,
+    overrides: Partial<ClaudeLaunchRequest> = {}): SeamPlan => ({
+    name, code, layer, trace, optimistic, overrides,
+    build: (log, hostile) => {
+      const harness = tracedHarness(log);
+      const base = dependencies(harness, log);
+      return { harness, deps: { ...base, ...alter(base, log, hostile) } };
+    },
+  });
+
+  const lifecycleSeam = (name: string, code: string, layer: string, trace: readonly string[],
+    optimistic: Record<string, unknown>, key: "started" | "completed"): SeamPlan => ({
+    name, code, layer, trace, optimistic, overrides: {},
+    build: (log, hostile) => {
+      const harness = tracedHarness(log, { [key]: Promise.resolve(hostile) } as never);
+      return { harness, deps: dependencies(harness, log) };
+    },
+  });
+
+  const SEAMS: readonly SeamPlan[] = [
+    seam("resolveDuplicate", "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "LAUNCH_LOCK", ["duplicate"],
+      { kind: "ADOPTED", ok: true, processIdentity: "windows:4242:1" },
+      (_base, log, hostile) => ({ resolveDuplicate: () => { log.push("duplicate"); return hostile; } }),
+      { duplicateDelivery: { claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE" } }),
+    seam("prepareRuntime", "CLAUDE_LAUNCH_RUNTIME_THROWN", "RUNTIME", ["runtime"],
+      { ok: true, executablePath: "C:\\claude.exe" },
+      (_base, log, hostile) => ({ prepareRuntime: async () => { log.push("runtime"); return hostile; } })),
+    seam("validateCommit", "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "ACTIVATION", ["runtime", "validate"],
+      { kind: "COHERENT", ok: true },
+      (_base, log, hostile) => ({ validateCommit: () => { log.push("validate"); return hostile; } })),
+    seam("consumeGrant", "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "GRANT", ["runtime", "validate", "consume"],
+      { kind: "CONSUMED", ok: true, versionDelta: 1 },
+      (_base, log, hostile) => ({ consumeGrant: () => { log.push("consume"); return hostile; } })),
+    seam("preflightRegisterLock", "CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK",
+      ["runtime", "validate", "consume", "register"],
+      { kind: "REGISTERED", ok: true, registration: { lockIdentity: "drill" } },
+      (_base, log, hostile) => ({ registerLock: () => { log.push("register"); return hostile; } })),
+    seam("acquireLock", "CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", PRE, { ok: true },
+      (_base, log, hostile) => ({ acquireLock: async () => { log.push("lock"); return hostile; } })),
+    seam("openBoundary", "CLAUDE_LAUNCH_CLEANUP_UNKNOWN", "LAUNCHER", [...OPENED, "unlock"],
+      { truthClass: "UNKNOWN", code: "PROCESS_BOUNDARY_BROKER_EXITED" },
+      (base, _log, hostile) => ({ openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+        base.openBoundary(value, options); return hostile;
+      } })),
+    lifecycleSeam("boundary.started", "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER",
+      [...OPENED, "cancel", "close", "unlock"], { pid: 4242 }, "started"),
+    seam("postStartRegisterLock", "CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK",
+      [...OPENED, "register", "cancel", "close", "unlock"],
+      { kind: "REGISTERED", ok: true, registration: { lockIdentity: "drill" } },
+      (base, log, hostile) => {
+        let calls = 0;
+        return { registerLock: (registration: unknown, claim: unknown, prior: unknown) => {
+          calls += 1;
+          if (calls === 1) return base.registerLock(registration, claim, prior);
+          log.push("register"); return hostile;
+        } };
+      }),
+    lifecycleSeam("boundary.completed", "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER",
+      [...OPENED, "register", "cancel", "close", "unlock"],
+      { truthClass: "PROVEN", exitCode: 0 }, "completed"),
+    seam("boundary.close", "CLAUDE_LAUNCH_CLEANUP_UNKNOWN", "LAUNCHER",
+      [...OPENED, "register", "close", "unlock"],
+      { truthClass: "PROVEN", identity: { pid: 4242 }, exitCode: 0 },
+      (base, _log, hostile) => ({ openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+        const opened = base.openBoundary(value, options) as WindowsProcessBoundary;
+        return { started: opened.started, completed: opened.completed,
+          providerStdin: opened.providerStdin, providerStdout: opened.providerStdout,
+          providerStderr: opened.providerStderr, cancel: () => opened.cancel(),
+          close: async () => { await opened.close(); return hostile; } };
+      } })),
+    seam("observeProcess", "CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER",
+      [...OPENED, "register", "close", "observe", "unlock"],
+      { kind: "OBSERVED", ok: true, observation: {
+        processExit: { kind: "EXITED" }, proven: true, reconciliation: null } },
+      (_base, log, hostile) => ({ observeProcess: () => { log.push("observe"); return hostile; } })),
+  ];
+
+  it("returns one typed refusal for every hostile fulfilled dependency result", async () => {
+    // Positive control: the reflection variant really is armed, so a later
+    // "fired: 0" is production never reflecting rather than a dead counter.
+    const armed: TrapCounter = { fired: 0 };
+    expect(() => Object.keys(hostileFulfilled("reflection", {}, armed) as object)).toThrow();
+    expect(armed.fired).toBe(1);
+    expect(SEAMS.length).toBe(12);
+    const generated = SEAMS.flatMap((plan) => HOSTILE_VARIANTS.map((variant) => ({ plan, variant })));
+    expect(generated.length).toBe(24);
+    let executed = 0;
+    for (const { plan, variant } of generated) {
+      const label = `${plan.name}/${variant}`;
+      const counter: TrapCounter = { fired: 0 };
+      const log: string[] = [];
+      const hostile = hostileFulfilled(variant, plan.optimistic, counter);
+      const { deps, harness } = plan.build(log, hostile);
+      const settled = await Promise.allSettled([
+        launchClaude(request(plan.overrides), { platform: "win32", deps }),
+      ]);
+      expect({ label, status: settled[0]?.status }).toEqual({ label, status: "fulfilled" });
+      if (settled[0]?.status !== "fulfilled") throw new Error(`${label} rejected the public promise`);
+      const result = settled[0].value;
+      expect({ label, kind: result.kind, ok: result.ok, truthClass: result.truthClass,
+        code: result.code, layer: result.layer, frozen: Object.isFrozen(result) })
+        .toEqual({ label, kind: "REFUSED", ok: false, truthClass: "UNKNOWN",
+          code: plan.code, layer: plan.layer, frozen: true });
+      if (result.kind !== "REFUSED") throw new Error(`${label} was not refused`);
+      expect({ label, secret: result.message.includes(SECRET),
+        hostile: result.message.includes("hostile") }).toEqual({ label, secret: false, hostile: false });
+      expect({ label, trace: log, fired: counter.fired })
+        .toEqual({ label, trace: [...plan.trace], fired: 0 });
+      expect({ label, opened: harness.requests.length })
+        .toEqual({ label, opened: plan.trace.includes("open") ? 1 : 0 });
+      executed += 1;
+    }
+    expect(executed).toBe(24);
+  });
+
+  it("refuses a raw thenable and a rejected promise at every awaited port", async () => {
+    const thenableCalls = { fired: 0 };
+    const thenable = (value: unknown): unknown => ({
+      then: (resolve: (settled: unknown) => void) => { thenableCalls.fired += 1; resolve(value); },
+    });
+    const rejected = (): Promise<never> => {
+      const promise = Promise.reject(new Error(`port ${SECRET}`));
+      promise.catch(() => undefined);
+      return promise;
+    };
+    const lease = (log: string[], release: () => unknown): Partial<ClaudeLauncherDependencies> => ({
+      acquireLock: async () => { log.push("lock"); return { ok: true, lease: { release } }; },
+    });
+    const wrapBoundary = (base: ClaudeLauncherDependencies,
+      close: (opened: WindowsProcessBoundary) => unknown): Partial<ClaudeLauncherDependencies> => ({
+      openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+        const opened = base.openBoundary(value, options) as WindowsProcessBoundary;
+        return { started: opened.started, completed: opened.completed,
+          providerStdin: opened.providerStdin, providerStdout: opened.providerStdout,
+          providerStderr: opened.providerStderr, cancel: () => opened.cancel(),
+          close: () => close(opened) };
+      },
+    });
+    const ports: readonly {
+      readonly name: string; readonly code: string; readonly layer: string;
+      trace(mode: "thenable" | "rejected"): readonly string[];
+      build(log: string[], mode: "thenable" | "rejected"): {
+        readonly deps: ClaudeLauncherDependencies; readonly harness: BoundaryHarness;
+      };
+    }[] = [
+      { name: "prepareRuntime", code: "CLAUDE_LAUNCH_RUNTIME_THROWN", layer: "RUNTIME", trace: () => ["runtime"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log);
+          return { harness, deps: { ...dependencies(harness, log), prepareRuntime: () => {
+            log.push("runtime"); return mode === "thenable" ? thenable(prepared) : rejected();
+          } } };
+        } },
+      { name: "acquireLock", code: "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK", trace: () => PRE,
+        build: (log, mode) => {
+          const harness = tracedHarness(log);
+          return { harness, deps: { ...dependencies(harness, log), acquireLock: () => {
+            log.push("lock");
+            return mode === "thenable"
+              ? thenable({ ok: true, lease: { release: async () => undefined } }) : rejected();
+          } } };
+        } },
+      { name: "boundary.started", code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+        trace: () => [...OPENED, "cancel", "close", "unlock"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log,
+            { started: (mode === "thenable" ? thenable(PROCESS) : rejected()) as never });
+          return { harness, deps: dependencies(harness, log) };
+        } },
+      { name: "boundary.completed", code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+        trace: (mode) => mode === "thenable" ? [...OPENED, "cancel", "close", "unlock"]
+          : [...OPENED, "register", "cancel", "close", "observe", "unlock"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log,
+            { completed: (mode === "thenable" ? thenable(PROVEN) : rejected()) as never });
+          return { harness, deps: dependencies(harness, log) };
+        } },
+      { name: "boundary.close", code: "CLAUDE_LAUNCH_CLEANUP_UNKNOWN", layer: "LAUNCHER",
+        trace: () => [...OPENED, "register", "close", "unlock"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log);
+          const base = dependencies(harness, log);
+          return { harness, deps: { ...base, ...wrapBoundary(base, (opened) => {
+            void opened.close();
+            return mode === "thenable" ? thenable(PROVEN) : rejected();
+          }) } };
+        } },
+      { name: "delay", code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+        trace: () => [...OPENED, "register", "cancel", "close", "observe", "unlock"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log, { completed: new Promise(() => undefined) });
+          return { harness, deps: { ...dependencies(harness, log),
+            delay: () => (mode === "thenable" ? thenable(undefined) : rejected()) } };
+        } },
+      { name: "lease.release", code: "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
+        trace: () => [...OPENED, "register", "close", "observe", "unlock"],
+        build: (log, mode) => {
+          const harness = tracedHarness(log);
+          return { harness, deps: { ...dependencies(harness, log), ...lease(log, () => {
+            log.push("unlock");
+            return mode === "thenable" ? thenable(undefined) : rejected();
+          }) } };
+        } },
+    ];
+    expect(ports.length).toBe(7);
+    const generated = ports.flatMap((port) =>
+      (["thenable", "rejected"] as const).map((mode) => ({ port, mode })));
+    expect(generated.length).toBe(14);
+    let executed = 0;
+    for (const { port, mode } of generated) {
+      const label = `${port.name}/${mode}`;
+      const log: string[] = [];
+      const { deps } = port.build(log, mode);
+      const settled = await Promise.allSettled([launchClaude(request(), { platform: "win32", deps })]);
+      expect({ label, status: settled[0]?.status }).toEqual({ label, status: "fulfilled" });
+      if (settled[0]?.status !== "fulfilled") throw new Error(`${label} rejected the public promise`);
+      const result = settled[0].value;
+      expect({ label, code: result.code, layer: result.layer, truthClass: result.truthClass })
+        .toEqual({ label, code: port.code, layer: port.layer, truthClass: "UNKNOWN" });
+      expect({ label, secret: JSON.stringify(result).includes(SECRET) })
+        .toEqual({ label, secret: false });
+      expect({ label, trace: log }).toEqual({ label, trace: [...port.trace(mode)] });
+      executed += 1;
+    }
+    expect(executed).toBe(14);
+    expect(thenableCalls.fired).toBe(0);
+  });
+
+  it("contains hostile launch-option and dependency capability reflection", async () => {
+    const withGetter = <T extends object>(target: T, key: string, counter: TrapCounter): T => {
+      Object.defineProperty(target, key, { enumerable: true, configurable: true,
+        get: () => { counter.fired += 1; throw new Error(`entry ${SECRET}`); } });
+      return target;
+    };
+    const cases: readonly { readonly name: string;
+      build(counter: TrapCounter, deps: ClaudeLauncherDependencies): unknown }[] = [
+      { name: "options.platform",
+        build: (counter) => withGetter({ } as Record<string, unknown>, "platform", counter) },
+      { name: "options.signal",
+        build: (counter, deps) => withGetter({ platform: "win32", deps } as Record<string, unknown>,
+          "signal", counter) },
+      { name: "options.deps",
+        build: (counter) => withGetter({ platform: "win32" } as Record<string, unknown>, "deps", counter) },
+      { name: "deps.openBoundary",
+        build: (counter, deps) => ({ platform: "win32",
+          deps: withGetter({ ...deps } as unknown as Record<string, unknown>, "openBoundary", counter) }) },
+      { name: "deps.observeProcess-absent",
+        build: (_counter, deps) => ({ platform: "win32",
+          deps: { ...deps, observeProcess: undefined } }) },
+      { name: "options.signal-prototype-trap",
+        build: (counter, deps) => ({ platform: "win32", deps,
+          signal: new Proxy(new AbortController().signal, {
+            getPrototypeOf: () => { counter.fired += 1; throw new Error(`entry ${SECRET}`); } }) }) },
+    ];
+    expect(cases.length).toBe(6);
+    let executed = 0;
+    for (const item of cases) {
+      const counter: TrapCounter = { fired: 0 };
+      const log: string[] = [];
+      const harness = tracedHarness(log);
+      const settled = await Promise.allSettled([
+        launchClaude(request(), item.build(counter, dependencies(harness, log)) as never),
+      ]);
+      expect({ name: item.name, status: settled[0]?.status })
+        .toEqual({ name: item.name, status: "fulfilled" });
+      if (settled[0]?.status !== "fulfilled") throw new Error(`${item.name} rejected`);
+      const result = settled[0].value;
+      expect({ name: item.name, code: result.code, layer: result.layer, truthClass: result.truthClass })
+        .toEqual({ name: item.name, code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+          truthClass: "UNKNOWN" });
+      if (result.kind !== "REFUSED") throw new Error(`${item.name} was not refused`);
+      expect({ name: item.name, secret: result.message.includes(SECRET), fired: counter.fired,
+        trace: log }).toEqual({ name: item.name, secret: false, fired: 0, trace: [] });
+      executed += 1;
+    }
+    expect(executed).toBe(6);
+  });
+
+  it("keeps cleanup ownership when a boundary stream traps its prototype", async () => {
+    const counter: TrapCounter = { fired: 0 };
+    const raise = (): never => { counter.fired += 1; throw new Error(`stream ${SECRET}`); };
+    const log: string[] = [];
+    const harness = tracedHarness(log);
+    const base = dependencies(harness, log);
+    const deps = { ...base, openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+      const opened = base.openBoundary(value, options) as WindowsProcessBoundary;
+      return { started: opened.started, completed: opened.completed,
+        providerStdin: opened.providerStdin,
+        providerStdout: new Proxy(opened.providerStdout, { getPrototypeOf: raise }),
+        providerStderr: opened.providerStderr, cancel: () => opened.cancel(),
+        close: async () => await opened.close() };
+    } };
+    const settled = await Promise.allSettled([launchClaude(request(), { platform: "win32", deps })]);
+    expect(settled[0]?.status).toBe("fulfilled");
+    if (settled[0]?.status !== "fulfilled") throw new Error("a hostile stream rejected the promise");
+    const result = settled[0].value;
+    expect({ kind: result.kind, code: result.code, layer: result.layer, truthClass: result.truthClass })
+      .toEqual({ kind: "REFUSED", code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
+        truthClass: "UNKNOWN" });
+    expect(log).toEqual([...OPENED, "cancel", "close", "unlock"]);
+    expect(counter.fired).toBe(0);
+  });
+
+  it("accepts a class-shaped boundary whose cleanup lives on its prototype", async () => {
+    class PrototypeBoundary {
+      readonly started: WindowsProcessBoundary["started"];
+      readonly completed: WindowsProcessBoundary["completed"];
+      readonly providerStdin: WindowsProcessBoundary["providerStdin"];
+      readonly providerStdout: WindowsProcessBoundary["providerStdout"];
+      readonly providerStderr: WindowsProcessBoundary["providerStderr"];
+      private readonly inner: WindowsProcessBoundary;
+      constructor(inner: WindowsProcessBoundary) {
+        this.inner = inner;
+        this.started = inner.started;
+        this.completed = inner.completed;
+        this.providerStdin = inner.providerStdin;
+        this.providerStdout = inner.providerStdout;
+        this.providerStderr = inner.providerStderr;
+      }
+      cancel(): void { this.inner.cancel(); }
+      async close(): Promise<WindowsProcessOutcome> { return await this.inner.close(); }
+    }
+    const log: string[] = [];
+    const harness = boundaryHarness({ stdout: Buffer.from("alpha") });
+    const base = dependencies(harness, log);
+    const deps = { ...base, openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) =>
+      new PrototypeBoundary(base.openBoundary(value, options) as WindowsProcessBoundary) };
+    const result = await launchClaude(request(), { platform: "win32", deps });
+    expect({ kind: result.kind, truthClass: result.truthClass, code: result.code })
+      .toEqual({ kind: "OBSERVED", truthClass: "PROVEN", code: null });
+    expect(harness.log).toEqual(["close"]);
+    expect(log.filter((entry) => entry === "unlock")).toHaveLength(1);
   });
 });
