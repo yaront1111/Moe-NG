@@ -1294,3 +1294,126 @@ it("lists a real directory through the published node artifact port", () => {
   expect(entries.find((entry) => entry.name === "scope")?.kind).toBe("DIRECTORY");
   expect(kinds.filter((kind) => !["FILE", "DIRECTORY", "OTHER"].includes(kind))).toEqual([]);
 });
+
+/**
+ * The recovery-inventory registration seam, composed ONLY through the root.
+ *
+ * Every annotation below is a published type doing real work: if the surface
+ * under-publishes one leaf of a factory's argument, this file stops compiling,
+ * which is the failure a downstream daemon would otherwise hit in its own repo.
+ * The enumeration behaviour of each adapter is proven against real ports in
+ * `recovery-inventory/inventory-registration.test.ts`; what is proven here is
+ * that a consumer holding nothing but `@moe/runner` can BUILD all four.
+ */
+const INVENTORY_CLOCK: ObservationClock = { observedAt: () => "2026-08-08T00:00:00.000Z" };
+const INVENTORY_PLATFORM: PlatformIdentity = { os: "windows", arch: "x64", osVersion: "10.0" };
+
+const CLAUDE_REPORT: ClaudeProbeReport = {
+  resolvedRuntimeClosure: [] as readonly RuntimeClosureEntry[],
+  reportedVersion: "v1",
+  schemaVersion: null,
+  pinningMethod: "UNSUPPORTED" satisfies RuntimePinningMethod,
+  structuredSample: null satisfies ClaudeStructuredSample | null,
+  rawSampleBase64: null,
+  cancelObservation: null satisfies ClaudeCancelObservation | null,
+  processTreeObservation: { childrenBefore: 2, childrenAfter: 0 } satisfies
+    ClaudeProcessTreeObservation,
+  runEnumeration: { enumeratedRunIds: ["run-a"], provenAbsentRunId: "run-z" } satisfies
+    ClaudeRunEnumerationObservation,
+  tokenizer: null satisfies ClaudeTokenizerObservation | null,
+  declaredContextLimit: null,
+  helpText: null,
+  resumeClaim: null,
+};
+
+const CODEX_REPORT: CodexProbeReport = {
+  resolvedRuntimeClosure: [],
+  reportedVersion: "v1",
+  schemaVersion: null,
+  pinningMethod: "UNSUPPORTED",
+  structuredSample: null satisfies CodexStructuredSample | null,
+  rawSampleBase64: null,
+  cancelObservation: null satisfies CodexCancelObservation | null,
+  cwdObservation: null satisfies CodexCwdObservation | null,
+  processTreeObservation: { childrenBefore: 2, childrenAfter: 0 } satisfies
+    CodexProcessTreeObservation,
+  runEnumeration: { enumeratedRunIds: ["run-a"], provenAbsentRunId: "run-z" } satisfies
+    CodexRunEnumerationObservation,
+  tokenizer: null satisfies CodexTokenizerObservation | null,
+  declaredContextLimit: null satisfies CodexContextLimit | null,
+  helpText: null,
+  resumeClaim: null,
+};
+
+function rootProviderInput(): ProviderLockInventoryInput {
+  const claudePort: ClaudeProbePort = { report: () => CLAUDE_REPORT };
+  const codexPort: CodexProbePort = { report: () => CODEX_REPORT };
+  const claude: ProbeClaudeRuntimeInput =
+    { port: claudePort, clock: INVENTORY_CLOCK, platformIdentity: INVENTORY_PLATFORM };
+  const codex: ProbeCodexRuntimeInput =
+    { port: codexPort, clock: INVENTORY_CLOCK, platformIdentity: INVENTORY_PLATFORM };
+  const processRecords: readonly ProviderProcessRecord[] =
+    [{ processIdentity: "pid-1", exit: { kind: "EXITED", code: 0 }, reconciliation: null }];
+  const port: ProviderLockInventoryPort = {
+    governingClaim: () => CLAIM_RECORD,
+    launchLockRecords: () => [],
+    processRecords: () => processRecords,
+  };
+  return { port, claude, codex, clock: INVENTORY_CLOCK };
+}
+
+function rootWorkspaceInput(): WorkspaceInventoryInput {
+  const result: WorkspaceInventoryResultAspect | null = null;
+  const source: WorkspaceInventorySource = {
+    workspaceRef: "ws/alpha", baseIdentity: "1".repeat(40), rootPath: SRC_DIR,
+    producer: { kind: "BASE" }, result,
+  };
+  const listing: WorkspaceInventoryListing = { workspaces: [source], listingComplete: true };
+  const port: WorkspaceInventoryPort = { list: () => listing };
+  return { port, clock: INVENTORY_CLOCK };
+}
+
+it("publishes the whole construction closure of the four registration factories", () => {
+  const git: GitIntegrationInventoryInput = {
+    observer: {} as unknown as GitObserver, clock: INVENTORY_CLOCK,
+  };
+  const artifact: ArtifactObjectInventoryInput = {
+    store: {} as unknown as ArtifactStore, clock: INVENTORY_CLOCK,
+  };
+  const registrations: readonly RecoveryInventoryRegistration[] = [
+    runner.providerLockInventoryRegistration(rootProviderInput()),
+    runner.workspaceInventoryRegistration(rootWorkspaceInput()),
+    runner.gitIntegrationInventoryRegistration(git),
+    runner.artifactObjectInventoryRegistration(artifact),
+  ];
+
+  // Exact classes in exact vocabulary order, four of them, all distinct: a
+  // surface that aliased one factory to another would produce a duplicate here
+  // rather than merely resolving four symbols.
+  const classes = registrations.map((registration) => registration.class);
+  expect(classes).toEqual([...runner.RECOVERY_INVENTORY_CLASSES]);
+  expect(new Set(classes).size).toBe(4);
+  expect(registrations.every((registration) => Object.isFrozen(registration))).toBe(true);
+
+  // The two refusal shapes a consumer reads back are nameable through the root
+  // too, so a caller can branch on the code its adapter reported.
+  const gitRefusal: GitIntegrationRefusal =
+    { code: "RUNNER_SCOPE_OBSERVATION_FAILED", layer: "GIT_OBSERVER" };
+  const gitReading: GitIntegrationInventoryReading =
+    { reading: { status: "UNAVAILABLE" }, refusal: gitRefusal };
+  const artifactReading: ArtifactObjectInventoryReading =
+    { reading: { status: "UNAVAILABLE" }, refusal: null };
+  expect([gitReading.refusal?.code, gitReading.refusal?.layer, artifactReading.refusal])
+    .toEqual(["RUNNER_SCOPE_OBSERVATION_FAILED", "GIT_OBSERVER", null]);
+});
+
+/** Negative control: the per-class readers and versions stay off the surface. */
+it("keeps the recovery-inventory enumerators and version constants unpublished", () => {
+  const withheld = [
+    "enumerateProviderLockInventory", "enumerateWorkspaceInventory",
+    "enumerateGitIntegrationInventory", "enumerateArtifactObjectInventory",
+    "PROVIDER_LOCK_INVENTORY_VERSION", "WORKSPACE_INVENTORY_VERSION",
+    "GIT_INTEGRATION_INVENTORY_VERSION", "ARTIFACT_OBJECT_INVENTORY_VERSION",
+  ];
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+});
