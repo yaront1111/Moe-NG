@@ -16,9 +16,87 @@
     "Preserve foreign work and stage/commit only explicit owned paths; target <=250 lines for the new production module and split before 400.",
     "Use LF one-line runtime bridges and public package roots across package boundaries."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a9210e34",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the implementation base and pre-change evidence before editing: confirm the six owned paths below are clean/absent as expected, save physical line counts and the design hash, grep the registry/service/caller graph, verify apps/daemon declares @moe/contracts and @moe/store in package.json plus both importer edges in pnpm-lock.yaml, and rerun a temporary in-package compiled bare-import probe for those two public roots, deleting it in the same command. Run and retain the pre-change daemon package and repo-wide gate outputs/failing-path sets for later path-attributed comparison; do not touch foreign work-claim WIP.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Base recorded at HEAD 1e8043f5. Owned paths clean; daemon-command-registry.{ts,js,test.ts} absent. Line counts: daemon-store-dependencies.ts 397, its test 240, runtime-entrypoint.test.ts 212, agent-wrapper.ts 265. Design SHA-256 matches 1D9D1EC9...383191. Sole agentCapabilitiesFor consumer is orchestrator/agent-wrapper.ts via ./daemon-store-dependencies.js. apps/daemon/package.json declares @moe/contracts and @moe/store; pnpm-lock.yaml apps/daemon importer carries both; temporary in-package bare-root probe (zz-bare-import-probe.ts importing JsonObject + DurableStoreError/IdempotencyConflictError/SqliteEventStore) typechecked exit 0 and was deleted in the same command. Baseline gates ALL GREEN: daemon typecheck 0, daemon test 65 files/1112 tests 0, root typecheck 0, root test 248 files/5386 passed 1 skipped 0 - so the pre-change failing-path set is empty. Live ingress probe measured exactly 20 registered kinds with capability/payload-key/DISPATCH code+layer table (all 422 PORT_REFUSED: BOOTSTRAP_PREREQUISITE_MISSING/DAEMON_PREREQUISITE, BOOTSTRAP_PAYLOAD_INVALID+REVIEW/SESSION/WORK_CLAIM_PAYLOAD_INVALID/DAEMON_INGRESS).",
+      "startedAt": "2026-08-13T22:28:11.862Z",
+      "completedAt": "2026-08-13T22:31:12.955Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: create a focused production-ingress characterization suite driven through `handleCommandRequest(createStoreDependencies(...).provide())`, not through reimplemented helper policy. Hand-transcribe all 20 current rows with exact command kind, required capability, ordered payload allow-list, and the measured empty-payload DISPATCH refusal code/layer; assert the table count is exactly 20 and exact set equality. For every row, use the real operator path with `{smuggled:true}` to pin INPUT_INVALID/PAYLOAD_SHAPE before dispatch and empty payload to pin the family handler's exact DISPATCH code/layer; add real-session authorization cases that distinguish correct capability (reaches PAYLOAD_SHAPE) from missing capability (CAPABILITY_DENIED/AUTHORIZE), with zero durable decision growth on both. Pin `agentCapabilitiesFor` through its old daemon-store-dependencies.js compatibility import for all 20 kinds, node.deliver, unknown, ordered values, and frozen arrays. Add focused tests for server-injected project/principal/time/kind/schema fields, representative bootstrap/review/session/work routing, DomainRefusal status/code/layer, changed-byte idempotency conflict at 409/DURABLE_STORE with no duplicate effect, identical replay, and fresh-handle replay. Run only this new test to show the missing module/factory causes red before production extraction.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "startedAt": "2026-08-13T22:33:26.773Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create daemon-command-registry.ts as the single focused registry/decision unit, targeting <=250 physical lines. Move—not duplicate—the five capability constants, bootstrap/review/session/work family maps, 20 ordered payload allow-lists, operator capability set, agentCapabilitiesFor, request encoding/injection, merged BOOTSTRAP_HANDLERS+GOAL_HANDLERS+PLANNING_HANDLERS table, family/schema/handler selection, frozen CommandRegistryEntry construction and registry assembly, DomainRefusal/decision conversion, and exact decision-port refusal translation. Export only `agentCapabilitiesFor`, the frozen operator capability value needed by authentication, and `createDaemonCommandPorts(options)` (with compact options/result types) accepting the concrete public-root SqliteEventStore, projectId, and clock and returning frozen `{decisions, registry}`. Preserve every literal, order, mapping, status, layer, replay path, and unknown-error throw; add no effect.activate behavior or new command.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Refactor daemon-store-dependencies.ts to import the extracted factory/operator capabilities, re-export `agentCapabilitiesFor` through the established `./daemon-store-dependencies.js` surface, and call `createDaemonCommandPorts({clock, projectId: config.projectId, store})` exactly once before composing the unchanged authenticator with the returned decisions/registry. Remove the moved imports and bytes rather than leaving duplicate policy. Keep createStoreDependencies, config/env parsing, store lifecycle, subscriptions, affordances, document dossiers, restore, source-entry default provider, and all callers unchanged; verify the host is below 300 physical lines and neither changed production file reaches 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Add the authoritative runtime bridge with byte-exact one-line LF content `export * from \"./daemon-command-registry.ts\";\\n`. Extend the existing provider regression test with a Windows-safe real child-Node smoke using promisified execFile/process.execPath, `--experimental-strip-types --input-type=module`, shell disabled, windowsHide, bounded timeout/buffer, package cwd, and a unique temporary SQLite path. In the child, install the required production recovery binding, import the default from daemon-store-dependencies.ts (not its export-star bridge), call provide(), traverse its dependency on the new .js bridge, dispatch and replay a valid project.register through production handleCommandRequest, and print a bounded JSON report. Assert exact provider/dependency method shapes, exact 20-entry registry count plus representative project.register capability/payload/handler, exact DECIDED then REPLAYED decision identity/result, and always remove the temp directory only after child exit so Windows handles are closed. Leave runtime-entrypoint.test.ts untouched; its existing generated sweep must discover and byte-check this bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-registry.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single final verification gate in the foreground and record fresh output/exit status: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/daemon exec node --experimental-strip-types --input-type=module -e \"const m=await import('./src/daemon-store-dependencies.ts'); if(typeof m.default?.provide!=='function') process.exit(1); process.stdout.write('DEFAULT_PROVIDER_OK')\" && pnpm typecheck && pnpm test`. Compare repo-wide failures against the stored base and require no new failing path intersecting the six owned paths; report unchanged foreign red verbatim rather than fabricating green. Confirm daemon-store-dependencies.ts <300, daemon-command-registry.ts <=250 target and <400 hard cap, and exact LF bridge bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Perform the final adversarial review over the owned diff: check exact 20-kind equality, family/schema precedence, request-injection trust boundary, capability-before-payload ordering, replay/idempotency semantics, frozen return values, unexpected-error propagation, import cycles, default-source entry versus named bridge behavior, Windows child cleanup/timeouts, and absence of effect.activate or unrelated policy. Temporarily mutate one production required-capability mapping and one ordered payload allow-list entry separately; for each, prove the named production-ingress characterization test turns red with the exact expected code/stage/layer or row mismatch, then reverse the exact edit and verify original hashes/gates. Inspect `git status --porcelain`; commit only explicit owned pathspecs, never a bare commit, and verify `git show --stat` contains no foreign paths. Submit for QA; if rejected, reproduce the exact production-surface claim, add a red regression, fix only owned paths, and repeat the final gate/review.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-733c82bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -49,16 +127,45 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T22:18:35.865Z",
+  "updatedAt": "2026-08-13T22:33:26.773Z",
   "metrics": {
-    "firstClaimAt": "2026-08-13T21:24:38.683Z"
+    "firstClaimAt": "2026-08-13T21:24:38.683Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-a9210e34",
-    "governor-773e2f5e"
+    "governor-773e2f5e",
+    "worker-733c82bb"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-13T22:27:28.602Z",
+  "planningNotes": {
+    "approachesConsidered": "Use one focused daemon-local factory `createDaemonCommandPorts({clock, projectId, store})` that owns the complete existing registry plus decision adapter and returns frozen `{decisions, registry}`; keep `createStoreDependencies` responsible for opening/closing the store, authentication, subscriptions, affordances, dossiers, restore, and the default provider. This removes roughly 207 lines from the 397-line host and projects it near 200 lines while keeping the new module near 235 lines. Rejected splitting capability maps from dispatch/decision construction because the downstream effect.activate consumer needs one coherent extension seam and two new production modules would add coordination without a distinct responsibility. Rejected a structural store port because all four current service families already require the concrete public SqliteEventStore. Rejected moving agent-wrapper to the new module: a compatibility re-export from daemon-store-dependencies preserves its established import. Rejected publishing the seam from @moe/daemon root or registering effect.activate because both broaden this behavior-preserving task. Human-approved prop-f0c3baf26d1c441c99f4f53018e53f65 makes the existing double-quoted LF bridge contract authoritative; no existing bridge/test migration is allowed.",
+    "codebaseInsights": "Fresh remeasurement: live HEAD advanced from 0371ead86fc0355a4929a04564296e9cfba573db to 1e8043f555dd2db2171012ea28ed0a74865008b4, but their diff over every relevant registry/store/runtime/agent path is empty. The relevant paths are clean; daemon-command-registry.{ts,js,test.ts} are absent. daemon-store-dependencies.ts is exactly 397 lines, its existing test 240, runtime-entrypoint.test.ts 212, and agent-wrapper.ts 265. Design SHA-256 is exactly 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. The extractable regions are capabilities/family/payload/operator maps at physical lines 43-134, DomainRefusal/decision/refusal at 191-229, and request injection/handler table/entry/registry/decision construction at 243-317. Sole production agentCapabilitiesFor caller is orchestrator/agent-wrapper.ts through daemon-store-dependencies.js. createStoreDependencies production callers are mcp-main.ts, orchestrator/agent-wrapper-main.ts, and its own default provider. No imported service/http module imports daemon-store-dependencies, so the new leaf has no cycle. apps/daemon/package.json declares @moe/contracts and @moe/store, pnpm-lock.yaml's apps/daemon importer contains both, and a temporary in-package TypeScript 7 `--ignoreConfig --target ES2024` probe importing JsonObject plus DurableStoreError/IdempotencyConflictError/SqliteEventStore from their bare roots exited 0 and was deleted. A live production ingress probe measured exactly 20 registered commands; operator-authenticated empty payload reached DISPATCH for all 20, all refused, with exact family codes/layers now available for characterization. The generic runtime bridge sweep already auto-discovers the new runtime module.",
+    "risks": "This is exact-behavior extraction: preserve all 20 kinds, ordered payload key arrays, required capabilities, family/schema selection, bootstrap handler-table merge, server-injected commandId/correlationId/decidedAt/expectedVersion/kind/payload/principalId/projectId/schemaVersion, DomainRefusal 422 mapping with exact code/layer/detail, idempotency 409 DURABLE_STORE mapping, DurableStoreError 503 DURABLE_STORE mapping, unexpected-error rethrow, and durable replay. Characterization expectations must be hand-transcribed rather than generated from production maps and must assert a positive count. For capability tests, a smuggled key plus correct capability must reach INPUT_INVALID/PAYLOAD_SHAPE; missing capability must remain CAPABILITY_DENIED/AUTHORIZE, so tests identify the refusing layer. The real default export is on daemon-store-dependencies.ts; export-star .js bridges do not forward default. A child smoke must import the .ts entry under Node strip-types, while that entry imports the new .js bridge, use execFile with shell disabled/windowsHide, wait for child completion, and clean its temp SQLite directory only after handles exit. The authoritative new bridge is exact bytes `export * from \"./daemon-command-registry.ts\";\\n`; never touch runtime-entrypoint.test.ts or existing bridges. Preserve foreign work in work-claim files.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-registry.js",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-13T22:27:51.953Z",
+    "escalatedAt": "2026-08-13T22:27:51.953Z"
+  },
+  "planApprovedAt": "2026-08-13T22:27:30.656Z",
+  "workStartedAt": "2026-08-13T22:28:11.862Z"
 }

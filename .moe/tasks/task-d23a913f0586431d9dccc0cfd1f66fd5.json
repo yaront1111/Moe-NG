@@ -1,0 +1,34 @@
+{
+  "id": "task-d23a913f0586431d9dccc0cfd1f66fd5",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Bind Claude model and effort launch selection",
+  "description": "Objective: make the real Claude launcher prove which provider/model/effort/profile/config selection it actually launches. Deliverable: an exact launch-selection contract and pre-open verifier composed into ClaudeLaunchRequest snapshotting and launchClaude so selectedModelId, dated snapshot/build evidence, reasoning effort, profile revision, configuration/policy/orchestration digests, and concurrency ceiling cannot disagree with argv or be supplied only after the run. Consumer: task-159f4c21ef9149e8a65f24735c9c1475. NOT in scope: parsing provider result usage, benchmark records, daemon dispatch, pricing, or treating runtime version/profileRevisionId as model evidence. Owned paths: focused packages/runner/src/providers/claude selection module/bridge/tests and minimal claude-launcher contract/input/entry wiring. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "ClaudeLaunchRequest snapshot carries an exact frozen launch selection distinct from runtime/profile facts, including provider, selected model ID, explicit snapshot/build evidence or UNKNOWN, reasoning effort, profile revision, configuration/policy/orchestration digests, and a positive concurrency ceiling.",
+    "Before runtime preparation, grant consumption, lock acquisition, or boundary open, production launchClaude verifies a unique exact argv model/effort selection against the snapshotted contract; duplicate, missing, alias-only, accessor/proxy, or conflicting evidence refuses with a stable exact TELEMETRY_CONFIGURATION code/layer and zero downstream effect.",
+    "Runtime reportedVersion/closure and profileRevisionId remain separately bound and can never satisfy model snapshot/build or reasoning-effort fields; dated exact model evidence is preserved while unavailable snapshot evidence is explicit UNKNOWN.",
+    "Focused production-path tests assert every selection evidence arm has non-zero exact cardinality, pin code/layer and downstream cutoffs, and mutation-check model and effort comparisons independently.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "Do not infer model or effort solely from caller telemetry, environment defaults, settings aliases, runtime reportedVersion, or profileRevisionId.",
+    "Selection validation happens before provider/open authority and never echoes argv secrets in refusals.",
+    "Do not grow claude-launcher-lifecycle.ts or claude-launcher-port-results.ts; both are already at the 250-line target.",
+    "Consumer task is task-159f4c21ef9149e8a65f24735c9c1475."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Independent measured prerequisite: the landed Claude launcher lacks an exact pre-open model/effort selection binding. Plan the focused runner contract/composition without parsing result usage or expanding daemon scope.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.602,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:23:51.900Z",
+  "updatedAt": "2026-08-13T22:30:16.083Z"
+}

@@ -1,0 +1,42 @@
+{
+  "id": "task-8e3076177f87458f934a776eca68ba16",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Normalize and persist provider run telemetry",
+  "description": "Objective: compose raw production provider telemetry with the landed scheduler usage authority at the daemon boundary that can depend on both packages. Deliverable: a focused daemon telemetry adapter/codec/ledger that consumes @moe/runner launch telemetry, runs every usage envelope through @moe/scheduler normalizeUsageMeasurement, preserves upstream versus scheduler refusal provenance, and commits one immutable digest-bound provider-run record for downstream benchmark reads. Hard dependencies: task-5fa25bb33e974f04865b46f9fa0f3910 and task-cbc42f3383444c05a20c6bf56129e8c8; production dispatch consumer is task-6cbff01023b14b26a78fc5e3eb1dd8a9. NOT in scope: launching providers, benchmark statistics, pricing comparison, confirmatory corpus, or claims. Owned paths: focused apps/daemon/src/telemetry/** production/test modules; use existing SqliteEventStore event/decision APIs and no new schema. Verification: pnpm --filter @moe/runner test && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "Daemon composition imports only @moe/runner and @moe/scheduler public roots, validates one raw launch-bound telemetry handoff, and delegates every usage envelope in original provider sequence to production normalizeUsageMeasurement without copying its source/coverage matrix.",
+    "One frozen canonical provider-run record binds run/effect/attempt, selected and provider-observed model evidence, effort, runtime/profile identities, wall/monotonic timestamps, exact terminal/infra/count/concurrency facts, normalized usage rows, cost-basis metadata, raw receipt digests, and a record digest.",
+    "UNKNOWN usage retains quantity null and exact upstream code/layer; PARTIAL retains its measured lower bound; scheduler CONTRACT/MEASUREMENT failures preserve their exact code/layer separately and no client-estimated Claude cost becomes ACTUAL_BILLED.",
+    "Existing SqliteEventStore decision/event APIs durably commit exactly one content-bound record; replay is idempotent, changed-byte replay/conflict fails closed, malformed/truncated/digest-mismatched reads return a stable telemetry unreadable code/layer, and no bespoke SQLite schema is added.",
+    "Focused real-store tests cover COMPLETE/PARTIAL/UNKNOWN, every declared source with exact non-zero cardinality, lost-ack/reopen and conflict behavior, and mutation-check production coverage plus model/effort bindings.",
+    "Fresh pnpm --filter @moe/runner test && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "Daemon is the direction-safe composition boundary; runner must not depend on scheduler and tests must not inject a fake normalizer.",
+    "Preserve upstream provider reason code/layer separately from scheduler CONTRACT/MEASUREMENT code/layer; do not flatten or invent a pass.",
+    "No new store schema/table; use public event/decision transactions and strict canonical bytes.",
+    "This task lands the durable composition surface; task-6cbff01023b14b26a78fc5e3eb1dd8a9 remains the real live dispatch consumer and must be named in the handoff."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.604,
+  "comments": [
+    {
+      "id": "comment-5eaa7d44c4b34477adea1573d601b312",
+      "author": "agent",
+      "content": "Governance sequencing guard: remain BACKLOG until task-5fa25bb and task-cbc42f are QA-approved DONE. Then promote to PLANNING and re-measure both public roots; do not copy either authority into daemon.",
+      "timestamp": "2026-08-13T22:30:29.907Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:24:26.165Z",
+  "updatedAt": "2026-08-13T22:30:29.907Z"
+}

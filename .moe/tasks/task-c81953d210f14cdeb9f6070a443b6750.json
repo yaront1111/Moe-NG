@@ -20,31 +20,40 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE, DO NOT WRITE. HEAD moves under this shared worktree, so confirm the four facts the plan rests on before editing: (a) `grep -rn \"createClaudeLauncher\\|consumeGrantDurably\\|commitProcessRegistration\" packages/runner/src` still returns zero hits; (b) PORT_KEYS in claude-launcher-port-results.ts still has exactly the ten entries and `snapshotLauncherPorts` still requires all of them; (c) claude-launcher.ts still selects `entry.deps ?? defaults` and still builds the preflight identity as `pending:${wrapperIdentity}`, and claude-launcher-lifecycle.ts still builds `windows:${pid}:${creationTime}` in BOTH `startAndRegister` and `bindObservation`; (d) `grep -c ''` on claude-launcher.ts, claude-launcher-lifecycle.ts, claude-launcher-contract.ts and claude-launcher-port-results.ts to record the pre-change physical line counts you must stay under. Record the four results in the step note. If (a) is no longer zero, STOP and report_blocked rather than landing a duplicate.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-lifecycle.ts"
       ],
-      "startedAt": "2026-08-13T22:23:34.455Z"
+      "note": "RE-MEASURED at HEAD f961d9c (moved from architect's 0371ead; task-f6cf8d16 recovery-inventory commit landed in between, untouched by this task's paths).\n\n(a) DUPLICATE CHECK — GAP STILL OPEN. `grep -rn \"createClaudeLauncher\\|consumeGrantDurably\\|commitProcessRegistration\" packages/runner/src apps` -> ZERO hits. Nothing to duplicate; proceeding.\n\n(b) PORT_KEYS UNCHANGED — claude-launcher-port-results.ts:44-45 still exactly ten entries: prepareRuntime, resolveDuplicate, validateCommit, consumeGrant, acquireLock, openBoundary, registerLock, observeProcess, now, delay. `snapshotLauncherPorts` (line 114-122) still loops every key and `return null` on the first `readCapability` miss — so adding a key would break every existing full-deps caller. Overlay-into-existing-slots plan holds.\n\n(c) SEAM SHAPE UNCHANGED — claude-launcher.ts:31 `const defaults: ClaudeLauncherDependencies = Object.freeze({...})` still module-private; :114 still `snapshotLauncherPorts(entry.deps ?? defaults)`; :143 still builds `processIdentity: `pending:${request.wrapperIdentity}``. claude-launcher-lifecycle.ts still builds `windows:${...}:${...}` in BOTH places: :109 inside `startAndRegister`, :188 inside `bindObservation`'s identity-conflict comparison.\n\n(d) PRE-CHANGE PHYSICAL LINE COUNTS (`grep -c ''`), the ceilings I must stay under:\n  claude-launcher.ts            167\n  claude-launcher-lifecycle.ts  249\n  claude-launcher-contract.ts   146\n  claude-launcher-port-results.ts 250 (at cap — NOT touched by this plan)\n\nAlso confirmed by reading (not assumed): `readCapability` is exported at port-results.ts:74 and already does descriptor-safe, proxy-rejecting, bounded prototype-walk binding via Reflect.apply — will reuse, not reimplement. `registerLaunchLock` (launch-lock.ts:90) refusal order is LAUNCH_LOCK_MALFORMED -> EFFECT_CLAIM_MALFORMED -> LAUNCH_LOCK_MALFORMED(prior) -> LAUNCH_LOCK_IDENTITY_CONFLICT(claim binding) -> LAUNCH_LOCK_CREDENTIAL_REUSED -> LAUNCH_LOCK_IDENTITY_CONFLICT(prior present), all at layer LAUNCH_LOCK except the KERNEL claim arm. `decodeRegistration` requires kind REGISTERED + ok true + parseLaunchLockRegistration; `decodeGrant` requires kind CONSUMED + ok true + versionDelta === 1 + parsed grant state CONSUMED.",
+      "startedAt": "2026-08-13T22:23:34.455Z",
+      "completedAt": "2026-08-13T22:24:31.039Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED. Create claude-launcher-authority.test.ts against the not-yet-existing `createClaudeLauncher`, importing it through the bare package root `@moe/runner` (no deep import) and reusing `request()`, `boundaryHarness()`, `dependencies()`, `failureOf()`, `COMMIT`, `CLAIM`, `PROCESS` from claude-launcher-test-fixtures.js. The suite must cover, each pinning the EXACT code AND layer: (1) happy path — a committed UNUSED grant advances exactly once, the injected consume port is called exactly once with the request's grant and wrapperIdentity, and the result is OBSERVED; (2) replay — the injected port returns a CONSUMED refusal and the launcher surfaces that DELEGATED code at GRANT, with `log` proving zero `lock` and zero `open` entries; (3) wrapper drift and forgery — same, delegated code preserved; (4) registration — the injected port is invoked exactly twice, first with phase PREFLIGHT and processIdentity `pending:<wrapperIdentity>`, then with phase STARTED and processIdentity `windows:<pid>:<creationTime>`, and the PREFLIGHT call strictly precedes the `open` entry in `log`; (5) pure-first composition — a `priorRegistration` that reuses the bootstrap credential refuses LAUNCH_LOCK_CREDENTIAL_REUSED at LAUNCH_LOCK from the PURE layer with the injected port NEVER called; (6) restart/duplicate — a `duplicateDelivery` record resolves ADOPTED or EXIT_BEFORE_LAUNCH with zero `open` entries and zero authority-port calls; (7) malformed authority (missing key, non-function, proxy, getter-throwing accessor, prototype-only property) refuses CLAUDE_LAUNCH_AUTHORITY_UNUSABLE at LAUNCHER with no port ever reached; (8) a GENERATED hostile-fulfilment matrix over both authority ports (throws, returns a Promise, returns a thenable, wrong `kind`, `ok:true` with a bad arm, `versionDelta` other than 1, a CONSUMED-shaped record whose grant does not parse, a REGISTERED-shaped record whose registration does not parse, a registration whose processIdentity drifted from the one passed in, a get-trapping proxy result) asserting a HAND-WRITTEN positive case count, the exact code and layer per case, an exact open count, and that close precedes release; (9) no refusal message contains the bootstrap credential digest, the grant id, or a runtime path. Run the file and record that it fails to resolve the symbol — that is the red.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher-authority.test.ts"
+      ],
+      "note": "TDD RED landed. `pnpm --filter @moe/runner test claude-launcher-authority` -> exit 1, `Test Files 1 failed | 55 passed (56)`, `Tests 42 failed | 1713 passed (1755)`. Every failure is `TypeError: createClaudeLauncher is not a function` — the symbol does not resolve through the bare root. Correct red: missing feature, not a typo. The only 2 new tests that pass are the hand-written cardinality guards, which deliberately do not call the factory.\n\n44 new tests in 3 describes, all imported through the BARE specifier `@moe/runner` (no deep import for the symbols under test; fixtures stay relative because they are internal test data).\n\nDESIGN CHOICE THAT MAKES THE DELEGATION ASSERTIONS NON-VACUOUS: the two stubs are DURABLE STORES that answer from their OWN rows, never from the caller's bytes. `durableGrants` seeds a row, looks it up by the presented grantId, and runs the production `consumeActivationGrant` over the STORED record, CASing the row on success. So:\n- replay = stored row is CONSUMED while the caller presents its committed UNUSED grant -> GRANT_ALREADY_CONSUMED/GRANT. The default port, handed the same request, would SUCCEED. D1 must redden this.\n- wrapper drift = stored row is bound to `wrapper-other` while the presented grant and wrapperIdentity agree with each other -> GRANT_WRAPPER_MISMATCH/GRANT. Default would also succeed here, so this case is D1-sensitive too (a grant tampered to disagree with itself is unusable: `validateActivationCommit` re-derives the grantId from `initialGrantBinding(intentId, grant.wrapperIdentity)` and would refuse ACTIVATION_COMMIT_INCOHERENT upstream, so the drift has to live in the durable row).\n- forgery = grantId absent from the store -> ACTIVATION_COMMIT_INCOHERENT/ACTIVATION, a code+layer pair the default consumeGrant CANNOT emit at the grant phase (it only ever emits EFFECT_GRANT_MALFORMED/KERNEL, GRANT_WRAPPER_MISMATCH/GRANT, GRANT_ALREADY_CONSUMED/GRANT). That makes delegation provable from the code alone.\n\nPLAN DEVIATION, one item, deliberate. Step 2 case (7) lists \"prototype-only property\" among the shapes that must refuse CLAUDE_LAUNCH_AUTHORITY_UNUSABLE. That is factually wrong against the port the plan itself mandates: step 5 requires binding with the exported `readCapability`, which walks up to PROTOTYPE_DEPTH=4 prototypes precisely so a CLASS INSTANCE binds (its own comment says a plain-record reader \"would refuse production\"). A daemon adapter class is the expected production shape. I therefore inverted that one case into a POSITIVE control — \"accepts an authority whose ports live on a class prototype\", asserting OBSERVED plus both phases, with the stub using `this` so the `Reflect.apply(candidate, source, args)` receiver is also pinned. The other six unusable shapes (null, primitive, proxy, absent consume, absent commit, non-function, getter-backed) are swept and counted.\n\nCOVERAGE MAP to the plan's nine clauses: (1) happy path — exactly one consume call with `[COMMIT.grant, CLAIM.wrapperIdentity]`, row advances to CONSUMED/version+1, OBSERVED/PROVEN, trace pins [\"runtime\",\"validate\",\"lock\",\"open\",\"observe\",\"unlock\"] (no \"consume\"/\"register\" because the overlay replaces those two fixture ports). (2)(3) replay/forgery/drift as above, each asserting trace === [\"runtime\",\"validate\"] so zero lock and zero open. (4) exactly 2 commits, phases [\"PREFLIGHT\",\"STARTED\"], processIdentities [\"pending:wrapper-1\",\"windows:4242:134309515541692727\"], `claim` identity-equal to CLAIM, `prior` null, and commit:PREFLIGHT strictly before \"open\" in one shared trace. (5) priorRegistration reusing DIGEST -> LAUNCH_LOCK_CREDENTIAL_REUSED/LAUNCH_LOCK with regs.commits.length === 0 and grants.calls.length === 1, proving the PURE layer answered and the injected port was never reached. (6) duplicateDelivery with NO deps at all — real shipped defaults — asserting EXIT_BEFORE_LAUNCH and ADOPTED with zero authority calls; this is D4's target. (7) 7 unusable shapes, all CLAUDE_LAUNCH_AUTHORITY_UNUSABLE/LAUNCHER with trace === []. (8) generated matrix = 8 grant fulfilments + 7 registration fulfilments x 2 phases = 22, hand-written count pinned by `expect(MATRIX.length).toBe(22)` plus a unique-name check and two partition counts (8 GRANT, 7 with opens===1) so a silently shrunk generator cannot pass; each case pins exact code+layer, exact open count, and for the STARTED family that \"close\" precedes \"unlock\". (9) `expectNoSecretEcho` on every refusal: no bootstrap digest, no grantId, no pinned executable path.\n\nTWO SUPPORTING DECISIONS worth recording. (a) `tracedDeps` exists only because `close` lands in `boundaryHarness().log` while `unlock` lands in the `dependencies()` log — two arrays, so cleanup ORDER is unassertable without one. It wraps `close` with a single trace push and forwards to the same scripted boundary; every port underneath is still the shipped production function. (b) the registration store models a real durable protocol: PREFLIGHT reserves the pending identity and REFUSES L",
+      "startedAt": "2026-08-13T22:24:37.126Z",
+      "completedAt": "2026-08-13T22:33:58.727Z"
     },
     {
       "stepId": "step-3",
       "description": "Extend claude-launcher-contract.ts only. Add: `CLAUDE_LAUNCH_REGISTRATION_PHASES = Object.freeze([\"PREFLIGHT\",\"STARTED\"])` plus its type; the two identity-format constants and the two builders (`pendingProcessIdentity(wrapperIdentity)` and `startedProcessIdentity(pid, creationTime)`) that become the single source of truth for those strings; `CLAUDE_LAUNCH_AUTHORITY_UNUSABLE` appended to LOCAL_CODES (safe — CLAUDE_LAUNCH_ERROR_CODES carries only `toContain` and `Object.isFrozen` assertions, no length pin); and the two public types `ClaudeRegistrationCommit` (readonly phase, registration: LaunchLockRegistration, claim: unknown, prior: unknown) and `ClaudeLauncherAuthority` (`consumeGrantDurably(grant: unknown, wrapperIdentity: unknown): unknown` and `commitProcessRegistration(commit: ClaudeRegistrationCommit): unknown` — both returning `unknown`, matching the existing honest-port convention documented above ClaudeLauncherDependencies). Do NOT touch PORT_KEYS or ClaudeLauncherDependencies. Keep the file under 250 physical lines measured with `grep -c ''`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-contract.ts"
-      ]
+      ],
+      "startedAt": "2026-08-13T22:34:00.761Z"
     },
     {
       "stepId": "step-4",
@@ -130,11 +139,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:26.455Z",
-  "updatedAt": "2026-08-13T22:23:38.040Z",
+  "updatedAt": "2026-08-13T22:34:00.761Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:12:53.445Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-b1a46457",
@@ -143,7 +153,10 @@
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T22:23:16.196Z",
   "planningNotes": {

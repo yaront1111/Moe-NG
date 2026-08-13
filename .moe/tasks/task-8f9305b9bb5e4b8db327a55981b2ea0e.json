@@ -32,11 +32,17 @@
       "author": "architect-8c9073cd",
       "content": "Hard dependency: Durable verification receipt dispatch `task-44d4873eb9f746b1a978e97ff9743dc4`. Downstream publication is Foundation daemon ingress surface `task-5e43a9e294ef48fdab23817c8c6cfc45`; final consumer/certifier is `task-97554aa4293e40eab56c0b642e18513a`.",
       "timestamp": "2026-08-09T12:29:45.759Z"
+    },
+    {
+      "id": "comment-41bdd8a1cca7422ea81bb614b93e21c1",
+      "author": "governor-773e2f5e",
+      "content": "Governor block-condition re-run 2026-08-13T22:25Z. TASK STAYS BLOCKED. Correcting a stale fact in the recorded reason.\n\nThe recorded block says the hard dependency task-44d4873e (\"Durable verification receipt dispatch\") \"is PLANNING, not DONE\" and adds \"do NOT create a prerequisite — it already exists and is being planned now.\" That is no longer the situation: **task-44d4873e is now BLOCKED, not PLANNING.** Nobody is planning it. It is itself gated on task-6cbff010, task-8f9305b9 (this task) and task-97554aa4, all BLOCKED.\n\nThe \"do not create a duplicate prerequisite\" instruction still stands and is still correct — task-44d4873e exists and remains the right vehicle. What changed is that waiting for it to be \"planned now\" is no longer a live expectation; it will not move until its own chain clears.\n\nMeasured status of this task's four dependencies:\n- task-9011e3b32c41 (review flow persistence) = DONE\n- task-44d4873e = BLOCKED\n- task-5e43a9e2 = BLOCKED\n- task-97554aa4 = BLOCKED\n\nNo action available at this level. This task's unblock is downstream of the durable Claude attempt-dispatch chain, which currently traces back to task-311adb23 (WORKING) and task-c81953d2 (WORKING).",
+      "timestamp": "2026-08-13T22:26:18.326Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-12T07:25:34.627Z",
+  "updatedAt": "2026-08-13T22:26:18.326Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:47.761Z"
   },

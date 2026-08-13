@@ -22,16 +22,13 @@
     {
       "stepId": "step-1",
       "description": "Reconfirm the planning baseline before edits: verify the pinned design hash, re-read design lines 978/1201, run the bare `@moe/runner` probe, and record the owned-path and repo-gate failing-path baseline. Lock the measured contract in the work note as six unique proof classes covering seven semantic populations (one and only one shared proof: `PROVIDER_PROCESS_LAUNCH_LOCK` covers lock registrations and provider runs); stop rather than edit if the public root or owned paths have drifted.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "note": "BASELINE RE-MEASURED at HEAD 0371ead86fc0355a4929a04564296e9cfba573db (matches planningNotes; task description's c0c5929 is stale).\n\n1) Design hash: sha256sum of D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md = 1d9d1ec97d3f07247fbbc088045e0ba2fd6da8307f10a9026c55106419383191 — EXACT match to the pinned epic rail.\n\n2) Design line 978 re-read verbatim: \"Moe inventories project-tagged workspaces, effect locks/wrapper registrations, provider runs, resources, branches/refs, integration targets, and artifact staging\" = SEVEN semantic populations. Same line: \"Each item is proven absent, cancelled, adopted only to a matching restored intent under the new incarnation, or quarantined as an orphan\" => ABSENT/CANCELLED/ADOPTED/QUARANTINED, plus UNKNOWN for non-fenceable (\"a non-fenceable state is unknown, recovery cannot complete\").\n\n3) CORE-S14 (design line ~1201 block): \"provider, resource, workspace, integration, Git, and artifact effects\" = SIX scenario groups.\n\n4) Bare `@moe/runner` child-import probe (node --input-type=module from packages/runner): classes=[\"PROVIDER_PROCESS_LAUNCH_LOCK\",\"WORKSPACE\",\"GIT_INTEGRATION_ON_DISK\",\"ARTIFACT_OBJECT_STAGING\"] = FOUR landed node classes. Published recovery keys also include MAX_RECOVERY_INVENTORY_ITEMS, RECOVERY_INVENTORY_ERROR_CODES/LAYERS/REF_KINDS/TRUTH_CLASSES/UNKNOWN_REASONS/VERSION, collectRecoveryInventory, createRecoveryInventoryRegistry, isRecoveryInventoryFailure, recoveryInventoryFailure.\n\n5) Gap re-measured (rail: description claims are stale by default). grep -rEn \"RecoveryInventoryReconciliation|RecoveryInventory.*Recorded|RECOVERY_INVENTORY_LEDGER|UNKNOWN_TRUTH|INTEGRATION_ATTEMPT|RESOURCE_EFFECT\" over apps+packages *.ts: ZERO production matches. `recovery.reconcile_external` EXISTS already as a RuntimeCommandKind (packages/contracts/src/runtime/runtime-vocabulary.ts:103, runtime-error-registry.ts:156) and is mapped from doctor.propose_effect_reconciliation (apps/daemon/src/recovery/doctor-commands.ts:51) — so the command kind is real, the record is absent. Confirmed.\n\nCONTRACT LOCKED (hand-written, one-to-one at the semantic population level, no proof duplicated to inflate cardinality):\n  6 unique proof classes -> 7 design populations\n  1. PROVIDER_PROCESS_LAUNCH_LOCK -> EFFECT_LOCK_WRAPPER_REGISTRATION + PROVIDER_RUN  (the ONLY 2-population class; the landed runner proof genuinely combines them and is stored ONCE)\n  2. RESOURCE                     -> RESOURCE                      (new daemon-side proof)\n  3. WORKSPACE                    -> PROJECT_TAGGED_WORKSPACE\n  4. INTEGRATION_TARGET           -> INTEGRATION_TARGET            (new daemon-side proof; NOT folded into Git — the landed Git adapter proves refs/submodules, not durable integration attempts)\n  5. GIT_INTEGRATION_ON_DISK      -> GIT_BRANCH_REF\n  6. ARTIFACT_OBJECT_STAGING      -> ARTIFACT_STAGING\n  Invariant: 4 landed runner proofs +RESOURCE=5 +INTEGRATION_TARGET=6 unique proofs -> 7 flattened populations.\n\n6) OWNED-PATH + REPO-GATE BASELINE, captured BEFORE writing any bytes (this is what makes path attribution provable): `git status --porcelain -- apps/daemon/src/recovery packages/store/src` returned EMPTY. Full gate run at HEAD on a clean owned tree: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test` exited 0, \"Tests 5386 passed | 1 skipped (5387)\". MERGE-BASE FAILING-PATH BASELINE IS THE EMPTY SET — therefore any red at step-8 is mine and is a block, never a disclosure.\n\nPublic root undrifted; no stop condition hit. Verified house patterns to reuse (read, not assumed): apps/daemon/src/recovery/recovery-incarnation-anchor.ts (expectedVersion:0 single-shot commit + exact-key decode + sameBytes idempotence), recovery-succession-contract.ts (frozen refusal constants, snapshot-by-own-property-descriptor, aggregate-id keying), apps/daemon/src/identity/recovery-authentication-binding.ts (fixed ACTIVE slot read, collapses missing/unreadable to null). Store surface confirmed: SqliteEventStore.commitExpectedVersionDecision(CommitExpectedVersionDecisionInput)->CommandDecisionResponse, readCommandDecisionsAfter(bigint,limit), readAggregateEvents(id,after,limit), readEventsAfter, openForProject(path,projectId); EventDraft accepts domainSchemaVersion. NO store schema change required.\n\nBridge rule verified in apps/daemon/src/runtime-entrypoint.test.ts: a module with a `<name>.test.ts` sibling (or reachable from one via a relative `./x.js` specifier) is runtime tier and MUST have an exact `export * from \"./<name>.ts\";\\n` .js bridge; a test-tier module must NOT. All four planned production modules land in the runtime tier, hence four bridges. Owned paths = exactly ten: recovery-inventory-{contract,record,codec,ledger}.{ts,js} plus recovery-inventory-{record,ledger}.test.ts, all under apps/daemon/src/recovery/.",
-      "startedAt": "2026-08-13T21:57:17.632Z",
-      "completedAt": "2026-08-13T21:59:46.253Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-2",
       "description": "TDD red: add focused record/codec and ledger tests against the planned production imports. Pin the exact six-class/ seven-population hand-written mapping and nonzero cardinalities; exact `EXTRA`, `UNKNOWN`, `DUPLICATE`, and `OMITTED` mapping refusal codes at layer `RECOVERY_INVENTORY`; every disposition arm (including design-required terminal `CANCELLED` alongside task-required `ABSENT`, `ADOPTED`, `QUARANTINED`, `UNKNOWN`); stale-incarnation and stale-key adoption refusals; UNKNOWN normalization with separately retained upstream code/layer; canonical field/digest mutations; nested freeze and secret absence. Add real temporary-file `SqliteEventStore` tests for exact replay, two-handle contention, close/reopen, missing/corrupt/truncated/extra-event evidence, and assert every generated sweep ran its exact nonzero case count. Run only these tests and record the expected missing-module/red failures.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
@@ -39,19 +36,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "note": "TDD RED landed. Two focused test files written against the PLANNED production imports (no production module exists yet), covering the whole DoD surface.\n\nrecovery-inventory-record.test.ts (28 cases) pins:\n- Hand-written mapping literal (NOT derived from production) asserted with toEqual against RECOVERY_CLASS_POPULATION_ROWS: exactly 6 classes, 7 populations, provider row is the ONLY 2-population row. Flattened populations length 7 AND Set size 7 (covers each exactly once, no duplicate proof inflating cardinality). recoveryPopulationClass sweep asserts resolved===7 and null for an unmapped name. Freeze assertions on all three tables.\n- Mapping refusals with exact upstream tuple {code, layer:\"RECOVERY_INVENTORY\"} AND coordinator code UNKNOWN_TRUTH/layer RECOVERY_INVENTORY/truth UNKNOWN, one test each: CLASS_EXTRA, CLASS_UNKNOWN, CLASS_DUPLICATE, plus a 6-case OMITTED sweep asserting swept===6.\n- POPULATION_UNMAPPED (subject population not in its declared class), SUBJECT_DUPLICATE, and INPUT_INVALID via an accessor-valued property (hostile descriptor, not a plain object).\n- All FIVE disposition arms named and asserted: ABSENT (7/7 items, record COMPLETE), CANCELLED (terminalProofDigest bound, restoredIntentRef null, no retry authority), ADOPTED (intent ref+digest bound, quarantineRef null), QUARANTINED (orphan quarantineRef retained), UNKNOWN. RECOVERY_INVENTORY_DISPOSITIONS asserted as exactly [\"ABSENT\",\"CANCELLED\",\"ADOPTED\",\"QUARANTINED\",\"UNKNOWN\"].\n- Adoption deviation sweep (swept===3), each deviation SINGLE and each asserting its own upstream code: ADOPTION_IDENTITY_MISMATCH, ADOPTION_INCARNATION_STALE, ADOPTION_KEY_EPOCH_STALE — all land QUARANTINED, never ADOPTED.\n- UNKNOWN normalization: unresolved item -> record truth UNKNOWN, coordinator {UNKNOWN_TRUTH, RECOVERY_INVENTORY}, upstream retained SEPARATELY (per-item INVENTORY_ADAPTER tuple preserved verbatim; record-level ITEM_UNRESOLVED at RECOVERY_INVENTORY). Two more: a missing configured proof normalizes into a canonical UNKNOWN slot (proofs still length 6, order still canonical, PROOF_MISSING) rather than shrinking the mapping; an UNKNOWN configured proof stays UNKNOWN (PROOF_INCOMPLETE) and never gains COMPLETE coverage.\n- Binding: project/projectTag/backupCursor/backupGenerationDigest/incarnationRef/keyEpochRef/anchorBindingDigest all asserted on the built record; per-class itemCount (provider===2, total===7).\n- Digest sensitivity sweep over 9 distinct bound body fields, asserting swept===9 and each digest differs from baseline; plus order-independence (reversed subject order yields the identical digest and item order).\n- Deep freeze on record/items/proof populations, and explicitly that the CALLER's input and its subjects array are NOT frozen.\n- Codec: exact round-trip + re-encode equality; 5-variant non-canonical sweep (whitespace, key-order, duplicate-key, extension, truncation) asserting swept===5 and refusal at RECOVERY_INVENTORY; semantic byte mutation -> RECORD_DIGEST_MISMATCH; invalid UTF-8 and empty bytes -> RECORD_UNREADABLE (swept===2); a stripped population edge -> refusal; exact 15-key body key ORDER asserted.\n\nrecovery-inventory-ledger.test.ts (14 cases) drives the REAL store, not a fake:\n- Real temp-file SqliteEventStore.openForProject, a REAL minted incarnation (createRecoveryIncarnationService + createNodeRecoveryCryptoPort), a REAL anchorIncarnation write, and a REAL installRecoveryBinding ACTIVE row. Nothing is stubbed.\n- Commit bound to store-selected refs; readback byte-identical by explicit digest; exact retry REPLAYED with readAggregateEvents asserting exactly ONE event at aggregateSequence 1 with the right eventType and decisionTrace.commandKind.\n- Two-handle contention plus close/reopen readback equality. afterEach closes EVERY opened handle before rmSync (Windows).\n- RECORD_NOT_FOUND (unknown digest), RECORD_UNREADABLE (malformed + truncated stored bytes, swept===2), RECORD_CONFLICT twice: a second event under one record aggregate, and a record misfiled under a foreign digest's aggregate. All at layer RECOVERY_INVENTORY_LEDGER with coordinator UNKNOWN_TRUTH/RECOVERY_INVENTORY.\n- Selected-authority refusals: BINDING_UNAVAILABLE (no ACTIVE row), ANCHOR_UNAVAILABLE (never anchored), BINDING_MISMATCH twice (ACTIVE key epoch disagrees with anchored; supplied backup generation is not the anchored one), and INPUT_INVALID when the caller smuggles incarnationRef/keyEpochRef into the external facts.\n- A no-authority assertion: authority===\"NONE\" and the result's exact key set carries no completion/approval field.\n\nRED CONFIRMED, for the right reason. `npx vitest run --root . --config package.json src/recovery/recovery-inventory-record.test.ts src/recovery/recovery-inventory-ledger.test.ts` => \"Test Files 2 failed (2) / Tests no tests\", both with `Error: Cannot find module './recovery-inventory-contract.js'`. That is module-absence, not a typo and not a passing assertion.",
-      "startedAt": "2026-08-13T21:59:50.924Z",
-      "completedAt": "2026-08-13T22:05:05.029Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "Implement the focused contract and exact LF NodeNext bridge. Freeze ordered proof classes as `PROVIDER_PROCESS_LAUNCH_LOCK`, `RESOURCE`, `WORKSPACE`, `INTEGRATION_TARGET`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`; freeze the seven design populations and the explicit class-to-population rows, with only the provider class containing two populations. Define closed proof/truth/disposition/result vocabularies, precise mapping error codes (`RECOVERY_INVENTORY_CLASS_EXTRA|UNKNOWN|DUPLICATE|OMITTED`), coordinator `UNKNOWN_TRUTH`, layer `RECOVERY_INVENTORY`, ledger upstream codes/layer, bounds, and immutable record/input/result types. Model terminal cancellation explicitly without granting retry/history authority; do not let Git/submodule evidence certify durable integration attempts or artifact-object evidence certify scheduler resources.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
@@ -59,19 +49,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-contract.js"
-      ],
-      "note": "Contract landed at apps/daemon/src/recovery/recovery-inventory-contract.ts (232 physical lines, `grep -c ''`, under the 250 target) plus its exact LF bridge recovery-inventory-contract.js verified with `cat -A`: `export * from \"./recovery-inventory-contract.ts\";$` — one line, LF, matches the expectedBridgeSource rule in runtime-entrypoint.test.ts byte for byte.\n\nFrozen and ordered:\n- RECOVERY_PROOF_CLASSES = 6, in the canonical order PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING.\n- RECOVERY_INVENTORY_POPULATIONS = 7 (EFFECT_LOCK_WRAPPER_REGISTRATION, PROVIDER_RUN, RESOURCE, PROJECT_TAGGED_WORKSPACE, INTEGRATION_TARGET, GIT_BRANCH_REF, ARTIFACT_STAGING).\n- RECOVERY_CLASS_POPULATION_ROWS: explicit rows in class order, doubly frozen (row object and its populations array). ONLY PROVIDER_PROCESS_LAUNCH_LOCK carries two populations; the combined runner proof is declared once and is not cloned into a seventh row to inflate cardinality. recoveryPopulationClass() resolves a population to its one class and returns null for an unmapped name.\n- The module header records WHY the 4/5/6/7 numbers were never contradictory (proof vs population) and pins the two boundaries that must not be folded: Git/submodule on-disk evidence is not evidence about durable integration attempts, and artifact-object/staging enumeration is not scheduler resource authority.\n\nClosed vocabularies: RECOVERY_INVENTORY_TRUTHS (COMPLETE, UNKNOWN — UNKNOWN is the floor); RECOVERY_INVENTORY_DISPOSITIONS (ABSENT, CANCELLED, ADOPTED, QUARANTINED, UNKNOWN) with CANCELLED documented as terminal proof-bearing and explicitly retry/history-free; RECOVERY_INVENTORY_UPSTREAM_LAYERS (RECOVERY_INVENTORY, RECOVERY_INVENTORY_LEDGER, INVENTORY_ADAPTER); RECOVERY_INVENTORY_UPSTREAM_CODES (24 codes) containing the four mapping codes RECOVERY_INVENTORY_CLASS_{EXTRA,UNKNOWN,DUPLICATE,OMITTED}, the adjudication/adoption/codec codes, and the ledger codes RECORD_NOT_FOUND / RECORD_UNREADABLE / RECORD_CONFLICT / RECOVERY_BINDING_UNAVAILABLE / RECOVERY_ANCHOR_UNAVAILABLE / RECOVERY_BINDING_MISMATCH.\n\nCoordinator answer is a single constant: RECOVERY_COORDINATOR_UNKNOWN_CODE = \"UNKNOWN_TRUTH\" at RECOVERY_INVENTORY_LAYER = \"RECOVERY_INVENTORY\". recoveryInventoryRefusal(upstream, reason) always stamps that coordinator pair and carries the precise upstream {code, layer} ALONGSIDE it, frozen, never in place of it — so provenance survives normalization. `reason` is caller-independent by construction: no observed value has a path into it.\n\nImmutable types: RecoveryReconciliationProof (class, populations, truth, sourceProofDigest, itemCount, upstream), RecoveryReconciliationItem (class, population, identity, disposition, sourceProofDigest, terminalProofDigest, restoredIntentRef, restoredIntentDigest, quarantineRef, upstream), RecoveryReconciliationRecord binding project/projectTag/backupCursor/backupGenerationDigest/incarnationRef/keyEpochRef/anchorBindingDigest/configuredClasses/proofs/items/truth/coordinator/upstream/recordDigest. No secret, key, nonce or message field exists on any of them.\n\nDurable identity: RECOVERY_RECONCILIATION_COMMAND_KIND = \"recovery.reconcile_external\" (already a real RuntimeCommandKind — verified in step 1, not invented here), RECOVERY_RECONCILIATION_EVENT_TYPE = \"RecoveryExternalReconciliationRecorded\", and the domain-separated aggregate prefix \"recovery-reconciliation:\" so a record digest can never collide with an incarnation or succession aggregate. Bounds declared as refusal thresholds: MAX ITEMS 4096, TEXT_CHARS 400, BYTES 4 MiB.\n\nTwo size decisions worth recording: the three canonical key-order arrays moved to the codec module (their only consumer) to hold this file at 232 lines, and the row builder is named `mapRow` so it does not shadow the `row` loop binding in recoveryPopulationClass.",
-      "startedAt": "2026-08-13T22:05:07.459Z",
-      "completedAt": "2026-08-13T22:07:09.065Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "Implement total record normalization/adjudication and its exact LF bridge. Validate hostile inputs with own enumerable data descriptors before property access; require the exact configured six-class set and normalize a missing/incomplete configured proof into its canonical UNKNOWN proof slot rather than shrinking the mapping. Bind each subject to its one mapped proof, project/project-tag, verified backup cursor+generation, selected anchor binding digest/incarnation/key epoch, source proof digest, restored-intent reference/digest, terminal proof or quarantine reference, disposition, and separate coordinator/upstream refusal tuples. Enforce: ABSENT only from complete negative proof; CANCELLED only from terminal cancellation proof; ADOPTED only when external/restored identity and both selected recovery refs match exactly; unmatched items only QUARANTINED or UNKNOWN; any incomplete/non-fenceable/artifact-or-key/unresolved fact makes the persisted truth `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY`. Deep-freeze copied data and expose no secret/message bytes.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
@@ -79,22 +62,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.js",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.js",
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts"
-      ],
-      "note": "Record normalization/adjudication landed, with one disclosed factoring deviation.\n\nDEVIATION (disclosed, not hidden): the step planned one module. It landed as TWO — recovery-inventory-record.ts (240 lines) and recovery-inventory-subject.ts (296 lines) — plus their two exact LF bridges, taking the owned-path count from the plan's ten to twelve. FORCED BY THE BINDING RAIL, and provable: the two responsibilities together measure ~536 physical lines, so a single module would sit at ~536, far past the 400 hard split point epic rail 5 sets. Splitting at the natural seam (record = assembly/ordering/coverage; subject = \"is this even a subject, and what does its evidence prove\") is the smallest split that clears it. record.ts re-exports every subject type, so consumers still import one module. Both files are under 400; subject.ts is 46 over the 250 target and I did not manufacture a third artificial seam to hide that.\n\nrecovery-inventory-subject.ts:\n- exactDataRecord (added to the contract this step, 24 lines) reads own enumerable DATA descriptors ONCE, before any property access, and refuses extra/missing/inherited keys and any accessor. An accessor or proxy cannot answer differently on a second read, and a smuggled key is refused rather than dropped — dropping one silently would look like it had been honoured.\n- Per-kind exact evidence key sets (EVIDENCE_KEYS), hex64 refs, NFC-normalised bounded control-character-free text, bounded arrays at MAX_RECOVERY_RECONCILIATION_ITEMS, and closed-vocabulary upstream {code, layer} reading. readProof accepts only COMPLETE/UNKNOWN.\n- adjudicateSubject is the ONE adoption rule: NEGATIVE_COMPLETE -> ABSENT with its terminal proof digest; TERMINAL_CANCELLED -> CANCELLED with its terminal proof digest and no retry field; ORPHAN -> QUARANTINED with its quarantine ref; UNRESOLVED -> UNKNOWN carrying the upstream tuple verbatim. RESTORED_INTENT reaches ADOPTED only when the intent names this exact external identity AND was restored under BOTH currently selected refs; each single deviation quarantines with its own code (ADOPTION_IDENTITY_MISMATCH, then ADOPTION_INCARNATION_STALE, then ADOPTION_KEY_EPOCH_STALE). No arm invents history and no arm returns retry authority.\n\nrecovery-inventory-record.ts:\n- Total by construction: every path returns a record or a frozen refusal, nothing throws.\n- refuseConfiguredClasses requires EXACTLY the frozen six, with distinct codes for UNKNOWN, DUPLICATE, EXTRA and OMITTED. A malformed class set is a STRUCTURAL refusal; missing evidence for a well-formed class is NOT — normaliseProofs emits a canonical UNKNOWN slot (digest 0*64, upstream PROOF_MISSING) for every configured class the caller supplied no proof for, so the mapping is always six rows and a caller cannot shrink it by declining to configure a class. No path raises a slot to COMPLETE.\n- Each subject is bound to its ONE mapped proof class: a subject whose population is not covered by its declared class refuses POPULATION_UNMAPPED; two subjects on one class-scoped identity refuse SUBJECT_DUPLICATE.\n- Item order is deterministic (class index, declared population index, identity), so the same facts in any caller order produce identical bytes.\n- truth is UNKNOWN when any proof is UNKNOWN or any item is UNKNOWN; coordinator is then {UNKNOWN_TRUTH, RECOVERY_INVENTORY} and record-level upstream retains PROOF_INCOMPLETE (proof side wins) or ITEM_UNRESOLVED, separately from the coordinator answer.\n- The record binds project id/tag, backup cursor + generation digest, and the selected anchorBindingDigest/incarnationRef/keyEpochRef; configuredClasses is written from the frozen table, never echoed from the caller.\n- Copied data is frozen at every level (record, items, proofs, populations, upstream tuples). The caller's input object and its arrays are never frozen and never mutated. No secret, key, nonce or message field is read or stored.\n\nVERIFICATION: `npx vitest run --root . --config package.json src/recovery/recovery-inventory-record.test.ts` is still RED, now NARROWED to the expected next gap — \"Cannot find module './recovery-inventory-codec.js'\" at recovery-inventory-record.ts:19. The contract module now resolves; the codec digest function is step 5. No assertion has been observed passing yet, so nothing here is claimed green.",
-      "startedAt": "2026-08-13T22:07:11.131Z",
-      "completedAt": "2026-08-13T22:11:01.563Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "Implement the strict canonical codec and exact LF bridge. Encode a versioned, fixed-key-order, bounded UTF-8 JSON body with deterministic class/population/item ordering; compute SHA-256 over every body field except `recordDigest`, then append that digest. Decode with fatal UTF-8, exact keys/vocabularies/bounds/cardinalities, re-derived six-to-seven mapping and disposition invariants, digest recomputation, and byte-for-byte canonical re-encoding so whitespace, key order, duplicate keys, extensions, truncation, or any semantic byte mutation cannot become an alternate authoritative record. Return the stable unreadable upstream code/layer under coordinator UNKNOWN rather than throwing or defaulting.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
@@ -102,21 +75,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-codec.js",
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.test.ts"
-      ],
-      "note": "Strict canonical codec landed at apps/daemon/src/recovery/recovery-inventory-codec.ts (310 physical lines, under the 400 split point) plus its exact LF bridge.\n\nENCODE: bodyObject() writes ONE fixed field order, built here and never spread from the caller's object, with deterministic class/population/item ordering inherited from the frozen mapping and the record builder's sort. recoveryReconciliationDigest computes SHA-256 (node:crypto, sync) over the body WITHOUT recordDigest; encodeRecoveryReconciliationRecord appends recordDigest last as UTF-8 JSON with no whitespace. That split is what makes the digest cover every bound leaf while remaining verifiable from the stored bytes alone.\n\nDECODE is layered, and the ORDER of the layers is the design:\n1. empty/over-bound bytes, fatal-UTF-8 decode failure, or JSON.parse failure -> RECOVERY_INVENTORY_RECORD_UNREADABLE.\n2. structural validation -> RECOVERY_INVENTORY_RECORD_NONCANONICAL. orderedKeys() checks key ORDER, not merely the key set, at every level (record, proof, item, upstream tuple). configuredClasses must be the frozen six in order; proofs must be exactly six rows in class order whose populations equal the frozen row element-for-element (the six-to-seven mapping is RE-DERIVED, never trusted from the stored bytes); items are checked against the mapping, the disposition vocabulary, hex64/nullable-hex64/nullable-text field shapes, and two cross-checks (ADOPTED implies a restored intent ref, UNKNOWN implies an upstream tuple); every proof's itemCount is recomputed from the items; truth UNKNOWN, the coordinator pair and the record upstream must be present together or absent together, and the coordinator pair may only ever be {UNKNOWN_TRUTH, RECOVERY_INVENTORY}.\n3. digest recomputation over the re-derived body -> RECOVERY_INVENTORY_RECORD_DIGEST_MISMATCH.\n4. byte-for-byte canonical re-encode compare -> NONCANONICAL.\nLayer 4 is what actually kills the duplicate-key and whitespace variants: JSON.parse silently keeps the last duplicate, so the parsed object looks legitimate and only re-encoding reveals the second spelling. Layer 3 catches the opposite case, a mutation that is still perfectly canonical. Neither layer alone is sufficient, which is why both exist.\nNothing throws and nothing defaults: every failure returns the frozen refusal carrying coordinator UNKNOWN_TRUTH/RECOVERY_INVENTORY plus its own upstream code at RECOVERY_INVENTORY.\n\nTWO REAL DEFECTS FOUND AND FIXED THIS STEP, both of the \"assertion detached from its subject\" family epic rail 6 names:\n1. PRODUCTION BUG, caught by a red test: RECOVERY_INVENTORY_CLASS_EXTRA was UNREACHABLE. Only six class names exist, so any list longer than six is necessarily also a duplicate, and the duplicate guard answered first — the test asked for EXTRA and got DUPLICATE. Fixed by asking LENGTH first in refuseConfiguredClasses, with a comment recording why the order is load-bearing. All four mapping codes are now individually reachable and individually asserted.\n2. TEST BUG, caught before it could pass vacuously: the mapping-strip case used .replace('\"PROVIDER_RUN\",', \"\") whose FIRST match is an item's `population` value, not the proofs row — that would have produced broken JSON and been answered by the UNREADABLE guard while reading as coverage of the mapping re-derivation. Retargeted to `,\"PROVIDER_RUN\"]`, which occurs only in the proofs populations array, with expect(text.split(...)).toHaveLength(2) asserting the anchor is unique before the mutation is applied. It now pins RECORD_NONCANONICAL exactly.\n\nVERIFICATION (fresh, foreground): `npx vitest run --root . --config package.json src/recovery/recovery-inventory-record.test.ts` => \"Test Files 1 passed (1) / Tests 31 passed (31)\". Contract, subject, record and codec are green together. The ledger suite is still unwritten-against and remains red pending step 6.",
-      "startedAt": "2026-08-13T22:11:03.936Z",
-      "completedAt": "2026-08-13T22:13:44.614Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "Implement content-addressed durable persistence/readback and its exact LF bridge using only the existing public `SqliteEventStore` transaction surface—no schema change or raw SQLite. The write service must read the fixed ACTIVE recovery binding from the project store and the exact anchored incarnation, cross-check key epoch/project/backup generation, and only then build the record; it must accept no request-selected current refs. Commit canonical bytes once under a domain-separated record-digest aggregate with command kind `recovery.reconcile_external`, expectedVersion 0, exact domain schema/event IDs, and identical request/result/event bytes; exact retries replay one event. The reader addresses an explicit record digest (never an invented 'latest'), verifies the sole sequence-1 event plus decision trace/decision bytes and codec/digest/aggregate identity, and maps absent, conflicting, malformed, or unverifiable evidence to `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY` while retaining `RECORD_NOT_FOUND|UNREADABLE|CONFLICT` at `RECOVERY_INVENTORY_LEDGER`. R3 may later bind this immutable digest; this task grants no recovery.complete authority.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
@@ -124,22 +88,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.js",
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.test.ts"
-      ],
-      "note": "Content-addressed durable persistence/readback landed at apps/daemon/src/recovery/recovery-inventory-ledger.ts (282 lines) plus its exact LF bridge. NO store schema change and NO raw SQLite: it uses only the existing public commitExpectedVersionDecision / readAggregateEvents / getCommandDecision surface, exactly as recovery-incarnation-anchor.ts already does.\n\nWRITE (recordRecoveryReconciliation):\n- Reads the exact 6-key external facts and 4-key scope through exactDataRecord; a smuggled incarnationRef/keyEpochRef makes the key set inexact and refuses INPUT_INVALID at RECOVERY_INVENTORY_LEDGER. The caller CANNOT nominate current refs.\n- Selected authority comes from the store: readCurrentRecoveryAuthenticationBinding (fixed ACTIVE slot) then readAnchoredIncarnation for that exact incarnation. Missing/unreadable binding -> RECOVERY_BINDING_UNAVAILABLE; unanchored incarnation -> RECOVERY_ANCHOR_UNAVAILABLE. Three cross-checks then run before any record exists: anchored keyEpochRef vs ACTIVE keyEpochRef, anchored incarnationRef vs ACTIVE incarnationRef, and anchored backupGenerationDigest vs the supplied one — each -> RECOVERY_BINDING_MISMATCH.\n- Only then is the record built, with selected = the ANCHORED bindingDigest/incarnationRef/keyEpochRef. A record-layer refusal is returned unchanged, keeping its own RECOVERY_INVENTORY upstream rather than being restamped as a ledger fault.\n- Commits canonical bytes ONCE: command kind recovery.reconcile_external, domain-separated aggregate recovery-reconciliation:<recordDigest>, expectedVersion 0, deterministic commandId recovery-reconcile:<recordDigest> and eventId <commandId>:recorded, domainSchemaVersion moe-recovery-reconciliation/1, and IDENTICAL request/result/event bytes. An exact retry replays: the second call returns disposition REPLAYED and readAggregateEvents still shows exactly one event at sequence 1.\n- Deliberately NO try/catch around the commit, following the house precedent recorded in recovery-incarnation-anchor.ts: a genuine store fault must keep throwing, because reporting a real database failure as a benign refusal is how a recovery ledger gains false authority.\n- Returns authority \"NONE\". There is no completion/approval field; R3 may later bind this immutable digest, and nothing here grants recovery.complete.\n\nREAD (readRecoveryReconciliation) addresses ONE explicit digest — there is no \"latest\" and no mutable pointer, because a repointable pointer would be exactly the unspecified authority this area must not create. It verifies, in order: at most two events fetched so a second event is DETECTED rather than truncated away; zero events -> RECORD_NOT_FOUND; more than one -> RECORD_CONFLICT; the sole event must be aggregateSequence 1 with the right eventType and a decisionTrace whose commandKind and projectId match; the decision addressed by that trace must exist, be EFFECTS_COMMITTED, sit on this aggregate, carry this command kind, and its resultBytes must equal the event payload byte for byte (a row whose result disagrees with the event it committed is evidence of nothing, and picking one of the two would be inventing a fact); the bytes must decode under the strict codec, else RECORD_UNREADABLE; and the decoded recordDigest must equal the ADDRESS and its projectId the queried project, else RECORD_CONFLICT — content addressing is only real if the address is checked. Store read faults are caught to RECORD_UNREADABLE. Every refusal answers coordinator UNKNOWN_TRUTH at RECOVERY_INVENTORY while retaining its ledger code at RECOVERY_INVENTORY_LEDGER.\n\nFOUR TYPE ERRORS found by tsc and fixed, one of them a real fail-open:\n- codec readRecord was validating the persisted coordinator pair with readUpstream, whose vocabulary is the 24 UPSTREAM codes. \"UNKNOWN_TRUTH\" is not among them, so the guard could never have accepted a legitimate coordinator — and the comparison tsc flagged as having no overlap was the symptom. Replaced with a dedicated readCoordinator that admits exactly the one pair {UNKNOWN_TRUTH, RECOVERY_INVENTORY}. Reusing the upstream reader would have admitted any of the 24 codes as a coordinator answer.\n- contract isDataProperty treated `enumerable: boolean | undefined` as boolean; now `=== true`.\n- Two test fixtures widened a literal upstream code to `string`; pinned with `as const`.\n\nVERIFICATION (fresh, foreground): `pnpm --filter @moe/daemon typecheck` exit 0 with no diagnostics. `npx vitest run --root . --config package.json src/recovery/recovery-inventory-record.test.ts src/recovery/recovery-inventory-ledger.test.ts src/runtime-entrypoint.test.ts` => \"Test Files 3 passed (3) / Tests 49 passed (49)\". runtime-entrypoint.test.ts is included on purpose: it is the guard that would redden if any of the five new .js bridges were missing, misnamed or byte-wrong, so its green is the bridge evidence. Mutation drills are step 7 — nothing is claimed proven until each named test has been shown to go red.",
-      "startedAt": "2026-08-13T22:13:46.856Z",
-      "completedAt": "2026-08-13T22:16:19.656Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review the owned diff as a trust boundary. Confirm each production source targets <=250 lines and remains below 400, all four bridges are exact LF one-liners, caller objects are never frozen/mutated, combined proofs are stored once, no COMPLETE resource/integration proof is synthesized, no raw credential/key/nonce/message is serialized, and Windows tests close both store handles before reopen/delete. Perform byte-restored mutation drills that (a) delete one population/mapping edge, (b) omit a bound body leaf from the digest, (c) bypass recovery-incarnation equality, and (d) bypass key-epoch equality; require each named production-surface test to turn red, restore exact bytes, and rerun the focused tests green.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
@@ -147,48 +101,21 @@
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.ts"
-      ],
-      "note": "Adversarial review of the owned diff as a trust boundary.\n\nSTATIC CHECKS (all measured, none asserted from memory):\n- Per-file physical lines (`grep -c ''`, which does not undercount like PowerShell Measure-Object): contract 255, subject 296, record 244, codec 321, ledger 282. ALL under the 400 hard split point; three exceed the 250 target and I am disclosing that rather than manufacturing artificial seams. Test files are not production sources and are uncapped.\n- All FIVE .js bridges verified with `cat -A`: each is exactly `export * from \"./<name>.ts\";$` — one LF-terminated line, byte-identical to expectedBridgeSource in runtime-entrypoint.test.ts. That test is in the focused run and is green, so the bridge set is proven, not assumed.\n- Diff scope: `git status --porcelain -- apps/daemon/src/recovery packages/store/src` lists exactly the twelve owned paths, ALL as `??` (new). Zero pre-existing files modified, zero store schema change, zero foreign paths.\n- Secrets: grep for signatureHex|publicKeySpki|challengeDigest|keyHandle|secret|token|privateKey|nonce over all five production sources returns nothing. The only `payload` hits are the store event payload carrying our own canonical record bytes. The ledger touches the anchored binding at exactly six sites and reads only bindingDigest/incarnationRef/keyEpochRef/backupGenerationDigest — no key material, no signature, no SPKI, ever serialized.\n- Caller objects: grep for Object.freeze applied to an argument returns nothing; exactDataRecord freezes a NEW object built by Object.fromEntries. The record suite asserts positively that the caller's input and its subjects array are NOT frozen.\n- Combined proof stored once: the provider proof is one row declaring two populations; the digest-sensitivity and cardinality tests both pin it.\n- No COMPLETE synthesis: drill (h) below proves it.\n- Windows handles: the ledger suite's afterEach drains EVERY opened handle via a stack and closes before rmSync; the reopen test closes both the contender and the original before reopening.\n\nMUTATION DRILLS — 11 run, 11 RED, each byte-restored and sha256-verified. Every drill asserted its anchor appeared EXACTLY ONCE before mutating (a missed anchor aborts rather than silently running the suite on pristine code and reading as green), and every restore was verified by comparing the sha256 of the file after restore to the sha256 taken before the mutation.\n  a1 delete the PROVIDER_RUN mapping edge -> \"covers the seven design populations...\" RED\n  a2 same edge -> \"maps every population exactly once...\" RED\n  b  drop projectTag from the canonical digest body -> \"changes the record digest for every bound body field\" RED\n  c  bypass the adoption incarnation equality -> \"quarantines each single adoption deviation...\" RED\n  d1 bypass the adoption key-epoch equality -> same test RED\n  d2 bypass the ledger anchored-vs-ACTIVE key-epoch check -> \"refuses when the ACTIVE key epoch disagrees...\" RED\n  e  drop the reader's recordDigest-equals-address check -> \"refuses a record filed under another digest's aggregate\" RED\n  f  widen the ledger fact key set to accept incarnationRef/keyEpochRef -> \"accepts no caller-selected current refs\" RED\n  g  drop the codec's canonical re-encode byte compare -> \"refuses non-canonical byte variants\" RED\n  h  raise a missing configured proof slot to COMPLETE -> \"fills a missing configured proof with an UNKNOWN slot\" RED\n  i  drop the sole-event conflict guard -> \"refuses a second event under one record aggregate\" RED\nOne drill (d1) initially ABORTED on anchor count 0 — a wrong-indentation anchor, exactly the failure mode where a mutator that applied nothing runs the suite on pristine code and reads as a holding guard. The harness caught it by design; the anchor was corrected against the real bytes (`grep -n | cat -A`) and rerun to RED.\n\nADVERSARIAL CHECKLIST, items considered and their resolution:\n- CONCURRENCY: two concurrent identical writes are serialized by the store on (commandId, principalId, projectId) with expectedVersion 0 on a digest-keyed aggregate; the second replays rather than forking. There is no check-then-act: nothing reads-then-writes and hopes. Two concurrent DIFFERENT records simply address different aggregates. The reopen/two-handle test exercises real contention.\n- INPUTS: null/undefined/array/proxy/accessor inputs all refuse INPUT_INVALID via own-descriptor reading; oversized arrays refuse at MAX_RECOVERY_RECONCILIATION_ITEMS and oversized bytes at MAX_RECOVERY_RECONCILIATION_BYTES; empty bytes and invalid UTF-8 refuse RECORD_UNREADABLE; identity strings are NFC-normalised and control/format characters are rejected, so a homoglyph or zero-width variant cannot masquerade as a duplicate identity.\n- TOCTOU: the reader re-verifies decision-vs-event bytes and re-checks the content address, so a row that changed between the event read and the decision read cannot be answered with.\n- SIDE EFFECTS: the write is a single store transaction; there is no part",
-      "startedAt": "2026-08-13T22:16:24.330Z",
-      "completedAt": "2026-08-13T22:18:48.657Z"
+      ]
     },
     {
       "stepId": "step-8",
       "description": "Run the single final foreground gate and capture fresh exit codes/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded merge-base failing-path baseline, require zero new failures intersecting the owned recovery paths and all owned-package legs green, report any foreign red verbatim, verify the final diff contains only the ten explicit owned paths, and hand QA the record digest/replay/reopen evidence plus consumer IDs `task-47eecd22b3b94a57a9632672c19ebd97`, `task-cf7fb147bd1c47698cbd65c9535370aa`, and downstream `task-6f786c58cabf4f85be8ed4135e68a752`.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-contract.js",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.js",
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.js",
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-codec.js",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.js",
-        "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "note": "FINAL GATE — one foreground run, fresh, exit 0.\n\nCommand: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store` => EXIT=0.\nPer-leg, from the captured log:\n- @moe/daemon typecheck: `tsc --project tsconfig.json`, no diagnostics.\n- @moe/daemon test: Test Files 65 passed (65), Tests 1074 passed (1074).\n- @moe/store test: Test Files 39 passed (39), Tests 444 passed (444).\n- pnpm typecheck: Scope: 18 of 19 workspace projects, all green.\n- pnpm test: Test Files 248 passed (248), Tests 5386 passed | 1 skipped (5387).\n- pnpm verify:foundation: Test Files 30 passed (30), Tests 487 passed (487).\n- pnpm verify:store: Test Files 39 passed (39), Tests 444 passed (444).\n\nBASELINE COMPARISON. The merge-base failing-path baseline recorded in step 1 — captured at HEAD 0371ead on a CLEAN owned tree, before a single byte was written — was EXIT=0 with an EMPTY failing-path set. The final run is also EXIT=0. (2) minus (1) is therefore empty, and its intersection with the owned recovery paths is empty. NO FOREIGN RED EXISTS TO REPORT, and no path attribution was needed: every leg is genuinely green, including the two owned-package legs, so nothing here is excused rather than passed.\n\nONE THING I CHECKED BECAUSE IT LOOKED WRONG: the repo-wide `pnpm test` count is 5386 in BOTH the baseline and the final run, which would normally mean my 45 new tests silently failed to run. It does not. The root vitest.config.ts `include` is [\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\"] — `apps/**` is deliberately NOT in root scope, so the root suite never ran daemon tests before or after. Positive control: `find apps/daemon/src -name '*.test.ts' | wc -l` = 65, the daemon leg reports exactly \"Test Files 65 passed (65)\", both new files are in that list, and running the two alone yields 45 passing tests (1074 - 45 = 1029 pre-existing). The new tests run inside the @moe/daemon leg, which is the owned-package leg.\n\nFINAL DIFF SCOPE: `git status --porcelain` shows only foreign `.moe/` board state plus exactly the owned paths. Committed by EXPLICIT PATHSPEC, owned paths only, as f961d9c \"feat(task-f6cf8d16c2654641a92b0ee36924de0c): freeze recovery inventory class contract and quarantine record\" — 12 files changed, 2229 insertions, all `create mode`. No `git add -A`, no reset, no stash, no push, no merge; zero pre-existing files touched and zero foreign work captured. The scratch drill harness was deleted before staging and no debug/probe/generated file is in the commit.\n\nPATH-COUNT DEVIATION, restated for QA: the plan named ten owned paths; twelve landed. The extra pair is recovery-inventory-subject.ts + its bridge, split out of the record module in step 4 because the combined responsibility measures ~536 physical lines — past the 400 hard split point in epic rail 5. Final per-file counts: contract 255, subject 296, record 244, codec 321, ledger 282; all under 400, three over the 250 target, disclosed rather than hidden behind further artificial seams.\n\nEVIDENCE FOR QA:\n- Cardinality resolution: six unique proof classes (PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING) over seven design populations; only the provider row carries two, and it is stored once rather than cloned to inflate the count.\n- Record digest: SHA-256 over every body field except recordDigest, then appended; drill (b) proves a leaf dropped from the digest input reddens a named test.\n- Replay: an exact retry returns disposition REPLAYED and readAggregateEvents still shows exactly ONE event at aggregateSequence 1 with the right eventType and decisionTrace.commandKind.\n- Reopen/contention: a second handle reads the same record, and after closing both handles and reopening the record decodes byte-identically.\n- Mutation drills: 11 run, 11 RED, each anchor-count-guarded and sha256 byte-restored (step 7 note has the full matrix).\n- Consumers to unblock: task-47eecd22b3b94a57a9632672c19ebd97 and task-cf7fb147bd1c47698cbd65c9535370aa, downstream task-6f786c58cabf4f85be8ed4135e68a752. This task grants NO recovery.complete authority; R3 may later bind the immutable record digest.",
-      "startedAt": "2026-08-13T22:18:50.941Z",
-      "completedAt": "2026-08-13T22:21:10.376Z"
+      "status": "PENDING",
+      "affectedFiles": []
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-41bfec20",
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Human-directed unblock after live architect audit: this prerequisite is the authority-owning contract/persistence task created specifically to resolve the measured 4/5/6/7 inventory cardinality contradiction. It does not depend on the blocked coordinator; architect must freeze one non-duplicating semantic population mapping before consumers proceed.",
+  "reopenCount": 1,
+  "reopenReason": "Fresh foreground verification is green, but adversarial production-surface probes reproduced three fail-closed gaps. The builder silently accepts unknown and duplicate supplied proof-class rows, accepts a subject whose sourceProofDigest contradicts its mapped COMPLETE proof and still returns truth COMPLETE, and lets a throwing Proxy trap escape instead of returning the stable typed refusal. These gaps violate the closed-class contract and allow unverifiable provenance to gain COMPLETE truth. Validate supplied proof rows as a closed unique set, cross-link each subject digest to its mapped proof, contain/reject proxies before reflective access, and add exact code/layer regressions against the production builder.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
@@ -199,37 +126,47 @@
       "author": "governor-7c5e6be6",
       "content": "Governance queue priority: this is the next independent recovery prerequisite to plan. task-47eecd22 and the coordinator chain are explicitly blocked on its frozen class mapping; claim before dependent recovery tasks, re-measure current public roots, and keep the mapping non-duplicating.",
       "timestamp": "2026-08-13T16:54:04.288Z"
+    },
+    {
+      "id": "comment-a1e3289dec66472980a64c8d6a5b3fa7",
+      "author": "agent",
+      "content": "Governance triage: first QA rejection; the three findings are concrete task-owned fail-closed repairs (closed unique proof rows, subject-to-proof digest cross-link, Proxy containment), not a structural re-plan. Keep WORKING and claim for repair when a worker is free; task-47eecd22 remains BLOCKED until QA verifies DONE.",
+      "timestamp": "2026-08-13T22:30:15.731Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-13T22:22:48.835Z",
-  "contextFetchedBy": [
-    "architect-a9210e34",
-    "architect-a42f4965",
-    "worker-733c82bb",
-    "qa-41bfec20"
-  ],
+  "updatedAt": "2026-08-13T22:30:15.731Z",
+  "contextFetchedBy": [],
   "metrics": {
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7",
-    "step-8"
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",
+      "rejectedAt": "2026-08-13T22:28:01.038Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "DoD 3: item dispositions and source-proof digests must form a verifiable durable record.",
+      "rejectedAt": "2026-08-13T22:28:01.038Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "DoD 4: unverifiable evidence must remain UNKNOWN with retained provenance.",
+      "rejectedAt": "2026-08-13T22:28:01.038Z",
+      "rejectedBy": "qa-41bfec20"
+    }
   ],
-  "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T21:56:46.952Z",
   "planningNotes": {
     "approachesConsidered": "SEVEN PROOF ROWS — rejected: it duplicates the one combined runner proof merely to inflate cardinality. FIVE PROOFS BY FOLDING DURABLE INTEGRATION INTO GIT — rejected: the landed Git adapter proves refs/submodules, not durable integration attempts. FOLDING RESOURCE INTO ARTIFACT — rejected: object/staging enumeration is not scheduler resource authority. EXTENDING THE RUNNER CLASS UNION/COLLECTOR — rejected: its four node-side classes are already a closed, focused 378-line aggregate and task-47 is allowed to deliver two daemon typed proof bridges without reversing dependency direction. A CUSTOM SQLITE TABLE — rejected: the existing expected-version decision/event transaction provides replay, reopen, and strict readback without shared-schema churn. A MUTABLE 'LATEST' RECORD — rejected as unspecified authority: records are immutable/content-addressed and the later R3 decision binds an explicit digest. ONLY FOUR DISPOSITIONS — rejected as a narrowing of the pinned design, whose line 978 explicitly distinguishes terminal cancellation; CANCELLED is therefore represented as a proof-bearing, zero-retry terminal disposition alongside the four task-named values.",
@@ -273,5 +210,65 @@
     "apps/daemon/src/recovery/recovery-inventory-codec.js",
     "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
     "apps/daemon/src/recovery/recovery-inventory-ledger.js"
+  ],
+  "reviewCompletedAt": "2026-08-13T22:28:01.038Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",
+      "DoD 3: item dispositions and source-proof digests must form a verifiable durable record.",
+      "DoD 4: unverifiable evidence must remain UNKNOWN with retained provenance."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
+        "line": 137,
+        "description": "normaliseProofs uses supplied.find and silently discards all unmatched rows. Production probes with a seventh proof {class:'ALIEN', ...} and with a duplicate of proofs[0] both returned ok:true, truth:'COMPLETE', proofCount:6. Validate the supplied proof array itself; refuse unknown, duplicate, and extra class rows with distinct stable RECOVERY_INVENTORY code/layer, and add production-surface tests that pin which guard answered."
+      },
+      {
+        "type": "security",
+        "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
+        "line": 203,
+        "description": "A subject is adjudicated without verifying subject.sourceProofDigest equals the sourceProofDigest of its mapped configured proof. Mutating only the first subject digest to deadbeef... while its class proof remained c0... returned ok:true and truth:'COMPLETE', persisting contradictory provenance. Fail closed (typed refusal or UNKNOWN as specified) with an exact reason/layer and test a positive nonzero sweep across mapped classes."
+      },
+      {
+        "type": "security",
+        "file": "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+        "line": 216,
+        "description": "exactDataRecord invokes Object.getOwnPropertyDescriptors on unknown input without Proxy containment. A Proxy whose ownKeys throws caused buildRecoveryReconciliationRecord to throw 'trap-executed', contradicting the claimed hostile-input refusal and the stable-result rail. Reject transparent proxies and contain throwing/revoked proxies before reflective traps; assert immutable UNKNOWN_TRUTH/RECOVERY_INVENTORY with upstream RECOVERY_INVENTORY_INPUT_INVALID/RECOVERY_INVENTORY."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Fresh foreground verification is green, but adversarial production-surface probes reproduced three fail-closed gaps. The builder silently accepts unknown and duplicate supplied proof-class rows, accepts a subject whose sourceProofDigest contradicts its mapped COMPLETE proof and still returns truth COMPLETE, and lets a throwing Proxy trap escape instead of returning the stable typed refusal. These gaps violate the closed-class contract and allow unverifiable provenance to gain COMPLETE truth. Validate supplied proof rows as a closed unique set, cross-link each subject digest to its mapped proof, contain/reject proxies before reflective access, and add exact code/layer regressions against the production builder.",
+      "rejectedAt": "2026-08-13T22:28:01.038Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",
+        "DoD 3: item dispositions and source-proof digests must form a verifiable durable record.",
+        "DoD 4: unverifiable evidence must remain UNKNOWN with retained provenance."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
+          "line": 137,
+          "description": "normaliseProofs uses supplied.find and silently discards all unmatched rows. Production probes with a seventh proof {class:'ALIEN', ...} and with a duplicate of proofs[0] both returned ok:true, truth:'COMPLETE', proofCount:6. Validate the supplied proof array itself; refuse unknown, duplicate, and extra class rows with distinct stable RECOVERY_INVENTORY code/layer, and add production-surface tests that pin which guard answered."
+        },
+        {
+          "type": "security",
+          "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
+          "line": 203,
+          "description": "A subject is adjudicated without verifying subject.sourceProofDigest equals the sourceProofDigest of its mapped configured proof. Mutating only the first subject digest to deadbeef... while its class proof remained c0... returned ok:true and truth:'COMPLETE', persisting contradictory provenance. Fail closed (typed refusal or UNKNOWN as specified) with an exact reason/layer and test a positive nonzero sweep across mapped classes."
+        },
+        {
+          "type": "security",
+          "file": "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+          "line": 216,
+          "description": "exactDataRecord invokes Object.getOwnPropertyDescriptors on unknown input without Proxy containment. A Proxy whose ownKeys throws caused buildRecoveryReconciliationRecord to throw 'trap-executed', contradicting the claimed hostile-input refusal and the stable-result rail. Reject transparent proxies and contain throwing/revoked proxies before reflective traps; assert immutable UNKNOWN_TRUTH/RECOVERY_INVENTORY with upstream RECOVERY_INVENTORY_INPUT_INVALID/RECOVERY_INVENTORY."
+        }
+      ]
+    }
   ]
 }

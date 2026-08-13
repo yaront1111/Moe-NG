@@ -19,8 +19,8 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a42f4965",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -41,15 +41,36 @@
       "author": "agent",
       "content": "Governor acknowledgement: architect confirmed live remeasurement/planning is active and no handoff is needed. Stale alert cleared; continue independently.",
       "timestamp": "2026-08-13T22:14:52.575Z"
+    },
+    {
+      "id": "comment-ebd9fa249f234583838a20eadd67cbce",
+      "author": "agent",
+      "content": "Governor acknowledgement: dependency block is valid and the four prerequisite tasks are now measured. Please leave an explicit handoff and self-release this BLOCKED assignment; no forced release will be made from stale presence alone.",
+      "timestamp": "2026-08-13T22:30:15.849Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:06.538Z",
-  "updatedAt": "2026-08-13T22:14:52.575Z",
+  "updatedAt": "2026-08-13T22:30:45.803Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:09:54.588Z"
   },
   "contextFetchedBy": [
     "architect-a42f4965"
+  ],
+  "blockedReason": "Current-byte audit at HEAD 0371ead shows the task cannot be planned honestly inside its stated runner/scheduler scope and <=10-file cap. ClaudeLaunchRequest/launch snapshot has no selected model, model snapshot/build evidence, reasoning effort, profile/config hashes, or concurrency authority; launchClaude has no production caller; its version-pinned stream parser retains only seq/type/subtype/schema and cannot observe model/usage/stop/steps. The landed scheduler UsageMeasurementRecord and normalizeUsageMeasurement are real but absent from @moe/scheduler root, and @moe/runner deliberately depends only on @moe/contracts and cannot import scheduler. A caller-supplied telemetry mirror or injected fake normalizer would violate the production-surface and fail-closed rails. Created bounded prerequisites: task-5fa25bb33e974f04865b46f9fa0f3910 (publish scheduler measurement root seam), task-d23a913f0586431d9dccc0cfd1f66fd5 (bind actual Claude model/effort selection before open), task-cbc42f3383444c05a20c6bf56129e8c8 (version-pinned Claude structured-result parser plus real launch raw handoff), and task-8e3076177f87458f934a776eca68ba16 (daemon direction-safe scheduler normalization and durable record). Re-promote task-159 only after those are DONE; then it should own the final production launch->normalized record integration/adversarial hardening and unblock benchmark harness task-b937811e8b72459ea169e5fff1238ce1.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T22:24:44.696Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured runner/scheduler/daemon capability, loaded planning and epic-breakdown guidance, proved the original task exceeds a truthful runner/scheduler slice, created prerequisites task-5fa25bb3, task-d23a913f, task-cbc42f33, task-8e307617, reported BLOCKED, and wrote Serena handoff/decision memories.",
+      "whatRemains": "Land the four prerequisite tasks; then re-measure and plan task-159 as final real launch-to-normalized-durable-record integration/hardening, followed by benchmark harness task-b937811e.",
+      "pitfalls": "Do not substitute runtime/profile for model/effort, accept caller-selected telemetry as observed, map UNKNOWN to zero, duplicate scheduler normalization in runner, or prove the consumer only in tests.",
+      "openQuestions": "Exact final task-159 owned paths depend on the public APIs produced by the four prerequisites and the durable dispatch task.",
+      "releasedAt": "2026-08-13T22:30:45.801Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit architect handoff after current-byte audit, prerequisite slicing, BLOCKED report, task comment, and Serena memory; release capacity to plan the next human-promoted task."
+    }
   ]
 }

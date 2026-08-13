@@ -1,0 +1,39 @@
+{
+  "id": "task-5fa25bb33e974f04865b46f9fa0f3910",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Publish scheduler usage-measurement consumer surface",
+  "description": "Objective: make the landed provider-neutral usage measurement contract executable through the bare @moe/scheduler package root so a provider telemetry composer can use the production authority rather than copy its source/coverage matrix. Deliverable: a curated root export of UsageMeasurementRecord, normalizeUsageMeasurement, the exact coverage/source/code/layer vocabularies and required type closure, with package-root/runtime tests. Consumer: task-159f4c21ef9149e8a65f24735c9c1475. NOT in scope: new normalization semantics, provider parsing, pricing, benchmark gates, or edits to the 250-line measurement kernels. Owned paths: packages/scheduler/src/index.ts and packages/scheduler/src/index-surface.test.ts only. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "@moe/scheduler root exports normalizeUsageMeasurement plus UsageMeasurementRecord, NormalizedMeasurement, PricebookBinding, coverage/source/code/layer vocabularies, and the exact callable type closure; no direct enumerator, policy, fixture, or incidental helper leaks.",
+    "Package-root exact namespace tests and a plain-Node bare-specifier probe prove every new runtime binding loads and invokes the production normalizer; generated runtime names have exact non-zero cardinality.",
+    "Root-driven tests pin UNKNOWN/null, PARTIAL/lower-bound, source/coverage, truncated-completion, and malformed-record semantics with their existing exact CONTRACT or MEASUREMENT code/layer; production kernel behavior remains byte-for-byte unchanged.",
+    "Fresh pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test exits 0."
+  ],
+  "taskRails": [
+    "Do not edit packages/scheduler/src/budget/budget-contract.ts or budget-measurement.ts; both are focused 250-line landed authorities.",
+    "Publish the existing normalizer and closed vocabularies; do not clone SOURCE_COVERAGES or introduce provider-specific rules.",
+    "Tests assert exact stable reason code and refusing layer and generated case counts are non-zero.",
+    "Consumer task is task-159f4c21ef9149e8a65f24735c9c1475; root loadability alone is not the final provider composition."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-b1a46457",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Independent measured prerequisite: the production scheduler usage normalizer is landed but not exposed at the public root. Plan only the two owned root/surface-test paths and preserve kernel bytes.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.601,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:23:51.670Z",
+  "updatedAt": "2026-08-13T22:34:10.132Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T22:34:04.576Z"
+  },
+  "contextFetchedBy": [
+    "architect-b1a46457"
+  ]
+}

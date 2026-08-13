@@ -1,0 +1,42 @@
+{
+  "id": "task-cbc42f3383444c05a20c6bf56129e8c8",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Claude structured result telemetry parser",
+  "description": "Objective: turn the version-pinned, digest-bound Claude structured output captured by the real launcher into provider-run facts without guessing absent measurements. Deliverable: focused @moe/runner provider telemetry contracts, a supported Claude result parser, and a launchClaudeWithTelemetry production wrapper that calls the real launchClaude path and returns a frozen raw handoff bound to run/effect/attempt, landed launch selection, runtime/profile digests, start/completion, exact terminal/infra classifications, token/step observations, concurrency facts, and raw receipt digests. Hard dependencies: task-d23a913f0586431d9dccc0cfd1f66fd5. Consumers: task-159f4c21ef9149e8a65f24735c9c1475 and durable dispatch task-6cbff01023b14b26a78fc5e3eb1dd8a9. NOT in scope: scheduler normalization, pricing/billing claims, daemon persistence, benchmark gates, or corpus/campaign work. Owned paths: new focused packages/runner/src/providers/telemetry/**, minimal Claude telemetry wrapper/surface wiring, and focused tests. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "Production telemetry contracts expose frozen closed terminal, infrastructure, count-coverage, concurrency, and reason-code/layer vocabularies; unsupported or unreadable model/token/step/stop facts remain explicit UNKNOWN with null quantities, never zero.",
+    "A version-pinned Claude structured-result parser binds providerRunRef, observed model/snapshot/build evidence, exact token/step observations, stop/infra outcome, parser version, sequence, and raw receipt digest; malformed, duplicate, reordered, truncated, or unknown-schema bytes fail closed with exact code/layer.",
+    "A public launchClaudeWithTelemetry wrapper invokes the real launchClaude result path and binds the parsed facts to exact effect/attempt identity, landed launch selection, runtime/profile digests, timestamps, achieved/ceiling concurrency, and launch observation without promoting declared selection to provider-observed evidence.",
+    "Focused tests sweep every declared terminal/infra/count arm with exact non-zero cardinality, pin UNKNOWN code/layer and zero-invention rules, and mutation-check model/effort identity and token/step coverage comparisons on the production wrapper.",
+    "@moe/runner curated root loads the wrapper/contracts through plain Node without incidental helper leakage, and task-159f4c21ef9149e8a65f24735c9c1475 plus task-6cbff01023b14b26a78fc5e3eb1dd8a9 are recorded consumers.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "Use only frozen supported provider schema facts; aliases, settings defaults, missing result usage, client-estimated cost, or placeholder assistant counts never become provider-observed COMPLETE facts.",
+    "Do not import @moe/scheduler or copy its source/coverage authority into runner; this slice emits raw provider observations for later normalization.",
+    "Do not grow the 249/250-line launcher lifecycle/result modules; compose through a focused wrapper and exact LF .js bridges.",
+    "Tests assert exact stable reason code and refusing layer, generated case counts are non-zero, and mutation drills exercise production comparisons."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.603,
+  "comments": [
+    {
+      "id": "comment-0e3482d29e9e4b78894bcd6b9f30ff06",
+      "author": "agent",
+      "content": "Governance sequencing guard: remain BACKLOG until task-d23a913 is QA-approved DONE. The parser must bind observed facts to the landed production launch-selection contract; do not plan against in-flight or invented shapes.",
+      "timestamp": "2026-08-13T22:30:29.779Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:24:09.437Z",
+  "updatedAt": "2026-08-13T22:30:29.779Z"
+}

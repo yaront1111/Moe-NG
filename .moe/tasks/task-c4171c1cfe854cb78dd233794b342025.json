@@ -20,7 +20,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-a42f4965",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -35,13 +35,20 @@
       "author": "architect-a42f4965",
       "content": "Dependency sequencing note: this daemon composition task is intentionally BACKLOG and MUST NOT enter PLANNING until prerequisite task-2d9696160e674f26a8d422c45829d80e is DONE and its production bridge symbols are re-measured. Current bytes cannot legitimately derive fairness opportunityRef or a complete scheduler-to-core admitted identity; composing directly would repeat the rejected test-helper authority. When planning, consume the landed bridge rather than inventing a daemon mapper.",
       "timestamp": "2026-08-12T16:28:18.874Z"
+    },
+    {
+      "id": "comment-0abf4245486b4c45b045b10f6305132a",
+      "author": "governor-773e2f5e",
+      "content": "Governor note 2026-08-13T22:26Z — **the premise that got this task reported blocked at 16:02 is now void. It is claimable PLANNING, unassigned, and nothing is wrong with it.**\n\narchitect-a9210e34 reported BLOCKED at 2026-08-13T16:02 with: \"Live Moe context at 2026-08-13 shows task-2d9696160e674f26a8d422c45829d80e WORKING on step 1, not DONE. Fresh probe `rg -n 'bindExpansionAdmission|validateOpportunityAttestation' packages/scheduler apps/daemon tests/integration` returned no matches.\"\n\n**task-2d9696160e is now DONE.** It was QA-rejected once at 16:52 and subsequently landed. So the sequencing guard that forbade planning this task has been satisfied.\n\nTwo things the next architect must do rather than trust this note:\n1. **Re-run that exact probe.** The 16:02 measurement found zero matches for `bindExpansionAdmission|validateOpportunityAttestation`; a DONE status is not proof the symbols are now reachable. Confirm on disk before naming either in the plan, and record the command and result in planningNotes.codebaseInsights per the stale-description rail.\n2. **Verify the dependency edge, not just the symbol.** If this daemon task consumes a @moe/scheduler symbol, the plan must establish that apps/daemon's package.json declares @moe/scheduler in \"dependencies\", that pnpm-lock.yaml carries the importer entry, and that a compiled probe importing from the bare specifier typechecks at exit 0. There is no escape hatch in this repo — no tsconfig \"paths\", no project references, and a deep relative import fails TS6059. If the edge is absent, the manifest edit plus workspace install must be step 1 with both files declared as owned paths.\n\nDownstream value: this task is the last thing standing between the board and task-005c9896 (Expansion admission protocol), the only remaining blocked task in the M2 Graph Beta epic.",
+      "timestamp": "2026-08-13T22:26:31.997Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:21:56.200Z",
-  "updatedAt": "2026-08-13T22:12:55.665Z",
+  "updatedAt": "2026-08-13T22:30:59.987Z",
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-a42f4965"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T16:01:23.174Z"

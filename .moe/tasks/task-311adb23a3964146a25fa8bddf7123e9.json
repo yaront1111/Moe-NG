@@ -29,57 +29,85 @@
     {
       "stepId": "step-2",
       "description": "TDD red: extend the production-boundary claim tests with an exact five-key successor assertion and exact values for ACTIVE lease, dimension-bound RESERVED/null-attempt slot, RESERVED reservation, the actual shifted budget view version and available/reserved buckets, and CLAIMED intent; assert input non-mutation, no successor/input aliasing, and recursive freezing. Add generated hostile outer/section/liveClaims/command cases for missing/extra/string-or-symbol keys, own accessors, proxies, custom prototypes, and sparse/unsafe arrays; assert a positive case count and, for every refusal, exact stable code, AUTHORITY layer, owning leg, upstreamCode, and zero successor keys. Add a generated non-claim command set that expects WORK_INTENT_COMMAND_MISMATCH/effectIntent/AUTHORITY/null and an earlier-leg-precedence case. Update the closed vocabulary producer and public-root compile-time equality assertions so ClaimSuccessors has exactly the five public package-root field types. Run only the named focused tests to demonstrate they fail for the missing code/view and permissive parsing before production edits.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.test.ts",
         "apps/daemon/src/work/work-vocabulary.test.ts",
         "apps/daemon/src/index-surface.test.ts"
       ],
-      "startedAt": "2026-08-13T22:19:40.097Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "RED confirmed for both QA defects. `pnpm exec vitest run --root . --config package.json src/work/work-claim.test.ts` -> 52 failed | 113 passed (165), exit 1. New/changed coverage: POISONS 8->9 (added a transparent proxy that traps nothing), HOSTILE_CASES 48->54, LIVE_CLAIM_CASES 6->9 (transparent proxy table, transparent proxy element, get-trapping element); trapsFire replaced by an asserted `proxy` flag plus `types.isProxy(nodeAt(payload, path))`, so a case must really plant the membrane it names, and probe.hits must now be 0 for EVERY case (a proxy is refused for being one, so no trap may run). The former \"mirrors a section through descriptors\" test — which positively GRANTED a get-trapping proxy — now pins gets===0 AND WORK_PAYLOAD_MALFORMED/budgetReservation/AUTHORITY/null. New 14-case hand-counted NESTED_CASES matrix (proxy/accessor/function/Map/Date/hole/borrowed prototype/symbol key/non-enumerable/self-cycle nested one or two levels inside a section) pinned to its owning leg. New describe proving the caller graph is neither frozen nor retained: shared single mutable lease record across lease.record and intent.leaseBinding, recursive reachable-object identity check both ways, and a recursive descriptor/frozen/sealed digest that JSON.stringify cannot see. Failures are all for the intended reason: transparent proxies granted, traps still firing, nested membranes accepted, and `published.filter(node => callerNodes.has(node))` returning the caller's own lease record.",
+      "startedAt": "2026-08-13T22:19:40.097Z",
+      "completedAt": "2026-08-13T22:24:56.411Z"
     },
     {
       "stepId": "step-3",
       "description": "Define the closed contract in work-kernel.ts: add WORK_INTENT_COMMAND_MISMATCH; change ClaimSuccessors from unknown placeholders to readonly LeaseRecord, ProviderSlotReservation, ReservationRecord, BudgetAvailableView, and EffectIntent fields imported type-only from the @moe/scheduler and @moe/runner public roots; add budgetView while retaining the four causal CLAIM_LEGS and all existing result/refusal shapes. Keep the production source focused and near the <=250-line target.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-kernel.ts"
-      ]
+      ],
+      "note": "No edit required this round: the closed contract landed in the pre-rejection round and QA confirmed it. Re-measured on disk at HEAD 0371ead — work-kernel.ts:98 declares WORK_INTENT_COMMAND_MISMATCH inside the frozen WORK_ERROR_CODES; work-kernel.ts:149-155 declares ClaimSuccessors with the five readonly public-root field types (LeaseRecord, ProviderSlotReservation, ReservationRecord, BudgetAvailableView, EffectIntent) imported type-only from @moe/scheduler and @moe/runner; CLAIM_LEGS is still the four causal legs with budgetView documented as the budget leg's second output. work-vocabulary.test.ts:142 produces the new code and index-surface.test.ts:372-382 pins the exact five-key compile-time closure. work-kernel.ts stays 261 lines, unchanged. Neither QA defect lives in this file: both are parsing/retention behaviour in work-claim.ts, fixed in step 4.",
+      "startedAt": "2026-08-13T22:24:58.418Z",
+      "completedAt": "2026-08-13T22:25:11.194Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the minimum claim composition in work-claim.ts. Exact-snapshot the outer record first, then exact-snapshot each section immediately before its existing leg, accepting only ordinary/null-prototype own-data records with the declared keys and a safe dense own-data liveClaims array; catch/reject proxies and descriptor traps without reading getters. Map structural failures to WORK_PAYLOAD_MALFORMED at the owning leg with AUTHORITY/null while retaining the established lease -> slotCeiling -> providerSlot -> budgetReservation -> effectIntent precedence and all upstream mappings. At the effect leg, distinguish a structurally valid non-'claim' kind as WORK_INTENT_COMMAND_MISMATCH, then invoke applyEffectCommand only with a server-owned {kind:'claim'} literal. Return both reservation and the exact shifted result.view from the single reserveForAdmission call, construct all five typed successors only after every leg succeeds, and rely on the existing deep-freeze boundary without freezing or aliasing caller input. Add concise contract comments only where the fixed-command or second budget output would otherwise be non-obvious; keep this source below 250 lines if practical and never approach 400.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim-shape.js"
+      ],
+      "note": "GREEN. Focused: 165/165 pass (was 52 failed | 113 passed). Full daemon typecheck exit 0; full daemon suite 65 files / 1104 tests exit 0 (baseline 1074, +30 new). Fix 1 — categorical proxy refusal: node:util `types.isProxy` (the convention already used at apps/daemon/src/documents/document-work-safe-value.ts) now refuses the outer record, every section, the command and the liveClaims table AND its elements before any trap can answer, so no caller code runs at all. Fix 2 — detachment: sections are now snapshotted DEEP (mirrorDeep), so the graph handed to fenceAuthority/reserveProviderSlot/reserveForAdmission/applyEffectCommand is daemon-owned; the runner can carry the intent's lease binding through and the published, deep-frozen successors still share no object with the caller at any depth. detach() copies only plain/null-prototype own-data records and dense own-data arrays, bounded at depth 24, so a Date/Map/class instance/function/symbol key/hole/non-enumerable field/self-cycle is refused at its owning leg rather than flattened. Leg precedence, all upstream mappings, the server-owned {kind:\"claim\"} literal and the retained post-reservation view are untouched. Deviation from planningNotes' \"keep helpers local\": extracted to a new work-claim-shape.ts because the helpers roughly tripled; work-claim.ts drops 250 -> 192 lines and work-claim-shape.ts is 152, both inside the <=250 target instead of one ~300-line file. The new module is runtime tier, so runtime-entrypoint.test.ts's bridge guard required work-claim-shape.js with exact content — added, and that guard passes.",
+      "startedAt": "2026-08-13T22:25:13.503Z",
+      "completedAt": "2026-08-13T22:26:56.711Z"
     },
     {
       "stepId": "step-5",
       "description": "Run the single final verification gate in the foreground and record fresh exit status/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded baseline and require no new failing path intersecting the five owned paths; report any unchanged foreign red verbatim rather than fabricating green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-kernel.ts",
         "apps/daemon/src/work/work-claim.test.ts",
         "apps/daemon/src/work/work-vocabulary.test.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "note": "Full gate run fresh in the foreground, every leg exit 0, no red anywhere to attribute or disclose. pnpm --filter @moe/daemon typecheck = 0. pnpm --filter @moe/daemon test = 65 files / 1104 tests, 0. pnpm --filter @moe/scheduler test = 42 files / 1219 tests, 0. pnpm typecheck (repo-wide, all packages incl. control-room/review/scheduler/daemon) = 0. pnpm test (repo-wide) = 248 files / 5386 passed | 1 skipped, 0. pnpm verify:foundation = 30 files / 487, 0. pnpm verify:store = 39 files / 444, 0. Baseline comparison: the step-1 baseline was already fully green (daemon 1074, scheduler 1219, typecheck 0), so the (2)-minus-(1) failing-path delta is empty by inspection and no foreign red exists this round; the recovery-inventory red recorded in the earlier handoff has cleared. Delta is +30 daemon tests, all in work-claim.test.ts.",
+      "startedAt": "2026-08-13T22:26:58.842Z",
+      "completedAt": "2026-08-13T22:27:46.360Z"
     },
     {
       "stepId": "step-6",
       "description": "Perform the final adversarial review over the owned diff: recheck parser trap safety, leg precedence, no optimistic authority, exact public-root type closure, five-record deep immutability, no recomputed budget view, and per-production-file line counts. Prove the guards are live by temporarily mutating the production non-claim check and the retained budget-view assignment one at a time, showing the named production-boundary tests red, then reverse each exact edit and confirm the original file hashes are restored (no reset/stash or leftover evidence). Inspect `git status --porcelain`, remove only owned staged entries if necessary, commit only the five explicit owned pathspecs, verify `git show --stat` contains nothing else, and submit for QA; on rejection, reproduce the exact production-surface claim, add a red regression, fix only owned paths, and repeat the final gate/review.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-kernel.ts",
         "apps/daemon/src/work/work-claim.test.ts",
         "apps/daemon/src/work/work-vocabulary.test.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim-shape.js",
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "Adversarial review found and fixed a real escape before commit: `Array.isArray` THROWS on a revoked proxy (\"Cannot perform 'IsArray' on a proxy that has been revoked\"), and mirror asked it before the proxy question with the old try/catch removed — so claimWork raised a TypeError instead of refusing with a stable code (epic rail 4). Red first: added a revoked-proxy poison (5 hostile cases failed with that exact TypeError), a revoked-proxy liveClaims table and a revoked-proxy nested lease binding; then reordered the proxy check ahead of Array.isArray. Matrix now POISONS 10 / HOSTILE_CASES 60 / LIVE_CLAIM_CASES 10 / NESTED_CASES 15, all hand-counted. Five mutation drills, each reddening its NAMED test then reversed by exact reverse-Edit (never git checkout): (1) `exact[\"kind\"] === \"claim\"` -> `!== undefined` = 7 red incl. \"refuses the requestCancel command as a command mismatch\"; (2) `view: result.view` -> `view: budget[\"view\"]` = 1 red, \"retains the post-reservation budget view, not the caller's input view\"; (3) drop types.isProxy from mirror = 20 red proxy cases; (4) claimIntent mirrorDeep -> mirror = 8 red incl. \"publishes no object the caller owns, at any depth\"; (5) drop the liveClaims element proxy guard = 2 red. All four owned files restored to byte-identical SHA-256 after the drills. Other review findings, all checked: UNSAFE is a private Symbol() (not Symbol.for), so a caller cannot forge it; the module has no mutable state and is concurrency-safe; nothing can throw after the reorder (no getters are invoked, no proxies reach the reflection calls); a proxy nested inside a liveClaims element is unreachable because countOccupyingSlots requires three string fields; a null-prototype input is copied into an ordinary record, which every upstream accepts. Theoretical only: detach is O(payload size), so an enormous payload is copied before the ceiling refuses — bounded upstream at ingress, unchanged from the previous mirrorList behaviour. Post-drill gate all green (daemon typecheck 0, daemon 65/1112, scheduler 42/1219, repo-wide typecheck 0, repo-wide vitest 248 files/5386+1 skipped, verify:foundation 30/487, verify:store 39/444). Correction to my step-5 note: root `pnpm test` covers adapters/packages/tests only — apps/daemon is out of its include list — so the daemon leg is covered by the filtered run, not by the root run; repo-wide typecheck DOES include apps/daemon. Committed 7c464d7 by explicit pathspec, exactly the four owned files (git show --stat shows nothing else); committed bytes hash-match the gated worktree bytes. Scratch .vitest-root.json removed; remaining untracked entries (.moe task json, packages/runner claude-launcher-authority.test.ts) are foreign and untouched.",
+      "startedAt": "2026-08-13T22:27:49.194Z",
+      "completedAt": "2026-08-13T22:32:57.945Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-68608f71",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -122,12 +150,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-13T22:21:55.717Z",
+  "updatedAt": "2026-08-13T22:33:32.497Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7,
+    "executedStepCount": 12,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -147,7 +175,12 @@
     }
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [
     {
@@ -181,20 +214,21 @@
   },
   "planApprovedAt": "2026-08-13T21:00:13.229Z",
   "workStartedAt": "2026-08-13T21:00:34.365Z",
-  "reviewStartedAt": "2026-08-13T21:31:39.177Z",
+  "reviewStartedAt": "2026-08-13T22:33:32.497Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store",
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "daemon typecheck: tsc --project tsconfig.json -> exit 0 | daemon test: Test Files 63 passed (63), Tests 1029 passed (1029) | scheduler test: Test Files 42 passed (42), Tests 1219 passed (1219) | repo typecheck: all 18 workspaces Done (apps/daemon typecheck: Done) | repo test: Test Files 248 passed (248), Tests 5386 passed | 1 skipped (5387) | verify:foundation: Test Files 30 passed (30), Tests 487 passed (487) | verify:store: Test Files 39 passed (39), Tests 444 passed (444) | GATE_EXIT=0",
-    "reportedAt": "2026-08-13T21:31:39.177Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  65 passed (65)\n      Tests  1112 passed (1112)\n   Duration  3.41s\n$ vitest run --root ../.. packages/scheduler/src\n RUN v4.1.10 D:/projexts/moe-next\n Test Files  42 passed (42)\n      Tests  1219 passed (1219)\n   Duration  1.07s\nGATE_EXIT=0",
+    "reportedAt": "2026-08-13T22:33:32.497Z"
   },
   "filesModified": [
     "apps/daemon/src/work/work-claim.test.ts",
-    "apps/daemon/src/work/work-vocabulary.test.ts",
-    "apps/daemon/src/index-surface.test.ts",
     "apps/daemon/src/work/work-kernel.ts",
     "apps/daemon/src/work/work-claim.ts",
-    "apps/daemon/src/work/work-race-world.ts"
+    "apps/daemon/src/work/work-claim-shape.ts",
+    "apps/daemon/src/work/work-claim-shape.js",
+    "apps/daemon/src/work/work-vocabulary.test.ts",
+    "apps/daemon/src/index-surface.test.ts"
   ],
   "reviewCompletedAt": "2026-08-13T22:14:57.765Z",
   "rejectionDetails": {
