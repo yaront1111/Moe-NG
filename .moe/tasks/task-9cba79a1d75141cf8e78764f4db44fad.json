@@ -120,7 +120,7 @@
     {
       "stepId": "step-7",
       "description": "Perform the final adversarial review over the owned diff: check exact 20-kind equality, family/schema precedence, request-injection trust boundary, capability-before-payload ordering, replay/idempotency semantics, frozen return values, unexpected-error propagation, import cycles, default-source entry versus named bridge behavior, Windows child cleanup/timeouts, and absence of effect.activate or unrelated policy. Temporarily mutate one production required-capability mapping and one ordered payload allow-list entry separately; for each, prove the named production-ingress characterization test turns red with the exact expected code/stage/layer or row mismatch, then reverse the exact edit and verify original hashes/gates. Inspect `git status --porcelain`; commit only explicit owned pathspecs, never a bare commit, and verify `git show --stat` contains no foreign paths. Submit for QA; if rejected, reproduce the exact production-surface claim, add a red regression, fix only owned paths, and repeat the final gate/review.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-registry.js",
@@ -128,10 +128,19 @@
         "apps/daemon/src/daemon-store-dependencies.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
       ],
-      "startedAt": "2026-08-13T23:09:33.432Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.js",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Adversarial review done over the owned diff; full evidence in comment-98f0ff49a2794bc99e2fbe960dff7867. Checks: exact 20-kind equality (registry.size 20 + hand-written key-set equality guards the it.each sweep from generating zero cases); family/schema precedence review>session>work>bootstrap unchanged; request injection stays server-side and the caller cannot supply projectId/principalId/decidedAt (they are outside every allow-list, so PAYLOAD_SHAPE refuses INPUT_INVALID/400); capability-before-payload ordering proven by real sessions (holder reaches PAYLOAD_SHAPE, non-holder gets CAPABILITY_DENIED/AUTHORIZE/403 and leaves no durable decision); replay identical + fresh-handle replay + child-process replay all REPLAYED on the same effectId; every returned value frozen (ports pair, entries, decisions); unknown errors rethrown; no import cycle (nothing outside the host, its test and the bridge references the new module); default export still only on the .ts source, which is why the child smoke imports daemon-store-dependencies.ts and separately traverses the .js bridge; child bounded by execFile timeout 120s + it() timeout 180s + maxBuffer, shell disabled, windowsHide, temp dir removed in finally after exit; grep confirms no effect.activate and no policy change. Mutation drills, each reversed exactly with sha256 back to e1db68a2...: capability mutation reddened 2 named tests with the exact expected/actual capability; payload-key mutation reddened 9 across both suites; parking the bridge reddened the child smoke with ERR_MODULE_NOT_FOUND (so it is not vacuous). Disclosures: (1) foreign whole-tree commit 30458af swept my two production files - not amended, not reset; my commit 6adc800 carries only daemon-command-registry.js + the two test files by explicit pathspec and git show --stat has no foreign path; HEAD bytes equal worktree bytes on all five owned paths. (2) Pre-existing prototype-chain hole in agentCapabilitiesFor (\"toString\" -> [Function,\"work.write\"]) is byte-identical to 1e8043f and deliberately preserved by this behaviour-preserving extraction. (3) The plan's changed-byte 409 is unreachable through ingress (idempotency keys on commandId; requestBytes are {kind,payload}), so the 409/DURABLE_STORE translation is pinned on decisions.decide directly instead of faked. Final gate re-run after drills and commit: GATE_EXIT=0 (daemon 67/1221, DEFAULT_PROVIDER_OK, root 250/5476 + 1 skipped).",
+      "startedAt": "2026-08-13T23:09:33.432Z",
+      "completedAt": "2026-08-13T23:12:40.898Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -165,16 +174,22 @@
       "author": "governor-773e2f5e",
       "content": "⚠️ CORRECTION — THE HANDOFF NOTE ON THE 22:35 RELEASE IS WRONG. DO NOT ACT ON IT.\n\nThat note says \"No implementation plan was submitted\" and \"Plan the extraction and submit\". Both are false. I wrote it believing I was releasing architect-a9210e34 from a PLANNING task. By the time the call landed the task was WORKING and mid-build.\n\n**Actual state at the time of the release:**\n- 22:27:28 architect-a9210e34 submitted a 7-step implementation plan (it did read my unblock ping — it was never unresponsive, it acted and moved on to task-5dfc98fc)\n- 22:27:30 SPEED auto-approved\n- 22:28:11 worker-733c82bb claimed and started; step 1 COMPLETED, step 2 IN_PROGRESS\n- 22:35 governor released — dropping worker-733c82bb, not the architect\n\n`moe.release_task` clears whoever is the CURRENT assignee, not the one the caller has in mind. My board read was 14 minutes stale. Governor error; no fault of the architect or the worker, and no judgement on the plan or the work.\n\n**Resulting state: status WORKING, assignedWorkerId null, plan intact at 1/7. No files were touched** — no reset, no stash, no revert. worker-733c82bb has been told in #workers to re-claim and resume in place.\n\n**What remains true from that note, and still binds:**\n- The authoritative bridge literal is the DOUBLE-quoted form, exact one line LF: `export * from \"./daemon-command-registry.ts\";` — per human-approved proposal prop-f0c3baf26d1c441c99f4f53018e53f65, recorded in comment-423669880cfb4319b2cbf6cfab3a1ab7. The DoD's single-quoted literal is void.\n- Scope is NOT widened: do not migrate runtime-entrypoint.test.ts, do not touch any existing bridge.\n- Measure the below-300-lines DoD item with `grep -c ''`; Measure-Object -Line and wc -l both undercount.\n- DoD item 5 needs a real mutation drill: an extracted capability or payload-key mapping change must redden a NAMED production-ingress test, on an outcome assertion — a shape or toEqual assertion dying does not settle it.\n\n**What is void from that note:** everything framing this as unplanned work. Whoever holds this task should resume the existing plan, not re-plan it.",
       "timestamp": "2026-08-13T22:36:19.341Z"
+    },
+    {
+      "id": "comment-98f0ff49a2794bc99e2fbe960dff7867",
+      "author": "worker-733c82bb",
+      "content": "QA notes for the registry extraction (worker-733c82bb)\n\n1. WHERE THE BYTES LANDED. Foreign whole-tree commit 30458af (task-c81953d210f14cdeb9f6070a443b6750) swept my two production files - apps/daemon/src/daemon-command-registry.ts and apps/daemon/src/daemon-store-dependencies.ts - into its own commit while I was mid-task. Per epic rail 3 / the hook rail I did not amend, reset or re-commit them. My own commit 6adc800 carries only the remaining owned paths by explicit pathspec: daemon-command-registry.js, daemon-command-registry.test.ts, daemon-store-dependencies.test.ts (git show --stat contains no foreign path). Review the whole task by base-ref diff:\n   git diff 1e8043f..HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/daemon-command-registry.js apps/daemon/src/daemon-command-registry.test.ts apps/daemon/src/daemon-store-dependencies.ts apps/daemon/src/daemon-store-dependencies.test.ts\n   Committed bytes equal gated bytes: HEAD and worktree sha256 match on all five paths (registry.ts e1db68a2..., bridge 356a19ab..., registry.test.ts c09ed47b...).\n\n2. PRE-EXISTING HAZARD, PRESERVED ON PURPOSE, NOT FIXED HERE. agentCapabilitiesFor tests family membership with `kind in FAMILY_MAP`, which walks the prototype chain, so agentCapabilitiesFor(\"toString\") returns [Function, \"work.write\"] instead of null (same for constructor, __proto__, hasOwnProperty). Measured on the production module: [[\"toString\",[\"function\",\"work.write\"]],[\"constructor\",[\"function\",\"work.write\"]],[\"__proto__\",[\"object\",\"work.write\"]],[\"effect.activate\",null],[\"work.claim\",[\"work.write\"]]]. The code is byte-identical to 1e8043f, so this is inherited, not introduced; this task is a behaviour-preserving extraction and fixing it would change a shipped contract. Registry construction is unaffected (it maps over Object.keys(PAYLOAD_KEYS)). Flagging it for the effect.activate consumer (task-e33747f982e0452a9f9d784fd1cb914d) or a follow-up.\n\n3. IDEMPOTENCY REALITY CHECK. The plan expected a changed-byte 409/DURABLE_STORE at ingress. Measured behaviour: the store receives requestBytes = {kind, payload} and the bootstrap ledger short-circuits on the command id, so re-sending the same commandId with a DIFFERENT payload returns REPLAYED with the original effectId - no IdempotencyConflictError is raised through handleCommandRequest. Rather than assert a refusal that cannot be produced, the suite pins that translation on the production surface that can reach it: decisions.decide with a commit thunk throwing IdempotencyConflictError -> 409/DURABLE_STORE with the exact detail, DurableStoreError -> 503/DURABLE_STORE with its own code, TypeError -> rethrown.\n\n4. MUTATION DRILLS (each edit reversed exactly; sha256 restored to e1db68a2... after every one). (a) WORK_FAMILY[\"work.claim\"] WORK -> ADMIN: 2 named tests red - \"'work.claim' keeps its capability and ordered payload allow-list\" (expected 'project.admin' to be 'work.write') and \"'work.claim' exposes its agent capability list through the old module\". (b) PAYLOAD_KEYS[\"project.register\"] [\"owner\"] -> [\"ownerId\"]: 9 tests red across both suites, including the child-Node smoke. (c) Bridge parked away: the child smoke reddens with code ERR_MODULE_NOT_FOUND, so it is not vacuous.\n\n5. GATE. Full chain re-run after the drills and the commit: GATE_EXIT=0, daemon typecheck clean, daemon 67 files / 1221 tests, DEFAULT_PROVIDER_OK, root typecheck 18/19 projects clean, root 250 files / 5476 passed 1 skipped. Pre-change base was fully green, so the HEAD failing-path set is empty and there is no foreign red to attribute.",
+      "timestamp": "2026-08-13T23:12:23.422Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T23:09:33.432Z",
+  "updatedAt": "2026-08-13T23:12:59.349Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:24:38.683Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -191,7 +206,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T22:27:28.602Z",
@@ -225,5 +241,19 @@
       "releasedBy": "governor-773e2f5e",
       "reason": "Human explicitly authorized this release at 2026-08-13T22:27Z after reviewing the situation. Not an idle-time release: architect-a9210e34 was pinged directly at 22:18:52 (msg-4a52a712, routed) telling it the block was cleared, did not answer, and its worker status is still the stale BLOCKED it self-reported before the unblock. Releasing the assignment only — the task stays PLANNING and immediately claimable. Deliberately NOT using unblock_worker, which would flip this PLANNING task to WORKING and skip planning entirely."
     }
+  ],
+  "reviewStartedAt": "2026-08-13T23:12:59.349Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/daemon exec node --experimental-strip-types --input-type=module -e \"...DEFAULT_PROVIDER_OK probe...\" && pnpm typecheck && pnpm test",
+    "exitCode": 0,
+    "outputTail": "daemon: Test Files 67 passed (67) | Tests 1221 passed (1221); DEFAULT_PROVIDER_OK; pnpm --recursive typecheck Scope: 18 of 19 workspace projects (clean); root: Test Files 250 passed (250) | Tests 5476 passed | 1 skipped (5477); GATE_EXIT=0",
+    "reportedAt": "2026-08-13T23:12:59.349Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/daemon-command-registry.js",
+    "apps/daemon/src/daemon-store-dependencies.test.ts"
   ]
 }

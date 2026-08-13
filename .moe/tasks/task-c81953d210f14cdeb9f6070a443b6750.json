@@ -98,7 +98,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-28758e8f",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -135,7 +135,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:26.455Z",
-  "updatedAt": "2026-08-13T23:03:22.804Z",
+  "updatedAt": "2026-08-13T23:12:01.406Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:12:53.445Z",
     "plannedStepCount": 8,
@@ -144,7 +144,9 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-28758e8f"
+  ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],

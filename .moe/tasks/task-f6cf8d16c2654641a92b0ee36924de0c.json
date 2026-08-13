@@ -151,13 +151,26 @@
     {
       "stepId": "step-8",
       "description": "Run the single final foreground gate and capture fresh exit codes/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded merge-base failing-path baseline, require zero new failures intersecting the owned recovery paths and all owned-package legs green, report any foreign red verbatim, verify the final diff contains only the ten explicit owned paths, and hand QA the record digest/replay/reopen evidence plus consumer IDs `task-47eecd22b3b94a57a9632672c19ebd97`, `task-cf7fb147bd1c47698cbd65c9535370aa`, and downstream `task-6f786c58cabf4f85be8ed4135e68a752`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-13T22:49:32.632Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
+        "apps/daemon/src/recovery/recovery-inventory-proofs.js",
+        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/recovery-inventory-record.ts",
+        "apps/daemon/src/recovery/recovery-inventory-subject.ts",
+        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+        "apps/daemon/src/recovery/recovery-inventory-hardening.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
+      ],
+      "note": "FINAL GATE, one foreground chain, GATE_EXIT=0:\n`pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`\ndaemon typecheck 0; daemon 67 files / 1221 passed; store 40 / 453; repo typecheck all 18 projects Done; root 250 files / 5476 passed + 1 skipped; verify:foundation 30 / 488; verify:store 40 / 453. ZERO failures repo-wide, so the merge-base baseline comparison is trivially satisfied: no new failing path, foreign or owned.\n\nDISCLOSED FLAKE: a first attempt at the same chain (02:10) reported runtime-entrypoint.test.ts > 'has an exact .js bridge for every runtime module and none for test-tier ones' red. Run standalone one minute later it passed 4/4, and the full clean chain above is green. That test walks the whole daemon src tree, so a foreign agent writing a .ts before its .js bridge reddens it transiently; nothing in my diff was involved. Reported rather than hidden.\n\nCOMMIT SITUATION — known board hazard, not repaired: the foreign whole-tree completion hook of task-c81953d210f14cdeb9f6070a443b6750 (commit 30458af) captured all nine of my files. I did not amend, reset, stash or create a claim commit. Every committed byte was verified sha256-identical to the gated working-tree byte for all nine paths. QA should review:\n  git diff 1e8043f..HEAD -- apps/daemon/src/recovery/\n= 9 files, 588 insertions, 5 deletions: proofs.ts (154, new) + its exact LF bridge, hardening.test.ts (337, new), contract +32, codec +12, subject +8, ledger.test +42, record.test +7, record.ts (net -1001 bytes; logic moved out).\n\nCONSUMERS notified in the handoff: task-47eecd22b3b94a57a9632672c19ebd97, task-cf7fb147bd1c47698cbd65c9535370aa, downstream task-6f786c58cabf4f85be8ed4135e68a752. The contract they bind is unchanged in shape — six proof classes over seven populations, immutable content-addressed record, no recovery.complete authority — with five new refusal codes and two new invariants they inherit for free.",
+      "startedAt": "2026-08-13T22:49:32.632Z",
+      "completedAt": "2026-08-13T23:12:14.256Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-68608f71",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -182,7 +195,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-13T22:49:32.632Z",
+  "updatedAt": "2026-08-13T23:12:55.513Z",
   "contextFetchedBy": [
     "worker-68608f71"
   ],
@@ -190,7 +203,7 @@
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 15,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -204,7 +217,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -246,26 +260,23 @@
   },
   "planApprovedAt": "2026-08-13T21:56:49.008Z",
   "workStartedAt": "2026-08-13T21:57:17.632Z",
-  "reviewStartedAt": "2026-08-13T22:22:01.940Z",
+  "reviewStartedAt": "2026-08-13T23:12:55.513Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store",
     "exitCode": 0,
-    "outputTail": "@moe/daemon typecheck: tsc --project tsconfig.json (no diagnostics)\n@moe/daemon test: Test Files 65 passed (65) | Tests 1074 passed (1074)\n@moe/store test: Test Files 39 passed (39) | Tests 444 passed (444)\npnpm typecheck: Scope: 18 of 19 workspace projects, all green\npnpm test: Test Files 248 passed (248) | Tests 5386 passed | 1 skipped (5387)\npnpm verify:foundation: Test Files 30 passed (30) | Tests 487 passed (487)\npnpm verify:store: Test Files 39 passed (39) | Tests 444 passed (444)\nEXIT=0",
-    "reportedAt": "2026-08-13T22:22:01.940Z"
+    "outputTail": "apps/daemon typecheck: Done | daemon: Test Files 67 passed (67), Tests 1221 passed (1221) | store: Test Files 40 passed (40), Tests 453 passed (453) | pnpm --recursive typecheck: Scope 18 of 19 workspace projects, all Done | root vitest: Test Files 250 passed (250), Tests 5476 passed | 1 skipped (5477) | verify:foundation: Test Files 30 passed (30), Tests 488 passed (488) | verify:store: Test Files 40 passed (40), Tests 453 passed (453) | GATE_EXIT=0",
+    "reportedAt": "2026-08-13T23:12:55.513Z"
   },
   "filesModified": [
-    "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
-    "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
+    "apps/daemon/src/recovery/recovery-inventory-hardening.test.ts",
     "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-    "apps/daemon/src/recovery/recovery-inventory-contract.js",
+    "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
+    "apps/daemon/src/recovery/recovery-inventory-proofs.js",
     "apps/daemon/src/recovery/recovery-inventory-record.ts",
-    "apps/daemon/src/recovery/recovery-inventory-record.js",
     "apps/daemon/src/recovery/recovery-inventory-subject.ts",
-    "apps/daemon/src/recovery/recovery-inventory-subject.js",
     "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-    "apps/daemon/src/recovery/recovery-inventory-codec.js",
-    "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
-    "apps/daemon/src/recovery/recovery-inventory-ledger.js"
+    "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
+    "apps/daemon/src/recovery/recovery-inventory-record.test.ts"
   ],
   "reviewCompletedAt": "2026-08-13T22:28:01.038Z",
   "rejectionDetails": {

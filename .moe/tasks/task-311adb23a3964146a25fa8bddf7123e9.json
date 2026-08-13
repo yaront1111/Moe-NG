@@ -75,7 +75,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-b1a46457",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -130,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-13T22:57:46.276Z",
+  "updatedAt": "2026-08-13T23:13:08.786Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
@@ -139,7 +139,9 @@
     "rejectCount": 2,
     "reopenCount": 2
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "architect-b1a46457"
+  ],
   "priorHandoffs": [
     {
       "whatIsDone": "No implementation plan was submitted; the prior architect only entered context reading. Governor recorded the dependency sequencing guard.",

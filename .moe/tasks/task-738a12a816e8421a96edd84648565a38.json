@@ -28,8 +28,15 @@
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
   "order": 22.403,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-254b115dd59d44e1ab91aa2183e25350",
+      "author": "architect-a9210e34",
+      "content": "Consumer-edge record: task-2d37939dddde447bb98e53a2bd9e6c60 is planned to publish scheduler-root bindCurrentExpansionHold and make bindExpansionAdmission its immediate production consumer. This durable daemon task remains the eventual cross-package consumer and must call that public production surface rather than reproduce hold replay/current-binding authority.",
+      "timestamp": "2026-08-13T23:11:51.580Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:05.524Z",
-  "updatedAt": "2026-08-13T22:49:05.524Z"
+  "updatedAt": "2026-08-13T23:11:51.580Z"
 }

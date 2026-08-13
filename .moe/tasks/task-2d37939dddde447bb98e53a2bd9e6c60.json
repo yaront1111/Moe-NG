@@ -16,9 +16,102 @@
     "Do not reorder or weaken bindExpansionAdmission's preparation/fairness/admission gates, and do not add persistence or activation.",
     "Use public @moe/core root imports, exact code/layer/origin/target assertions and positive generated counts; target <=250 lines per production source and split before 400."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a9210e34",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight the shared worktree before editing: confirm task-5fa25bb33e974f04865b46f9fa0f3910 is DONE (otherwise report the exact root-file collision), re-run scoped status/rg/line-count/root-export probes, and record merge-base outputs for the repo-wide gates so later red can be path-attributed. Run the existing scheduler gate once to establish a green-or-disclosed baseline; do not modify or clean any foreign path.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-binding.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD red: add focused bare-root tests for ExpansionCurrentHoldRequest/Result and bindCurrentExpansionHold before production exists. Pin the exact 11-field successful PlanningExpansionHoldBinding, detached/deep-frozen inputs and results, direct core-inspector validity, and byte equality with bindExpansionAdmission's existing successful planningHoldBinding. Add hand-authored positive-cardinality hostile-shape/revoked-proxy/accessor/symbol/non-enumerable/sparse cases; all five missing/invalid current fields; reducer-replay and presented-vs-replayed forgery cases; each graphEpoch/holdId/holdVersion/planningRunRef hold mismatch; invalid goalVersion domain evidence; and exact code/layer/origin/missingInput/target plus zero binding on every refusal. Update existing admission assertions to require target:null for local, reducer, and fairness issues and target:'HOLD_BINDING' for the production planning inspector. Run only the named tests and capture their expected failure against the missing surface.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the focused expansion-current-hold production boundary and exact LF runtime bridge. Move the shared ExpansionBindingIssue/refusal/current-authority vocabulary into the acyclic module and add the required nullable target field. Snapshot the exact two-key request and exact five-key authority with own enumerable data descriptors and no caller aliasing; require the exact ACTIVE v1 hold, replay its creationReceipt through the public @moe/core reducer, exact-compare the full presented/replayed state, compare the four hold-backed current facts, construct the core PlanningExpansionHoldBinding, and pass it through inspectPlanningExpansionContract('HOLD_BINDING', ...). Return only deep-frozen success or stable UNKNOWN/REFUSED results, preserving reducer code/layer with origin EXPANSION_HOLD and null target and copying the inspector target verbatim. Keep the TypeScript source <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Refactor bindExpansionAdmission to import and call bindCurrentExpansionHold at its existing post-preparation/post-fairness/post-winner hold/current gate, propagate its refusal unchanged, and use its returned binding as the sole PlanningExpansionHoldBinding projection. Delete the old replay/current projection mapper; retain the admission-only comparisons of returned binding.goalVersion and binding.graphEpoch against preparation.bound in their existing code/layer/origin order, including both graph operands, then build the admitted result with byte-identical success fields. Add target:null to preparation/fairness/local issues and preserve delegated targets. Reduce expansion-binding.ts below 250 lines without moving unrelated fairness/preparation policy.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-binding.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Publish the curated scheduler-root runtime value and complete type closure after remeasuring the concurrently changed barrel: bindCurrentExpansionHold, ExpansionCurrentHoldRequest/Result, the shared authority/issue/refusal types, and named type-only re-exports of the public core ExpansionPlanningHoldState and PlanningExpansionHoldBinding required by the request/result. Update the hand-pinned root namespace/type assertions without deriving expected counts from production. In the focused test, assert the exact one-line LF bridge and run a bounded `process.execPath`/argument-array/`shell:false` plain-Node bare `@moe/scheduler` import/invocation smoke. Record task-738a12a816e8421a96edd84648565a38 in the module contract as the eventual durable consumer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Complete the mutation-resistant test pass against production, never a helper reimplementation: independently remove/alter reducer replay, presented-state exact comparison, each of graphEpoch-to-hold, holdId, holdVersion, planningRunRef, goalVersion-to-preparation, and graphEpoch-to-preparation comparisons, the bindExpansionAdmission call site, and inspector target propagation; require the named direct/admission test to go red for every mutation, then restore exact bytes and rerun the focused tests. Assert every generated sweep's exact or positive case count and add compound-fault precedence pins showing preparation beats fairness/hold, fairness/winner beats hold, and hold evidence beats unknown current.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-binding.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the single completion-evidence command fresh in the foreground: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test`. Then run the repository/public-consumer legs required by AGENTS.md (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`), comparing failures with the recorded merge-base baseline and reporting every foreign failing path verbatim. Confirm both production files are <=250 lines, the bridge bytes/LF are exact, no probe/generated evidence remains, and the scoped diff contains only the six owned paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.js",
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/expansion/expansion-binding.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Perform the final adversarial review over the owned-path merge-base diff: attack hostile descriptors/proxies, replay laundering, UNKNOWN upgrades, provenance/target fabrication, missing current facts, detached immutability, goal/graph comparison ordering, public-root runtime reachability, and accidental duplicated mapping. If review changes bytes, rerun the exact completion-evidence command. Before completion, inspect shared staging, unstage foreign entries only, and commit strictly by explicit owned pathspec; verify `git show --stat` and report any foreign whole-tree commit hazard rather than rewriting history.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.js",
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/expansion/expansion-binding.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -49,11 +142,36 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:48:41.262Z",
-  "updatedAt": "2026-08-13T23:02:12.596Z",
+  "updatedAt": "2026-08-13T23:11:45.415Z",
   "metrics": {
-    "firstClaimAt": "2026-08-13T22:57:18.499Z"
+    "firstClaimAt": "2026-08-13T22:57:18.499Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6
   },
   "contextFetchedBy": [
     "architect-a9210e34"
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-13T23:11:43.356Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected a focused scheduler extraction: a new expansion-current-hold module owns the public binder, the shared refusal vocabulary/provenance, hostile-safe snapshots, reducer replay, current-vs-hold checks, and the sole PlanningExpansionHoldBinding projection; bindExpansionAdmission consumes that result. Rejected adding goalVersion to the core hold schema because the landed ExpansionPlanningHoldState/CreateExpansionHoldCommand intentionally have no such field and that would widen this task into a core protocol migration. Rejected a daemon-owned mapper because scheduler is the direction-safe bridge over public @moe/core types and task-738a12a816e8421a96edd84648565a38 is the later durable daemon consumer. Rejected keeping a second projection in expansion-binding.ts or deep-importing core internals. The exact {currentAuthority,hold} API can compare graphEpoch, holdId, holdVersion, and planningRunRef to hold facts; goalVersion has no hold-side operand, so the standalone binder validates/carries it through the production core HOLD_BINDING inspector while bindExpansionAdmission retains the load-bearing goalVersion comparison to preparation.bound. The second graphEpoch comparison to preparation.bound also remains there.",
+    "codebaseInsights": "Current-byte measurements: `rg -n \"bindCurrentExpansionHold\" packages apps` returned no production hit; scoped git status for the six planned paths was clean; expansion-binding.ts is 291 physical lines, expansion-binding-facts.ts 228, scheduler index.ts 332, and no expansion-current-hold files exist. The current binding pipeline is request -> preparation identity -> fairness/opportunity -> ACTIVE hold exact parse/reducer replay/exact comparison -> five-field current parse -> ordered authority comparisons -> projection -> @moe/core HOLD_BINDING inspection. Core ExpansionPlanningHoldBinding has 11 exact fields; core ExpansionPlanningHoldState has no goalVersion. A temporary bare-@moe/core scheduler type probe compiled with `pnpm --filter @moe/scheduler typecheck` and was deleted, confirming the public dependency edge already declared in packages/scheduler/package.json. The authoritative design hash was rechecked as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. Exact bridge convention is one LF line: `export * from \"./expansion-current-hold.ts\";`. bindExpansionAdmission is the immediate real production consumer; record task-738a12a816e8421a96edd84648565a38 as the eventual durable daemon consumer (under parent task-c4171c1cfe854cb78dd233794b342025).",
+    "risks": "Shared-tree collision: task-5fa25bb33e974f04865b46f9fa0f3910 is currently WORKING and owns packages/scheduler/src/index.ts plus index-surface.test.ts; do not edit either path until that task is DONE, then remeasure its root namespace/type expectations instead of assuming the present count of 78. If it is still active at claim time, report the collision rather than editing around it. Preserve the existing preparation/fairness/winner/hold/current gate order and every isolated refusal code/layer/origin; add dual-fault precedence pins for malformed preparation, fairness, bad hold, and unknown current. Because hold has no goalVersion, do not falsely claim the standalone surface authenticates goalVersion against hold: its positive/domain validation is by the core inspector and its equality fence remains admission-vs-preparation. Exact parsing must reject accessors, symbols, custom prototypes, non-enumerable properties, sparse arrays, and revoked proxies without invoking getters. Copy inspector target verbatim; never derive it from code/layer. Re-measure root exports after the colliding task lands, keep each new/refactored production source <=250 lines, and preserve all foreign WIP.",
+    "keyFiles": [
+      "packages/scheduler/src/expansion/expansion-current-hold.ts",
+      "packages/scheduler/src/expansion/expansion-current-hold.js",
+      "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+      "packages/scheduler/src/expansion/expansion-binding.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-13T23:11:45.415Z"
 }
