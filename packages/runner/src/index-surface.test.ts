@@ -462,6 +462,7 @@ function commitFixture(): ActivationCommit {
  * eventually certifies that composed edge.
  */
 it("lets a root-only consumer construct and narrow the Claude launcher", async () => {
+  expect(runner.CLAUDE_LAUNCH_ERROR_CODES).toContain("CLAUDE_LAUNCH_DEPENDENCY_THROWN");
   const commit = commitFixture();
   const observation = observationFixture("CONTENT_ADDRESSED_COPY");
   const lease: ClaudeLaunchLockLease = { release: async () => undefined };

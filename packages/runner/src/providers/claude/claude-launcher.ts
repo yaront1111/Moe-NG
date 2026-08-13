@@ -8,7 +8,8 @@ import { openWindowsProcessBoundary, type WindowsProcessBoundary } from "../../p
 import { type WindowsProcessOutcome,
   type WindowsProcessUnknown } from "../../platform/windows/windows-process-contract.js";
 import { resolveDuplicateDelivery, type DuplicateDeliveryOutcome } from "../../supervisor/duplicate-delivery.js";
-import { consumeActivationGrant, validateActivationCommit } from "../../supervisor/effect-grant.js";
+import { consumeActivationGrant, validateActivationCommit,
+  type CommitCheck, type GrantOutcome } from "../../supervisor/effect-grant.js";
 import { type ActivationGrant,
   type SupervisorFailure } from "../../supervisor/effect-kernel.js";
 import { registerLaunchLock, type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
@@ -317,7 +318,10 @@ export async function launchClaude(value: unknown, options: ClaudeLaunchOptions 
   if (request === null) return malformed("launch request is not bounded plain data");
   const deps = options.deps ?? defaults;
   if (request.duplicateDelivery !== null) {
-    const decided = deps.resolveDuplicate(request.duplicateDelivery);
+    let decided: DuplicateDeliveryOutcome;
+    try { decided = deps.resolveDuplicate(request.duplicateDelivery); }
+    catch { return directFailure(
+      "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "LAUNCH_LOCK", "duplicate-delivery authority threw"); }
     if (decided.kind === "SUSPECT") return delegated(decided.failure);
     return duplicate(decided);
   }
@@ -325,9 +329,15 @@ export async function launchClaude(value: unknown, options: ClaudeLaunchOptions 
   try { runtime = await deps.prepareRuntime(request.runtime); }
   catch { return directFailure("CLAUDE_LAUNCH_RUNTIME_THROWN", "RUNTIME", "runtime preparation threw"); }
   if (!runtime.ok) return directFailure(runtime.code, runtime.layer, runtime.message);
-  const commit = deps.validateCommit(request.effect, request.attempt, request.grant);
+  let commit: CommitCheck;
+  try { commit = deps.validateCommit(request.effect, request.attempt, request.grant); }
+  catch { return directFailure(
+    "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "ACTIVATION", "activation-commit authority threw"); }
   if (commit.kind === "REFUSED") return delegated(commit.failure);
-  const grant = deps.consumeGrant(request.grant, request.wrapperIdentity);
+  let grant: GrantOutcome;
+  try { grant = deps.consumeGrant(request.grant, request.wrapperIdentity); }
+  catch { return directFailure(
+    "CLAUDE_LAUNCH_DEPENDENCY_THROWN", "GRANT", "activation-grant authority threw"); }
   if (grant.kind === "REFUSED") return delegated(grant.failure);
   const preflight = preflightLaunchLock(request, deps);
   if ("kind" in preflight) return preflight;

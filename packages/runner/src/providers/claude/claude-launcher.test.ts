@@ -218,6 +218,45 @@ describe("Windows Claude launcher", () => {
     }
   });
 
+  it("contains every pre-launch authority exception before registration or provider open", async () => {
+    const cases = [
+      { name: "duplicate", overrides: { duplicateDelivery: {} }, layer: "LAUNCH_LOCK",
+        alter: (deps: ClaudeLauncherDependencies, log: string[]) => ({ ...deps,
+          resolveDuplicate: () => { log.push("duplicate"); throw new Error("duplicate port rejected"); } }) },
+      { name: "activation", overrides: {}, layer: "ACTIVATION",
+        alter: (deps: ClaudeLauncherDependencies, log: string[]) => ({ ...deps,
+          validateCommit: () => { log.push("validate"); throw new Error("activation port rejected"); } }) },
+      { name: "grant", overrides: {}, layer: "GRANT",
+        alter: (deps: ClaudeLauncherDependencies, log: string[]) => ({ ...deps,
+          consumeGrant: () => { log.push("consume"); throw new Error("grant port rejected"); } }) },
+    ] as const;
+    expect(cases.length).toBe(3);
+    let ran = 0;
+    for (const item of cases) {
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const settled = await Promise.allSettled([launchClaude(request(item.overrides), {
+        platform: "win32", deps: item.alter(dependencies(boundary, log), log),
+      })]);
+      expect(settled).toHaveLength(1);
+      expect(settled[0]?.status, item.name).toBe("fulfilled");
+      if (settled[0]?.status !== "fulfilled") throw new Error(`${item.name} escaped the launcher`);
+      const result = settled[0].value;
+      expect({ kind: result.kind, ok: result.ok, truthClass: result.truthClass }, item.name).toEqual({
+        kind: "REFUSED", ok: false, truthClass: "UNKNOWN",
+      });
+      const failure = failureOf(result);
+      expect(failure.code, item.name).toBe("CLAUDE_LAUNCH_DEPENDENCY_THROWN");
+      expect(failure.layer, item.name).toBe(item.layer);
+      expect(Object.isFrozen(result), item.name).toBe(true);
+      expect(log.filter((entry) => ["register", "lock", "open"].includes(entry)), item.name).toEqual([]);
+      expect(boundary.requests, item.name).toHaveLength(0);
+      expect(boundary.log, item.name).toEqual([]);
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
   it("refuses prior launch registration before locking or opening the provider", async () => {
     const log: string[] = [];
     const boundary = boundaryHarness();
