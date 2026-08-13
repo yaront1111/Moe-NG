@@ -194,7 +194,11 @@ describe("hostile lane smoke — ordinary root config is untouched", () => {
   const block = laneTest(rootConfig, "root");
 
   it("still discovers *.test.ts only, so hostile files are not regression evidence", () => {
-    expect(block.include).toStrictEqual(["packages/**/*.test.ts", "tests/**/*.test.ts"]);
+    expect(block.include).toStrictEqual([
+      "adapters/**/*.test.ts",
+      "packages/**/*.test.ts",
+      "tests/**/*.test.ts",
+    ]);
     expect(block.passWithNoTests).toBe(false);
     for (const pattern of block.include ?? []) {
       expect(pattern.endsWith(".fault.ts")).toBe(false);
