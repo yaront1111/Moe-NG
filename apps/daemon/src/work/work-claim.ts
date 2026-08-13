@@ -183,8 +183,7 @@ function checkClaimCommand(value: unknown): WorkResult | null {
   if (exact !== null && exact["kind"] === "claim") return null;
   const kind = mirror(value, null, false)?.["kind"];
   if (typeof kind === "string" && kind !== "claim") {
-    // Truncated: the kind is caller-controlled and unbounded, so echoing it
-    // whole would let a refusal message amplify to the size of the request.
+    // Truncated: an unbounded caller kind would amplify the refusal message.
     return refused(workFailure(
       "WORK_INTENT_COMMAND_MISMATCH", "effectIntent", "AUTHORITY",
       `work.claim causes only the claim transition, never ${kind.slice(0, 32)}`,
