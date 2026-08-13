@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { byCodeUnit, canonicalDigest, normalizedText, sha256Hex } from "./canonical-bytes.js";
@@ -52,23 +52,39 @@ function fileEntry(root: string, parts: readonly string[]): SourceFileEntry {
  * itself deterministic, so a partial read or an early refusal also stops at the same
  * place on every machine.
  */
-function walk(root: string, parts: readonly string[], into: SourceFileEntry[]): void {
+function walk(
+  root: string,
+  parts: readonly string[],
+  into: SourceFileEntry[],
+): ImportRefused | undefined {
   const listing = readdirSync(join(root, ...parts), { withFileTypes: true });
   const names = listing.map((entry) => entry.name).sort(byCodeUnit);
   for (const name of names) {
     const next = [...parts, name];
-    // Re-stat rather than trusting the Dirent: a symlink reports as a link, and following
-    // it could read bytes from outside the frozen tree.
-    const stat = statSync(join(root, ...next), { throwIfNoEntry: false });
+    // lstat, never stat: stat FOLLOWS a link, so a symlink or junction inside the tree
+    // would pull bytes from outside it into the manifest with full provenance (and a link
+    // cycle would recurse forever). The freeze contract rejects symlink/reparse escapes,
+    // so a link refuses by name rather than being skipped — a skipped link would make two
+    // trees with different reachable bytes hash identically.
+    const stat = lstatSync(join(root, ...next), { throwIfNoEntry: false });
     if (stat === undefined) continue;
+    if (stat.isSymbolicLink()) {
+      return refuseImport(
+        "IMPORT_SOURCE_UNREADABLE",
+        "MANIFEST",
+        `${relativePosix(next)} is a link; following it could read bytes outside the frozen tree`,
+      );
+    }
     if (stat.isDirectory()) {
-      walk(root, next, into);
+      const refused = walk(root, next, into);
+      if (refused !== undefined) return refused;
       continue;
     }
     if (stat.isFile()) {
       into.push(fileEntry(root, next));
     }
   }
+  return undefined;
 }
 
 /**
@@ -86,7 +102,8 @@ export function buildSourceManifest(root: string): SourceManifestResult {
   }
   const entries: SourceFileEntry[] = [];
   try {
-    walk(root, [], entries);
+    const refused = walk(root, [], entries);
+    if (refused !== undefined) return refused;
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     return refuseImport("IMPORT_SOURCE_UNREADABLE", "MANIFEST", detail);

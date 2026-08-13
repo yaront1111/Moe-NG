@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -144,6 +144,27 @@ describe("the source tree is never written to", () => {
     const result = buildSourceManifest(join(root, "no-such-subtree"));
     expect("outcome" in result).toBe(true);
     expect(snapshot(root, paths)).toEqual(before);
+  });
+});
+
+describe("links are never followed out of the frozen tree", () => {
+  it("refuses a junction/symlink inside the tree rather than reading through it", () => {
+    // The phase-0/1 contract: reject symlink/reparse escapes, fail closed. A junction
+    // needs no admin rights on Windows, and `symlinkSync(..., "junction")` degrades to a
+    // plain directory symlink elsewhere, so the fixture is portable. Following the link
+    // would hash bytes wholly outside the frozen root and give them provenance.
+    const outside = mkdtempSync(join(tmpdir(), "moe-import-outside-"));
+    roots.push(outside);
+    writeFileSync(join(outside, "secret.txt"), "bytes outside the frozen tree");
+    const root = tree([["real.json", '{"id":"r"}']]);
+    symlinkSync(outside, join(root, "esc"), "junction");
+    const result = buildSourceManifest(root);
+    expect("outcome" in result).toBe(true);
+    if (!("outcome" in result)) return;
+    expect(result.code).toBe("IMPORT_SOURCE_UNREADABLE");
+    expect(result.layer).toBe("MANIFEST");
+    // The refusal names the link, so an operator can find and remove it.
+    expect(result.detail).toContain("esc");
   });
 });
 

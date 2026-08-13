@@ -57,9 +57,20 @@ export const SKILL_ASSET_AMBIGUITY_CLASSES = Object.freeze([
   "SKILL_ESCAPING_ASSET",
 ] as const);
 
+/**
+ * Derived-identity ambiguity. Its authority is this package's own canonical-derivation
+ * contract rather than §21.6's seven or the skill amendment's five: `deriveImportedId`
+ * digests only (kind, legacyId, sourcePath) plus the manifest, so two records sharing
+ * that tuple with DIFFERENT payloads would import onto one id and silently
+ * last-writer-win — a guess §21.6 forbids. A separate frozen list, same as the other two
+ * authorities, so none can absorb another's coverage.
+ */
+export const DERIVED_IDENTITY_AMBIGUITY_CLASSES = Object.freeze(["DUPLICATE_IDENTITY"] as const);
+
 export const AMBIGUITY_CLASSES = Object.freeze([
   ...DESIGN_AMBIGUITY_CLASSES,
   ...SKILL_ASSET_AMBIGUITY_CLASSES,
+  ...DERIVED_IDENTITY_AMBIGUITY_CLASSES,
 ] as const);
 
 export type AmbiguityClass = (typeof AMBIGUITY_CLASSES)[number];

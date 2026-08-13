@@ -1,8 +1,9 @@
 import { byCodeUnit } from "./canonical-bytes.js";
 import { canonicalPayload } from "./import-canonical.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
-import { AMBIGUITY_OUTCOME } from "./import-contract.js";
+import { AMBIGUITY_OUTCOME, DETERMINISTIC_TIME_SENTINEL } from "./import-contract.js";
 import type { AmbiguityClass, ImportProvenance, ReconciliationFinding } from "./import-contract.js";
+import { duplicateIdentityFindings } from "./import-duplicate-identity.js";
 import { SKILL_PAYLOAD_KEY, classifySkillAsset, readSkillIdentity } from "./import-skill-assets.js";
 
 /**
@@ -194,14 +195,28 @@ function graphFindings(entries: readonly ReconcileEntry[]): readonly Reconciliat
   return found;
 }
 
+/**
+ * Provenance for the one finding no read record can lend it to: the source declared
+ * records and ZERO were read. There is no source file to cite, so every field is an
+ * explicit empty/sentinel value rather than fabricated evidence — an empty digest can
+ * never match a real hash, and the sentinel time keeps the finding deterministic.
+ */
+const NO_RECORDS_PROVENANCE: ImportProvenance = Object.freeze({
+  manifestDigest: "",
+  sourceDigest: "",
+  sourcePath: "",
+  sourceTime: DETERMINISTIC_TIME_SENTINEL,
+  timeBasis: "MANIFEST_SENTINEL",
+});
+
 function countFindings(input: ReconcileInput): readonly ReconciliationFinding[] {
   const { declaredRecordCount, entries } = input;
-  const first = entries[0];
-  if (declaredRecordCount === null || first === undefined) return [];
-  if (declaredRecordCount === entries.length) return [];
+  if (declaredRecordCount === null || declaredRecordCount === entries.length) return [];
+  // Zero entries is the TOTAL-LOSS mismatch — every declared record dropped upstream —
+  // which is the one count mismatch that must never be swallowed for lack of an entry.
   return [finding(
     "COUNT_MISMATCH",
-    first.provenance,
+    entries[0]?.provenance ?? NO_RECORDS_PROVENANCE,
     `source declared ${String(declaredRecordCount)} records; ${String(entries.length)} were read`,
   )];
 }
@@ -225,6 +240,7 @@ export function reconcileImport(input: ReconcileInput): ReconcileReport {
     found.push(...classifySkillAsset(entry.record, entry.provenance));
   }
   found.push(...splitOwnershipFindings(entries));
+  found.push(...duplicateIdentityFindings(entries));
   found.push(...skillAmbiguityFindings(entries));
   found.push(...graphFindings(entries));
   if (first !== undefined) {

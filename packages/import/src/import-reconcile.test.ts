@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AMBIGUITY_CLASSES,
   AMBIGUITY_OUTCOME,
+  DERIVED_IDENTITY_AMBIGUITY_CLASSES,
   DESIGN_AMBIGUITY_CLASSES,
   SKILL_ASSET_AMBIGUITY_CLASSES,
 } from "./import-contract.js";
@@ -14,8 +15,8 @@ import type { ReconcileEntry } from "./import-reconcile.js";
 /**
  * Design §21.6 plus the 2026-08-07 roadmap amendment on this task.
  *
- * EACH CLASS GETS ITS OWN FIXTURE. A single "bad input" case would let eleven of the
- * twelve regress unseen, which is precisely the detached-assertion failure the epic rail
+ * EACH CLASS GETS ITS OWN FIXTURE. A single "bad input" case would let twelve of the
+ * thirteen regress unseen, which is precisely the detached-assertion failure the epic rail
  * warns about. The final test asserts every DECLARED class was actually produced, so a
  * detector that silently stops firing fails by name.
  */
@@ -61,6 +62,27 @@ function classesFrom(entries: readonly ReconcileEntry[], over: {
 describe("each design §21.6 class is detected on its own fixture", () => {
   it("COUNT_MISMATCH when the source declares a different total", () => {
     expect(classesFrom([entry()], { declaredRecordCount: 5 })).toContain("COUNT_MISMATCH");
+  });
+
+  it("COUNT_MISMATCH when the source declared records and ZERO were read", () => {
+    // The total-loss case: every record dropped upstream. No entry exists to lend the
+    // finding provenance, so it must carry the explicit no-source sentinel instead —
+    // suppressing it would report a "successful" import of nothing, the exact
+    // successful-looking failure §21.6's "report exact counts" exists to prevent.
+    const report = reconcileImport({
+      declaredRecordCount: 100,
+      entries: [],
+      knownFields: KNOWN_FIELDS,
+      sourcePaths: ["tasks/one.json"],
+    });
+    expect(report.findings.map((finding) => finding.ambiguityClass)).toEqual(["COUNT_MISMATCH"]);
+    expect(report.findings[0]?.detail).toContain("100");
+    expect(report.findings[0]?.detail).toContain("0 were read");
+    expect(report.findings[0]?.outcome).toBe(AMBIGUITY_OUTCOME);
+  });
+
+  it("reports no COUNT_MISMATCH when the source declared zero and zero were read", () => {
+    expect(classesFrom([], { declaredRecordCount: 0 })).toEqual([]);
   });
 
   it("UNKNOWN_FIELD when a payload carries a field outside the known set", () => {
@@ -134,6 +156,34 @@ describe("each roadmap-amendment skill class is detected on its own fixture", ()
   });
 });
 
+describe("the derived-identity guard is detected on its own fixture", () => {
+  it("DUPLICATE_IDENTITY when one identity tuple carries two conflicting payloads", () => {
+    // (kind, legacyId, sourcePath) is exactly what deriveImportedId digests, so these two
+    // records derive the SAME imported id; the differing titles make the collapse a
+    // last-writer-wins guess unless it is reported.
+    expect(classesFrom([
+      entry({ payload: { title: "first" } }),
+      entry({ payload: { title: "second" } }),
+    ])).toContain("DUPLICATE_IDENTITY");
+  });
+
+  it("stays silent for byte-identical duplicates, which collapse losslessly", () => {
+    expect(classesFrom([
+      entry({ payload: { title: "same" } }),
+      entry({ payload: { title: "same" } }),
+    ])).not.toContain("DUPLICATE_IDENTITY");
+  });
+
+  it("stays silent when the same legacy id comes from two different files", () => {
+    // A different sourcePath derives a DIFFERENT imported id — no collapse to report.
+    // (That pair is SPLIT_OWNERSHIP's territory when the owners also differ.)
+    expect(classesFrom([
+      entry({ payload: { title: "first" } }, "tasks/a.json"),
+      entry({ payload: { title: "second" } }, "tasks/b.json"),
+    ])).not.toContain("DUPLICATE_IDENTITY");
+  });
+});
+
 describe("the sweep is complete and nothing is guessed or dropped", () => {
   it("produces every declared class across the fixture set, so none can quietly stop firing", () => {
     const entries: readonly ReconcileEntry[] = [
@@ -148,6 +198,8 @@ describe("the sweep is complete and nothing is guessed or dropped", () => {
       entry({ kind: "skill", legacyId: "i", payload: { skill: { assets: ["../out"], license: "MIT", version: "1" } } }, "skills/i.json"),
       entry({ kind: "skill", legacyId: "j", payload: { skill: { license: "MIT", version: "1" } } }, "skills/j.json"),
       entry({ kind: "skill", legacyId: "j", payload: { skill: { license: "MIT", version: "1" } } }, "skills/J.json"),
+      entry({ legacyId: "k", payload: { title: "one" } }, "tasks/k.json"),
+      entry({ legacyId: "k", payload: { title: "two" } }, "tasks/k.json"),
     ];
     const produced = new Set(classesFrom(entries, { declaredRecordCount: 99 }));
     // Guard the sweep itself: a fixture set that produced nothing would pass a
@@ -156,6 +208,7 @@ describe("the sweep is complete and nothing is guessed or dropped", () => {
     expect([...AMBIGUITY_CLASSES].filter((name) => !produced.has(name))).toEqual([]);
     expect(DESIGN_AMBIGUITY_CLASSES.length).toBe(7);
     expect(SKILL_ASSET_AMBIGUITY_CLASSES.length).toBe(5);
+    expect(DERIVED_IDENTITY_AMBIGUITY_CLASSES.length).toBe(1);
   });
 
   it("preserves every finding with typed provenance and the single outcome", () => {
