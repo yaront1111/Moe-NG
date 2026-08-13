@@ -139,6 +139,25 @@ function isAnchorRow(decision: CommandDecisionRecord, projectId: string): boolea
 }
 
 /**
+ * Whether ANY incarnation was ever anchored for this project. An anchor with no
+ * installed binding is a restore waiting to quiesce, so the genesis installer
+ * asks this before treating an empty ACTIVE slot as a store with no recovery
+ * history at all.
+ */
+export function hasAnchoredIncarnation(
+  store: Pick<SqliteEventStore, "readCommandDecisionsAfter">,
+  projectId: string,
+): boolean {
+  let cursor = 0n;
+  for (;;) {
+    const page = store.readCommandDecisionsAfter(cursor, PAGE_SIZE);
+    if (page.items.some((decision) => isAnchorRow(decision, projectId))) return true;
+    if (!page.hasMore || page.nextCursor === null) return false;
+    cursor = page.nextCursor;
+  }
+}
+
+/**
  * Returns the anchored binding for one incarnation, or null when nothing
  * anchored it. The aggregate id is recomputed from the DECODED content, so a
  * row filed under one incarnation while carrying another's binding is dropped

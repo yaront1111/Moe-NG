@@ -361,3 +361,25 @@ it("serves the default provider and its registry bridge under plain Node", { tim
     rmSync(childDirectory, { force: true, recursive: true });
   }
 });
+
+describe("first boot", () => {
+  it("authenticates the operator on a fresh store with no manual binding install", () => {
+    // The genesis seam: no restore has run, no fixture installed a binding.
+    // Before genesis wiring this deadlocked — the operator could never get in.
+    const freshDirectory = mkdtempSync(join(tmpdir(), "moe-first-boot-"));
+    const freshProvider = createStoreDependencies({
+      clock: CLOCK,
+      credential: CREDENTIAL,
+      principalId: "operator-local",
+      projectId: PROJECT,
+      storePath: join(freshDirectory, "store.db"),
+    });
+    try {
+      const verdict = freshProvider.provide().authenticator.authenticate(CREDENTIAL).verdict;
+      expect(verdict).toBe("AUTHENTICATED");
+    } finally {
+      freshProvider.close();
+      rmSync(freshDirectory, { force: true, recursive: true });
+    }
+  });
+});

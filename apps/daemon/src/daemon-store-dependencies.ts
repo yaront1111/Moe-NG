@@ -9,6 +9,7 @@ import { reseatToSnapshot } from "@moe/store/subscriptions/subscription-writes.j
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
+import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -89,6 +90,16 @@ export function createStoreDependencies(
 ): StoreDependencyProvider {
   const clock = config.clock ?? ((): string => new Date().toISOString());
   const store = SqliteEventStore.openForProject(config.storePath, config.projectId);
+  // Every authentication is fenced on the ACTIVE recovery binding, and the only
+  // other installer is the disaster-restore path — without genesis, a fresh
+  // store could never authenticate anyone. A refusal here is a startup fault:
+  // the throw surfaces as DAEMON_ENTRY_PROVIDER_THREW rather than as a daemon
+  // that listens but refuses every credential forever.
+  const genesis = ensureGenesisRecoveryBinding(store, { clock, projectId: config.projectId });
+  if (!genesis.ok) {
+    store.close();
+    throw new Error(`GENESIS_RECOVERY_BINDING_FAILED: ${genesis.code} (${genesis.storeCode})`);
+  }
   let subscriptionDatabase: DatabaseSync | null = null;
 
   const { decisions, registry } = createDaemonCommandPorts({
