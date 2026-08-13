@@ -101,8 +101,8 @@
       "completedAt": "2026-08-11T20:03:09.807Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f3560083",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,12 +127,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-11T07:55:43.645Z",
-  "updatedAt": "2026-08-11T20:04:26.446Z",
+  "updatedAt": "2026-08-11T20:08:03.438Z",
   "metrics": {
     "firstClaimAt": "2026-08-11T19:50:02.264Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-11T20:08:03.438Z",
+    "wallClockMs": 1081174
   },
   "stepsCompleted": [
     "step-1",
@@ -177,5 +179,8 @@
     "packages/mcp/src/index.ts",
     "packages/mcp/src/mcp-root-surface.test.ts",
     "packages/mcp/src/mcp-runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-11T20:08:03.438Z",
+  "reviewCompletedAt": "2026-08-11T20:08:03.438Z",
+  "reviewSummary": "VERIFIED at 6ab5830 (3 files, +188/-0; index.ts 35 lines, test 179 — under per-file cap).\n\nGATES re-run by me from repo root:\n- pnpm --filter @moe/mcp typecheck -> exit 0.\n- pnpm --filter @moe/mcp test -> 8 files/136 tests pass; focused verbose run of mcp-root-surface.test.ts 5/5.\n- pnpm typecheck repo-wide -> exit 1, FOREIGN ONLY: 4 errors, all in packages/runner/src/platform/windows/windows-launch-request{,.test}.ts (TS2459 WINDOWS_MAX_PATH_CHARS not exported; 3x TS6133). Both UNTRACKED, absent from HEAD; this commit touches 0 runner paths -> (HEAD minus merge-base) ∩ owned = EMPTY. \"packages/mcp typecheck: Done\". Rail 3 disclosure, not a block. task.verification omitted the repo-wide leg; I ran all three.\n\nDoD 1 ✓ two NodeNext \".js\" specifiers into src/http/**. 2 ✓ hand-written lists, set equality + pinned counts 13 stdio/1 HTTP, not Object.keys-derived. 3 ✓ my own probe, cwd packages/mcp: node --experimental-strip-types --input-type=module -e 'const ns=await import(\"@moe/mcp\");...' -> {\"createHttpMcpAdapter\":\"function\",\"createStdioMcpServer\":\"function\",\"keys\":14}, exit 0. 4 ✓ five types via BARE specifier; adapterOptions is a real literal, adapter uses ReturnType<typeof createHttpMcpAdapter>. 5 ✓ stdio block byte-identical, same expectation. 6 ✓ git show --stat over http/ and apps/ pathspecs empty. 7 ✓ above.\n\nMY DRILLS (git checkout restore, md5 match both):\n1. Delete createHttpMcpAdapter -> RED: \"expected [13] to deeply equal [14]\" + bound-value check + Node probe. List genuinely hand-written.\n2. Delete HttpSessionPort type export -> typecheck RED \"TS2305: Module '@moe/mcp' has no exported member 'HttpSessionPort'\" while vitest stayed 5/5 GREEN.\n\nNegative control non-vacuous: HTTP_LISTED_TOOLS/LOOPBACK_HOSTNAMES/MCP_PROTOCOL_VERSION_HEADER are real http-server.ts value exports. The 1-line mcp-runtime-entrypoint.test.ts edit is FORCED (toEqual over a walk of every src/**.ts). index.js unchanged. Committed bytes == gated bytes (md5, all 3)."
 }

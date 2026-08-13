@@ -1,0 +1,63 @@
+{
+  "id": "task-c4171c1cfe854cb78dd233794b342025",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Daemon expansion admission composition",
+  "description": "Objective: compose the landed core/scheduler expansion protocol into a real daemon production boundary so partial admission and stale approval cannot mint authority. Deliverable: a focused apps/daemon planning expansion service plus focused SQLite-backed daemon tests that drive the production adapter through the daemon handler/service boundary, read daemon-current durable bindings, preserve exact upstream refusal identity, and durably record only a fully current approved expansion binding. NOT in scope: creating child runs/leases/worktrees/effects, graph supersession activation, automatic approval, UI, or reimplementing core/scheduler policy. Hard dependencies: task-7f089e11daea44e9a483197ff139d725, task-93b0314e09f248118e21f92699989468, task-2561a780fdd149439c9858c9c7b459e8, task-b863bae80fab426db7b6204f9d713c42, and task-a1e7f75e9681486cb0a8f93e9397b8b5 are DONE. Verification: pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "A production daemon call site composes the current durable expansion hold and sealed EXPANSION PlanningRun with scheduler admitExpansion, core prepareExpansion, and core approveExpansionManually; callers cannot select or replace daemon-current authority bindings.",
+    "Every hold, contract, admission, preparation, and approval refusal is returned with its exact stable code and the owning layer plus origin/component/target, and commits no business event or authority.",
+    "A late reservation/resource refusal proves budget unwind with a non-empty exact restored-meter set and leaves no durable resource, child, run, lease, effect, graph mutation, or activation authority.",
+    "A fresh, current, fully approved journey durably records the exact proposal, preparation, and approval identities only; changed proposal/prepared/resource/revision bytes require re-admission or reapproval and do not reuse stale authority.",
+    "Focused SQLite-backed daemon tests drive the production service, pin refusal precedence and nonzero case counts, and mutation-check the real comparisons/unwind rather than a test-owned helper.",
+    "Fresh pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "This is the real consumer edge required by task-005c9896f9724ece80b27f44789d0435; importing or exporting symbols without a durable apps/daemon call site is incomplete.",
+    "Do not create child execution authority or claim graph activation: this slice ends at a durable approved expansion binding; atomic child activation remains a separate graph-composition capability.",
+    "The daemon derives the scheduler-to-core admitted projection and truth marking from validated production results; no test helper or caller-selected digest becomes authority.",
+    "Tests for a refusal assert the exact code and refusing layer and, where applicable, origin/component/target; generated matrices assert exact nonzero cardinality.",
+    "Keep each production source focused, target <=250 physical lines and split before 400; preserve foreign work and stage only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
+  "priority": "HIGH",
+  "order": 22.5,
+  "comments": [
+    {
+      "id": "comment-8715e31ba439436688ff87aa8a623fdf",
+      "author": "architect-a42f4965",
+      "content": "Dependency sequencing note: this daemon composition task is intentionally BACKLOG and MUST NOT enter PLANNING until prerequisite task-2d9696160e674f26a8d422c45829d80e is DONE and its production bridge symbols are re-measured. Current bytes cannot legitimately derive fairness opportunityRef or a complete scheduler-to-core admitted identity; composing directly would repeat the rejected test-helper authority. When planning, consume the landed bridge rather than inventing a daemon mapper.",
+      "timestamp": "2026-08-12T16:28:18.874Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-12T16:21:56.200Z",
+  "updatedAt": "2026-08-13T16:03:19.191Z",
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:01:23.174Z"
+  },
+  "blockedReason": "Hard prerequisite is not landed. Live Moe context at 2026-08-13 shows task-2d9696160e674f26a8d422c45829d80e WORKING on step 1, not DONE. Fresh probe `rg -n 'bindExpansionAdmission|validateOpportunityAttestation' packages/scheduler apps/daemon tests/integration` returned no matches, so the production admission-to-preparation bridge and validated opportunity surface this daemon task must consume are absent. The task's own sequencing comment explicitly forbids PLANNING before that dependency is DONE. Planning now would invent the daemon mapper and repeat the rejected test-owned authority. Requeue only after dependency DONE and re-measure its public @moe/scheduler root exports.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T16:02:17.081Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fetched full task and dependency contexts, loaded planning/exploration guidance, and re-measured the prerequisite. task-2d9696160e674f26a8d422c45829d80e is WORKING step 1; a fresh rg probe found neither bindExpansionAdmission nor validateOpportunityAttestation. Reported this daemon task BLOCKED with the exact dependency and notified governors.",
+      "whatRemains": "After task-2d9696160e674f26a8d422c45829d80e reaches DONE, re-measure its public @moe/scheduler root types/functions and only then plan the daemon durable composition against those landed bytes.",
+      "pitfalls": "Do not invent a daemon-owned scheduler-to-core mapper, synthesize opportunityRef, or plan against uncommitted/shared-tree WIP. The task's own comment requires the bridge task to be DONE first.",
+      "releasedAt": "2026-08-13T16:03:19.189Z",
+      "releasedBy": "architect-a9210e34",
+      "reason": "Explicit architect handoff after reporting the premature planning task blocked; freeing this architect to claim the next eligible planning task."
+    }
+  ]
+}

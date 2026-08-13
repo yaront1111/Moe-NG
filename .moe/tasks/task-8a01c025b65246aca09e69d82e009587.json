@@ -18,13 +18,127 @@
     "Do not convert restored counters into recovery authority or accept a caller-selected current binding.",
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-93b492de",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED for the core production surface. Update the existing identity-session.test.ts, authenticate-session.test.ts, and authenticate-command.test.ts fixtures to name lowercase 64-hex recoveryIncarnationRef/keyEpochRef values, then add recovery-authentication.test.ts for the cross-cutting fence. Through createSession/createCredential/canonicalizeCapabilities/authenticateSession/authenticateCommand (not a reimplemented helper), require exact-key rejection of missing, extra, malformed, accessor/hostile, or conflicting refs; frozen propagation through Session, Credential, CapabilityGrant, ProofChallenge, AuthenticatedSessionFacts, credential rotation, and successful AuthorizationContext; and grant canonical/conflict identity that changes when either ref changes. Generate exactly two well-formed earlier-install cases with distinct refs, assert the case count is two/nonzero, and pin SESSION_REPLAYED plus the new core RECOVERY_BINDING layer with no context. Cross stale session/credential/proof authority and an otherwise matching stale grant against expiry, transport denial, and missing capability to pin precedence; add positive fresh-current controls and structural/cross-record controls that remain AUTHENTICATION_FAILED at BINDING.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/identity"
+      ],
+      "newFiles": [
+        "packages/core/src/identity/recovery-authentication.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/recovery-authentication.test.ts"
+      ],
+      "note": "Reopen-2 TDD RED adds production authenticateCommand coverage for Session, Credential, CapabilityGrant, current binding, transport/grant arrays, plus direct authenticateSession coverage for recovery-candidate arrays. Both hidden and enumerable-symbol own-property variants are generated and exact-count pinned. Fresh focused run: 6 named cases failed (21 passed) because spoofed inputs returned ok:true rather than AUTHENTICATION_FAILED/BINDING; command cases and candidate-array cases also pin zero verifier/replay observations.",
+      "startedAt": "2026-08-12T16:02:19.136Z",
+      "completedAt": "2026-08-12T16:03:25.360Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Implement the minimum core fence in identity-session.ts, identity-capability.ts, authenticate-session.ts, authenticate-command.ts, and the curated identity/index.ts export. Introduce one RecoveryAuthenticationBinding vocabulary using RestoreQuiesceWitness['recoveryIncarnationRef'] plus an exact lowercase-64-hex keyEpochRef; thread both required fields through Session/Credential exact factories and rotateCredential, and through CapabilityGrant GRANT_KEYS, grantKey, conflict identity, and the exact matching tuple. AuthenticateCommandInput supplies a nullable daemon-current binding; SessionAuthenticationInput also receives only the otherwise-matching capability recovery candidates derived by production identity-capability code, never caller-selected current authority. Snapshot/freeze all inputs, put both refs in ProofChallenge and success facts, and compare session, credential, proof-attested challenge, current binding, and candidate grants after PROOF/REPLAY/GENERATION/SESSION_STATE but before EXPIRY/TRANSPORT/exact capability matching. If a current candidate exists, prefer it; if only otherwise-matching candidates are prior-incarnation/prior-key, return SESSION_REPLAYED/RECOVERY_BINDING. Invalid canonicalization or cross-record ref disagreement remains AUTHENTICATION_FAILED/BINDING, and success copies the validated current refs into AuthorizationContext.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/identity"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/identity-snapshot.ts",
+        "packages/core/src/identity/identity-snapshot.js",
+        "packages/core/src/identity/identity-session.ts",
+        "packages/core/src/identity/identity-capability.ts",
+        "packages/core/src/identity/recovery-authentication-binding.ts",
+        "packages/core/src/identity/recovery-authentication.test.ts"
+      ],
+      "note": "Implemented one focused hostile-safe identity snapshot seam. Exact records use Reflect.ownKeys with a complete allowed-key universe and require enumerable own data descriptors; exact arrays admit only dense enumerable own data indices plus the native non-enumerable data length descriptor, rejecting hidden/symbol/custom/accessor behavior. Session, Credential, grants, transport/grant lists, current binding, and recovery-candidate lists now compose it. All six previously red cases are green with exact AUTHENTICATION_FAILED/BINDING, no context, and zero proof/replay calls. Fresh core typecheck plus 4 identity files/149 tests passed; diff check clean.",
+      "startedAt": "2026-08-12T16:03:42.330Z",
+      "completedAt": "2026-08-12T16:05:35.728Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED for daemon composition. In the focused new recovery-authentication.test.ts, use real project-scoped SqliteEventStore.installRecoveryBinding rows, runSessionCommand/session.open, readSessionLedger, createSessionAuthenticator, buildCommandRegistry, handleCommandRequest, and a counted decision/handler port. Issue bearer sessions while ACTIVE names incarnation/key pairs 1 and 2 with the same payload bytes, install pair 3, and prove both earlier credentials/capability sets return HTTP 401 with code SESSION_REPLAYED, stage AUTHENTICATE, layer IDENTITY and zero decode/decision/handler effect, while a pair-3 session succeeds. Assert exactly two stale cases, stale precedence over expired sessions and otherwise missing capability, and malformed/unknown bearer precedence as generic AUTHENTICATION_FAILED. Add ABSENT, codec-refused/corrupt, ambiguous credential, and legacy SessionOpened-without-refs controls; assert no returned/serialized result exposes credential text, proof/signature bytes, private key/handle, incarnation nonce, or binding payload. Update session-authority.test.ts and protocol assertions so current-row issuance/authentication succeeds, old unbound folds fail closed, each signed ref is load-bearing, and a prior proof-bound authority reaches core SESSION_REPLAYED/RECOVERY_BINDING.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity",
+        "apps/daemon/src/http"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/recovery-authentication.test.ts"
+      ],
+      "note": "Revalidated daemon composition against the stricter core snapshots. The existing real-store, authority, and HTTP production tests remain green; no daemon source change was needed because all selected-binding projections use exact ordinary data records and arrays. Fresh daemon typecheck plus recovery-authentication, session-authority, and http-adapter: 3 files/43 tests passed.",
+      "startedAt": "2026-08-12T16:05:42.080Z",
+      "completedAt": "2026-08-12T16:05:55.863Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the focused daemon selected-binding adapter and bearer persistence. recovery-authentication-binding.ts must synchronously read only RECOVERY_BINDING_SLOTS[0] from the injected project-scoped SqliteEventStore, take no slot/ref/request argument, map incarnationRef -> recoveryIncarnationRef plus keyEpochRef, return a frozen public-only binding, and return no authority for ABSENT or any store/codec refusal; add the exact LF one-line .js bridge. In session-contracts.ts/session-services.ts, add a stable SESSION_RECOVERY_BINDING_UNAVAILABLE prerequisite refusal and stamp both current refs into every newly committed SessionOpened result/event only after structural payload validation; renew/close preserve them. In session-read-model.ts, require both refs on opened facts so restored legacy rows become unreadable instead of receiving defaults. In session-authenticator.ts, retain structural/ambiguous credential checks, read the current binding fresh on every operator or matched-session decision, compare a matched session before expiry/capability publication, and return a fixed frozen sanitized SESSION_REPLAYED/401/IDENTITY refusal for a well-formed prior binding. Do not cache refs or expose row payload/installedAt/digest details.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity"
+      ],
+      "newFiles": [
+        "apps/daemon/src/identity/recovery-authentication-binding.ts",
+        "apps/daemon/src/identity/recovery-authentication-binding.js"
+      ],
+      "note": "Revalidated the previously landed daemon selected-binding adapter and bearer persistence under the stricter core record/list contract. The fixed ACTIVE-slot reader still returns frozen public refs only, and open/read/authenticate paths construct exact data records; no cache or caller-selected authority was introduced. Fresh daemon typecheck and focused composition suite remained green at 3 files/43 tests.",
+      "startedAt": "2026-08-12T16:06:00.310Z",
+      "completedAt": "2026-08-12T16:06:06.455Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Compose the same public binding into the real proof-of-possession core consumer without growing the near-cap files past 400. Extend SessionAuthorityOpened and credential-history fold data in session-authority-contracts.ts/session-authority-store.ts with both issuance refs; openSession in session-authority.ts reads the fixed current row itself, rotation preserves the authenticated refs, and missing/unbound historical records remain BINDING failures. Extend SessionProofChallengeFields and CHALLENGE_ORDER in session-authority-protocol.ts with recoveryIncarnationRef then keyEpochRef using the existing framed scalar encoding; both self-open proof and later verification derive those values from the selected/store snapshot, never from presented authentication. session-authority.ts passes the fresh current binding and no capability candidates to @moe/core authenticateSession so stale restored credentials refuse before expiry. Keep the signing handle, recovery nonce, private bytes, bearer, and signatures out of snapshots/contexts/errors; factor recovery projections through the focused adapter (or extract an equally focused existing helper) so session-authority.ts and session-authority-store.ts remain strictly below 400 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/identity"
+      ],
+      "note": "Revalidated the proof-of-possession consumer: signed recovery refs, fresh store-selected binding, and exact AUTHENTICATION_FAILED/SESSION_REPLAYED precedence remain compatible with the stricter core snapshots. Session-authority focused coverage passed within the 3-file/43-test daemon run; no authority/protocol production file changed or grew.",
+      "startedAt": "2026-08-12T16:06:11.100Z",
+      "completedAt": "2026-08-12T16:06:17.250Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Preserve the identity refusal at the production HTTP boundary. Extend AuthenticationResult in http-contract.ts with a typed refused verdict carrying PortRefusal and allow HttpPortRefused at AUTHENTICATE as well as DISPATCH. Update authenticateHttpRequest/http-adapter.ts to return the authenticator's frozen SESSION_REPLAYED refusal unchanged at stage AUTHENTICATE before compatibility, decode, registry, authorization, or dispatch; only ordinary missing/malformed/unknown credentials remain the existing generic AUTHENTICATION_FAILED response. Update http-adapter.test.ts to pin the exact code, 401 status, stage, layer, and zero downstream calls. Keep the existing createSessionAuthenticator composition in daemon-store-dependencies.ts as the durable ingress consumer, publish core additions only through identity/index.ts, add only rationale comments for the fixed selected slot and separated pre-/post-decode seams, and do not edit unrelated ingress/recovery handlers or the authoritative design.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/http"
+      ],
+      "note": "Revalidated the production HTTP refusal seam with stricter core structural rejection. HTTP adapter coverage in the fresh 3-file/43-test daemon run still preserves stale SESSION_REPLAYED as 401/AUTHENTICATE/IDENTITY and prevents downstream work; structural identity input continues to remain AUTHENTICATION_FAILED. No HTTP source change was required.",
+      "startedAt": "2026-08-12T16:06:21.640Z",
+      "completedAt": "2026-08-12T16:06:28.849Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review and mutation evidence on the production surface. Audit null/accessor/proxy/huge inputs, duplicate calls, simultaneous reads during a binding replacement, ABSENT/corrupt store results, same-backup ABA, old unbound events, expiry/capability masking, exact freezing, secret serialization, current-slot selection, line counts, and the owned-path diff. In separate arms neutralize (1) the core current session/credential comparison, (2) stale-grant candidate classification, (3) recoveryIncarnationRef framing, (4) keyEpochRef framing, and (5) createSessionAuthenticator's production comparison; each intended focused test must go RED for the named reason rather than syntax or another layer. Back up outside the repo where necessary, restore and hash-check exact bytes after every arm, assert generated cases remain nonzero, and leave no drill/scratch/evidence file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/identity",
+        "apps/daemon/src/identity",
+        "apps/daemon/src/http"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/identity/identity-snapshot.ts"
+      ],
+      "note": "Adversarial review/mutation evidence for reopen-2: (1) replaced record Reflect.ownKeys with Object.keys; both named hidden/symbol record cases reddened by returning ok:true instead of AUTHENTICATION_FAILED/BINDING; exit 1, SHA restored TRUE. (2) made array key enumeration ignore hidden/symbol properties while preserving normal length; four command/candidate array cases reddened with ok:true; exit 1, SHA restored TRUE. (3) replaced own data-descriptor reads with direct property access; session/grant accessor guards reddened by accepting the records; exit 1, SHA restored TRUE. Post-restore core typecheck and focused 27/27 passed. Review covered null/proxy/accessor/sparse/extra/symbol shapes, no-context and zero proof/replay exits, duplicate calls, frozen snapshots, no caller current-binding choice, and no secret serialization.",
+      "startedAt": "2026-08-12T16:06:48.058Z",
+      "completedAt": "2026-08-12T16:08:27.750Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Run one final fresh foreground verification from D:/projexts/moe-next after every mutation byte is restored: `pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Record exit statuses and exact output as completion evidence. Also compare the initial repo-wide failing-path baseline with HEAD and disclose any foreign red verbatim under the path-attributed rail; the core and daemon owned-package legs must be exit 0 and the owned-path failure delta must be empty. Confirm every touched production source is below 400 physical lines (new files targeted <=250), the design hash is unchanged, only explicit owned paths are staged/committed, foreign restore-controller WIP is byte-preserved, then call complete_task for QA.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Final review confirms exact own-key/data-descriptor snapshots are pure and frozen, contain revoked proxies/accessors, reject null/sparse/extra/symbol/custom arrays before verifier/replay, and add no state/concurrency seam. Design SHA unchanged; new bridge ends LF; plain-Node core identity import loaded; diff check clean; index and owned paths clean. Production lines: snapshot 52, session 187, capability 169, recovery binding 55; all below target 250, while pre-existing daemon near-cap files remain 399/394 and unchanged. Fresh exact foreground gate exited 0 in 31.8s: core 28 files/579 tests; daemon 63/946; all 18 workspace typechecks; root 248 files/5243 passed +1 skipped; foundation 30/487; store 39/444. No failing paths remain.",
+      "startedAt": "2026-08-12T16:08:36.692Z",
+      "completedAt": "2026-08-12T16:09:48.594Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-42b952c9, 2026-08-11. I refused to promote this TWICE, on 08-09 and 08-10, and both refusals were correct. The reason they no longer apply is worth recording so nobody re-derives it. WHY I REFUSED BEFORE: a naive dependency check said READY because both stated hard dependencies resolved, but task-b6e3dd2a (Crash-safe two-slot recovery anchor installer) was ARCHIVED — shelved, not shipped — and the capability behind it was UNFIT, not merely absent. RecoveryIncarnationKeyHandle is `object` (recovery-incarnation-contract.ts:42) resolved through a module-private WeakMap (recovery-incarnation.node.ts:43), which cannot survive process death, so a crash-safe installer that must reuse a key epoch across a crash could not be built on it. Symbol presence was not capability fitness. WHAT CHANGED, measured at HEAD: task-b6e3dd2af916490fb2bc4d375a530683 is DONE, task-684e6972c8c1418f8996ea3edd61f00c is DONE, and task-304aa63417e448a897e83a4fd08cccaa (Recovery incarnation continuity across a crash: re-mint and prove succession) is DONE. The architectural answer was never to persist private key material — a landed test at recovery-incarnation.test.ts:668 positively forbids it, asserting the signing handle stays out of the serialized binding. It was SUCCESSION: apps/daemon/src/recovery/recovery-succession.ts:50 states \"Everything below is checkable from durable public bytes\", exposing readSuccessionChain at :233 and createRecoverySuccessionService at :322. Verification rests on durable PUBLIC bytes, so it survives process death without ever persisting the handle. The installer surface is live at recovery-incarnation-anchor.ts with anchorIncarnation (:186) and readAnchoredIncarnation (:147). ARCHITECT, TWO INSTRUCTIONS. (1) Re-measure all of the above on disk before naming symbols; this reason string is stale by default like any description. (2) Do NOT plan to persist, serialize or resurrect a key handle — compose the succession service instead. Any plan that serializes the handle will go red against a landed test. Your own description's MEASURED GAP was taken at HEAD 1ce0059; re-take it. DOWNSTREAM: task-cf7fb147 (Recovery inventory quarantine coordinator) and task-6f786c58 (R3 disaster-recovery completion composition) both name this task as a hard dependency and stay BACKLOG until it lands.",
+  "reopenCount": 2,
+  "reopenReason": "Rejected after fresh diff/DoD/rail verification. Exact required gate exited 0: core 28/572, daemon 63/946, and all 18 typechecks. Broader gates exited 0: root 248/5236 +1 skipped, foundation 30/487, store 39/444. A QA mutation neutralizing the production session/current binding comparison reddened both earlier-install tests for the exact reason and was restored SHA-exact. Design hash, LF bridges, committed bytes, and production-file line caps pass. But core exact readers ignore non-enumerable and symbol own properties. A direct production authenticateCommand probe attached both to valid Session and CapabilityGrant inputs and returned ok:true with an authorization context instead of AUTHENTICATION_FAILED/BINDING, violating DoD 1 and the structural-spoofing rail.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -45,13 +159,144 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:06:34.822Z",
-  "updatedAt": "2026-08-11T19:52:03.241Z",
+  "updatedAt": "2026-08-12T16:16:07.409Z",
   "contextFetchedBy": [
-    "architect-f39f0c46",
-    "architect-5b5302ee",
-    "architect-93b492de"
+    "worker-fc2b891f",
+    "qa-41bfec20"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-11T19:46:00.720Z"
-  }
+    "firstClaimAt": "2026-08-11T19:46:00.720Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 24,
+    "rejectCount": 2,
+    "reopenCount": 2,
+    "doneAt": "2026-08-12T16:16:07.409Z",
+    "wallClockMs": 73806689
+  },
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [
+    {
+      "item": "A freshly issued current-incarnation credential and grant authenticate normally, while credentials/grants from both earlier installs of the same backup generation fail; tests pin refusal precedence, code, stage, and layer and mutation-check the production comparison.",
+      "rejectedAt": "2026-08-12T08:57:43.442Z",
+      "rejectedBy": "qa-f31da604"
+    },
+    {
+      "item": "Session, Credential, CapabilityGrant, proof challenge, and successful AuthorizationContext carry exact validated `recoveryIncarnationRef` and `keyEpochRef` values; canonicalization/conflict identity includes both fields.",
+      "rejectedAt": "2026-08-12T10:05:51.491Z",
+      "rejectedBy": "qa-41bfec20"
+    }
+  ],
+  "planSubmittedAt": "2026-08-12T07:35:35.735Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the installer-selected store authority, not caller input: read RECOVERY_BINDING_SLOTS[0] fresh from the selected SqliteEventStore and map only incarnationRef/keyEpochRef to the core vocabulary. Passing refs in HTTP/session requests, caching them, or defaulting old records was rejected because restored callers could select or inherit current authority.\nKeep the pre-decode HTTP bearer Authenticator and the post-decode proof-of-possession session authority separate. They see different facts and already compose in sequence; merging them would decode attacker bytes before authentication.\nDo not serialize, resurrect, or even pass a RecoveryIncarnationKeyHandle. The landed recovery succession/anchor path establishes the durable public incarnation and key-epoch refs upstream; this task consumes those public selected-store bytes only.\nDo not let a stale grant degrade to CAPABILITY_DENIED. Canonical exact matching includes both recovery refs, while a pre-expiry candidate classification distinguishes an otherwise matching stale grant and returns SESSION_REPLAYED only when no current candidate exists.\nDo not cache the current binding or flatten daemon refusals. A cache can retain authority across a live restore, and generic flattening loses the required SESSION_REPLAYED/AUTHENTICATE/IDENTITY evidence.",
+    "codebaseInsights": "Re-measured from D:/projexts/moe-next at HEAD acb3f4d7f52464a49c53e0b80bbacc2ef4e0d4a2. `(Get-FileHash -Algorithm SHA256 D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md).Hash` returned 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191.\n`Get-ChildItem packages/core/src/identity,apps/daemon/src/http -Recurse -File | Select-String 'recoveryIncarnationRef|keyEpochRef'` returned no matches, so the task's old gap remains open at current HEAD.\nThe prerequisites are present in committed production bytes: recovery-incarnation.ts at ea31ab4, recovery-succession.ts at 1eb3747 (readSuccessionChain line 232; createRecoverySuccessionService line 321), and recovery-anchor-install.ts at 1009d99. The installer writes the selected database's fixed RECOVERY_BINDING_SLOTS[0] row; SqliteEventStore.readRecoveryBinding is the current synchronous authority read.\nCore definitions are identity-session.ts (Session/Credential factories and rotation), identity-capability.ts (GRANT_KEYS, TUPLE_KEYS, grantKey/canonicalization), authenticate-session.ts (BINDING -> PROOF -> REPLAY -> GENERATION -> SESSION_STATE -> EXPIRY -> TRANSPORT), authenticate-command.ts, and the curated identity/index.ts seam.\nThe daemon has two real credential carriers. Bearer sessions are opened/folded in session-services.ts and session-read-model.ts, then consumed by createSessionAuthenticator. Proof-of-possession sessions are persisted/folded by session-authority-store.ts and authenticated through the core seam by session-authority.ts; the v1 signed field order is CHALLENGE_ORDER in session-authority-protocol.ts.\nauthenticateHttpRequest currently maps every non-authenticated verdict to generic AUTHENTICATION_FAILED. AuthenticationResult has no typed refusal variant and HttpPortRefused currently fixes stage to DISPATCH, although PortRefusal already carries code/httpStatus/layer.\nProduction ingress already composes createSessionAuthenticator at apps/daemon/src/daemon-store-dependencies.ts:360, so changing that authenticator plus HTTP passthrough lands a durable call site rather than a test-only edge.\nForeign WIP is present under apps/daemon/src/recovery/restore-controller*. It is not a prerequisite surface for this task and must remain untouched.\nLine pressure is real: session-authority.ts is 392 physical lines and session-authority-store.ts is 387. Put selected-binding reads and recovery projections in a focused module and keep both hosts below 400; target every new production file at <=250.",
+    "risks": "Proof framing is a security protocol: add recoveryIncarnationRef and keyEpochRef to the exact ordered production challenge on every signing and verification path. A test helper that adds fields without changing canonicalSessionProofBytes is not evidence.\nOld or restored SessionOpened/SessionAuthorityOpened/credential rows without both refs must become unreadable or BINDING-refused. Never stamp the current row onto legacy material during a fold.\nRefusal order is load-bearing: hostile/malformed cross-record shapes stay AUTHENTICATION_FAILED/BINDING; valid proof plus prior recovery refs becomes SESSION_REPLAYED/RECOVERY_BINDING before expiry/transport/capability; HTTP preserves code SESSION_REPLAYED at stage AUTHENTICATE, layer IDENTITY.\nTwo earlier incarnations can share identical backup-generation payload/counters. Tests must vary both public refs while holding the generation payload fixed and assert exactly two stale cases were created.\nReturn only frozen public digest refs. Fixed refusals, contexts, logs, event results, and serialized test evidence must contain no bearer, signature, private key, recovery nonce, key handle, proof bytes, or recovery payload.\nRead the selected binding for every authentication/issuance decision. Missing, ABSENT, codec-refused, ambiguous, or malformed state has no authority and must not reach expiry, capability matching, decode, dispatch, or a business-effect port.\nUse exact-path staging only and preserve foreign restore-controller WIP. For repo-wide red, record the initial baseline and final failing paths, then apply the task's owned-path delta rule rather than repairing unrelated files.",
+    "keyFiles": [
+      "packages/core/src/identity/identity-session.ts",
+      "packages/core/src/identity/identity-capability.ts",
+      "packages/core/src/identity/authenticate-session.ts",
+      "packages/core/src/identity/authenticate-command.ts",
+      "packages/core/src/identity/index.ts",
+      "apps/daemon/src/identity/session-services.ts",
+      "apps/daemon/src/identity/session-read-model.ts",
+      "apps/daemon/src/identity/session-authenticator.ts",
+      "apps/daemon/src/identity/session-authority-protocol.ts",
+      "apps/daemon/src/identity/session-authority-store.ts",
+      "apps/daemon/src/identity/session-authority.ts",
+      "apps/daemon/src/http/http-adapter.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-12T07:43:18.681Z",
+    "escalatedAt": "2026-08-12T07:43:18.681Z"
+  },
+  "planApprovedAt": "2026-08-12T07:35:37.777Z",
+  "workStartedAt": "2026-08-12T07:44:09.419Z",
+  "reviewStartedAt": "2026-08-12T16:10:48.269Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store",
+    "exitCode": 0,
+    "outputTail": "Exit code: 0; wall time 31.8s.\n@moe/core: Test Files 28 passed (28); Tests 579 passed (579).\n@moe/daemon: Test Files 63 passed (63); Tests 946 passed (946).\npnpm typecheck: all 18 workspace projects passed.\nRoot pnpm test: Test Files 248 passed (248); Tests 5243 passed | 1 skipped (5244).\npnpm verify:foundation: Test Files 30 passed (30); Tests 487 passed (487).\npnpm verify:store: Test Files 39 passed (39); Tests 444 passed (444).",
+    "reportedAt": "2026-08-12T16:10:48.269Z"
+  },
+  "filesModified": [
+    "packages/core/src/identity/recovery-authentication.test.ts",
+    "packages/core/src/identity/identity-snapshot.ts",
+    "packages/core/src/identity/identity-snapshot.js",
+    "packages/core/src/identity/identity-session.ts",
+    "packages/core/src/identity/identity-capability.ts",
+    "packages/core/src/identity/recovery-authentication-binding.ts",
+    "apps/daemon/src/identity",
+    "apps/daemon/src/http"
+  ],
+  "reviewCompletedAt": "2026-08-12T16:16:07.409Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Session, Credential, CapabilityGrant, proof challenge, and successful AuthorizationContext carry exact validated `recoveryIncarnationRef` and `keyEpochRef` values; canonicalization/conflict identity includes both fields."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/core/src/identity/identity-session.ts",
+        "line": 85,
+        "description": "`Object.keys` hides non-enumerable and symbol own properties; the same flaw is at identity-capability.ts:75 and recovery-authentication-binding.ts:24,49. Production authenticateCommand accepted Session/CapabilityGrant inputs carrying both and returned ok:true. Use Reflect.ownKeys plus enumerable own data-descriptor checks. Add production regressions for Session, Credential, grants, current binding, and arrays; assert AUTHENTICATION_FAILED/BINDING and zero verifier/replay calls."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected after fresh diff/DoD/rail verification. Exact required gate exited 0: core 28/572, daemon 63/946, and all 18 typechecks. Broader gates exited 0: root 248/5236 +1 skipped, foundation 30/487, store 39/444. A QA mutation neutralizing the production session/current binding comparison reddened both earlier-install tests for the exact reason and was restored SHA-exact. Design hash, LF bridges, committed bytes, and production-file line caps pass. But core exact readers ignore non-enumerable and symbol own properties. A direct production authenticateCommand probe attached both to valid Session and CapabilityGrant inputs and returned ok:true with an authorization context instead of AUTHENTICATION_FAILED/BINDING, violating DoD 1 and the structural-spoofing rail.",
+      "rejectedAt": "2026-08-12T10:05:51.491Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "Session, Credential, CapabilityGrant, proof challenge, and successful AuthorizationContext carry exact validated `recoveryIncarnationRef` and `keyEpochRef` values; canonicalization/conflict identity includes both fields."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/core/src/identity/identity-session.ts",
+          "line": 85,
+          "description": "`Object.keys` hides non-enumerable and symbol own properties; the same flaw is at identity-capability.ts:75 and recovery-authentication-binding.ts:24,49. Production authenticateCommand accepted Session/CapabilityGrant inputs carrying both and returned ok:true. Use Reflect.ownKeys plus enumerable own data-descriptor checks. Add production regressions for Session, Credential, grants, current binding, and arrays; assert AUTHENTICATION_FAILED/BINDING and zero verifier/replay calls."
+        }
+      ]
+    },
+    {
+      "reason": "Rejected after diff/DoD/rail review. The exact required gate was freshly green: core 28/570, daemon 63/945, workspace typecheck, root 248/5228 +1 skipped, foundation 30/487, and store 39/444. A QA mutation of the production current-binding comparison correctly reddened both named stale-install tests and was restored byte-exact. However, the daemon authority accepts a structurally spoofed nonthrowing accessor and creates durable replay evidence, violating the structural-spoofing AUTHENTICATION_FAILED/BINDING rail. Also, DoD 4's stale-grant evidence covers only one earlier install and asserts no refusing layer, contrary to the exact reason/layer and nonzero generated-case rails. All probes were removed and owned bytes are clean.",
+      "rejectedAt": "2026-08-12T08:57:43.442Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "A freshly issued current-incarnation credential and grant authenticate normally, while credentials/grants from both earlier installs of the same backup generation fail; tests pin refusal precedence, code, stage, and layer and mutation-check the production comparison."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "apps/daemon/src/identity/session-authority-protocol.ts",
+          "line": 108,
+          "description": "readExactRecord invokes value[key], so a nonthrowing enumerable accessor is accepted as exact input. QA wrapped a valid authenticate request's requestId in such a getter; createSessionAuthority.authenticate returned ok:true and committed a replay marker instead of AUTHENTICATION_FAILED/BINDING. Require own data descriptors, then add a production-authority regression asserting the exact code/layer and zero event delta."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/core/src/identity/recovery-authentication.test.ts",
+          "line": 274,
+          "description": "The stale-grant test exercises only EARLIER[0] and asserts only SESSION_REPLAYED; AuthenticateCommandResult drops the refusing layer. A different SESSION_REPLAYED layer can answer while this remains green, and EARLIER.length counts session cases, not grant cases. Generate both earlier grant cases, assert their exact count, and pin RECOVERY_BINDING through the production command refusal surface."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-12T16:16:07.409Z",
+  "reviewSummary": "Verified the full owned diff and all six DoD items/rails at committed HEAD ff292f0. Re-ran the exact foreground gate successfully: core 28/579, daemon 63/946, all 18 workspace typechecks, root 248/5246 +1 skipped, foundation 30/487, store 39/444. Independently probed 14 hidden/symbol record/array cases through production authenticateCommand/authenticateSession; all returned AUTHENTICATION_FAILED/BINDING with zero proof/replay calls and no context. Mutating the production record own-key check to Object.keys reddened both named variants by accepting authority; restored SHA-exact. Confirmed stale-install/grant reason-layer tests, daemon HTTP consumer call site, selected-binding behavior, secret-free contexts/refusals, LF bridge, unchanged design hash, clean owned bytes, and every production file below 400 lines."
 }

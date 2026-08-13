@@ -1,0 +1,129 @@
+{
+  "id": "task-fb997625e61f487a9afa1cc56c67687a",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Publish recovery inventory adapter composition surface",
+  "description": "Objective: make the four landed node-side recovery inventory registrations legally consumable by the daemon without deep imports or mutable global registration. Deliverable: a curated @moe/runner root surface that exports providerLockInventoryRegistration, workspaceInventoryRegistration, gitIntegrationInventoryRegistration, artifactObjectInventoryRegistration and the exact input/port/refusal type closure needed to construct them, while preserving caller-injected immutable registry composition. MEASURED GAP at HEAD c0c5929: packages/runner/package.json exports only '.', packages/runner/src/index.ts exports the contract and collect/create registry but none of the four factories, and a bare @moe/runner runtime probe returns undefined for all four while deep import fails ERR_PACKAGE_PATH_NOT_EXPORTED. Consumer: task-cf7fb147bd1c47698cbd65c9535370aa. NOT in scope: daemon ports, enumeration behavior changes, new inventory classes, quarantine, persistence, embargo, or recovery.complete. Owned paths: packages/runner/src/surface/recovery-inventory-surface.ts (+ mandatory .js bridge), minimal packages/runner/src/index.ts wiring, and the focused root/runtime surface test. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "The @moe/runner package root exports all four existing registration factories and the exact public input/port/refusal type closure required by an external daemon consumer; no deep import or package exports-map change is needed.",
+    "The surface delegates to the landed adapter modules unchanged and keeps createRecoveryInventoryRegistry caller-injected; no mutable module-global registry, fallback enumerator, or duplicate inventory implementation is introduced.",
+    "A compiled/bare-specifier runtime test imports @moe/runner, constructs each registration through the published factory, asserts the four exact class identities and a non-zero count of four, and pins any refusal code/layer produced by the real aggregate.",
+    "Existing recovery-inventory and root namespace tests remain green, every new .ts module has the exact LF .js bridge required by NodeNext, and production sources remain below the per-file 400-line cap.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "Publish existing authority only; do not change the four adapters, their class vocabulary, the aggregate, or any refusal code.",
+    "Keep registration immutable and caller-injected. A module-global registry would make import order authority and is forbidden.",
+    "Tests must drive the package root, assert exact class/cardinality and exact stable reason code/layer; symbol presence alone is not composition.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD red: extend the bare-root surface contract to import/name the complete adapter construction type closure and expect exactly four new runtime functions—providerLockInventoryRegistration, workspaceInventoryRegistration, gitIntegrationInventoryRegistration, and artifactObjectInventoryRegistration—raising the hand-maintained namespace cardinality from 155 to 159. Add focused root-composition coverage that constructs all four landed registrations through `@moe/runner` (never a relative/deep substitute), asserts the generated list is nonzero and exactly four with four unique exact RECOVERY_INVENTORY_CLASSES, verifies the root functions are the landed factory identities/no wrappers, snapshots them through caller-injected createRecoveryInventoryRegistry, and proves caller-array mutation cannot alter the frozen registry. Invoke the real aggregate and pin both every proof tuple and the duplicate-registry refusal `RECOVERY_INVENTORY_REQUEST_INVALID` at layer `INVENTORY_ADAPTER`, with a guard that no enumerator ran on that refusal. Run the focused tests now and record the expected failure because the root bindings/type closure are absent.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create an explicit curated recovery-inventory composition surface. Move the existing named recovery-inventory contract and collect/create registry exports from index.ts into it unchanged; explicitly re-export only the four existing registration factories as runtime values plus the exact type-only external construction/refusal closure (provider process/port/input and required Claude/Codex probe input/port/report leaves; workspace result/source/listing/port/input; Git input/reading/refusal; artifact input/reading). Reuse already-rooted common types and resolve any Claude/Codex type-name collisions explicitly. Do not export adapter enumerators, version constants, fixtures, default tuples, or mutable/global registration.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/surface/recovery-inventory-surface.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Add the mandatory NodeNext bridge with exact bytes `export * from \"./recovery-inventory-surface.ts\";\\n` (LF, no CR), and wire index.ts to `export *` only from that curated `.js` surface. Keep package.json's root-only exports map unchanged. Confirm the existing runtime-entrypoint sweep discovers the new module/bridge and a real child Node bare import sees all four defined functions; do not add a deep export.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/surface/recovery-inventory-surface.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Refactor the focused registration test imports/fixtures only as needed so all four factories and consumer-facing types are obtained from the bare package root while real Git observer, artifact store, workspace scanner, provider probes, registry, and aggregate remain the production surfaces under test. Preserve the existing exact all-four COMPLETE journey and exact one-missing UNKNOWN tuple (`RECOVERY_INVENTORY_COVERAGE_UNKNOWN`, `ENUMERATOR_UNREGISTERED`, `INVENTORY_ADAPTER`); add no local adapter implementation or caller-selected authority. Then make the red tests green without changing any adapter, aggregate, class vocabulary, or reason code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Run the single concentrated verification command fresh in the foreground: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`. Require exit 0, nonzero runner test execution, the exact namespace/root tests, all existing recovery-inventory suites, real child-Node bare-specifier loadability, and the dynamic exact-LF bridge sweep. Also record merge-base versus HEAD repo-wide path-attributed baseline only if broader gates expose foreign failures; no owned runner-path delta may be red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.js",
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarially review the owned diff before completion: verify index.ts and the new production surface stay below 400 (target <=250), exactly four runtime bindings were added, no direct enumerator/version/test fixture/global registry leaked, caller mutation and duplicate registration fail closed, no deep-import/package-map change occurred, and the exact LF bridge is portable on Windows/macOS/Linux. Mutation drill the production surface by temporarily deleting or misbinding one factory export (or aliasing artifact to Git), rerun the focused root/registration test to confirm it goes red on exact identity/class/cardinality—not merely import success—then restore and rerun the exact verification command. Finally stage/commit only the five owned runner paths and hand QA the fresh command output plus the mutation red evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.js",
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-directed unblock after live architect audit: the four node-side recovery inventory adapters already exist and the measured gap is only their unavailable @moe/runner root composition surface. This prerequisite has no unmet production dependency; architect must re-measure exact exports before planning.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
+  "priority": "CRITICAL",
+  "order": 13.51,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T15:50:24.022Z",
+  "updatedAt": "2026-08-13T16:21:54.948Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:12:53.060Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5
+  },
+  "contextFetchedBy": [
+    "architect-a42f4965"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-13T16:21:52.901Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected (1) adding four inline exports to packages/runner/src/index.ts because that production entry point is already 275 lines and the repository targets <=250; (2) blanket export * from the adapter modules because it would leak enumerate* functions and version constants outside the four-factory contract; (3) changing package.json exports/deep-import paths because the durable consumer must use the reviewed package root; and (4) a module-global/default registry because import order must never confer inventory authority. Chosen approach: extract the existing inventory root block into one explicit curated surface, publish only the four landed factories plus their type-only construction/refusal closure, and keep registry composition caller-injected.",
+    "codebaseInsights": "Re-measured at HEAD 2b15b8f01ee0b4a52deb6bb78e510e0ca60d9c66. Command `pnpm --filter @moe/runner exec node --experimental-strip-types --input-type=module -e <bare import probe>` returned all four requested bindings as `undefined` (count 0); a direct `@moe/runner/recovery-inventory/provider-lock-inventory.js` import returned `ERR_PACKAGE_PATH_NOT_EXPORTED`. The landed factories exist at provider-lock-inventory.ts:240, workspace-inventory.ts:242, git-integration-inventory.ts:242, and artifact-object-inventory.ts:186 and each returns a frozen RecoveryInventoryRegistration over injected ports. createRecoveryInventoryRegistry at recovery-inventory.ts:53 snapshots/freezes the caller tuple, and duplicate registrations are refused by collectRecoveryInventory as `RECOVERY_INVENTORY_REQUEST_INVALID` / `INVENTORY_ADAPTER`. packages/runner/src/index.ts:207-251 currently owns the explicit aggregate/contract exports; move that block to the new surface then re-export the surface so the root shrinks below 250 without changing existing names. Existing runtime-entrypoint.test.ts dynamically walks every runtime module and requires the exact LF bridge bytes, while index-surface.test.ts hand-pins the complete root namespace. Named durable consumer is task-cf7fb147bd1c47698cbd65c9535370aa; this task publishes its legal edge but does not claim to complete that blocked coordinator's other prerequisites.",
+    "risks": "The exact public type closure is easy to under-publish: ProviderLockInventoryInput reaches ProbeClaudeRuntimeInput and ProbeCodexRuntimeInput, their ports/reports, and report leaf types; use explicit type-only re-exports and resolve Claude/Codex name collisions without widening runtime authority. Do not touch the four adapter files (248/250/250/194 lines), the 378-line aggregate, class vocabulary, codes/layers, or adapter behavior. Add exactly four runtime root values; direct enumerators and *_INVENTORY_VERSION constants remain private. Git/artifact factories intentionally expose aggregate UNKNOWN coverage rather than their direct enumerator refusal side-channel; do not change that protocol here. Tests must assert generated count exactly/nonzero four and exact code/layer, and the worker must mutation-drill the production root comparison/export rather than a helper. Preserve foreign scheduler work visible in the shared tree; commit only these owned runner paths.",
+    "keyFiles": [
+      "packages/runner/src/index.ts",
+      "packages/runner/src/surface/recovery-inventory-surface.ts",
+      "packages/runner/src/surface/recovery-inventory-surface.js",
+      "packages/runner/src/index-surface.test.ts",
+      "packages/runner/src/recovery-inventory/inventory-registration.test.ts",
+      "packages/runner/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-13T16:21:54.948Z"
+}

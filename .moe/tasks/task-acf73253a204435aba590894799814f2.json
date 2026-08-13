@@ -17,13 +17,69 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
     "Primary support target is Windows; any non-Windows path must return typed UNSUPPORTED rather than emulate Windows locking or process-tree guarantees."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Phase 0 / TDD RED for QA rejection #3 in `packages/runner/src/providers/claude/claude-launcher.test.ts`. First harden the existing non-Windows precedence test by passing an outer Proxy whose reflection trap throws and require the existing frozen `UNSUPPORTED`, `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED/LAUNCHER` result, proving the request is not observed off Windows. Then add a hand-pinned nine-case win32 hostile-snapshot matrix through production `launchClaude`: ownKeys traps at the outer request, runtime record, runtime.quotedObservation, one recursive authority record, argv array, environment record, and limits record, plus getOwnPropertyDescriptor traps at the outer request and recursive authority record. Assert `cases.length === 9`, `ran === 9`, and every per-case trap counter is positive. Observe each call with `Promise.allSettled` and require fulfillment with an immutable `REFUSED`, `ok:false`, `truthClass:'UNKNOWN'`, exact `CLAUDE_LAUNCH_REQUEST_MALFORMED` code and `LAUNCHER` layer, with no hostile exception text exposed. For every case require the dependency log, boundary requests, and process-boundary log to be exactly empty. Run the focused file and retain the expected RED showing rejected promises before production changes.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "RED captured. Hardened the non-Windows test to pass an ownKeys-throwing outer Proxy through launchClaude with a fixture deps/boundary harness: still fulfills frozen UNSUPPORTED CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED/LAUNCHER with trap fired 0 and empty dependency/boundary logs (passes, proving the platform guard precedes request observation). Added the nine-case win32 hostile-snapshot matrix through production launchClaude (ownKeys at outer request, runtime record, runtime.quotedObservation, recursive authority record, argv array, environment record, limits record; getOwnPropertyDescriptor at outer request and recursive authority record) with cases.length===9, ran===9, per-case positive trap counts, Promise.allSettled fulfillment, exact REFUSED/ok:false/UNKNOWN/CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER, frozen result, no hostile exception text, and exactly empty dependency log, boundary requests, and boundary log. Focused run is RED as required: `npx vitest run --root ../.. packages/runner/src/providers/claude/claude-launcher.test.ts` exit 1, 1 failed | 25 passed, first case outer-own-keys received status \"rejected\" instead of \"fulfilled\".",
+      "startedAt": "2026-08-13T16:20:03.523Z",
+      "completedAt": "2026-08-13T16:23:22.774Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Apply the minimum production repair in `packages/runner/src/providers/claude/claude-launcher.ts`. Keep the `platform !== 'win32'` refusal first. Type a local `ClaudeLaunchSnapshot | null`, surround only `snapshotClaudeLaunchRequest(value)` with try/catch, and return the existing generic `malformed(...)` result when reflection throws; keep the existing null/malformed branch for safely observed invalid data. Leave dependency selection and every duplicate/runtime/activation/grant/lock/boundary path outside this catch so their exact existing code and owning layer remain unchanged. Do not alter the launcher contract, input helper, exports, bridges, or downstream authority ordering. Re-run the focused test to GREEN and confirm all nine hostile cases fulfill without invoking a port.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts"
+      ],
+      "note": "Minimum production repair applied in claude-launcher.ts (2 added lines, file now 358 physical lines, below the 400 split threshold). The `platform !== \"win32\"` UNSUPPORTED refusal still runs first and before any request observation. Only `snapshotClaudeLaunchRequest(value)` is now wrapped: `let request: ClaudeLaunchSnapshot | null; try { request = snapshotClaudeLaunchRequest(value); } catch { return malformed(\"launch request is not bounded plain data\"); }` with the pre-existing `request === null` branch untouched, so safely observed invalid data and thrown reflection both yield the same frozen REFUSED/UNKNOWN CLAUDE_LAUNCH_REQUEST_MALFORMED at LAUNCHER. Dependency selection (`options.deps ?? defaults`) and every duplicate/runtime/activation/grant/lock/boundary try/catch remain outside the new catch, so their existing codes and owning layers are unchanged. No contract, input-helper, export, or bridge change. Focused run GREEN: `npx vitest run --root ../.. packages/runner/src/providers/claude/claude-launcher.test.ts` exit 0, 1 file / 26 tests passed, all nine hostile cases fulfilled with empty dependency, boundary-request, and boundary logs.",
+      "startedAt": "2026-08-13T16:23:25.160Z",
+      "completedAt": "2026-08-13T16:23:50.447Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Run the single concentrated fresh task gate from `D:/projexts/moe-next` and preserve its foreground output as completion evidence: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && cd packages/runner && node --experimental-strip-types -e \"import('@moe/runner').then(async m=>{let r=await m.launchClaude({},{platform:'linux'});if(typeof m.launchClaude!='function'||r.truthClass!='UNSUPPORTED'||r.code!='CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED'||r.layer!='LAUNCHER')throw Error(JSON.stringify(r));console.log(r.code,r.layer)})\"`. Require exit 0. In this same final verification step, compare merge-base versus HEAD results for repository `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`; disclose exact foreign red and permit completion only when the owned runner-path failure delta is empty. Reconfirm the design hash, `git diff --check`, root export smoke, both owned paths only, no scratch/generated files, and `claude-launcher.ts` below 400 physical lines without compression.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "Fresh concentrated task gate exit 0 from D:/projexts/moe-next: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && cd packages/runner && node --experimental-strip-types -e \"import('@moe/runner')...\"` — tsc clean, 55 test files / 1696 tests passed (baseline 1695, +1 new hostile-matrix test), plain-Node bare-root smoke printed `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED LAUNCHER`. Path-attributed repository baseline: `pnpm typecheck` exit 0 (every package Done), `pnpm test` exit 0 (248 files / 5327 passed, 1 skipped), `pnpm verify:foundation` exit 0 (30 files / 487 tests), `pnpm verify:store` exit 0 (39 files / 444 tests). No foreign red exists at HEAD, so the HEAD-minus-merge-base failing-path set is empty and its intersection with the owned runner paths is empty; nothing to disclose. Design SHA-256 re-measured as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191 (unchanged, not edited). `git diff --check` exit 0 (only foreign CRLF warnings on .codex files). Source-tree working changes are the two owned paths plus one pre-existing foreign docs/plans edit that is not mine; no untracked scratch/generated files under packages/. Physical lines: claude-launcher.ts 358 (< 400, uncompressed), claude-launcher.test.ts 585 (test file, per-file cap applies to production sources).",
+      "startedAt": "2026-08-13T16:23:52.822Z",
+      "completedAt": "2026-08-13T16:25:38.640Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Adversarially review the two-file diff after the green gate. Attack revoked Proxies and throwing ownKeys/getOwnPropertyDescriptor/getPrototypeOf traps at outer and nested snapshot positions, request mutation during observation, null/huge inputs, and accidental movement of the non-Windows gate after snapshotting; confirm downstream exceptions still retain their existing RUNTIME/ACTIVATION/GRANT/LAUNCH_LOCK/LAUNCHER ownership rather than being recast as malformed. Run byte-restored production-surface mutation drills: remove the snapshot catch and require the nine-case allSettled test to red on rejected status; change the malformed code alone and layer alone and require the exact assertions to red separately; move request observation before the platform guard and require the hostile non-Windows test to red; and weaken one zero-port assertion and prove the corresponding injected port call is detected. Assert every drill's positive count, restore exact pre-drill hashes, rerun the exact step-3 command, then commit only `packages/runner/src/providers/claude/claude-launcher.ts` and `packages/runner/src/providers/claude/claude-launcher.test.ts` by explicit pathspec after removing any foreign staged entry.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "startedAt": "2026-08-13T16:25:41.146Z"
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-733c82bb",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-f70d1157 on human direction, 12:33Z. Dependency-checked before promoting, not assumed.\n\nWHY PROMOTABLE NOW: its only stated dependency is \"the committed supervisor/Claude observation surfaces\", which are landed — task-4a3b5ec0 (launch lock, process adoption, drain and restart reconciliation) and task-7d0abdcd (runner recovery, evidence and Claude observation surfaces on the @moe/runner root) are both DONE. No unbuilt dependency remains.\n\nWHY IT MATTERS: architect-8c9073cd's 12:29Z canary block named exactly this absence — \"production has no Claude/verifier child-process launcher\". This task IS that launcher. It is the physical execution boundary Foundation Preview needs and nothing on the board substitutes for it.\n\nSCOPE GUARD, from the task's own description: NOT in scope are daemon/store orchestration, verification commands, review, or canary fixtures. Owned paths are packages/runner/src/providers/claude/**. Its real production consumer is task-6cbff010 (Durable Claude attempt dispatch), which stays BACKLOG until this lands — per Clause 1, name that consumer id in the plan so the edge is explicit rather than implied.\n\nThis is a production capability task, not an acceptance task. It builds a subject; it does not certify one. An architect that finds itself planning evidence or conformance work here has drifted out of scope.",
+  "reopenCount": 3,
+  "reopenReason": "Fresh required verification passed (runner typecheck; 55 files/1695 tests; plain-Node root smoke), and the prior pre-launch port fixes are present. However, malformed hostile request objects can still reject the public launcher promise: an ownKeys-throwing Proxy escapes from the uncontained request snapshot instead of returning the required typed UNKNOWN with stable malformed-request code/layer. This violates DoD 1 and the fail-closed refusal rail.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -46,21 +102,33 @@
       "author": "architect-8c9073cd",
       "content": "Human confirmed the recommended safe route in the REPL. SPIDR prerequisites created: `task-4d1f8ba54cb6476c930c46b413f882aa` (dedicated Windows Job Object process boundary; taskkill-only forbidden) and `task-078af6f181484dd99d1bf9008b4cf731` (streaming content-addressed Claude closure pin/re-observation). On resume, ownership is human-amended to include `packages/runner/src/index-surface.test.ts`, which hard-pins the exact root namespace. Current task becomes the thin grant/duplicate/lock facade + bounded evidence/root publication after both prerequisites land.",
       "timestamp": "2026-08-09T12:51:43.375Z"
+    },
+    {
+      "id": "comment-67e2f54f422449f680ba4b61f62475cc",
+      "author": "governor-7c5e6be6",
+      "content": "Governance finding after rejection-history audit: all three QA rejections are the same fundamental fail-closed boundary defect, not independent polish. Re-plan holistically around a total public `launchClaude` contract: hostile structural input and every injected/async dependency failure must resolve a frozen typed UNKNOWN with exact code/layer and zero unauthorized effects; do not patch only the latest `ownKeys` case. Preserve the valid landed lock/cleanup fixes, re-measure current bytes, and use positive-count adversarial coverage/mutation evidence before resubmission.",
+      "timestamp": "2026-08-13T16:16:37.933Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.737Z",
-  "updatedAt": "2026-08-09T12:52:50.214Z",
+  "updatedAt": "2026-08-13T16:25:41.146Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T12:34:18.450Z"
+    "firstClaimAt": "2026-08-09T12:34:18.450Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 21,
+    "rejectCount": 3,
+    "reopenCount": 3
   },
   "contextFetchedBy": [
-    "architect-8c9073cd"
+    "architect-a9210e34",
+    "worker-733c82bb"
   ],
-  "blockedReason": "Current bytes make the original four-path plan unsafe and oversized. @moe/runner has exactly 116 root values and unowned index-surface.test.ts pins the exact namespace; the human approved adding that fifth owned path. More importantly, existing Claude observation/supervisor modules perform zero physical resolution, pinning, spawn, OS locking, or tree cleanup, Node core has no per-run Job Object API, and taskkill cannot prove descendants dead after the root exits. Forcing all closure pinning, native Windows process control, grant/duplicate/lock composition, bounded evidence, and root publication into claude-launcher.ts would violate the focused-file/time rails and would guess a security boundary. Two bounded production prerequisites were created and linked. Resume only after both are DONE; durable stale-UNUSED grant CAS remains downstream task-6cbff010's responsibility.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T12:51:56.102Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured the runner/Claude/supervisor surfaces, obtained human confirmation for the native Job Object route and root-test scope amendment, created two linked CRITICAL prerequisites, blocked the parent on them, and wrote Serena handoff/decision memories.",
@@ -70,6 +138,121 @@
       "releasedAt": "2026-08-09T12:52:50.212Z",
       "releasedBy": "architect-8c9073cd",
       "reason": "Blocked prerequisite split is complete and durably handed off; release architect capacity for the remaining PLANNING queue."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-13T16:19:41.237Z",
+  "planningNotes": {
+    "approachesConsidered": "QA's security finding is reproducible and the suggested containment is correct for this codebase. Use the narrow public-boundary repair: catch only `snapshotClaudeLaunchRequest(value)` inside `launchClaude` and map thrown reflection/proxy traps to the existing frozen malformed-request result. Reject widening the catch over the whole launcher, because that would erase the already-correct RUNTIME, ACTIVATION, GRANT, LAUNCH_LOCK, and process-boundary failure ownership. Reject editing `claude-launcher-input.ts`: the task only requires the public promise to fail closed, that helper is outside the declared owned repair paths, and a caller-local containment guard covers outer, runtime, recursive authority, argv, environment, and limits reflection uniformly. Preserve the current non-win32 check before any request observation. No docs, bridge, contract, or export change is needed because no public shape or vocabulary changes.",
+    "codebaseInsights": "Fresh 2026-08-13 measurements: the authoritative design hash is still `1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191`; both repair paths are clean. `launchClaude` is at `packages/runner/src/providers/claude/claude-launcher.ts:311-356`; line 317 calls `snapshotClaudeLaunchRequest(value)` outside a try. A plain-Node bare-root probe from `packages/runner` with an ownKeys-throwing outer Proxy returned `rejected Error: hostile ownKeys`, reproducing QA exactly. `snapshotClaudeLaunchRequest` reaches uncontained reflection through root/runtime/limits `snapshotExactRecord` and recursive `cloneData`; existing argv/environment helpers have local catches but the launcher should enforce the public invariant uniformly. The existing `malformed` helper already returns a deeply frozen `REFUSED`, `ok:false`, `truthClass:UNKNOWN`, `CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER` result. Existing fixture `dependencies` logs every logical/physical port and `boundaryHarness` records process requests/logs. The focused launcher test baseline is green at 1 file / 25 tests, confirming a coverage gap. `launchClaude` remains root-exported through `claude-surface.ts`; current production line counts are launcher 356, input 111, contract 145, surface 103, so the narrow repair remains below the 400-line production-file split threshold.",
+    "risks": "Containment must surround only synchronous request snapshotting; catching downstream work would misclassify stable delegated failures. The hostile error text must not escape in the result. A single outer ownKeys case is insufficient: the test must exercise all snapshot reader families and both ownKeys/getOwnPropertyDescriptor reflection traps, prove each trap fired, and assert an exact nonzero matrix cardinality. Run each case through production `launchClaude` with `Promise.allSettled` so a rejected promise is distinguished from the required fulfilled UNKNOWN result. Assert every dependency log, boundary request, and process log is exactly empty. Keep non-Windows precedence load-bearing by passing a hostile Proxy on `platform:'linux'` and requiring UNSUPPORTED without touching it. Because the launcher is already 356 lines, keep the implementation to narrow containment and verify the final physical count stays below 400.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-launcher.ts",
+      "packages/runner/src/providers/claude/claude-launcher.test.ts",
+      "packages/runner/src/providers/claude/claude-launcher-input.ts",
+      "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
+      "packages/runner/src/providers/claude/claude-launcher-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 1800000,
+    "warnedAt": "2026-08-12T08:28:20.445Z",
+    "escalatedAt": "2026-08-12T08:28:20.445Z"
+  },
+  "planApprovedAt": "2026-08-13T16:19:43.291Z",
+  "workStartedAt": "2026-08-12T08:29:20.122Z",
+  "reviewStartedAt": "2026-08-13T15:55:13.882Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && cd packages/runner && node --experimental-strip-types -e \"import('@moe/runner').then(async m=>{let r=await m.launchClaude({},{platform:'linux'});if(typeof m.launchClaude!='function'||r.truthClass!='UNSUPPORTED'||r.code!='CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED'||r.layer!='LAUNCHER')throw Error(JSON.stringify(r));console.log(r.code,r.layer)})\"",
+    "exitCode": 0,
+    "outputTail": "Test Files  55 passed (55)\nTests  1695 passed (1695)\nDuration  4.15s\nCLAUDE_LAUNCH_PLATFORM_UNSUPPORTED LAUNCHER\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src",
+    "reportedAt": "2026-08-13T15:55:13.882Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/claude/claude-launcher.test.ts",
+    "packages/runner/src/providers/claude/claude-launcher-contract.ts",
+    "packages/runner/src/providers/claude/claude-launcher.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/providers/claude/claude-launcher.js",
+    "packages/runner/src/surface/claude-surface.ts"
+  ],
+  "reviewCompletedAt": "2026-08-13T16:05:20.425Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+        "line": 317,
+        "description": "`snapshotClaudeLaunchRequest(value)` runs outside exception containment. QA passed a Proxy whose `ownKeys` throws through root `launchClaude`; Promise.allSettled returned rejected `Error: hostile ownKeys` instead of UNKNOWN `CLAUDE_LAUNCH_REQUEST_MALFORMED`/`LAUNCHER`. Contain snapshot/proxy exceptions and add a positive-count outer+nested proxy sweep asserting fulfillment, exact code/layer/truthClass, freezing, and zero dependency/process calls."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Fresh required verification passed (runner typecheck; 55 files/1695 tests; plain-Node root smoke), and the prior pre-launch port fixes are present. However, malformed hostile request objects can still reject the public launcher promise: an ownKeys-throwing Proxy escapes from the uncontained request snapshot instead of returning the required typed UNKNOWN with stable malformed-request code/layer. This violates DoD 1 and the fail-closed refusal rail.",
+      "rejectedAt": "2026-08-13T16:05:20.425Z",
+      "reopenCount": 3,
+      "failedDodItems": [
+        "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 317,
+          "description": "`snapshotClaudeLaunchRequest(value)` runs outside exception containment. QA passed a Proxy whose `ownKeys` throws through root `launchClaude`; Promise.allSettled returned rejected `Error: hostile ownKeys` instead of UNKNOWN `CLAUDE_LAUNCH_REQUEST_MALFORMED`/`LAUNCHER`. Contain snapshot/proxy exceptions and add a positive-count outer+nested proxy sweep asserting fulfillment, exact code/layer/truthClass, freezing, and zero dependency/process calls."
+        }
+      ]
+    },
+    {
+      "reason": "Rejected after fresh diff, rail, and DoD review. The declared gate is green: runner typecheck, 55 files/1694 tests, and root smoke returned CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED/LAUNCHER. The lock and boundary-cleanup fixes are present; touched production files are 144/346/103 lines, owned paths are clean, and the design hash is unchanged. But three pre-launch dependency exceptions still escape as rejected promises. A temporary QA launchClaude test generated exactly three cases; every case rejected with the injected failure rather than returning UNKNOWN. The probe was removed.",
+      "rejectedAt": "2026-08-12T17:09:35.050Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "The wrapper resolves and re-observes the Claude runtime closure and returns a typed UNKNOWN/UNSUPPORTED refusal whenever any required runtime or launch-authority fact is missing, malformed, unsupported, or unverifiable.",
+        "No child process can start before runtime re-observation, activation-commit validation, grant consumption, and an OS-exclusive pre-start wrapper lock; every refusal path returns the exact stable code/layer and leaves provider spawn count at zero.",
+        "Duplicate delivery either adopts only a matching live registered claim or refuses before provider launch; consumed/wrong-subject/wrong-attempt/wrong-effect grants refuse at the exact GRANT code/layer with no duplicate spawn."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 319,
+          "description": "resolveDuplicate, validateCommit, and consumeGrant run outside exception containment (lines 320, 328, 330). A QA production-surface probe injected one throw per port; all 3/3 launchClaude calls rejected instead of resolving typed UNKNOWN. Contain every port throw and add tests pinning the exact code/layer, UNKNOWN truthClass, resolved result, and zero register/lock/open/spawn effects."
+        }
+      ]
+    },
+    {
+      "reason": "Fresh runner verification passed (typecheck; 55 files/1685 tests; plain-Node root loadability), but production ordering and rejection probes fail three DoD items. No OS-exclusive lock is acquired before provider start: the boundary reaches STARTED before a pure non-OS registry is consulted. A rejected completion promise also escapes `launchClaude` and bypasses cleanup instead of returning immutable UNKNOWN with exact code/layer.",
+      "rejectedAt": "2026-08-12T16:05:13.224Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "No child process starts before runtime re-observation, activation-grant validation/consumption, and OS-exclusive launch-lock acquisition all succeed; each refusal asserts exact production code/layer and proves zero spawn calls.",
+        "Launch uses an argument array with shell disabled and a bounded environment/cwd; Windows process-tree cleanup is awaited on success, cancellation, timeout, and thrown-error paths so no handle or child leaks.",
+        "Duplicate delivery either adopts the registered process or refuses before provider launch; a consumed/forged/wrong-wrapper grant pins the exact activation-grant error and never spawns twice."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 244,
+          "description": "`launchClaude` opens the process boundary before `startAndRegister`; registration waits for `boundary.started`. `supervisor/launch-lock.ts` says it touches no OS, so this is post-start bookkeeping, not pre-start OS-exclusive acquisition. The registration-refusal test expects `open` before `register`. Add a real pre-start OS-exclusive lock seam and assert zero boundary/provider calls for every lock refusal or duplicate."
+        },
+        {
+          "type": "regression",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 122,
+          "description": "`waitForTerminal` does not contain rejection from `boundary.completed`. QA injected a rejected completion promise; `launchClaude` rejected instead of resolving typed UNKNOWN, and close was skipped. Contain completion/timer/cancellation/stream rejections, return an exact stable code/layer, cancel and await close/streams, and add named tests proving cleanup exactly once."
+        }
+      ]
     }
   ]
 }

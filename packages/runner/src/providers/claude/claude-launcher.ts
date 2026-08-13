@@ -314,7 +314,9 @@ export async function launchClaude(value: unknown, options: ClaudeLaunchOptions 
     return malformed("Claude launch is supported only on win32", "UNSUPPORTED");
   }
   const signal = options.signal;
-  const request = snapshotClaudeLaunchRequest(value);
+  let request: ClaudeLaunchSnapshot | null;
+  try { request = snapshotClaudeLaunchRequest(value); }
+  catch { return malformed("launch request is not bounded plain data"); }
   if (request === null) return malformed("launch request is not bounded plain data");
   const deps = options.deps ?? defaults;
   if (request.duplicateDelivery !== null) {

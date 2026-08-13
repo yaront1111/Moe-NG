@@ -1,4 +1,4 @@
-# `node:sqlite` storage driver — retroactive decision record
+c# `node:sqlite` storage driver — retroactive decision record
 
 - **Date:** 2026-08-09
 - **Status:** `PROPOSED — AWAITING HUMAN RATIFICATION`

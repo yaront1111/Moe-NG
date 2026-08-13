@@ -1,0 +1,42 @@
+{
+  "id": "task-e33747f982e0452a9f9d784fd1cb914d",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Durable effect activation ingress with recovery embargo",
+  "description": "Objective: land the missing daemon/store production consumer for the four-leg execution claim and @moe/runner effect.activate, and fence both with persisted recovery state before any execution authority is allocated. Deliverable: a focused daemon activation service that reads current persisted restore/project embargo state, composes the existing claimWork and activateEffect production surfaces, commits attempt/slot/lease/effect/spend atomically only after all gates pass, and is reached from production daemon ingress. MEASURED GAP at HEAD c0c5929: runWorkClaimCommand only records board-work ownership, claimWork (lease+slot+budget+effect intent) has no daemon production caller, activateEffect has no daemon production caller, and therefore the coordinator's required zero-attempt/slot/lease/effect/spend assertion would be vacuous. Existing ACTIVE recovery binding alone does not prove reconciliation complete; project QUIESCED/recoveryRequired state is durable. Consumer: task-cf7fb147bd1c47698cbd65c9535370aa. NOT in scope: collecting inventory, class vocabulary, quarantine decisions, external process launch, or recovery.complete. Owned paths: focused daemon work/effect activation service, persisted recovery embargo reader, minimal command-registry wiring, and focused tests; split daemon-store-dependencies.ts before growing it beyond 400. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test.",
+  "definitionOfDone": [
+    "A production daemon command/service—not a test harness—invokes the existing claimWork four-leg gate and @moe/runner activateEffect, and exposes an accepted path that atomically records attempt, slot, lease, effect and budget/spend authority.",
+    "Before claimWork or activateEffect runs, the service reads persisted selected-restore and exact project recovery state; QUIESCED/recoveryRequired, missing, unreadable, or mismatched state returns RECOVERY_RECONCILIATION_REQUIRED at layer RECOVERY_INVENTORY.",
+    "A recovery embargo refusal creates zero attempt, slot, lease, effect, activation grant or spend rows/events, while release/drain operations required to reduce old authority remain available; tests include a positive control proving the same production path creates the records when unembargoed.",
+    "Structural/malformed activation still returns its existing upstream code/layer before recovery binding comparison where specified, while a well-formed embargoed request preserves RECOVERY_RECONCILIATION_REQUIRED/RECOVERY_INVENTORY without flattening.",
+    "Replay and concurrency tests prove one accepted activation and zero duplicate authority, and every refusal assertion pins exact code, stage/layer and event/decision counts.",
+    "A mutation drill bypasses the production embargo comparison and turns the named daemon ingress test red; fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test exits 0."
+  ],
+  "taskRails": [
+    "Do not treat board work.claim ledger ownership as execution authority; the positive path must compose the four-leg claimWork and activateEffect surfaces.",
+    "Do not accept caller-selected recovery state or infer completion from an ACTIVE binding alone; use selected restore plus durable project recovery state.",
+    "Embargo must precede every authority allocation and commit, yet must not prevent safe release/drain of existing authority.",
+    "Tests assert exact stable reason code/layer and prove non-vacuous zero-authority with a positive production control.",
+    "Target <=250 physical lines per production source and split before 400; split daemon-store-dependencies.ts before adding lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-a9210e34",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-directed unblock after live architect audit: production claimWork, runner activateEffect, and durable selected-restore/project recovery state already exist; the measured missing capability is their daemon ingress and persisted embargo composition, which this prerequisite owns. Inventory collection and coordinator completion remain out of scope.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
+  "priority": "CRITICAL",
+  "order": 13.53,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T15:50:59.313Z",
+  "updatedAt": "2026-08-13T16:23:26.908Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:23:22.267Z"
+  },
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ]
+}

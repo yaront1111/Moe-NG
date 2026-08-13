@@ -1,0 +1,56 @@
+{
+  "id": "task-47eecd22b3b94a57a9632672c19ebd97",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Durable resource and integration recovery inventory providers",
+  "description": "Objective: supply the missing production recovery-window enumeration sources for scheduler resource effects and integration attempts so the recovery coordinator never infers absence from a generic event scan or a fixture. Deliverable: durable resource and integration attempt inventory records/readers bound to project, effect intent, cursor window and current recovery incarnation, plus immutable RecoveryInventoryRegistration fragments or an equally explicit typed bridge the daemon can compose with @moe/runner registrations. MEASURED GAP at HEAD c0c5929: @moe/scheduler exposes ResourceRow transition functions but no durable inventory enumerator/reader; there is no production integration-attempt record or integration inventory surface in scheduler/store/daemon, and store schema/root probes find no resource/integration inventory rows. The runner collector rejects unknown/extra class evidence. Consumer: task-cf7fb147bd1c47698cbd65c9535370aa. NOT in scope: node-side adapters, adoption/quarantine decisions, project embargo, caller-selected current binding, or recovery.complete. Owned paths: focused scheduler/store contracts and daemon-facing adapters selected after re-measurement; do not grow existing >250-line files. Verification: pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "A production durable reader enumerates every project-tagged scheduler resource effect in an exact backup-cursor window, including QUARANTINED/non-fenceable states, and binds each row to its effect intent and source proof digest; empty is COMPLETE only with a verifiable negative proof.",
+    "A production durable integration-attempt record and reader enumerate every project-tagged integration target/effect in the same window with exact intent/incarnation binding; unmatched, malformed, duplicate, truncated, or unreadable records stay UNKNOWN with stable code and originating layer.",
+    "The daemon-facing bridge exposes immutable registration fragments for the resource and integration populations without mutable global registration, caller-provided item lists, or reimplementation of scheduler/store authority.",
+    "Persistence/reopen tests prove resource and integration rows survive process/store reopen and are filtered by exact project/cursor/incarnation; refusal tests assert exact stable code and layer and generated class/case sweeps assert non-zero cardinality.",
+    "Focused mutation drills alter each production completeness/fenceability comparison and turn the named resource or integration test red.",
+    "Fresh pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck exits 0, with repo-wide foreign red disclosed by owned-path baseline."
+  ],
+  "taskRails": [
+    "Do not infer durable inventory from caller-supplied fixtures or by scanning generic events without a typed complete-population contract.",
+    "Do not convert restored counters or a caller-selected incarnation into recovery authority; bind to the selected store/anchor current binding.",
+    "Missing/unreadable/partial enumeration stays UNKNOWN and preserves the precise upstream code/layer.",
+    "If shared schema or wire contracts change, run full regression as required by the global schema rail.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Explicit human confirmation to unblock this remaining prerequisite now. Permit pipelined planning of durable resource/integration readers, but the architect must consume the frozen class mapping from task-f6cf8d16 for registration identity, avoid overlapping schema authority, and report BLOCKED rather than inventing any class/cardinality contract that has not landed.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
+  "priority": "CRITICAL",
+  "order": 13.52,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T15:50:41.056Z",
+  "updatedAt": "2026-08-13T16:23:16.989Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:21:56.007Z"
+  },
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ],
+  "blockedReason": "The required authority-owning class mapping is not landed, so a production plan would have to invent registration identity/cardinality in direct conflict with the task's human-unblock condition and stale-dependency rail. Live Moe context shows task-f6cf8d16c2654641a92b0ee36924de0c still PLANNING with no implementation plan or worker. Fresh disk probes find only runner's existing four adapter classes (`PROVIDER_PROCESS_LAUNCH_LOCK`, `WORKSPACE`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`); no daemon/store/scheduler RecoveryInventory population/class mapping, reconciliation record, resource inventory reader, or integration-attempt record/reader exists. The current scheduler root is also foreign-modified by active task-2d969616, so planning a cross-package public export now would overlap live WIP. Resume only after task-f6cf8d16 is DONE and re-measure its exact public frozen mapping/registration identity; then select non-overlapping focused schema/readers/adapters against those landed bytes.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T16:23:04.281Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fetched full context and architect channel; loaded planning guidance; re-measured prerequisite task-f6cf8d16 as PLANNING/unassigned and probed current code. Confirmed only runner's four legacy recovery classes exist; no frozen daemon semantic-population mapping, recovery reconciliation record, scheduler resource inventory reader, or integration-attempt record/reader exists. Reported this task BLOCKED with needsFrom task-f6cf8d16.",
+      "whatRemains": "After task-f6cf8d16c2654641a92b0ee36924de0c is DONE, re-measure its public mapping/registration identity and then plan focused durable resource and integration records/readers plus daemon registration fragments against those exact bytes.",
+      "pitfalls": "Do not invent class/cardinality identity, scan generic events as complete inventory, or overlap the live foreign scheduler index edits from task-2d969616. Preserve exact upstream code/layer and selected current recovery binding.",
+      "releasedAt": "2026-08-13T16:23:16.987Z",
+      "releasedBy": "architect-a9210e34",
+      "reason": "Explicit architect handoff after evidence-based prerequisite block; freeing capacity for the next eligible planning task."
+    }
+  ]
+}

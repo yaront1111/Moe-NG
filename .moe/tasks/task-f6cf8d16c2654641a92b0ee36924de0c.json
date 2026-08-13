@@ -1,0 +1,39 @@
+{
+  "id": "task-f6cf8d16c2654641a92b0ee36924de0c",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Freeze recovery inventory class contract and quarantine record",
+  "description": "Objective: resolve the current contradictory inventory cardinality and define the durable fail-closed reconciliation/quarantine record the coordinator can persist. Deliverable: one canonical daemon recovery-inventory contract that maps every detailed external population to exactly one configured proof class, defines ABSENT/ADOPTED/QUARANTINED/UNKNOWN dispositions and upstream-code retention, and provides a frozen digest-verified persisted record bound to project, backup cursor/generation, selected incarnation/key epoch and quarantine refs. MEASURED GAP at HEAD c0c5929: design line 978 names seven populations, CORE-S14 names six grouped categories, @moe/runner exposes four combined node classes, adding scheduler resource yields five proof classes, the coordinator description lists six groups, and DoD demands seven generated classes; the runner collector rejects unknown/extra classes. No production quarantine/reconciliation record or sink exists. Consumer: task-cf7fb147bd1c47698cbd65c9535370aa and downstream task-6f786c58cabf4f85be8ed4135e68a752. NOT in scope: enumerating providers, invoking adapters, allocating authority, or approving recovery.complete. Owned paths: focused daemon recovery contract/codec/persistence modules and tests, plus minimal store schema only if required. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "A frozen hand-written class/population mapping resolves the 4-runner/5-proof/6-scenario/7-population ambiguity: every design population is covered exactly once, no proof is duplicated to inflate cardinality, and unknown/duplicate/omitted/extra classes refuse with stable code/layer.",
+    "The contract defines canonical ABSENT, ADOPTED, QUARANTINED and UNKNOWN dispositions; ADOPTED requires exact restored intent plus current incarnation/key epoch, unmatched items can only quarantine/UNKNOWN, and no disposition invents history or retry authority.",
+    "A durable frozen reconciliation record binds project, backup cursor and generation, selected incarnation and key epoch, configured class mapping, source proof digests, every item disposition, retained upstream code/layer and quarantine refs; any byte change changes or invalidates its digest.",
+    "Missing inventory, incomplete coverage, non-fenceable state, artifact/key proof failure and unresolved items persist truth UNKNOWN with coordinator code UNKNOWN_TRUTH at RECOVERY_INVENTORY while retaining the precise upstream code/layer separately.",
+    "Persistence/reopen and hostile-byte tests drive the real store/codec surface, assert exact cardinalities and stable code/layer, and generated cases assert a non-zero exact population count.",
+    "Mutation drills alter canonical digest input and one adoption/incarnation comparison and turn named tests red; fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "Do not satisfy the seven-population requirement by duplicating a combined runner proof; the mapping must be explicit and one-to-one at the semantic population level.",
+    "Do not narrow the design or accept caller-selected current binding; use exact selected store/anchor authority in consumers.",
+    "Retain upstream code and layer separately from the coordinator UNKNOWN_TRUTH/RECOVERY_INVENTORY answer; never restamp away provenance.",
+    "Shared schema changes require full regression and crash/reopen evidence.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-directed unblock after live architect audit: this prerequisite is the authority-owning contract/persistence task created specifically to resolve the measured 4/5/6/7 inventory cardinality contradiction. It does not depend on the blocked coordinator; architect must freeze one non-duplicating semantic population mapping before consumers proceed.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
+  "priority": "CRITICAL",
+  "order": 13.54,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T15:51:16.732Z",
+  "updatedAt": "2026-08-13T16:22:16.090Z",
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ]
+}

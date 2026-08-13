@@ -1,0 +1,36 @@
+{
+  "id": "task-1eeb2dccce204671b442704cd60b38ad",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Live command timing and decision-effort instrumentation",
+  "description": "Objective: make the production daemon/control-room path emit the benchmark's distinct timing and human-effort source observations instead of asking the harness to accept caller-supplied timestamp pairs. Deliverable: daemon command/event and control-room live instrumentation that binds trigger, server receipt/commit, client receipt, render and human commit observations to one command/run identity; records demanded decision commands, free interactions, focus/away intervals, attention switches and recovery burden; then feeds the existing SurfaceTimingReceipt evaluator through a real consumer edge. MEASURED GAP at HEAD 2b15b8f: daemon StreamEvent exposes only committedAt; live-event-feed copies only wire fields; evaluateTiming exists but has zero production call sites and accepts caller-supplied pairs; wire events omit commandId/actor/session needed for effort attribution, and no focus/activity or decision-effort record exists. Consumer: task-b937811e8b72459ea169e5fff1238ce1. NOT in scope: benchmark statistics, thresholds, competitor screen-capture instrumentation, corpus/campaign, UI claim verdicts, or provider usage. Owned paths: focused daemon HTTP/stream telemetry fields, generated client/live control-room instrumentation, and tests; preserve existing truth boundaries. Verification: pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The live production path binds trigger, server-received/committed, client-received, surface-rendered and human-command-committed observations to exact project/session/command/event/run identities; no layer compares timestamps from different clocks without an explicit observer/clock binding.",
+    "System latency and response time remain separate, away/focus intervals are recorded separately, and absent/unparseable/skewed observations return the existing or new stable UNKNOWN code plus exact layer instead of zero/absolute-value interpolation.",
+    "Demanded decision commands, free interactions, attention switches, recovery actions/burden and scroll/focus evidence are emitted as frozen observations with explicit source/provenance; the live path can distinguish create/approve/accept from any additional demanded decision.",
+    "At least one actual live control-room surface calls evaluateTiming/describeTimingReceipt using observed production timestamps, and daemon/client/control-room tests prove the real edge rather than a fixture-only helper.",
+    "Refusal tests pin exact code/layer and zero-vs-absent precedence; generated timing/decision cases assert non-zero exact cardinality, including every timing split and decision kind.",
+    "Mutation drills bypass a production render timestamp and a decision-command attribution guard and turn named live integration tests red; fresh pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room test && pnpm typecheck exits 0."
+  ],
+  "taskRails": [
+    "Do not collapse server, stream/client receipt, render and human time; response time is not system latency.",
+    "Do not compare cross-machine timestamps without an explicit shared observer or clock-offset uncertainty; unresolved skew is UNKNOWN.",
+    "Instrumentation is observational and grants no authority or evidence strength.",
+    "No benchmark thresholds, gate scoring, competitor screen-capture or confirmatory corpus bytes belong here.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-directed next unblock after live architect audit: current daemon/control-room timing surfaces are present but lack a real production instrumentation edge; this prerequisite independently owns command/run identity, clock-bound timing, and decision-effort observations. Cross-clock uncertainty must remain UNKNOWN.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
+  "priority": "HIGH",
+  "order": 4.63,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:07:41.074Z",
+  "updatedAt": "2026-08-13T16:20:16.800Z"
+}

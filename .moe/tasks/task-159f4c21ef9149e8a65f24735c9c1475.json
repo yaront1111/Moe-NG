@@ -1,0 +1,36 @@
+{
+  "id": "task-159f4c21ef9149e8a65f24735c9c1475",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Provider run identity and usage telemetry",
+  "description": "Objective: provide the missing production provider-run telemetry source required by the benchmark harness. Deliverable: runner/provider records and a public consumer surface that bind each run to provider/model ID, model snapshot or build evidence, reasoning effort, runtime/profile identities, start/completion/stop classification, token and step measurements, infrastructure classification, achieved concurrency, and provider-neutral usage/cost evidence through the landed scheduler measurement contract. MEASURED GAP at HEAD 2b15b8f: Claude runtime/launch observations bind runtime bytes, streams, exit and timestamps but contain no selected model ID/snapshot/reasoning effort, usage cost, stop reason, infrastructure class, step count, or concurrency; scheduler budget-contract/measurement has the six source/coverage semantics but is not root-exported and has no production provider emitter/consumer. Consumer: task-b937811e8b72459ea169e5fff1238ce1. NOT in scope: benchmark gate statistics, competitor records, pricing comparison, corpus/campaign execution, or claims. Owned paths: focused runner provider telemetry modules, minimal scheduler curated export if necessary, public runner surface, and focused tests. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "A frozen production provider-run record binds run/effect identity, provider, selected model ID, snapshot/build evidence, reasoning effort, runtime observation/profile digests, start/completion timestamps, exact terminal classification, token count, step count, and achieved/concurrency-ceiling values; missing provider facts are explicit UNKNOWN with stable reason code/layer, never zero.",
+    "Provider usage observations are normalized through the existing scheduler UsageMeasurementRecord/normalizeUsageMeasurement semantics, preserve COMPLETE/PARTIAL/UNKNOWN and exact source provenance, and publish cost-basis metadata without converting PARTIAL or UNKNOWN into complete spend.",
+    "The real Claude launch/result path emits or durably hands off the record through a curated @moe/runner root surface; tests use that production call path rather than constructing a benchmark-only mirror.",
+    "Closed terminal/infra/concurrency vocabularies distinguish administrative wall cap, token/step exhaustion, product cap, agent failure, provider/rate/container infrastructure failure and ordinary completion where observed; unknown/unreadable termination retains its exact code/layer.",
+    "Focused tests assert every declared outcome and measurement source is generated with non-zero exact cardinality, pin exact UNKNOWN code/layer, and mutation-check the production model/effort and usage-coverage comparisons.",
+    "Fresh pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/scheduler test exits 0."
+  ],
+  "taskRails": [
+    "Runtime version/closure is not model snapshot/build evidence; record both and never substitute profileRevisionId for model/effort.",
+    "UNKNOWN/PARTIAL token or cost evidence is never zero or complete. Preserve scheduler source/coverage authority rather than copying it into the benchmark package.",
+    "No confirmatory corpus/campaign or claim verdict code belongs in this task.",
+    "Tests assert exact stable reason code and refusing layer and generated case counts are non-zero.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human-directed next unblock after live architect audit: existing runner launch/runtime observations and scheduler usage-measurement semantics are landed; the measured missing capability is the production provider/model/effort/usage telemetry and public consumer edge owned by this task. Keep UNKNOWN/PARTIAL evidence fail-closed.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
+  "priority": "HIGH",
+  "order": 4.61,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:07:06.538Z",
+  "updatedAt": "2026-08-13T16:20:16.502Z"
+}

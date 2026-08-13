@@ -20,18 +20,47 @@
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human-directed unblock after live dependency re-measurement: task-b6e3dd2 and task-8a01c025 are DONE; archived SPIDR shell task-0325dcf7 explicitly records its four implementation children task-00956ac3, task-091c93db, task-d7da9be4, and task-f6c9011 as DONE and the production inventory surface delivered. Hand planning to architects; re-measure current public symbols and call sites before planning.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
   "order": 13.6,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-4063ffd4d1964fcd87ad4d89bbd7c6aa",
+      "author": "architect-a42f4965",
+      "content": "Planning audit at HEAD c0c5929 found the task is not implementable as written; created prerequisite production tasks: task-fb997625e61f487a9afa1cc56c67687a (publish four real runner adapter registrations), task-47eecd22b3b94a57a9632672c19ebd97 (durable resource/integration inventory providers), task-e33747f982e0452a9f9d784fd1cb914d (non-vacuous daemon four-leg claim/effect.activate ingress plus persisted embargo), and task-f6cf8d16c2654641a92b0ee36924de0c (freeze 7-population mapping and durable quarantine/reconciliation record). Exact contradiction: design line 978 names 7 populations; CORE-S14 names 6 categories; runner contract has 4 combined classes; adding resource yields 5 proof classes; description lists 6; DoD says 7. Do not duplicate combined proofs to fabricate seven. Coordinator should be re-promoted only after these prerequisites land and its stale class wording is reconciled against the frozen contract.",
+      "timestamp": "2026-08-13T15:51:26.082Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:49.319Z",
-  "updatedAt": "2026-08-09T12:07:49.319Z"
+  "updatedAt": "2026-08-13T16:00:52.430Z",
+  "contextFetchedBy": [
+    "governor-7c5e6be6",
+    "architect-a42f4965"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-13T15:42:43.029Z"
+  },
+  "blockedReason": "Current production cannot satisfy the task without inventing authority. At HEAD c0c5929, @moe/runner exposes only four combined inventory classes and does not root-export any of the four adapter registration factories; @moe/scheduler has an in-memory ResourceRow transition surface but no durable inventory reader; no production integration-attempt inventory record exists; no daemon recovery quarantine/reconciliation persistence exists; claimWork (four execution-authority legs) and @moe/runner activateEffect have no daemon production caller, so the required zero attempt/slot/lease/effect/spend embargo assertion would be vacuous. Cardinality is mechanically contradictory: design line 978 names seven semantic populations, CORE-S14 names six categories, runner has four combined classes, adding resource gives five proof classes, the task description lists six groups, and DoD 6 requires seven generated classes while the collector rejects unknown/extra classes. Created prerequisite tasks task-fb997625e61f487a9afa1cc56c67687a, task-47eecd22b3b94a57a9632672c19ebd97, task-e33747f982e0452a9f9d784fd1cb914d, and task-f6cf8d16c2654641a92b0ee36924de0c.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T15:51:35.144Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured current production, identified the non-vacuous capability gaps and cardinality contradiction, created four prerequisite production tasks, commented the parent, reported it BLOCKED, and wrote Serena handoff memory.",
+      "whatRemains": "Land task-fb997625e61f487a9afa1cc56c67687a, task-47eecd22b3b94a57a9632672c19ebd97, task-e33747f982e0452a9f9d784fd1cb914d, and task-f6cf8d16c2654641a92b0ee36924de0c; then re-measure and plan the coordinator.",
+      "pitfalls": "Runner adapter factories are not root-exported; resource/integration durable inventory and daemon four-leg/effect.activate consumers are absent at HEAD c0c5929.",
+      "openQuestions": "The exact 7-population to proof-class mapping must be frozen by task-f6cf8d16c2654641a92b0ee36924de0c; do not duplicate combined runner proofs.",
+      "releasedAt": "2026-08-13T16:00:52.428Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit handoff after reporting the task blocked; user requested the next planning task."
+    }
+  ]
 }

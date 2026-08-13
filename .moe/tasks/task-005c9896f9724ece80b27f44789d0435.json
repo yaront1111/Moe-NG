@@ -20,8 +20,8 @@
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "QA rejection is valid and the approved no-source closeout plan cannot repair it. Current production references show admitExpansion, approveExpansionManually, and reduceExpansionPlanningHold only at definitions/exports/tests; apps/daemon has no call site. The sole recorded consumer task-9634ed3b72014fe781591c7df9674da2 is ARCHIVED, and no live replacement exists. Repeating the four proof-only steps would remain vacuous and be rejected again. Replan must either (preferred) create/require a focused live daemon expansion composition task and keep this shell open until its durable call site plus partial-admission/zero-child-authority proof land, or explicitly widen this task to permitted daemon graph paths and tests. Do not resubmit on pure package-root tests alone.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -32,23 +32,56 @@
       "author": "architect-8c9073cd",
       "content": "SPIDR decomposition after committed-byte audit (authoritative design hash verified). This parent is a decomposition shell: its honest implementation requires >10 paths and crosses independent hold, PlanningRun schema/behavior, scheduler admission, approval/preparation, publication, and hardening authorities. Created and—per human instruction—moved all six children to PLANNING: (1) task-7f089e11daea44e9a483197ff139d725 Expansion planning hold lifecycle; (2) task-fcad40b6d26243439cd19fd3e49c924d Planning expansion contract binding; (3) task-93b0314e09f248118e21f92699989468 Planning-run expansion submission; (4) task-2561a780fdd149439c9858c9c7b459e8 Scheduler expansion admission; (5) task-b863bae80fab426db7b6204f9d713c42 Expansion manual approval binding; (6) task-a1e7f75e9681486cb0a8f93e9397b8b5 Expansion protocol public hardening. They are dependency-ordered and file-disjoint. Hard external blockers remain: Fair scheduler production task-10cab3e5cdad4296bd7632bcda7b20f3 is BLOCKED and packages/scheduler/src/fairness is absent; Graph supersession engine task-dddfaf83f9c644099b5b263e485c58c7 is BACKLOG. Do not plan child 4 against caller capacity/testkit fairness or child 5 against invented preparation/fence records. Durable atomic child activation remains task-9634ed3b72014fe781591c7df9674da2; the pure protocol proves only all-or-none decisions and zero authority before that consumer transaction.",
       "timestamp": "2026-08-09T13:48:12.960Z"
+    },
+    {
+      "id": "comment-3a2277cb382b4ea38f744536ad8678e7",
+      "author": "architect-a42f4965",
+      "content": "Closeout/status reconciliation at HEAD fcf2cfbbd42f400599adc63347a6b4561a063092: this parent is the already-decomposed SPIDR shell, not new implementation authority. All six child tasks named in comment-efabf472 are DONE and their production surfaces are present: expansion planning hold (task-7f089e11), PlanningRun expansion contract (task-fcad40b6), PlanningRun submission (task-93b0314e), scheduler admitExpansion all-or-none admission/unwind (task-2561a780), core prepareExpansion/approveExpansionManually exact binding (task-b863bae8), and public roots plus tests/integration/expansion-protocol.test.ts hardening (task-a1e7f75e). External fair-scheduler task-10cab3e5 and graph-supersession dependency are DONE. The landed integration production-root journey pins quality/scope/budget/capacity/dependency refusals, exact prepared identity and reapproval on changed bytes, all-or-none unwind, and zero child/lease/effect/graph authority before approval. Fresh parent verification on 2026-08-12: `pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test` exit 0; core 28 files/570 tests, scheduler 42 files/1137 tests. No source change is needed or permitted: submitting a second implementation plan would duplicate DONE child ownership. Marking this decomposition shell DONE as the governor reopen reason requested.",
+      "timestamp": "2026-08-12T08:24:27.967Z"
+    },
+    {
+      "id": "comment-6259c1af21f94fa4b122443cab125155",
+      "author": "worker-37edea60",
+      "content": "Rejection verified against current production bytes. Serena reference analysis finds admitExpansion only in scheduler export/tests, approveExpansionManually only in core export/tests, and reduceExpansionPlanningHold only in core export/tests; there is no apps/daemon production call site. Moe reports task-9634ed3b72014fe781591c7df9674da2 (Multi-node daemon composition) ARCHIVED, and current live expansion/daemon search finds no replacement consumer. The approved zero-file closeout plan cannot satisfy the pure-package consumer rail or DoD 3; repeating its tests/mutations would reproduce the rejection. This needs a fresh plan that either lands a permitted focused daemon expansion consumer edge with production-boundary partial-admission/zero-child-authority proof, or creates and binds this shell to a live focused consumer task. I will request replan rather than resubmit vacuous evidence.",
+      "timestamp": "2026-08-12T16:08:05.390Z"
+    },
+    {
+      "id": "comment-845999640b0c4c18adfb419c813e6d93",
+      "author": "architect-a42f4965",
+      "content": "Replan measurement at HEAD ff292f0: QA's consumer-edge rejection exposed two deeper production gaps, so the parent cannot honestly receive another direct implementation plan. Created prerequisite child task-2d9696160e674f26a8d422c45829d80e (Expansion admission-to-preparation binding) and consumer child task-c4171c1cfe854cb78dd233794b342025 (Daemon expansion admission composition), ordered 22.4 -> 22.5 and both BACKLOG. The former removes test-only admittedFrom/HOLD_BINDING authority: scheduler output lacks a verified opportunityRef, core drops scheduler admission identity and several authority-relevant facts, and reducer-produced hold lacks the goalVersion required by PlanningExpansionHoldBinding. The latter then lands the durable apps/daemon call site and production-boundary partial-admission/zero-authority proof. Keep this parent open until both children are DONE; do not resubmit pure-root tests or fabricate a daemon mapping.",
+      "timestamp": "2026-08-12T16:28:26.043Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.623Z",
-  "updatedAt": "2026-08-09T13:48:59.475Z",
+  "updatedAt": "2026-08-13T15:46:11.257Z",
   "contextFetchedBy": [
-    "architect-da724bb7",
-    "architect-8c9073cd"
+    "worker-37edea60",
+    "architect-a42f4965",
+    "architect-a9210e34"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T13:32:08.207Z"
+    "firstClaimAt": "2026-08-09T13:32:08.207Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 4,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
-  "blockedReason": "Parent is an oversized decomposition shell, not a safe single implementation task. Its honest surface exceeds 10 files and crosses six independent authorities; children are created and moved to PLANNING per human request. Also the explicit Fair scheduler hard dependency is BLOCKED and absent on disk (no fairness/WorkItem/WDRR/opportunity/cap-revision/resource-queue production surface), while exact prepared supersession/funding/fence authority is still BACKLOG. Planning the parent now would require caller-declared capacity, testkit fairness, unreachable package internals, or duplicated PlanningRun/supersession authority. Close this shell only after the six children and named external dependencies land; durable child activation remains the daemon composition consumer.",
+  "blockedReason": "QA's rejection remains reproducible: the pure core/scheduler expansion protocol still lacks a production consumer. Current task comments and disk audit identify two live prerequisites: task-2d9696160e674f26a8d422c45829d80e must first land the authority-preserving admission-to-preparation bridge, then task-c4171c1cfe854cb78dd233794b342025 must compose it into a durable daemon call site and prove partial admission mints zero child authority. Both are PLANNING, not DONE. Submitting another parent closeout plan now would repeat the vacuous proof QA rejected.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T13:48:26.715Z",
+  "blockedAt": "2026-08-13T15:45:23.477Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read QA rejection, current parent context, prior handoff, and child contexts. Confirmed parent closeout remains vacuous. Reported parent BLOCKED with ordered needsFrom task-2d9696160e674f26a8d422c45829d80e then task-c4171c1cfe854cb78dd233794b342025.",
+      "whatRemains": "Land task-2d9696160e674f26a8d422c45829d80e, then plan/land task-c4171c1cfe854cb78dd233794b342025 against its measured bridge. Only after both are DONE should the parent be resumed for final production-consumer proof and closeout.",
+      "pitfalls": "Do not resubmit pure package-root tests. The existing integration helper invents opportunityRef and drops authority-relevant admission bytes; daemon composition must not duplicate that mapper.",
+      "openQuestions": "None; dependency order and gaps are explicit.",
+      "releasedAt": "2026-08-13T15:46:11.255Z",
+      "releasedBy": "architect-a9210e34",
+      "reason": "Explicit architect handoff after confirming the reopened parent is blocked on its two newly created production children; freeing this architect to plan the first prerequisite."
+    },
     {
       "whatIsDone": "Verified design/current bytes/dependency states; decomposed the oversized parent into six file-disjoint child tasks; moved all six children to PLANNING per human instruction; linked Fair scheduler, Graph supersession, and daemon consumer dependencies; reported the parent BLOCKED; wrote Serena handoff and decision memories.",
       "whatRemains": "Plan/land the six children in dependency order. Child 4 waits for task-10cab3 Fair scheduler production; child 5 waits for task-dddfaf83 Graph supersession. After every child/external dependency is DONE, close this parent shell and let task-9634ed3 prove durable atomic activation.",
@@ -58,5 +91,106 @@
       "releasedBy": "architect-8c9073cd",
       "reason": "Explicit architect handoff after SPIDR decomposition; free the architect for the expanded PLANNING queue."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [
+    {
+      "item": "No child obtains authority from a partially admitted expansion.",
+      "rejectedAt": "2026-08-12T16:03:26.873Z",
+      "rejectedBy": "qa-41bfec20"
+    }
+  ],
+  "planSubmittedAt": "2026-08-12T08:25:25.495Z",
+  "planningNotes": {
+    "approachesConsidered": "Reimplementing the parent deliverable was rejected: the task is a SPIDR decomposition shell and all six file-disjoint children are DONE, so touching their owned production paths would duplicate landed authority. Direct PLANNING -> DONE reconciliation was attempted after a fresh audit but Moe correctly disallowed that transition. The submitted plan is therefore a no-source-change closeout proof over the real production surfaces shipped by the children, with current-byte and mutation evidence rather than test-owned reimplementation.",
+    "codebaseInsights": "Measured at HEAD fcf2cfbbd42f400599adc63347a6b4561a063092. Production capability is present: task-7f089e11 shipped the expansion planning hold; task-fcad40b6 bound EXPANSION into the authoritative PlanningRun contract; task-93b0314e shipped PlanningRun expansion submission; task-2561a780 shipped scheduler admitExpansion with pure-check ordering and unwind; task-b863bae8 shipped prepareExpansion/approveExpansionManually; task-a1e7f75e published both package roots and tests/integration/expansion-protocol.test.ts. The integration suite reaches only the production roots and contains named tests for every refusal vocabulary, 3/6/9 boundaries, exact identity perturbations/reapproval, all-or-none unwind, and zero pre-activation authority. External fairness task-10cab3e5 and graph-supersession dependency are DONE. Fresh `pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test` exited 0: core 28 files/570 tests; scheduler 42 files/1137 tests. No source diff is required.",
+    "risks": "Do not edit or restate the child modules, fairness policy, graph supersession, budget, or daemon activation. This closeout certifies only the parent core/scheduler DoD; durable atomic child activation remains a separate daemon composition concern. Mutation drills must alter the production surface one arm at a time, must redden for the intended assertion/code/layer, and must restore exact bytes even if a foreign whole-tree commit moves HEAD. Generated matrices must retain explicit nonzero counts. Preserve all foreign work and leave no evidence/scratch file.",
+    "keyFiles": [
+      "packages/core/src/expansion/expansion-planning-hold.ts",
+      "packages/core/src/expansion/expansion-preparation.ts",
+      "packages/core/src/expansion/expansion-approval.ts",
+      "packages/core/src/planning/planning-run-submission.ts",
+      "packages/scheduler/src/expansion/expansion-admission.ts",
+      "tests/integration/expansion-protocol.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-12T08:25:30.676Z",
+    "escalatedAt": "2026-08-12T08:25:30.676Z"
+  },
+  "planApprovedAt": "2026-08-12T08:25:27.550Z",
+  "workStartedAt": "2026-08-12T08:26:03.134Z",
+  "reviewStartedAt": "2026-08-12T08:33:17.088Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "Test Files  28 passed (28)\nTests  570 passed (570)\nTest Files  42 passed (42)\nTests  1137 passed (1137)\nExit code: 0",
+    "reportedAt": "2026-08-12T08:33:17.088Z"
+  },
+  "filesModified": [],
+  "reviewCompletedAt": "2026-08-12T16:03:26.873Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "No child obtains authority from a partially admitted expansion."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "tests/integration/expansion-protocol.test.ts",
+        "line": 1,
+        "description": "This suite proves only exported pure surfaces. Production grep finds no caller of admitExpansion, approveExpansionManually, or reduceExpansionPlanningHold, and apps/daemon/src has no expansion call site. The recorded consumer task-9634ed3b72014fe781591c7df9674da2 is ARCHIVED. Replan against a live daemon consumer task or land a permitted durable call site, then prove partial admission cannot reach child authority through that edge."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected after current-state verification. The exact task gate is freshly green (`pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test`: core 28/572, scheduler 42/1137), and the production-root integration suite is green (1/113). The six SPIDR children and external dependencies are DONE, owned paths are clean, the design hash is unchanged, and production files remain below 400 lines. But the delivered pure core/scheduler protocol has no real production consumer edge. Fresh source search finds admitExpansion, approveExpansionManually, and reduceExpansionPlanningHold only at their definitions/exports and in tests; apps/daemon/src contains no expansion call site. The only recorded durable consumer, task-9634ed3b72014fe781591c7df9674da2, is ARCHIVED. Therefore the global pure-package consumer rail is unsatisfied, and DoD 3's zero-authority proof is vacuous at the production-system boundary.",
+      "rejectedAt": "2026-08-12T16:03:26.873Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "No child obtains authority from a partially admitted expansion."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "tests/integration/expansion-protocol.test.ts",
+          "line": 1,
+          "description": "This suite proves only exported pure surfaces. Production grep finds no caller of admitExpansion, approveExpansionManually, or reduceExpansionPlanningHold, and apps/daemon/src has no expansion call site. The recorded consumer task-9634ed3b72014fe781591c7df9674da2 is ARCHIVED. Replan against a live daemon consumer task or land a permitted durable call site, then prove partial admission cannot reach child authority through that edge."
+        }
+      ]
+    }
+  ],
+  "priorAttempt": {
+    "attemptedAt": "2026-08-12T16:08:12.358Z",
+    "reason": "QA rejection is valid and the approved no-source closeout plan cannot repair it. Current production references show admitExpansion, approveExpansionManually, and reduceExpansionPlanningHold only at definitions/exports/tests; apps/daemon has no call site. The sole recorded consumer task-9634ed3b72014fe781591c7df9674da2 is ARCHIVED, and no live replacement exists. Repeating the four proof-only steps would remain vacuous and be rejected again. Replan must either (preferred) create/require a focused live daemon expansion composition task and keep this shell open until its durable call site plus partial-admission/zero-child-authority proof land, or explicitly widen this task to permitted daemon graph paths and tests. Do not resubmit on pure package-root tests alone.",
+    "implementationPlan": [
+      {
+        "stepId": "step-1",
+        "description": "Reconcile the decomposition against current bytes without editing them. Verify the six child task IDs are DONE; grep/probe the production roots for the shipped hold, PlanningRun EXPANSION contract/submission, scheduler admitExpansion, core prepareExpansion, and approveExpansionManually entry points; confirm tests/integration/expansion-protocol.test.ts imports only the two production roots. Map parent DoD 1 to the suite's quality/scope/budget/capacity/dependency refusal matrices, DoD 2 to exact identity perturbation and changed-byte reapproval tests, and DoD 3 to the all-or-none unwind and zero-authority suites. If any subject is absent or any child is no longer DONE, report blocked rather than substituting a helper.",
+        "status": "IN_PROGRESS",
+        "affectedFiles": [],
+        "startedAt": "2026-08-12T16:07:42.735Z"
+      },
+      {
+        "stepId": "step-2",
+        "description": "Run the existing production-root acceptance proof in the foreground: `pnpm exec vitest run tests/integration/expansion-protocol.test.ts`. Require its generated refusal/perturbation families to assert their hand-pinned nonzero counts, every failure to pin exact stable code plus layer/component/origin as applicable, the happy path to produce one preparation/approval identity, changed bound bytes to require reapproval, and partial reservation failure to restore the real budget meters while exposing no child run, lease, effect, slot, graph mutation, or activation authority. Do not add mocks or new test-owned policy.",
+        "status": "PENDING",
+        "affectedFiles": []
+      },
+      {
+        "stepId": "step-3",
+        "description": "Adversarially review the already-landed implementation as a closeout, not as its author. Re-run one independent production mutation per parent invariant: bypass one scheduler precondition, remove the late-reservation unwind, omit one bound preparation/approval field, and allow one pre-approval authority-shaped field. Each intended existing test must go RED for its named assertion/code/layer; restore and hash-check exact bytes after each arm. Audit duplicate/concurrent calls, stale graph epoch/revision, changed capacity/fairness/budget/dependency evidence, empty generated families, frozen outputs, and the absence of automatic/partial activation. Leave no modified or scratch path.",
+        "status": "PENDING",
+        "affectedFiles": []
+      },
+      {
+        "stepId": "step-4",
+        "description": "Run the parent's one exact fresh foreground verification command after all mutation bytes are restored: `pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test`. Record exit statuses and output as complete_task evidence; also disclose repo-wide baseline-vs-HEAD foreign failures under the path-attributed rail if a broader gate is run. Confirm the design hash is unchanged, no source or evidence file was created, the owned-path diff is empty, and complete the shell for QA review without an empty ownership-claim commit.",
+        "status": "PENDING",
+        "affectedFiles": []
+      }
+    ],
+    "stepsCompleted": []
+  }
 }

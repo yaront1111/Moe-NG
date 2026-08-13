@@ -17,6 +17,12 @@ import {
   CLAIM, COMMIT, DIGEST, PROCESS, PROVEN, boundaryHarness, dependencies,
   failureOf, prepared, request, runtimeRequest, sha256,
 } from "./claude-launcher-test-fixtures.js";
+type ReflectionTrap = "ownKeys" | "getOwnPropertyDescriptor";
+interface TrapCounter { fired: number }
+function hostileProxy(target: object, trap: ReflectionTrap, counter: TrapCounter): object {
+  const raise = (): never => { counter.fired += 1; throw new Error("hostile reflection trap"); };
+  return new Proxy(target, trap === "ownKeys" ? { ownKeys: raise } : { getOwnPropertyDescriptor: raise });
+}
 describe("Windows Claude launcher", () => {
   it("bounds the recursive plain-data authority snapshot", () => {
     const huge = Array.from({ length: 2_049 }, (_, index) => index);
@@ -51,11 +57,70 @@ describe("Windows Claude launcher", () => {
   });
 
   it("refuses a non-Windows host before reading the request or calling a port", async () => {
-    const result = await launchClaude({}, { platform: "linux" });
+    const counter: TrapCounter = { fired: 0 };
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const [settled] = await Promise.allSettled([launchClaude(hostileProxy(request(), "ownKeys", counter),
+      { platform: "linux", deps: dependencies(boundary, log) })]);
+    expect(settled?.status).toBe("fulfilled");
+    if (settled === undefined || settled.status !== "fulfilled") throw new Error("non-Windows launch rejected");
+    const result = settled.value;
     expect(failureOf(result)).toEqual({
       code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER",
     });
     expect(result.truthClass).toBe("UNSUPPORTED");
+    expect(Object.isFrozen(result)).toBe(true);
+    expect({ fired: counter.fired, deps: log, requests: boundary.requests, boundary: boundary.log })
+      .toEqual({ fired: 0, deps: [], requests: [], boundary: [] });
+  });
+
+  it("contains hostile request reflection and pins the malformed launch refusal", async () => {
+    const counters: TrapCounter[] = [];
+    const track = (): TrapCounter => { const item = { fired: 0 }; counters.push(item); return item; };
+    const cases: readonly { readonly name: string; readonly build: (counter: TrapCounter) => unknown }[] = [
+      { name: "outer-own-keys", build: (c) => hostileProxy(request(), "ownKeys", c) },
+      { name: "outer-descriptor", build: (c) => hostileProxy(request(), "getOwnPropertyDescriptor", c) },
+      { name: "runtime-own-keys",
+        build: (c) => ({ ...request(), runtime: hostileProxy({ ...runtimeRequest }, "ownKeys", c) }) },
+      { name: "quoted-observation-own-keys", build: (c) => ({ ...request(),
+        runtime: { ...runtimeRequest, quotedObservation: hostileProxy({}, "ownKeys", c) } }) },
+      { name: "authority-own-keys",
+        build: (c) => ({ ...request(), reconciliation: { nested: hostileProxy({}, "ownKeys", c) } }) },
+      { name: "authority-descriptor", build: (c) => ({ ...request(),
+        reconciliation: { nested: hostileProxy({ probe: "value" }, "getOwnPropertyDescriptor", c) } }) },
+      { name: "argv-own-keys", build: (c) => ({ ...request(), argv: hostileProxy(["--print"], "ownKeys", c) }) },
+      { name: "environment-own-keys",
+        build: (c) => ({ ...request(), environment: hostileProxy({ SYSTEMROOT: "C:\\Windows" }, "ownKeys", c) }) },
+      { name: "limits-own-keys", build: (c) => ({ ...request(), limits: hostileProxy(
+        { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 1_000 }, "ownKeys", c) }) },
+    ];
+    expect(cases.length).toBe(9);
+    let ran = 0;
+    for (const item of cases) {
+      const counter = track();
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const [settled] = await Promise.allSettled([launchClaude(item.build(counter),
+        { platform: "win32", deps: dependencies(boundary, log) })]);
+      expect({ name: item.name, status: settled?.status })
+        .toEqual({ name: item.name, status: "fulfilled" });
+      if (settled === undefined || settled.status !== "fulfilled") throw new Error(`${item.name} rejected`);
+      const result = settled.value;
+      expect({ name: item.name, kind: result.kind, ok: result.ok, truth: result.truthClass,
+        code: result.code, layer: result.layer }).toEqual({ name: item.name, kind: "REFUSED", ok: false,
+        truth: "UNKNOWN", code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" });
+      expect(Object.isFrozen(result)).toBe(true);
+      if (result.kind !== "REFUSED") throw new Error(`${item.name} was not refused`);
+      expect(result.message).not.toContain("hostile");
+      expect(result.message).not.toContain("trap");
+      expect({ name: item.name, fired: counter.fired > 0, deps: log,
+        requests: boundary.requests, boundary: boundary.log })
+        .toEqual({ name: item.name, fired: true, deps: [], requests: [], boundary: [] });
+      ran += 1;
+    }
+    expect(ran).toBe(9);
+    expect(counters.length).toBe(9);
+    expect(counters.filter((entry) => entry.fired > 0)).toHaveLength(9);
   });
 
   it("runs the logical gates before opening and binds exact dual-stream evidence", async () => {

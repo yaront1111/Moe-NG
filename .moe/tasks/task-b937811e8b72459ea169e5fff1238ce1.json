@@ -16,21 +16,48 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human-directed unblock after live capability/dependency audit: the runner evidence receipt pipeline (task-1e512b95), published runner recovery/evidence/Claude observation surface (task-7d0abdcd), live daemon/control-room seam (task-2d1f94f9), and control-room evidence timeline (task-d99ca771) are DONE. This task is harness infrastructure only and excludes corpus/campaign claims. Architect must re-measure current production instrumentation and report BLOCKED rather than invent any absent measurement source.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c6dc9878a00248988ed31bb3c0db70bc",
+      "author": "architect-a42f4965",
+      "content": "Planning audit at HEAD 2b15b8f found the named hard dependency is only partially fit, so a benchmark-only plan would invent source authority. Present: @moe/runner evidence receipts/runtime/launch observations; internal control-room pure four-phase evaluator. Missing/unpublished: selected model ID/snapshot/reasoning effort, provider token/step/cost/stop/infra/concurrency record, ProjectConfigurationManifest/settingsDigest/orchestration SHA, production timing trigger/receipt/render/human-commit linkage, decision-effort/focus/activity observations; scheduler usage measurement is not root-exported and has no provider emitter. evaluateTiming, buildEvidenceReceipt, runVerifierProcess, launchClaude and normalizeUsageMeasurement have no daemon/provider production composition call site. packages/benchmark is absent and the named verification command currently exits 0 vacuously with 'No projects matched'. Created prerequisites task-159f4c21ef9149e8a65f24735c9c1475 (provider run identity/usage), task-5dfc98fc3e7f4035a8012bd9ba032de3 (path-neutral configuration manifest), task-1eeb2dccce204671b442704cd60b38ad (live timing/decision-effort). After they land, re-measure and plan the harness; widen ownership to pnpm-lock.yaml for the workspace importer and require a nonzero package/test execution assertion.",
+      "timestamp": "2026-08-13T16:07:51.066Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-09T10:23:41.107Z",
+  "updatedAt": "2026-08-13T16:08:36.290Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "governor-7c5e6be6",
+    "architect-a42f4965"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:00:55.803Z"
+  },
+  "blockedReason": "At HEAD 2b15b8f the production instrumentation required by this acceptance/harness task is absent or unconsumable. @moe/runner publishes receipt/runtime/launch shapes, but no production record contains selected model ID/snapshot/reasoning effort, token/step/cost, stop/infra classification or achieved concurrency; scheduler usage normalization is not root-exported and has no provider emitter; ProjectConfigurationManifest/settingsDigest/orchestration SHA do not exist; daemon StreamEvent exposes only committedAt, control-room evaluateTiming has zero production call sites and receives caller-supplied pairs, and no decision-effort/focus/activity record exists. packages/benchmark itself is absent, so pnpm --filter @moe/benchmark test currently exits 0 vacuously ('No projects matched'). A packages/benchmark-only implementation would either invent source authority or label nearly every required binding UNKNOWN despite DoD 2 requiring bound identities/split points. Created prerequisite production tasks task-159f4c21ef9149e8a65f24735c9c1475, task-5dfc98fc3e7f4035a8012bd9ba032de3, and task-1eeb2dccce204671b442704cd60b38ad.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T16:08:01.061Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified benchmark spec hash/requirements and current production at HEAD 2b15b8f; established that the filter gate is vacuous and required instrumentation is absent; created three prerequisite production tasks; commented and blocked the parent; wrote Serena handoff memory.",
+      "whatRemains": "Land task-159f4c21ef9149e8a65f24735c9c1475, task-5dfc98fc3e7f4035a8012bd9ba032de3, and task-1eeb2dccce204671b442704cd60b38ad; widen ownership for pnpm-lock.yaml; re-measure public consumers; then plan packages/benchmark.",
+      "pitfalls": "pnpm --filter @moe/benchmark test currently exits 0 with no package; insist on nonzero package/test execution. Do not substitute runtime/profile IDs for model snapshot/effort or caller-supplied timing pairs for production observations.",
+      "openQuestions": "After prerequisites land, freeze exact stable UNKNOWN reason-code/layer vocabulary for the benchmark codec without adding campaign scoring.",
+      "releasedAt": "2026-08-13T16:08:36.289Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit architect handoff after current-byte planning audit and BLOCKED report."
+    }
   ]
 }

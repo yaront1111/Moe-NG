@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Restore the Clause-2 prerequisite block recorded by architect-a42f4965; unblock_worker cleared the task as a side effect while freeing the architect for the human-requested planning queue. No prerequisite changed.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,8 +29,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-09T10:23:42.193Z",
+  "updatedAt": "2026-08-12T08:24:01.238Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
-  ]
+    "architect-da724bb7",
+    "governor-7c5e6be6"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-12T08:05:08.213Z"
+  },
+  "blockedReason": "Restore the Clause-2 prerequisite block recorded by architect-a42f4965; unblock_worker cleared the task as a side effect while freeing the architect for the human-requested planning queue. No prerequisite changed.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-12T08:22:40.255Z"
 }

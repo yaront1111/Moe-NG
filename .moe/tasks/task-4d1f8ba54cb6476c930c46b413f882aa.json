@@ -23,9 +23,9 @@
       "description": "STOP AND MEASURE BEFORE WRITING ANYTHING -- THIS STEP EXISTS TO PREVENT DUPLICATING FOUR COMPLETED TASKS. The description reads as if a native Windows binding must be built. IT MUST NOT BE. Confirm on disk: packages/runner/src/platform/windows/native/broker/ exists with its 19 production sources and its test suite; task-af3d7bc8's four children (task-05bf0e0f, task-14ab762d, task-55e2c4c8, task-e18b1284) are all DONE; and `cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker` passes. Then record the exact protocol constants you will mirror: PROTOCOL_VERSION (protocol.rs:32), FRAME_HEADER_BYTES (frames.rs:43), the header layout at frames.rs:13-16, and the variant lists of ProtocolReason, RefusalLayer and Status. If ANY of this is absent or has moved, STOP and report blocked -- do NOT improvise a Node Job-Object implementation. Also record the pre-diff baseline for `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`, git rev-parse HEAD, the merge-base, and which foreign paths are dirty.",
       "status": "COMPLETED",
       "affectedFiles": [],
-      "note": "MEASURED — no Node Job-Object binding will be written; this task composes the landed Rust broker.\n\nPREREQUISITES ON DISK: packages/runner/src/platform/windows/native/broker/src holds 18 sources (boundary completion control descriptors diagnostics frames launch lib main payload protocol refusal session settle status verify watch) + bin/{detached_spawner,handle_probe}.rs + 7 test files (containment 1085, session, frame_sweep, idempotence, handle_inheritance, descriptor_block, node_loadability). Task statuses read from .moe/tasks: task-05bf0e0f DONE, task-14ab762d DONE, task-55e2c4c8 DONE, task-e18b1284 DONE, task-ea76e0cf DONE.\n\nGATE BASELINES (pre-diff):\n- cargo test --locked --manifest-path .../native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker -> exit 0.\n- pnpm --filter @moe/runner typecheck -> exit 0.\n- pnpm --filter @moe/runner test -> exit 0, 49 files / 1459 tests.\n- git rev-parse HEAD = 8ba1d2cd86138542be1f7498ac60b932fc5ce9cb; merge-base with main = 1e3057ab938236a98105177fb060021ff992b529.\n- git status --porcelain: ONLY .moe/messages/*.jsonl and .moe/tasks/*.json (board state, foreign). No foreign source dirty.\n\nPROTOCOL CONSTANTS MIRRORED (read from source, not prose):\n- PROTOCOL_VERSION = 1 (protocol.rs:32). FRAME_HEADER_BYTES = 6 (frames.rs:43).\n- Header (frames.rs:13-16): off0 u8 version | off1 u8 opcode | off2 u32 LITTLE-ENDIAN declared length | off6 payload.\n- Caps: MAX_CONTROL_PAYLOAD 64*1024, MAX_STATUS_PAYLOAD 4*1024, MAX_DIAGNOSTIC_PAYLOAD 512.\n- Inbound (control.rs): Launch=1, Cancel=2. Outbound (status.rs): Started=1, Completed=2, Refused=3.\n- Started payload 12B: pid u32 LE + creation_time u64 LE. Completed payload 5B: kind u8 (1 Exited / 2 Unknown) + u32 LE; unknown wire NotWaited=1 StillRunning=2 WaitAbandoned=3 ProofFromAnotherProcess=4.\n- Refused payload 7B (REFUSED_PAYLOAD_BYTES): layer u8 + reason u16 LE + code u32 LE. RefusalLayer wire 1-based: Descriptor=1, Protocol=2, Native=3.\n- ProtocolReason::ALL 10 in order: VersionMismatch LengthOverLimit FrameTruncated ChannelFailed UnknownOpcode PayloadMalformed TrailingBytes DuplicateLaunch FrameOutOfOrder FrameAfterTerminal. ProtocolStage::ALL 2: Framing, Control (Framing owns the first four).\n- Launch payload order (control.rs decode_launch): text(executable) list(argv) text(cwd) pairs(environment); text = u16 LE byte length + UTF-8; list = u16 LE count + texts; pairs = u16 LE count + (text,text)*.\n\nTWO HOST FACTS PROVEN BY PROBE, both load-bearing for step 7:\n1. Broker binary resolution target is dist/windows-job-native/release/moe-windows-job-broker.exe (dist/ is line 4 of .gitignore, so nothing is committed). `cargo build --locked --release ... -p moe-windows-job-broker` freshness check measured at 0.107s when already built, so the smoke can guarantee the binary rather than skipping.\n2. DEATH-BY-IDENTITY IS ANSWERABLE FROM NODE WITHOUT A NATIVE CALL. Ran detached_spawner.exe directly; it reported core FILETIMEs `parent 12168 134309515541692727` / `grandchild 58612 134309515541797052`. PowerShell `(Get-Process -Id N).StartTime.ToFileTime()` returned 134309515541692727 and 134309515541797052 — delta EXACTLY 0 for both. So the smoke can pin (pid, creation_time) against the same FILETIME the STARTED frame carries, and will assert that equality BEFORE the kill as a premise guard so a conversion drift fails loudly instead of vacuously.\n\nBridge rule confirmed at src/runtime-entrypoint.test.ts:129 — every non-test-tier .ts under packages/runner/src needs an exact one-line sibling .js containing `export * from \"./<name>.ts\";` plus newline.",
-      "startedAt": "2026-08-11T19:49:35.729Z",
-      "completedAt": "2026-08-11T19:53:18.256Z"
+      "note": "Re-measured at HEAD acb3f4d7f52464a49c53e0b80bbacc2ef4e0d4a2 (branch moe/work-2026-08-08; merge-base with origin/main 1e3057ab938236a98105177fb060021ff992b529). Native broker exists with 19 Rust production sources. Fresh locked broker suite exited 0, including 7 containment, 8 descriptor, 38 frame, 1 inheritance, 5 idempotence, 1 Node-loadability, and 29 session tests. Fresh runner baseline exited 0: typecheck plus 54 files/1623 tests. Frozen wire facts: PROTOCOL_VERSION=1; FRAME_HEADER_BYTES=6; header bytes are version@0, opcode@1, LE u32 length@2, payload@6; ProtocolReason has exactly VersionMismatch, LengthOverLimit, FrameTruncated, ChannelFailed, UnknownOpcode, PayloadMalformed, TrailingBytes, DuplicateLaunch, FrameOutOfOrder, FrameAfterTerminal; RefusalLayer exactly Descriptor, Protocol, Native; Status exactly Started, Completed, Refused. Dirty paths are foreign daemon recovery/doc paths plus runtime .moe/.codex state; no owned packages/runner path was dirty before this repair.",
+      "startedAt": "2026-08-12T07:28:13.321Z",
+      "completedAt": "2026-08-12T07:29:20.380Z"
     },
     {
       "stepId": "step-2",
@@ -36,14 +36,9 @@
         "packages/runner/src/platform/windows/windows-process-contract.ts",
         "packages/runner/src/platform/windows/windows-process-contract.js"
       ],
-      "modifiedFiles": [
-        "packages/runner/src/platform/windows/windows-process-contract.ts",
-        "packages/runner/src/platform/windows/windows-process-contract.js",
-        "packages/runner/src/platform/windows/windows-process-contract.test.ts"
-      ],
-      "note": "Landed packages/runner/src/platform/windows/windows-process-contract.ts (242 lines, under the 250 cap) + its exact one-line .js bridge + windows-process-contract.test.ts (17 tests, green).\n\nVOCABULARIES, closed and frozen, following platform-contract.ts style:\n- WINDOWS_PROCESS_TRUTH_CLASSES = [\"PROVEN\",\"UNKNOWN\"] — UNKNOWN is the floor.\n- WINDOWS_PROCESS_LAYERS, 6 members. Three on THIS side (WINDOWS_PROCESS_REQUEST / _RESOLUTION / _TRANSPORT) and three MIRRORING the broker's RefusalLayer (BROKER_DESCRIPTOR / BROKER_PROTOCOL / BROKER_NATIVE), so a refusal that crossed the wire keeps its layer identity rather than flattening to \"the boundary refused\". A check migrating between TypeScript and the broker now has to move a test's expected layer.\n- WINDOWS_PROCESS_CODES, 22 members, hand-written, no catch-all.\n\nONE DELIBERATE DESIGN CALL WORTH REVIEW: there is a SINGLE code (PROCESS_BOUNDARY_BROKER_REFUSED) for all three broker layers, not three, and no TS re-spelling of the broker's ProtocolReason/DescriptorReason/NativeOp vocabularies. Re-spelling them would duplicate authority that already has a frozen definition and one owner. Exactness is preserved by the triple (code, layer, brokerReason.reason): brokerReason carries the LAYER-LOCAL ordinal plus the Win32 code, which is exactly what refusal.rs puts on the wire. DoD 2's create/configure/assign/resume/query/terminate/close set arrives as layer BROKER_NATIVE with reason = position in NativeOp::ALL (19 ops, win32.rs:33-53), so each of those operations is still identified exactly.\n\nIMMUTABILITY, by construction not by convention:\n- provenRun() is the ONLY constructor of a PROVEN outcome and it REFUSES rather than trusts: a zero/negative/fractional pid, a zero creation time, or a non-integer/negative exit all come back as UNKNOWN with PROCESS_BOUNDARY_IDENTITY_UNPROVEN on WINDOWS_PROCESS_TRANSPORT. So \"a PROVEN result always carries a full pid+creationTime pair\" holds by construction. A PID-only proof is unrepresentable — the shape DoD 4 forbids.\n- creationTime is a bigint, not a number: a FILETIME (134309515541692727 measured on this host) is past Number.MAX_SAFE_INTEGER and would silently lose its low digits as a double, which is exactly how a reused-PID check goes vacuous.\n- unknownOutcome() COPIES the caller's brokerReason/identity rather than freezing them in place. Freezing in place would reach out and mutate an object this module does not own; not copying would leave the caller's retained reference a back door that can rewrite a recorded refusal. Both directions are asserted.\n- brokerLayerFromWire is 1-BASED, pinned by value against RefusalLayer::wire, and the closed-set test sweeps all 256 bytes asserting exactly 253 answer null (positive generated-case count asserted, so a sweep producing zero cases fails).\n\nplatform-contract.ts was NOT edited (still 250 lines) and no PLATFORM_WINDOWS member was added to PLATFORM_LAYERS — this vocabulary is Windows-process-scoped and lives in its own file, so no scope question needs raising.\n\nGates: pnpm --filter @moe/runner typecheck exit 0; vitest over packages/runner/src/platform/windows -> 1 file / 17 tests passed.",
-      "startedAt": "2026-08-11T19:53:21.266Z",
-      "completedAt": "2026-08-11T19:56:44.494Z"
+      "note": "Reopened-task audit: the already-landed contract and LF .js bridge remain present and unchanged (contract SHA-256 D8FC36C09F8D61B782FFB0690A9073DAA625301BAA6016B59BE85E0426A6E9E9; bridge C8C8896B875B4EDD69873270CD49D306B179085E7766CD527D04B6F88A3DE968). The production file is 223 physical lines, retains frozen closed code/layer/truth arrays, immutable PROVEN/UNKNOWN outcomes, and broker refusal identity. No repair was needed in this step.",
+      "startedAt": "2026-08-12T07:29:28.081Z",
+      "completedAt": "2026-08-12T07:29:42.724Z"
     },
     {
       "stepId": "step-3",
@@ -53,12 +48,9 @@
       "newFiles": [
         "packages/runner/src/platform/windows/windows-frames.test.ts"
       ],
-      "modifiedFiles": [
-        "packages/runner/src/platform/windows/windows-frames.test.ts"
-      ],
-      "note": "RED CONFIRMED. `npx vitest run --root . packages/runner/src/platform/windows/windows-frames.test.ts` exits 1: \"Error: Cannot find module './windows-frames.js'\". The codec does not exist; the tests were written first.\n\nwindows-frames.test.ts covers, in four groups:\n\n1. THE ANTI-DRIFT PIN AGAINST THE RUST SOURCE (not against its doc comment). The test READS native/broker/src/{protocol,frames}.rs and compares: PROTOCOL_VERSION parsed out of `pub const PROTOCOL_VERSION: u8 = 1;`, FRAME_HEADER_BYTES, and all three caps (MAX_CONTROL_PAYLOAD / MAX_STATUS_PAYLOAD / MAX_DIAGNOSTIC_PAYLOAD, with a tiny `N` / `N * M` evaluator since Rust spells them `64 * 1024`). It also asserts FRAME_HEADER_BYTES === 1+1+4 so a header that grows breaks the sum, and asserts the three caps are DISTINCT so one global number cannot be substituted. ENDIANNESS is pinned by reading the CALLS: frames.rs must contain `u32::from_le_bytes` and must NOT contain `from_be_bytes` or `to_be_bytes`, so a Rust flip to big-endian reddens here before production disagrees. Every extractor throws by name if its declaration moves, so a silently-zero pin is impossible.\n\n2. BYTE-EXACT ENCODER FIXTURES, literal bytes so a wrong offset is a value mismatch. Empty CANCEL is exactly [01 02 00 00 00 00]. The LE pin uses payload length 258 = 0x00000102, whose LE header bytes [01 01 02 01 00 00] share NO byte position with the BE spelling [01 01 00 00 01 02] — so the fixture cannot pass under writeUInt32BE (this is the step-9 drill target). Version-at-0 / opcode-at-1 asserted separately so a swap is caught. Over-cap encode refuses with PROCESS_BOUNDARY_FRAME_OVERSIZED on WINDOWS_PROCESS_TRANSPORT; exactly-at-cap is accepted, so the bound is pinned inclusive on both sides.\n\n3. HOSTILE HEADERS. Wrong version -> exact FRAME_VERSION_MISMATCH + layer. ORDER IS THE CONTRACT and mirrors read_frame (frames.rs:129-146): a frame that is BOTH wrong-version and 0xFFFFFFFF-long must answer VERSION_MISMATCH, not OVERSIZED — a bound-check-first reader would make a future protocol re-layout read as garbage. The near-u32::MAX case (0xFFFFFFFF = 4 GiB) asserts REFUSED **rather than PENDING**, which is the discriminating assertion: a reader that waits for `6 + declared` bytes before bound-checking answers PENDING forever and one that sizes a buffer first throws — and it asserts buffered() === 6, so nothing past the header was ever touched. Per-channel cap tested by having the SAME bytes refuse on DIAGNOSTIC and be PENDING on CONTROL. A one-byte push answers PENDING, pinning that the whole header is read before the version is judged (the Rust order).\n\n4. CHUNK BOUNDARIES — the case synthetic tests miss, since fd1 delivers partial frames and several frames per chunk. A three-frame stream is read identically when (a) fully coalesced into one chunk, (b) fragmented one byte at a time, and (c) split at 3/5/7/... sizes deliberately coprime with the 6-byte header so splits land inside a header, inside a length field and inside a payload. A hostile trailing frame must refuse at the SAME point with the SAME code under both coalesced and fragmented delivery. Plus a nesting case: an outer frame whose payload IS a well-formed frame must yield ONE read, so a reader that rescans its own buffer instead of consuming exactly the declared length is caught. Frame counts are asserted exactly (3, 1, 2) so a run producing zero frames cannot pass.",
-      "startedAt": "2026-08-11T19:56:51.071Z",
-      "completedAt": "2026-08-11T19:59:40.384Z"
+      "note": "Reopened-task audit: the already-landed byte-exact frame tests remain present. Fresh focused run `pnpm exec vitest run --root . packages/runner/src/platform/windows/windows-frames.test.ts --reporter=verbose` exited 0 with 1 file/21 tests. The suite pins version/header width/LE length, near-u32::MAX refusal, distinct truncation, coalesced and one-byte fragmentation, and the named 258-byte little-endian fixture. No edit needed.",
+      "startedAt": "2026-08-12T07:29:48.640Z",
+      "completedAt": "2026-08-12T07:30:05.144Z"
     },
     {
       "stepId": "step-4",
@@ -71,67 +63,94 @@
         "packages/runner/src/platform/windows/windows-frames.ts",
         "packages/runner/src/platform/windows/windows-frames.js"
       ],
-      "modifiedFiles": [
-        "packages/runner/src/platform/windows/windows-frames.ts",
-        "packages/runner/src/platform/windows/windows-frames.js",
-        "packages/runner/src/platform/windows/windows-frames.test.ts"
-      ],
-      "note": "GREEN. packages/runner/src/platform/windows/windows-frames.ts, 233 physical lines (grep -c ''), under the 250 cap, plus its exact one-line .js bridge. `npx vitest run --root . packages/runner/src/platform/windows` -> 2 files / 37 tests passed. `pnpm --filter @moe/runner typecheck` -> exit 0.\n\nBYTES ONLY, like its Rust counterpart: the module knows version, declared length and payload extent and interprets NO opcode, so one codec serves fd0/fd1/fd2 without embedding three vocabularies.\n\nTHE THREE THINGS THAT MAKE IT NOT-NAIVE:\n\n1. THE BOUND CHECK PRECEDES EVERYTHING SIZED FROM THE DECLARATION. next() reads the header, checks the version, then compares `declared > cap` against a compile-time constant, and only then computes `FRAME_HEADER_BYTES + declared` or touches the buffer. Checking availability first would turn a 4 GiB declaration into an unbounded wait rather than a refusal — that is the exact inversion step 9 drills.\n\n2. readDeclaredLength USES `* 0x1000000`, NOT `<< 24`. This is a real trap, not defensive decoration: under JavaScript's SIGNED 32-bit bitwise operators, `head[5] << 24` for a top byte >= 0x80 is NEGATIVE, so a length near u32::MAX would compute as negative, compare as LESS than the cap, and sail straight through the bound check immediately above its only caller. Multiplying keeps it unsigned. The 0xFFFFFFFF test is what holds this.\n\n3. THE READER IS CHUNK-AGNOSTIC. push() only appends; next() drains and consumes exactly `6 + declared`. A refusal LATCHES — a refused channel stays refused, because resuming after a hostile frame would let a peer resynchronise the stream on bytes of its own choosing. Payloads are taken with `slice`, not `subarray`: a view would alias and retain the whole accumulated buffer this reader is about to drop.\n\nORDER MIRRORS read_frame (frames.rs:129-146) exactly: whole header, then VERSION, then the bound check, then the payload. Encoding writes the little-endian length as four explicit byte stores rather than a DataView call, so the layout the Rust side pins is literally the four lines of code.\n\nTRUNCATION IS ONLY KNOWABLE AT finish(). Before the channel ends, \"short\" and \"slow\" are indistinguishable, so a partial frame is PENDING and never an error. finish() then distinguishes a truncated HEADER from a truncated PAYLOAD via two exported message constants — separate because only the second implicates the peer (it promised bytes it never sent) — and the tests assert the exported symbols rather than retyped strings.\n\nencodeFrame refuses its own over-cap payload (PROCESS_BOUNDARY_FRAME_OVERSIZED) and a non-byte opcode (PROCESS_BOUNDARY_FRAME_OPCODE_UNKNOWN) instead of emitting a frame the broker would have to defend against.\n\nOne test fix during GREEN: windows-frames.test.ts:27 needed `match?.[1]` hoisted into a checked local for noUncheckedIndexedAccess. No assertion changed.",
-      "startedAt": "2026-08-11T19:59:43.789Z",
-      "completedAt": "2026-08-11T20:01:19.026Z"
+      "note": "Reopened-task audit: the already-landed bytes-only chunk-accumulating codec remains unchanged and clean (SHA-256 A4045BB0147B6E56895B4A9A0CD73EC7DD11657E0597EAB236C249EBDCB19FE4), its exact LF bridge is present, and the source is 233 physical lines. Step-3's fresh 21-test focused gate exercised it successfully. No repair needed here.",
+      "startedAt": "2026-08-12T07:30:08.964Z",
+      "completedAt": "2026-08-12T07:30:24.108Z"
     },
     {
       "stepId": "step-5",
       "description": "THE BOUNDARY: SPAWN THE BROKER AND DRIVE THE PROTOCOL. Create packages/runner/src/platform/windows/windows-boundary.ts and its .js bridge, following linux-boundary.ts as the structural precedent. It resolves the built broker binary deterministically, spawns it with `shell:false` and EXACTLY SIX pipes (fd0 control in, fd1 status out, fd2 bounded diagnostics, fd3/4/5 provider stdio), sends one launch request, and translates Started/Completed/Refused into the PROVEN/UNKNOWN vocabulary from step 2. DoD 3: accept an executable plus an argv ARRAY with shell disabled, and validate a bounded absolute cwd and an allowlisted bounded environment -- malformed, oversized, UNC or device paths refuse BEFORE the broker is spawned, and the test asserts no process was created rather than only that an error came back. DoD 5's runtime-loadability: if the broker binary cannot be resolved, return a typed UNKNOWN with its own stable code -- FAIL, never silently degrade to a shell or taskkill fallback. Under 250 lines; split resolution from protocol driving if it grows.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/runner/src/platform/windows/windows-boundary.ts",
         "packages/runner/src/platform/windows/windows-boundary.js"
       ],
-      "startedAt": "2026-08-11T20:01:22.629Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-boundary.test.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-path-guard.ts"
+      ],
+      "note": "Repaired QA's two pre-spawn bypasses with TDD. RED: focused boundary test exited 1 with 40 expected failures: the hostile own Symbol.iterator argv and 39 invalid Win32 component cases were accepted (`expected an UNKNOWN outcome`). GREEN: request validation now rejects an own iterator/extra behavior and encodes an Object.freeze snapshot of the exact validated descriptors; path validation rejects `< > \" | ? *`, all ASCII controls 0x00-0x1f, CONIN$, and CONOUT$ while positive substring controls remain accepted. The production-boundary sweep checks executable and cwd exact PROCESS_BOUNDARY codes, WINDOWS_PROCESS_REQUEST, and an empty resolve/spawn log for every case; its hand-pinned count is 39. Fresh focused run passed 2 files/163 tests; runner typecheck exited 0. Production sources remain 243 and 106 physical lines.",
+      "startedAt": "2026-08-12T07:30:28.395Z",
+      "completedAt": "2026-08-12T07:35:32.936Z"
     },
     {
       "stepId": "step-6",
       "description": "REFUSAL SWEEP AND THE NON-WINDOWS PATH. Extend the boundary tests to cover DoD 2 and DoD 5. Every create/configure/assign/resume/query/terminate/close failure surfaces an IMMUTABLE UNKNOWN carrying the exact stable code AND the refusing layer -- and where both the TS boundary and the broker could refuse the same input, the test pins WHICH one answered, or the assertion is one layer away from vacuous. Assert a nonzero exact generated-case count so a sweep producing zero cases fails. For DoD 5, prove the non-Windows path returns typed UNSUPPORTED with ZERO native or process calls -- prove it by injecting a spawn seam that records calls and asserting the log is EMPTY, not by reading the source. Follow the runner's existing platform pattern of returning a classification envelope rather than throwing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/windows-boundary.ts"
       ],
       "newFiles": [
         "packages/runner/src/platform/windows/windows-boundary.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-boundary.test.ts"
+      ],
+      "note": "The existing native refusal/non-Windows sweeps remain intact, and the new pre-spawn sweep now adds 39 positive-count hostile component cases across both executable and cwd with exact code, WINDOWS_PROCESS_REQUEST layer, and empty process log. Mutation drills proved the new guards are load-bearing: disabling the own-iterator refusal reddened the named argv boundary test; disabling INVALID_SEGMENT_CHARACTERS reddened invalid-60; removing CONIN$/CONOUT$ reddened console-input-device. Each drill exited 1, original bytes were restored by exact SHA-256 comparison, then the focused green gate passed 2 files/163 tests.",
+      "startedAt": "2026-08-12T07:35:48.686Z",
+      "completedAt": "2026-08-12T07:36:47.336Z"
     },
     {
       "stepId": "step-7",
       "description": "THE FOREGROUND WINDOWS PROCESS-TREE SMOKE (DoD 4 and DoD 6). This runs for real on this win32 host -- no skip, no cfg gate; if it cannot locate the release broker it FAILS rather than passing vacuously. WHAT IT MUST AND MUST NOT PROVE: Job Object semantics and the detached-grandchild kill are ALREADY PROVEN in Rust by broker/tests/containment.rs (1085 lines) with broker/src/bin/detached_spawner.rs. Do not re-prove them. Prove THE FACADE DRIVES THEM: launch a provider that spawns a deliberately detached grandchild, then close/cancel/time out THROUGH THE TYPESCRIPT BOUNDARY, and assert both the parent and the grandchild are dead. Prove death by PID PLUS CREATION TIME for each -- Windows reuses PIDs, so a PID-only check can report an unrelated live process as the dead one. Assert a positive generated case count. Clean up every child and handle on every exit path INCLUDING failure; a stranded broker holds pipes open and flakes the next run.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "packages/runner/src/platform/windows/windows-boundary.smoke.test.ts"
-      ]
+      ],
+      "note": "Fresh foreground real-Windows facade smoke executed, not skipped: `pnpm exec vitest run --root . packages/runner/src/platform/windows/windows-boundary.smoke.test.ts --reporter=verbose` exited 0; close, cancel, and timeout each killed the controlled parent plus deliberately detached grandchild, and the positive generated-case count passed (1 file/4 tests, 9.30s). No smoke edits were required for this QA repair.",
+      "startedAt": "2026-08-12T07:36:52.603Z",
+      "completedAt": "2026-08-12T07:37:17.966Z"
     },
     {
       "stepId": "step-8",
       "description": "WIRE UP, RESOLVE THE BINARY, AUDIT SIZE. Ensure the new modules are reachable however the runner's platform modules are (match how linux-boundary is surfaced; do NOT add a public @moe/runner launcher export -- the description's NOT-in-scope list forbids it). Settle binary resolution deterministically and document it in a module comment: the broker is built by the pinned Rust toolchain (rust-toolchain.toml 1.96.0, committed Cargo.lock, windows-sys exact-pinned =0.61.2), so DoD 5's version-pinning is already satisfied upstream -- what this task adds is deterministic resolution plus a loadability check. Do NOT vendor a prebuilt binary into the repo; committing build artifacts is forbidden. Then audit every new production source with `grep -c ''` and record each count -- windows-process-contract.ts, windows-frames.ts, windows-boundary.ts -- each <=250, splitting by responsibility rather than reformatting if any exceeds it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/package.json"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-launch-request.ts"
+      ],
+      "note": "Re-audited every TypeScript production source in packages/runner/src/platform/windows: all 12 are <=250 physical lines (largest windows-boundary-session.ts 247; repaired windows-launch-request.ts 243; windows-path-guard.ts 106). All 12 runtime bridges remain exact one-line `export * from \"./<name>.ts\";` files. No public launcher export or binary/build artifact was added, and package.json needed no repair. Normalized the repaired launch-request source back to LF after the symbol editor produced mixed CRLF/LF; byte scan now reports CRLF=0/LF=243 and git diff --check is clean.",
+      "startedAt": "2026-08-12T07:37:22.777Z",
+      "completedAt": "2026-08-12T07:38:06.684Z"
     },
     {
       "stepId": "step-9",
       "description": "VERIFY, DRILL, COMMIT. (a) Run `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` fresh and paste real output; both exit 0. Run the Windows process-tree smoke and show it EXECUTED, with its assertions, not skipped. Compare against the step-1 baseline and path-attribute any repo-wide red -- it must exist at the merge-base too or it is yours. (b) MUTATION DRILLS, each turning a NAMED test red with the exact failing assertion recorded: change readUInt32LE to readUInt32BE and confirm the byte-exact fixture reddens; move the declared-length bound check to after the allocation and confirm the near-u32::MAX case reddens; make the non-Windows path perform one spawn call and confirm the empty-call-log assertion reddens; make the smoke assert PID only and confirm it no longer distinguishes a reused PID. Revert each and re-confirm green, verifying by reading file contents rather than trusting a clean git status. (c) Record in the completion notes that this task COMPOSES the existing Rust broker rather than implementing Job Objects in Node, and name task-acf73253 (Windows Claude launch wrapper) as the consumer edge per the pure-package clause. (d) `git status --porcelain`, unstage anything foreign, commit by explicit pathspec over owned paths only, verify with `git show --stat` that no build artifact or binary is included.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/windows-boundary.test.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+        "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "packages/runner/src/platform/windows/windows-path-guard.ts"
+      ],
+      "note": "Adversarial diff review found no shared mutable state or IO added: both repairs are synchronous pre-spawn pure validation, snapshot caller-owned argv descriptors, and preserve exact refusal code/layer. Fresh post-commit named gate `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exited 0: 54 files/1664 tests. Fresh foreground smoke exited 0: close/cancel/timeout executed plus positive count, 4/4. Broader gates also exited 0: root typecheck; root test 245 files/5189 passed + 1 skipped; verify:foundation 30/487; verify:store 38/441. New guard mutations each reddened a named production-boundary test and were byte-exact restored. Commit c4d9c55 contains only the four owned runner paths; no artifact/binary. This Node facade COMPOSES the existing Rust Job Object broker rather than reimplementing Job control. Consumer edge remains task-acf73253a204435aba590894799814f2 (Windows Claude launch wrapper).",
+      "startedAt": "2026-08-12T07:38:17.214Z",
+      "completedAt": "2026-08-12T07:41:33.299Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-767ae903",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-42b952c9, 2026-08-11. Both SPIDR prerequisites this block named are now satisfied. THE BLOCK SAID: \"SPIDR interface split created CRITICAL prerequisites task-ea76e0cf9bdb4f1888aaa9e49323c782 (Win32 Job lifecycle core) and task-af3d7bc8af2146cf92d98557ed0e90c0 (Windows Job broker protocol). Resume and submit the current task's Node facade/final-hardening plan only after both are DONE.\" PREREQUISITE 1: task-ea76e0cf is DONE. PREREQUISITE 2 needs one explanation, so read it rather than trusting the status field. task-af3d7bc8 still SHOWS as BLOCKED, but it is an empty SPIDR parent shell with 0 plan steps and 0 owned files whose six DoD items were redistributed to four children, and ALL FOUR ARE DONE: task-05bf0e0f (3a, broker package, workspace wiring, CRT descriptor acquisition, non-inheritance proof), task-14ab762db (3b, frozen protocol version, closed vocabularies, bounded framing, hostile-frame refusal sweep), task-55e2c4c83 (3c, broker session, Job ownership, core delegation, STARTED after proof, natural COMPLETED), task-e18b12845 (3d, hardening, concurrent termination idempotence, detached-grandchild kill proof, acceptance). The shell remains BLOCKED only because the board rejects BLOCKED -> REVIEW as bypassing the planning gates and it has no plan to submit; it is parked, not outstanding. THE WORK ITSELF IS ON DISK, which is the check that actually matters: packages/runner/src/platform/windows/native/broker/src/ holds lib.rs, main.rs, boundary.rs, completion.rs, control.rs, descriptors.rs, diagnostics.rs, frames.rs, launch.rs, payload.rs plus the bins detached_spawner.rs and handle_probe.rs. Also DONE upstream: task-a02496064e and both its children task-885a46e9 and task-af99cf14. ARCHITECT: your scope is what the block reserved for this task — piece (3), the hostile-input/fail-closed TypeScript facade over the landed native surface plus the final Windows parent+grandchild smoke. Do NOT re-implement pieces (1) or (2); they have owners and they landed. Re-measure the broker's exported surface on disk before naming symbols, and consume it through the proper boundary rather than deep-importing crate internals. DoD still requires a real per-run Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE and no breakaway, created suspended then resumed — a taskkill-only implementation remains insufficient. DOWNSTREAM: task-6cbff010 (Durable Claude attempt dispatch) names this task plus task-acf73253a; task-acf73253a is still BLOCKED, so that chain does not move on this unblock alone.",
+  "reopenCount": 1,
+  "reopenReason": "Rejected because DoD 3's fail-closed pre-spawn input gate is bypassable. Verification was otherwise green: runner typecheck+test exited 0 (54 files/1623 tests), the foreground real-Windows close/cancel/timeout smoke exited 0 (4/4), and the locked Rust broker suite exited 0. Job Object composition, reason/layer sweeps, runtime loadability, consumer edge, clean owned bytes, and all production-file caps verified. An independent endian mutation reddened the named byte-exact frame test and was restored exactly. But a hostile argv iterator and malformed/reserved Windows path components are accepted and reach broker process creation.",
   "createdBy": "WORKER",
   "parentTaskId": "task-acf73253a204435aba590894799814f2",
   "priority": "CRITICAL",
@@ -152,16 +171,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:51:07.418Z",
-  "updatedAt": "2026-08-11T20:01:22.629Z",
+  "updatedAt": "2026-08-12T08:08:17.927Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:11:25.569Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 4
+    "executedStepCount": 18,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-12T08:08:17.927Z",
+    "wallClockMs": 237412358
   },
   "contextFetchedBy": [
-    "architect-f39f0c46",
-    "worker-767ae903"
+    "worker-fc2b891f",
+    "qa-f31da604"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -186,9 +209,20 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "Launch accepts an executable plus argv array with shell disabled and validates a bounded absolute cwd and allowlisted bounded environment; malformed, oversized, UNC/device, or unverifiable inputs produce exact refusal codes before process creation.",
+      "rejectedAt": "2026-08-12T07:26:59.263Z",
+      "rejectedBy": "qa-f31da604"
+    }
+  ],
   "planSubmittedAt": "2026-08-11T19:49:07.357Z",
   "planningNotes": {
     "approachesConsidered": "COMPOSE THE BROKER, DO NOT REBUILD IT. Rejected implementing Job Object control in Node via a native addon or child_process+taskkill. The description's own rail 1 says taskkill-only cannot prove whole-tree termination, and the broker already proves it on a real kernel. Node's job is to spawn the broker with six pipes, speak the frame protocol, and translate outcomes into the runner's PROVEN/UNKNOWN vocabulary.\n\nWHERE THE NATIVE DEPENDENCY LIVES (DoD 5's 'version-pinned and runtime-loadable'). The 'native dependency' is the broker BINARY produced by the pinned Rust toolchain (rust-toolchain.toml pins 1.96.0, Cargo.lock is committed, windows-sys is exact-pinned =0.61.2). So version-pinning is already satisfied upstream; what this task must add is deterministic RESOLUTION of the built binary plus a runtime-loadability check that FAILS rather than silently degrades when it is missing. Do not vendor a prebuilt binary into the repo -- rail 3 and the epic forbid committing build artifacts.\n\nFRAME CODEC: MIRROR, DO NOT SHARE. There is no way to share the Rust codec with TypeScript, so the TS side necessarily re-encodes the same 6-byte header. That is a duplicated FORMAT, not duplicated authority, and it is unavoidable -- but it must be pinned against the Rust definition by byte-exact fixtures rather than by reading the doc comment, or the two drift silently. This is the one place where a second implementation is legitimate, and it is why DoD 4 wants generated cases.\n\nNON-WINDOWS PATH: TYPED UNSUPPORTED WITH ZERO PROCESS CALLS (DoD 5). Follow the runner's existing platform pattern -- a pure classification returning an UNKNOWN/UNSUPPORTED envelope -- rather than a thrown error, and prove zero native/process calls by injection rather than by inspection.\n\nSCOPE BOUNDARY I AM DRAWING EXPLICITLY: this lands the internal boundary only. The description's own NOT-in-scope list excludes Claude discovery/pinning, activation grants, daemon/store orchestration, evidence receipts and any public @moe/runner launcher export. The real consumer is task-acf73253 (Windows Claude launch wrapper), which is BLOCKED on this task -- record it as the consumer edge per the pure-package clause.",
@@ -209,5 +243,65 @@
     "escalatedAt": "2026-08-11T19:49:15.217Z"
   },
   "planApprovedAt": "2026-08-11T19:49:09.384Z",
-  "workStartedAt": "2026-08-11T19:49:35.729Z"
+  "workStartedAt": "2026-08-11T19:49:35.729Z",
+  "reviewStartedAt": "2026-08-12T07:43:00.443Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\nTest Files  54 passed (54)\nTests  1664 passed (1664)\nStart at  10:41:08\nDuration  9.95s (transform 10.74s, setup 0ms, import 15.75s, tests 20.86s, environment 4ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src",
+    "reportedAt": "2026-08-12T07:43:00.443Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/windows-frames.test.ts",
+    "packages/runner/src/platform/windows/windows-boundary.test.ts",
+    "packages/runner/src/platform/windows/windows-launch-request.test.ts",
+    "packages/runner/src/platform/windows/windows-launch-request.ts",
+    "packages/runner/src/platform/windows/windows-path-guard.ts"
+  ],
+  "reviewCompletedAt": "2026-08-12T08:08:17.927Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Launch accepts an executable plus argv array with shell disabled and validates a bounded absolute cwd and allowlisted bounded environment; malformed, oversized, UNC/device, or unverifiable inputs produce exact refusal codes before process creation."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/runner/src/platform/windows/windows-launch-request.ts",
+        "line": 68,
+        "description": "The code validates numeric descriptors, then encodes the original array with for...of (lines 198/231). A custom Symbol.iterator replaced ['safe'] with 'bad\\0argument'; QA observed an accepted payload and resolve,spawn,writeControl. Encode a snapshot of the validated descriptor values (or refuse custom iteration). Add a production-boundary test asserting PROCESS_BOUNDARY_ARGV_REJECTED / WINDOWS_PROCESS_REQUEST and an empty resolver/spawn log."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/runner/src/platform/windows/windows-path-guard.ts",
+        "line": 90,
+        "description": "The segment guard accepts invalid Win32 characters/control bytes and special devices. QA observed C:\\Windows\\bad<name>.exe, bad|name.exe, bad*name.exe, a U+0001 component, CONIN$, and CONOUT$ reach resolve,spawn,writeControl. Reject these forms for executable and cwd. Add a positive-count sweep asserting each exact executable/cwd PROCESS_BOUNDARY code, WINDOWS_PROCESS_REQUEST layer, and zero process calls."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected because DoD 3's fail-closed pre-spawn input gate is bypassable. Verification was otherwise green: runner typecheck+test exited 0 (54 files/1623 tests), the foreground real-Windows close/cancel/timeout smoke exited 0 (4/4), and the locked Rust broker suite exited 0. Job Object composition, reason/layer sweeps, runtime loadability, consumer edge, clean owned bytes, and all production-file caps verified. An independent endian mutation reddened the named byte-exact frame test and was restored exactly. But a hostile argv iterator and malformed/reserved Windows path components are accepted and reach broker process creation.",
+      "rejectedAt": "2026-08-12T07:26:59.263Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Launch accepts an executable plus argv array with shell disabled and validates a bounded absolute cwd and allowlisted bounded environment; malformed, oversized, UNC/device, or unverifiable inputs produce exact refusal codes before process creation."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/runner/src/platform/windows/windows-launch-request.ts",
+          "line": 68,
+          "description": "The code validates numeric descriptors, then encodes the original array with for...of (lines 198/231). A custom Symbol.iterator replaced ['safe'] with 'bad\\0argument'; QA observed an accepted payload and resolve,spawn,writeControl. Encode a snapshot of the validated descriptor values (or refuse custom iteration). Add a production-boundary test asserting PROCESS_BOUNDARY_ARGV_REJECTED / WINDOWS_PROCESS_REQUEST and an empty resolver/spawn log."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/runner/src/platform/windows/windows-path-guard.ts",
+          "line": 90,
+          "description": "The segment guard accepts invalid Win32 characters/control bytes and special devices. QA observed C:\\Windows\\bad<name>.exe, bad|name.exe, bad*name.exe, a U+0001 component, CONIN$, and CONOUT$ reach resolve,spawn,writeControl. Reject these forms for executable and cwd. Add a positive-count sweep asserting each exact executable/cwd PROCESS_BOUNDARY code, WINDOWS_PROCESS_REQUEST layer, and zero process calls."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-12T08:08:17.927Z",
+  "reviewSummary": "Reopened QA verified repair commit c4d9c55 and the full owned Windows boundary diff. The rejected hostile argv iterator now returns PROCESS_BOUNDARY_ARGV_REJECTED at WINDOWS_PROCESS_REQUEST with zero resolver/spawn calls; invalid Win32 characters, ASCII controls, CONIN$, and CONOUT$ return the exact executable/cwd refusal at the request layer with zero calls. A hand-pinned 39-case production-boundary sweep covers both path positions. Independent QA mutations disabled each new guard and reddened its named test; bytes were restored exactly and repaired cases passed 41/41. Fresh `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exited 0 (54 files/1664 tests). Fresh foreground real-Windows smoke exited 0 (4/4), executing close/cancel/timeout parent+detached-grandchild termination. The unchanged locked Rust broker suite was also green in this QA session. c4d9c55 is an ancestor of current HEAD, no later commit changed owned paths, and owned worktree/index bytes are clean. All DoD items, exact code/layer rails, six-pipe Job Object composition, non-Windows zero-call path, runtime loadability, consumer edge, and no-artifact scope verified. Every production source is under 250 lines (largest 247; repaired launch request 243)."
 }

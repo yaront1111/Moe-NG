@@ -37,12 +37,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-09T14:30:56.254Z",
+  "updatedAt": "2026-08-12T07:25:34.729Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:11.847Z"
   },
   "contextFetchedBy": [
-    "architect-db2146e3"
+    "architect-db2146e3",
+    "governor-7c5e6be6"
   ],
   "blockedReason": "Two measured production prerequisites prevent a non-speculative host plan. First, the stated hard dependency Foundation daemon ingress surface task-5e43a9e294ef48fdab23817c8c6cfc45 is still PLANNING, and `apps/daemon/src/foundation/foundation-surface.{ts,js}` is absent, so the host cannot name the bounded command/query/session/coordination surface it must compose. Second, @moe/mcp has official stdio and Streamable HTTP implementations on disk, but its only package export is `.` -> `src/index.ts`, and that root exports only stdio. `createHttpMcpAdapter`, `HttpAdapterOptions`, `HttpMcpAdapter`, `HttpDispatchPort`, and `HttpSessionPort` exist only under unexported `src/http/**`; the task rail forbids deep imports and current ownership excludes packages/mcp. A prerequisite/root-surface amendment is required before this host can compile. Stale-disk command also found all three owned host files absent/clean, while foreign WIP already modifies owned `apps/daemon/package.json` and `pnpm-lock.yaml`; preserve it. Resume only after task-5e43 is DONE and the HTTP MCP surface is published from @moe/mcp root (with its root/runtime test), then re-probe both public package namespaces. Do not inject fake dispatch/session authority or deep-import.",
   "blockedResourceId": null,
