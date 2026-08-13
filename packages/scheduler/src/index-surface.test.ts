@@ -32,6 +32,11 @@ import type {
   BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, BudgetReservePurpose,
 } from "@moe/scheduler";
 import type {
+  BudgetIssueCode, BudgetMeasurementCoverage, BudgetMeasurementSource, LayeredIssue,
+  MeasurementIssueCode, MeasurementIssueLayer, MeasurementResult, NormalizedMeasurement,
+  ObservedIntervalRefs, PricebookBinding, UsageMeasurementRecord,
+} from "@moe/scheduler";
+import type {
   FairnessBypassClaim, FairnessCapMigration, FairnessCapRevision, FairnessContractIssue,
   FairnessContractIssueCode, FairnessContractLayer, FairnessContractRefusal,
   FairnessContractResult, FairnessDispatchabilityFact, FairnessDispatchabilityState,
@@ -69,12 +74,16 @@ type ExportKind = "array" | "function" | "number" | "record";
  * values + 11 fairness contract values + 6 supersession disposition values +
  * 12 fairness rotation and aging values + 7 expansion admission values + the two
  * admission-to-preparation binding values (bindExpansionAdmission and
- * validateOpportunityAttestation).
+ * validateOpportunityAttestation) + the 7 usage-measurement values (the
+ * normalizeUsageMeasurement authority plus the six closed vocabularies a provider
+ * telemetry composer needs so it never has to copy the source/coverage matrix).
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
   ["ABSOLUTE_MAX_GRAPH_TOTAL_EDGES", "number"], ["ADMISSION_PURPOSES", "array"],
-  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
+  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_ISSUE_CODES", "array"],
+  ["BUDGET_MEASUREMENT_COVERAGES", "array"], ["BUDGET_MEASUREMENT_SOURCES", "array"],
+  ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
   ["EXPANSION_ADMISSION_ISSUE_CODES", "array"], ["EXPANSION_ADMISSION_ORIGINS", "array"],
@@ -89,11 +98,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["FAIRNESS_PRIORITY_LADDER", "array"], ["FAIRNESS_ROTATION_DISPOSITIONS", "array"],
   ["FAIRNESS_SERVICE_COST", "number"], ["FORBIDDEN_VERDICT_KEYS", "array"],
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
+  ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
+  ["SUPPORTED_SOURCE_PARSER_VERSIONS", "array"],
   ["activateProviderSlot", "function"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
   ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
@@ -106,7 +117,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["createTraversalCounter", "function"], ["deriveExpansionEvidence", "function"],
   ["deriveReservationId", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
-  ["isFairnessIdentity", "function"],
+  ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
@@ -123,7 +134,25 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(78);
+  expect(EXPECTED_EXPORTS.length).toBe(85);
+});
+
+/**
+ * Hand-written, never derived from the namespace under test. Each name is a measurement or budget
+ * symbol its own module exports but the root deliberately withholds: the bare validator and the
+ * budget-policy projection would let a consumer accept a record normalizeUsageMeasurement refuses,
+ * and the account/reserve validators belong to a different seam entirely.
+ */
+const WITHHELD_BUDGET_NAMES: readonly string[] = [
+  "projectBudgetFact", "validateUsageMeasurement", "MEASUREMENT_FACT_TIER",
+  "validateBudgetAccount", "validateReserveDeclaration", "MAX_BUDGET_METERS",
+];
+
+it("withholds the budget symbols a consumer could use to bypass the measurement authority", () => {
+  expect(WITHHELD_BUDGET_NAMES.length).toBe(6);
+  const published = new Set(Object.keys(scheduler));
+  const leaked = WITHHELD_BUDGET_NAMES.filter((name) => published.has(name));
+  expect(leaked).toStrictEqual([]);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1331,4 +1360,207 @@ it("refuses a presented hold whose nested terminal effect list grew an entry", (
   );
   expect([issue.code, issue.layer, issue.origin])
     .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+});
+
+/**
+ * Usage-measurement semantics driven entirely through the bare package root.
+ *
+ * Every call below goes through `scheduler.normalizeUsageMeasurement` — this file holds no deep
+ * import into ./budget/ — so a root that re-exported a stub rather than the production authority
+ * would keep these green only until the mutation drill runs. The exact code/layer pairs are
+ * transcribed from budget-measurement.test.ts, never re-derived here.
+ */
+const MEASURED_INTERVAL: ObservedIntervalRefs = { startRef: "event:1", endRef: "event:2" };
+const COMPLETE_MEASUREMENT: UsageMeasurementRecord = {
+  meter: "runner.authorized_ms", quantity: 1200,
+  coverage: "COMPLETE" satisfies BudgetMeasurementCoverage,
+  source: "PROVIDER_REPORTED_COMPLETE" satisfies BudgetMeasurementSource,
+  providerRunRef: "run:abc", sourceParserVersion: 2, sequence: 7, rawReceiptDigest: DIGEST,
+  observedInterval: MEASURED_INTERVAL,
+};
+const LIST_PRICE_BINDING: PricebookBinding = {
+  pricebookRevisionRef: "pricebook:rev-9", unitPriceMicros: 2500, pricedAtRef: "event:1",
+};
+interface UsageEnvelope {
+  readonly pricebookBinding?: PricebookBinding | null;
+  readonly truncated?: boolean;
+}
+function usageObservation(
+  overrides: Partial<UsageMeasurementRecord> = {}, envelope: UsageEnvelope = {},
+): unknown {
+  return {
+    measurement: { ...COMPLETE_MEASUREMENT, ...overrides },
+    pricebookBinding: envelope.pricebookBinding ?? null,
+    truncated: envelope.truncated ?? false,
+  };
+}
+/**
+ * Narrows LayeredIssue on its `layer` discriminant. The arms carry different closed code
+ * vocabularies, so this reads the code AND proves at typecheck time that the root published
+ * enough of the closure to keep CONTRACT and MEASUREMENT codes distinguishable.
+ */
+function layeredCode(issue: LayeredIssue): BudgetIssueCode | MeasurementIssueCode {
+  if (issue.layer === "CONTRACT") {
+    const contractCode: BudgetIssueCode = issue.code;
+    return contractCode;
+  }
+  const measurementCode: MeasurementIssueCode = issue.code;
+  return measurementCode;
+}
+function normalizeAtRoot(
+  input: unknown, prior?: NormalizedMeasurement | null,
+): MeasurementResult<NormalizedMeasurement> {
+  return scheduler.normalizeUsageMeasurement(input, prior);
+}
+function acceptedAtRoot(result: MeasurementResult<NormalizedMeasurement>): NormalizedMeasurement {
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(`root normalizer refused: ${JSON.stringify(result.issues)}`);
+  return result.record;
+}
+function refusedAtRoot(
+  result: MeasurementResult<NormalizedMeasurement>,
+  layer: MeasurementIssueLayer, code: BudgetIssueCode | MeasurementIssueCode,
+): void {
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("root normalizer accepted what the authority must refuse");
+  expect(result.issues.map((issue: LayeredIssue) => `${issue.layer}:${layeredCode(issue)}`))
+    .toContain(`${layer}:${code}`);
+}
+
+it("accepts an UNKNOWN-coverage observation through the root and keeps its quantity null", () => {
+  const record = acceptedAtRoot(
+    normalizeAtRoot(usageObservation({ coverage: "UNKNOWN", source: "UNKNOWN", quantity: null })),
+  );
+  expect(record.measurement.coverage).toBe("UNKNOWN");
+  expect(record.measurement.quantity).toBeNull();
+  expect(record.measurement.observedInterval).toStrictEqual(MEASURED_INTERVAL);
+  expect(record.pricebookBinding).toBeNull();
+});
+
+it("refuses at the CONTRACT layer when an UNKNOWN-coverage observation carries a quantity", () => {
+  for (const quantity of [0, 1200]) {
+    refusedAtRoot(
+      normalizeAtRoot(usageObservation({ coverage: "UNKNOWN", source: "UNKNOWN", quantity })),
+      "CONTRACT", "BUDGET_MEASUREMENT_COVERAGE_QUANTITY_MISMATCH",
+    );
+  }
+});
+
+it("keeps a PARTIAL observation an exact lower bound rather than promoting it", () => {
+  for (const quantity of [0, 5]) {
+    const record = acceptedAtRoot(normalizeAtRoot(usageObservation(
+      { coverage: "PARTIAL", source: "PROVIDER_REPORTED_PARTIAL", quantity },
+    )));
+    expect(record.measurement.quantity).toBe(quantity);
+    expect(record.measurement.coverage).toBe("PARTIAL");
+  }
+});
+
+it("refuses at the MEASUREMENT layer when a source claims a coverage outside the matrix", () => {
+  refusedAtRoot(
+    normalizeAtRoot(usageObservation(
+      { coverage: "UNKNOWN", source: "PROVIDER_REPORTED_COMPLETE", quantity: null },
+    )),
+    "MEASUREMENT", "BUDGET_OBSERVATION_SOURCE_COVERAGE_MISMATCH",
+  );
+  refusedAtRoot(
+    normalizeAtRoot(usageObservation({ coverage: "COMPLETE", source: "UNKNOWN" })),
+    "MEASUREMENT", "BUDGET_OBSERVATION_SOURCE_COVERAGE_MISMATCH",
+  );
+});
+
+it("sweeps the root vocabularies over the full source-by-coverage matrix", () => {
+  expect(scheduler.BUDGET_MEASUREMENT_SOURCES.length).toBe(6);
+  expect(scheduler.BUDGET_MEASUREMENT_COVERAGES.length).toBe(3);
+  const CONSISTENT = new Set([
+    "PROVIDER_REPORTED_COMPLETE|COMPLETE", "PROVIDER_REPORTED_PARTIAL|PARTIAL",
+    "DERIVED_LIST_PRICE|COMPLETE", "DERIVED_LIST_PRICE|PARTIAL", "SUBSCRIPTION_QUOTA|COMPLETE",
+    "SUBSCRIPTION_QUOTA|PARTIAL", "ACTUAL_BILLED|COMPLETE", "ACTUAL_BILLED|PARTIAL",
+    "UNKNOWN|UNKNOWN",
+  ]);
+  let ran = 0;
+  let accepts = 0;
+  let refusals = 0;
+  for (const source of scheduler.BUDGET_MEASUREMENT_SOURCES) {
+    for (const coverage of scheduler.BUDGET_MEASUREMENT_COVERAGES) {
+      ran += 1;
+      const candidate = usageObservation(
+        { source, coverage, quantity: coverage === "UNKNOWN" ? null : 3 },
+        { pricebookBinding: source === "DERIVED_LIST_PRICE" ? LIST_PRICE_BINDING : null },
+      );
+      if (CONSISTENT.has(`${source}|${coverage}`)) {
+        acceptedAtRoot(normalizeAtRoot(candidate));
+        accepts += 1;
+      } else {
+        refusedAtRoot(normalizeAtRoot(candidate),
+          "MEASUREMENT", "BUDGET_OBSERVATION_SOURCE_COVERAGE_MISMATCH");
+        refusals += 1;
+      }
+    }
+  }
+  expect(ran).toBe(18);
+  expect([accepts, refusals]).toStrictEqual([9, 9]);
+});
+
+it("never lets a truncated receipt claim COMPLETE coverage through the root", () => {
+  refusedAtRoot(normalizeAtRoot(usageObservation({}, { truncated: true })),
+    "MEASUREMENT", "BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM");
+  const partial = acceptedAtRoot(normalizeAtRoot(usageObservation(
+    { coverage: "PARTIAL", source: "PROVIDER_REPORTED_PARTIAL" }, { truncated: true },
+  )));
+  expect(partial.truncated).toBe(true);
+});
+
+it("separates a malformed envelope from a malformed measurement by refusing layer", () => {
+  const hostile: readonly unknown[] = [undefined, new Proxy({ ...COMPLETE_MEASUREMENT }, {}), {
+    measurement: { ...COMPLETE_MEASUREMENT }, pricebookBinding: null, truncated: false, extra: 1,
+  }];
+  expect(hostile.length).toBe(3);
+  for (const envelope of hostile) {
+    refusedAtRoot(normalizeAtRoot(envelope), "MEASUREMENT", "BUDGET_OBSERVATION_MALFORMED");
+  }
+  refusedAtRoot(
+    normalizeAtRoot({
+      measurement: new Proxy({ ...COMPLETE_MEASUREMENT }, {}),
+      pricebookBinding: null, truncated: false,
+    }),
+    "CONTRACT", "BUDGET_MEASUREMENT_MALFORMED",
+  );
+  refusedAtRoot(normalizeAtRoot(usageObservation({ rawReceiptDigest: "ab" })),
+    "CONTRACT", "BUDGET_MEASUREMENT_FIELD_INVALID");
+});
+
+it("refuses a derived price without a binding and an undeclared binding on a billed source", () => {
+  refusedAtRoot(
+    normalizeAtRoot(usageObservation({ source: "DERIVED_LIST_PRICE" }, { pricebookBinding: null })),
+    "MEASUREMENT", "BUDGET_OBSERVATION_PRICEBOOK_BINDING_INVALID",
+  );
+  refusedAtRoot(
+    normalizeAtRoot(usageObservation({ source: "ACTUAL_BILLED" },
+      { pricebookBinding: LIST_PRICE_BINDING })),
+    "MEASUREMENT", "BUDGET_OBSERVATION_UNCORRELATED_BILLING_CLAIM",
+  );
+});
+
+it("treats a same-identity same-bytes redelivery as a deterministic no-op at the root", () => {
+  const prior: NormalizedMeasurement = acceptedAtRoot(normalizeAtRoot(usageObservation()));
+  expect(acceptedAtRoot(normalizeAtRoot(usageObservation(), prior))).toBe(prior);
+  expect(acceptedAtRoot(normalizeAtRoot(usageObservation({ sequence: 8 }), prior))
+    .measurement.sequence).toBe(8);
+  refusedAtRoot(normalizeAtRoot(usageObservation({ sequence: 10 }), prior),
+    "MEASUREMENT", "BUDGET_OBSERVATION_SEQUENCE_GAP");
+});
+
+it("publishes the measurement vocabularies as frozen non-empty closed sets", () => {
+  expect(scheduler.MEASUREMENT_ISSUE_CODES.length).toBe(10);
+  expect(scheduler.MEASUREMENT_ISSUE_LAYERS).toStrictEqual(["CONTRACT", "MEASUREMENT"]);
+  expect(scheduler.SUPPORTED_SOURCE_PARSER_VERSIONS).toStrictEqual([1, 2]);
+  expect(scheduler.BUDGET_ISSUE_CODES.length).toBeGreaterThan(0);
+  const contract = new Set<string>(scheduler.BUDGET_ISSUE_CODES);
+  for (const code of scheduler.MEASUREMENT_ISSUE_CODES) expect(contract.has(code)).toBe(false);
+  for (const frozen of [scheduler.MEASUREMENT_ISSUE_CODES, scheduler.MEASUREMENT_ISSUE_LAYERS,
+    scheduler.SUPPORTED_SOURCE_PARSER_VERSIONS, scheduler.BUDGET_ISSUE_CODES,
+    scheduler.BUDGET_MEASUREMENT_COVERAGES, scheduler.BUDGET_MEASUREMENT_SOURCES]) {
+    expect(Object.isFrozen(frozen)).toBe(true);
+  }
 });

@@ -96,6 +96,25 @@ export {
   reserveForAdmission,
 } from "./budget/budget-reservation.js";
 export {
+  BUDGET_ISSUE_CODES,
+  BUDGET_MEASUREMENT_COVERAGES,
+  BUDGET_MEASUREMENT_SOURCES,
+} from "./budget/budget-contract.js";
+/**
+ * The measurement authority, not its parts. `normalizeUsageMeasurement` composes
+ * `validateUsageMeasurement` and then adds the source/coverage matrix, the pricebook binding
+ * check and the identity/sequence checks, so publishing the bare validator would hand a
+ * consumer a gate that accepts records the authority refuses. `projectBudgetFact`,
+ * `PolicyFactInputCompatible` and `MEASUREMENT_FACT_TIER` stay withheld for the same reason
+ * in the other direction: budget-policy projection is a different seam.
+ */
+export {
+  MEASUREMENT_ISSUE_CODES,
+  MEASUREMENT_ISSUE_LAYERS,
+  SUPPORTED_SOURCE_PARSER_VERSIONS,
+  normalizeUsageMeasurement,
+} from "./budget/budget-measurement.js";
+export {
   FAIRNESS_CONTRACT_ISSUE_CODES,
   FAIRNESS_CONTRACT_LAYERS,
   FAIRNESS_DISPATCHABILITY_STATES,
@@ -258,10 +277,26 @@ export type {
 } from "./budget/budget-reservation.js";
 export type {
   BudgetAccountState,
+  BudgetIssueCode,
+  BudgetMeasurementCoverage,
+  BudgetMeasurementSource,
   BudgetMeterBuckets,
   BudgetPolicyOutcome,
   BudgetReservePurpose,
+  ObservedIntervalRefs,
+  UsageMeasurementRecord,
 } from "./budget/budget-contract.js";
+/** `ObservedIntervalRefs` above is closure, not decoration: it is the field type of
+ * `UsageMeasurementRecord.observedInterval`, so without it a consumer can name the record but
+ * never construct one. */
+export type {
+  LayeredIssue,
+  MeasurementIssueCode,
+  MeasurementIssueLayer,
+  MeasurementResult,
+  NormalizedMeasurement,
+  PricebookBinding,
+} from "./budget/budget-measurement.js";
 
 export type {
   FairnessContractIssue,
