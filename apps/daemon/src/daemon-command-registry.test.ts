@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { RuntimeCommandKind } from "@moe/contracts";
 import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
@@ -230,14 +230,8 @@ describe("authorization ordering under a real session", () => {
 
 describe("server-injected request fields", () => {
   it("commits with the daemon's own project, clock and kind, never the caller's", () => {
-    // Sessions opened earlier in this file also emit events, so the cursor is
-    // drained to empty first: the assertion below is then exactly the commit
-    // this case made.
-    let drained = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
-    expect(drained).toMatchObject({ outcome: "PAGE" });
-    while (drained?.outcome === "PAGE" && drained.events.length > 0) {
-      drained = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
-    }
+    const seated = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
+    expect(seated).toMatchObject({ outcome: "PAGE" });
 
     expect(send("cmd-register-1", "project.register", { owner: "operator-local" })).toMatchObject({
       decision: { commandId: "cmd-register-1", disposition: "DECIDED",
@@ -247,11 +241,18 @@ describe("server-injected request fields", () => {
       outcome: "ACCEPTED",
     });
 
+    // Exactly one registration event, carrying the daemon's project as the
+    // aggregate and the injected clock as the commit time. Other suites in this
+    // file open sessions, so the registration rows are selected by type rather
+    // than by draining the cursor - and "exactly one" also rules out a second
+    // effect behind the replay below.
     const page = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
     if (page?.outcome !== "PAGE") throw new Error("expected a page after the commit");
-    expect(page.events.map((event) => ({
-      aggregateId: event.aggregateId, committedAt: event.committedAt, eventType: event.eventType,
-    }))).toEqual([
+    expect(page.events
+      .filter((event) => event.eventType === "ProjectRegistered")
+      .map((event) => ({
+        aggregateId: event.aggregateId, committedAt: event.committedAt, eventType: event.eventType,
+      }))).toEqual([
       { aggregateId: PROJECT, committedAt: DECIDED_AT, eventType: "ProjectRegistered" },
     ]);
   });
@@ -301,10 +302,21 @@ describe("server-injected request fields", () => {
 
 describe("createDaemonCommandPorts", () => {
   const key = { commandId: "cmd-port", principalId: "operator-local", projectId: PROJECT };
-  const portStore = SqliteEventStore.openForProject(storePath, PROJECT);
-  const ports = createDaemonCommandPorts({ clock: CLOCK, projectId: PROJECT, store: portStore });
+  const portDirectory = mkdtempSync(join(tmpdir(), "moe-command-ports-"));
+  let portStore: SqliteEventStore;
+  let ports: ReturnType<typeof createDaemonCommandPorts>;
 
-  afterAll(() => { portStore.close(); });
+  // Its own store handle and directory: a handle opened at collection time and
+  // held over the other suites would keep the shared file locked on Windows.
+  beforeAll(() => {
+    portStore = SqliteEventStore.openForProject(join(portDirectory, "store.db"), PROJECT);
+    ports = createDaemonCommandPorts({ clock: CLOCK, projectId: PROJECT, store: portStore });
+  });
+
+  afterAll(() => {
+    portStore.close();
+    rmSync(portDirectory, { force: true, recursive: true });
+  });
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);

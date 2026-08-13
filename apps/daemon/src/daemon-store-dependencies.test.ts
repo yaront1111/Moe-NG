@@ -1,7 +1,10 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
@@ -237,4 +240,124 @@ describe("createStoreDependencies", () => {
       reopened.close();
     }
   });
+});
+
+/**
+ * vitest rewrites `./daemon-command-registry.js` back to the `.ts` module and `tsc`
+ * never reads a bridge at all, so the extracted registry's runtime edge is invisible
+ * to every in-process suite here. This probe therefore runs a REAL child Node process
+ * against the shipped default provider: it imports `daemon-store-dependencies.ts` (the
+ * module that carries the default export - an export-star bridge would not forward it),
+ * which in turn resolves `./daemon-command-registry.js` through Node itself.
+ */
+const execFileAsync = promisify(execFile);
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const CHILD_SOURCE = `
+const report = (value) => process.stdout.write(JSON.stringify(value));
+try {
+  const { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } = await import("@moe/store");
+  const setup = SqliteEventStore.openForProject(
+    process.env.MOE_STORE_PATH, process.env.MOE_PROJECT_ID,
+  );
+  const installed = setup.installRecoveryBinding({
+    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+    incarnationRef: "${"71".repeat(32)}",
+    installedAt: "2026-08-12T00:00:00.000Z",
+    keyEpochRef: "${"72".repeat(32)}",
+    payload: new TextEncoder().encode("child-smoke-recovery-binding"),
+    slot: "ACTIVE",
+  });
+  setup.close();
+  if (!installed.ok) throw new Error("recovery binding refused: " + installed.code);
+
+  const provider = (await import("./src/daemon-store-dependencies.ts")).default;
+  const bridged = await import("./src/daemon-command-registry.js");
+  const { RUNTIME_COMMAND_ENVELOPE_VERSION } = await import("@moe/contracts");
+  const { handleCommandRequest } = await import("./src/http/http-adapter.ts");
+  const { WIRE_PROTOCOL_VERSION } = await import("./src/http/http-contract.ts");
+  const deps = provider.provide();
+  const entry = deps.registry.get("project.register");
+  const dispatch = () => handleCommandRequest(deps, {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId: "cmd-child-register", commandKind: "project.register",
+      correlationId: "corr-child", expectedVersion: 0, payload: { owner: "operator-local" },
+      requestDigest: "c".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: process.env.MOE_DAEMON_CREDENTIAL, targetAggregateId: "agg-child",
+    })),
+    credential: process.env.MOE_DAEMON_CREDENTIAL,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+  const first = dispatch();
+  const second = dispatch();
+  const shapeOf = (result) => ({
+    commandId: result.decision?.commandId ?? null,
+    disposition: result.decision?.disposition ?? null,
+    outcome: result.outcome,
+    resultCode: result.decision?.resultCode ?? null,
+  });
+  report({
+    outcome: "LOADED",
+    bridgeExports: Object.keys(bridged).sort(),
+    depsKeys: Object.keys(deps).sort(),
+    first: shapeOf(first),
+    providerKeys: Object.keys(provider).sort(),
+    registerCapability: entry.requiredCapability,
+    registerHandler: typeof entry.handler,
+    registerPayloadKeys: entry.payloadKeys,
+    registrySize: deps.registry.size,
+    sameEffect: first.decision?.effectId === second.decision?.effectId,
+    second: shapeOf(second),
+  });
+} catch (error) {
+  report({ outcome: "FAILED", code: error?.code ?? "NO_CODE", message: String(error?.message) });
+}
+`;
+
+it("serves the default provider and its registry bridge under plain Node", { timeout: 180_000 }, async () => {
+  const childDirectory = mkdtempSync(join(tmpdir(), "moe-store-deps-child-"));
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", CHILD_SOURCE],
+      {
+        cwd: PACKAGE_ROOT,
+        env: {
+          ...process.env,
+          MOE_DAEMON_CREDENTIAL: "child-operator-credential",
+          MOE_PROJECT_ID: "proj-child-smoke",
+          MOE_STORE_PATH: join(childDirectory, "store.db"),
+        },
+        maxBuffer: 1_000_000,
+        shell: false,
+        timeout: 120_000,
+        windowsHide: true,
+      },
+    );
+    // Values, not typeofs: a binding that resolved to the wrong module, a
+    // registry that lost an entry, or a replay that ran the effect twice all
+    // have to show up here rather than pass as "it imported".
+    expect(JSON.parse(stdout)).toEqual({
+      outcome: "LOADED",
+      bridgeExports: ["OPERATOR_CAPABILITIES", "agentCapabilitiesFor", "createDaemonCommandPorts"],
+      depsKeys: ["authenticator", "decisions", "registry"],
+      first: {
+        commandId: "cmd-child-register", disposition: "DECIDED",
+        outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
+      },
+      providerKeys: ["affordances", "documentDossiers", "provide", "restore", "subscriptions"],
+      registerCapability: "project.admin",
+      registerHandler: "function",
+      registerPayloadKeys: ["owner"],
+      registrySize: 20,
+      sameEffect: true,
+      second: {
+        commandId: "cmd-child-register", disposition: "REPLAYED",
+        outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
+      },
+    });
+  } finally {
+    // Only after the child exits: Windows keeps the SQLite file locked while it lives.
+    rmSync(childDirectory, { force: true, recursive: true });
+  }
 });
