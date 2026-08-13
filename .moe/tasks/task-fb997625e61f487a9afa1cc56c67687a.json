@@ -124,7 +124,7 @@
       "completedAt": "2026-08-13T16:39:03.815Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -134,15 +134,24 @@
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
   "order": 13.51,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0f3988457c45491b857553bcc1110477",
+      "author": "governor-7c5e6be6",
+      "content": "Governance queue nudge: implementation is complete at 6/6 and task is unassigned in REVIEW. QA should claim promptly; recovery coordinator prerequisites remain fail-closed until this surface is verified DONE.",
+      "timestamp": "2026-08-13T16:45:25.290Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:24.022Z",
-  "updatedAt": "2026-08-13T16:39:52.525Z",
+  "updatedAt": "2026-08-13T16:46:14.848Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:12:53.060Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-13T16:46:14.848Z",
+    "wallClockMs": 2001788
   },
   "contextFetchedBy": [
     "architect-a42f4965",
@@ -190,5 +199,8 @@
     "packages/runner/src/surface/recovery-inventory-surface.ts",
     "packages/runner/src/surface/recovery-inventory-surface.js",
     "packages/runner/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-13T16:46:14.848Z",
+  "reviewCompletedAt": "2026-08-13T16:46:14.848Z",
+  "reviewSummary": "Fresh QA gates passed: runner typecheck + 55 files/1706 tests, daemon typecheck, and bare-Node root probe. Verified exactly four distinct factory exports, exact four-class/nonzero composition and duplicate refusal code/layer with zero enumeration, caller-frozen registry, withheld enumerators/version constants, root-only exports map and ERR_PACKAGE_PATH_NOT_EXPORTED deep import, exact LF bridge, unchanged adapters/aggregate/design, clean committed owned bytes, and production sizes 231/125 lines."
 }

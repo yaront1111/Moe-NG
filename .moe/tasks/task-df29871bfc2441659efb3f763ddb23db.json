@@ -1,0 +1,35 @@
+{
+  "id": "task-df29871bfc2441659efb3f763ddb23db",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Durable activation authority ledger",
+  "description": "Objective: provide the missing durable all-or-none persistence contract for one execution activation without adding ad-hoc SQLite schema. Depends on task-c956fd56f0d24e84a33644934982828f and task-311adb23a3964146a25fa8bddf7123e9. Deliverable: a focused daemon activation-ledger codec/reader/commit adapter that stores one canonical EffectActivationCommitted event containing the claim successor closure plus the runner activation commit and activated budget/slot successors. Derive a dedicated aggregate id from `(effect aggregateId,idempotencyKey)`, always commit it from expected version 0, and use the existing aggregate-head primary key plus globally unique domain-event id set to the grantId to enforce semantic uniqueness. Consumer: task-e33747f982e0452a9f9d784fd1cb914d. NOT in scope: recovery embargo decisions, HTTP registry wiring, provider launch, schema/table migrations, or constructing claim/activation outcomes. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "The exact versioned activation record/codec preserves and digest-binds active lease, dimension/attempt-bound ACTIVE provider slot, post-reservation budget view plus ACTIVATED reservation, ACTIVE effect intent, RUNNING attempt, UNUSED grant, predecessor intent/attempt versions, and activation digest.",
+    "The commit adapter derives the target aggregate id injectively from `(aggregateId,idempotencyKey)`, requires expected aggregate version 0, uses the grantId as the unique business event id, and appends the decision/event/authority record in one existing @moe/store transaction.",
+    "Same-command replay returns the original durable record without rerunning apply; a distinct command for the same aggregate/idempotency pair or the same grantId accepts exactly once and otherwise pins the exact EXPECTED_VERSION_CONFLICT or store uniqueness refusal with zero duplicate events.",
+    "The production reader requires exactly one correctly typed event whose payload, derived aggregate id, event id/grant id, versions and digest agree; absent, truncated, extra or malformed evidence returns a typed UNKNOWN/refusal and never reconstructs authority.",
+    "Focused concurrency and injected-throw tests assert exact decision disposition/code/layer plus event counts, prove no partial attempt/slot/lease/effect/grant/budget record is observable, and assert every generated race set has positive cardinality.",
+    "The focused daemon/store gates pass, a mutation of the production aggregate-id or expected-version guard reddens the named replay/race test, and task-e33747f982e0452a9f9d784fd1cb914d is recorded as the production consumer."
+  ],
+  "taskRails": [
+    "Use existing @moe/store aggregate-head, event-id, command-decision and commit-with-apply authorities; do not create SQLite objects or execute daemon-owned ad-hoc DDL.",
+    "TDD every behavior; refusal tests pin exact stable code and refusing layer, and zero-authority assertions include a positive accepted control through the production adapter.",
+    "Never persist a partial activation tuple or optimistically reconstruct missing bytes; unreadable evidence is UNKNOWN.",
+    "Use only public package roots across boundaries; target <=250 physical lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
+  "priority": "CRITICAL",
+  "order": 13.523,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:43:11.801Z",
+  "updatedAt": "2026-08-13T16:43:11.801Z"
+}

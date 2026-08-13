@@ -1,0 +1,34 @@
+{
+  "id": "task-311adb23a3964146a25fa8bddf7123e9",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Execution claim successor closure",
+  "description": "Objective: make the existing pure four-leg claimWork result sufficient for a durable activation consumer instead of dropping conserved-budget and slot-dimension facts. Depends on task-c956fd56f0d24e84a33644934982828f. Deliverable: harden claimWork to require the exact server-owned claim command and exact section shapes, pass the slot dimension through the new @moe/scheduler reservation API, and return a frozen typed successor closure containing the active lease, dimension-bound RESERVED provider slot, reservation record, post-reservation BudgetAvailableView, and CLAIMED effect intent. Consumer: task-e33747f982e0452a9f9d784fd1cb914d. NOT in scope: durability, effect arming/activation, attempt creation, recovery embargo, registry wiring, or slot activation. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "A granted claim exposes the typed immutable five-record closure: active lease, dimension-bound RESERVED provider slot, RESERVED budget reservation, shifted post-reservation budget view, and CLAIMED effect intent; tests assert the budget version/bucket delta and slot dimension.",
+    "claimWork accepts only the exact outer/section records required by the production command and only `{kind:\"claim\"}` for the effect leg; alternate commands, accessors, prototype/extra keys, or missing facts refuse before publishing any successor.",
+    "A non-claim effect command pins WORK_INTENT_COMMAND_MISMATCH at layer AUTHORITY on leg effectIntent, while existing lease/ceiling/slot/budget/effect refusals retain their exact code, layer, leg, and upstreamCode.",
+    "Focused tests assert every refusal has no successor keys, generated hostile cases have a positive case count, and input/result graphs are deeply immutable.",
+    "@moe/daemon root retains claimWork and exports the complete updated ClaimSuccessors type closure; the named daemon/scheduler gates pass and mutating the production command or budget-view retention guard reddens its named test."
+  ],
+  "taskRails": [
+    "TDD all behavior; every refusal test pins exact code, layer, leg, and upstream code where present.",
+    "Do not rerun or reimplement reserveForAdmission in the consumer: retain its actual production post-reservation view in claimWork.",
+    "The activation consumer task-e33747f982e0452a9f9d784fd1cb914d must import this production result; fixtures and test-owned authority do not count.",
+    "Use only public package roots across boundaries; target <=250 physical lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
+  "priority": "CRITICAL",
+  "order": 13.522,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:41:24.792Z",
+  "updatedAt": "2026-08-13T16:41:24.792Z"
+}

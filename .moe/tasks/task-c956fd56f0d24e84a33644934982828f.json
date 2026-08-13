@@ -1,0 +1,215 @@
+{
+  "id": "task-c956fd56f0d24e84a33644934982828f",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Provider slot activation reducer",
+  "description": "Objective: close the missing production RESERVED→ACTIVE provider-slot transition required by the daemon effect.activate path. Deliverable: extend the public @moe/scheduler ProviderSlotReservation closure with an immutable slot dimension and nullable attempt binding, make reserveProviderSlot return a dimension-bound RESERVED record, and expose activateProviderSlot that exact-parses the record/command, verifies slot/request identity, accepts only RESERVED, and returns ACTIVE bound to the exact attempt without mutating its inputs. Consumer: task-e33747f982e0452a9f9d784fd1cb914d must import and call this public root surface after @moe/runner activateEffect succeeds. NOT in scope: daemon ingress or persistence, effect/budget transitions, provider launch, release/terminal cleanup, or recovery policy. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && a plain-Node @moe/scheduler root export/transition smoke.",
+  "definitionOfDone": [
+    "reserveProviderSlot exact-validates dimension/slot/request inputs and returns a deeply frozen `{dimension, slotRef, requestId, state:\"RESERVED\", attemptRef:null}` successor without mutating caller data.",
+    "Public activateProviderSlot accepts only an exact RESERVED predecessor plus exact expected slot/request identity and nonempty attemptRef, returning a frozen ACTIVE successor bound to that attempt.",
+    "Malformed input returns AUTHORITY_MALFORMED_INPUT and wrong-state, replayed, or identity-mismatched activation returns AUTHORITY_STALE_LEASE; focused tests pin each exact production code and prove no ACTIVE successor is present.",
+    "@moe/scheduler root exports activateProviderSlot and the complete command/result type closure; a plain-Node package-root smoke exercises RESERVED→ACTIVE.",
+    "The focused scheduler typecheck/tests pass, and a mutation of the production RESERVED-state guard makes the named replay/wrong-state test fail."
+  ],
+  "taskRails": [
+    "TDD every transition; refusal tests assert the exact AuthorityErrorCode returned by the production root surface, not merely `ok:false`.",
+    "Do not manufacture ACTIVE slots in daemon code or test helpers; this scheduler reducer is the sole slot-state authority consumed by task-e33747f982e0452a9f9d784fd1cb914d.",
+    "Keep production files focused, target <=250 physical lines and split before 400; use only public package roots across package boundaries.",
+    "Preserve foreign scheduler work in the shared tree and stage/commit only explicit owned paths after re-measuring live ownership."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "EXPLORE/BASELINE, DO NOT WRITE. Re-run `git status --porcelain -- packages/scheduler/src`, `rg -n \"reserveProviderSlot\\\\(|activateProviderSlot|ProviderSlotReservation\" packages apps`, and the exact line counts for resource-model.ts, lease-resource.ts, index.ts, lease-resource.test.ts, and index-surface.test.ts. Confirm there is still no activation reducer, that every reserveProviderSlot caller is in the measured set, and that none of the five owned paths has foreign WIP. Record `git merge-base HEAD origin/main` (or the task base provided by Moe) plus fresh repo-wide `pnpm typecheck` and `pnpm test` failure paths as the before-diff baseline required for path attribution. If the reducer has landed, a new caller exists, or an owned path is foreign-modified, STOP and report_blocked rather than duplicate or overwrite it.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts",
+        "packages/scheduler/src/authority/lease-resource.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "note": "Baseline re-measured on live bytes; wrote nothing.\n\nOwnership: `git status --porcelain -- packages/scheduler/src apps/daemon/src/work` returned ZERO entries — no foreign WIP on any owned path.\n\nGap still open (architect's claim confirmed, not assumed): `grep -rn \"reserveProviderSlot(\\|activateProviderSlot\\|ProviderSlotReservation\" packages apps` finds NO activateProviderSlot anywhere. reserveProviderSlot is 3-arg (lease-resource.ts:161-174), returns `{slotRef,requestId,state:'RESERVED'}` only. ProviderSlotReservation (resource-model.ts:77-81) has no dimension and no attemptRef.\n\nCallers = exactly the measured set, no new one: apps/daemon/src/work/work-claim.ts:65, lease-resource.test.ts:168,178, index-surface.test.ts:193.\n\nPhysical lines (grep -c ''): resource-model.ts 169, lease-resource.ts 193, lease-resource.test.ts 218, index.ts 328, index-surface.test.ts 1120, work-claim.ts 153. All production files have headroom under 250/400.\n\nRoot-surface guard found: index-surface.test.ts:74-124 EXPECTED_EXPORTS is hand-transcribed with a hard count pin `expect(EXPECTED_EXPORTS.length).toBe(77)` plus an exact `Object.keys(scheduler).sort()` equality — publishing activateProviderSlot forces both to be updated (77 -> 78, entry sorted before activateReservation).\n\nBEFORE-DIFF BASELINE (merge-base 1e3057ab938236a98105177fb060021ff992b529, HEAD 5929166aad93cfc697dd779452f0cc285144036f), all captured with an empty owned diff:\n- `pnpm typecheck` exit 0 — Scope: 18 of 19 workspace projects, every project Done.\n- `pnpm test` exit 0 — 248 test files passed, 5337 passed / 1 skipped.\n- `pnpm --filter @moe/daemon test` exit 0 — 63 files, 946 tests (root vitest does not reach apps/, so this leg is baselined separately).\n\nZero repo-wide failing paths at baseline, so any red at step 6 is mine and is not disclosable as foreign.",
+      "startedAt": "2026-08-13T16:46:48.729Z",
+      "completedAt": "2026-08-13T16:48:13.441Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST (RED). In lease-resource.test.ts, change the reserve call to include explicit dimension `default`, then add production-surface cases for the frozen RESERVED shape `{dimension,slotRef,requestId,state:'RESERVED',attemptRef:null}` and a successful exact activation command `{dimension,slotRef,requestId,attemptRef}` yielding an ACTIVE, attempt-bound, deeply frozen successor while the input digest/value remains unchanged. Add a table with an explicit positive case-count assertion that calls activateProviderSlot for null/non-record, missing/extra/symbol/accessor/proxy fields, empty refs, mismatched dimension/slotRef/requestId, ACTIVE replay, and RELEASED predecessor; assert exactly `AUTHORITY_MALFORMED_INPUT` for malformed shape and exactly `AUTHORITY_STALE_LEASE` for identity/state failures, plus absence of `value`/ACTIVE authority on every refusal. Run the focused file and capture the expected red caused by the missing API/shape.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/authority/lease-resource.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/authority/lease-resource.test.ts"
+      ],
+      "note": "Tests written first; focused run is RED for exactly the intended reasons.\n\n`pnpm --filter @moe/scheduler test` -> lease-resource.test.ts 27 tests, 8 failed:\n- \"records a RESERVED slot only once every declared resource is ACTIVE\" — `AssertionError: expected { slotRef: 'default', ...(2) } to deeply equal { dimension: 'default', ...(4) }`. The 4-arg call is landing \"default\" in the old slotRef position, which is the signature gap itself, not a typo.\n- 7 x `TypeError: activateProviderSlot is not a function` — the reducer does not exist yet.\n\nSignature pinned from the plan's step-6 smoke literal: `reserveProviderSlot(rows, dimension, slotRef, requestId)` (dimension is the 4th reservation FACT, 2nd positional argument). Coded to that so the verbatim gate command will run.\n\nCoverage added (all against the production surface; the predecessor is seeded by `reserveProviderSlot`, never hand-transcribed, so model drift cannot hide in a test-local twin):\n- Success: exact `{dimension,slotRef,requestId,state:'ACTIVE',attemptRef:'attempt:7'}`, `Object.isFrozen(successor)`, successor is neither the predecessor nor the command object, caller's command still NOT frozen (catches a deep-freeze that reaches through an aliased return), and `JSON.stringify` of both inputs byte-identical across the call.\n- 22-case malformed table with an explicit `expect(cases.length).toBe(22)` so a silently empty sweep fails: null/array/string, missing key, extra key, symbol key, accessor-backed field, proxy, empty slotRef, empty dimension, unknown state `SUSPECT`, numeric attemptRef, prototype-borrowed `Object.create(record)`, plus command-side missing/extra/symbol/accessor/proxy/empty/null attemptRef and numeric dimension. Each asserts exactly `[\"AUTHORITY_MALFORMED_INPUT\"]`.\n- 3-case identity-drift table (dimension, slotRef, requestId), each exactly `[\"AUTHORITY_STALE_LEASE\"]`.\n- Three SINGLE-GUARD refusal tests so no guard can hide behind another, which is what makes the step-7 drill honest:\n  * ACTIVE predecessor with `attemptRef:null` — identity matches and nothing is bound, so ONLY the RESERVED-state guard can refuse it. This is the named drill target.\n  * RESERVED predecessor with `attemptRef:'attempt:prior'` — ONLY the attempt-binding guard can refuse it.\n  * RELEASED predecessor, plus a realistic replay of the reducer's own ACTIVE successor.\n\nEvery refusal also asserts `expect(outcome).not.toHaveProperty(\"value\")`, so no refusal can leak an ACTIVE successor. Assertion on the property, not on a JSON substring, because a refusal message legitimately names the state.\n\nAlso added a reservation-side refusal test for missing/empty dimension (exact `AUTHORITY_MALFORMED_INPUT`); it is vacuous until step 3 lands the new signature and becomes load-bearing after it.",
+      "startedAt": "2026-08-13T16:48:17.505Z",
+      "completedAt": "2026-08-13T16:51:42.531Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "MODEL/REDUCER (GREEN). In resource-model.ts, extend ProviderSlotReservation with readonly `dimension:string` and `attemptRef:string|null`, add/export ProviderSlotActivateCommand, and add exact hostile-input parsers for both records using `exactRecord`, `isRef`, `oneOf`, and own-data-property rebuilding—never casts/spreads of unparsed caller objects. In lease-resource.ts, change reserveProviderSlot to require an explicit nonempty dimension and return a rebuilt/frozen RESERVED record with `attemptRef:null`; add activateProviderSlot(predecessor, command) that parses both first, returns AUTHORITY_MALFORMED_INPUT for either malformed value, then checks dimension/slotRef/requestId identity and predecessor `RESERVED`/`attemptRef:null`, returning AUTHORITY_STALE_LEASE on the first semantic mismatch, otherwise a rebuilt/frozen ACTIVE record bound to the command attemptRef. Keep the operation pure and input-immutable; do not add release/persistence/default-dimension behavior.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts"
+      ],
+      "note": "Model + reducer landed; the whole lease-resource.test.ts file is now GREEN (27/27), and the only remaining scheduler red is index-surface.test.ts's 3-arg root call, which is step 4's work.\n\n`pnpm --filter @moe/scheduler test` -> 1184 passed / 1 failed; the single failure is `index-surface.test.ts > reserves and confirms an acquisition set through the root exports`, caused by the intentional signature change.\n\nresource-model.ts:\n- ProviderSlotReservation gained `readonly dimension: string` and `readonly attemptRef: string | null`.\n- New exported ProviderSlotActivateCommand `{dimension, slotRef, requestId, attemptRef}` — attemptRef non-nullable there, since a command that binds nothing is not an activation.\n- New exact parsers parseProviderSlot / parseProviderSlotActivation. Both go through `exactRecord` (isPlainRecord + hasOnlyOwnStringKeys + readOwnDataProperty), then destructure to locals and REBUILD a fresh record. No cast of an unparsed caller object and no spread of one, so an accessor/proxy/extra key cannot survive the parse and reappear in a successor.\n- `attemptRef !== null && !isRef(attemptRef)` is deliberate: only literal null means unbound; every other non-ref stays malformed rather than degrading to \"absent\" (a malformed-as-absent read would let a junk attempt authorize the weaker unbound branch).\n\nlease-resource.ts:\n- reserveProviderSlot is now `(value, dimension, slotRef, requestId)` — dimension as the 4th fact / 2nd positional, matching the plan's step-6 smoke literal — and returns `{dimension, slotRef, requestId, state:'RESERVED', attemptRef:null}` frozen. No default dimension anywhere: the daemon counts slot ceilings per dimension, so a reducer-side default would silently merge two ceilings.\n- activateProviderSlot(predecessor, command): parses BOTH first and returns AUTHORITY_MALFORMED_INPUT if either is malformed, then refuses AUTHORITY_STALE_LEASE on the first semantic mismatch in fixed order — dimension/slotRef identity, requestId identity, `state !== 'RESERVED'`, `attemptRef !== null` — otherwise returns a rebuilt frozen ACTIVE record bound to the command's attemptRef.\n- Nothing is mutated, frozen, or returned by reference from either input; the successor is constructed field-by-field from the parsed values, not spread from the predecessor.\n- No release/persistence/terminal behavior added, per the NOT-in-scope list.\n\nPhysical lines after the edit: resource-model.ts 214, lease-resource.ts 232 — both under the 250 target, so no split is needed. (lease-resource.test.ts is 381; the cap is a production-source rule and the sibling index-surface.test.ts is already 1120.)",
+      "startedAt": "2026-08-13T16:51:45.560Z",
+      "completedAt": "2026-08-13T16:53:03.455Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "PUBLIC ROOT/CONSUMER CONTRACT. Export activateProviderSlot from packages/scheduler/src/index.ts and export ProviderSlotActivateCommand with the existing slot type closure. Update index-surface.test.ts's hand-transcribed namespace to include exactly the new runtime function, import the new type from bare `@moe/scheduler`, and drive reserve(default dimension) then activate through that bare root, asserting RESERVED→ACTIVE, exact attempt/dimension binding, and exact root refusal codes. Do not deep-import or edit the existing LF bridge: lease-resource.js already root-loads the edited .ts module. In the task completion note name task-e33747f982e0452a9f9d784fd1cb914d as the required production consumer; exports alone are not composition.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "note": "Root surface published and proven through the BARE specifier. Scheduler package is fully green: `pnpm --filter @moe/scheduler typecheck` exit 0, `pnpm --filter @moe/scheduler test` exit 0 (42 files, 1188 tests).\n\nindex.ts: added `activateProviderSlot` to the lease-resource value export block and `ProviderSlotActivateCommand` to the resource-model type block. No .js bridge added or edited — index.ts already re-exports \"./authority/lease-resource.js\" and that tracked LF bridge root-loads the edited .ts, proven by the plain-Node run below.\nOne prose correction was forced, not optional: the header said \"No slot is counted or activated here\", which this task makes false. Narrowed to \"No slot is counted here\" plus two lines naming activateProviderSlot as the sole RESERVED -> ACTIVE transition. No other surface prose touched.\n\nindex-surface.test.ts: the hand-transcribed guard is load-bearing and was updated in all three places it pins — `[\"activateProviderSlot\",\"function\"]` inserted in sorted position before activateReservation, the count pin 77 -> 78, and the doc tally 19 -> 20 claim-composition values. Added the type import and two new root-driven tests: reserve(dimension \"default\") -> activate asserting RESERVED->ACTIVE with exact attempt/dimension binding and the predecessor still RESERVED; and a refusal test pinning exact root codes — slotRef drift AUTHORITY_STALE_LEASE, empty attemptRef AUTHORITY_MALFORMED_INPUT, successor replay AUTHORITY_STALE_LEASE with no leaked `value`.\n\nDEVIATION FROM THE PLAN'S SMOKE COMMAND — the cwd, nothing else. The plan's step-6 smoke runs the bare `@moe/scheduler` import from D:/projexts/moe-next, and that is unsatisfiable for EVERY package in this workspace:\n  node --input-type=module -e \"import ... from '@moe/scheduler'\" (cwd=repo root)\n  -> Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@moe/scheduler'\nNEGATIVE CONTROL run in the same shell, so this is attributed to cwd and not to my diff: long-shipped `@moe/store` fails identically from the repo root, and `node_modules/@moe DOES NOT EXIST at repo root` — pnpm links workspace packages into each CONSUMER's node_modules, never the root.\n\nThe same probe, byte-identical except cwd, passes where a real dependent resolves it:\n- from packages/scheduler (self-reference through the package's own exports map):\n  `SMOKE_OK {\"dimension\":\"default\",\"slotRef\":\"slot:smoke\",\"requestId\":\"req:smoke\",\"state\":\"ACTIVE\",\"attemptRef\":\"attempt:smoke\"}` exit 0\n- from apps/daemon, the actual consuming package: `CONSUMER_SMOKE true ACTIVE function` exit 0\nNo --experimental-strip-types needed on Node v24.16.0.\n\nCONSUMER (clause 1, exports are not composition): task-e33747f982e0452a9f9d784fd1cb914d must import activateProviderSlot from the @moe/scheduler root and call it after @moe/runner activateEffect succeeds. That task is currently BLOCKED precisely on this missing RESERVED->ACTIVE authority; this step is what unblocks it. Step 5 lands the in-repo caller edge for the reservation half.",
+      "startedAt": "2026-08-13T16:53:05.980Z",
+      "completedAt": "2026-08-13T16:55:27.322Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "UPDATE THE ONLY CURRENT CALLER. Change apps/daemon/src/work/work-claim.ts to pass `slot['dimension']` as the explicit fourth reservation fact rather than defaulting it inside @moe/scheduler. Keep existing claim leg order and exact WORK_* refusal mapping unchanged; no daemon activation or persistence belongs here. Update the focused scheduler tests if TypeScript exposes any stale three-argument calls, but do not change daemon behavior beyond refusing a missing/unreadable dimension as the scheduler's AUTHORITY_MALFORMED_INPUT mapped by claimWork.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim.test.ts",
+        "apps/daemon/src/work/work-vocabulary.test.ts",
+        "apps/daemon/src/work/work-race-world.ts"
+      ],
+      "note": "Sole production caller updated; daemon is green — `pnpm --filter @moe/daemon typecheck` exit 0, `pnpm --filter @moe/daemon test` exit 0 (63 files, 948 tests, up from the 946 baseline by exactly the 2 tests my new injection adds through the two existing it.each blocks).\n\nwork-claim.ts:65 now calls `reserveProviderSlot(slot[\"rows\"], slot[\"dimension\"], slot[\"slotRef\"], slot[\"requestId\"])`. Leg order, the WORK_* mapping, and every other behavior are untouched. This closes a real dropped fact rather than shuffling arguments: work-slot-ceiling.ts:35-39 already counts live claims per `dimension` against DEFAULT_SLOT_DIMENSION, while the reservation carried no dimension at all — so the thing being counted and the thing being reserved were not the same object. A comment at the call site records why the daemon must not default it.\n\nSCOPE ADDITION, FORCED AND DISCLOSED — 3 files beyond the plan's step-5 affectedFiles. The plan anticipated stale 3-arg calls only in the scheduler tests; the daemon's own claim fixtures also omit the new fact, and my diff is what makes them red, so path attribution does NOT excuse them and I fixed them:\n- work-claim.test.ts — `validPayload().slot` gained `dimension: \"default\"`.\n- work-vocabulary.test.ts — CLAIM_PAYLOAD.slot gained `dimension: \"default\"`.\n- work-race-world.ts — the seeded race world's claim payload gained it. Caught only by running the suite: `work-race-orderings.test.ts` went red with `expected [ …(17) ] to deeply equal [ …(19) ]` and `claim was never duplicated: expected 0 to be greater than 0`, i.e. every claim in the race schedule was refusing. This file is test-tier despite having no .test.ts suffix (imported only by work-race-orderings.test.ts and work-race-schedule.ts), so no production surface grew.\nTotal distinct affectedFiles for the task is now 9, within the 10 cap; no additional production file was touched.\n\nBehavior pinned, not just fixed: added an 11th entry to the INJECTIONS refusal table — deleting `slot.dimension` must refuse with daemon code WORK_PAYLOAD_MALFORMED carrying upstream AUTHORITY_MALFORMED_INPUT on leg `providerSlot`. The table's existing count pin was bumped 10 -> 11 in the same edit, so the case cannot be silently dropped later.\n\nNo daemon-side activation, persistence, or ACTIVE slot construction was added; activateProviderSlot stays unconsumed here and belongs to task-e33747f982e0452a9f9d784fd1cb914d.",
+      "startedAt": "2026-08-13T16:55:31.598Z",
+      "completedAt": "2026-08-13T16:57:16.348Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "ONE VERIFICATION GATE AT THE END. From D:/projexts/moe-next run exactly: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && node --input-type=module -e \"import {activateProviderSlot,reserveProviderSlot} from '@moe/scheduler'; const rows=[{resourceId:'r',capacityUnits:1,epoch:1,state:'ACTIVE',effectIntentRef:'i',external:false,fenceable:true}]; const r=reserveProviderSlot(rows,'default','slot:smoke','req:smoke'); if(!r.ok) throw new Error(r.issues[0]?.code); const a=activateProviderSlot(r.value,{dimension:'default',slotRef:'slot:smoke',requestId:'req:smoke',attemptRef:'attempt:smoke'}); if(!a.ok||a.value.state!=='ACTIVE'||a.value.attemptRef!=='attempt:smoke') throw new Error(a.ok?'bad successor':a.issues[0]?.code);\" && pnpm typecheck && pnpm test`. Capture fresh exit status/output. Compare repo-wide failing paths against step 1 and require zero new failures intersecting the five owned paths plus work-claim.ts; disclose any unchanged foreign red verbatim rather than claiming it green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts",
+        "packages/scheduler/src/authority/lease-resource.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "apps/daemon/src/work/work-claim.ts"
+      ],
+      "note": "Full gate run fresh as ONE chain, GATE_EXIT=0. Every leg green.\n\n- `pnpm --filter @moe/scheduler typecheck` -> tsc, no diagnostics\n- `pnpm --filter @moe/scheduler test` -> 42 files, 1188 tests passed\n- `pnpm --filter @moe/daemon typecheck` -> tsc, no diagnostics\n- `pnpm --filter @moe/daemon test` -> 63 files, 948 tests passed\n- plain-Node package-root smoke -> `SMOKE_OK`\n- `pnpm typecheck` -> Scope: 18 of 19 workspace projects, every project Done\n- `pnpm test` -> 248 files, 5348 passed | 1 skipped\n\nONE DEVIATION from the plan's literal command, cwd only, already evidenced in step 4: the `node --input-type=module -e \"...import from '@moe/scheduler'...\"` leg is run as `pnpm --filter @moe/scheduler exec node --input-type=module -e \"<same script verbatim>\"`. The script bytes are unchanged; `pnpm exec` only runs it with the package as cwd. As written it is unsatisfiable for every package in this workspace — `node_modules/@moe` does not exist at the repo root, and the same import of long-shipped `@moe/store` fails identically there with ERR_MODULE_NOT_FOUND. The relocated leg is the STRONGER probe: it resolves the bare specifier the way a real dependent does. Also independently confirmed from apps/daemon, the actual consumer: `CONSUMER_SMOKE true ACTIVE function`.\n\nPATH-ATTRIBUTED BASELINE COMPARISON (step-1 before-diff vs now):\n- Step 1 failing-path set: EMPTY (typecheck exit 0, 248/248 files, 5337 passed; daemon 63/63, 946 passed).\n- Post-diff failing-path set: EMPTY.\n- Delta intersected with owned paths: EMPTY. No foreign red exists to disclose, and none is being claimed green.\n\nTest-count delta fully accounted for, so no count drift is hiding a lost test:\n- root run 5337 -> 5348 = +11, all mine: lease-resource.test.ts 19 -> 27 (+8: 7 activation tests + 1 reservation dimension refusal), index-surface.test.ts 137 -> 140 (+3: 2 new root tests + 1 extra it.each case from EXPECTED_EXPORTS 77 -> 78).\n- daemon 946 -> 948 = +2, exactly the new INJECTIONS entry running through the two existing it.each blocks.\n\nWorking tree carries only my 9 owned files (git status --porcelain): the 5 scheduler paths plus work-claim.ts, work-claim.test.ts, work-vocabulary.test.ts, work-race-world.ts. One untracked `.tmp-binding-tests.txt` appeared at the repo root mid-run and vanished on its own moments later — a live peer's scratch file, not mine, not touched, and it will not be in my pathspec commit.",
+      "startedAt": "2026-08-13T16:57:19.390Z",
+      "completedAt": "2026-08-13T16:58:47.311Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL REVIEW/MUTATION LAST. Read the owned diff as an attacker: concurrent/repeated activation, null/empty/huge refs, proxies/accessors/symbols/extra keys, mismatched dimension/slot/request, ACTIVE/RELEASED predecessors, caller mutation, leaked references, export drift, and accidental daemon defaults. Temporarily mutate the production `predecessor.state !== 'RESERVED'` guard so an ACTIVE predecessor can reactivate; run the named replay/wrong-state test and require it to fail for the exact missing AUTHORITY_STALE_LEASE assertion, then restore byte-for-byte and rerun the exact verification command from the prior step. Inspect `git diff --check`, physical production-file line counts, and `git diff -- <owned paths>`; stage and commit only explicit owned pathspecs after `git status --porcelain` confirms no foreign staged entry.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts",
+        "packages/scheduler/src/authority/lease-resource.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "apps/daemon/src/work/work-claim.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/authority/resource-model.ts",
+        "packages/scheduler/src/authority/lease-resource.ts",
+        "packages/scheduler/src/authority/lease-resource.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-claim.test.ts",
+        "apps/daemon/src/work/work-vocabulary.test.ts",
+        "apps/daemon/src/work/work-race-world.ts"
+      ],
+      "note": "Adversarial review done, TWO mutation drills each killed exactly one named test, bytes restored hash-exact, and the work is committed as 2a82819 without sweeping a peer's in-flight file.\n\nDRILL 1 (plan-mandated, the RESERVED-state guard). `if (slot.state !== \"RESERVED\")` -> `if (slot.state === \"RELEASED\")`, chosen so RESERVED still succeeds and only ACTIVE slips through (a `===` flip would have over-reddened and proved nothing). Result: lease-resource.test.ts 27 tests, exactly 1 failed —\n  `> refuses replaying activation onto an ACTIVE predecessor carrying no attempt`\n  `AssertionError: active replay: expected true to be false`\nThat is my labelled `expect(outcome.ok, label).toBe(false)`, i.e. the reducer ACCEPTED an ACTIVE predecessor: the exact missing AUTHORITY_STALE_LEASE refusal. The other 26 stayed green. This test is honest because its fixture is ACTIVE with `attemptRef:null`, so the state guard is the ONLY guard that can answer it — the realistic replay case (ACTIVE + bound) correctly stayed green under this mutant, since the attempt-binding guard catches that one.\n\nDRILL 2 (added by me, not in the plan). The identity check is one `if` with two operands, which is the classic equivalent-mutant trap, so I drilled it: dropped `slot.dimension !== activation.dimension`. Exactly 1 failed — `> refuses identity drift between the reservation and the activation command`, `AssertionError: dimension drift: expected true to be false`. The operands are independently load-bearing; without that one, a \"gpu\" command activates a \"default\" slot and escapes the ceiling entirely, which is the whole point of this task.\n\nRESTORE: sha256 c2aac87286c553fd5409c03e3c6cfd4e0c6e0cb557161f4861d30be8e6614073 before both drills and after both restores, anchor counts back to 1. DISCLOSURE: restoring drill 1 with `git checkout -- <path>` reverted the file to HEAD and deleted my uncommitted step-3 implementation while reporting the path clean — caught by the hash, not by git. Reconstructed from the diff captured at the top of this step and confirmed identical by sha256. Written up as a Serena memory; drill 2 used an out-of-repo backup copy instead.\n\nATTACKER READ of the diff, beyond the tables:\n- Concurrency: the reducer is pure with no store, so two concurrent activations of the same RESERVED record both return ACTIVE. It CANNOT be fixed here without inventing persistence (compose-don't-invent). One-activation-per-slot is a fence/persistence property owned by task-e33747f9. Flagged in the handoff memory, not silently assumed.\n- Refusal messages interpolate only `slot.state`, which comes from the closed SLOT_STATES set — no attacker-controlled ref reaches a message or a log.\n- Huge refs: `isRef` has no length cap, unchanged from the sibling parsers in this kernel; no new exposure introduced.\n- `deepFreeze` cannot reach caller data: the successor is a fresh literal of primitives. Asserted positively — the test checks the caller's command is still NOT frozen after a successful call.\n- No production caller of `claimWork` exists (`grep` finds only the daemon root re-export and the test-tier race world), so the payload-shape change breaks no live ingress.\n\nHYGIENE: `git diff --check` clean. Physical lines resource-model.ts 214, lease-resource.ts 232, work-claim.ts 158 (all under the 250 target); index.ts 332, pre-existing >250 and grown by only 4 lines, still well under 400. No debug/probe/scratch file in the commit; the drill backup lived in the OS temp dir and was deleted.\n\nCOMMIT under a co-occupied file. A peer landed ~160 uncommitted lines in index-surface.test.ts (expansion-binding identity-hash tests) mid-drill; I watched their suite go 27 failed -> 17 failed with the names changing, i.e. a live TDD loop, and posted a coordination message rather than touching it. A plain pathspec commit takes the WORKING TREE copy and would have stolen their work, but I could not hold the file back either — my index.ts export and its EXPECTED_EXPORTS count pin must land together or the committed tree is red. Used the repo's index-blob technique: HEAD+my-lines copy -> `git hash-object -w` -> `git update-index --cacheinfo` -> `git commit` with NO pathspec. Verified after: `git diff --cached` showed only my 5 hunks, `git show --stat HEAD` = my 9 files only, and their block plus `expansion-binding.ts` and the untracked `expansion-binding-facts.{ts,js}` are still uncommitted and byte-untouched. No add -A, no reset, no stash.\n\nFRESH GATE AFTER COMMIT, exit 0 on every leg: smoke SMOKE_OK; scheduler typecheck + 42 files/1217 tests; daemon typecheck + 63 files/948 tests; `pnpm typecheck` all 18 projects Done; `pnpm test` 248 files, 5378 passed | 1 skipped. (Scheduler is 1217 not 1188 because the peer's 29 tests are now green in the working tree; the committed tree contains only my 1188 and is the state gated at step 6.)",
+      "startedAt": "2026-08-13T16:58:54.101Z",
+      "completedAt": "2026-08-13T17:06:18.863Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
+  "priority": "CRITICAL",
+  "order": 13.521,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:41:09.379Z",
+  "updatedAt": "2026-08-13T17:07:07.784Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T16:44:18.594Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 7
+  },
+  "contextFetchedBy": [
+    "architect-a9210e34",
+    "worker-68608f71"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-13T16:46:21.456Z",
+  "planningNotes": {
+    "approachesConsidered": "Keep slot activation in the daemon was rejected because `ProviderSlotReservation` is scheduler-owned authority and the task rail forbids manufacturing ACTIVE records. Adding a separate slot-activation module was considered, but resource-model.ts (169 lines) and lease-resource.ts (193 lines) both have safe per-file headroom and the existing bridge already makes the operation root-loadable; keeping the parser/type beside the model and the reducer beside reserveProviderSlot is the minimum coherent change. A new slot-specific error vocabulary was rejected because the public AuthorityOutcome already distinguishes malformed input (`AUTHORITY_MALFORMED_INPUT`) from stale/wrong-state authority (`AUTHORITY_STALE_LEASE`).",
+    "codebaseInsights": "Fresh measurements: `rg -n 'reserveProviderSlot\\\\('` finds only apps/daemon/src/work/work-claim.ts, scheduler index-surface.test.ts, lease-resource.ts, and lease-resource.test.ts; `rg -n 'activateProviderSlot|ProviderSlotReservation'` finds no activation reducer. resource-model.ts:77-81 defines only `{slotRef,requestId,state}`; lease-resource.ts:160-174 says effect.activate makes it ACTIVE but only returns RESERVED; @moe/runner ActivationCommit has no slot. The design SHA-256 remains pinned and design line 427 requires claim RESERVED then effect.activate ACTIVE. Current relevant files are clean: `git status --porcelain -- packages/scheduler/src` returned no entries. Physical lines: resource-model.ts 169, lease-resource.ts 193, lease-resource.test.ts 218, index.ts 328. Existing tracked LF `.js` bridges already re-export the corresponding `.ts` modules. Root surface tests use the bare `@moe/scheduler` package and a hand-transcribed namespace.",
+    "risks": "This intentionally breaks the old three-argument reserveProviderSlot signature; update every measured caller rather than add a default dimension, because a hidden default would reintroduce the dropped fact and let the daemon ceiling count diverge. Define one exact command record (dimension, slotRef, requestId, attemptRef) and exact-parse both predecessor and command with own data properties only; accessors, proxies, symbols, extra keys, empty refs, ACTIVE replay and RELEASED state must fail closed. Never mutate or return the caller's predecessor by reference. The downstream consumer is task-e33747f982e0452a9f9d784fd1cb914d; record that task id, but do not edit daemon files in this task. index.ts is already >250 but remains <400; make only the minimal export edits and do not grow unrelated surface prose.",
+    "keyFiles": [
+      "packages/scheduler/src/authority/resource-model.ts",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "packages/scheduler/src/authority/lease-resource.test.ts",
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-13T16:46:23.500Z",
+  "workStartedAt": "2026-08-13T16:46:48.729Z",
+  "reviewStartedAt": "2026-08-13T17:07:07.784Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck && pnpm test",
+    "exitCode": 0,
+    "outputTail": "scheduler: tsc clean; Test Files 42 passed (42), Tests 1217 passed (1217).\ndaemon: tsc clean; Test Files 63 passed (63), Tests 948 passed (948).\npnpm typecheck: Scope 18 of 19 workspace projects, every project Done.\npnpm test: Test Files 248 passed (248), Tests 5378 passed | 1 skipped (5379).\nGATE_EXIT=0\n\nRun separately, fresh, same working tree (its 470-char script does not fit the command field):\npnpm --filter @moe/scheduler exec node --input-type=module -e \"<the plan's step-6 smoke script verbatim>\" -> SMOKE_OK, SMOKE_EXIT=0",
+    "reportedAt": "2026-08-13T17:07:07.784Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/authority/resource-model.ts",
+    "packages/scheduler/src/authority/lease-resource.ts",
+    "packages/scheduler/src/authority/lease-resource.test.ts",
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/index-surface.test.ts",
+    "apps/daemon/src/work/work-claim.ts",
+    "apps/daemon/src/work/work-claim.test.ts",
+    "apps/daemon/src/work/work-vocabulary.test.ts",
+    "apps/daemon/src/work/work-race-world.ts"
+  ]
+}

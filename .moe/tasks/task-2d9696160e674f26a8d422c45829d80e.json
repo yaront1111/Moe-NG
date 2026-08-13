@@ -29,12 +29,11 @@
         "tests/integration/expansion-protocol.test.ts"
       ],
       "modifiedFiles": [
-        "packages/scheduler/src/index-surface.test.ts",
-        "tests/integration/expansion-protocol.test.ts"
+        "packages/scheduler/src/index-surface.test.ts"
       ],
-      "note": "RED established. packages/scheduler/src/index-surface.test.ts: added root-only type consumers + 36 failing cases for validateOpportunityAttestation and bindExpansionAdmission (healthy/frozen/detached, malformed, getter, extra key, identity mismatch x2, delegated fairness UNKNOWN, winner mismatch, malformed/terminal/changed hold, 5 missing-authority UNKNOWN cases, 5 current-authority mismatch codes, zero-authority key inventory); EXPECTED_EXPORTS 72 -> 77. tests/integration/expansion-protocol.test.ts: deleted test-owned admittedFrom and the unrelated hand-written HOLD_BINDING, aligned the hold graphEpoch to 11, journey now drives boundBinding() -> prepareExpansion, plus a hand-written 15/11 field partition table, an 11-case explicit-vs-projection table and a 15-case forged-preparation sweep. Fresh run: 36 failed | 1139 passed - \"bindExpansionAdmission is not a function\".",
-      "startedAt": "2026-08-13T15:57:56.791Z",
-      "completedAt": "2026-08-13T16:09:39.901Z"
+      "note": "RED reproduced both rejected gaps through the bare package root. Added to index-surface.test.ts: (a) a hand-counted 10-case hostile/unhashable bound-leaf sweep (BigInt at proposalId / budget line quantity / capacity unit, symbol, undefined, function, cycle, throwing toJSON, negative count, non-hex digest) asserting no throw plus EXPANSION_BINDING_REQUEST_MALFORMED/REQUEST/BRIDGE; (b) a 14-case forged-presented-hold sweep whose universe is asserted equal to Object.keys(activeHold()) minus the four fields an earlier gate answers, plus nested-accessor, extra-nested-key and grown-array cases, all pinning EXPANSION_BINDING_HOLD_STATE_MISMATCH/HOLD/BRIDGE. Fresh run: 27 failed | 142 passed. Observed causes match QA verbatim: \"TypeError: Do not know how to serialize a BigInt\", \"TypeError: Converting circular structure to JSON\", the remaining leaf cases answered PREPARATION_IDENTITY_MISMATCH instead of REQUEST, and every forged-hold case returned ok:true.",
+      "startedAt": "2026-08-13T16:55:38.001Z",
+      "completedAt": "2026-08-13T16:58:51.267Z"
     },
     {
       "stepId": "step-2",
@@ -43,12 +42,9 @@
       "affectedFiles": [
         "packages/scheduler/src/fairness/fairness-evidence.ts"
       ],
-      "modifiedFiles": [
-        "packages/scheduler/src/fairness/fairness-evidence.ts"
-      ],
-      "note": "Split the descriptor-safe attestation reader into parseAttestation(value, field) (exact three keys, opportunityRef/winnerWorkItemId identities, null observation -> existing UNKNOWN FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED/OPPORTUNITY_EVIDENCE naming `<field>.observationRef`) and kept the BYPASS-only self-attestation rule in readAttestation, so a SELECTION attestation naming its own winner is no longer refused by a rule that does not apply to it. Added public validateOpportunityAttestation returning only the detached deeply frozen attestation - no truth marker, no derived identity, never inferred from workItemId. Existing bypass codes/layers/messages unchanged. File 176 -> 210 lines (under the 250 target).",
-      "startedAt": "2026-08-13T16:09:42.392Z",
-      "completedAt": "2026-08-13T16:10:15.703Z"
+      "note": "Re-measured rather than re-implemented. `validateOpportunityAttestation` is already on disk at packages/scheduler/src/fairness/fairness-evidence.ts:129 sharing the exact three-key `parseAttestation` reader with the bypass path; missing observation still answers UNKNOWN FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED / OPPORTUNITY_EVIDENCE, malformed and unsafe identities keep FAIRNESS_CONTRACT_MALFORMED_INPUT / FAIRNESS_CONTRACT_INVALID_IDENTITY, and the bypass self-attestation rule is unchanged. QA raised no issue against this step and its six-case attestation sweep plus the two direct root tests pass in the fresh run below. No edit made — re-implementing a landed surface is the duplicate this project's rails forbid.",
+      "startedAt": "2026-08-13T16:58:55.845Z",
+      "completedAt": "2026-08-13T17:02:26.039Z"
     },
     {
       "stepId": "step-3",
@@ -58,15 +54,13 @@
         "packages/scheduler/src/expansion/expansion-preparation.ts"
       ],
       "modifiedFiles": [
-        "packages/scheduler/src/expansion/expansion-binding.ts",
-        "packages/scheduler/src/expansion/expansion-binding.js",
-        "packages/scheduler/src/index.ts",
-        "packages/scheduler/src/index-surface.test.ts",
-        "packages/scheduler/src/fairness/fairness-contract.test.ts"
+        "packages/scheduler/src/expansion/expansion-binding-facts.ts",
+        "packages/scheduler/src/expansion/expansion-binding-facts.js",
+        "packages/scheduler/src/expansion/expansion-binding.ts"
       ],
-      "note": "DEVIATION (rail-forced, disclosed): the plan named packages/scheduler/src/expansion/expansion-preparation.ts as the host. That file is 208 lines and the bridge is 374; combining them lands at 582, past the epic rail-5 HARD 400-line-per-file cap. Split instead into a new production source packages/scheduler/src/expansion/expansion-binding.ts (374 lines, under 400; the package precedent is expansion-preparation.ts beside expansion-admission.ts and supersession-disposition-contract.ts beside supersession-dispositions.ts) plus its required plain-Node re-export bridge expansion-binding.js. expansion-preparation.ts is unchanged and only its exported digestOf/ExpansionPreparation are consumed. Implemented: bindExpansionAdmission over an exact 4-key request; boundSnapshot rebuilds all 15 bound fields + 4 nested records + 4 string lists + 2 record lists through exactRecord/stringList/readList own-data readers in the admission's own key order, then digestOf(snapshot) is compared to preparation.identity (EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH/PREPARATION); opportunity validated by the production validator with delegated fairness code/layer/disposition verbatim under origin FAIRNESS and winner==admitted workItemId enforced locally; hold gated on outer ACTIVE/version 1/terminalReceipt null BEFORE replaying its own creation command through reduceExpansionPlanningHold (delegated under origin EXPANSION_HOLD), so a terminated hold cannot be resurrected by a replay; all five current-authority values compared with one code each at CURRENT_AUTHORITY, missing/unreadable staying UNKNOWN with missingInput; PlanningExpansionHoldBinding built from the validated hold plus daemon-current goalVersion with DAEMON_VERIFIED set inside the bridge and re-inspected through core inspectPlanningExpansionContract. pnpm --filter @moe/scheduler typecheck exit 0; test 42 files / 1175 passed.",
-      "startedAt": "2026-08-13T16:10:17.849Z",
-      "completedAt": "2026-08-13T16:15:46.081Z"
+      "note": "Closed both rejected fail-closed gaps. (1) Total leaf validation before hashing: the bound-facts reader now rebuilds every one of the 24 leaves through typed readers (lineageOf/fairnessOf/capacityOf/linesOf/budgetOf/resourceOf) proving each is a safe string, count or explicit null in the admission's own key order, so digestOf can no longer be reached by a BigInt, a cycle, a throwing toJSON, a symbol, a function or an undefined; an unprovable leaf is EXPANSION_BINDING_REQUEST_MALFORMED/REQUEST, not a TypeError and not an identity verdict. admittedOf is now total (its unreachable null branch is gone). (2) Presented-vs-replayed hold comparison: new matchesTrusted walks the REDUCER-produced state (so a hostile presented value cannot widen or unbound the walk) and reads the presented side only through own-data readers; any mismatched, accessor-hidden, extra-keyed or grown value refuses with the new EXPANSION_BINDING_HOLD_STATE_MISMATCH at layer HOLD, origin BRIDGE, added to the closed code tuple. Split under the per-file cap: new packages/scheduler/src/expansion/expansion-binding-facts.ts (228 lines) plus its .js bridge; expansion-binding.ts drops to 293 lines. pnpm --filter @moe/scheduler typecheck clean; packages/scheduler/src/index-surface.test.ts 169/169 pass (was 27 failed | 142 passed).",
+      "startedAt": "2026-08-13T17:02:28.600Z",
+      "completedAt": "2026-08-13T17:02:39.026Z"
     },
     {
       "stepId": "step-4",
@@ -79,15 +73,11 @@
         "tests/integration/expansion-protocol.test.ts"
       ],
       "modifiedFiles": [
-        "packages/scheduler/src/expansion/expansion-binding.ts",
-        "packages/scheduler/src/index.ts",
-        "packages/scheduler/src/index-surface.test.ts",
-        "tests/integration/expansion-protocol.test.ts",
-        "packages/scheduler/src/fairness/fairness-contract.test.ts"
+        "tests/integration/expansion-protocol.test.ts"
       ],
-      "note": "Output + publication complete. admittedOf maps the 15 explicit leaves byte-for-byte (budget accountId/admissionRef/reservationId + RESERVED, childKeys, fairness capRevisionRef/validated opportunityRef/resourceId/workItemId, goalVersion, observedAtSequence, proposalId, qualityDigest, resource epoch/resourceIds + HELD, revision, sourceDigests, bridge-owned DAEMON_VERIFIED) and sets evidenceDigest = digestOf(projectionOf(snapshot)) over exactly the 11 scheduler-only leaves (schedulerEvidenceDigest, graphEpoch, lineage, fairnessDisposition, roundsAdvanced, capacitySnapshot as already sorted by admission, provenBypasses, budgetLines, effectIntentRefs) - no explicitly mapped field appears in it. Result is deeply frozen with schedulerPreparationIdentity BESIDE {admitted, planningHoldBinding}; the only authority-shaped key in the whole output is parentRunRef (pinned by an exact-set test). index.ts curates bindExpansionAdmission, validateOpportunityAttestation, the 3 frozen vocabularies and the 9-name type closure; root namespace remeasured 72 -> 77 and pinned in index-surface.test.ts, driven from the bare @moe/scheduler root. Consumer task-c4171c1cfe854cb78dd233794b342025 recorded in the module contract. Integration journey rewritten: real hold first (graphEpoch aligned to the admitted 11), boundBinding() feeds planningHoldBinding to EXPANSION create/propose and admitted facts to prepareExpansion; test-owned admittedFrom and the unrelated HOLD_BINDING literal are gone. Added a delegated PLANNING_CONTRACT case (goalVersion 0 is a legal scheduler count and an illegal planning binding), so the core re-inspection is proven live. One forced out-of-plan edit: packages/scheduler/src/fairness/fairness-contract.test.ts line 626 hand-written module export count 1 -> 2, unavoidable because publishing validateOpportunityAttestation changes that count; the name rules it polices are unchanged (validate* prefix). Fresh: scheduler typecheck 0, scheduler 42 files/1176 passed, core 28 files/579 passed, integration 146 passed.",
-      "startedAt": "2026-08-13T16:15:48.364Z",
-      "completedAt": "2026-08-13T16:16:53.508Z"
+      "note": "Publication and journey re-verified after the repair. The root namespace is unchanged: the new expansion-binding-facts module is INTERNAL (boundSnapshot/projectionOf/admittedOf/matchesTrusted are not published), so index.ts still exports exactly bindExpansionAdmission, validateOpportunityAttestation and the three frozen vocabularies, and the hand-transcribed exact-namespace guard in index-surface.test.ts passes untouched. Integration journey updated for the new closed code: EXPANSION_BINDING_ISSUE_CODES.length pinned 10 -> 11, plus a new composed-layer case forging parentRunRef on the journey's own reducer-produced hold while leaving its creation receipt and all five current-authority values untouched, asserting EXPANSION_BINDING_HOLD_STATE_MISMATCH/HOLD/BRIDGE — the exact attack QA demonstrated. The 15-case BOUND_MUTATIONS sweep still answers PREPARATION_IDENTITY_MISMATCH (every mutation uses a type-valid value, so leaf validation does not steal those cases). tests/integration/expansion-protocol.test.ts: 147 passed.",
+      "startedAt": "2026-08-13T17:02:46.904Z",
+      "completedAt": "2026-08-13T17:03:25.746Z"
     },
     {
       "stepId": "step-5",
@@ -100,18 +90,9 @@
         "packages/scheduler/src/index-surface.test.ts",
         "tests/integration/expansion-protocol.test.ts"
       ],
-      "modifiedFiles": [
-        "packages/scheduler/src/expansion/expansion-binding.ts",
-        "packages/scheduler/src/expansion/expansion-binding.js",
-        "packages/scheduler/src/index.ts",
-        "packages/scheduler/src/index-surface.test.ts",
-        "packages/scheduler/src/fairness/fairness-evidence.ts",
-        "packages/scheduler/src/fairness/fairness-contract.test.ts",
-        "tests/integration/expansion-protocol.test.ts"
-      ],
-      "note": "Concentrated task gate from D:/projexts/moe-next, foreground, exit 0: core typecheck + scheduler typecheck + core test (28 files/579) + scheduler test (42 files/1176) + vitest tests/integration/expansion-protocol.test.ts (146 passed). Repo-wide legs at HEAD ALL GREEN, so the (HEAD minus merge-base) failing-path delta is empty by construction and no foreign red needs disclosing: pnpm typecheck exit 0 (17 projects Done), pnpm test 248 files / 5325 passed | 1 skipped, pnpm verify:foundation 30 files/487, pnpm verify:store 39 files/444. Design SHA-256 re-measured on D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md = 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191, unchanged. Physical lines: expansion-binding.ts 374, expansion-preparation.ts 208 (untouched), fairness-evidence.ts 210, index.ts 328 - all under the 400 hard cap, longest line in the new source is 100 chars and zero lines exceed 100, so no one-line compression evasion. Plain-Node probe from packages/scheduler under --experimental-strip-types: root resolves 77 exports, bindExpansionAdmission and validateOpportunityAttestation are functions, the three frozen vocabularies read 10/5/4, and both refuse live (REFUSED:EXPANSION_BINDING_REQUEST_MALFORMED:REQUEST:BRIDGE and UNKNOWN:FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED:OPPORTUNITY_EVIDENCE). git status over owned paths shows exactly 5 modified + 2 new files and no scratch/generated evidence.",
-      "startedAt": "2026-08-13T16:16:55.628Z",
-      "completedAt": "2026-08-13T16:18:09.294Z"
+      "note": "Fresh gate, all foreground, from D:/projexts/moe-next. Declared task gate exit 0: core typecheck + scheduler typecheck clean; @moe/core test 28 files / 579 tests; @moe/scheduler test 42 files / 1217 tests (the lease-resource.test.ts:180 foreign red disclosed at reopen is gone — that peer's WIP landed); tests/integration/expansion-protocol.test.ts 147 tests. Repo-wide legs at HEAD are all green, so the path-attributed baseline is trivially empty: pnpm typecheck Done for every package, pnpm test 248 files / 5378 passed | 1 skipped, pnpm verify:foundation 30 files / 487, pnpm verify:store 39 files / 444. Design SHA-256 of D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md is unchanged at 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. Physical line counts (grep -c ''): expansion-binding.ts 291, expansion-binding-facts.ts 228, fairness-evidence.ts 210, index.ts 332 — all under 400, and max line width is 100 in both production sources, so no one-line compression evasion. Plain Node with type stripping loads the bare package root from packages/scheduler: 78 root values, bindExpansionAdmission and validateOpportunityAttestation both functions, 11 published codes including EXPANSION_BINDING_HOLD_STATE_MISMATCH, and bindExpansionAdmission(null) returns REQUEST_MALFORMED/REQUEST/BRIDGE. git status shows only the owned paths plus foreign .moe/tasks entries; no scratch or generated evidence remains.",
+      "startedAt": "2026-08-13T17:03:28.205Z",
+      "completedAt": "2026-08-13T17:05:01.408Z"
     },
     {
       "stepId": "step-6",
@@ -125,42 +106,51 @@
         "tests/integration/expansion-protocol.test.ts"
       ],
       "modifiedFiles": [
-        "packages/scheduler/src/expansion/expansion-binding.ts",
-        "packages/scheduler/src/expansion/expansion-binding.js",
         "packages/scheduler/src/index-surface.test.ts",
-        "packages/scheduler/src/index.ts",
-        "packages/scheduler/src/fairness/fairness-evidence.ts",
-        "packages/scheduler/src/fairness/fairness-contract.test.ts",
         "tests/integration/expansion-protocol.test.ts"
       ],
-      "note": "ADVERSARIAL PROBE (40 attacks through the plain-Node package root, temp script, deleted): duplicate calls byte-identical; result deeply frozen at every level; reordered request keys still bind; revoked proxies as request/preparation/hold all REQUEST_MALFORMED; a getter on a nested bound field REQUEST_MALFORMED; a sparse array hole REQUEST_MALFORMED; NaN/-1/2^53/Infinity/-0/\"7\"/null current versions all UNKNOWN (never a silent mismatch); forged frozen preparation and correct-bound-wrong-identity both PREPARATION_IDENTITY_MISMATCH; wrong winner FAIRNESS; a REALLY terminated hold HOLD_INACTIVE; all five changed current values give their own code; reordered capacitySnapshot PREPARATION_IDENTITY_MISMATCH; missing member and empty/0/false/[]/{} opportunity sweeps refuse; output authority-shaped keys are exactly [\"parentRunRef\"]; caller mutation after the call cannot move the result. TWO probe results needed judgement rather than a fix: (a) a childKeys array with a hijacked Symbol.iterator binds - correct, because stringList reads by index and the forged iterator never reaches the digest; (b) reordered resourceIds bound - a no-op mutation, the fixture has one resource id. ONE REAL GAP FOUND AND CLOSED: a terminated hold laundered back to {lifecycle ACTIVE, version 1, terminalReceipt null} is byte-identical to a live hold and replays cleanly, so no value inspection can catch it - the daemon's current holdVersion is what does. Added an index-surface test asserting BOTH halves (honest terminal -> HOLD_INACTIVE/HOLD; laundered + honest current version -> HOLD_VERSION_MISMATCH/CURRENT_AUTHORITY) and stated the limit in the module contract instead of implying more. MUTATION DRILLS, 10 arms, each restored and sha256-verified byte-identical (bind 12a6f5ebc9e8c828..., fair e4719366d595c715...): D1 code-only and D2 layer-only on the identity refusal (both RED, 17 tests - the whole forged-preparation sweep); D3 bypass the identity comparison RED 17; D4 accept a null observation RED 2 (the two literal-pinning tests, not the direct-vs-composed comparison which would drift together); D5 drop the selected-winner comparison RED 1; D6 accept a terminal hold RED 3; D7 skip the holdVersion comparison RED 2; D8 layer-only on the current-authority family RED 6; D9 omit one explicit mapping RED 1 (its own BRIDGE_CASES entry); D10 omit one projection-only field RED 1 (its own entry). Every arm reddened its own subject by name - no arm passed on an unrelated shape assertion. Step-5 gate re-run after restore: exit 0 (core 579, scheduler 1177, integration 146); repo-wide pnpm typecheck 0 and pnpm test 248 files / 5327 passed | 1 skipped. Committed f6be16e by explicit pathspec over exactly the 7 owned paths; the foreign packages/runner/claude-launcher edits are left uncommitted and untouched.",
-      "startedAt": "2026-08-13T16:18:14.803Z",
-      "completedAt": "2026-08-13T16:24:49.606Z"
+      "note": "Adversarial review found two further real gaps, both closed; then all drills re-run byte-restored.\n\nPROBES (28 hostile inputs through the bare package root, throwaway script outside the repo, deleted): revoked and throwing proxies as request/hold/preparation/current-authority/nested-release; NaN, Infinity, negative, negative-zero, huge and string authority counts; null/array/__proto__ requests; frozen forged preparation; reordered capacity list; array hole; symbol keys on bound facts and on the hold; 200k childKeys; 50k-deep nested leaf; injection-shaped proposalId; terminal hold replayed with its creation command; wrong-winner and truth-marker opportunities. Every one fails closed with an exact code and layer, none throws. Controls: healthy request binds, two calls agree byte-for-byte, result deeply frozen, and the only authority-shaped output key is parentRunRef. ONE probe was ACCEPTED and examined: a symbol-keyed custom iterator on the childKeys array. Correct — stringList reads by index, the carried list is the honest [\"child-1\",\"child-2\"], no forged value appears in the output, and the array is detached. A decoration production never reads is not an authority fact.\n\nDRILLS (16 arms; each anchor-count-guarded at exactly 1, each restored and sha256-verified against the pre-drill backup — binding 2a962bb8..., facts 182c03bd..., fairness e4719366...): code-only and layer-only on EXPANSION_BINDING_HOLD_STATE_MISMATCH run separately (18 red each); skip the presented-vs-replayed comparison (18 red); weaken the extra-nested-key check (exactly 1 red: the extra-key test); drop the provenBypasses / qualityDigest / budget-line-quantity leaf checks (1, 2, 1 red, each its own named hostile-leaf case); skip the preparation identity comparison (17 red); accept a null opportunity observation (2 red); drop the selected-winner comparison (1 red); skip the holdVersion comparison (2 red, including the laundered-hold test); omit one projection-only field (exactly 1 red: \"moves only the projection digest for graphEpoch\"); downgrade the bridge-owned truthClass (root healthy test red); drop the childKeys mapping — reddens by the PRODUCTION consumer, core prepareExpansion refusing EXPANSION_PREPARATION_INPUT_INVALID at journey construction, which also proves the journey really drives core preparation.\n\nTWO ARMS CAME BACK GREEN AND WERE REAL GAPS, NOT WEAK MUTATIONS. (a) Deleting version !== 1 and terminalReceipt !== null from the outer hold gate left the suite green, because the new state comparison catches those too — with a different code. Which gate answers was unpinned. Added two BINDING_CASES pinning EXPANSION_BINDING_HOLD_INACTIVE for an ACTIVE hold at version 2 and one carrying a terminal receipt; count updated 13 -> 15, distinct codes still 9. (b) Swapping qualityDigest for evidenceDigest in the explicit mapping left the suite green: only 5 of the 15 explicit core fields had a BRIDGE_CASES perturbation, so the partition table proved assignment but never correct carrying. Added the integration test \"carries every explicit core field from its scheduler source, byte for byte\" — both sides read from production surfaces, with a hand-pinned count of 15 and a distinctness check so a constant-returning mapping cannot pass. Re-ran both drills: each now reddens exactly its own subject.\n\nFinal state: fresh gate green (core 579, scheduler 1219, integration 148, repo-wide 248 files / 5381 passed | 1 skipped), design hash unchanged, expansion-binding.ts 291 and expansion-binding-facts.ts 228 physical lines with max width 100. Committed adf8f36 by explicit pathspec over the five owned paths only; git status over those paths is empty, so the committed bytes are the gated bytes. All scratch scripts lived outside the repo and are deleted.",
+      "startedAt": "2026-08-13T17:05:06.138Z",
+      "completedAt": "2026-08-13T17:13:41.548Z"
     }
   ],
   "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "Rejected after diff/DoD review and fresh production-surface probes. Core's declared leg passed (28 files/579 tests). The scheduler leg was temporarily foreign-red at authority/lease-resource.test.ts:180 from concurrent uncommitted WIP; the task-owned root/fairness/integration suites passed 3 files/437 tests, so that foreign failure is disclosed but not attributed. Production files are 380/210/328 lines (<400), design hash is unchanged, and owned bytes are clean. Two task-owned fail-closed gaps remain: an unhashable preparation leaf escapes as a thrown TypeError, and a presented hold that differs from its creation receipt is accepted. Both QA probes were removed and index-surface.test.ts restored hash-exact.",
   "createdBy": "WORKER",
   "parentTaskId": "task-005c9896f9724ece80b27f44789d0435",
   "priority": "HIGH",
   "order": 22.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-7dadf8208bf046ffaa3c4c1c281c0594",
+      "author": "governor-7c5e6be6",
+      "content": "Governance queue nudge: implementation is complete at 6/6 and task is unassigned in REVIEW. QA should claim and verify this first because task-c4171c1 and the expansion parent are serially blocked on its DONE result; do not promote downstream on REVIEW alone.",
+      "timestamp": "2026-08-13T16:45:25.200Z"
+    },
+    {
+      "id": "comment-466b0da50f7c46858fe21c03401b9297",
+      "author": "governor-7c5e6be6",
+      "content": "Governance triage: first QA rejection; both findings are concrete task-owned fail-closed repairs (unhashable leaf containment and presented-vs-replayed hold equality), not a re-plan loop. Keep WORKING with worker-733c82bb; downstream task-c4171c1 remains BLOCKED until QA verifies DONE.",
+      "timestamp": "2026-08-13T16:52:52.032Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:23:29.092Z",
-  "updatedAt": "2026-08-13T16:26:18.079Z",
+  "updatedAt": "2026-08-13T17:14:28.896Z",
   "contextFetchedBy": [
-    "architect-a9210e34",
-    "worker-68608f71"
+    "worker-733c82bb"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T15:46:16.462Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1
   },
   "stepsCompleted": [
     "step-1",
@@ -170,7 +160,18 @@
     "step-5",
     "step-6"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "A public production bridge accepts only a successful scheduler ExpansionPreparation plus the exact required current authority evidence and returns the closed core ExpansionAdmittedFacts/PlanningExpansionHoldBinding inputs without caller-invented refs or truth upgrades.",
+      "rejectedAt": "2026-08-13T16:52:14.304Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "Hold-to-PlanningRun binding uses the exact reducer-produced hold plus a daemon-current goalVersion input and refuses mismatched hold/current authority with a stable exact code and layer.",
+      "rejectedAt": "2026-08-13T16:52:14.304Z",
+      "rejectedBy": "qa-41bfec20"
+    }
+  ],
   "planSubmittedAt": "2026-08-13T15:57:31.522Z",
   "planningNotes": {
     "approachesConsidered": "Rejected three unsafe shapes. (1) Do not keep the integration-only `admittedFrom`: QA already proved a test helper is not a production consumer. (2) Do not add `@moe/scheduler` to core or deep-import either package; scheduler already depends on the public `@moe/core` root, so the bridge belongs on the scheduler side. (3) Do not place the full scheduler preparation digest beside every individually mapped field in core admitted facts: that double-binds each fact and lets a dropped mapping hide behind the aggregate digest. The selected design extends the existing scheduler `expansion-preparation.ts` seam: verify the source preparation identity, validate one selected fairness opportunity through the production fairness reader, partition scheduler fields between explicit core fields and one digest containing only scheduler-only fields, validate the active hold by replaying its creation command through the core reducer, and derive the hold contract using daemon-current authority. Existing `.js` bridges remain sufficient, keeping the task to five files.",
@@ -188,24 +189,73 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-13T16:48:06.110Z",
+    "escalatedAt": "2026-08-13T16:48:06.110Z"
   },
   "planApprovedAt": "2026-08-13T15:57:33.565Z",
   "workStartedAt": "2026-08-13T15:57:56.791Z",
-  "reviewStartedAt": "2026-08-13T16:26:18.079Z",
+  "reviewStartedAt": "2026-08-13T17:14:28.895Z",
   "verification": {
     "command": "pnpm --filter @moe/core test && pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "$ vitest run --root ../.. packages/core/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  28 passed (28)\n      Tests  579 passed (579)\n   Start at  19:25:17\n   Duration  794ms (transform 5.70s, setup 0ms, import 8.70s, tests 1.02s, environment 2ms)\n\n$ vitest run --root ../.. packages/scheduler/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  42 passed (42)\n      Tests  1177 passed (1177)\n   Start at  19:25:18\n   Duration  1.34s (transform 10.92s, setup 0ms, import 14.65s, tests 2.07s, environment 3ms)\nGATE=0",
-    "reportedAt": "2026-08-13T16:26:18.079Z"
+    "outputTail": "@moe/core: Test Files 28 passed (28) | Tests 579 passed (579) | Duration 740ms\n@moe/scheduler: Test Files 42 passed (42) | Tests 1219 passed (1219) | Duration 1.02s",
+    "reportedAt": "2026-08-13T17:14:28.895Z"
   },
   "filesModified": [
     "packages/scheduler/src/index-surface.test.ts",
-    "tests/integration/expansion-protocol.test.ts",
     "packages/scheduler/src/fairness/fairness-evidence.ts",
+    "packages/scheduler/src/expansion/expansion-binding-facts.ts",
+    "packages/scheduler/src/expansion/expansion-binding-facts.js",
     "packages/scheduler/src/expansion/expansion-binding.ts",
-    "packages/scheduler/src/expansion/expansion-binding.js",
-    "packages/scheduler/src/index.ts",
-    "packages/scheduler/src/fairness/fairness-contract.test.ts"
+    "tests/integration/expansion-protocol.test.ts",
+    "packages/scheduler/src/expansion/expansion-preparation.ts",
+    "packages/scheduler/src/index.ts"
+  ],
+  "reviewCompletedAt": "2026-08-13T16:52:14.304Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "A public production bridge accepts only a successful scheduler ExpansionPreparation plus the exact required current authority evidence and returns the closed core ExpansionAdmittedFacts/PlanningExpansionHoldBinding inputs without caller-invented refs or truth upgrades.",
+      "Hold-to-PlanningRun binding uses the exact reducer-produced hold plus a daemon-current goalVersion input and refuses mismatched hold/current authority with a stable exact code and layer."
+    ],
+    "issues": [
+      {
+        "type": "security",
+        "file": "packages/scheduler/src/expansion/expansion-binding.ts",
+        "line": 346,
+        "description": "bindExpansionAdmission calls digestOf(snapshot) before validating or containing all leaf values. QA replaced preparation.bound.proposalId with BigInt; the public root threw `TypeError: Do not know how to serialize a BigInt` instead of EXPANSION_BINDING_REQUEST_MALFORMED/REQUEST. Validate or safely canonicalize every leaf and add a positive-count unhashable/hostile leaf sweep pinning exact code/layer."
+      },
+      {
+        "type": "security",
+        "file": "packages/scheduler/src/expansion/expansion-binding.ts",
+        "line": 264,
+        "description": "activeHoldOf checks only outer lifecycle/version/terminalReceipt, replays creationReceipt.command, and never compares the presented hold with the reducer-produced state. QA changed presented parentRunRef to `run:forged` while leaving receipt/current authority unchanged; bindExpansionAdmission returned ok:true and discarded the forged byte. Refuse every presented/replayed hold mismatch with a stable exact code/layer and perturb each authority field."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Rejected after diff/DoD review and fresh production-surface probes. Core's declared leg passed (28 files/579 tests). The scheduler leg was temporarily foreign-red at authority/lease-resource.test.ts:180 from concurrent uncommitted WIP; the task-owned root/fairness/integration suites passed 3 files/437 tests, so that foreign failure is disclosed but not attributed. Production files are 380/210/328 lines (<400), design hash is unchanged, and owned bytes are clean. Two task-owned fail-closed gaps remain: an unhashable preparation leaf escapes as a thrown TypeError, and a presented hold that differs from its creation receipt is accepted. Both QA probes were removed and index-surface.test.ts restored hash-exact.",
+      "rejectedAt": "2026-08-13T16:52:14.304Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "A public production bridge accepts only a successful scheduler ExpansionPreparation plus the exact required current authority evidence and returns the closed core ExpansionAdmittedFacts/PlanningExpansionHoldBinding inputs without caller-invented refs or truth upgrades.",
+        "Hold-to-PlanningRun binding uses the exact reducer-produced hold plus a daemon-current goalVersion input and refuses mismatched hold/current authority with a stable exact code and layer."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/scheduler/src/expansion/expansion-binding.ts",
+          "line": 346,
+          "description": "bindExpansionAdmission calls digestOf(snapshot) before validating or containing all leaf values. QA replaced preparation.bound.proposalId with BigInt; the public root threw `TypeError: Do not know how to serialize a BigInt` instead of EXPANSION_BINDING_REQUEST_MALFORMED/REQUEST. Validate or safely canonicalize every leaf and add a positive-count unhashable/hostile leaf sweep pinning exact code/layer."
+        },
+        {
+          "type": "security",
+          "file": "packages/scheduler/src/expansion/expansion-binding.ts",
+          "line": 264,
+          "description": "activeHoldOf checks only outer lifecycle/version/terminalReceipt, replays creationReceipt.command, and never compares the presented hold with the reducer-produced state. QA changed presented parentRunRef to `run:forged` while leaving receipt/current authority unchanged; bindExpansionAdmission returned ok:true and discarded the forged byte. Refuse every presented/replayed hold mismatch with a stable exact code/layer and perturb each authority field."
+        }
+      ]
+    }
   ]
 }

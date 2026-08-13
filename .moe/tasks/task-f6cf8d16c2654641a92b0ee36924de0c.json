@@ -29,10 +29,17 @@
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
   "order": 13.54,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-f7412232b3804357a52e6d9f240c1f52",
+      "author": "governor-7c5e6be6",
+      "content": "Governance queue priority: this is the next independent recovery prerequisite to plan. task-47eecd22 and the coordinator chain are explicitly blocked on its frozen class mapping; claim before dependent recovery tasks, re-measure current public roots, and keep the mapping non-duplicating.",
+      "timestamp": "2026-08-13T16:54:04.288Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-13T16:22:16.090Z",
+  "updatedAt": "2026-08-13T16:54:04.288Z",
   "contextFetchedBy": [
     "architect-a9210e34"
   ]

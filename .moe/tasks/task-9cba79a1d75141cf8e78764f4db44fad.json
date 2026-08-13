@@ -1,0 +1,34 @@
+{
+  "id": "task-9cba79a1d75141cf8e78764f4db44fad",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Daemon command registry extraction",
+  "description": "Objective: create room for the effect.activate ingress without growing the 397-line daemon-store-dependencies.ts past the split-before-400 rail. Deliverable: move the existing capability/family/payload-key maps, request injection, CommandRegistryEntry construction, registry assembly, and decision/refusal adapter into a focused daemon-command-registry module with its LF .js bridge; daemon-store-dependencies.ts delegates to it and preserves its current public compatibility exports/callers byte-for-byte in behavior. Consumer: task-e33747f982e0452a9f9d784fd1cb914d will add only the new effect.activate entry to the extracted seam. NOT in scope: registering effect.activate, changing authorization/payload policy, recovery reads, store schema, or activation behavior. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && a plain-Node daemon default-provider construction smoke.",
+  "definitionOfDone": [
+    "daemon-store-dependencies.ts delegates registry/decision construction to the new focused module and is reduced below 300 physical lines; no production source created or changed by the task reaches 400 lines.",
+    "All pre-existing command kinds retain the exact required capability, family, payload allow-list, injected store/project request fields, handler, refusal code/layer and replay behavior through handleCommandRequest(createStoreDependencies(...).provide()).",
+    "agentCapabilitiesFor remains available to agent-wrapper through the established daemon-local import or an explicit compatibility re-export; no caller is switched to a deep package import.",
+    "The new .js bridge is exact one-line LF `export * from './daemon-command-registry.ts';`, and the plain-Node default-provider smoke loads the real runtime path.",
+    "Focused daemon typecheck/tests pass and a mutation of one extracted capability or payload-key mapping reddens its named production-ingress test."
+  ],
+  "taskRails": [
+    "This is a behavior-preserving extraction: do not add effect.activate or alter any existing command contract.",
+    "TDD/characterization tests assert exact command kind, capability, payload allow-list and refusal code/layer rather than only accepted/refused.",
+    "Preserve foreign work and stage/commit only explicit owned paths; target <=250 lines for the new production module and split before 400.",
+    "Use LF one-line runtime bridges and public package roots across package boundaries."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
+  "priority": "CRITICAL",
+  "order": 13.524,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T16:43:30.111Z",
+  "updatedAt": "2026-08-13T16:43:30.111Z"
+}
