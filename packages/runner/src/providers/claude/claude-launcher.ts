@@ -13,9 +13,9 @@ import { directFailure, settleClaudeLaunch } from "./claude-launcher-lifecycle.j
 import { decodeCommit, decodeDuplicate, decodeGrant, decodeLease, decodeRegistration,
   decodeRuntime, isSafeNativePromise, snapshotLaunchEntry, snapshotLauncherPorts,
   type DecodedDuplicate, type PortDecision } from "./claude-launcher-port-results.js";
-import { type ClaudeLaunchDuplicate, type ClaudeLaunchFailure, type ClaudeLaunchLockLease,
-  type ClaudeLaunchLockResult, type ClaudeLaunchOptions, type ClaudeLaunchResult,
-  type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
+import { pendingProcessIdentity, type ClaudeLaunchDuplicate, type ClaudeLaunchFailure,
+  type ClaudeLaunchLockLease, type ClaudeLaunchLockResult, type ClaudeLaunchOptions,
+  type ClaudeLaunchResult, type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
 import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 export * from "./claude-launcher-contract.js";
 /**
@@ -28,7 +28,13 @@ export * from "./claude-launcher-contract.js";
  * `catch` rejects the public promise just as effectively as a throw. Once the
  * lock is held, `settleClaudeLaunch` owns the single exit.
  */
-const defaults: ClaudeLauncherDependencies = Object.freeze({
+/**
+ * The shipped production port set. Exported for the durable-authority overlay in
+ * this package to compose; it is deliberately NOT on the published seam, because
+ * a consumer that could take these one at a time could replace the Windows
+ * physical boundary alone and keep every other guarantee's appearance.
+ */
+export const CLAUDE_LAUNCHER_DEFAULTS: ClaudeLauncherDependencies = Object.freeze({
   prepareRuntime: prepareClaudeRuntimePin,
   resolveDuplicate: resolveDuplicateDelivery,
   validateCommit: validateActivationCommit,
@@ -111,7 +117,7 @@ export async function launchClaude(
   try { snapshot = snapshotClaudeLaunchRequest(value); } catch { return malformed(REQUEST_MALFORMED); }
   if (snapshot === null) return malformed(REQUEST_MALFORMED);
   const request = snapshot;
-  const ports = snapshotLauncherPorts(entry.deps ?? defaults);
+  const ports = snapshotLauncherPorts(entry.deps ?? CLAUDE_LAUNCHER_DEFAULTS);
   if (ports === null) return malformed("the launcher dependency capabilities are unusable");
   if (request.duplicateDelivery !== null) {
     const decided = contained(() => ports.resolveDuplicate(request.duplicateDelivery), decodeDuplicate);
@@ -140,7 +146,8 @@ export async function launchClaude(
   }
   const preflight = contained(() => ports.registerLock({
     lockIdentity: (request.claim as { lockIdentity?: unknown }).lockIdentity,
-    wrapperIdentity: request.wrapperIdentity, processIdentity: `pending:${request.wrapperIdentity}`,
+    wrapperIdentity: request.wrapperIdentity,
+    processIdentity: pendingProcessIdentity(request.wrapperIdentity),
     bootstrapCredentialDigest: request.bootstrapCredentialDigest, registeredAt: ports.now(),
   }, request.claim, request.priorRegistration), decodeRegistration);
   if (preflight.kind === "REFUSED") {

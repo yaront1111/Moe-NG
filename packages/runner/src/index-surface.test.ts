@@ -59,9 +59,10 @@ import type {
   BuildObservationInput, BuildObservationResult, BuildVerificationRecipeResult, CandidateTreeEntry,
   CandidateTreePort, ClaudeLaunchErrorCode, ClaudeLaunchFailure, ClaudeLaunchLayer,
   ClaudeLaunchLimits, ClaudeLaunchLockLease, ClaudeLaunchLockResult, ClaudeLaunchObservation,
-  ClaudeLaunchOptions, ClaudeLaunchRequest,
-  ClaudeLaunchResult, ClaudeLaunchTruthClass, ClaudeLauncherDependencies, ClaudeProcessExit,
-  ClaudeRawRetention, ClaudeReconciledOutcome,
+  ClaudeLaunchOptions, ClaudeLaunchRegistrationPhase, ClaudeLaunchRequest,
+  ClaudeLaunchResult, ClaudeLaunchTruthClass, ClaudeLauncherAuthority,
+  ClaudeLauncherDependencies, ClaudeProcessExit,
+  ClaudeRawRetention, ClaudeReconciledOutcome, ClaudeRegistrationCommit,
   ClaudeReconciliation, ClaudeStreamAnomaly, ClaudeStreamDisposition, ClaudeStreamEvent,
   ClaudeStreamRecord, CrashClassification, DeclaredInput, DischargedObligation, DrainAdvance,
   DrainDisposition, DrainReason, DrainTerminalTarget, EvidenceFailure, EvidenceObligationKind,
@@ -178,6 +179,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["CLAUDE_LAUNCHER_VERSION", "string"], ["CLAUDE_LAUNCH_ERROR_CODES", "array"],
   ["CLAUDE_LAUNCH_LAYERS", "array"], ["CLAUDE_LAUNCH_TRUTH_CLASSES", "array"],
   ["launchClaude", "function"],
+  // The durable-authority overlay. The FACTORY is published; the shipped default
+  // port set behind it is not, so the two authority slots are the only ones a
+  // consumer can reach. See the withheld-name control below.
+  ["CLAUDE_LAUNCH_REGISTRATION_PHASES", "array"], ["createClaudeLauncher", "function"],
   // platform/: the OS-neutral boundary vocabulary and the Linux classifier.
   ["LINUX_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_BOUNDARIES", "array"],
   ["PLATFORM_ERROR_CODES", "array"], ["PLATFORM_LAYERS", "array"],
@@ -203,7 +208,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(159);
+  expect(EXPECTED_EXPORTS.length).toBe(161);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -529,6 +534,51 @@ it("lets a root-only consumer construct and narrow the Claude launcher", async (
     code: "GRANT_WRAPPER_MISMATCH", layer: "GRANT", truth: "UNKNOWN",
   });
   expect({} as ClaudeLaunchObservation).toBeDefined();
+});
+
+/**
+ * Type-only exports are invisible to the `Object.keys` guard above, so each new
+ * type has to ANNOTATE a real value here or an unpublished one would go
+ * unnoticed until a consumer's own repository failed to compile. The launch is
+ * refused on platform, so this constructs the seam without spawning anything.
+ */
+it("gives a root-only consumer the durable launcher authority type closure", async () => {
+  const phases: readonly ClaudeLaunchRegistrationPhase[] =
+    runner.CLAUDE_LAUNCH_REGISTRATION_PHASES;
+  const commits: ClaudeRegistrationCommit[] = [];
+  const authority: ClaudeLauncherAuthority = {
+    consumeGrantDurably: (grant, wrapperIdentity) =>
+      runner.consumeActivationGrant(grant, wrapperIdentity),
+    commitProcessRegistration: (commit) => {
+      commits.push(commit);
+      const phase: ClaudeLaunchRegistrationPhase = commit.phase;
+      return { kind: "REGISTERED", ok: true, registration: commit.registration, phase };
+    },
+  };
+  const launch = runner.createClaudeLauncher(authority);
+  const result: ClaudeLaunchResult = await launch({}, { platform: "linux" });
+  expect(phases).toEqual(["PREFLIGHT", "STARTED"]);
+  expect(result).toMatchObject({
+    kind: "REFUSED", code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER",
+  });
+  expect(commits).toEqual([]);
+});
+
+/**
+ * Negative control for the seam's WIDTH. The factory is published precisely so
+ * the eight non-authority ports do not have to be: a consumer able to take them
+ * one at a time could replace the Windows physical boundary alone and keep every
+ * other guarantee's appearance. If any of these ever appears on the root, the
+ * factory has stopped being the only way in.
+ */
+it("withholds the launcher's default ports and internals from the root", () => {
+  const withheld = [
+    "CLAUDE_LAUNCHER_DEFAULTS", "classifyRegistrationPhase", "durableRegistrationPort",
+    "acquireWindowsLaunchLock", "openWindowsProcessBoundary", "prepareClaudeRuntimePin",
+    "registerLaunchLock", "resolveDuplicateDelivery", "intakeProcessObservation",
+  ];
+  expect(withheld.length).toBe(9);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
 });
 
 function recordsOf(overrides: Overrides = {}): Overrides {

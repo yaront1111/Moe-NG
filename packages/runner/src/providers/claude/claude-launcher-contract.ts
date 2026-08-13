@@ -145,3 +145,50 @@ export interface ClaudeLaunchOptions {
   readonly signal?: AbortSignal;
   readonly deps?: ClaudeLauncherDependencies;
 }
+/**
+ * The two moments the launcher registers a process identity, and the ONE place
+ * those identity strings are built.
+ *
+ * PREFLIGHT names an intention: no process exists yet, so the identity is the
+ * wrapper's, marked pending. STARTED names an observed fact. A durable consumer
+ * may reserve at PREFLIGHT but must only treat STARTED as process authority —
+ * a persisted pending record, fed back as `priorRegistration`, would make
+ * `registerLaunchLock` refuse a legitimate restart instead of adopting it.
+ *
+ * The builders exist because the launcher compares a registration's
+ * `processIdentity` against a freshly rebuilt string to detect boundary drift.
+ * Two literals would let a format change pass that comparison silently, so both
+ * call sites and the phase classifier read from here.
+ */
+export const CLAUDE_LAUNCH_REGISTRATION_PHASES = Object.freeze(["PREFLIGHT", "STARTED"] as const);
+export type ClaudeLaunchRegistrationPhase = (typeof CLAUDE_LAUNCH_REGISTRATION_PHASES)[number];
+export const CLAUDE_PENDING_IDENTITY_PREFIX = "pending:";
+export const CLAUDE_STARTED_IDENTITY_PREFIX = "windows:";
+export function pendingProcessIdentity(wrapperIdentity: string): string {
+  return `${CLAUDE_PENDING_IDENTITY_PREFIX}${wrapperIdentity}`;
+}
+export function startedProcessIdentity(pid: number, creationTime: bigint): string {
+  return `${CLAUDE_STARTED_IDENTITY_PREFIX}${pid}:${creationTime}`;
+}
+/**
+ * What the launcher hands a durable registration port. `claim` and `prior` stay
+ * `unknown`: they are the caller's own records travelling back out unchanged, and
+ * the launcher has already used the validated `registration` for every decision
+ * it makes itself.
+ */
+export interface ClaudeRegistrationCommit {
+  readonly phase: ClaudeLaunchRegistrationPhase;
+  readonly registration: LaunchLockRegistration;
+  readonly claim: unknown;
+  readonly prior: unknown;
+}
+/**
+ * The two authority ports a daemon supplies to make a launch durable. Both
+ * return `unknown` for the same reason `ClaudeLauncherDependencies` does: these
+ * cross a process boundary, so a declared return type would be a claim about
+ * someone else's code. The launcher decodes both before branching.
+ */
+export interface ClaudeLauncherAuthority {
+  consumeGrantDurably(grant: unknown, wrapperIdentity: unknown): unknown;
+  commitProcessRegistration(commit: ClaudeRegistrationCommit): unknown;
+}

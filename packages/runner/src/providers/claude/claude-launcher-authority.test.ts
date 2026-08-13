@@ -26,6 +26,8 @@ import {
 } from "@moe/runner";
 
 import { type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
+import { classifyRegistrationPhase,
+  durableRegistrationPort } from "./claude-launcher-authority.js";
 import { type WindowsProcessOutcome } from "../../platform/windows/windows-process-contract.js";
 import { consumeActivationGrant, grantRefusal } from "../../supervisor/effect-grant.js";
 import { parseActivationGrant } from "../../supervisor/effect-parse.js";
@@ -184,7 +186,9 @@ describe("durable Claude launcher authority overlay", () => {
     expect(regs.commits.map((commit) => commit.phase)).toEqual(["PREFLIGHT", "STARTED"]);
     expect(regs.commits.map((commit) => commit.registration.processIdentity))
       .toEqual([PENDING_IDENTITY, STARTED_IDENTITY]);
-    expect(regs.commits[0]?.claim).toBe(CLAIM);
+    // The launcher deep-copies the request, so the claim travelling out is an
+    // equal record rather than the caller's object identity.
+    expect(regs.commits[0]?.claim).toEqual(CLAIM);
     expect(regs.commits[0]?.prior).toBe(null);
     expect(trace.indexOf("commit:PREFLIGHT")).toBeLessThan(trace.indexOf("open"));
     expect(trace.indexOf("commit:STARTED")).toBeGreaterThan(trace.indexOf("open"));
@@ -453,6 +457,91 @@ describe("durable authority construction", () => {
     expect(result.kind).toBe("OBSERVED");
     expect(grants.calls.length).toBe(1);
     expect(regs.commits.length).toBe(2);
+  });
+
+  /**
+   * The phase classifier is pinned on the production function itself because its
+   * third arm has no path through `launchClaude` today — both call sites build
+   * their identity with the shared builders — and a guard nothing asserts is a
+   * guard nobody notices going wrong.
+   */
+  it("classifies each identity format and refuses one it cannot name", () => {
+    const base = { lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
+      bootstrapCredentialDigest: DIGEST, registeredAt: AT };
+    expect(classifyRegistrationPhase({ ...base, processIdentity: PENDING_IDENTITY }))
+      .toBe("PREFLIGHT");
+    expect(classifyRegistrationPhase({ ...base, processIdentity: STARTED_IDENTITY }))
+      .toBe("STARTED");
+    expect(classifyRegistrationPhase({ ...base, processIdentity: "pending:wrapper-other" }))
+      .toBe(null);
+    expect(classifyRegistrationPhase({ ...base, processIdentity: "linux:4242:1" })).toBe(null);
+  });
+
+  it("refuses an unclassifiable phase without calling the durable commit", () => {
+    const commits: unknown[] = [];
+    const port = durableRegistrationPort((commit) => { commits.push(commit); return commit; });
+    const outcome = port({ lockIdentity: CLAIM.lockIdentity,
+      wrapperIdentity: CLAIM.wrapperIdentity, processIdentity: "linux:4242:1",
+      bootstrapCredentialDigest: DIGEST, registeredAt: AT }, CLAIM, null);
+    expect(outcome).toMatchObject({
+      kind: "REFUSED", failure: { code: "LAUNCH_LOCK_MALFORMED", layer: "LAUNCH_LOCK" },
+    });
+    expect(commits).toEqual([]);
+  });
+
+  it("hands the PURE lock refusal back verbatim, never reaching the durable commit", () => {
+    const commits: unknown[] = [];
+    const port = durableRegistrationPort((commit) => { commits.push(commit); return commit; });
+    const outcome = port({ lockIdentity: "lock-other", wrapperIdentity: CLAIM.wrapperIdentity,
+      processIdentity: STARTED_IDENTITY, bootstrapCredentialDigest: DIGEST,
+      registeredAt: AT }, CLAIM, null);
+    expect(outcome).toMatchObject({
+      kind: "REFUSED", failure: { code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK" },
+    });
+    expect(commits).toEqual([]);
+  });
+
+  /**
+   * The overlay reads the caller's options with the launcher's own strict reader
+   * instead of spreading them, because a spread of a hostile Proxy would run a
+   * trap in the overlay's own frame and REJECT the returned promise — and a
+   * launcher that rejects has escaped its whole contract. On anything the reader
+   * refuses, the original options are forwarded so the launcher answers.
+   */
+  it("refuses hostile options with a result rather than a rejected promise", async () => {
+    const grants = durableGrants();
+    const regs = durableRegistrations();
+    let fired = 0;
+    const hostile = new Proxy({ platform: "win32" },
+      { ownKeys: (): never => { fired += 1; throw new Error("hostile reflection trap"); } });
+    const launch = createClaudeLauncher(authorityOf(grants, regs));
+    const [settled] = await Promise.allSettled([launch(request(), hostile)]);
+    expect(settled?.status).toBe("fulfilled");
+    if (settled === undefined || settled.status !== "fulfilled") {
+      throw new Error("the overlay rejected instead of refusing");
+    }
+    expect(failureOf(settled.value)).toEqual({
+      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+    });
+    expect({ fired, grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ fired: 0, grants: 0, regs: 0 });
+  });
+
+  it("forwards unusable caller dependencies for the launcher itself to refuse", async () => {
+    const trace: string[] = [];
+    const grants = durableGrants();
+    const regs = durableRegistrations();
+    const complete = dependencies(boundaryHarness(), trace);
+    const { observeProcess, ...incomplete } = complete;
+    expect(typeof observeProcess).toBe("function");
+    const launch = createClaudeLauncher(authorityOf(grants, regs));
+    const result = await launch(request(),
+      { deps: incomplete as unknown as ClaudeLauncherDependencies });
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER",
+    });
+    expect({ trace, grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ trace: [], grants: 0, regs: 0 });
   });
 
   it("refuses a non-Windows host before reaching the durable authority", async () => {

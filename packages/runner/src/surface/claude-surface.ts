@@ -67,10 +67,23 @@ export {
   type RuntimeClosureKind,
   type RuntimePinningMethod,
 } from "../providers/claude/claude-observation.js";
+/**
+ * The durable-authority seam. The FACTORY is published while the default port
+ * set behind it is not, and that asymmetry is the point: a daemon needs the
+ * launcher's grant consumption and launch registration to be durable
+ * compare-and-sets, but it must not be able to take the shipped defaults one at
+ * a time — a consumer able to do that could replace the Windows physical
+ * boundary alone and keep every other guarantee's appearance. `createClaudeLauncher`
+ * is the only way to reach those two slots, and it replaces exactly those two.
+ * `CLAUDE_LAUNCHER_DEFAULTS`, `classifyRegistrationPhase` and
+ * `durableRegistrationPort` stay internal.
+ */
+export { createClaudeLauncher } from "../providers/claude/claude-launcher-authority.js";
 export {
   CLAUDE_LAUNCHER_VERSION,
   CLAUDE_LAUNCH_ERROR_CODES,
   CLAUDE_LAUNCH_LAYERS,
+  CLAUDE_LAUNCH_REGISTRATION_PHASES,
   CLAUDE_LAUNCH_TRUTH_CLASSES,
   launchClaude,
   type ClaudeLaunchDuplicate,
@@ -84,10 +97,13 @@ export {
   type ClaudeLaunchObservation,
   type ClaudeLaunchObserved,
   type ClaudeLaunchOptions,
+  type ClaudeLaunchRegistrationPhase,
   type ClaudeLaunchRequest,
   type ClaudeLaunchResult,
   type ClaudeLaunchTruthClass,
+  type ClaudeLauncherAuthority,
   type ClaudeLauncherDependencies,
+  type ClaudeRegistrationCommit,
   type ClaudeStreamEvidence,
 } from "../providers/claude/claude-launcher.js";
 export {

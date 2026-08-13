@@ -6,8 +6,8 @@ import { adaptBoundaryOpen, captureStream, normalizeObservation, normalizeOutcom
   type NormalizedOutcome, type SafeBoundary } from "./claude-launcher-boundary-results.js";
 import { decodeRegistration, isSafeNativePromise, type Capability,
   type DecodedRuntime } from "./claude-launcher-port-results.js";
-import { CLAUDE_LAUNCHER_VERSION, type ClaudeLaunchErrorCode, type ClaudeLaunchExit,
-  type ClaudeLaunchFailure, type ClaudeLaunchLayer, type ClaudeLaunchObservation,
+import { CLAUDE_LAUNCHER_VERSION, startedProcessIdentity, type ClaudeLaunchErrorCode,
+  type ClaudeLaunchExit, type ClaudeLaunchFailure, type ClaudeLaunchLayer, type ClaudeLaunchObservation,
   type ClaudeLaunchResult, type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
 import { type ClaudeLaunchSnapshot } from "./claude-launcher-input.js";
 /**
@@ -106,7 +106,7 @@ async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBound
       lockIdentity: (request.claim as { lockIdentity?: unknown }).lockIdentity,
       wrapperIdentity: request.wrapperIdentity, bootstrapCredentialDigest:
         request.bootstrapCredentialDigest, registeredAt: startedAt,
-      processIdentity: `windows:${start.identity.pid}:${start.identity.creationTime}`,
+      processIdentity: startedProcessIdentity(start.identity.pid, start.identity.creationTime),
     }, request.claim, request.priorRegistration));
   } catch { return no(lockUnknown("durable launch registration threw")); }
   if (decided.kind === "REFUSED") return no(directFailure(decided.code, decided.layer, "register refused"));
@@ -185,7 +185,7 @@ function bindObservation(input: LaunchLifecycleInput, drive: Drive,
   const proofs = [closed, ended].filter((value): value is Proven => value?.kind === "PROVEN");
   const completion = proofs[0] ?? null;
   const conflict = completion !== null && proofs.some((proof) =>
-    `windows:${proof.identity.pid}:${proof.identity.creationTime}` !== registration.processIdentity ||
+    startedProcessIdentity(proof.identity.pid, proof.identity.creationTime) !== registration.processIdentity ||
     proof.exitCode !== completion.exitCode);
   let observed;
   try {
