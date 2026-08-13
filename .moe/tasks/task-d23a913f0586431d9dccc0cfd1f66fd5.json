@@ -18,7 +18,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-b1a46457",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -27,8 +27,21 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 4.602,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c92874e8644b41e3b5554af731e1d4ca",
+      "author": "agent",
+      "content": "Governance queue priority: this is the next independent telemetry prerequisite because task-cbc42f is serially blocked on its QA-DONE result. Claim before dependent parser/normalizer tasks; re-measure the active launcher surface and avoid overlap with current c819/de496 owned paths.",
+      "timestamp": "2026-08-13T22:45:32.268Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.900Z",
-  "updatedAt": "2026-08-13T22:30:16.083Z"
+  "updatedAt": "2026-08-13T22:46:00.356Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T22:45:50.536Z"
+  },
+  "contextFetchedBy": [
+    "architect-b1a46457"
+  ]
 }

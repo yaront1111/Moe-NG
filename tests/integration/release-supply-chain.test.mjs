@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
@@ -489,6 +489,14 @@ describe("release CLI and filesystem boundary", () => {
     symlinkSync(temp(), link, "junction");
     expectReleaseRefusal(await runSupply({ evidenceRoot: join(link, "new") }),
       "OUTPUT_PATH_INVALID");
+  });
+
+  test("refuses a junction planted below the evidence root through the real publisher", async () => {
+    const evidenceRoot = temp();
+    const outside = temp();
+    symlinkSync(outside, join(evidenceRoot, SOURCE_SHA), "junction");
+    expectReleaseRefusal(await runSupply({ evidenceRoot }), "OUTPUT_PATH_INVALID");
+    assert.deepEqual(readdirSync(outside), []);
   });
 });
 

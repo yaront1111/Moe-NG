@@ -180,6 +180,8 @@ describe("policy decision table", () => {
       waiver({ expiresAtEpochMs: 1_000 }),
       waiver({ expiresAtEpochMs: 999 }),
       waiver({ scope: [OTHER] }),
+      // An unscoped waiver covers nothing: `[].every()` must never read as universal scope.
+      waiver({ scope: [] }),
       waiver({ namedObligationId: "obligation.other" }),
     ];
     for (const bad of invalid) {
@@ -187,8 +189,10 @@ describe("policy decision table", () => {
       expect(record.decision).toBe("DENY");
       expect(record.reasonCodes).toContain("SLICE_RELAXATION_DETECTED");
     }
-    expect(decide({ sliceChain: [parent, child], waivers: [waiver({ scope: [OTHER] })] })
-      .reasonCodes).toContain("WAIVER_INVALID");
+    for (const scope of [[OTHER], []] as const) {
+      expect(decide({ sliceChain: [parent, child], waivers: [waiver({ scope })] })
+        .reasonCodes).toContain("WAIVER_INVALID");
+    }
     expect(rejectionCode(input({
       sliceChain: [parent, child], waivers: [waiver({ humanApprovalRef: "" })],
     }))).toBe("INPUT_INVALID");

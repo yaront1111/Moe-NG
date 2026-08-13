@@ -129,9 +129,13 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
       return () => { clearTimeout(timer); };
     });
   let cancel: (() => void) | null = null;
+  // Generation guard (same discipline as createLiveDocumentDossierFeed): stop()
+  // cannot cancel an in-flight request, and a restart resets `running`, so the
+  // boolean alone would let an orphaned poll revive as a second permanent loop.
+  let generation = 0;
   let running = false;
 
-  const poll = async (): Promise<void> => {
+  const poll = async (run: number): Promise<void> => {
     let next: SurfaceFrame;
     try {
       const response = await post("{}");
@@ -139,19 +143,21 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
     } catch {
       next = frame("DISCONNECTED", "UNDELIVERED", "TRANSPORT_REQUEST_FAILED");
     }
-    if (!running) return;
+    if (!running || run !== generation) return;
     options.onFrame(next);
-    if (running) cancel = schedule(() => { void poll(); }, options.intervalMs);
+    if (run === generation) cancel = schedule(() => { void poll(run); }, options.intervalMs);
   };
 
   return Object.freeze({
     start: (): void => {
       if (running) return;
       running = true;
-      void poll();
+      generation += 1;
+      void poll(generation);
     },
     stop: (): void => {
       running = false;
+      generation += 1;
       cancel?.();
       cancel = null;
     },

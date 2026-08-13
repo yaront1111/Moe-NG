@@ -7,7 +7,8 @@ import type { ControlRoomTransport } from "@moe/control-room-client";
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 
 import { LiveBoard } from "./live-board.js";
-import { frameOfSurface } from "./live-board-feed.js";
+import { createBoardFeed, frameOfSurface } from "./live-board-feed.js";
+import type { SurfaceFrame } from "./live-board-feed.js";
 
 /**
  * The gate needs a matching report; build it from the gate's own refusal-free
@@ -87,6 +88,43 @@ describe("frameOfSurface", () => {
         offers: [], outcome: "UNREADABLE", steps: [],
       });
     }
+  });
+});
+
+describe("createBoardFeed", () => {
+  it("suppresses an in-flight poll across stop and restart instead of reviving it", async () => {
+    const answers: Array<(response: Response) => void> = [];
+    const frames: SurfaceFrame[] = [];
+    let scheduled = 0;
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 10_000,
+      onFrame: (frame) => frames.push(frame),
+      post: () => new Promise<Response>((resolve) => { answers.push(resolve); }),
+      schedule: () => { scheduled += 1; return () => undefined; },
+    });
+    const surface = (): Response => ({
+      json: () => Promise.resolve({ nextAllowedCommands: [], outcome: "SURFACE", steps: [] }),
+    } as Response);
+
+    // StrictMode's dev double-invoke: setup -> cleanup -> setup while poll A awaits.
+    feed.start();
+    feed.stop();
+    feed.start();
+    expect(answers).toHaveLength(2);
+
+    // Poll A outlived its stop; it must neither deliver nor start a second loop.
+    answers[0]?.(surface());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(0);
+    expect(scheduled).toBe(0);
+
+    // Poll B is the restart's own loop: exactly one frame, one reschedule.
+    answers[1]?.(surface());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(1);
+    expect(scheduled).toBe(1);
+    feed.stop();
   });
 });
 

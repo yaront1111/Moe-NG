@@ -113,10 +113,17 @@ function sameIdentities<T>(
   return left.every((item, at) => item === right[at]);
 }
 
+/**
+ * Collision-free tuple encoding: JSON escaping pins every field boundary, so a delimiter
+ * inside one field can never re-tokenize into its neighbour the way a plain `join(" ")`
+ * would ({templateId:"welcome", version:"v2 1"} vs {templateId:"welcome v2", version:"1"}).
+ * `skillId`'s charset happens to exclude spaces, but the encoding must not rely on that.
+ */
+const identityKey = (parts: readonly string[]): string => JSON.stringify(parts);
 const skillIdentity = (entry: DistributionSkillEntry): string =>
-  [entry.skillId, entry.version, entry.digest].join(" ");
+  identityKey([entry.skillId, entry.version, entry.digest]);
 const templateIdentity = (entry: DistributionTemplateEntry): string =>
-  [entry.templateId, entry.version, entry.digest].join(" ");
+  identityKey([entry.templateId, entry.version, entry.digest]);
 
 /** Provenance the manifest asserts, against provenance the host trusts. */
 function provenanceRefusal(

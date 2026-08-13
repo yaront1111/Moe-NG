@@ -543,6 +543,26 @@ describe("startup set admission", () => {
     });
   }
 
+  test("a space in one identity field cannot alias into a neighbouring field", () => {
+    // {templateId:"welcome", version:"v2 1"} and {templateId:"welcome v2", version:"1"} are
+    // different identities sharing one digest. A delimiter-joined encoding serializes both to
+    // the same string, blinding INSTRUCTION_TEMPLATE_DRIFT to a signed-but-relabeled template.
+    const spaced = {
+      instructionTemplates: [{ templateId: "welcome", version: "v2 1", digest: HEX_B }],
+    };
+    const drifted = [
+      observed(spaced),
+      observed({ ...spaced, componentId: "control-room", componentKind: "CONTROL_ROOM" }),
+    ];
+    expectRefusal(
+      verifyDistributionSet(drifted, expectation({
+        instructionTemplates: [{ templateId: "welcome v2", version: "1", digest: HEX_B }],
+      }), accept),
+      "INSTRUCTION_TEMPLATE_DRIFT",
+      "DISTRIBUTION_STARTUP",
+    );
+  });
+
   test("a mutually consistent but entirely stale set is still refused", () => {
     // Every component agrees on the same wrong source. Agreement among the observed set is
     // not evidence: only the trusted expectation decides.

@@ -1,0 +1,41 @@
+{
+  "id": "task-2d37939dddde447bb98e53a2bd9e6c60",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Current expansion hold binding surface",
+  "description": "Objective: remove the cyclic/test-only authority gap between an ACTIVE durable hold and the EXPANSION PlanningRun that must be opened before scheduler admission. Deliverable: extract and publish a direction-safe scheduler root function `bindCurrentExpansionHold` that accepts only a reducer-produced hold plus daemon-current goal/epoch/hold/run counters, replays and exact-compares the hold, and returns the validated core PlanningExpansionHoldBinding; refactor bindExpansionAdmission to compose that one producer. Also preserve the planning inspector's exact refusal target in bridge issues. Consumers: the atomic expansion-request task and task-c4171c1cfe854cb78dd233794b342025. NOT in scope: persistence, scheduler admission, approval, or child/graph authority. Owned paths: focused packages/scheduler/src/expansion current-hold module/bridge/test plus curated root surface tests. Verification: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "Public `bindCurrentExpansionHold(value)` exact-parses `{currentAuthority,hold}`, requires all five current values, replays the creation receipt through `reduceExpansionPlanningHold`, exact-compares the presented ACTIVE v1 state, verifies goalVersion/graphEpoch/holdId/holdVersion/planningRunRef, and returns one deeply frozen core-valid `PlanningExpansionHoldBinding` or typed UNKNOWN/REFUSED.",
+    "`bindExpansionAdmission` calls the new production function rather than retaining a second hold/current mapper; unchanged successful inputs produce byte-identical planning/admitted bindings and unchanged refusal precedence/codes/layers/origins.",
+    "Every bridge issue carries exact nullable `target`; delegated `inspectPlanningExpansionContract` refusals preserve its target such as `HOLD_BINDING`, while local/hold/fairness issues use null and never invent provenance.",
+    "The curated bare `@moe/scheduler` root exports the runtime function and complete type closure with an exact LF bridge; consumers need no deep import.",
+    "Focused tests pin every current-authority mismatch and delegated origin/code/layer/target, exact success bytes, nonzero hostile cases, and mutation drills for hold replay, each current comparison, and target propagation.",
+    "Fresh `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` exits 0."
+  ],
+  "taskRails": [
+    "This is the sole production hold-to-PlanningRun binding producer; daemon and tests must not rebuild the projection or set DAEMON_VERIFIED themselves.",
+    "Do not reorder or weaken bindExpansionAdmission's preparation/fairness/admission gates, and do not add persistence or activation.",
+    "Use public @moe/core root imports, exact code/layer/origin/target assertions and positive generated counts; target <=250 lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion. Head of the three-task chain architect-a42f4965 created when blocking task-c4171c1c, and the only one with no unmet dependency: task-e62e3828 needs task-6cbff010 (BLOCKED) and task-738a12a8 needs both siblings DONE. Gap premise re-verified on current bytes — grep for bindCurrentExpansionHold across packages/ and apps/ returns zero hits, and ExpansionBindingIssue still exposes no target field — so both halves of the deliverable are genuinely absent. Owned paths are focused scheduler expansion sources plus curated root surface tests; verification is the focused @moe/scheduler gate. Without this promotion the M2 epic has nothing claimable. Measurement and DoD review in comment-d5612aa3c3f44bf998b7f8457e8674a2.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
+  "priority": "CRITICAL",
+  "order": 22.401,
+  "comments": [
+    {
+      "id": "comment-d5612aa3c3f44bf998b7f8457e8674a2",
+      "author": "governor-773e2f5e",
+      "content": "Governor promotion BACKLOG → PLANNING, 2026-08-13T22:52Z. **This is the head of the three-task chain architect-a42f4965 created when it blocked task-c4171c1c, and the only one of the three with no unmet dependency. Nothing else can move the M2 epic until this lands.**\n\n**Chain as measured, so nobody promotes the wrong one:**\n- **task-2d37939d (this task)** — no hard dependency. Owned paths are a focused scheduler expansion module/bridge/test plus curated root surface tests; verification is the focused `@moe/scheduler` gate. **Claimable now.**\n- task-e62e3828 (Current expansion safe-release evidence) — hard dependency task-6cbff010 must be DONE. task-6cbff010 is BLOCKED, deep in the M1 durable-dispatch chain. **Stays BACKLOG.**\n- task-738a12a8 (Atomic expansion request persistence) — hard dependencies task-e62e3828 AND this task DONE. **Stays BACKLOG.**\n- task-c4171c1c reclaims only after all three are DONE and re-probed.\n\n**Gap premise re-verified on current bytes before promoting**, per the stale-description rail's second direction — do not plan work to build something already built:\n```\ngrep -rn \"bindCurrentExpansionHold\" packages/ apps/   →  zero hits\ngrep -n  \"target\" packages/scheduler/src/expansion/expansion-binding.ts   →  zero hits\n```\n`ExpansionBindingIssue` at expansion-binding.ts:71-78 exposes exactly `code`, `layer`, `message`, `missingInput`, `origin` — no `target`. Both halves of this task's deliverable are genuinely absent. The file is 291 physical lines (`grep -c ''`); extracting the current-hold producer should pull lines out of it, not add, so watch that the new module lands near the 250 target rather than pushing either file up.\n\n**This task absorbed a deleted predecessor.** task-0b6a58a1 \"Preserve expansion binding refusal targets\" was created at 22:47 and deleted ~90 seconds later when the architect re-scoped; its target-preservation work is now DoD item 3 here. If you find a Serena memory or chat reference to task-0b6a58a1, that is why it does not resolve.\n\n**Two DoD items where a passing test would not settle the claim:**\n- **Item 2** requires `bindExpansionAdmission` to *call* the new function rather than retain a second mapper, with byte-identical successful bindings. Composition is unsettleable from an import list — prove it by mutating `bindCurrentExpansionHold` in its own file and requiring the admission suite to redden on a named value. \"Exports the symbol\" is not composition.\n- **Item 3** splits `target` into a preserved delegated value versus `null` for local/hold/fairness. A test asserting only that `target` is present passes for both a correct `null` and an invented string. Pin the exact value per origin, and make the item-5 mutation drill redden on a **target** assertion specifically — if an earlier shape or key-set assertion dies first, the provenance guard itself is still untested.\n\nItem 5 already asks for mutation drills on hold replay, each current comparison, and target propagation. Treat \"each current comparison\" literally: all five of goalVersion/graphEpoch/holdId/holdVersion/planningRunRef need their own drill. A cross-check where one operand is also bound by the surrounding query can survive a single-operand mutation — drill the pair if a lone drill comes back green rather than assuming the test is weak.",
+      "timestamp": "2026-08-13T22:50:46.954Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:48:41.262Z",
+  "updatedAt": "2026-08-13T22:50:54.550Z"
+}

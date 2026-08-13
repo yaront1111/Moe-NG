@@ -9,6 +9,7 @@ import {
   RECOVERY_INVENTORY_UPSTREAM_LAYERS,
   RECOVERY_PROOF_CLASSES,
   RECOVERY_RECONCILIATION_SCHEMA_VERSION,
+  RECOVERY_UNKNOWN_PROOF_DIGEST,
   exactDataRecord,
   recoveryInventoryRefusal,
 } from "./recovery-inventory-contract.js";
@@ -273,8 +274,17 @@ function readRecord(parsed: unknown): RecoveryReconciliationRecord | null {
   if (coordinator === false) return null;
   if ((truth === "UNKNOWN") !== (coordinator !== null)) return null;
   if ((truth === "UNKNOWN") !== (upstream !== null)) return null;
+  // Re-derived, not trusted: an item's provenance must agree with its class
+  // proof, and an item under the reserved unbacked slot cannot hold a positive
+  // disposition. Checked HERE, ahead of the digest comparison, so a forged
+  // record whose digest was recomputed over the forgery is still refused.
   for (const proof of proofs) {
-    if (proof.itemCount !== items.filter((item) => item.class === proof.class).length) return null;
+    const owned = items.filter((item) => item.class === proof.class);
+    if (proof.itemCount !== owned.length) return null;
+    const unbacked = proof.sourceProofDigest === RECOVERY_UNKNOWN_PROOF_DIGEST;
+    if (owned.some((item) => (unbacked
+      ? item.disposition !== "UNKNOWN"
+      : item.sourceProofDigest !== proof.sourceProofDigest))) return null;
   }
   return Object.freeze({
     anchorBindingDigest: raw["anchorBindingDigest"] as string,

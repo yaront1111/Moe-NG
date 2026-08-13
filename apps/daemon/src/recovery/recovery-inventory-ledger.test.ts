@@ -17,6 +17,7 @@ import {
   recoveryPopulationClass,
   recoveryReconciliationAggregateId,
 } from "./recovery-inventory-contract.js";
+import type { RecoveryProofClass } from "./recovery-inventory-contract.js";
 import { encodeRecoveryReconciliationRecord } from "./recovery-inventory-codec.js";
 import {
   readRecoveryReconciliation,
@@ -139,7 +140,12 @@ const facts = (
     evidence: { kind: "NEGATIVE_COMPLETE" as const, proofDigest: hex(`ab${index}`) },
     identity: `external-${population}`,
     population: population as string,
-    sourceProofDigest: hex(`c${index}`),
+    // The CLASS index, not the population index: a subject's source digest must
+    // equal the digest of the one class proof that covers it, and seven
+    // populations map onto six classes.
+    sourceProofDigest: hex(
+      `c${RECOVERY_PROOF_CLASSES.indexOf(recoveryPopulationClass(population) as RecoveryProofClass)}`,
+    ),
   })),
   ...overrides,
 });
@@ -474,5 +480,39 @@ describe("selected-authority binding", () => {
       "record",
       "recordDigest",
     ]);
+  });
+
+  it("persists nothing when supplied provenance contradicts itself", async () => {
+    const { binding, store } = await prepare();
+    const valid = facts(binding.backupGenerationDigest);
+    // Positive control first: these exact facts DO commit, so the refusals
+    // below cannot be blamed on the binding, the anchor or the fixture.
+    const control = recordRecoveryReconciliation(store, writeRequest, valid);
+    expect(control.ok).toBe(true);
+    const contradicting = facts(binding.backupGenerationDigest, {
+      subjects: valid.subjects.map((subject, index) =>
+        index === 0 ? { ...subject, sourceProofDigest: hex("deadbeef") } : subject,
+      ),
+    });
+    const alien = facts(binding.backupGenerationDigest, {
+      proofs: valid.proofs.map((proof, index) =>
+        index === 1 ? { ...proof, class: "ALIEN" } : proof,
+      ),
+    });
+    const expected: readonly (readonly [string, RecoveryReconciliationExternalFacts])[] = [
+      ["RECOVERY_INVENTORY_ITEM_PROOF_MISMATCH", contradicting],
+      ["RECOVERY_INVENTORY_PROOF_CLASS_UNKNOWN", alien],
+    ];
+    let swept = 0;
+    for (const [code, supplied] of expected) {
+      const refused = recordRecoveryReconciliation(store, writeRequest, supplied);
+      expect(`${code}:${refused.ok}`).toBe(`${code}:false`);
+      if (refused.ok) throw new Error("unreachable");
+      expect(refused.upstream).toEqual({ code, layer: "RECOVERY_INVENTORY" });
+      expect(refused.code).toBe("UNKNOWN_TRUTH");
+      expect(refused.authority).toBe("NONE");
+      swept += 1;
+    }
+    expect(swept).toBe(2);
   });
 });

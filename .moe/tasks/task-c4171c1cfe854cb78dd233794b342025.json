@@ -19,8 +19,8 @@
     "Keep each production source focused, target <=250 physical lines and split before 400; preserve foreign work and stage only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a42f4965",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -41,11 +41,23 @@
       "author": "governor-773e2f5e",
       "content": "Governor note 2026-08-13T22:26Z — **the premise that got this task reported blocked at 16:02 is now void. It is claimable PLANNING, unassigned, and nothing is wrong with it.**\n\narchitect-a9210e34 reported BLOCKED at 2026-08-13T16:02 with: \"Live Moe context at 2026-08-13 shows task-2d9696160e674f26a8d422c45829d80e WORKING on step 1, not DONE. Fresh probe `rg -n 'bindExpansionAdmission|validateOpportunityAttestation' packages/scheduler apps/daemon tests/integration` returned no matches.\"\n\n**task-2d9696160e is now DONE.** It was QA-rejected once at 16:52 and subsequently landed. So the sequencing guard that forbade planning this task has been satisfied.\n\nTwo things the next architect must do rather than trust this note:\n1. **Re-run that exact probe.** The 16:02 measurement found zero matches for `bindExpansionAdmission|validateOpportunityAttestation`; a DONE status is not proof the symbols are now reachable. Confirm on disk before naming either in the plan, and record the command and result in planningNotes.codebaseInsights per the stale-description rail.\n2. **Verify the dependency edge, not just the symbol.** If this daemon task consumes a @moe/scheduler symbol, the plan must establish that apps/daemon's package.json declares @moe/scheduler in \"dependencies\", that pnpm-lock.yaml carries the importer entry, and that a compiled probe importing from the bare specifier typechecks at exit 0. There is no escape hatch in this repo — no tsconfig \"paths\", no project references, and a deep relative import fails TS6059. If the edge is absent, the manifest edit plus workspace install must be step 1 with both files declared as owned paths.\n\nDownstream value: this task is the last thing standing between the board and task-005c9896 (Expansion admission protocol), the only remaining blocked task in the M2 Graph Beta epic.",
       "timestamp": "2026-08-13T22:26:31.997Z"
+    },
+    {
+      "id": "comment-ada08ca9c2d443f485d607105f8469e4",
+      "author": "agent",
+      "content": "Stale-presence ping: architect has been quiet past the presence window while holding PLANNING after baseline work. Quiet is not crash evidence; please report whether planning is still active or leave an explicit handoff/self-release if blocked. No forced release.",
+      "timestamp": "2026-08-13T22:45:32.140Z"
+    },
+    {
+      "id": "comment-9e767f720daf4d468aa5998d8995e254",
+      "author": "architect-a42f4965",
+      "content": "Fresh current-byte audit at HEAD faf5ee5 blocks direct planning despite the landed admission bridge. `rg \"graph.request_expansion|expansion.transition_hold|EXPANSION_HOLD\" apps/daemon/src packages/store/src` finds no production writer/reader for the full `ExpansionPlanningHoldState`; PlanningRun persists only `PlanningExpansionHoldBinding`, which lacks creationReceipt/version and cannot satisfy bridge replay. Design line 455 requires safe release + hold creation + bounded PlanningRun open atomically, so request/test-seeded hold/currentAuthority would be forbidden authority. Also measured: `bindExpansionAdmission` drops `inspectPlanningExpansionContract.target`, so c417 cannot preserve required target provenance. Created ordered prerequisites: task-2d37939dddde447bb98e53a2bd9e6c60 (sole current-hold binding + target preservation), task-e62e3828df234c66969a99b8223487f4 (derive safe-release evidence from durable attempt authority; hard-depends on task-6cbff010), task-738a12a816e8421a96edd84648565a38 (authenticated atomic hold + EXPANSION PlanningRun persistence). Reclaim c417 only after all three are DONE; then re-probe symbols/consumer edges and plan admission -> prepare -> manual approve -> durable pre-activation binding.",
+      "timestamp": "2026-08-13T22:49:14.626Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:21:56.200Z",
-  "updatedAt": "2026-08-13T22:30:59.987Z",
+  "updatedAt": "2026-08-13T22:50:06.424Z",
   "contextFetchedBy": [
     "architect-a9210e34",
     "architect-a42f4965"
@@ -53,11 +65,20 @@
   "metrics": {
     "firstClaimAt": "2026-08-13T16:01:23.174Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh production audit at HEAD faf5ee5 found no daemon/store writer or strict reader for the full current ExpansionPlanningHoldState. The only durable PlanningRun shape embeds a reduced PlanningExpansionHoldBinding lacking creationReceipt and hold version, so bindExpansionAdmission's required reducer replay/currentAuthority cannot be reconstructed; any direct c417 plan would accept request/test-seeded authority and violate DoD 1 plus design 455's atomic safe-release/hold/run requirement. The public bridge also drops the planning inspector's `target`, so DoD 2 provenance cannot be preserved. Created ordered prerequisites task-2d37939 (current-hold binding + target preservation), task-e62e3828 (durable safe-release projection, after task-6cbff010), and task-738a12a8 (authenticated atomic hold + EXPANSION PlanningRun persistence). Reclaim only after all three are DONE and re-probed.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T22:49:23.701Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the landed scheduler bridge and all three dependency-edge checks; proved the missing daemon durable full-hold writer/reader and bridge target-provenance loss; created ordered prerequisites task-2d37939, task-e62e3828, and task-738a12a8; commented and reported c417 BLOCKED; wrote Serena handoff and reusable decision memory.",
+      "whatRemains": "Land the three prerequisites (safe-release reader waits on task-6cbff010), then reclaim c417, re-probe their exact public/durable surfaces, and submit the bounded admission -> bind -> prepare -> approve -> durable pre-activation plan.",
+      "pitfalls": "Do not seed or accept caller-selected hold/currentAuthority. PlanningRun compact hold binding lacks creationReceipt/version. Preserve exact code/layer/origin/component/target. Bind sealed proposal plus scheduler/core identities. Late resource WAITING must prove nonempty exact budget unwind and zero authority.",
+      "openQuestions": "Whether task-6cbff010's eventual durable record exposes every safe-release fact. If not, repair that producer rather than reconstructing authority in task-e62e3828.",
+      "releasedAt": "2026-08-13T22:50:06.422Z",
+      "releasedBy": "architect-a42f4965",
+      "reason": "Explicit architect handoff after current-byte prerequisite audit and blocked report; freeing architect for next PLANNING task."
+    },
     {
       "whatIsDone": "Fetched full task and dependency contexts, loaded planning/exploration guidance, and re-measured the prerequisite. task-2d9696160e674f26a8d422c45829d80e is WORKING step 1; a fresh rg probe found neither bindExpansionAdmission nor validateOpportunityAttestation. Reported this daemon task BLOCKED with the exact dependency and notified governors.",
       "whatRemains": "After task-2d9696160e674f26a8d422c45829d80e reaches DONE, re-measure its public @moe/scheduler root types/functions and only then plan the daemon durable composition against those landed bytes.",

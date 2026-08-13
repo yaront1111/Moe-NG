@@ -36,7 +36,11 @@ export interface SliceFold {
   readonly waiverInvalid: boolean;
 }
 
-/** A waiver only covers a drop when it is scoped, unexpired, and names that exact obligation. */
+/**
+ * A waiver only covers a drop when it is scoped, unexpired, and names that exact obligation.
+ * "Scoped" means a non-empty subset of the evaluation scope (design: scope subset-of decision
+ * scope): without the length check, `[].every()` would read an UNSCOPED waiver as universal.
+ */
 function waiverCovers(
   waiver: PolicyWaiver,
   obligationId: string,
@@ -44,6 +48,7 @@ function waiverCovers(
 ): boolean {
   return waiver.namedObligationId === obligationId
     && waiver.expiresAtEpochMs > input.evaluatedAtEpochMs
+    && waiver.scope.length > 0
     && waiver.scope.every((ref) => input.scope.includes(ref));
 }
 

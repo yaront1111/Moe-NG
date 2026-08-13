@@ -1,0 +1,35 @@
+{
+  "id": "task-bcea70569f714367b2e50c1734433631",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Project configuration digest codec",
+  "description": "Objective: turn the browser-safe contract from task-0c21ba2f07cc4f4a829e475bbd7f0562 into the one canonical, content-addressed Node/domain manifest that daemon selection can trust. Deliverable: @moe/core public create/encode/decode functions that compose only the bare @moe/contracts root, domain-separate SHA-256 over canonical bytes of every ProjectConfigurationSettings field (settingsDigest is mechanically excluded from its own preimage), emit canonical full-manifest bytes, and fail closed on hostile/noncanonical/digest-mismatched input. NOT in scope: changing the contract vocabulary, daemon persistence/currentness, benchmark records, provider launch verification, or physical paths. Dependency: task-0c21ba2f07cc4f4a829e475bbd7f0562 must be DONE unchanged. Consumer: task-5dfc98fc3e7f4035a8012bd9ba032de3. Owned paths: packages/core/src/configuration/project-configuration-manifest.ts, its exact LF .js bridge, focused test, packages/core/src/index.ts, and packages/core/src/index-surface.test.ts. Verification: pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The @moe/core root exports typed immutable createProjectConfigurationManifest, encodeProjectConfigurationManifest, and decodeProjectConfigurationManifestBytes results plus a closed codec code/layer vocabulary; production imports task-0c21ba2f07cc4f4a829e475bbd7f0562 only through bare @moe/contracts.",
+    "SHA-256 is domain-separated over canonical bytes of every settings field except settingsDigest itself; object insertion order is irrelevant, fixed collections remain ordered, and the full encoded manifest including settingsDigest has one exact canonical byte representation.",
+    "Decode composes decodeBoundedJsonBytes, preserves duplicate-key provenance, snapshots once, revalidates the contract, recomputes the digest, and pins PROJECT_CONFIGURATION_BYTES_INVALID, PROJECT_CONFIGURATION_DUPLICATE_KEY, PROJECT_CONFIGURATION_NONCANONICAL, or PROJECT_CONFIGURATION_DIGEST_MISMATCH at the exact codec/canonicalization/digest layer; no malformed input throws.",
+    "A hand-enumerated production-surface sensitivity sweep asserts its exact positive leaf count and proves each valid leaf mutation changes settingsDigest while invalid mutations refuse; hostile byte/object cases pin exact code/layer/upstream, and valid results/bytes are frozen or caller-detached.",
+    "A reversible mutation removes one real production field from the canonical preimage and makes the named sensitivity test red before restoration; root namespace/type assertions and the exact LF bridge pass, and existing >250-line index.ts does not grow in physical line count.",
+    "The exact verification command exits 0, the manifest/lock/bare-specifier dependency probe is recorded, and task-5dfc98fc3e7f4035a8012bd9ba032de3 is recorded as the production consumer."
+  ],
+  "taskRails": [
+    "Do not put node:crypto into @moe/contracts and do not deep-import its parser or contract internals.",
+    "Never normalize away unknown, duplicate, reordered serialized, accessor, symbol, proxy, sparse-array, or unsupported-version data; invalid evidence remains typed UNKNOWN.",
+    "Do not use profileRevisionId, runtime version, or a physical path as settingsDigest/orchestration source evidence.",
+    "Keep the new production source <=250 physical lines and keep packages/core/src/index.ts at or below its pre-task physical line count by consolidating only equivalent export statements."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5dfc98fc3e7f4035a8012bd9ba032de3",
+  "priority": "HIGH",
+  "order": 4.619,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:49:25.526Z",
+  "updatedAt": "2026-08-13T22:49:25.526Z"
+}

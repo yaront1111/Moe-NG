@@ -1,0 +1,33 @@
+{
+  "id": "task-e62e3828df234c66969a99b8223487f4",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Current expansion safe-release evidence",
+  "description": "Objective: provide the missing daemon-current safe-release authority from which an expansion planning hold can be created without trusting an agent's `DAEMON_VERIFIED` fields. Hard dependency: task-6cbff01023b14b26a78fc5e3eb1dd8a9 must be DONE and must expose its durable attempt/activation/lease/slot/effect/result/reconciliation reader; re-measure it before planning. Deliverable: a focused daemon reader that derives one exact frozen @moe/core ExpansionReleaseEvidence plus ExpansionHandoffBinding only from the selected project's current durable released attempt facts, with typed ABSENT/UNKNOWN refusals. Consumer: the atomic expansion-request task created next, then task-c4171c1cfe854cb78dd233794b342025. NOT in scope: creating a hold or PlanningRun, scheduler admission, approval, graph activation, or accepting release truth from a command payload. Owned paths: apps/daemon/src/work/expansion-release-authority.ts/.js and focused test. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The production reader selects durable records by project and attempt identity, and returns BOUND only when the attempt is RELEASED for unchanged `WORK_RELEASE_OR_PAUSE`, the lease and provider slot are RELEASED, effects and resources are terminal, the safe boundary is observed, and one exact committed handoff is present.",
+    "The BOUND result rebuilds and deeply freezes the complete core `ExpansionReleaseEvidence` and `ExpansionHandoffBinding` from stored facts; request/caller objects can select an attempt but cannot provide, replace, or upgrade any release, truth, terminal-ref, or handoff field.",
+    "Missing, foreign-project, stale, active/draining, terminal-incomplete, conflicting, malformed, or unreadable records return typed ABSENT or UNKNOWN with stable exact code and layer and no release evidence.",
+    "File-backed SQLite tests use the real durable attempt records from task-6cbff010, close before reopen on Windows, pin exact code/layer and nonzero hostile/race cases, and mutation-check the production currentness and handoff comparisons.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0."
+  ],
+  "taskRails": [
+    "Do not plan until task-6cbff010 is DONE and its release/result reader is verified on disk; if it omits a named fact, repair that producer rather than reconstructing authority here.",
+    "No caller-supplied `DAEMON_VERIFIED`, release state, terminal proof, or handoff may become authority; missing/unverifiable evidence stays UNKNOWN.",
+    "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
+  "priority": "CRITICAL",
+  "order": 22.402,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:47:49.831Z",
+  "updatedAt": "2026-08-13T22:47:49.831Z"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "task-738a12a816e8421a96edd84648565a38",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Atomic expansion request persistence",
+  "description": "Objective: land the missing durable current ExpansionPlanningHoldState and its exactly bound EXPANSION PlanningRun so later admission reads authority rather than test/request fixtures. Hard dependencies: task-e62e3828df234c66969a99b8223487f4 and task-2d37939dddde447bb98e53a2bd9e6c60 DONE. Deliverable: a focused daemon planning service and handler that accepts an authenticated `graph.request_expansion`, reads the daemon-current goal/parent/run plus production safe-release authority, runs the core hold reducer and production `bindCurrentExpansionHold`, opens the EXPANSION PlanningRun with that binding, and commits the hold and run atomically with exact replay. Consumer: task-c4171c1cfe854cb78dd233794b342025. NOT in scope: scheduler admission, preparation/approval, children, resources/budget reservation, or graph activation. Owned paths: focused apps/daemon/src/planning expansion-request contract/service/ledger/tests and the narrow daemon command-registry entry after task-9cba extraction is DONE. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "Authenticated production ingress exposes one exact `graph.request_expansion` payload that contains rationale and subject refs only; project, principal, current goal/graph/hold/run counters, safe-release evidence, and handoff are read or derived by daemon production code and cannot be caller-replaced.",
+    "One store transaction runs the real core hold reducer, production current-hold binding, and real PlanningRun reducer, then commits the complete reducer-produced ACTIVE hold state plus the bound EXPANSION PlanningRun together; a crash or injected failure cannot persist only one side.",
+    "The durable relation uniquely selects the current hold by project, goal, parent run/node, planningRunRef, generation, graph epoch, and hold version; strict readers reject absent, foreign, stale, terminal, malformed, conflicting, or split records with stable exact code/layer and no authority.",
+    "Identical command replay is byte-identical; same-id/different-bytes and concurrent request/cancel/goal-epoch movement produce one winner or exact refusal and never two active holds/runs.",
+    "File-backed SQLite tests close before reopen on Windows, assert exact codes/layers and nonzero race/hostile counts, raw event/decision cardinality, and zero child/lease/effect/resource/budget/activation authority; mutation drills target safe-release selection and atomic hold/run commit.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0."
+  ],
+  "taskRails": [
+    "Design requires safe release, hold creation, and PlanningRun open atomically; do not seed a hold in tests, accept a caller-produced hold/binding, or commit the two aggregates in separate transactions.",
+    "Compose task-e62e's durable release reader and task-2d379's production binding surface; do not reimplement either authority.",
+    "This task stops at an ACTIVE hold and bound EXPANSION PlanningRun and mints no admission, preparation, approval, child, or graph activation authority.",
+    "Use public package roots across boundaries, exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
+  "priority": "CRITICAL",
+  "order": 22.403,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:49:05.524Z",
+  "updatedAt": "2026-08-13T22:49:05.524Z"
+}

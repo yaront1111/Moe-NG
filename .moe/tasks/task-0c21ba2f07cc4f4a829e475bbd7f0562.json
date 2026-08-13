@@ -1,0 +1,34 @@
+{
+  "id": "task-0c21ba2f07cc4f4a829e475bbd7f0562",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Project configuration manifest contract",
+  "description": "Objective: freeze the browser-safe, path-neutral V1 data contract that task-5dfc98fc3e7f4035a8012bd9ba032de3 will persist and the benchmark will bind. Deliverable: @moe/contracts public types, closed vocabularies, descriptor-safe parsers, and immutable snapshots for ProjectConfigurationSettings and ProjectConfigurationManifest. The required schema is exact: schemaVersion/projectId; policy revision/evaluator plus MANUAL planning/expansion/acceptance defaults and auto-approval opt-in digest; provider/model/snapshot/reasoning-effort/runtime/profile/structured-output-schema selection refs; a fixed ordered limit table covering design §§2.1, 11.2 and 19.1 (project/goal provider slots, expansion depth/width/nodes/relations, active nodes/hard edges, priority aging/fairness/dispatch bound, review rounds, attempts/runner-authorized time, input sizes/depth, retained events, sessions, capture/tail, subscribers/waiters/outbox/presence, and mandatory artifact quota); provider-egress and daemon-exposure network policy; workspace and host-containment isolation truth; canonical command/query/error schema versions; orchestrationSource as the existing DistributionSource; and settingsDigest only on the full manifest. Logical refs must reject absolute/relative filesystem and file-URI forms. NOT in scope: SHA-256 production, canonical byte encoding, daemon persistence/current selection, benchmark constants, defaults synthesis, or physical configuration paths. Consumer is task-5dfc98fc3e7f4035a8012bd9ba032de3 via the core codec prerequisite created next. Owned paths: packages/contracts/src/configuration/project-configuration-contract.ts, its exact LF .js bridge, focused test, and packages/contracts/src/index.ts. Verification: pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The @moe/contracts root exports the exact V1 settings/manifest types, closed enum and limit-key vocabularies, schema version, and stable refusal code/layer types; the module has no node:* import and remains browser-loadable.",
+    "Production parsers use own enumerable data descriptors and exact Reflect.ownKeys snapshots, require dense/fixed-order unique collections and safe bounded values, deep-freeze without aliasing, and pin PROJECT_CONFIGURATION_INPUT_INVALID or PROJECT_CONFIGURATION_VERSION_UNSUPPORTED at PROJECT_CONFIGURATION_MANIFEST.",
+    "The closed contract contains no path key; logical refs reject Windows drive/UNC, POSIX absolute, file URI, dot-segment, accessor, proxy, symbol, extra, missing, duplicate-list, malformed source-sha, and unsupported-version inputs with exact code/layer.",
+    "Focused tests import only the bare @moe/contracts root, assert an exact positive schema/hostile-case count, immutable valid snapshots, zero optimistic normalization, and exact failure code/layer for every generated refusal.",
+    "The exact verification command exits 0 and task-5dfc98fc3e7f4035a8012bd9ba032de3 is recorded as the production consumer; only the four owned paths are committed explicitly."
+  ],
+  "taskRails": [
+    "Do not import node:crypto or any node:* module into the @moe/contracts root; hashing belongs to the dependent core task.",
+    "Do not invent or persist defaults: every effective authority value is required input, and missing values fail closed.",
+    "Use the existing public DistributionSource shape for orchestration objectFormat/sourceSha; never store a physical repository or configuration path.",
+    "The production module must remain <=250 physical lines; split the task before implementation if the exact contract cannot fit without exceeding that target."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5dfc98fc3e7f4035a8012bd9ba032de3",
+  "priority": "HIGH",
+  "order": 4.618,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T22:49:07.402Z",
+  "updatedAt": "2026-08-13T22:49:07.402Z"
+}

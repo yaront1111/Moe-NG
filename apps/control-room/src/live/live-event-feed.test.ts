@@ -80,6 +80,42 @@ describe("createLiveEventFeed", () => {
     const frame = await oneFrame("not-a-frame");
     expect(frame).toMatchObject({ detail: "LIVE_FRAME_UNREADABLE", outcome: "UNREADABLE" });
   });
+
+  it("suppresses an in-flight poll across stop and restart instead of reviving it", async () => {
+    type PageAnswer = { delivered: true; response: unknown; status: number };
+    const answers: Array<(result: PageAnswer) => void> = [];
+    const frames: LiveFrame[] = [];
+    let scheduled = 0;
+    const feed = createLiveEventFeed({
+      intervalMs: 10_000,
+      onFrame: (frame) => frames.push(frame),
+      projection: "moe.board",
+      schedule: () => { scheduled += 1; return () => undefined; },
+      subscriberId: "control-room-1",
+      transport: {
+        readEventPage: () => new Promise((resolve) => { answers.push(resolve); }),
+      },
+    });
+
+    // StrictMode's dev double-invoke: setup -> cleanup -> setup while poll A awaits.
+    feed.start();
+    feed.stop();
+    feed.start();
+    expect(answers).toHaveLength(2);
+
+    // Poll A outlived its stop; it must neither deliver nor start a second loop.
+    answers[0]?.({ delivered: true, response: { events: [], outcome: "PAGE" }, status: 200 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(0);
+    expect(scheduled).toBe(0);
+
+    // Poll B is the restart's own loop: exactly one frame, one reschedule.
+    answers[1]?.({ delivered: true, response: { events: [], outcome: "PAGE" }, status: 200 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(1);
+    expect(scheduled).toBe(1);
+    feed.stop();
+  });
 });
 
 describe("resolveLiveSetup", () => {

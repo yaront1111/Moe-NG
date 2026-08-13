@@ -598,6 +598,28 @@ describe("production startup admission", () => {
     );
     expectRefusal(result, "LAUNCH_PORT_FAILED");
   });
+
+  test("a port that throws mid-set reports the components already launched", () => {
+    // The launch port has no stop affordance, so a throw on a later component cannot
+    // un-launch its predecessors; the refusal must report the true launch count rather
+    // than implying it is zero.
+    const sideEffects: string[] = [];
+    const result = startDistribution(
+      { containers: allContainers(), expectation: expectation(), trustedPublicKeys: trustedKeys() },
+      (componentId) => {
+        if (sideEffects.length === 1) throw new Error("second component refused to start");
+        sideEffects.push(componentId);
+      },
+    );
+    expectRefusal(result, "LAUNCH_PORT_FAILED");
+    if (result.ok || !("launched" in result)) {
+      throw new Error("refusal must report the launched components");
+    }
+    expect(sideEffects.length).toBe(1);
+    expect(result.launched).toEqual(sideEffects);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.launched)).toBe(true);
+  });
 });
 
 describe("IDE_ADAPTER packaging contract", () => {

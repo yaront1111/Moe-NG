@@ -16,29 +16,37 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-a42f4965",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Restore the Clause-2 prerequisite block recorded by architect-a42f4965; unblock_worker cleared the task as a side effect while freeing the architect for the human-requested planning queue. No prerequisite changed.",
+  "reopenReason": "Human-approved scope amendment. Dependency condition measured satisfied: M4 epic is 10 DONE with zero other open tasks. The remaining gap was mechanical, not architectural — the task's declared verification leg `pnpm test:migration` exists in no package.json repo-wide while its owned paths excluded root package.json, so it could not create the gate it had to pass. Owned paths widened to include root package.json solely to define that script; defining it is step 1 and must run the real migration/legacy-import shadow comparison, not alias test:integration. Full amendment and the on-disk capability measurements are in comment-d6d930b06eeb4d40b76a557039b32638.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-d6d930b06eeb4d40b76a557039b32638",
+      "author": "governor-773e2f5e",
+      "content": "HUMAN-APPROVED SCOPE AMENDMENT 2026-08-13T22:27Z. Block cleared; task returned to PLANNING. This comment is the authoritative amendment — it overrides the owned-paths clause in the task description.\n\n**OWNED PATHS ARE WIDENED TO INCLUDE the repository root `package.json`,** for the single purpose of defining the `test:migration` script. Everything else in the description's owned-paths clause stands unchanged: `tests/integration/portability/**` and release evidence paths.\n\n**Why the amendment was needed.** The task declares verification `pnpm test:integration && pnpm test:migration`. Measured: `grep -rn '\"test:migration\"' --include=package.json .` returns **zero hits repo-wide** — the script does not exist anywhere. The original owned-paths clause excluded root package.json, so the task was required to pass a gate it was forbidden to create. Mechanically unsatisfiable as written, in the same family as the bridge-literal conflict resolved on task-9cba79a1 earlier today. The human chose to widen scope rather than drop the leg, because dropping `test:migration` would leave the migration/legacy-import half of the shadow comparison with no gate at all — thin for an evidence task.\n\n**Defining that script is step 1 of the plan.** It is production work, not setup: it must actually run the migration/legacy-import shadow comparison, not alias `test:integration` or exit 0 on an empty match. A script that runs zero cases passes while testing nothing — epic rail 6 requires a swept case set to assert it was actually generated.\n\n**Dependency condition, measured, is satisfied.** \"Hard dependencies: every M4 task\" — the M4 epic is 10 DONE with zero other open tasks. This is the last one.\n\n**The capabilities this gate shadow-compares are on disk. Re-measure each before naming a symbol, and verify the dependency edge, not just the export:**\n- Codex provider: `packages/runner/src/providers/codex/` (codex-observation, codex-stream, codex-capabilities, codex-probe, codex-render and others)\n- Legacy import: `packages/import/` (import-apply, import-canonical, import-reconcile, canonical-bytes, index.ts)\n- JetBrains: `adapters/jetbrains/src/index.ts`\n- MCP transports: stdio and Streamable HTTP adapters, both landed and root-published\n\nA root-barrel grep proving an export exists does NOT establish that the consuming package can import it. For each cross-package symbol the plan names, record: the producer declared in the consumer's package.json \"dependencies\", the pnpm-lock.yaml importer entry, and a compiled bare-specifier probe at exit 0 with the probe deleted in the same command.\n\n**Clause 2 still binds.** This is an acceptance/evidence task: name at planning time the production capability it certifies and the task that shipped it, verified by grep/probe rather than by reading the design. Where a capability turns out to be absent or unreachable, the required output is a prerequisite production task with the gap measured symbol by symbol — never a narrowed DoD, never a mock-backed journey, never authority reimplemented inside the test. A proof that only proves the shapes is worse than no proof.\n\n**Known local hazard for whoever runs the gate:** `pnpm test:integration` must be run from PowerShell, not Git Bash. Under MSYS, GNU tar reads `C:\\` as a remote host and the run reports `SOURCE_ARCHIVE_FAILED`, which reads exactly like a genuine red but is not.",
+      "timestamp": "2026-08-13T22:35:04.302Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-12T08:24:01.238Z",
+  "updatedAt": "2026-08-13T22:50:16.315Z",
   "contextFetchedBy": [
     "architect-da724bb7",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-a42f4965"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": "Restore the Clause-2 prerequisite block recorded by architect-a42f4965; unblock_worker cleared the task as a side effect while freeing the architect for the human-requested planning queue. No prerequisite changed.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-12T08:22:40.255Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

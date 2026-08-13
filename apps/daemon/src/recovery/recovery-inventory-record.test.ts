@@ -462,10 +462,17 @@ describe("record binding and freeze", () => {
         ...baseInput(),
         subjects: absentSubjects().slice(0, 6),
       }],
+      // A proof digest cannot be moved ALONE any more: an item must cite the
+      // digest of its own class proof, so the two move together by design.
       ["proofs", {
         ...baseInput(),
         proofs: completeProofs().map((proof, index) =>
           index === 0 ? { ...proof, sourceProofDigest: hex("999") } : proof,
+        ),
+        subjects: absentSubjects().map((subject) =>
+          subject.class === "PROVIDER_PROCESS_LAUNCH_LOCK"
+            ? { ...subject, sourceProofDigest: hex("999") }
+            : subject,
         ),
       }],
     ];

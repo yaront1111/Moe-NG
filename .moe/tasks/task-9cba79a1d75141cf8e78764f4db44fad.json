@@ -29,7 +29,7 @@
     {
       "stepId": "step-2",
       "description": "TDD red: create a focused production-ingress characterization suite driven through `handleCommandRequest(createStoreDependencies(...).provide())`, not through reimplemented helper policy. Hand-transcribe all 20 current rows with exact command kind, required capability, ordered payload allow-list, and the measured empty-payload DISPATCH refusal code/layer; assert the table count is exactly 20 and exact set equality. For every row, use the real operator path with `{smuggled:true}` to pin INPUT_INVALID/PAYLOAD_SHAPE before dispatch and empty payload to pin the family handler's exact DISPATCH code/layer; add real-session authorization cases that distinguish correct capability (reaches PAYLOAD_SHAPE) from missing capability (CAPABILITY_DENIED/AUTHORIZE), with zero durable decision growth on both. Pin `agentCapabilitiesFor` through its old daemon-store-dependencies.js compatibility import for all 20 kinds, node.deliver, unknown, ordered values, and frozen arrays. Add focused tests for server-injected project/principal/time/kind/schema fields, representative bootstrap/review/session/work routing, DomainRefusal status/code/layer, changed-byte idempotency conflict at 409/DURABLE_STORE with no duplicate effect, identical replay, and fresh-handle replay. Run only this new test to show the missing module/factory causes red before production extraction.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.test.ts",
         "apps/daemon/src/daemon-store-dependencies.test.ts"
@@ -37,26 +37,38 @@
       "newFiles": [
         "apps/daemon/src/daemon-command-registry.test.ts"
       ],
-      "startedAt": "2026-08-13T22:33:26.773Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "Added apps/daemon/src/daemon-command-registry.test.ts (359 lines): hand-transcribed 20-row table (kind, capability, ordered payloadKeys, measured DISPATCH code/layer, ordered agentCapabilitiesFor value), driven through handleCommandRequest(createStoreDependencies(...).provide()). Cases: exact count 20 + registry key-set equality (guards the sweep from generating zero cases); per-row capability/payload-key equality; per-row {smuggled:true} pinning INPUT_INVALID/400/PAYLOAD_SHAPE; per-row empty payload pinning the family DISPATCH code+layer at 422; agentCapabilitiesFor through the old ./daemon-store-dependencies.js import incl. node.deliver, unknown -> null, frozen arrays; OPERATOR_CAPABILITIES order+frozen; real-session authorization (holder reaches PAYLOAD_SHAPE, non-holder CAPABILITY_DENIED/AUTHORIZE/403) plus proof neither refusal left a durable decision; injected projectId/clock/kind observed as aggregateId/committedAt/eventType on the production stream; injected expectedVersion observed as EXPECTED_VERSION_CONFLICT/CORE_REDUCER; identical replay and fresh-handle replay; createDaemonCommandPorts frozen pair, 20-entry registry, DECIDED passthrough, IdempotencyConflictError -> 409/DURABLE_STORE, DurableStoreError -> 503/DURABLE_STORE with its own code, unclassified error rethrown. Focused run is RED as required: \"Error: Cannot find module './daemon-command-registry.js'\" (1 failed suite, no tests).",
+      "startedAt": "2026-08-13T22:33:26.773Z",
+      "completedAt": "2026-08-13T22:36:02.603Z"
     },
     {
       "stepId": "step-3",
       "description": "Create daemon-command-registry.ts as the single focused registry/decision unit, targeting <=250 physical lines. Move—not duplicate—the five capability constants, bootstrap/review/session/work family maps, 20 ordered payload allow-lists, operator capability set, agentCapabilitiesFor, request encoding/injection, merged BOOTSTRAP_HANDLERS+GOAL_HANDLERS+PLANNING_HANDLERS table, family/schema/handler selection, frozen CommandRegistryEntry construction and registry assembly, DomainRefusal/decision conversion, and exact decision-port refusal translation. Export only `agentCapabilitiesFor`, the frozen operator capability value needed by authentication, and `createDaemonCommandPorts(options)` (with compact options/result types) accepting the concrete public-root SqliteEventStore, projectId, and clock and returning frozen `{decisions, registry}`. Preserve every literal, order, mapping, status, layer, replay path, and unknown-error throw; add no effect.activate behavior or new command.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts"
       ],
       "newFiles": [
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "note": "Created apps/daemon/src/daemon-command-registry.ts at 247 physical lines (max line 98 chars), under the 250 target. Carries the moved bytes verbatim: five CAPABILITIES constants, BOOTSTRAP/REVIEW/SESSION/WORK family maps, agentCapabilitiesFor with its unchanged precedence chain and frozen arrays, the 20 ordered PAYLOAD_KEYS allow-lists in their original key order, OPERATOR_CAPABILITIES, the shared TextEncoder, DomainRefusal, decisionOf, refusal, request encoding/injection (commandId, correlationId, decidedAt=clock(), expectedVersion, kind, payload, principalId, projectId, schemaVersion), the merged BOOTSTRAP_HANDLERS+GOAL_HANDLERS+PLANNING_HANDLERS table, family/schema/handler/capability selection, frozen CommandRegistryEntry construction, buildCommandRegistry assembly over Object.keys(PAYLOAD_KEYS), and the decision port with its 422 DomainRefusal / 409 IdempotencyConflict / 503 DurableStoreError translations and unknown-error rethrow. Public surface is exactly agentCapabilitiesFor, OPERATOR_CAPABILITIES and createDaemonCommandPorts({clock, projectId, store}) -> frozen {decisions, registry}, plus the two compact option/result interfaces. Only compaction (2-per-line data rows, merged inline type imports) differs from the original text; no logic edited and no effect.activate added. pnpm --filter @moe/daemon typecheck exit 0 with the module in place.",
+      "startedAt": "2026-08-13T22:36:05.050Z",
+      "completedAt": "2026-08-13T22:39:07.490Z"
     },
     {
       "stepId": "step-4",
       "description": "Refactor daemon-store-dependencies.ts to import the extracted factory/operator capabilities, re-export `agentCapabilitiesFor` through the established `./daemon-store-dependencies.js` surface, and call `createDaemonCommandPorts({clock, projectId: config.projectId, store})` exactly once before composing the unchanged authenticator with the returned decisions/registry. Remove the moved imports and bytes rather than leaving duplicate policy. Keep createStoreDependencies, config/env parsing, store lifecycle, subscriptions, affordances, document dossiers, restore, source-entry default provider, and all callers unchanged; verify the host is below 300 physical lines and neither changed production file reaches 400.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-dependencies.ts"
-      ]
+      ],
+      "startedAt": "2026-08-13T22:39:10.456Z"
     },
     {
       "stepId": "step-5",
@@ -96,7 +108,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-733c82bb",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -123,16 +135,22 @@
       "author": "governor-773e2f5e",
       "content": "HUMAN APPROVED prop-f0c3baf26d1c441c99f4f53018e53f65 (resolved 2026-08-13T22:18:19Z, resolvedBy human). Block cleared; task returned to PLANNING.\n\nAUTHORITATIVE BRIDGE FORM for this task, superseding DoD item 4's quote style:\n\n    export * from \"./daemon-command-registry.ts\";\n\nExact one-line, LF terminated, DOUBLE quotes. The single-quoted literal written into the DoD is an editorial error and is void.\n\nGovernor-verified evidence: apps/daemon/src/runtime-entrypoint.test.ts:176 defines expectedBridgeSource as `export * from \"./${basename(module, \".ts\")}.ts\";\\n` and the it() at :179 enforces it over a walk of the entire daemon src root — so the new module's bridge is necessarily in that sweep. Census on disk: 6 double-quoted daemon bridges, 0 single-quoted.\n\nScope is NOT expanded: do not migrate runtime-entrypoint.test.ts, and do not touch any existing bridge. Everything else in the DoD stands unchanged — behavior-preserving extraction only, no effect.activate registration, daemon-store-dependencies.ts below 300 physical lines, and the mutation drill on an extracted capability/payload-key mapping must redden a NAMED production-ingress test (epic rail 6: assert the reason code and prove the test is not vacuous).",
       "timestamp": "2026-08-13T22:18:30.861Z"
+    },
+    {
+      "id": "comment-656c7f936bb3497e8f412c4ff8498055",
+      "author": "governor-773e2f5e",
+      "content": "⚠️ CORRECTION — THE HANDOFF NOTE ON THE 22:35 RELEASE IS WRONG. DO NOT ACT ON IT.\n\nThat note says \"No implementation plan was submitted\" and \"Plan the extraction and submit\". Both are false. I wrote it believing I was releasing architect-a9210e34 from a PLANNING task. By the time the call landed the task was WORKING and mid-build.\n\n**Actual state at the time of the release:**\n- 22:27:28 architect-a9210e34 submitted a 7-step implementation plan (it did read my unblock ping — it was never unresponsive, it acted and moved on to task-5dfc98fc)\n- 22:27:30 SPEED auto-approved\n- 22:28:11 worker-733c82bb claimed and started; step 1 COMPLETED, step 2 IN_PROGRESS\n- 22:35 governor released — dropping worker-733c82bb, not the architect\n\n`moe.release_task` clears whoever is the CURRENT assignee, not the one the caller has in mind. My board read was 14 minutes stale. Governor error; no fault of the architect or the worker, and no judgement on the plan or the work.\n\n**Resulting state: status WORKING, assignedWorkerId null, plan intact at 1/7. No files were touched** — no reset, no stash, no revert. worker-733c82bb has been told in #workers to re-claim and resume in place.\n\n**What remains true from that note, and still binds:**\n- The authoritative bridge literal is the DOUBLE-quoted form, exact one line LF: `export * from \"./daemon-command-registry.ts\";` — per human-approved proposal prop-f0c3baf26d1c441c99f4f53018e53f65, recorded in comment-423669880cfb4319b2cbf6cfab3a1ab7. The DoD's single-quoted literal is void.\n- Scope is NOT widened: do not migrate runtime-entrypoint.test.ts, do not touch any existing bridge.\n- Measure the below-300-lines DoD item with `grep -c ''`; Measure-Object -Line and wc -l both undercount.\n- DoD item 5 needs a real mutation drill: an extracted capability or payload-key mapping change must redden a NAMED production-ingress test, on an outcome assertion — a shape or toEqual assertion dying does not settle it.\n\n**What is void from that note:** everything framing this as unplanned work. Whoever holds this task should resume the existing plan, not re-plan it.",
+      "timestamp": "2026-08-13T22:36:19.341Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T22:33:26.773Z",
+  "updatedAt": "2026-08-13T22:39:10.456Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:24:38.683Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -144,7 +162,9 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T22:27:28.602Z",
@@ -167,5 +187,16 @@
     "escalatedAt": "2026-08-13T22:27:51.953Z"
   },
   "planApprovedAt": "2026-08-13T22:27:30.656Z",
-  "workStartedAt": "2026-08-13T22:28:11.862Z"
+  "workStartedAt": "2026-08-13T22:28:11.862Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "The rail conflict that blocked this task is RESOLVED and needs no further investigation. architect-a9210e34 correctly measured it: the DoD demanded the exact LF bridge `export * from './daemon-command-registry.ts';` (single quotes) while apps/daemon/src/runtime-entrypoint.test.ts:176 computes and enforces `export * from \"./${basename}.ts\";\\n` (double quotes) across a walk of the entire daemon src root. Census on disk: 6 double-quoted daemon bridges, 0 single-quoted. Governor independently verified both facts. Rail proposal prop-f0c3baf26d1c441c99f4f53018e53f65 was raised and APPROVED by the human at 22:18:19Z. No implementation plan was submitted.",
+      "whatRemains": "Plan the extraction and submit. The authoritative bridge literal is the DOUBLE-quoted form `export * from \"./daemon-command-registry.ts\";` — exact one line, LF terminated. The DoD's single-quoted literal is void. Scope is NOT expanded: do not migrate runtime-entrypoint.test.ts and do not touch any existing bridge. Everything else in the DoD stands: behavior-preserving extraction only, no effect.activate registration, daemon-store-dependencies.ts reduced below 300 physical lines, agentCapabilitiesFor still reachable by agent-wrapper without switching any caller to a deep package import.",
+      "pitfalls": "Re-measure before planning — the prior architect's numbers are from HEAD ca77c05 and the tree has moved (f961d9c and others have landed since). Measure daemon-store-dependencies.ts physical lines yourself with `grep -c ''`; PowerShell's Measure-Object -Line skips blank lines and wc -l drops one without a trailing newline, and both err toward telling you there is room. The DoD's final item requires a mutation drill: change one extracted capability or payload-key mapping and require a NAMED production-ingress test to redden — a shape or toEqual assertion dying is not sufficient, it must be an outcome assertion. Note also that the new module's .js bridge is necessarily inside runtime-entrypoint.test.ts's sweep, which is the whole reason the quote style mattered.",
+      "openQuestions": "None. The single open question — which bridge quote style is authoritative — was settled by the human-approved proposal. Full detail in comment-423669880cfb4319b2cbf6cfab3a1ab7.",
+      "releasedAt": "2026-08-13T22:35:28.751Z",
+      "releasedBy": "governor-773e2f5e",
+      "reason": "Human explicitly authorized this release at 2026-08-13T22:27Z after reviewing the situation. Not an idle-time release: architect-a9210e34 was pinged directly at 22:18:52 (msg-4a52a712, routed) telling it the block was cleared, did not answer, and its worker status is still the stale BLOCKED it self-reported before the unblock. Releasing the assignment only — the task stays PLANNING and immediately claimable. Deliberately NOT using unblock_worker, which would flip this PLANNING task to WORKING and skip planning entirely."
+    }
+  ]
 }

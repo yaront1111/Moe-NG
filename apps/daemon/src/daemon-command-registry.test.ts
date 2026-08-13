@@ -1,0 +1,359 @@
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { RuntimeCommandKind } from "@moe/contracts";
+import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@moe/store";
+import { afterAll, describe, expect, it } from "vitest";
+
+import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
+import { handleCommandRequest } from "./http/http-adapter.js";
+import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+
+/**
+ * Characterization of the registry the daemon actually serves. Every row was
+ * MEASURED through `handleCommandRequest(createStoreDependencies(...).provide())`
+ * and is transcribed here by hand: nothing is read back out of the production
+ * maps, so a mapping that moves reddens a named case instead of regenerating the
+ * expectation. `agent` is the ordered array `agentCapabilitiesFor` returns for
+ * the kind, also transcribed rather than recomputed from `capability`.
+ */
+interface Row {
+  readonly agent: readonly string[];
+  readonly capability: string;
+  readonly code: string;
+  readonly kind: RuntimeCommandKind;
+  readonly layer: string;
+  readonly payloadKeys: readonly string[];
+}
+
+const ADMIN = "project.admin";
+const GOAL = "goal.write";
+const PLANNING = "planning.write";
+const REVIEW = "review.write";
+const WORK = "work.write";
+const PREREQUISITE = "BOOTSTRAP_PREREQUISITE_MISSING";
+const INGRESS = "DAEMON_INGRESS";
+const PREREQ_LAYER = "DAEMON_PREREQUISITE";
+
+const ROWS: readonly Row[] = [
+  { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "approval.decide",
+    layer: PREREQ_LAYER,
+    payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
+    kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
+    layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
+    layer: PREREQ_LAYER,
+    payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
+  { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
+    kind: "integration.accept_output", layer: INGRESS,
+    payloadKeys: ["calibration", "packageItems", "policy", "proof", "reviewer", "subjectRef"] },
+  { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
+    layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
+    kind: "policy.install", layer: INGRESS, payloadKeys: ["slice"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "policy.validate",
+    layer: PREREQ_LAYER, payloadKeys: ["input"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.activate",
+    layer: PREREQ_LAYER, payloadKeys: ["witness"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.bind_repository",
+    layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
+    kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
+    layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
+    kind: "qualification.replan", layer: INGRESS,
+    payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
+  { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
+    kind: "review.submit", layer: INGRESS,
+    payloadKeys: ["findings", "packageItems", "round", "subjectRef"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "SESSION_PAYLOAD_INVALID",
+    kind: "session.close", layer: INGRESS, payloadKeys: ["sessionId"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "SESSION_PAYLOAD_INVALID",
+    kind: "session.open", layer: INGRESS,
+    payloadKeys: ["capabilities", "credentialSha256", "expiresAt", "sessionId"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "SESSION_PAYLOAD_INVALID",
+    kind: "session.renew", layer: INGRESS, payloadKeys: ["expiresAt", "sessionId"] },
+  { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
+    layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
+  { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
+    layer: INGRESS, payloadKeys: ["workItemId"] },
+  { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.renew",
+    layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
+];
+
+const CREDENTIAL = "registry-operator-credential";
+const PROJECT = "proj-command-registry";
+const DECIDED_AT = "2026-08-09T12:00:00.000Z";
+const CLOCK = (): string => DECIDED_AT;
+
+const directory = mkdtempSync(join(tmpdir(), "moe-command-registry-"));
+const storePath = join(directory, "store.db");
+
+const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
+installTestRecoveryBinding(setupStore);
+setupStore.close();
+
+const provider = createStoreDependencies({
+  clock: CLOCK,
+  credential: CREDENTIAL,
+  principalId: "operator-local",
+  projectId: PROJECT,
+  storePath,
+});
+const deps = provider.provide();
+const stream = provider.subscriptions?.();
+
+afterAll(() => {
+  provider.close();
+  rmSync(directory, { force: true, recursive: true });
+});
+
+function send(
+  commandId: string,
+  commandKind: RuntimeCommandKind,
+  payload: Readonly<Record<string, unknown>>,
+  credential: string = CREDENTIAL,
+  expectedVersion = 0,
+): ReturnType<typeof handleCommandRequest> {
+  return handleCommandRequest(deps, {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId, commandKind, correlationId: "corr-registry", expectedVersion, payload,
+      requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential, targetAggregateId: "agg-registry",
+    })),
+    credential,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+}
+
+function openSession(
+  commandId: string, sessionId: string, secret: string, capabilities: readonly string[],
+): string {
+  const opened = send(commandId, "session.open", {
+    capabilities,
+    credentialSha256: createHash("sha256").update(secret, "utf8").digest("hex"),
+    expiresAt: "2027-01-01T00:00:00.000Z",
+    sessionId,
+  });
+  expect(opened).toMatchObject({ decision: { disposition: "DECIDED" }, outcome: "ACCEPTED" });
+  return secret;
+}
+
+describe("registered command table", () => {
+  it("serves exactly the twenty characterized kinds and nothing else", () => {
+    // Pins the swept case count: an it.each over an empty or shortened table
+    // would otherwise pass while asserting nothing.
+    expect(ROWS).toHaveLength(20);
+    expect(deps.registry.size).toBe(20);
+    expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
+  });
+
+  it.each(ROWS)("$kind keeps its capability and ordered payload allow-list", (row) => {
+    const entry = deps.registry.get(row.kind);
+    expect(entry).toBeDefined();
+    expect(entry?.requiredCapability).toBe(row.capability);
+    expect(entry?.payloadKeys).toEqual(row.payloadKeys);
+  });
+
+  it.each(ROWS)("$kind refuses a smuggled key before it can reach dispatch", (row) => {
+    expect(send(`cmd-smuggled-${row.kind}`, row.kind, { smuggled: true })).toMatchObject({
+      error: { code: "INPUT_INVALID" },
+      httpStatus: 400,
+      ok: false,
+      outcome: "REFUSED",
+      stage: "PAYLOAD_SHAPE",
+    });
+  });
+
+  it.each(ROWS)("$kind reaches its own family handler and refuses with its code", (row) => {
+    expect(send(`cmd-empty-${row.kind}`, row.kind, {})).toMatchObject({
+      httpStatus: 422,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: { code: row.code, layer: row.layer },
+      stage: "DISPATCH",
+    });
+  });
+
+  it.each(ROWS)("$kind exposes its agent capability list through the old module", (row) => {
+    const capabilities = agentCapabilitiesFor(row.kind);
+    expect(capabilities).toEqual(row.agent);
+    expect(Object.isFrozen(capabilities)).toBe(true);
+  });
+
+  it("answers node.deliver and refuses an unknown kind", () => {
+    const delivered = agentCapabilitiesFor("node.deliver");
+    expect(delivered).toEqual([REVIEW, WORK]);
+    expect(Object.isFrozen(delivered)).toBe(true);
+    expect(agentCapabilitiesFor("effect.activate")).toBeNull();
+    expect(agentCapabilitiesFor("")).toBeNull();
+  });
+
+  it("keeps the operator capability set frozen and ordered", () => {
+    expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
+    expect(Object.isFrozen(OPERATOR_CAPABILITIES)).toBe(true);
+  });
+});
+
+describe("authorization ordering under a real session", () => {
+  it("lets the capability holder reach payload shape and denies the one without it", () => {
+    const allowed = openSession("cmd-sess-allow", "sess-allow", "secret-allow", [REVIEW, WORK]);
+    expect(send("cmd-review-allowed", "review.submit", { smuggled: true }, allowed)).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, stage: "PAYLOAD_SHAPE",
+    });
+
+    const denied = openSession("cmd-sess-deny", "sess-deny", "secret-deny", [WORK]);
+    expect(send("cmd-review-denied", "review.submit", { smuggled: true }, denied)).toMatchObject({
+      error: { code: "CAPABILITY_DENIED" }, httpStatus: 403, ok: false,
+      outcome: "REFUSED", stage: "AUTHORIZE",
+    });
+
+    // Neither refusal may leave a durable decision behind: replaying the same
+    // command ids as the operator must reach DISPATCH afresh rather than return
+    // a stored decision.
+    expect(send("cmd-review-allowed", "review.submit", {})).toMatchObject({
+      outcome: "PORT_REFUSED", refusal: { code: "REVIEW_PAYLOAD_INVALID" }, stage: "DISPATCH",
+    });
+    expect(send("cmd-review-denied", "review.submit", {})).toMatchObject({
+      outcome: "PORT_REFUSED", refusal: { code: "REVIEW_PAYLOAD_INVALID" }, stage: "DISPATCH",
+    });
+  });
+});
+
+describe("server-injected request fields", () => {
+  it("commits with the daemon's own project, clock and kind, never the caller's", () => {
+    // Sessions opened earlier in this file also emit events, so the cursor is
+    // drained to empty first: the assertion below is then exactly the commit
+    // this case made.
+    let drained = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
+    expect(drained).toMatchObject({ outcome: "PAGE" });
+    while (drained?.outcome === "PAGE" && drained.events.length > 0) {
+      drained = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
+    }
+
+    expect(send("cmd-register-1", "project.register", { owner: "operator-local" })).toMatchObject({
+      decision: { commandId: "cmd-register-1", disposition: "DECIDED",
+        resultCode: "EFFECTS_COMMITTED" },
+      httpStatus: 200,
+      ok: true,
+      outcome: "ACCEPTED",
+    });
+
+    const page = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
+    if (page?.outcome !== "PAGE") throw new Error("expected a page after the commit");
+    expect(page.events.map((event) => ({
+      aggregateId: event.aggregateId, committedAt: event.committedAt, eventType: event.eventType,
+    }))).toEqual([
+      { aggregateId: PROJECT, committedAt: DECIDED_AT, eventType: "ProjectRegistered" },
+    ]);
+  });
+
+  it("carries the caller's expected version into the durable decision", () => {
+    expect(send("cmd-register-stale", "project.register", { owner: "operator-local" },
+      CREDENTIAL, 5)).toMatchObject({
+      httpStatus: 422,
+      outcome: "PORT_REFUSED",
+      refusal: { code: "EXPECTED_VERSION_CONFLICT", layer: "CORE_REDUCER" },
+      stage: "DISPATCH",
+    });
+  });
+
+  it("replays the identical command and replays again on a fresh store handle", () => {
+    expect(send("cmd-register-1", "project.register", { owner: "operator-local" })).toMatchObject({
+      decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
+      ok: true,
+      outcome: "ACCEPTED",
+    });
+
+    const reopened = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: "operator-local",
+      projectId: PROJECT, storePath,
+    });
+    try {
+      const replayed = handleCommandRequest(reopened.provide(), {
+        body: new TextEncoder().encode(JSON.stringify({
+          commandId: "cmd-register-1", commandKind: "project.register",
+          correlationId: "corr-registry", expectedVersion: 0,
+          payload: { owner: "operator-local" }, requestDigest: "a".repeat(64),
+          schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: CREDENTIAL,
+          targetAggregateId: "agg-registry",
+        })),
+        credential: CREDENTIAL,
+        protocolVersion: WIRE_PROTOCOL_VERSION,
+      });
+      expect(replayed).toMatchObject({
+        decision: { disposition: "REPLAYED", resultCode: "EFFECTS_COMMITTED" },
+        outcome: "ACCEPTED",
+      });
+    } finally {
+      reopened.close();
+    }
+  });
+});
+
+describe("createDaemonCommandPorts", () => {
+  const key = { commandId: "cmd-port", principalId: "operator-local", projectId: PROJECT };
+  const portStore = SqliteEventStore.openForProject(storePath, PROJECT);
+  const ports = createDaemonCommandPorts({ clock: CLOCK, projectId: PROJECT, store: portStore });
+
+  afterAll(() => { portStore.close(); });
+
+  it("returns a frozen pair carrying the whole registry", () => {
+    expect(Object.isFrozen(ports)).toBe(true);
+    expect(ports.registry.size).toBe(20);
+    expect(ports.registry.get("project.register")).toMatchObject({
+      kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
+    });
+  });
+
+  it("passes a committed decision through unchanged", () => {
+    const decision = {
+      commandId: key.commandId, disposition: "DECIDED" as const,
+      effectId: "effect-1", resultCode: "EFFECTS_COMMITTED",
+    };
+    const result = ports.decisions.decide(key, "a".repeat(64), () => decision);
+    expect(result).toEqual({ decision, outcome: "DECIDED" });
+  });
+
+  it("translates an idempotency conflict to 409 under the durable store layer", () => {
+    expect(ports.decisions.decide(key, "a".repeat(64), () => {
+      throw new IdempotencyConflictError(key);
+    })).toEqual({
+      outcome: "REFUSED",
+      refusal: {
+        code: "IDEMPOTENCY_CONFLICT",
+        detail: "same command identity with different request bytes",
+        httpStatus: 409,
+        layer: "DURABLE_STORE",
+      },
+    });
+  });
+
+  it("translates any other durable store failure to 503 with its own code", () => {
+    expect(ports.decisions.decide(key, "a".repeat(64), () => {
+      throw new DurableStoreError("STORE_BUSY", "database is locked");
+    })).toEqual({
+      outcome: "REFUSED",
+      refusal: {
+        code: "STORE_BUSY",
+        detail: "STORE_BUSY: database is locked",
+        httpStatus: 503,
+        layer: "DURABLE_STORE",
+      },
+    });
+  });
+
+  it("rethrows an error it cannot classify instead of inventing a refusal", () => {
+    expect(() => ports.decisions.decide(key, "a".repeat(64), () => {
+      throw new TypeError("unexpected");
+    })).toThrowError("unexpected");
+  });
+});

@@ -1,3 +1,5 @@
+import { types } from "node:util";
+
 /**
  * The canonical daemon recovery-inventory contract.
  *
@@ -115,6 +117,11 @@ export const RECOVERY_INVENTORY_UPSTREAM_CODES = Object.freeze([
   "RECOVERY_INVENTORY_CLASS_UNKNOWN",
   "RECOVERY_INVENTORY_CLASS_DUPLICATE",
   "RECOVERY_INVENTORY_CLASS_OMITTED",
+  "RECOVERY_INVENTORY_PROOF_CLASS_EXTRA",
+  "RECOVERY_INVENTORY_PROOF_CLASS_UNKNOWN",
+  "RECOVERY_INVENTORY_PROOF_CLASS_DUPLICATE",
+  "RECOVERY_INVENTORY_PROOF_DIGEST_RESERVED",
+  "RECOVERY_INVENTORY_ITEM_PROOF_MISMATCH",
   "RECOVERY_INVENTORY_INPUT_INVALID",
   "RECOVERY_INVENTORY_SUBJECT_INVALID",
   "RECOVERY_INVENTORY_SUBJECT_DUPLICATE",
@@ -152,6 +159,14 @@ export interface RecoveryInventoryCoordinatorAnswer {
 export const MAX_RECOVERY_RECONCILIATION_ITEMS = 4096;
 export const MAX_RECOVERY_RECONCILIATION_TEXT_CHARS = 400;
 export const MAX_RECOVERY_RECONCILIATION_BYTES = 4 * 1_024 * 1_024;
+
+/**
+ * The one digest that means "no configured proof backed this class". It is
+ * RESERVED: a supplied proof carrying it is refused, because a caller able to
+ * spell the sentinel could make an unbacked slot indistinguishable from a real
+ * one, and the readback invariant keyed on it would then certify nothing.
+ */
+export const RECOVERY_UNKNOWN_PROOF_DIGEST = "0".repeat(64);
 
 export interface RecoveryReconciliationProof {
   readonly class: RecoveryProofClass;
@@ -203,6 +218,21 @@ const isDataProperty = (descriptor: PropertyDescriptor | undefined): boolean =>
   descriptor.get === undefined && descriptor.set === undefined;
 
 /**
+ * Proxy-ness is asked FIRST, everywhere, and refused CATEGORICALLY. A revoked
+ * proxy makes `Array.isArray` itself THROW, and a trap-bearing one would run
+ * caller code inside what is supposed to be a reflective read — both escape the
+ * typed refusal envelope rather than returning a stable reason code. A merely
+ * transparent proxy is refused too: its target can be swapped between reads, so
+ * "it behaved like a record once" proves nothing about the second look.
+ */
+export const isReflectableObject = (value: unknown): value is object =>
+  typeof value === "object" && value !== null && !types.isProxy(value);
+
+/** Same ordering rule for arrays, for the same revoked-proxy reason. */
+export const isPlainArray = (value: unknown): value is readonly unknown[] =>
+  !types.isProxy(value) && Array.isArray(value);
+
+/**
  * One synchronous read of own property DESCRIPTORS, before any use. An accessor,
  * a proxy trap or an inherited key must not be able to answer differently the
  * second time, and an extra key is REFUSED rather than dropped: silently
@@ -212,7 +242,7 @@ export function exactDataRecord(
   value: unknown,
   keys: readonly string[],
 ): Readonly<Record<string, unknown>> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!isReflectableObject(value) || Array.isArray(value)) return null;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const own = Reflect.ownKeys(descriptors);
   if (own.length !== keys.length) return null;

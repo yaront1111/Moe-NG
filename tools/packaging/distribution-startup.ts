@@ -26,9 +26,19 @@ export interface DistributionStartupInput {
 
 export type DistributionLaunchPort = (componentId: string) => void;
 
+/**
+ * The one refusal this module mints mid-loop. The port has no stop affordance, so a
+ * throw on a later component cannot un-launch its predecessors; `launched` reports the
+ * components the port had already completed so the caller can reconcile them.
+ */
+export interface DistributionLaunchFailure extends DistributionRefusal {
+  readonly launched: readonly string[];
+}
+
 export type DistributionStartupResult =
   | { readonly launched: readonly string[]; readonly ok: true }
-  | DistributionRefusal;
+  | DistributionRefusal
+  | DistributionLaunchFailure;
 
 const refuse = (reason: Parameters<typeof distributionRefusal>[0]): DistributionRefusal =>
   distributionRefusal(reason, "DISTRIBUTION_STARTUP");
@@ -74,8 +84,9 @@ function isStartupInput(value: unknown): value is DistributionStartupInput {
  *
  * Nothing launches until the WHOLE set is admitted: a per-component launch loop would
  * start a valid daemon beside a tampered control room, which is exactly the split state
- * a distribution gate exists to prevent. Every failure path leaves the launch count at
- * zero, including a launch port that throws.
+ * a distribution gate exists to prevent. Every refusal BEFORE the launch loop leaves
+ * the launch count at zero; a port that throws mid-loop fails closed and truthfully
+ * reports the components already launched, because they cannot be unwound.
  */
 export function startDistribution(
   input: unknown, launch: DistributionLaunchPort,
@@ -108,7 +119,9 @@ export function startDistribution(
     try {
       launch(componentId);
     } catch {
-      return refuse("LAUNCH_PORT_FAILED");
+      return Object.freeze({
+        ...refuse("LAUNCH_PORT_FAILED"), launched: Object.freeze([...launched]),
+      });
     }
     launched.push(componentId);
   }

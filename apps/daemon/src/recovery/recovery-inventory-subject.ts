@@ -4,6 +4,8 @@ import {
   RECOVERY_INVENTORY_UPSTREAM_CODES,
   RECOVERY_INVENTORY_UPSTREAM_LAYERS,
   exactDataRecord,
+  isPlainArray,
+  isReflectableObject,
 } from "./recovery-inventory-contract.js";
 import type {
   RecoveryInventoryPopulation,
@@ -103,7 +105,9 @@ function readUpstream(value: unknown): RecoveryInventoryUpstream | null {
 }
 
 function readEvidence(value: unknown): RecoverySubjectEvidence | null {
-  if (value === null || typeof value !== "object") return null;
+  // Proxy-ness first: the `kind` peek below is itself a reflective read, so a
+  // trap here would run before `exactDataRecord` ever got the chance to refuse.
+  if (!isReflectableObject(value)) return null;
   const kind: unknown = Object.getOwnPropertyDescriptor(value, "kind")?.value;
   if (typeof kind !== "string") return null;
   const keys = EVIDENCE_KEYS[kind];
@@ -176,7 +180,7 @@ const readArray = <Item>(
   value: unknown,
   read: (entry: unknown) => Item | null,
 ): readonly Item[] | null => {
-  if (!Array.isArray(value) || value.length > MAX_RECOVERY_RECONCILIATION_ITEMS) return null;
+  if (!isPlainArray(value) || value.length > MAX_RECOVERY_RECONCILIATION_ITEMS) return null;
   const out: Item[] = [];
   for (const entry of value) {
     const item = read(entry);
