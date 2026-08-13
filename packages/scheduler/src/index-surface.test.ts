@@ -19,8 +19,8 @@ import type {
 } from "@moe/scheduler";
 import type {
   AcquisitionFailure, AcquisitionSet, AcquisitionState, DeclaredResource,
-  ProviderSlotReservation, ReserveAllRequest, ReserveAllResult, ResourceRow, ResourceWaitRequest,
-  SlotState,
+  ProviderSlotActivateCommand, ProviderSlotReservation, ReserveAllRequest, ReserveAllResult,
+  ResourceRow, ResourceWaitRequest, SlotState,
 } from "@moe/scheduler";
 import type {
   AdmissionAmount, AdmissionGate, AdmissionHumanApproval, AdmissionPolicyAllowance,
@@ -65,7 +65,7 @@ import type {
 
 type ExportKind = "array" | "function" | "number" | "record";
 /**
- * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
+ * Hand-transcribed: 17 pre-existing graph values + 20 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
  * 12 fairness rotation and aging values + 7 expansion admission values + the two
  * admission-to-preparation binding values (bindExpansionAdmission and
@@ -94,6 +94,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
+  ["activateProviderSlot", "function"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
   ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
   ["analyzeGraphStructure", "function"],
@@ -122,7 +123,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(77);
+  expect(EXPECTED_EXPORTS.length).toBe(78);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -190,11 +191,51 @@ it("reserves and confirms an acquisition set through the root exports", () => {
   const confirmed = acquisitionSet(scheduler.adapterConfirm(rows, "res:remote", 1));
   expect(confirmed.allActive).toBe(true);
   const slot: AuthorityOutcome<ProviderSlotReservation> =
-    scheduler.reserveProviderSlot(confirmed.rows, "slot:1", "req:1");
+    scheduler.reserveProviderSlot(confirmed.rows, "default", "slot:1", "req:1");
   expect(slot.ok).toBe(true);
   const state: SlotState = slot.ok ? slot.value.state : "RELEASED";
   expect(state).toBe("RESERVED");
   expect(scheduler.SLOT_STATES).toContain(state);
+});
+
+it("activates a reserved provider slot through the root exports", () => {
+  const rows = reservedRows(scheduler.reserveAll(RESERVE_REQUEST));
+  const confirmed = acquisitionSet(scheduler.adapterConfirm(rows, "res:remote", 1));
+  const slot = scheduler.reserveProviderSlot(confirmed.rows, "default", "slot:1", "req:1");
+  expect(slot.ok).toBe(true);
+  if (!slot.ok) throw new Error(authorityCodes(slot).join(","));
+  expect(slot.value.dimension).toBe("default");
+  expect(slot.value.attemptRef).toBeNull();
+  const activation: ProviderSlotActivateCommand = {
+    dimension: "default", slotRef: "slot:1", requestId: "req:1", attemptRef: "attempt:1",
+  };
+  const activated: AuthorityOutcome<ProviderSlotReservation> =
+    scheduler.activateProviderSlot(slot.value, activation);
+  expect(activated.ok).toBe(true);
+  if (!activated.ok) throw new Error(authorityCodes(activated).join(","));
+  const next: SlotState = activated.value.state;
+  expect(next).toBe("ACTIVE");
+  expect(activated.value.attemptRef).toBe("attempt:1");
+  expect(activated.value.dimension).toBe("default");
+  expect(slot.value.state).toBe("RESERVED");
+});
+
+it("refuses drifted or replayed activation with the exact root refusal codes", () => {
+  const rows = reservedRows(scheduler.reserveAll(RESERVE_REQUEST));
+  const confirmed = acquisitionSet(scheduler.adapterConfirm(rows, "res:remote", 1));
+  const slot = scheduler.reserveProviderSlot(confirmed.rows, "default", "slot:1", "req:1");
+  if (!slot.ok) throw new Error(authorityCodes(slot).join(","));
+  const good = { dimension: "default", slotRef: "slot:1", requestId: "req:1", attemptRef: "a:1" };
+  const drifted = scheduler.activateProviderSlot(slot.value, { ...good, slotRef: "slot:2" });
+  expect(authorityCodes(drifted)).toEqual(["AUTHORITY_STALE_LEASE"]);
+  const malformed = scheduler.activateProviderSlot(slot.value, { ...good, attemptRef: "" });
+  expect(authorityCodes(malformed)).toEqual(["AUTHORITY_MALFORMED_INPUT"]);
+  const first = scheduler.activateProviderSlot(slot.value, good);
+  expect(first.ok).toBe(true);
+  if (!first.ok) return;
+  const replay = scheduler.activateProviderSlot(first.value, good);
+  expect(authorityCodes(replay)).toEqual(["AUTHORITY_STALE_LEASE"]);
+  expect(replay).not.toHaveProperty("value");
 });
 
 it("quarantines an unknown adapter failure and clears it with a proof", () => {

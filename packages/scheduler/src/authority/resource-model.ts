@@ -74,10 +74,25 @@ export interface ResourceWaitRequest {
   readonly callerObservation: string;
 }
 
+/**
+ * `dimension` is carried, never defaulted: the daemon's slot ceiling counts per
+ * dimension, so a reducer-side default would silently merge two ceilings.
+ * `attemptRef` is null until `effect.activate` binds exactly one attempt.
+ */
 export interface ProviderSlotReservation {
+  readonly dimension: string;
   readonly slotRef: string;
   readonly requestId: string;
   readonly state: SlotState;
+  readonly attemptRef: string | null;
+}
+
+/** The exact activation fact set: the identity being activated plus its attempt. */
+export interface ProviderSlotActivateCommand {
+  readonly dimension: string;
+  readonly slotRef: string;
+  readonly requestId: string;
+  readonly attemptRef: string;
 }
 
 export interface AcquisitionSet {
@@ -161,6 +176,36 @@ export function parseReserveRequest(value: unknown): ReserveAllRequest | null {
     return null;
   }
   return { ...parsed, declaredResources: declared } as unknown as ReserveAllRequest;
+}
+
+const SLOT_KEYS = ["dimension", "slotRef", "requestId", "state", "attemptRef"] as const;
+const SLOT_ACTIVATE_KEYS = ["dimension", "slotRef", "requestId", "attemptRef"] as const;
+
+/**
+ * Rebuilds from own data properties only. A caller record is never returned or
+ * spread through, so an accessor, proxy, or extra key cannot survive the parse
+ * and reappear in a successor.
+ */
+export function parseProviderSlot(value: unknown): ProviderSlotReservation | null {
+  const parsed = exactRecord(value, SLOT_KEYS);
+  if (parsed === null) return null;
+  const { attemptRef, dimension, requestId, slotRef, state } = parsed;
+  if (!isRef(dimension) || !isRef(slotRef) || !isRef(requestId)) return null;
+  if (!oneOf(state, SLOT_STATES)) return null;
+  // Absent-and-unbound is `null`; every other non-ref is malformed, never "unbound".
+  if (attemptRef !== null && !isRef(attemptRef)) return null;
+  return { attemptRef, dimension, requestId, slotRef, state };
+}
+
+export function parseProviderSlotActivation(
+  value: unknown,
+): ProviderSlotActivateCommand | null {
+  const parsed = exactRecord(value, SLOT_ACTIVATE_KEYS);
+  if (parsed === null) return null;
+  const { attemptRef, dimension, requestId, slotRef } = parsed;
+  if (!isRef(dimension) || !isRef(slotRef) || !isRef(requestId)) return null;
+  if (!isRef(attemptRef)) return null;
+  return { attemptRef, dimension, requestId, slotRef };
 }
 
 /** Wrong-state and unmet-precondition refusals map to the registry stale-lease family. */

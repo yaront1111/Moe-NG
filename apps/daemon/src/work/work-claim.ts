@@ -62,7 +62,12 @@ function claimLease(lease: Record<string, unknown>): WorkResult | { readonly val
 }
 
 function claimSlot(slot: Record<string, unknown>): WorkResult | { readonly value: unknown } {
-  const outcome = reserveProviderSlot(slot["rows"], slot["slotRef"], slot["requestId"]);
+  // The dimension is read from the payload, never defaulted here: the ceiling
+  // in `checkSlotCeiling` counts per dimension, so a default would silently
+  // merge two ceilings and reserve a slot the count never saw.
+  const outcome = reserveProviderSlot(
+    slot["rows"], slot["dimension"], slot["slotRef"], slot["requestId"],
+  );
   if (outcome.ok) return { value: outcome.value };
   const issue = outcome.issues[0];
   const upstream = issue?.code ?? null;

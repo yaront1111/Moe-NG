@@ -21,6 +21,8 @@ import {
 import {
   ACQUISITION_FAILURES,
   availableUnits,
+  parseProviderSlot,
+  parseProviderSlotActivation,
   parseReserveRequest,
   parseRows,
   refuse,
@@ -36,8 +38,8 @@ export {
 } from "./resource-model.js";
 export type {
   AcquisitionFailure, AcquisitionSet, AcquisitionState, DeclaredResource,
-  ProviderSlotReservation, ReserveAllRequest, ReserveAllResult, ResourceRow, ResourceWaitRequest,
-  SlotState,
+  ProviderSlotActivateCommand, ProviderSlotReservation, ReserveAllRequest, ReserveAllResult,
+  ResourceRow, ResourceWaitRequest, SlotState,
 } from "./resource-model.js";
 
 /**
@@ -157,20 +159,57 @@ export function adapterFail(
   return settled(rows, true);
 }
 
-/** Design 427: claim reserves the slot; `effect.activate` (out of scope) makes it ACTIVE. */
+/** Design 427: claim reserves the slot; `activateProviderSlot` below makes it ACTIVE. */
 export function reserveProviderSlot(
   value: unknown,
+  dimension: unknown,
   slotRef: unknown,
   requestId: unknown,
 ): AuthorityOutcome<ProviderSlotReservation> {
   const rows = parseRows(value);
-  if (rows === null || !isRef(slotRef) || !isRef(requestId)) {
+  if (rows === null || !isRef(dimension) || !isRef(slotRef) || !isRef(requestId)) {
     return malformed("reserveProviderSlot received a malformed reservation request");
   }
   if (!rows.every((row) => row.state === "ACTIVE")) {
     return refuse("a provider slot requires every declared resource to be ACTIVE");
   }
-  return accept(deepFreeze({ slotRef, requestId, state: "RESERVED" as const }));
+  return accept(deepFreeze({
+    dimension, slotRef, requestId, state: "RESERVED" as const, attemptRef: null,
+  }));
+}
+
+/**
+ * Design 427: `effect.activate` is the ONLY RESERVED -> ACTIVE transition, and
+ * it lives here because slot occupancy is scheduler-owned authority. The
+ * operation is pure: both inputs are re-parsed from own data properties, the
+ * successor is a fresh frozen record, and neither caller record is mutated,
+ * frozen, or returned by reference.
+ */
+export function activateProviderSlot(
+  predecessor: unknown,
+  command: unknown,
+): AuthorityOutcome<ProviderSlotReservation> {
+  const slot = parseProviderSlot(predecessor);
+  const activation = parseProviderSlotActivation(command);
+  if (slot === null || activation === null) {
+    return malformed("activateProviderSlot received a malformed slot record or command");
+  }
+  if (slot.dimension !== activation.dimension || slot.slotRef !== activation.slotRef) {
+    return refuse("activation identity does not match the reserved provider slot");
+  }
+  if (slot.requestId !== activation.requestId) {
+    return refuse("activation names a different request than the reserved provider slot");
+  }
+  if (slot.state !== "RESERVED") {
+    return refuse(`a provider slot in state ${slot.state} cannot be activated`);
+  }
+  if (slot.attemptRef !== null) {
+    return refuse("the provider slot is already bound to an attempt");
+  }
+  return accept(deepFreeze({
+    dimension: slot.dimension, slotRef: slot.slotRef, requestId: slot.requestId,
+    state: "ACTIVE" as const, attemptRef: activation.attemptRef,
+  }));
 }
 
 /** A successor receives no capacity until fenceability or reconciliation proves it safe. */

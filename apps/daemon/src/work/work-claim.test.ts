@@ -86,7 +86,9 @@ function validPayload(): Record<string, unknown> {
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: PROOF, record: LEASE_RECORD },
     liveClaims: [],
-    slot: { requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1" },
+    slot: {
+      dimension: "default", requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1",
+    },
   };
 }
 
@@ -198,6 +200,17 @@ const INJECTIONS: readonly Injection[] = [
     },
   },
   {
+    code: "WORK_PAYLOAD_MALFORMED",
+    // The dimension the ceiling counts by must be carried on the payload; the
+    // scheduler refuses an absent one rather than assuming the default.
+    upstream: "AUTHORITY_MALFORMED_INPUT",
+    label: "provider-slot leg — the slot section carries no dimension",
+    leg: "providerSlot",
+    mutate: (p) => {
+      delete at(p, "slot")["dimension"];
+    },
+  },
+  {
     code: "WORK_BUDGET_REFUSED",
     upstream: "BUDGET_RESERVATION_INSUFFICIENT_AVAILABLE",
     label: "budget leg — insufficient available",
@@ -288,7 +301,7 @@ describe("work.claim — the happy path publishes all four successors", () => {
 describe("work.claim — per-leg failure injection", () => {
   it("covers every declared claim leg, so a dropped leg fails the suite", () => {
     expect(CLAIM_LEGS.length).toBe(4);
-    expect(INJECTIONS.length).toBe(10);
+    expect(INJECTIONS.length).toBe(11);
     const covered = new Set(INJECTIONS.map((injection) => injection.leg));
     expect([...covered].sort()).toStrictEqual([...CLAIM_LEGS].sort());
   });

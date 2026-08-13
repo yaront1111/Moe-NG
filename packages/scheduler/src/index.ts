@@ -13,7 +13,9 @@
  *    record and a proof the CALLER supplies; no lease, token, or epoch is minted.
  *  - reserveAll / adapterConfirm / adapterFail / grantSuccessorCapacity /
  *    reserveProviderSlot: all-or-none acquisition over a caller-supplied
- *    capacity snapshot. No slot is counted or activated here.
+ *    capacity snapshot. No slot is counted here.
+ *  - activateProviderSlot: the sole RESERVED -> ACTIVE slot transition, binding
+ *    exactly one caller-supplied attempt. It mints no slot and no attempt.
  *
  * 3. Caller-supplied conserved-budget admission reservation:
  *  - reserveForAdmission / cancelReservation: units move all-or-none between the
@@ -68,6 +70,7 @@ export {
 export { createTraversalCounter } from "./graph-model.js";
 
 export {
+  activateProviderSlot,
   adapterConfirm,
   adapterFail,
   grantSuccessorCapacity,
@@ -228,6 +231,7 @@ export type {
   AcquisitionSet,
   AcquisitionState,
   DeclaredResource,
+  ProviderSlotActivateCommand,
   ProviderSlotReservation,
   ReserveAllRequest,
   ReserveAllResult,

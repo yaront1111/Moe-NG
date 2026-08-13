@@ -79,6 +79,7 @@ const CLAIM_PAYLOAD = {
   lease: { proof: PROOF, record: LEASE },
   liveClaims: [] as unknown[],
   slot: {
+    dimension: "default",
     requestId: "req-v",
     rows: [
       {

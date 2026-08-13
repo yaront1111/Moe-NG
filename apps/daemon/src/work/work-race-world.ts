@@ -135,7 +135,9 @@ function basePayload(world: World, proof: Record<string, unknown>): Payload {
     effect: { command: { kind: "claim" }, intent: { ...world.intent } },
     lease: { proof: { ...proof }, record: { ...world.record } },
     liveClaims: [],
-    slot: { requestId: "req-1", rows: [{ ...RESOURCE_ROW }], slotRef: "slot-1" },
+    slot: {
+      dimension: "default", requestId: "req-1", rows: [{ ...RESOURCE_ROW }], slotRef: "slot-1",
+    },
   };
 }
 
