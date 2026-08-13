@@ -139,7 +139,7 @@
       "completedAt": "2026-08-13T17:06:18.863Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -149,19 +149,35 @@
   "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
   "priority": "CRITICAL",
   "order": 13.521,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-216e37783f294b8f931daee598455f2e",
+      "author": "governor-7c5e6be6",
+      "content": "Fleet priority: QA is actively reviewing this task; complete this review before taking another item because DONE unlocks task-311adb23, then task-df29871/e33747f9. Verify normally—this is priority routing, not pressure to approve.",
+      "timestamp": "2026-08-13T20:49:31.027Z"
+    },
+    {
+      "id": "comment-91c15caeaf3b4ee9bb6d2d3af75ddccd",
+      "author": "qa-41bfec20",
+      "content": "Independent QA verification completed after the task transitioned to DONE concurrently. Fresh gate: scheduler typecheck + 42/1219, daemon typecheck + 63/948, workspace typecheck, root 248/5386 +1 skipped; bare-root RESERVED→ACTIVE smoke green. Hostile symbol/accessor/proxy and mismatch probe pinned exact MALFORMED versus STALE codes with no value. RESERVED-guard mutation reddened the named replay test and was restored SHA-exact. Production sizes/design/diff checks passed. My qa_approve call raced the DONE transition and returned INVALID_STATE; evidence is recorded here and in Serena handoff.",
+      "timestamp": "2026-08-13T20:52:00.390Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:09.379Z",
-  "updatedAt": "2026-08-13T17:07:07.784Z",
+  "updatedAt": "2026-08-13T20:52:00.390Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:44:18.594Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-13T20:50:42.313Z",
+    "wallClockMs": 14783719
   },
   "contextFetchedBy": [
     "architect-a9210e34",
-    "worker-68608f71"
+    "worker-68608f71",
+    "qa-41bfec20"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -190,7 +206,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-13T20:48:39.401Z",
+    "escalatedAt": "2026-08-13T20:48:39.401Z"
   },
   "planApprovedAt": "2026-08-13T16:46:23.500Z",
   "workStartedAt": "2026-08-13T16:46:48.729Z",
@@ -211,5 +229,8 @@
     "apps/daemon/src/work/work-claim.test.ts",
     "apps/daemon/src/work/work-vocabulary.test.ts",
     "apps/daemon/src/work/work-race-world.ts"
-  ]
+  ],
+  "completedAt": "2026-08-13T20:50:42.313Z",
+  "reviewCompletedAt": "2026-08-13T20:50:42.313Z",
+  "reviewSummary": "Approved after reviewing commit 2a82819 over all nine owned paths and verifying every DoD item. Fresh exact gate exited 0: scheduler typecheck + 42 files/1219 tests, daemon typecheck + 63 files/948 tests, workspace typecheck, and root 248 files/5386 passed +1 skipped. A separate plain-Node @moe/scheduler root smoke exercised RESERVED→ACTIVE and printed SMOKE_OK. The production parsers exact-read own data, reserve returns the frozen dimension-bound/null-attempt shape, activation pins dimension/slot/request/state/attempt and rebuilds a frozen successor, and tests assert exact malformed/stale codes with positive case counts and no successor. The public function/type closure is rooted; downstream consumer task-e33747f982e0452a9f9d784fd1cb914d is recorded. Production files are 214/232/332/158 lines (<400), the design hash is unchanged, and worker mutation evidence pins the state and dimension guards."
 }

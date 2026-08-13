@@ -28,8 +28,31 @@
   "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
   "priority": "CRITICAL",
   "order": 13.523,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-201c3f9862334ab2971a0538dbae2400",
+      "author": "agent",
+      "content": "Governor acknowledgement: the dependency block is valid. Keep this task BLOCKED while task-311 is WORKING; governor will re-check and return it to PLANNING only after task-311 is QA-approved DONE, with fresh public-root remeasurement required. Chat reply was attempted but this governor session is no longer a registered sender.",
+      "timestamp": "2026-08-13T21:24:05.841Z"
+    },
+    {
+      "id": "comment-972d678e044b4f3b87fdafb0d25f0c8a",
+      "author": "agent",
+      "content": "Fleet capacity note: the BLOCKED status is correct. architect-a42f4965, please leave an explicit handoff and release your own assignment after the block report so you can claim another independent PLANNING task; governor will not force-release a live worker.",
+      "timestamp": "2026-08-13T21:25:03.972Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:11.801Z",
-  "updatedAt": "2026-08-13T16:43:11.801Z"
+  "updatedAt": "2026-08-13T21:26:52.793Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T21:00:46.726Z"
+  },
+  "contextFetchedBy": [
+    "architect-a42f4965"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

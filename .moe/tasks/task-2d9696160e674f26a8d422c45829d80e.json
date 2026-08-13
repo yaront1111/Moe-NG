@@ -114,7 +114,7 @@
       "completedAt": "2026-08-13T17:13:41.548Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -136,13 +136,20 @@
       "author": "governor-7c5e6be6",
       "content": "Governance triage: first QA rejection; both findings are concrete task-owned fail-closed repairs (unhashable leaf containment and presented-vs-replayed hold equality), not a re-plan loop. Keep WORKING with worker-733c82bb; downstream task-c4171c1 remains BLOCKED until QA verifies DONE.",
       "timestamp": "2026-08-13T16:52:52.032Z"
+    },
+    {
+      "id": "comment-7d37d69030df40b5a7867fe5934585ae",
+      "author": "governor-7c5e6be6",
+      "content": "Fleet QA queue: retain in REVIEW behind the active CRITICAL c956/acf reviews. Repair verification is fresh and this is the next expansion-chain gate; once QA marks DONE, governor will promote task-c4171c1 to PLANNING.",
+      "timestamp": "2026-08-13T20:49:31.237Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:23:29.092Z",
-  "updatedAt": "2026-08-13T17:14:28.896Z",
+  "updatedAt": "2026-08-13T21:28:32.447Z",
   "contextFetchedBy": [
-    "worker-733c82bb"
+    "worker-733c82bb",
+    "qa-41bfec20"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T15:46:16.462Z",
@@ -150,7 +157,9 @@
     "plannedDistinctFileCount": 5,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-13T21:28:32.447Z",
+    "wallClockMs": 20535985
   },
   "stepsCompleted": [
     "step-1",
@@ -212,7 +221,7 @@
     "packages/scheduler/src/expansion/expansion-preparation.ts",
     "packages/scheduler/src/index.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T16:52:14.304Z",
+  "reviewCompletedAt": "2026-08-13T21:28:32.447Z",
   "rejectionDetails": {
     "failedDodItems": [
       "A public production bridge accepts only a successful scheduler ExpansionPreparation plus the exact required current authority evidence and returns the closed core ExpansionAdmittedFacts/PlanningExpansionHoldBinding inputs without caller-invented refs or truth upgrades.",
@@ -257,5 +266,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-13T21:28:32.447Z",
+  "reviewSummary": "Verified all seven DoD items and rails against committed source bytes (repair commit adf8f36; no later task-path diff at HEAD ca77c059). Fresh declared gate passed: @moe/core 28 files/579 tests and @moe/scheduler 42 files/1219 tests. Fresh integration journey passed 1 file/148 tests; core and scheduler typechecks passed. Plain-Node scheduler-root smoke loaded 78 exports and both public bridge functions, with malformed input returning exact EXPANSION_BINDING_REQUEST_MALFORMED/REQUEST/BRIDGE. Repo typecheck, verify:foundation (30/487), verify:store (39/444), and fresh root test rerun (248 files/5386 passed +1 skipped) passed. An immediately prior root run had transient timeout/EBUSY failures only in foreign runner/testkit/e2e paths; no scheduler path failed and the rerun was fully green. Audited that every preparation leaf/closed nested shape is validated before hashing, the source preparation identity is recomputed, opportunityRef is taken from validated production fairness evidence, explicit core facts and the nine-field canonical projection are disjoint, reducer-produced hold replay is followed by full presented-vs-replayed equality, and all five daemon-current authority fields have stable exact mismatch codes. Generated sweeps pin exact positive universes and the integration journey uses the public bridge; downstream consumer task-c4171c1 is recorded. Independent QA mutations were load-bearing: removing proposalId leaf validation reddened the named case with the original BigInt TypeError escape, and bypassing matchesTrusted reddened the parentRunRef forgery case because success replaced EXPANSION_BINDING_HOLD_STATE_MISMATCH/HOLD/BRIDGE; both production files were restored SHA-256 exactly and git diff verified clean. Production sources are 210/228/291/208/332 lines, all below 400. Diff check clean, no artifacts, and authoritative design hash unchanged."
 }

@@ -17,8 +17,8 @@
     "Use LF one-line runtime bridges and public package roots across package boundaries."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-a9210e34",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,5 +30,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:30.111Z",
-  "updatedAt": "2026-08-13T16:43:30.111Z"
+  "updatedAt": "2026-08-13T21:28:19.203Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-13T21:24:38.683Z"
+  },
+  "contextFetchedBy": [
+    "architect-a9210e34"
+  ],
+  "blockedReason": "Current-byte rail conflict makes the task mechanically unsatisfiable as written. DoD mandates the exact LF bridge `export * from './daemon-command-registry.ts';\\n` (single quotes), while apps/daemon/src/runtime-entrypoint.test.ts:175-176 computes and enforces `export * from \"./${basename}.ts\";\\n` (double quotes) for every runtime module. daemon-store-dependencies.ts will import the extracted module, so the new bridge is necessarily in that sweep. Repo measurement found all existing daemon bridges use the enforced double-quoted form and zero single-quoted bridges. Using the DoD literal fails the required daemon test; using the enforced repository convention violates the exact DoD. Needed unblock: amend DoD to the current canonical double-quoted bridge `export * from \"./daemon-command-registry.ts\";` (recommended), or explicitly expand scope to migrate runtime-entrypoint.test.ts and every daemon runtime bridge. No speculative plan submitted.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T21:28:19.203Z"
 }

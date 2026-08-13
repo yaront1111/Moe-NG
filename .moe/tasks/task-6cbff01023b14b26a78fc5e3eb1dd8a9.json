@@ -17,12 +17,12 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-a42f4965",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Dependency task-acf73253 is now QA-approved DONE with fresh runner typecheck, 55/1711 tests, and bare-root launcher smoke. Architect must re-measure the landed total launch boundary and plan the durable dispatch consumer without reimplementing launcher authority.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -43,20 +43,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-12T07:25:34.526Z",
+  "updatedAt": "2026-08-13T21:27:11.927Z",
   "contextFetchedBy": [
     "architect-8c9073cd",
     "architect-21f667ae",
     "governor-1f3b15b7",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-a42f4965"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z"
   },
-  "blockedReason": "Hard production dependency is not available, so a production-ready plan cannot name or compose its public launcher surface without guessing. Board re-measurement: Windows Claude launch wrapper task-acf73253a204435aba590894799814f2 is BLOCKED; its Job Object and runtime-pin prerequisites task-4d1f8ba54cb6476c930c46b413f882aa and task-078af6f181484dd99d1bf9008b4cf731 are PLANNING. Disk probe from D:/projexts/moe-next: Test-Path packages/runner/src/providers/claude/claude-launcher.ts => False; Test-Path packages/runner/src/providers/claude/claude-runtime-pin.ts => False; Test-Path packages/runner/src/platform/windows => False; production rg for launchClaude|ClaudeLauncher|createClaude.*Launch|FOUNDATION_ATTEMPT returned no matches. Existing prerequisite tasks already measure and own the missing production capability. Resume this task only after task-acf73253 is DONE and then re-probe its @moe/runner public root export before planning; do not deep-import or emulate the launcher in daemon tests.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:19:59.680Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured the board and disk, proved the required Windows Claude launcher/public surface is absent, reported this task BLOCKED, and wrote Serena memory task-task-6cbff01023b14b26a78fc5e3eb1dd8a9-handoff with exact probes and resume instructions.",

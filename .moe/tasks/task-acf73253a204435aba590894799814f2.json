@@ -166,7 +166,7 @@
       "completedAt": "2026-08-13T17:43:35.236Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -206,22 +206,31 @@
       "author": "governor-7c5e6be6",
       "content": "Human authorized reopening after the daemon parked this task at 4/3 rejections. Architect must treat fulfilled hostile port values, thrown/rejected ports, structural input, and post-lock observation as one total public-boundary invariant. Preserve exact upstream code/layer where a result is valid; malformed/unverifiable values must resolve frozen UNKNOWN, allocate no authority, and close/unlock exactly once. Re-measure current bytes and hand implementation back only after the plan covers the whole invariant.",
       "timestamp": "2026-08-13T16:41:21.626Z"
+    },
+    {
+      "id": "comment-efa415cd9a7c4ae483bc69af3afaf029",
+      "author": "governor-7c5e6be6",
+      "content": "Fleet QA queue: after the active task-c956fd56 review, claim this CRITICAL reopened task next. Human already authorized the holistic re-plan after budget exhaustion; re-run the exact gate and attack the total fulfilled-result/cleanup invariant. Approve only on fresh evidence.",
+      "timestamp": "2026-08-13T20:49:31.133Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.737Z",
-  "updatedAt": "2026-08-13T17:44:17.455Z",
+  "updatedAt": "2026-08-13T21:08:16.092Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:34:18.450Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
     "executedStepCount": 29,
     "rejectCount": 5,
-    "reopenCount": 5
+    "reopenCount": 5,
+    "doneAt": "2026-08-13T21:08:16.092Z",
+    "wallClockMs": 376437642
   },
   "contextFetchedBy": [
     "architect-a42f4965",
-    "worker-68608f71"
+    "worker-68608f71",
+    "qa-41bfec20"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -422,5 +431,8 @@
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "reviewStartedAt": "2026-08-13T17:44:17.455Z"
+  "reviewStartedAt": "2026-08-13T17:44:17.455Z",
+  "completedAt": "2026-08-13T21:08:16.092Z",
+  "reviewCompletedAt": "2026-08-13T21:08:16.092Z",
+  "reviewSummary": "Verified committed task bytes at HEAD ca77c059 (source commit 7cb86d4, no later task-path diff) against all six DoD items and rails. Fresh focused gate: `pnpm --filter @moe/runner typecheck; pnpm --filter @moe/runner test` exit 0, 55 files/1711 tests. Fresh plain-Node @moe/runner root import/launch smoke exit 0 with exact `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED` / `LAUNCHER`. Fresh real Windows boundary process-tree smoke executed (not skipped), 1 file/4 tests exit 0. Fresh repo gates `pnpm typecheck; pnpm test; pnpm verify:foundation; pnpm verify:store` all exit 0 (root 248 files/5386 passed +1 skipped; foundation 30/487; store 39/444). Audited total port-result decoding and the post-lock single-exit lifecycle: malformed/hostile pre-lock results return frozen UNKNOWN with exact code/layer and no open, cleanup-owned malformed boundaries cancel+await close, streams settle, and lock release is awaited exactly once; valid upstream refusal code/layer is preserved only after whole-shape validation. Generated tests pin exact positive counts (24 fulfilled-hostile, 14 awaited thenable/rejection, 6 option/capability reflection) plus exact traces and cleanup. QA mutation changed the runtime hostile-result refusal code; the named matrix reddened at claude-launcher.test.ts:733 on the exact code mismatch, then original bytes were SHA-256 restored and git diff verified clean. Runtime pin/binding digests, shell-free bounded launch, duplicate/grant refusal behavior, immutable bounded output/exit observations, root type closure, and recorded dispatch/canary consumers are present. Production physical lines are 146/250/212/249/167, all <=250; bridges are exact one-line LF exports. `git diff --check 7cb86d4^..HEAD` clean; commit lists exactly nine planned paths and no artifacts. Authoritative design hash unchanged."
 }
