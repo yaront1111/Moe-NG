@@ -144,6 +144,19 @@ export { deriveExpansionEvidence } from "./expansion/expansion-evidence.js";
 export {
   EXPANSION_ADMISSION_ISSUE_CODES, EXPANSION_ADMISSION_ORIGINS,
 } from "./expansion/expansion-preparation.js";
+/**
+ * The admission-to-preparation bridge. `bindExpansionAdmission` is the ONLY way
+ * an admitted expansion becomes core's `ExpansionAdmittedFacts` and its
+ * `PlanningExpansionHoldBinding`, so no consumer has to hand-map the two shapes
+ * and none can invent an opportunity ref or a DAEMON_VERIFIED marker on the way.
+ * `validateOpportunityAttestation` is published beside it because the daemon
+ * must be able to validate the evidence it is about to pass in.
+ */
+export { validateOpportunityAttestation } from "./fairness/fairness-evidence.js";
+export {
+  EXPANSION_BINDING_ISSUE_CODES, EXPANSION_BINDING_LAYERS, EXPANSION_BINDING_ORIGINS,
+  bindExpansionAdmission,
+} from "./expansion/expansion-binding.js";
 export {
   EXPANSION_EVIDENCE_ISSUE_CODES, EXPANSION_EVIDENCE_LAYERS, FORBIDDEN_VERDICT_KEYS,
 } from "./expansion/expansion-receipt.js";
@@ -294,6 +307,11 @@ export type {
   ExpansionEvidenceIssueCode, ExpansionEvidenceLayer, ExpansionEvidenceRefusal,
   ExpansionEvidenceResult, ExpansionInputFact,
 } from "./expansion/expansion-receipt.js";
+export type {
+  ExpansionAdmissionBinding, ExpansionBindingIssue, ExpansionBindingIssueCode,
+  ExpansionBindingLayer, ExpansionBindingOrigin, ExpansionBindingRefusal, ExpansionBindingRequest,
+  ExpansionBindingResult, ExpansionCurrentAuthority,
+} from "./expansion/expansion-binding.js";
 
 export type {
   SupersessionBoundDispositionField,

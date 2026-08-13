@@ -623,7 +623,10 @@ const RUNTIME_MODULES: readonly (readonly [string, Readonly<Record<string, unkno
   ["fairness-contract", contractModule, 11],
   ["fairness-work-item", workItemModule, 2],
   ["fairness-ring", ringModule, 2],
-  ["fairness-evidence", evidenceModule, 1],
+  // Two: validateBypassClaim, plus validateOpportunityAttestation for the
+  // admission-to-preparation bridge. Both are `validate*`, so the name rules
+  // below still apply unchanged.
+  ["fairness-evidence", evidenceModule, 2],
   ["fairness-cap-revision", capRevisionModule, 1],
 ];
 

@@ -70,10 +70,19 @@ function evidenceRefusal(
   );
 }
 
-function readAttestation(
+/**
+ * The shape rules ONE attestation obeys wherever it appears, and nothing else.
+ *
+ * `field` names the position for the UNKNOWN's missingInput, because the same
+ * three keys are read from inside a bypass claim's array and from a standalone
+ * selection attestation, and an UNKNOWN that cannot say WHICH input is missing
+ * is a silent pass. The self-attestation rule is deliberately NOT here: it is a
+ * BYPASS rule ("a work item cannot be bypassed by itself") and applying it to a
+ * SELECTION attestation would refuse exactly the winner a selection names.
+ */
+function parseAttestation(
   value: unknown,
-  index: number,
-  claimant: string,
+  field: string,
 ): FairnessOpportunityAttestation | FairnessContractRefusal {
   const parsed = exactRecord(value, ATTESTATION_KEYS);
   if (parsed === null) {
@@ -98,7 +107,7 @@ function readAttestation(
   if (observationRef === null) {
     return unknownFairness(
       "FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED", "OPPORTUNITY_EVIDENCE",
-      `attestations[${index}].observationRef`, [opportunityRef],
+      `${field}.observationRef`, [opportunityRef],
     );
   }
   if (!isFairnessIdentity(observationRef)) {
@@ -107,13 +116,38 @@ function readAttestation(
       [opportunityRef],
     );
   }
-  if (winnerWorkItemId === claimant) {
+  return { opportunityRef, winnerWorkItemId, observationRef };
+}
+
+/**
+ * Total validator for ONE attested opportunity, for a consumer that must name
+ * the opportunity a work item was SELECTED in rather than passed over in.
+ *
+ * It returns the validated attestation and nothing else: no truth marker, no
+ * verdict, no derived identity. An opportunity is never inferred from a work
+ * item id — that is precisely the synthesis this validator exists to replace.
+ */
+export function validateOpportunityAttestation(
+  value: unknown,
+): FairnessContractResult<FairnessOpportunityAttestation> {
+  const parsed = parseAttestation(value, "attestation");
+  return isFairnessRefusal(parsed) ? parsed : acceptFairness({ ...parsed });
+}
+
+function readAttestation(
+  value: unknown,
+  index: number,
+  claimant: string,
+): FairnessOpportunityAttestation | FairnessContractRefusal {
+  const parsed = parseAttestation(value, `attestations[${index}]`);
+  if (isFairnessRefusal(parsed)) return parsed;
+  if (parsed.winnerWorkItemId === claimant) {
     return evidenceRefusal(
       "FAIRNESS_CONTRACT_BYPASS_SELF_ATTESTED", "a work item cannot be bypassed by itself",
-      [claimant, opportunityRef],
+      [claimant, parsed.opportunityRef],
     );
   }
-  return { opportunityRef, winnerWorkItemId, observationRef };
+  return parsed;
 }
 
 /**

@@ -45,8 +45,9 @@ import {
   validExpansionSealedEvent,
 } from "../../packages/core/src/index.js";
 import {
-  EXPANSION_ADMISSION_ISSUE_CODES, EXPANSION_EVIDENCE_ISSUE_CODES, FORBIDDEN_VERDICT_KEYS,
-  admitExpansion, deriveExpansionEvidence,
+  EXPANSION_ADMISSION_ISSUE_CODES, EXPANSION_BINDING_ISSUE_CODES,
+  EXPANSION_EVIDENCE_ISSUE_CODES, FORBIDDEN_VERDICT_KEYS, admitExpansion,
+  bindExpansionAdmission, deriveExpansionEvidence,
 } from "../../packages/scheduler/src/index.js";
 
 const hex = (character: string): string => character.repeat(64);
@@ -63,7 +64,7 @@ function holdCreateCommand(
 ): Record<string, unknown> {
   return {
     commandId: "command:create", deadline: 4_000, expectedVersion: 0, generation: 1,
-    graphEpoch: 7, holdId: "hold:expansion:1", kind: "graph.request_expansion",
+    graphEpoch: 11, holdId: "hold:expansion:1", kind: "graph.request_expansion",
     parentNodeRef: "node:parent", parentRevisionRef: "revision:active",
     parentRunRef: "run:parent", planningRunRef: "planning:expansion:1",
     proposalBaseHash: HASH_A,
@@ -93,12 +94,45 @@ function holdCreateCommand(
 const seed = (value: string): string => value.repeat(64).slice(0, 64);
 const SUBMISSION_HASH = seed("77");
 
-const HOLD_BINDING = {
-  generation: 2, goalVersion: 3, graphEpoch: 4, holdId: "hold-1", lifecycle: "ACTIVE",
-  parentNodeRef: "node-parent-1", parentRunRef: "planning-run-0", proposalBaseHash: seed("99"),
-  sourceFingerprint: seed("aa"), truthClass: "DAEMON_VERIFIED",
-  workerHandoff: { digest: seed("bb"), ref: "handoff-1" },
+/**
+ * THE PRODUCTION BINDING, NOT A HAND-WRITTEN ONE.
+ *
+ * This file used to declare a `HOLD_BINDING` literal unrelated to the hold it
+ * had just created, and an `admittedFrom` mapping that invented an
+ * `opportunity:<workItemId>` ref and dropped the graph, lineage, capacity,
+ * bypass, budget-line and resource-intent facts on the floor. Both were
+ * test-owned authority: a green suite proved a mapping no consumer would ever
+ * run. `bindExpansionAdmission` is now the only producer of either shape, so
+ * what the journey exercises is what a daemon would call.
+ *
+ * The daemon-current authority is an INPUT, never a caller verdict: the bridge
+ * compares all five values against the reducer-produced hold and the scheduler's
+ * own admitted goal/epoch before it will set DAEMON_VERIFIED on anything.
+ */
+const CURRENT_AUTHORITY = {
+  goalVersion: 7, graphEpoch: 11, holdId: "hold:expansion:1", holdVersion: 1,
+  planningRunRef: "planning:expansion:1",
 };
+/** The selection opportunity: its winner IS the admitted work item. */
+const OPPORTUNITY = {
+  observationRef: "observation.round.7", opportunityRef: "opportunity.round.7",
+  winnerWorkItemId: "item.a",
+};
+
+function boundBinding(overrides: Readonly<Record<string, unknown>> = {}): Record<string, any> {
+  const result = bindExpansionAdmission({
+    currentAuthority: { ...CURRENT_AUTHORITY }, hold: heldHold(holdCreateCommand())["state"],
+    opportunity: { ...OPPORTUNITY }, preparation: admitted(admissionRequest()), ...overrides,
+  }) as Record<string, any>;
+  if (!result["ok"]) {
+    throw new Error(
+      `binding refused: ${result["issues"].map((one: any) => one.code).join(",")}`,
+    );
+  }
+  return result;
+}
+
+const HOLD_BINDING = boundBinding()["binding"].planningHoldBinding as Record<string, unknown>;
 const PROPOSAL_IDENTITY = {
   proposalHash: SUBMISSION_HASH, proposalRef: "submission-1", truthClass: "DAEMON_VERIFIED",
 };
@@ -343,45 +377,9 @@ function supersessionInput(): Record<string, unknown> {
   };
 }
 
-/**
- * THE CONSUMER EDGE THIS TASK CERTIFIES.
- *
- * @moe/core declares only @moe/contracts and @moe/scheduler depends on core, so
- * an admitted expansion can only reach core as INBOUND DATA under a core-owned
- * closed shape. This function is that mapping and nothing more: it moves the
- * scheduler's bound facts into core's `admitted` shape and decides nothing. Both
- * ends are production types; a field that stopped existing on either side breaks
- * here rather than silently dropping out of the identity.
- */
-function admittedFrom(bound: Record<string, any>): Record<string, unknown> {
-  return {
-    budgetReservation: {
-      accountId: bound["budgetReservation"].accountId,
-      admissionRef: bound["budgetReservation"].admissionRef,
-      reservationId: bound["budgetReservation"].reservationId,
-      state: "RESERVED",
-    },
-    childKeys: [...bound["childKeys"]],
-    evidenceDigest: bound["evidenceDigest"],
-    fairness: {
-      capRevisionRef: bound["fairness"].capRevisionRef,
-      opportunityRef: `opportunity:${bound["fairness"].workItemId}`,
-      resourceId: bound["fairness"].resourceId,
-      workItemId: bound["fairness"].workItemId,
-    },
-    goalVersion: bound["goalVersion"],
-    observedAtSequence: bound["observedAtSequence"],
-    proposalId: bound["proposalId"],
-    qualityDigest: bound["qualityDigest"],
-    resourceReservation: {
-      epoch: bound["resourceReservation"].epoch,
-      resourceIds: [...bound["resourceReservation"].resourceIds],
-      state: "HELD",
-    },
-    revision: bound["revision"],
-    sourceDigests: [...bound["sourceDigests"]],
-    truthClass: "DAEMON_VERIFIED",
-  };
+/** The admitted facts a daemon would hand core, produced by the bridge alone. */
+function admittedFacts(): Record<string, unknown> {
+  return clone(boundBinding()["binding"].admitted as Record<string, unknown>);
 }
 
 function preparationInput(
@@ -477,7 +475,8 @@ function journey(): Record<string, any> {
   const draft = acceptedRun(undefined, expansionCreate());
   const sealed = acceptedRun(expansionPlanningState(), expansionPropose());
   const admission = admitted(admissionRequest());
-  const preparation = prepared(preparationInput(admittedFrom(admission["bound"])));
+  const binding = boundBinding()["binding"] as Record<string, any>;
+  const preparation = prepared(preparationInput(clone(binding["admitted"])));
   const approval = approveExpansionManually({
     approval: humanApproval(preparation), claim: claimFor(preparation),
     command: {
@@ -486,7 +485,7 @@ function journey(): Record<string, any> {
     },
     nowEpochMs: 1_700_000_300_000, preparation,
   }) as Record<string, any>;
-  return { admission, approval, draft, hold, preparation, sealed };
+  return { admission, approval, binding, draft, hold, preparation, sealed };
 }
 
 describe("the pure expansion protocol runs end to end from the package roots", () => {
@@ -601,15 +600,18 @@ describe("the pure expansion protocol runs end to end from the package roots", (
   });
 
   it("binds the admitted expansion into one core preparation identity and approves it", () => {
-    const { admission, approval, preparation } = journey();
+    const { admission, approval, binding: bridged, preparation } = journey();
     expect(approval["ok"]).toBe(true);
     const binding = approval["binding"];
-    // Three byte-comparisons across three packages' worth of stages. Each is an
+    // Four byte-comparisons across three packages' worth of stages. Each is an
     // exact string equality, so a re-derived-but-equal identity still passes and
     // a drifted one cannot.
     expect(binding.preparationIdentity).toBe(preparation["identity"]);
-    expect(preparation["bound"].admitted.evidenceDigest).toBe(admission["bound"].evidenceDigest);
+    expect(preparation["bound"].admitted.evidenceDigest).toBe(bridged["admitted"].evidenceDigest);
     expect(preparation["bound"].admitted.proposalId).toBe(admission["bound"].proposalId);
+    // The core digest is the bridge's PROJECTION, never the scheduler's own
+    // evidence digest re-presented: the source digest is one field inside it.
+    expect(bridged["admitted"].evidenceDigest).not.toBe(admission["bound"].evidenceDigest);
     expect(binding.identity).toMatch(/^[0-9a-f]{64}$/u);
     expect(binding.decidedApproval.decision).toBe("APPROVE");
     expect(binding.approvalRef).toBe("approval-1");
@@ -744,15 +746,15 @@ describe("one perturbed byte moves the identity it is bound into", () => {
   it.each(CORE_PERTURBATIONS)(
     "moves the core preparation identity when %s changes",
     (_name, override) => {
-      const admittedFacts = admittedFrom(base["admission"].bound);
-      const moved = prepared(preparationInput(admittedFacts, override));
+      const facts = admittedFacts();
+      const moved = prepared(preparationInput(facts, override));
       expect(moved["identity"]).not.toBe(base["preparation"]["identity"]);
     },
   );
 
   it("requires re-approval when a bound byte moved: the stale claim is refused by code", () => {
-    const admittedFacts = admittedFrom(base["admission"].bound);
-    const moved = prepared(preparationInput(admittedFacts, { deadlineEpochMs: 1_700_000_700_000 }));
+    const facts = admittedFacts();
+    const moved = prepared(preparationInput(facts, { deadlineEpochMs: 1_700_000_700_000 }));
     // The approval carries the ORIGINAL claim against the MOVED preparation.
     const result = approveExpansionManually({
       approval: humanApproval(moved), claim: claimFor(base["preparation"]),
@@ -1217,7 +1219,7 @@ describe("every declared preparation code is produced with its own component and
     return result;
   }
 
-  const base = (): Record<string, unknown> => admittedFrom(journey()["admission"].bound);
+  const base = (): Record<string, unknown> => admittedFacts();
 
   it("covers the published vocabulary exactly, with a hand-pinned size", () => {
     expect(EXPANSION_PREPARATION_CODES.length).toBe(9);
@@ -1300,7 +1302,7 @@ const APPROVAL_CASES: readonly ApprovalCase[] = [
     component: "EXPANSION_APPROVAL",
     apply: (request) => {
       const reprepared = prepared(preparationInput(
-        { ...admittedFrom(journey()["admission"].bound), revision: 99 },
+        { ...admittedFacts(), revision: 99 },
       ));
       request["claim"].preparationIdentity = reprepared["identity"];
     } },
@@ -1341,7 +1343,7 @@ const APPROVAL_CASES: readonly ApprovalCase[] = [
 
 describe("every declared approval code is produced, races included", () => {
   const request = (): Record<string, any> => {
-    const preparation = prepared(preparationInput(admittedFrom(journey()["admission"].bound)));
+    const preparation = prepared(preparationInput(admittedFacts()));
     return clone({
       approval: humanApproval(preparation), claim: claimFor(preparation),
       command: {
@@ -1388,4 +1390,236 @@ describe("every declared approval code is produced, races included", () => {
       expect(result["binding"]).toBeUndefined();
       expect(JSON.stringify(subject)).toBe(before);
     });
+});
+
+// ===========================================================================
+// The admission-to-preparation binding: one production bridge, one partition.
+//
+// The claim under test is "every authority-relevant admitted byte is
+// load-bearing in core EXACTLY ONCE". Two hand-written columns state where each
+// byte went; the partition test proves the columns are disjoint AND that their
+// union is the whole bound fact set, so a byte the bridge silently dropped has
+// nowhere to hide and a byte bound twice fails the disjointness.
+// ===========================================================================
+
+/** Carried into `ExpansionAdmittedFacts` as its own named core field. */
+const EXPLICIT_CORE_FIELDS: readonly string[] = [
+  "budgetReservation.accountId", "budgetReservation.admissionRef",
+  "budgetReservation.reservationId", "childKeys", "fairness.capRevisionRef",
+  "fairness.resourceId", "fairness.workItemId", "goalVersion", "observedAtSequence",
+  "proposalId", "qualityDigest", "resourceReservation.epoch", "resourceReservation.resourceIds",
+  "revision", "sourceDigests",
+];
+
+/** Scheduler-only: covered by the one canonical projection the bridge digests. */
+const PROJECTION_ONLY_FIELDS: readonly string[] = [
+  "budgetReservation.lines", "capacitySnapshot", "evidenceDigest", "fairness.disposition",
+  "fairness.roundsAdvanced", "graphEpoch", "lineage.childWidth", "lineage.expansionDepth",
+  "lineage.nodesAddedInExpansion", "provenBypasses", "resourceReservation.effectIntentRefs",
+];
+
+/** One level deep: an array is a leaf, a plain record is expanded once. */
+function leafPaths(value: Record<string, any>): readonly string[] {
+  const out: string[] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (nested !== null && typeof nested === "object" && !Array.isArray(nested)) {
+      for (const inner of Object.keys(nested)) out.push(`${key}.${inner}`);
+    } else out.push(key);
+  }
+  return out.sort();
+}
+
+function read(value: Record<string, any>, path: string): unknown {
+  return path.split(".").reduce<any>((cursor, key) => cursor?.[key], value);
+}
+
+describe("the bridge partitions every admitted byte into core or the projection", () => {
+  const bound = journey()["admission"].bound as Record<string, any>;
+
+  it("names a non-empty, disjoint pair of columns", () => {
+    // Positive counts first: two empty lists would satisfy the equality below.
+    expect(EXPLICIT_CORE_FIELDS.length).toBe(15);
+    expect(PROJECTION_ONLY_FIELDS.length).toBe(11);
+    const overlap = EXPLICIT_CORE_FIELDS.filter((one) => PROJECTION_ONLY_FIELDS.includes(one));
+    expect(overlap).toEqual([]);
+  });
+
+  it("covers the production bound fact set exactly, leaf for leaf", () => {
+    // Derived from the SHIPPED admission, so a field added to or removed from
+    // ExpansionBoundFacts reddens here instead of silently leaving the identity.
+    expect(leafPaths(bound))
+      .toEqual([...EXPLICIT_CORE_FIELDS, ...PROJECTION_ONLY_FIELDS].sort());
+  });
+});
+
+interface BridgeCase {
+  readonly admission: () => Record<string, unknown>;
+  /** The one core field this byte lands in, or null when it is projection-only. */
+  readonly core: string | null;
+  readonly current?: Record<string, unknown>;
+  readonly holdEpoch?: number;
+  readonly name: string;
+}
+
+function bridgedAdmitted(one: BridgeCase): Record<string, any> {
+  const command = one.holdEpoch === undefined
+    ? holdCreateCommand() : holdCreateCommand({ graphEpoch: one.holdEpoch });
+  return boundBinding({
+    currentAuthority: { ...CURRENT_AUTHORITY, ...(one.current ?? {}) },
+    hold: heldHold(command)["state"], preparation: admitted(one.admission()),
+  })["binding"].admitted as Record<string, any>;
+}
+
+const BRIDGE_CASES: readonly BridgeCase[] = [
+  { name: "proposalId", core: "proposalId",
+    admission: () => admissionRequest({ receipt: healthyReceipt({ proposalId: "prop-2" }) }) },
+  { name: "revision", core: "revision",
+    admission: () => admissionRequest({ receipt: healthyReceipt({ revision: 4 }) }) },
+  { name: "goalVersion", core: "goalVersion", current: { goalVersion: 8 },
+    admission: () => admissionRequest({ receipt: healthyReceipt({ goalVersion: 8 }) }) },
+  { name: "observedAtSequence", core: "observedAtSequence",
+    admission: () => admissionRequest({ receipt: healthyReceipt({ observedAtSequence: 101 }) }) },
+  { name: "budget admissionRef", core: "budgetReservation.admissionRef", admission: () => {
+    const base = budgetPart()["admission"] as Record<string, unknown>;
+    return admissionRequest({
+      budget: budgetPart({ admission: { ...base, admissionRef: "adm.2" } }),
+    });
+  } },
+  { name: "graphEpoch", core: null, current: { graphEpoch: 12 }, holdEpoch: 12,
+    admission: () => admissionRequest({ receipt: healthyReceipt({ graphEpoch: 12 }) }) },
+  { name: "lineage.expansionDepth", core: null,
+    admission: () =>
+      admissionRequest({ lineage: { expansionDepth: 1, nodesAddedInExpansion: 2 } }) },
+  { name: "lineage.nodesAddedInExpansion", core: null,
+    admission: () =>
+      admissionRequest({ lineage: { expansionDepth: 2, nodesAddedInExpansion: 3 } }) },
+  { name: "capacitySnapshot inFlightUnits", core: null,
+    admission: () => admissionRequest({ rotation: rotationPart({ capacities: [
+      { resourceId: "res.a", capacityUnits: 4, inFlightUnits: 0 },
+      { resourceId: "res.b", capacityUnits: 4, inFlightUnits: 1 },
+    ] }) }) },
+  { name: "provenBypasses", core: null, admission: () => admissionRequest({
+    bypassClaim: { workItemId: "item.a", claimedBypasses: 1, attestations: [{
+      opportunityRef: "opportunity.round.6", winnerWorkItemId: "item.b",
+      observationRef: "observation.round.6",
+    }] },
+  }) },
+  { name: "resource effectIntentRefs", core: null,
+    admission: () => admissionRequest({ resources: resourcesPart({ requestId: "req.2" }) }) },
+];
+
+describe("one scheduler byte moves exactly one place in the core admitted facts", () => {
+  const base = journey()["binding"].admitted as Record<string, any>;
+
+  it("generated one case per enumerated byte, both columns represented", () => {
+    // Hand-written names and counts: a table that silently lost an entry cannot
+    // pass by emitting fewer cases and comparing itself to what it emitted.
+    expect(BRIDGE_CASES.map((one) => one.name)).toEqual([
+      "proposalId", "revision", "goalVersion", "observedAtSequence", "budget admissionRef",
+      "graphEpoch", "lineage.expansionDepth", "lineage.nodesAddedInExpansion",
+      "capacitySnapshot inFlightUnits", "provenBypasses", "resource effectIntentRefs",
+    ]);
+    expect(BRIDGE_CASES.filter((one) => one.core !== null).length).toBe(5);
+    expect(BRIDGE_CASES.filter((one) => one.core === null).length).toBe(6);
+  });
+
+  it("every named core target is one of the hand-written explicit fields", () => {
+    const targets = BRIDGE_CASES.map((one) => one.core).filter((one): one is string => one !== null);
+    expect(targets.filter((one) => !EXPLICIT_CORE_FIELDS.includes(one))).toEqual([]);
+  });
+
+  it.each(BRIDGE_CASES.filter((one) => one.core !== null))(
+    "moves the explicit core field for $name and leaves the projection digest alone",
+    (one) => {
+      const moved = bridgedAdmitted(one);
+      expect(read(moved, one.core as string)).not.toEqual(read(base, one.core as string));
+      // Disjointness, asserted rather than asserted about: an explicitly bound
+      // field that ALSO moved the digest would be bound twice, and dropping it
+      // from the mapping would then leave its own test green.
+      expect(moved["evidenceDigest"]).toBe(base["evidenceDigest"]);
+    },
+  );
+
+  it.each(BRIDGE_CASES.filter((one) => one.core === null))(
+    "moves only the projection digest for $name",
+    (one) => {
+      const moved = bridgedAdmitted(one);
+      expect(moved["evidenceDigest"]).not.toBe(base["evidenceDigest"]);
+      const drifted =
+        EXPLICIT_CORE_FIELDS.filter((path) => read(moved, path) !== read(base, path)
+          && JSON.stringify(read(moved, path)) !== JSON.stringify(read(base, path)));
+      expect(drifted).toEqual([]);
+    },
+  );
+});
+
+/**
+ * The other direction: a byte edited in a STORED preparation, with its original
+ * identity left in place, must be refused rather than carried. This is what
+ * makes "every production byte" true for the fields no admission input can move
+ * one at a time.
+ */
+const BOUND_MUTATIONS: readonly (readonly [string, (bound: Record<string, any>) => void])[] = [
+  ["proposalId", (bound) => { bound["proposalId"] = "prop-9"; }],
+  ["revision", (bound) => { bound["revision"] = 99; }],
+  ["goalVersion", (bound) => { bound["goalVersion"] = 99; }],
+  ["graphEpoch", (bound) => { bound["graphEpoch"] = 99; }],
+  ["observedAtSequence", (bound) => { bound["observedAtSequence"] = 999; }],
+  ["childKeys", (bound) => { bound["childKeys"] = [...bound["childKeys"], "child-9"]; }],
+  ["sourceDigests", (bound) => { bound["sourceDigests"] = [hex("9")]; }],
+  ["evidenceDigest", (bound) => { bound["evidenceDigest"] = hex("9"); }],
+  ["qualityDigest", (bound) => { bound["qualityDigest"] = hex("9"); }],
+  ["lineage", (bound) => { bound["lineage"] = { ...bound["lineage"], childWidth: 9 }; }],
+  ["fairness", (bound) => { bound["fairness"] = { ...bound["fairness"], roundsAdvanced: 9 }; }],
+  ["capacitySnapshot", (bound) => { bound["capacitySnapshot"] = []; }],
+  ["provenBypasses", (bound) => { bound["provenBypasses"] = 9; }],
+  ["budgetReservation", (bound) => {
+    bound["budgetReservation"] = { ...bound["budgetReservation"], lines: [] };
+  }],
+  ["resourceReservation", (bound) => {
+    bound["resourceReservation"] =
+      { ...bound["resourceReservation"], effectIntentRefs: ["intent:forged"] };
+  }],
+];
+
+describe("a preparation edited under its own identity is refused, byte by byte", () => {
+  it("sweeps exactly the production bound field universe", () => {
+    // The universe is hand-written; the equality is against the SHIPPED facts,
+    // so a sweep that produced zero cases or lost one cannot read as coverage.
+    expect(BOUND_MUTATIONS.length).toBe(15);
+    expect(BOUND_MUTATIONS.map(([name]) => name).sort())
+      .toEqual(Object.keys(journey()["admission"].bound as Record<string, unknown>).sort());
+  });
+
+  it.each(BOUND_MUTATIONS)("refuses a forged %s at the PREPARATION layer", (_name, apply) => {
+    const source = admitted(admissionRequest());
+    const bound = clone(source["bound"]) as Record<string, any>;
+    apply(bound);
+    const refusal = bindExpansionAdmission({
+      currentAuthority: { ...CURRENT_AUTHORITY },
+      hold: heldHold(holdCreateCommand())["state"], opportunity: { ...OPPORTUNITY },
+      preparation: { bound, identity: source["identity"] },
+    }) as Record<string, any>;
+    expect(refusal["ok"]).toBe(false);
+    expect([refusal["issues"][0].code, refusal["issues"][0].layer, refusal["issues"][0].origin])
+      .toEqual(["EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "PREPARATION", "BRIDGE"]);
+  });
+});
+
+describe("the bridge speaks a published, frozen refusal vocabulary", () => {
+  it("publishes a hand-pinned closed code set", () => {
+    expect(Object.isFrozen(EXPANSION_BINDING_ISSUE_CODES)).toBe(true);
+    expect(EXPANSION_BINDING_ISSUE_CODES.length).toBe(10);
+  });
+
+  it("refuses a hold that is no longer ACTIVE, so a terminated hold binds nothing", () => {
+    const { state } = heldHold(holdCreateCommand());
+    const refusal = bindExpansionAdmission({
+      currentAuthority: { ...CURRENT_AUTHORITY },
+      hold: { ...state, lifecycle: "CANCELLED", version: 2 }, opportunity: { ...OPPORTUNITY },
+      preparation: admitted(admissionRequest()),
+    }) as Record<string, any>;
+    expect([refusal["ok"], refusal["issues"][0].code, refusal["issues"][0].layer])
+      .toEqual([false, "EXPANSION_BINDING_HOLD_INACTIVE", "HOLD"]);
+  });
 });

@@ -9,6 +9,9 @@
  */
 import { expect, it } from "vitest";
 
+import { reduceExpansionPlanningHold, validExpansionHoldBinding } from "@moe/core";
+import type { ExpansionPlanningHoldState } from "@moe/core";
+
 import * as scheduler from "@moe/scheduler";
 import type {
   AuthorityErrorCode, AuthorityIssue, AuthorityOutcome, AuthorityProof, AuthorityRejection,
@@ -54,12 +57,19 @@ import type {
   ExpansionInputFact, ExpansionLineageFacts, ExpansionPreparation, ExpansionResourceFacts,
   ExpansionRestoredMeter,
 } from "@moe/scheduler";
+import type {
+  ExpansionAdmissionBinding, ExpansionBindingIssue, ExpansionBindingIssueCode,
+  ExpansionBindingLayer, ExpansionBindingOrigin, ExpansionBindingRefusal,
+  ExpansionBindingRequest, ExpansionBindingResult, ExpansionCurrentAuthority,
+} from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 19 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
- * 12 fairness rotation and aging values + 7 expansion admission values.
+ * 12 fairness rotation and aging values + 7 expansion admission values + the two
+ * admission-to-preparation binding values (bindExpansionAdmission and
+ * validateOpportunityAttestation).
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -68,6 +78,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
   ["EXPANSION_ADMISSION_ISSUE_CODES", "array"], ["EXPANSION_ADMISSION_ORIGINS", "array"],
+  ["EXPANSION_BINDING_ISSUE_CODES", "array"], ["EXPANSION_BINDING_LAYERS", "array"],
+  ["EXPANSION_BINDING_ORIGINS", "array"],
   ["EXPANSION_EVIDENCE_ISSUE_CODES", "array"], ["EXPANSION_EVIDENCE_LAYERS", "array"],
   ["FAIRNESS_BYPASSES_PER_LEVEL", "number"],
   ["FAIRNESS_CONTRACT_ISSUE_CODES", "array"], ["FAIRNESS_CONTRACT_LAYERS", "array"],
@@ -86,6 +98,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
   ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
+  ["bindExpansionAdmission", "function"],
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"],
@@ -99,7 +112,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
   ["resourceRotationOrder", "function"], ["rotateOnce", "function"],
   ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
-  ["validateGraphSnapshot", "function"], ["validateResourceCapacity", "function"],
+  ["validateGraphSnapshot", "function"], ["validateOpportunityAttestation", "function"],
+  ["validateResourceCapacity", "function"],
   ["validateRing", "function"],
   ["validateRingResource", "function"], ["validateRotationRequest", "function"],
   ["validateWorkItem", "function"],
@@ -108,7 +122,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(72);
+  expect(EXPECTED_EXPORTS.length).toBe(77);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -734,4 +748,373 @@ it("publishes the expansion vocabularies as frozen closed sets", () => {
   ]) {
     expect(Object.isFrozen(vocabulary)).toBe(true);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The admission-to-preparation binding, driven from the bare package root.
+//
+// Every refusal below pins the exact code AND the refusing layer, and for a
+// DELEGATED one also the origin, because more than one layer can refuse here:
+// the fairness contract, the core hold reducer and this bridge all speak.
+// ---------------------------------------------------------------------------
+
+const HANDOFF = { digest: DIGEST_B, ref: "handoff:worker" };
+
+function holdCommand(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    commandId: "command:create", deadline: 4_000, expectedVersion: 0, generation: 1,
+    graphEpoch: 11, holdId: "hold:expansion:1", kind: "graph.request_expansion",
+    parentNodeRef: "node:parent", parentRevisionRef: "revision:active",
+    parentRunRef: "run:parent", planningRunRef: "planning:expansion:1",
+    proposalBaseHash: DIGEST_A,
+    rationale: { text: "split bounded independent work", truthClass: "AGENT_REPORTED" },
+    release: {
+      attemptRef: "attempt:released", attemptState: "RELEASED",
+      disposition: {
+        resumable: true, strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
+      },
+      effectsTerminal: true, handoff: { ...HANDOFF },
+      leaseRef: "lease:released", leaseState: "RELEASED",
+      observationRef: "observation:safe-boundary", providerSlotRef: "slot:released",
+      providerSlotState: "RELEASED", reason: "WORK_RELEASE_OR_PAUSE",
+      receiptRef: "receipt:release", resourcesTerminal: true, safeBoundaryObserved: true,
+      terminalEffectRefs: ["effect:terminal"], terminalResourceRefs: ["resource:terminal"],
+      truthClass: "DAEMON_VERIFIED",
+    },
+    sourceFingerprint: DIGEST_B, workerHandoff: { ...HANDOFF },
+    ...overrides,
+  };
+}
+
+function activeHold(overrides: Readonly<Record<string, unknown>> = {}): ExpansionPlanningHoldState {
+  const result = reduceExpansionPlanningHold(undefined, holdCommand(overrides));
+  if (!result.ok) throw new Error(`hold refused: ${result.code}`);
+  return result.state;
+}
+
+function admittedPreparation(): ExpansionPreparation {
+  const result = scheduler.admitExpansion(admissionRequest());
+  if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+  return result.preparation;
+}
+
+const OPPORTUNITY = {
+  opportunityRef: "opportunity.round.7", winnerWorkItemId: "item.a",
+  observationRef: "observation.round.7",
+};
+
+const CURRENT: ExpansionCurrentAuthority = {
+  goalVersion: 7, graphEpoch: 11, holdId: "hold:expansion:1", holdVersion: 1,
+  planningRunRef: "planning:expansion:1",
+};
+
+/** The exact production request type, named so a shape change breaks here. */
+function baseRequest(): ExpansionBindingRequest {
+  return {
+    currentAuthority: { ...CURRENT }, hold: activeHold(), opportunity: { ...OPPORTUNITY },
+    preparation: admittedPreparation(),
+  };
+}
+
+function bindingRequest(overrides: Readonly<Record<string, unknown>> = {}): unknown {
+  return { ...baseRequest(), ...overrides };
+}
+
+/** The single issue a refusal carried, failing loudly if there was not exactly one. */
+function onlyBindingIssue(result: ExpansionBindingResult): ExpansionBindingIssue {
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: ExpansionBindingRefusal = result;
+  expect(refusal.issues).toHaveLength(1);
+  return refusal.issues[0] as ExpansionBindingIssue;
+}
+
+it("validates one fairness opportunity attestation through the root, detached and frozen", () => {
+  const source = { ...OPPORTUNITY };
+  const result: FairnessContractResult<FairnessOpportunityAttestation> =
+    scheduler.validateOpportunityAttestation(source);
+  if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+  const attestation: FairnessOpportunityAttestation = result.value;
+  expect(attestation).toEqual({ ...OPPORTUNITY });
+  expect(Object.isFrozen(attestation)).toBe(true);
+  // Detached: mutating the caller's own record cannot move the validated one.
+  source.opportunityRef = "opportunity.round.8";
+  expect(attestation.opportunityRef).toBe("opportunity.round.7");
+});
+
+/**
+ * The bypass rule and the selection rule are DIFFERENT rules over the same
+ * shape. `validateBypassClaim` refuses a self-attested winner because a work
+ * item cannot bypass itself; a SELECTION attestation names the winner, and here
+ * that winner is the admitted item. Pinning both sides keeps the split honest.
+ */
+it("accepts a self-named winner that the bypass validator refuses", () => {
+  const selected = scheduler.validateOpportunityAttestation(
+    { ...OPPORTUNITY, winnerWorkItemId: "item.a" },
+  );
+  expect(selected.ok).toBe(true);
+  const claim: FairnessBypassClaim = {
+    workItemId: "item.a", claimedBypasses: 1,
+    attestations: [{ ...OPPORTUNITY, winnerWorkItemId: "item.a" }],
+  };
+  const bypass = scheduler.validateBypassClaim(claim);
+  expect(bypass.ok).toBe(false);
+  if (bypass.ok) throw new Error("expected a refusal");
+  expect([bypass.issues[0]?.code, bypass.issues[0]?.layer])
+    .toEqual(["FAIRNESS_CONTRACT_BYPASS_SELF_ATTESTED", "OPPORTUNITY_EVIDENCE"]);
+});
+
+const ATTESTATION_CASES: readonly (readonly [string, unknown, string, string, string])[] = [
+  ["a non-record", null, "FAIRNESS_CONTRACT_MALFORMED_INPUT", "OPPORTUNITY_EVIDENCE", "REFUSED"],
+  ["an extra key", { ...OPPORTUNITY, extra: 1 }, "FAIRNESS_CONTRACT_MALFORMED_INPUT",
+    "OPPORTUNITY_EVIDENCE", "REFUSED"],
+  ["an unsafe opportunity identity", { ...OPPORTUNITY, opportunityRef: "opp ref" },
+    "FAIRNESS_CONTRACT_INVALID_IDENTITY", "OPPORTUNITY_EVIDENCE", "REFUSED"],
+  ["an unsafe winner identity", { ...OPPORTUNITY, winnerWorkItemId: "" },
+    "FAIRNESS_CONTRACT_INVALID_IDENTITY", "OPPORTUNITY_EVIDENCE", "REFUSED"],
+  ["an unsafe observation identity", { ...OPPORTUNITY, observationRef: 7 },
+    "FAIRNESS_CONTRACT_INVALID_IDENTITY", "OPPORTUNITY_EVIDENCE", "REFUSED"],
+  ["an unobserved opportunity", { ...OPPORTUNITY, observationRef: null },
+    "FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED", "OPPORTUNITY_EVIDENCE", "UNKNOWN"],
+];
+
+it("generated one attestation case per enumerated perturbation", () => {
+  expect(ATTESTATION_CASES.map(([name]) => name)).toEqual([
+    "a non-record", "an extra key", "an unsafe opportunity identity", "an unsafe winner identity",
+    "an unsafe observation identity", "an unobserved opportunity",
+  ]);
+});
+
+it.each(ATTESTATION_CASES)("refuses %s with its own code and layer",
+  (_name, value, code, layer, disposition) => {
+    const result = scheduler.validateOpportunityAttestation(value);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal");
+    const refusal: FairnessContractRefusal = result;
+    const issue: FairnessContractIssue = refusal.issues[0] as FairnessContractIssue;
+    const issueCode: FairnessContractIssueCode = issue.code;
+    const issueLayer: FairnessContractLayer = issue.layer;
+    expect([issueCode, issueLayer, refusal.disposition]).toEqual([code, layer, disposition]);
+    expect(scheduler.FAIRNESS_CONTRACT_ISSUE_CODES).toContain(issueCode);
+    // An UNKNOWN must name the input it is missing; a REFUSED names none.
+    expect(issue.missingInput === null).toBe(disposition === "REFUSED");
+  });
+
+it("binds one admitted expansion to the core admitted facts and the hold contract", () => {
+  const result: ExpansionBindingResult = scheduler.bindExpansionAdmission(bindingRequest());
+  if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+  const binding: ExpansionAdmissionBinding = result.binding;
+  expect(result.schedulerPreparationIdentity).toBe(admittedPreparation().identity);
+  expect(binding.admitted.truthClass).toBe("DAEMON_VERIFIED");
+  expect(binding.admitted.evidenceDigest).toMatch(/^[0-9a-f]{64}$/u);
+  // The opportunity is the VALIDATED one, never synthesised from the work item.
+  expect(binding.admitted.fairness).toEqual({
+    capRevisionRef: null, opportunityRef: "opportunity.round.7", resourceId: "res.a",
+    workItemId: "item.a",
+  });
+  expect(binding.admitted.budgetReservation.state).toBe("RESERVED");
+  expect(binding.admitted.resourceReservation.state).toBe("HELD");
+  expect(binding.planningHoldBinding).toEqual({
+    generation: 1, goalVersion: 7, graphEpoch: 11, holdId: "hold:expansion:1",
+    lifecycle: "ACTIVE", parentNodeRef: "node:parent", parentRunRef: "run:parent",
+    proposalBaseHash: DIGEST_A, sourceFingerprint: DIGEST_B, truthClass: "DAEMON_VERIFIED",
+    workerHandoff: { digest: DIGEST_B, ref: "handoff:worker" },
+  });
+  expect(Object.isFrozen(binding.admitted.fairness)).toBe(true);
+});
+
+it("mints no run, child, lease, effect, slot or activation authority", () => {
+  const result = scheduler.bindExpansionAdmission(bindingRequest());
+  if (!result.ok) throw new Error("expected an accepted binding");
+  const keys = new Set<string>();
+  const walk = (value: unknown): void => {
+    if (value === null || typeof value !== "object") return;
+    for (const [key, nested] of Object.entries(value)) { keys.add(key); walk(nested); }
+  };
+  walk(result.binding);
+  // `parentRunRef` names the PARENT work the hold was taken from. Nothing else
+  // in the output matches, so no effect intent, lease or slot escaped.
+  expect([...keys].filter((key) => /run|lease|effect|slot|allocation|dispatch|activat/iu.test(key)))
+    .toEqual(["parentRunRef"]);
+});
+
+const BINDING_CASES: readonly (readonly [string, () => unknown, string, string, string])[] = [
+  ["a non-record request", () => null, "EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST", "BRIDGE"],
+  ["an extra request key", () => ({ ...bindingRequest() as object, extra: 1 }),
+    "EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST", "BRIDGE"],
+  ["a preparation carrying a getter", () => ({
+    ...bindingRequest() as object,
+    preparation: Object.defineProperty(
+      { bound: admittedPreparation().bound }, "identity",
+      { enumerable: true, get: () => admittedPreparation().identity },
+    ),
+  }), "EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST", "BRIDGE"],
+  ["a preparation whose identity does not cover its bound facts", () => ({
+    ...bindingRequest() as object,
+    preparation: { bound: admittedPreparation().bound, identity: DIGEST_A },
+  }), "EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "PREPARATION", "BRIDGE"],
+  ["a preparation whose bound facts were edited under a correct identity", () => {
+    const source = admittedPreparation();
+    return {
+      ...bindingRequest() as object,
+      preparation: {
+        bound: { ...source.bound, goalVersion: source.bound.goalVersion + 1 },
+        identity: source.identity,
+      },
+    };
+  }, "EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "PREPARATION", "BRIDGE"],
+  ["an opportunity naming a different winner",
+    () => bindingRequest({ opportunity: { ...OPPORTUNITY, winnerWorkItemId: "item.b" } }),
+    "EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH", "FAIRNESS", "BRIDGE"],
+  ["a hold that is not a hold record", () => bindingRequest({ hold: { holdId: "hold:1" } }),
+    "EXPANSION_BINDING_REQUEST_MALFORMED", "REQUEST", "BRIDGE"],
+  ["a terminated hold", () => bindingRequest({
+    hold: { ...activeHold(), lifecycle: "RESOLVED", version: 2 },
+  }), "EXPANSION_BINDING_HOLD_INACTIVE", "HOLD", "BRIDGE"],
+  ["a current goalVersion the scheduler did not admit",
+    () => bindingRequest({ currentAuthority: { ...CURRENT, goalVersion: 8 } }),
+    "EXPANSION_BINDING_GOAL_VERSION_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
+  ["a current graphEpoch the hold was not taken at",
+    () => bindingRequest({ currentAuthority: { ...CURRENT, graphEpoch: 12 } }),
+    "EXPANSION_BINDING_GRAPH_EPOCH_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
+  ["a current holdId naming another hold",
+    () => bindingRequest({ currentAuthority: { ...CURRENT, holdId: "hold:expansion:2" } }),
+    "EXPANSION_BINDING_HOLD_ID_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
+  ["a current holdVersion ahead of the hold",
+    () => bindingRequest({ currentAuthority: { ...CURRENT, holdVersion: 2 } }),
+    "EXPANSION_BINDING_HOLD_VERSION_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
+  ["a current planningRunRef naming another run",
+    () => bindingRequest({ currentAuthority: { ...CURRENT, planningRunRef: "planning:other" } }),
+    "EXPANSION_BINDING_PLANNING_RUN_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE"],
+];
+
+it("generated one binding case per enumerated perturbation", () => {
+  expect(BINDING_CASES.length).toBe(13);
+  expect([...new Set(BINDING_CASES.map(([, , code]) => code))].length).toBe(9);
+});
+
+it.each(BINDING_CASES)("refuses %s with its own code, layer and origin",
+  (_name, build, code, layer, origin) => {
+    const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(build()));
+    const issueCode: string = issue.code;
+    const issueLayer: string = issue.layer;
+    const issueOrigin: ExpansionBindingOrigin = issue.origin;
+    expect([issueCode, issueLayer, issueOrigin]).toEqual([code, layer, origin]);
+    const local: ExpansionBindingIssueCode = code as ExpansionBindingIssueCode;
+    expect(scheduler.EXPANSION_BINDING_ISSUE_CODES).toContain(local);
+    const known: ExpansionBindingLayer = layer as ExpansionBindingLayer;
+    expect(scheduler.EXPANSION_BINDING_LAYERS).toContain(known);
+    expect(scheduler.EXPANSION_BINDING_ORIGINS).toContain(issueOrigin);
+  });
+
+const AUTHORITY_FIELDS: readonly string[] =
+  ["goalVersion", "graphEpoch", "holdId", "holdVersion", "planningRunRef"];
+
+it("generated one missing-authority case per current authority field", () => {
+  expect(AUTHORITY_FIELDS.length).toBe(5);
+});
+
+it.each(AUTHORITY_FIELDS)("holds current authority UNKNOWN when %s is absent", (field) => {
+  const current: Record<string, unknown> = { ...CURRENT };
+  delete current[field];
+  const result = scheduler.bindExpansionAdmission(bindingRequest({ currentAuthority: current }));
+  const issue = onlyBindingIssue(result);
+  if (result.ok) throw new Error("expected a refusal");
+  // UNKNOWN, never REFUSED: the daemon supplied no authority to compare against,
+  // which is the absence of a verdict rather than a verdict of mismatch.
+  expect([result.disposition, issue.code, issue.layer, issue.missingInput]).toEqual([
+    "UNKNOWN", "EXPANSION_BINDING_CURRENT_AUTHORITY_UNKNOWN", "CURRENT_AUTHORITY",
+    "currentAuthority",
+  ]);
+});
+
+it("delegates an unobserved opportunity to the fairness layer verbatim", () => {
+  const raw = { ...OPPORTUNITY, observationRef: null };
+  const direct = scheduler.validateOpportunityAttestation(raw);
+  expect(direct.ok).toBe(false);
+  if (direct.ok) throw new Error("expected a refusal");
+  const result = scheduler.bindExpansionAdmission(bindingRequest({ opportunity: raw }));
+  const issue = onlyBindingIssue(result);
+  if (result.ok) throw new Error("expected a refusal");
+  // Compared against what the fairness surface says when called DIRECTLY, so a
+  // re-coded delegation cannot pass by matching a literal transcribed twice.
+  expect([issue.code, issue.layer, issue.origin, result.disposition, issue.missingInput]).toEqual([
+    direct.issues[0]?.code, direct.issues[0]?.layer, "FAIRNESS", direct.disposition,
+    direct.issues[0]?.missingInput,
+  ]);
+  expect(issue.code).toBe("FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED");
+});
+
+it("delegates a hold the core reducer refuses, keeping the reducer's code and layer", () => {
+  const command = holdCommand();
+  const release = command["release"] as Record<string, unknown>;
+  const creation = { ...command, release: { ...release, safeBoundaryObserved: false } };
+  const hold = { ...activeHold(), creationReceipt: { command: creation } };
+  const direct = reduceExpansionPlanningHold(undefined, creation);
+  expect(direct.ok).toBe(false);
+  if (direct.ok) throw new Error("expected a refusal");
+  const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(bindingRequest({ hold })));
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual([direct.code, direct.layer, "EXPANSION_HOLD"]);
+  expect(issue.code).toBe("EXPANSION_HOLD_SAFE_BOUNDARY_UNPROVEN");
+});
+
+/**
+ * The derived hold binding is not asserted, it is RE-INSPECTED by core's own
+ * predicate. `goalVersion` 0 is a legal scheduler count and an illegal planning
+ * binding version, so this is the one input that separates "the bridge built a
+ * binding" from "core accepts the binding the bridge built".
+ */
+it("delegates a derived hold binding core refuses, keeping core's code and layer", () => {
+  const request = bindingRequest({
+    currentAuthority: { ...CURRENT, goalVersion: 0 },
+    preparation: (() => {
+      const result = scheduler.admitExpansion({
+        ...admissionRequest(), receipt: { ...healthyReceipt(), goalVersion: 0 },
+      });
+      if (!result.ok) throw new Error(result.issues.map((one) => one.code).join(","));
+      return result.preparation;
+    })(),
+  });
+  const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(request));
+  expect([issue.code, issue.layer, issue.origin])
+    .toEqual(["PLANNING_EXPANSION_HOLD_BINDING_INVALID", "BINDING", "PLANNING_CONTRACT"]);
+  // The same predicate, called directly, agrees — so the refusal came from the
+  // binding check and not from the inspector's target dispatch.
+  expect(validExpansionHoldBinding({ generation: 1, goalVersion: 0 })).toBe(false);
+});
+
+/**
+ * A TERMINATED hold that has been laundered back to ACTIVE carries no in-band
+ * evidence of its own termination: strip the terminal receipt and the value is
+ * byte-identical to what the reducer produces for a live hold, so replaying its
+ * creation command reconstructs it happily. The DAEMON'S CURRENT HOLD VERSION is
+ * what catches it — which is precisely why that comparison is a required input
+ * rather than an optional one, and why this test asserts both halves.
+ */
+it("catches a terminated hold laundered back to ACTIVE, by the daemon's current version", () => {
+  const active = activeHold();
+  const terminated = reduceExpansionPlanningHold(active, {
+    cause: "EXPANSION_REFUSED", commandId: "command:end", expectedVersion: 1,
+    generation: active.generation, graphEpoch: active.graphEpoch, holdId: active.holdId,
+    kind: "expansion.transition_hold", parentNodeRef: active.parentNodeRef,
+    parentRevisionRef: active.parentRevisionRef, parentRunRef: active.parentRunRef,
+    planningRunRef: active.planningRunRef, proposalBaseHash: active.proposalBaseHash,
+    sourceFingerprint: active.sourceFingerprint, targetLifecycle: "RESOLVED",
+    terminalProof: {
+      authorityState: "TERMINAL", decisionRef: "decision:1", successorHoldRef: null,
+      truthClass: "DAEMON_VERIFIED",
+    },
+  });
+  if (!terminated.ok) throw new Error(`could not terminate: ${terminated.code}`);
+  // Presented honestly, the terminal receipt is visible and the outer gate answers.
+  const honest = onlyBindingIssue(
+    scheduler.bindExpansionAdmission(bindingRequest({ hold: terminated.state })),
+  );
+  expect([honest.code, honest.layer]).toEqual(["EXPANSION_BINDING_HOLD_INACTIVE", "HOLD"]);
+  const laundered = { ...terminated.state, lifecycle: "ACTIVE", version: 1, terminalReceipt: null };
+  const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(bindingRequest({
+    currentAuthority: { ...CURRENT, holdVersion: 2 }, hold: laundered,
+  })));
+  expect([issue.code, issue.layer])
+    .toEqual(["EXPANSION_BINDING_HOLD_VERSION_MISMATCH", "CURRENT_AUTHORITY"]);
 });
