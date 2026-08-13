@@ -8,6 +8,7 @@ import {
 } from "@moe/scheduler";
 import { applyEffectCommand, type EffectIntent } from "@moe/runner";
 
+import { mirror, mirrorDeep, mirrorList } from "./work-claim-shape.js";
 import { granted, refused, workFailure } from "./work-kernel.js";
 import { fenceWorkLease } from "./work-lease.js";
 import { checkSlotCeiling } from "./work-slot-ceiling.js";
@@ -43,68 +44,6 @@ const COMMAND_KEYS = ["kind"] as const;
 
 type Leg<T> = WorkResult | { readonly value: T };
 
-/**
- * Own-data mirror of a caller record. Values come from DESCRIPTORS, never from
- * property access, so a caller's getter is never invoked — running attacker
- * code inside the authority boundary is the failure this exists to prevent. A
- * borrowed prototype, symbol key, undeclared key, accessor, or proxy trap that
- * lies or throws refuses rather than degrading to a partial read. `keys ===
- * null` mirrors whatever own string keys are present; `exact` also demands
- * every declared key, so a section passes `false` and a MISSING fact still
- * reaches its own leg carrying that leg's upstream reason code.
- */
-function mirror(
-  value: unknown,
-  keys: readonly string[] | null,
-  exact: boolean,
-): Record<string, unknown> | null {
-  try {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-    const prototype: unknown = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const own = Reflect.ownKeys(value);
-    if (!own.every((key) => typeof key === "string" && (keys === null || keys.includes(key)))) {
-      return null;
-    }
-    if (exact && keys !== null && own.length !== keys.length) return null;
-    const copy: Record<string, unknown> = {};
-    for (const key of keys ?? (own as readonly string[])) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined) continue;
-      if (!descriptor.enumerable || !("value" in descriptor)) return null;
-      copy[key] = descriptor.value;
-    }
-    return copy;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Own-data mirror of a dense array. The own-key count must be exactly the
- * indices plus `length`, which is what rejects a hole or a smuggled key — and
- * it also bounds the loop, so a proxy reporting a colossal length cannot spin.
- */
-function mirrorList(value: unknown): readonly unknown[] | null {
-  try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null;
-    const length = Object.getOwnPropertyDescriptor(value, "length");
-    if (length === undefined || typeof length.value !== "number") return null;
-    if (Reflect.ownKeys(value).length !== length.value + 1) return null;
-    const copy: unknown[] = [];
-    for (let index = 0; index < length.value; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      copy.push(descriptor.value);
-    }
-    return copy;
-  } catch {
-    return null;
-  }
-}
-
 function malformed(leg: string, message: string): WorkResult {
   return refused(workFailure("WORK_PAYLOAD_MALFORMED", leg as never, "AUTHORITY", message));
 }
@@ -133,7 +72,7 @@ export function readClaimSections(payload: unknown): ClaimSections | null {
 }
 
 function claimLease(section: unknown): Leg<LeaseRecord> {
-  const lease = mirror(section, LEASE_KEYS, false);
+  const lease = mirrorDeep(section, LEASE_KEYS);
   if (lease === null) return malformed("lease", "the lease section is not an own-data record");
   const gate = fenceWorkLease(lease, "work.claim", CLAIM_LEGAL_LEASE_STATES);
   // `fenceAuthority` already parsed and returned a LeaseRecord; the lease gate
@@ -142,7 +81,7 @@ function claimLease(section: unknown): Leg<LeaseRecord> {
 }
 
 function claimSlot(section: unknown): Leg<ProviderSlotReservation> {
-  const slot = mirror(section, SLOT_KEYS, false);
+  const slot = mirrorDeep(section, SLOT_KEYS);
   if (slot === null) return malformed("providerSlot", "the slot section is not own data");
   // The dimension is read from the payload, never defaulted here: the ceiling
   // in `checkSlotCeiling` counts per dimension, so a default would silently
@@ -161,7 +100,7 @@ function claimSlot(section: unknown): Leg<ProviderSlotReservation> {
 }
 
 function claimBudget(section: unknown): Leg<BudgetLeg> {
-  const budget = mirror(section, BUDGET_KEYS, false);
+  const budget = mirrorDeep(section, BUDGET_KEYS);
   if (budget === null) return malformed("budgetReservation", "the budget section is not own data");
   const result = reserveForAdmission(
     budget["view"] as never, budget["admission"] as never, budget["gate"] as never,
@@ -193,7 +132,10 @@ function checkClaimCommand(value: unknown): WorkResult | null {
 }
 
 function claimIntent(section: unknown): Leg<EffectIntent> {
-  const effect = mirror(section, EFFECT_KEYS, false);
+  // Deep, like every other section: the runner carries the intent's lease
+  // binding through onto the transitioned intent, so a one-level snapshot
+  // publishes — and then deep-freezes — a record the caller still owns.
+  const effect = mirrorDeep(section, EFFECT_KEYS);
   if (effect === null) return malformed("effectIntent", "the effect section is not own data");
   const mismatch = checkClaimCommand(effect["command"]);
   if (mismatch !== null) return mismatch;

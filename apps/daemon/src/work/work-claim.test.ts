@@ -768,6 +768,19 @@ const POISONS: readonly PoisonSpec[] = [
     label: "a transparent proxy that traps nothing",
     proxy: true,
   },
+  {
+    // A revoked proxy still answers `typeof` as an object, but makes
+    // `Array.isArray` THROW. A parser that asks that question before asking
+    // whether it holds a proxy escapes as an exception instead of refusing
+    // with a stable code — the caller learns nothing and the leg is unnamed.
+    apply: (value) => {
+      const revocable = Proxy.revocable(value, {});
+      revocable.revoke();
+      return revocable.proxy;
+    },
+    label: "a revoked proxy",
+    proxy: true,
+  },
 ];
 
 interface HostileTarget {
@@ -920,6 +933,15 @@ const LIVE_CLAIM_CASES: readonly LiveClaimCase[] = [
     label: "a live claim table whose element traps every read",
     proxyAt: "element",
   },
+  {
+    build: () => {
+      const revocable = Proxy.revocable([{ ...HELD_CLAIM }], {});
+      revocable.revoke();
+      return revocable.proxy;
+    },
+    label: "a revoked proxy live claim table",
+    proxyAt: "table",
+  },
 ];
 
 function liveClaimProxyAt(table: unknown): "none" | "table" | "element" {
@@ -931,15 +953,15 @@ function liveClaimProxyAt(table: unknown): "none" | "table" | "element" {
 
 describe("work.claim — hostile shapes refuse before any successor exists", () => {
   it("generated a positive, hand-counted case matrix", () => {
-    expect(POISONS.length).toBe(9);
+    expect(POISONS.length).toBe(10);
     expect(HOSTILE_TARGETS.length).toBe(6);
-    expect(HOSTILE_CASES.length).toBe(54);
-    expect(LIVE_CLAIM_CASES.length).toBe(9);
-    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(54);
+    expect(HOSTILE_CASES.length).toBe(60);
+    expect(LIVE_CLAIM_CASES.length).toBe(10);
+    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(60);
     // Hand-counted so a poison silently dropped from the proxy family — the
     // family QA proved was granted — shrinks the matrix instead of passing.
-    expect(POISONS.filter((poison) => poison.proxy).length).toBe(5);
-    expect(LIVE_CLAIM_CASES.filter((live) => live.proxyAt !== "none").length).toBe(4);
+    expect(POISONS.filter((poison) => poison.proxy).length).toBe(6);
+    expect(LIVE_CLAIM_CASES.filter((live) => live.proxyAt !== "none").length).toBe(5);
   });
 
   it.each(HOSTILE_CASES.map((hostile) => [hostile.label, hostile] as const))(
@@ -1114,5 +1136,281 @@ describe("work.claim — the effect command is server-owned", () => {
     expect(refusal.failure.code).toBe("WORK_SLOT_EXHAUSTED");
     expect(refusal.failure.leg).toBe("slotCeiling");
     expect(refusal.failure.upstreamCode).toBeNull();
+  });
+});
+
+/**
+ * Depth matters on its own. A section can be an ordinary own-data record whose
+ * OWN values carry the membrane, and a snapshot that copies one level hands
+ * that membrane straight to the scheduler, the budget ledger or the runner.
+ * Each case names the leg that owns the section it poisons, so a nested fault
+ * cannot drift to a neighbouring leg and still read as covered.
+ */
+interface NestedCase {
+  readonly label: string;
+  readonly leg: string;
+  readonly build: (probe: Probe) => Record<string, unknown>;
+}
+
+const NESTED_CASES: readonly NestedCase[] = [
+  {
+    build: () => withPayload((p) => {
+      at(p, "lease")["record"] = new Proxy(at(p, "lease", "record"), {});
+    }),
+    label: "a lease record behind a transparent proxy",
+    leg: "lease",
+  },
+  {
+    build: (probe) => withPayload((p) => {
+      const proof = at(p, "lease", "proof");
+      Object.defineProperty(proof, "leaseToken", {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          probe.hits += 1;
+          return "token-1";
+        },
+      });
+    }),
+    label: "a lease proof whose token is an accessor",
+    leg: "lease",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "lease", "record")["state"] = (() => "ACTIVE") as never;
+    }),
+    label: "a lease record carrying a callable state",
+    leg: "lease",
+  },
+  {
+    build: () => withPayload((p) => {
+      Object.defineProperty(at(p, "lease", "record"), "leaseId", {
+        configurable: true, enumerable: false, value: "lease-1", writable: true,
+      });
+    }),
+    label: "a lease record hiding a non-enumerable field",
+    leg: "lease",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "slot")["rows"] = [new Proxy(firstOf(listAt(p, ["slot"], "rows")), {})];
+    }),
+    label: "a resource row behind a transparent proxy",
+    leg: "providerSlot",
+  },
+  {
+    build: () => withPayload((p) => {
+      const rows: unknown[] = [...listAt(p, ["slot"], "rows")];
+      rows.length = 3;
+      at(p, "slot")["rows"] = rows;
+    }),
+    label: "a resource row table with a hole",
+    leg: "providerSlot",
+  },
+  {
+    build: () => withPayload((p) => {
+      firstOf(listAt(p, ["slot"], "rows"))["capacityUnits"] = new Map() as never;
+    }),
+    label: "a resource row carrying a Map",
+    leg: "providerSlot",
+  },
+  {
+    build: (probe) => withPayload((p) => {
+      at(p, "budget", "view")["meters"] = [
+        new Proxy(firstOf(listAt(p, ["budget", "view"], "meters")), {
+          get: (target, key, receiver) => {
+            probe.hits += 1;
+            return Reflect.get(target, key, receiver) as unknown;
+          },
+        }),
+      ];
+    }),
+    label: "a budget meter that traps every read",
+    leg: "budgetReservation",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "budget", "view")["state"] = new Date(0) as never;
+    }),
+    label: "a budget view carrying a Date",
+    leg: "budgetReservation",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "budget", "admission")["amounts"] = Object.setPrototypeOf(
+        [...listAt(p, ["budget", "admission"], "amounts")], { inherited: true },
+      ) as never;
+    }),
+    label: "an admission amount list with a borrowed prototype",
+    leg: "budgetReservation",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "effect")["intent"] = new Proxy(at(p, "effect", "intent"), {});
+    }),
+    label: "an effect intent behind a transparent proxy",
+    leg: "effectIntent",
+  },
+  {
+    build: () => withPayload((p) => {
+      at(p, "effect", "intent")["leaseBinding"] = new Proxy(
+        at(p, "effect", "intent", "leaseBinding"), {},
+      );
+    }),
+    label: "an intent lease binding behind a transparent proxy",
+    leg: "effectIntent",
+  },
+  {
+    build: () => withPayload((p) => {
+      Object.defineProperty(at(p, "effect", "intent"), Symbol("smuggled"), {
+        configurable: true, enumerable: true, value: 1, writable: true,
+      });
+    }),
+    label: "an effect intent carrying an own symbol key",
+    leg: "effectIntent",
+  },
+  {
+    build: () => withPayload((p) => {
+      const intent = at(p, "effect", "intent");
+      intent["predecessorCursor"] = intent;
+    }),
+    label: "an effect intent that points back at itself",
+    leg: "effectIntent",
+  },
+  {
+    build: () => withPayload((p) => {
+      const revocable = Proxy.revocable(at(p, "effect", "intent", "leaseBinding"), {});
+      revocable.revoke();
+      at(p, "effect", "intent")["leaseBinding"] = revocable.proxy;
+    }),
+    label: "an intent lease binding behind a revoked proxy",
+    leg: "effectIntent",
+  },
+];
+
+describe("work.claim — a membrane nested inside a section refuses at that leg", () => {
+  it("generated a positive, hand-counted nested matrix", () => {
+    expect(NESTED_CASES.length).toBe(15);
+    expect(new Set(NESTED_CASES.map((nested) => nested.label)).size).toBe(15);
+    expect(new Set(NESTED_CASES.map((nested) => nested.leg))).toStrictEqual(
+      new Set(["lease", "providerSlot", "budgetReservation", "effectIntent"]),
+    );
+  });
+
+  it.each(NESTED_CASES.map((nested) => [nested.label, nested] as const))(
+    "refuses %s at its owning leg",
+    (_label, nested) => {
+      const probe: Probe = { hits: 0 };
+      const refusal = refusalOf(claimWork(nested.build(probe)));
+      expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+      expect(refusal.failure.leg).toBe(nested.leg);
+      expect(refusal.failure.layer).toBe("AUTHORITY");
+      expect(refusal.failure.upstreamCode).toBeNull();
+      const keys = Object.keys(refusal);
+      expect(keys).not.toContain("successors");
+      for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
+      expect(probe.hits).toBe(0);
+    },
+  );
+});
+
+/** Every object reachable from `root` through own data properties. */
+function reachable(root: unknown, seen = new Set<object>()): Set<object> {
+  if (typeof root !== "object" || root === null || seen.has(root)) return seen;
+  seen.add(root);
+  for (const key of Reflect.ownKeys(root)) {
+    const descriptor = Object.getOwnPropertyDescriptor(root, key);
+    if (descriptor === undefined || !("value" in descriptor)) continue;
+    reachable(descriptor.value, seen);
+  }
+  return seen;
+}
+
+/**
+ * Keys, descriptor flags AND extensibility, recursively. `JSON.stringify` sees
+ * none of the last three, which is why the older non-mutation test stayed green
+ * while the call froze the caller's own lease record.
+ */
+function descriptorShape(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return `${typeof value}:${String(value)}`;
+  return {
+    entries: Reflect.ownKeys(value).map((key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key) as PropertyDescriptor;
+      return [
+        String(key),
+        descriptor.enumerable,
+        descriptor.writable ?? "accessor",
+        descriptor.configurable,
+        descriptorShape(descriptor.value),
+      ];
+    }),
+    frozen: Object.isFrozen(value),
+    sealed: Object.isSealed(value),
+  };
+}
+
+/**
+ * A payload a real caller still holds after the call, with ONE lease record in
+ * both the lease section and the intent's binding — the exact shape QA used to
+ * show `claimWork` freezing a caller object through the transitioned intent.
+ */
+function mutablePayload(): Record<string, unknown> {
+  const payload = withPayload(() => undefined);
+  at(payload, "effect", "intent")["leaseBinding"] = at(payload, "lease")["record"];
+  return payload;
+}
+
+describe("work.claim — the caller's graph is neither frozen nor retained", () => {
+  it("shares one mutable lease record across the sections it hands over", () => {
+    const payload = mutablePayload();
+    expect(at(payload, "effect", "intent")["leaseBinding"]).toBe(at(payload, "lease")["record"]);
+    expect(Object.isFrozen(at(payload, "lease")["record"])).toBe(false);
+    expect(reachable(payload).size).toBeGreaterThan(10);
+  });
+
+  it("leaves every caller object unfrozen, at any depth", () => {
+    const payload = mutablePayload();
+    const nodes = [...reachable(payload)];
+    grantOf(claimWork(payload));
+    expect(nodes.filter((node) => Object.isFrozen(node))).toStrictEqual([]);
+  });
+
+  it("leaves every caller descriptor exactly as it found it", () => {
+    const payload = mutablePayload();
+    const before = JSON.stringify(descriptorShape(payload));
+    grantOf(claimWork(payload));
+    expect(JSON.stringify(descriptorShape(payload))).toBe(before);
+  });
+
+  it("publishes no object the caller owns, at any depth", () => {
+    const payload = mutablePayload();
+    const callerNodes = reachable(payload);
+    const grant = grantOf(claimWork(payload));
+    const published = [...reachable(grant.successors)];
+    expect(published.length).toBeGreaterThan(10);
+    expect(published.filter((node) => callerNodes.has(node))).toStrictEqual([]);
+    // The alias QA actually found: the runner carries the caller's own lease
+    // record onto the transitioned intent, so a top-level copy is not enough.
+    expect(grant.successors.effectIntent.leaseBinding)
+      .not.toBe(at(payload, "lease")["record"]);
+    expect(grant.successors.effectIntent.leaseBinding).toStrictEqual(EXPECTED_LEASE);
+  });
+
+  it("freezes every object it does publish, at any depth", () => {
+    const grant = grantOf(claimWork(mutablePayload()));
+    const published = [...reachable(grant.successors)];
+    expect(published.length).toBeGreaterThan(10);
+    expect(published.filter((node) => !Object.isFrozen(node))).toStrictEqual([]);
+  });
+
+  it("refuses without touching the caller's graph either", () => {
+    const payload = mutablePayload();
+    at(payload, "lease", "proof")["leaseToken"] = "token-stale";
+    const nodes = [...reachable(payload)];
+    const before = JSON.stringify(descriptorShape(payload));
+    const refusal = refusalOf(claimWork(payload));
+    expect(refusal.failure.code).toBe("WORK_STALE_TOKEN");
+    expect(nodes.filter((node) => Object.isFrozen(node))).toStrictEqual([]);
+    expect(JSON.stringify(descriptorShape(payload))).toBe(before);
   });
 });
