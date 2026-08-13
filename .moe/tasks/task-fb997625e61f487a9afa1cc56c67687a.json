@@ -20,73 +20,112 @@
     {
       "stepId": "step-1",
       "description": "TDD red: extend the bare-root surface contract to import/name the complete adapter construction type closure and expect exactly four new runtime functions—providerLockInventoryRegistration, workspaceInventoryRegistration, gitIntegrationInventoryRegistration, and artifactObjectInventoryRegistration—raising the hand-maintained namespace cardinality from 155 to 159. Add focused root-composition coverage that constructs all four landed registrations through `@moe/runner` (never a relative/deep substitute), asserts the generated list is nonzero and exactly four with four unique exact RECOVERY_INVENTORY_CLASSES, verifies the root functions are the landed factory identities/no wrappers, snapshots them through caller-injected createRecoveryInventoryRegistry, and proves caller-array mutation cannot alter the frozen registry. Invoke the real aggregate and pin both every proof tuple and the duplicate-registry refusal `RECOVERY_INVENTORY_REQUEST_INVALID` at layer `INVENTORY_ADAPTER`, with a guard that no enumerator ran on that refusal. Run the focused tests now and record the expected failure because the root bindings/type closure are absent.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
       ],
-      "startedAt": "2026-08-13T16:29:51.663Z"
+      "modifiedFiles": [
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ],
+      "note": "TDD red recorded. index-surface.test.ts: EXPECTED_EXPORTS raised 155 -> 159 with the four factories, new type-only import of the full construction closure through @moe/runner (30 names; ObservationClock/PlatformIdentity/RuntimeClosureEntry/RuntimePinningMethod deliberately NOT re-listed because the Claude seam already roots them and Codex's structurally identical copies must not collide), a root-composition test that builds all four registrations from the root and pins exact classes == RECOVERY_INVENTORY_CLASSES / Set size 4 / frozen, plus a negative control asserting the 4 enumerate* readers and 4 *_INVENTORY_VERSION constants stay unpublished. inventory-registration.test.ts: all four factories + input types now come from the bare root, landed modules imported only as identity operands, new describe with (a) root binding === landed factory and 4 distinct functions, (b) exact four-class generation + real aggregate COMPLETE proof tuples, (c) caller-array mutation cannot alter the frozen snapshot, (d) duplicate GIT registration refuses with exact [\"RECOVERY_INVENTORY_REQUEST_INVALID\",\"INVENTORY_ADAPTER\"] and enumerations === 0. RED evidence: pnpm --filter @moe/runner typecheck exit 1 with 22 TS2305/TS2339/TS2724 errors naming every absent binding; focused vitest exit 1 with \"Tests 17 failed | 188 passed (205)\" and \"TypeError: gitIntegrationInventoryRegistration is not a function\". Corrected two planning assumptions against measured source: the Git refusal vocabulary is RUNNER_SCOPE_OBSERVATION_FAILED / GIT_OBSERVER (no RUNNER_SCOPE_OBSERVER_UNAVAILABLE, no GIT_BOUNDARY layer).",
+      "startedAt": "2026-08-13T16:29:51.663Z",
+      "completedAt": "2026-08-13T16:33:43.337Z"
     },
     {
       "stepId": "step-2",
       "description": "Create an explicit curated recovery-inventory composition surface. Move the existing named recovery-inventory contract and collect/create registry exports from index.ts into it unchanged; explicitly re-export only the four existing registration factories as runtime values plus the exact type-only external construction/refusal closure (provider process/port/input and required Claude/Codex probe input/port/report leaves; workspace result/source/listing/port/input; Git input/reading/refusal; artifact input/reading). Reuse already-rooted common types and resolve any Claude/Codex type-name collisions explicitly. Do not export adapter enumerators, version constants, fixtures, default tuples, or mutable/global registration.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/surface/recovery-inventory-surface.ts"
       ],
       "newFiles": [
         "packages/runner/src/surface/recovery-inventory-surface.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/recovery-inventory-surface.ts"
+      ],
+      "note": "Created packages/runner/src/surface/recovery-inventory-surface.ts (123 lines). Moved the aggregate/contract block from index.ts verbatim (same 30 names, same order) and added exactly four runtime values: providerLockInventoryRegistration, workspaceInventoryRegistration, gitIntegrationInventoryRegistration, artifactObjectInventoryRegistration. Type-only closure published: provider (Input/Port/ProviderProcessRecord), ProbeClaudeRuntimeInput + 7 Claude report leaves from claude-capabilities.ts, ProbeCodexRuntimeInput + 9 Codex report leaves from codex-capabilities.ts, workspace (Input/Port/Listing/Source/ResultAspect), Git (Input/Reading/Refusal), artifact (Input/Reading). Claude/Codex collision resolved by omission, documented in the header: ObservationClock, PlatformIdentity, RuntimeClosureEntry and RuntimePinningMethod are already rooted by claude-surface.ts and Codex's own declarations are byte-identical in shape, so re-exporting the Codex copies would collide on the root namespace for zero added capability. Withheld as planned: all four enumerate*Inventory readers, all four *_INVENTORY_VERSION constants, every fixture, any default tuple, and any module-global registry. No adapter, aggregate, class vocabulary, or reason code was touched.",
+      "startedAt": "2026-08-13T16:33:46.294Z",
+      "completedAt": "2026-08-13T16:34:21.629Z"
     },
     {
       "stepId": "step-3",
       "description": "Add the mandatory NodeNext bridge with exact bytes `export * from \"./recovery-inventory-surface.ts\";\\n` (LF, no CR), and wire index.ts to `export *` only from that curated `.js` surface. Keep package.json's root-only exports map unchanged. Confirm the existing runtime-entrypoint sweep discovers the new module/bridge and a real child Node bare import sees all four defined functions; do not add a deep export.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/surface/recovery-inventory-surface.js"
       ],
       "newFiles": [
         "packages/runner/src/surface/recovery-inventory-surface.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/recovery-inventory-surface.js",
+        "packages/runner/src/index.ts"
+      ],
+      "note": "Bridge + wiring landed. packages/runner/src/surface/recovery-inventory-surface.js written with exact bytes `export * from \"./recovery-inventory-surface.ts\";\\n`; verified LF-only via `cat -A` (single trailing `$`, no `^M`) and byte-compared with `cmp` against the expected printf output -> BYTES_EXACT. index.ts: added `export * from \"./surface/recovery-inventory-surface.js\";` to the surface group (kept alphabetical), updated the group doc comment three->four modules, and deleted the 46-line inline recovery-inventory block now owned by the surface. index.ts is 275 -> 231 lines, under the 250 target. package.json exports map untouched (`git diff --stat -- packages/runner/package.json` empty); no deep export added. Evidence: real child-Node bare-specifier probe from the package root returns {\"total\":159,\"undefinedBindings\":0,\"four\":{all four \"function\"},\"distinct\":4} at exit 0 - was total 155 with all four undefined before this task. runtime-entrypoint.test.ts (dynamic exact-LF bridge sweep + child-Node import + ERR_MODULE_NOT_FOUND negative control) passes 3/3, exit 0.",
+      "startedAt": "2026-08-13T16:34:23.948Z",
+      "completedAt": "2026-08-13T16:35:16.521Z"
     },
     {
       "stepId": "step-4",
       "description": "Refactor the focused registration test imports/fixtures only as needed so all four factories and consumer-facing types are obtained from the bare package root while real Git observer, artifact store, workspace scanner, provider probes, registry, and aggregate remain the production surfaces under test. Preserve the existing exact all-four COMPLETE journey and exact one-missing UNKNOWN tuple (`RECOVERY_INVENTORY_COVERAGE_UNKNOWN`, `ENUMERATOR_UNREGISTERED`, `INVENTORY_ADAPTER`); add no local adapter implementation or caller-selected authority. Then make the red tests green without changing any adapter, aggregate, class vocabulary, or reason code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "Red -> green with no production adapter change. The import refactor landed with the red tests in step-1: inventory-registration.test.ts now takes all four factories and ArtifactObjectInventoryInput/GitIntegrationInventoryInput/ProviderLockInventoryInput/WorkspaceInventoryInput/RecoveryInventoryRegistry from the bare `@moe/runner` root; the four relative adapter imports remain solely as aliased right-hand operands (landedProvider/landedWorkspace/landedGit/landedArtifact) of the identity assertions. Production surfaces under test are unchanged and real: createNodeGitObserver over a real `git init` repository, createArtifactStore + createNodeArtifactFs over a real staged object, the real recursive workspace scanner over a real temp dir, the real Claude/Codex probe path through providerInput(), createRecoveryInventoryRegistry, and collectRecoveryInventory. No local adapter implementation and no caller-selected authority was added; the counted() wrapper in the duplicate-refusal test only observes, delegating to the real registration's enumerate. The pre-existing exact all-four COMPLETE journey and the one-missing UNKNOWN tuple (RECOVERY_INVENTORY_COVERAGE_UNKNOWN / ENUMERATOR_UNREGISTERED / INVENTORY_ADAPTER) are untouched and still asserted whole-object via proofShapes. Evidence: pnpm --filter @moe/runner typecheck exit 0 (was exit 1 with 22 errors); focused vitest \"Test Files 2 passed (2) / Tests 205 passed (205)\" exit 0 (was 17 failed).",
+      "startedAt": "2026-08-13T16:35:19.212Z",
+      "completedAt": "2026-08-13T16:35:42.577Z"
     },
     {
       "stepId": "step-5",
       "description": "Run the single concentrated verification command fresh in the foreground: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`. Require exit 0, nonzero runner test execution, the exact namespace/root tests, all existing recovery-inventory suites, real child-Node bare-specifier loadability, and the dynamic exact-LF bridge sweep. Also record merge-base versus HEAD repo-wide path-attributed baseline only if broader gates expose foreign failures; no owned runner-path delta may be red.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/surface/recovery-inventory-surface.ts",
         "packages/runner/src/surface/recovery-inventory-surface.js",
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
-      ]
+      ],
+      "note": "Named verification command run fresh in the foreground: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> exit 0. tsc clean; vitest reports \"Test Files 55 passed (55) / Tests 1706 passed (1706)\" - non-vacuous execution, not a narrowed or zero-case run. Covered inside that run: index-surface.test.ts (159-entry hand-pinned namespace, exact Object.keys equality, per-name kind check, the new construction-closure composition test and the enumerator/version negative control), all recovery-inventory suites including inventory-registration.test.ts's four-class journey and the new root-composition describe, runtime-entrypoint.test.ts's real child-Node bare-specifier import plus the dynamic exact-LF bridge sweep and its ERR_MODULE_NOT_FOUND negative control. Additionally ran the only cross-package consumer of @moe/runner (apps/daemon, the sole other package.json declaring the dependency): `pnpm --filter @moe/daemon typecheck` exit 0, so the widened root namespace breaks no downstream compilation. No broader gate exposed any foreign failure, so no merge-base/HEAD path-attributed baseline was needed; zero owned runner-path red.",
+      "startedAt": "2026-08-13T16:35:45.091Z",
+      "completedAt": "2026-08-13T16:36:17.814Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarially review the owned diff before completion: verify index.ts and the new production surface stay below 400 (target <=250), exactly four runtime bindings were added, no direct enumerator/version/test fixture/global registry leaked, caller mutation and duplicate registration fail closed, no deep-import/package-map change occurred, and the exact LF bridge is portable on Windows/macOS/Linux. Mutation drill the production surface by temporarily deleting or misbinding one factory export (or aliasing artifact to Git), rerun the focused root/registration test to confirm it goes red on exact identity/class/cardinality—not merely import success—then restore and rerun the exact verification command. Finally stage/commit only the five owned runner paths and hand QA the fresh command output plus the mutation red evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/surface/recovery-inventory-surface.ts",
         "packages/runner/src/surface/recovery-inventory-surface.js",
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/recovery-inventory-surface.ts",
+        "packages/runner/src/surface/recovery-inventory-surface.js",
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/recovery-inventory/inventory-registration.test.ts"
+      ],
+      "note": "Adversarial review + three mutation drills, all restored and re-verified by hash.\n\nSIZE/SCOPE: index.ts 231 lines (was 275), surface/recovery-inventory-surface.ts 125 - both under the 250 target and far under 400. Exactly four runtime bindings added (root namespace 155 -> 159; child-Node probe reports distinct=4, undefinedBindings=0). No enumerator, version constant, fixture, default tuple, or module-global registry leaked - the surface is pure re-export with no module state, so nothing new is shared across concurrent collections. package.json untouched; deep import of the new module still returns exactly ERR_PACKAGE_PATH_NOT_EXPORTED.\n\nDRILL A (alias artifact factory to git in the production surface): reddened on the OUTCOME assertions, not import success - inventory-registration.test.ts:359 `expect(artifactObjectInventoryRegistration).toBe(landedArtifact)` failed with received [Function gitIntegrationInventoryRegistration], and :378 exact-class failed showing \"GIT_INTEGRATION_ON_DISK\" where \"ARTIFACT_OBJECT_STAGING\" was expected; index-surface.test.ts's closure test failed on the same class equality. 10 tests red.\nDRILL B (delete the workspace runtime export, keep its types): index-surface.test.ts:212 Object.keys equality red, naming the missing \"workspaceInventoryRegistration\".\nDRILL C (rewrite the bridge with CRLF): runtime-entrypoint.test.ts:156 red with wrongContent: [\"surface\\\\recovery-inventory-surface.ts\"] - proves the dynamic exact-LF sweep actually discovers MY module rather than passing vacuously.\nEach drill was applied with an anchor-count==1 guard and restored; post-restore sha256 matches pristine exactly (.ts f7c9c022..., .js dd591b52...).\n\nPORTABILITY: .gitattributes sets `* text=auto eol=lf` repo-wide and `git ls-files --eol` reports i/lf w/lf for the new bridge, so the exact bytes survive checkout on Windows/macOS/Linux.\n\nGATE RERUN AFTER RESTORE: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0, \"Test Files 55 passed (55) / Tests 1706 passed (1706)\".\n\nCOMMIT: e2bea22, staged by explicit pathspec over the five owned runner paths only (5 files, +397/-66). Foreign .moe/ board files and any other agent's work left untouched. Committed bytes verified identical to the gated bytes via `git show HEAD:<path> | sha256sum` for all three non-test owned files.\n\nTHEORETICAL, noted for QA: the two published *InventoryReading types name shapes the direct readers return, but those readers stay unpublished, so a consumer can name a reading it cannot obtain directly - deliberate, since the aggregate's UNKNOWN reduction is the protocol.",
+      "startedAt": "2026-08-13T16:36:20.729Z",
+      "completedAt": "2026-08-13T16:39:03.815Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-68608f71",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,17 +137,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:24.022Z",
-  "updatedAt": "2026-08-13T16:29:51.663Z",
+  "updatedAt": "2026-08-13T16:39:52.525Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:12:53.060Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-a42f4965",
-    "worker-68608f71"
+    "worker-68608f71",
+    "qa-41bfec20"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T16:21:52.901Z",
   "planningNotes": {
@@ -128,5 +176,19 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-13T16:21:54.948Z",
-  "workStartedAt": "2026-08-13T16:29:51.663Z"
+  "workStartedAt": "2026-08-13T16:29:51.663Z",
+  "reviewStartedAt": "2026-08-13T16:39:52.525Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  55 passed (55)\n      Tests  1706 passed (1706)\n   Start at  19:39:09\n   Duration  4.30s (transform 11.73s, setup 0ms, import 17.72s, tests 15.97s, environment 4ms)\n\nFINAL_GATE_EXIT=0",
+    "reportedAt": "2026-08-13T16:39:52.525Z"
+  },
+  "filesModified": [
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/recovery-inventory/inventory-registration.test.ts",
+    "packages/runner/src/surface/recovery-inventory-surface.ts",
+    "packages/runner/src/surface/recovery-inventory-surface.js",
+    "packages/runner/src/index.ts"
+  ]
 }

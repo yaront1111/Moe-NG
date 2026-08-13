@@ -84,8 +84,8 @@
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 3,
-  "reopenReason": "Fresh required verification passed (runner typecheck; 55 files/1695 tests; plain-Node root smoke), and the prior pre-launch port fixes are present. However, malformed hostile request objects can still reject the public launcher promise: an ownKeys-throwing Proxy escapes from the uncontained request snapshot instead of returning the required typed UNKNOWN with stable malformed-request code/layer. This violates DoD 1 and the fail-closed refusal rail.",
+  "reopenCount": 4,
+  "reopenReason": "Fresh required gate passed (runner typecheck; 55 files/1706 tests; root smoke), and hostile request snapshotting is now fixed. But the governor-required total public contract still fails on fulfilled hostile dependency results. A six-case production probe produced five rejected promises (duplicate, activation, grant, boundary, observation); the post-lock boundary and observation cases also skipped unlock. Missing/malformed authority therefore remains capable of escaping UNKNOWN, proceeding toward effects, or leaking the OS lock.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -118,19 +118,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.737Z",
-  "updatedAt": "2026-08-13T16:30:32.242Z",
+  "updatedAt": "2026-08-13T16:40:22.700Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T12:34:18.450Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
     "executedStepCount": 22,
-    "rejectCount": 3,
-    "reopenCount": 3
+    "rejectCount": 4,
+    "reopenCount": 4
   },
-  "contextFetchedBy": [
-    "architect-a9210e34",
-    "worker-733c82bb"
-  ],
+  "contextFetchedBy": [],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -152,7 +149,28 @@
     "step-3",
     "step-4"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable.",
+      "rejectedAt": "2026-08-13T16:40:22.700Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "No child process starts before runtime re-observation, activation-grant validation/consumption, and OS-exclusive launch-lock acquisition all succeed; each refusal asserts the exact production code and layer and proves zero spawn calls.",
+      "rejectedAt": "2026-08-13T16:40:22.700Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "Launch uses an argument array with shell disabled and a bounded environment/cwd; Windows process-tree cleanup is awaited on success, cancellation, timeout, and thrown-error paths so no handle or child leaks.",
+      "rejectedAt": "2026-08-13T16:40:22.700Z",
+      "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "Duplicate delivery either adopts the registered process or refuses before provider launch; a consumed/forged/wrong-wrapper grant pins GRANT_ALREADY_CONSUMED or GRANT_WRAPPER_MISMATCH at the GRANT layer and never spawns twice.",
+      "rejectedAt": "2026-08-13T16:40:22.700Z",
+      "rejectedBy": "qa-41bfec20"
+    }
+  ],
   "planSubmittedAt": "2026-08-13T16:19:41.237Z",
   "planningNotes": {
     "approachesConsidered": "QA's security finding is reproducible and the suggested containment is correct for this codebase. Use the narrow public-boundary repair: catch only `snapshotClaudeLaunchRequest(value)` inside `launchClaude` and map thrown reflection/proxy traps to the existing frozen malformed-request result. Reject widening the catch over the whole launcher, because that would erase the already-correct RUNTIME, ACTIVATION, GRANT, LAUNCH_LOCK, and process-boundary failure ownership. Reject editing `claude-launcher-input.ts`: the task only requires the public promise to fail closed, that helper is outside the declared owned repair paths, and a caller-local containment guard covers outer, runtime, recursive authority, argv, environment, and limits reflection uniformly. Preserve the current non-win32 check before any request observation. No docs, bridge, contract, or export change is needed because no public shape or vocabulary changes.",
@@ -184,21 +202,55 @@
     "packages/runner/src/providers/claude/claude-launcher.test.ts",
     "packages/runner/src/providers/claude/claude-launcher.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T16:05:20.425Z",
+  "reviewCompletedAt": "2026-08-13T16:40:22.700Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable."
+      "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable.",
+      "No child process starts before runtime re-observation, activation-grant validation/consumption, and OS-exclusive launch-lock acquisition all succeed; each refusal asserts the exact production code and layer and proves zero spawn calls.",
+      "Launch uses an argument array with shell disabled and a bounded environment/cwd; Windows process-tree cleanup is awaited on success, cancellation, timeout, and thrown-error paths so no handle or child leaks.",
+      "Duplicate delivery either adopts the registered process or refuses before provider launch; a consumed/forged/wrong-wrapper grant pins GRANT_ALREADY_CONSUMED or GRANT_WRAPPER_MISMATCH at the GRANT layer and never spawns twice."
     ],
     "issues": [
       {
         "type": "security",
         "file": "packages/runner/src/providers/claude/claude-launcher.ts",
-        "line": 317,
-        "description": "`snapshotClaudeLaunchRequest(value)` runs outside exception containment. QA passed a Proxy whose `ownKeys` throws through root `launchClaude`; Promise.allSettled returned rejected `Error: hostile ownKeys` instead of UNKNOWN `CLAUDE_LAUNCH_REQUEST_MALFORMED`/`LAUNCHER`. Contain snapshot/proxy exceptions and add a positive-count outer+nested proxy sweep asserting fulfillment, exact code/layer/truthClass, freezing, and zero dependency/process calls."
+        "line": 327,
+        "description": "Port calls are caught, but their returned values are interpreted outside containment (`decided.kind`, `commit.kind`, `grant.kind`). QA generated hostile fulfilled result Proxies; all three rejected `launchClaude` instead of typed UNKNOWN. Malformed plain discriminators can also flow toward optimistic success/provider open. Validate and dispatch each result inside its owning catch and test exact code/layer plus zero effects."
+      },
+      {
+        "type": "regression",
+        "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+        "line": 354,
+        "description": "The post-lock `\"truthClass\" in opened` check and post-close `observed.kind` read are outside containment. Hostile fulfilled results rejected the public promise; logs showed lock acquisition with no `unlock` in both boundary and observation cases. Contain structural result validation under cleanup authority and add exact failure tests proving boundary close and lock release exactly once."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Fresh required gate passed (runner typecheck; 55 files/1706 tests; root smoke), and hostile request snapshotting is now fixed. But the governor-required total public contract still fails on fulfilled hostile dependency results. A six-case production probe produced five rejected promises (duplicate, activation, grant, boundary, observation); the post-lock boundary and observation cases also skipped unlock. Missing/malformed authority therefore remains capable of escaping UNKNOWN, proceeding toward effects, or leaking the OS lock.",
+      "rejectedAt": "2026-08-13T16:40:22.700Z",
+      "reopenCount": 4,
+      "failedDodItems": [
+        "The wrapper resolves the installed runtime, hashes every declared closure entry, records the actual version/platform/pinning method, and returns typed UNKNOWN/UNSUPPORTED with stable launcher code/layer when any fact is missing or unverifiable.",
+        "No child process starts before runtime re-observation, activation-grant validation/consumption, and OS-exclusive launch-lock acquisition all succeed; each refusal asserts the exact production code and layer and proves zero spawn calls.",
+        "Launch uses an argument array with shell disabled and a bounded environment/cwd; Windows process-tree cleanup is awaited on success, cancellation, timeout, and thrown-error paths so no handle or child leaks.",
+        "Duplicate delivery either adopts the registered process or refuses before provider launch; a consumed/forged/wrong-wrapper grant pins GRANT_ALREADY_CONSUMED or GRANT_WRAPPER_MISMATCH at the GRANT layer and never spawns twice."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 327,
+          "description": "Port calls are caught, but their returned values are interpreted outside containment (`decided.kind`, `commit.kind`, `grant.kind`). QA generated hostile fulfilled result Proxies; all three rejected `launchClaude` instead of typed UNKNOWN. Malformed plain discriminators can also flow toward optimistic success/provider open. Validate and dispatch each result inside its owning catch and test exact code/layer plus zero effects."
+        },
+        {
+          "type": "regression",
+          "file": "packages/runner/src/providers/claude/claude-launcher.ts",
+          "line": 354,
+          "description": "The post-lock `\"truthClass\" in opened` check and post-close `observed.kind` read are outside containment. Hostile fulfilled results rejected the public promise; logs showed lock acquisition with no `unlock` in both boundary and observation cases. Contain structural result validation under cleanup authority and add exact failure tests proving boundary close and lock release exactly once."
+        }
+      ]
+    },
     {
       "reason": "Fresh required verification passed (runner typecheck; 55 files/1695 tests; plain-Node root smoke), and the prior pre-launch port fixes are present. However, malformed hostile request objects can still reject the public launcher promise: an ownKeys-throwing Proxy escapes from the uncontained request snapshot instead of returning the required typed UNKNOWN with stable malformed-request code/layer. This violates DoD 1 and the fail-closed refusal rail.",
       "rejectedAt": "2026-08-13T16:05:20.425Z",
@@ -257,5 +309,6 @@
         }
       ]
     }
-  ]
+  ],
+  "needsHumanReview": true
 }
