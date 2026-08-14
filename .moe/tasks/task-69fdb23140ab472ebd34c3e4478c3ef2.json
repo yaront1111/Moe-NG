@@ -138,34 +138,52 @@
     {
       "stepId": "step-8",
       "description": "Satisfy DoD-5's generated sweep with an EXACT NONZERO CARDINALITY. Build the strict-classification case table covering every conjunct-failure axis from step 6 plus the passing case, and assert its exact length with a hand-written literal before iterating - `expect(CASES).toHaveLength(<literal>)`. A generated sweep that silently produces zero cases passes while testing nothing, and a count computed from the generator cannot police the generator. Assert every case's exact expected outcome AND code, and assert that the table covers each of the five conjuncts at least once by naming them, so a future edit that drops a conjunct's case fails the count rather than quietly shrinking coverage.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/restore-record-classification.test.ts"
       ],
-      "startedAt": "2026-08-14T11:36:48.993Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/restore-controller.test.ts"
+      ],
+      "note": "Cardinality test \"sweeps an exact, hand-counted set of cases\" added ahead of the it.each, so a table that silently produced ZERO cases fails instead of passing while testing nothing. Every number and name in it is a hand-written literal:\n\n  expect(FENCE_CASES).toHaveLength(12);\n  expect(GENESIS_CONJUNCTS).toHaveLength(7);\n  expect([...new Set(FENCE_CASES.map(c => c.conjunct))].sort()).toEqual(\n    [\"ANCHOR\",\"DECODES\",\"DERIVATION\",\"ORIGIN\",\"PROJECT_CONTEXT\",\"PROOF\",\"ROW_REFS\"]);\n  expect(new Set(FENCE_CASES.map(c => c.name)).size).toBe(12);\n\nEach conjunct is NAMED, so dropping a case fails this assertion rather than quietly shrinking coverage to whatever is left. The distinct-name assertion stops two entries collapsing into one report.\n\nTHE ASSERTION THAT DOES THE REAL WORK is against the PRODUCTION surface, not a copy of it:\n\n  expect([...new Set(FENCE_CASES.map(c => c.reason))].sort())\n    .toEqual([...GENESIS_FENCE_REJECTIONS].sort());\n  expect(GENESIS_FENCE_REJECTIONS).toHaveLength(8);\n\nA count computed from the generator cannot police the generator, so the table's reason set is required to equal the classifier's own exported rejection list. Adding a rejection code to production with no case here fails immediately.\n\nDRILL PROVING THAT COUPLING IS LIVE: I appended a 9th reason \"UNSWEPT_NEW_REASON\" to GENESIS_FENCE_REJECTIONS in the production module (printed the applied line, 47; chained with &&). Exactly one test went red, on the right assertion:\n  AssertionError: expected [ 'ANCHOR_ABSENT', ...(7) ] to deeply equal [ 'ANCHOR_ABSENT', ...(8) ]\n  -   \"UNSWEPT_NEW_REASON\"\nThe other 48 stayed green, so the drill was targeted and not a broken environment. Restored with Edit, sha256sum -c back to pre-drill bytes: OK.\n\nCoverage accounting, stated explicitly so a reviewer can count it: 12 failing cases spanning all 7 conjuncts and all 8 rejection reasons, PLUS the passing case, which is its own named test (\"verifies the fence a production genesis install actually wrote\") and asserts verified:true with origin GENESIS and both refs matching the row — 13 strict-classification cases in total. Each failing case asserts THREE things in the sweep body: the exact controller code and layer (expectRefusal at DAEMON_RESTORE_CONTROLLER with RESTORE_RECORD_UNREADABLE), that it is neither ok nor ABSENT, and the exact classifier conjunct.\n\nVerification: tsc exit 0; vitest src/recovery/ src/identity/ -> 23 files, 456 passed (456), exit 0; restore-controller.test.ts alone 49 passed.",
+      "startedAt": "2026-08-14T11:36:48.993Z",
+      "completedAt": "2026-08-14T11:37:55.601Z"
     },
     {
       "stepId": "step-9",
       "description": "Run the mutation drills DoD-5 requires, against the PRODUCTION surface. [1] Weaken the genesis discriminator - accept a binding without checking origin === 'GENESIS' - and confirm the RESTORE-binding-in-the-ACTIVE-slot case goes red on its exact code. [2] Weaken the proof comparison - skip the anchor byte-equality check, then separately skip the projectId/storeContextDigest recomputation - and confirm the corresponding conjunct cases go red. [3] THE RAIL-1 DRILL: make the classifier treat `decodeBinding(...) === null` as genesis-or-absence, and confirm the malformed-bytes case goes red on RESTORE_RECORD_UNREADABLE rather than passing as ABSENT - this is the exact defect task rail 1 forbids and the drill is what proves the guard is real. For each drill: confirm it actually applied (print the replaced line range, chain with &&, since a drill that applied nothing reads as green), read the failure MESSAGE not the count (over-reddening means a broken environment), restore with Edit rather than git checkout (checkout reverts to HEAD and destroys uncommitted work), and hash-check back to the pre-drill bytes before the next drill.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/restore-record-classification.ts",
         "apps/daemon/src/recovery/restore-record-classification.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/restore-genesis-classifier.ts"
+      ],
+      "note": "Four drills, all against the PRODUCTION classifier, each printing the replaced line range and chained with && so a drill that applied nothing could not read as green. Failure MESSAGES read, not counts. Restored with Edit each time and sha256sum -c verified back to the pre-drill bytes before the next drill — never git checkout, which would revert to HEAD and destroy this task's uncommitted work.\n\n[1] GENESIS DISCRIMINATOR REMOVED (line 97, `if (binding.origin !== \"GENESIS\") return reject(\"ORIGIN_NOT_GENESIS\")`).\nRED, 1 test: \"refuses a real RESTORE binding in the slot a genesis is expected in\".\n  expected { ...(2) } to deeply equal { reason: 'ORIGIN_NOT_GENESIS', ...(1) }\n  -   \"reason\": \"ORIGIN_NOT_GENESIS\"   +   \"reason\": \"PROJECT_CONTEXT_MISMATCH\"\nWorth noting precisely: the controller code stays RESTORE_RECORD_UNREADABLE either way, because a RESTORE binding trips a LATER conjunct once the discriminator is gone. Only the per-case conjunct assertion catches it. That is exactly why step 6 asserts the reason and not merely the refusal — a test asserting \"it refused\" would have stayed green through this drill.\n\n[2A] ANCHOR BYTE-EQUALITY REMOVED (line 144).\nRED, 1 test: \"refuses non-canonical bytes that decode to the anchored binding\".\n  -   \"outcome\": \"REFUSED\"   +   \"outcome\": \"GENESIS_FENCED\"\nThe strongest single result here: without the byte comparison, bytes that merely DECODE to the anchored binding are accepted as a verified fence.\n\n[2B] projectId / storeContextDigest RECOMPUTATION REMOVED (lines 108-111).\nRED, 3 tests: \"a genesis binding asserted against a different project\" (-PROJECT_CONTEXT_MISMATCH +DERIVATION_MISMATCH), plus both sweep cases \"a store context digest that does not recompute\" and \"a project the daemon did not assert\" (-PROJECT_CONTEXT_MISMATCH +ANCHOR_BYTES_DIVERGE). Each landed on its own conjunct assertion, and the classifier-level test caught a DIFFERENT downstream reason than the controller-level ones, which is the layered behavior I would expect and not over-reddening.\n\n[3] THE RAIL-1 DRILL (lines 164-165): inspectGenesisFence made to return {ok: true, outcome: \"ABSENT\"} when the verdict reason is PAYLOAD_UNDECODABLE — verbatim the decode-failure-as-absence defect rail 1 forbids.\nRED, 4 tests, every one on the same axis:\n  expected { ok: true, outcome: 'ABSENT' } to match object { authority: 'NONE', ...(5) }\n  -   \"outcome\": \"REFUSED\"   +   \"outcome\": \"ABSENT\"\nThe three sweep DECODES cases (malformed, truncated, alternate schemaVersion) plus — and this is the part I did not anticipate — the PRE-EXISTING test \"refuses an installed record whose prepared identity does not bind its fields\". That row is a restore record whose preparedIdentity does not bind, so decodeRestoreRecord returns null and it reaches the same adapter. The rail-1 defect would therefore have silently converted an existing corruption refusal into an absence too. The guard is real and it is load-bearing for behavior older than this task.\n\nAcross all four drills the red set was tight (1, 1, 3, 4 of 49) and every message named the assertion the drill targeted, so the environment was sound rather than over-reddening.\n\nFinal state: sha256sum -c on restore-genesis-classifier.ts -> OK; tsc exit 0; vitest src/recovery/ src/identity/ -> 23 files, 456 passed (456), exit 0. No drill artifact remains.",
+      "startedAt": "2026-08-14T11:38:21.586Z",
+      "completedAt": "2026-08-14T11:39:53.838Z"
     },
     {
       "stepId": "step-10",
       "description": "Verification gate then adversarial self-review; load the adversarial-self-review skill. Run the task's named command on FRESH output pasted into complete_task: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run src/recovery/restore-controller.test.ts src/recovery/restore-controller-reachability.test.ts. That command is NARROWER than the DoD - this task changes the genesis installer and the anchor - so ALSO run: pnpm --filter @moe/daemon exec vitest run src/recovery/ src/identity/. Read every summary line, not the final exit code. Then review as an attacker: (1) Can ANY path reach the genesis arm without all five conjuncts holding - especially via a payload that decodes as a restore record first? (2) Is a decode failure anywhere treated as absence? (3) Does an already-restore-installed row still take the untouched branch - diff it and confirm. (4) Does the new anchor write break idempotence on a second boot, and does a DEFERRED store still behave correctly? (5) Are raw nonce, private key, PKCS8, key handle, bearer or proof-of-possession secrets absent from every persisted byte and every log line? (6) Confirm restore-controller.ts did not grow toward 400 and the new module is at or under 250, using `grep -c ''` (PowerShell Measure-Object -Line undercounts). Then git status --porcelain, confirm no drill file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/restore-record-classification.ts",
         "apps/daemon/src/recovery/restore-controller.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/identity/genesis-recovery-binding.ts",
+        "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
+      ],
+      "note": "GATE. The task's named vitest leg is BROKEN independently of this diff and I am disclosing it rather than papering over exit 1.\n- `pnpm --filter @moe/daemon typecheck` -> exit 0.\n- `pnpm --filter @moe/daemon exec vitest run src/recovery/restore-controller.test.ts src/recovery/restore-controller-reachability.test.ts` -> exit 1, \"No test files found\", include: adapters/**,packages/**,tests/**. It resolves the ROOT vitest config, which never covers apps/**.\n- CONTROL, so this is a measurement not a claim: the same form against src/recovery/recovery-succession.test.ts — a pre-existing file this task never touched, `git status --porcelain` empty for it — fails identically. The command, not the diff.\n- WORKING FORM (what the package's own test script uses: `vitest run --root . --config package.json src`): 2 files, 53 passed, exit 0.\n- Broader than the DoD, as the step required: full daemon suite `pnpm --filter @moe/daemon test` -> 71 files, 1553 passed, exit 0. Read per summary line, not just the final code.\n\nREPO-WIDE, path-attributed baseline. `pnpm typecheck` exit 0 (Scope: 18 of 19). `pnpm test` exit 1 on exactly ONE test: tests/integration/control-room/control-room-transport.test.ts, \"expected ... to deeply equal ...\", seamObservation.reading.value 2026-08-14T11:43:58.634Z vs .626Z — an 8 ms wall-clock delta in a whole-payload equality. Attributed, not assumed: it reproduced 3/3 so it is not a flake; the test builds its own local provider() and never reaches createStoreDependencies; the field is produced by apps/daemon/src/http/event-stream.ts, last touched by 4c39f3a (task-1430dfae, \"server timing observations\"), and `git merge-base --is-ancestor 4c39f3a 5a9bf0b` is TRUE — the red predates this session's base commit. Failing-path set ∩ owned paths = EMPTY.\n\nADVERSARIAL REVIEW — six questions, answered by measurement:\n(1) Reach the genesis arm without every conjunct? No. GENESIS_FENCED has exactly one producer, `inspectGenesisFence`, whose only non-refusal branch is verified===true. A payload cannot decode as BOTH: decodeRestoreRecord demands an exact 6-key set, decodeBinding an exact 12-key set, disjoint.\n(2) Decode failure treated as absence anywhere? grep found exactly ONE ABSENT producer in the daemon restore path — restore-controller.ts:57, the store's own empty-slot answer. Never a decode failure.\n(3) Restore-installed row on the untouched branch? Diffed: the only changed line in readInstalledRestore is the `record === null` arm. Every branch a restore row touches is byte-identical.\n(4) Anchor idempotence / DEFERRED? Both tested. AND I FOUND A REAL BUG HERE, fixed it, and it is the one thing tests would not have caught: anchorIncarnation reads-then-writes, so two daemons on one store can both see no anchor, both attempt one, and the loser is refused by the expectedVersion-0 conflict — failing daemon startup over an anchor that DID land. settle() now re-reads and accepts ONLY byte-identical evidence; different bytes refuse ANCHOR_BYTES_DIVERGED, no anchor refuses ANCHOR_NOT_COMMITTED. New test drives a real rival commit. Fifth mutation drill: replacing the re-read with an unconditional accept reddens \"refuses instead of claiming an INSTALLED fence its anchor never committed\" — so the fix did not weaken fail-closed. Restored, sha256sum -c OK.\n(5) Secrets? The persisted-payload test pins the exact 12-key set and bans privateKey/PKCS8/keyHandle/nonce substrings. grep: zero console/logger/stdout/stderr in every production file this task touched. Anchor bytes are the same public encodeBinding output; requestBytes carry only {incarnationRef, intent}.\n(6) Sizes, grep -c '' (Measure-Object -Line undercounts): restore-controller.ts 294 (was 284, +10 = 3 signature + 7 review comments), restore-genesis-classifier.ts 172, restore-controller-contract.ts 287 (was 273), recovery-incarnation-anchor.ts 193 (was 139), genesis-recovery-binding.ts 213 (was 129), restore-controller-commands.ts 129. All far below the 400 split threshold. Two sit above the 250 TARGET — restore-controller.ts and its contract — and BOTH were already above it before this task (284 and 273); I did not push either toward 400 and the classifier went into a new file precisely to avoid that.\n\nAlso noted, no action: settle() now scans the decision log on every boot rather than only when the slot is empty. In practice it terminates on page 1 because the genesis anchor is written at first boot and sits near the head of the log.\n\nCOMMITS. `git status --porcelain` shows no drill artifact anywhere and `grep -rn DRILL apps/daemon/src` is empty; `git log -S DRILL --all` proves no drill text ever entered history. Most of this task's bytes were swept into FOREIGN commit 3b928c2 (task-45d12ec, whole-tree hook) — the known hazard; I did not amend, reset, or fake a commit, and I verified the committed bytes are identical to the gated working tree (one file reported a difference that was purely CRLF/LF normalization; `git diff HEAD` is empty and `diff --strip-trai",
+      "startedAt": "2026-08-14T11:39:57.540Z",
+      "completedAt": "2026-08-14T11:47:08.511Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-50f0d628",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -177,16 +195,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:34.193Z",
-  "updatedAt": "2026-08-14T11:36:48.993Z",
+  "updatedAt": "2026-08-14T11:48:15.638Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:40.180Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 10
   },
   "contextFetchedBy": [
     "architect-2aea4111",
-    "worker-06df66bb"
+    "worker-06df66bb",
+    "qa-50f0d628"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -214,7 +233,10 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T10:48:46.911Z",
@@ -238,5 +260,25 @@
     "escalatedAt": "2026-08-14T11:13:44.235Z"
   },
   "planApprovedAt": "2026-08-14T10:48:48.968Z",
-  "workStartedAt": "2026-08-14T11:15:30.116Z"
+  "workStartedAt": "2026-08-14T11:15:30.116Z",
+  "reviewStartedAt": "2026-08-14T11:48:10.614Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/restore-controller.test.ts src/recovery/restore-controller-reachability.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  2 passed (2)\n      Tests  53 passed (53)\n   Start at  14:47:17\n   Duration  2.19s (transform 1.17s, setup 0ms, import 1.48s, tests 1.63s, environment 0ms)",
+    "reportedAt": "2026-08-14T11:48:10.614Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/identity/genesis-recovery-binding.ts",
+    "apps/daemon/src/identity/genesis-recovery-binding.test.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-anchor.ts",
+    "apps/daemon/src/recovery/restore-genesis-classifier.ts",
+    "apps/daemon/src/recovery/restore-genesis-classifier.js",
+    "apps/daemon/src/recovery/restore-test-harness.ts",
+    "apps/daemon/src/recovery/restore-controller.test.ts",
+    "apps/daemon/src/recovery/restore-controller-contract.ts",
+    "apps/daemon/src/recovery/restore-controller.ts",
+    "apps/daemon/src/recovery/restore-controller-commands.ts",
+    "apps/daemon/src/recovery/restore-controller-reachability.test.ts"
+  ]
 }

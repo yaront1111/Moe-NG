@@ -151,8 +151,8 @@
       "completedAt": "2026-08-14T11:36:15.717Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -164,12 +164,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:45.931Z",
-  "updatedAt": "2026-08-14T11:37:01.592Z",
+  "updatedAt": "2026-08-14T11:42:13.010Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:42:54.606Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-14T11:42:13.010Z",
+    "wallClockMs": 3558404
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -230,5 +232,8 @@
     "packages/runner/src/platform/macos/macos-observation.ts",
     "packages/runner/src/platform/macos/macos-observation.js",
     "packages/runner/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-14T11:42:13.010Z",
+  "reviewCompletedAt": "2026-08-14T11:42:13.010Z",
+  "reviewSummary": "APPROVED at 13c03d9, 10 files +1517/-65. Full evidence in chan-ced99359.\n\nGATE re-run by me: runner typecheck && test EXIT=0, 58 files / 1927 tests. Owned paths clean, six macOS deliverables resolve at HEAD, three .js bridges i/lf w/lf. Per-file 184/249/170.\n\nDoD 1: all seven boundaries PROVEN on a coherent darwin input, boundary list asserted as a hand-written ORDERED array plus length===7 and isFrozen. MACOS_SUPPORTED_ARCHITECTURES pinned at exactly [x64, arm64] with a separate x64 case, so the second entry is not decorative.\n\nDoD 3 negative verified WITH a positive control, not a bare empty grep: child_process|spawn|kill|Date.now|Math.random|new Date matches nothing under platform/macos except a comment saying so, and the same pattern hits five files under src/evidence/.\n\nDoD 4: plain-Node probe through the bare @moe/runner specifier resolved observeMacosPlatform, MACOS_SUPPORTED_ARCHITECTURES and PLATFORM_MACOS_LAYER, with a negative control in the same command. Both consumer task ids recorded.\n\nDRILL: I first aimed at macosOwnValue and it did NOT redden - my error, that function is never called with truthClass. Re-aimed at the guard that answers, snapshotExactRecord's descriptor read, replaced with Object.hasOwn + plain read -> BOTH accessor tests red, Linux and macOS. The macOS adapter inherits the neutral shape gate rather than reimplementing it, and reads===0 is attached to production.\n\nDrills restored byte-exact (sha256 -c OK, owned paths clean, temp probe deleted).\n\nNON-BLOCKING: macosOwnValue's descriptor read is an UNKILLED mutant - a plain read leaves all 1927 tests green. It guards NESTED accessors on fact/scope/workspace, which the envelope gate does not cover. I could NOT show the difference is reachable: my probe recorded zero reads even under the mutant. Gap or equivalent mutant is undetermined, and I am not rejecting on a difference I could not demonstrate."
 }
