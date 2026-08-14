@@ -640,3 +640,61 @@ describe("genesis recovery-binding initial install: concurrent handles", () => {
     }
   });
 });
+
+describe("genesis recovery-binding initial install: guard precedence", () => {
+  /**
+   * Each guard below CAN be reached only because the ones before it declined,
+   * so a store that trips several at once is the only fixture that pins which
+   * one answers. Without these two cases, reordering history against the
+   * ACTIVE-row check would leave every other test green.
+   */
+  it("answers HISTORY before ALREADY_BOUND, and PENDING before HISTORY", () => {
+    const path = databasePath("precedence");
+    const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      const committed = store.commit({
+        aggregateId: "precedence-goal",
+        commandBytes: encoder.encode("goal.create/v1"),
+        commandId: "precedence-commit",
+        committedAt: "2026-08-14T08:00:00.000Z",
+        events: [
+          {
+            eventId: "precedence-event",
+            eventType: "goal.created",
+            payload: encoder.encode("payload-1"),
+          },
+        ],
+        expectedVersion: 0,
+      });
+      expect(committed.currentVersion).toBe(1);
+      expect(store.installRecoveryBinding(binding("ACTIVE", REF_Y)).ok).toBe(true);
+
+      // History AND a valid ACTIVE incumbent: history must answer, not CURRENT.
+      expect(store.readRecoveryBinding("ACTIVE").outcome).toBe("FOUND");
+      const withActive = refused(
+        store.installInitialRecoveryBinding(binding("ACTIVE", REF_X)),
+        "history and active",
+      );
+      expect(withActive.code).toBe("RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT");
+      expect(withActive.layer).toBe(RECOVERY_INSTALL_TRANSACTION_LAYER);
+
+      // Add PENDING on top: PENDING now outranks the history it sits above.
+      expect(store.installRecoveryBinding(binding("PENDING", "5e".repeat(32))).ok).toBe(true);
+      const withPending = refused(
+        store.installInitialRecoveryBinding(binding("ACTIVE", REF_X)),
+        "pending over history",
+      );
+      expect(withPending.code).toBe("RECOVERY_INITIAL_INSTALL_PENDING_PRESENT");
+      expect(withPending.layer).toBe(RECOVERY_INSTALL_TRANSACTION_LAYER);
+
+      // Neither attempt disturbed the incumbent.
+      const active = store.readRecoveryBinding("ACTIVE");
+      if (!active.ok || active.outcome !== "FOUND") {
+        throw new Error(`expected FOUND, got ${active.outcome}`);
+      }
+      expect(active.binding.incarnationRef).toBe(REF_Y);
+    } finally {
+      store.close();
+    }
+  });
+});

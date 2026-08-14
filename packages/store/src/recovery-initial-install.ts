@@ -73,18 +73,23 @@ export class RecoveryInitialInstallStore extends RecoveryInstallStore {
     this.requireOpen();
     // Scope is asked BEFORE the codec, matching the replacement installer, so a
     // caller who may not write cannot probe whether their record was well formed.
-    if (this.projectId === null || !this.writeProjectAsserted) {
+    // The narrowed id is threaded downward rather than re-read from `this`: bound
+    // as NULL, `WHERE project_id = ?` matches no row and the decisions leg would
+    // go silently vacuous instead of failing.
+    const projectId = this.projectId;
+    if (projectId === null || !this.writeProjectAsserted) {
       return RECOVERY_INSTALL_SCOPE_REQUIRED;
     }
     const encoded = encodeRecoveryBinding(input);
     if (!encoded.ok) return encoded;
     // Genesis mints the live identity, never a staged successor.
     if (encoded.binding.slot !== "ACTIVE") return RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED;
-    return this.runInitialInstallTransaction(encoded);
+    return this.runInitialInstallTransaction(encoded, projectId);
   }
 
   private runInitialInstallTransaction(
     encoded: RecoveryBindingEncoded,
+    projectId: string,
   ): RecoveryInitialInstallResult {
     try {
       this.database.exec("BEGIN IMMEDIATE");
@@ -94,7 +99,7 @@ export class RecoveryInitialInstallStore extends RecoveryInstallStore {
     let commitAttempted = false;
     try {
       this.assertDurableProjectBinding();
-      const blocked = this.readPristineBlocker();
+      const blocked = this.readPristineBlocker(projectId);
       if (blocked !== null) {
         // A refusal is not a fault: release the lock cleanly and report it.
         this.database.exec("ROLLBACK");
@@ -119,11 +124,11 @@ export class RecoveryInitialInstallStore extends RecoveryInstallStore {
   }
 
   /** Null means pristine and unbound; anything else is the caller's answer. */
-  private readPristineBlocker(): RecoveryInitialInstallResult | null {
+  private readPristineBlocker(projectId: string): RecoveryInitialInstallResult | null {
     if (this.database.prepare(SELECT_BINDING_SQL).get("PENDING") !== undefined) {
       return RECOVERY_INITIAL_INSTALL_PENDING_PRESENT;
     }
-    const history = this.database.prepare(HISTORY_PRESENT_SQL).get(this.projectId);
+    const history = this.database.prepare(HISTORY_PRESENT_SQL).get(projectId);
     if (Number((history as Record<string, unknown>)["present"]) !== 0) {
       return RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT;
     }
