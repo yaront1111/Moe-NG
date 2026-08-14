@@ -63,10 +63,35 @@ function providerAssets(provider: string): readonly string[] {
 /**
  * The hand-reviewed inventory of components that actually exist in this tree.
  *
- * IDE_ADAPTER is deliberately ABSENT: `adapters/` does not exist and the real JetBrains
- * consumer is task-9fd52b41f3ea4aad8c0c07bbe6fd3025. It is exercised below only as an
- * explicitly labelled contract fixture, never as a shipped artifact.
+ * IDE_ADAPTER IS NOW SHIPPED. The premise of its former absence — that `adapters/` does
+ * not exist — stopped being true: task-9fd52b41f3ea4aad8c0c07bbe6fd3025 landed
+ * adapters/jetbrains and adapters/ide-contract, and
+ * task-9fff3d4258ca4bd8b6e167761ee94fdf added the host that composes them. Its assets are
+ * real shipped source read through the same `read(path)` helper as every other component,
+ * so its digests come from the production builder rather than from a fixture.
+ *
+ * Both the `.ts` modules AND their `.js` bridges are enumerated: the bridges are what let
+ * these modules resolve each other under plain Node, so a component shipped without them
+ * would not load at all.
+ *
+ * The labelled contract FIXTURE at the bottom of this file is a different thing and stays:
+ * it exercises the packaging path for an IDE_ADAPTER component that is not this one.
  */
+const JETBRAINS_ADAPTER_ASSETS = [
+  "adapters/ide-contract/src/index.js",
+  "adapters/ide-contract/src/index.ts",
+  "adapters/jetbrains/src/host/jetbrains-host-port-detail.js",
+  "adapters/jetbrains/src/host/jetbrains-host-port-detail.ts",
+  "adapters/jetbrains/src/host/jetbrains-host-ports.js",
+  "adapters/jetbrains/src/host/jetbrains-host-ports.ts",
+  "adapters/jetbrains/src/host/jetbrains-host.js",
+  "adapters/jetbrains/src/host/jetbrains-host.ts",
+  "adapters/jetbrains/src/index.js",
+  "adapters/jetbrains/src/index.ts",
+  "adapters/jetbrains/src/jetbrains-distribution-gate.js",
+  "adapters/jetbrains/src/jetbrains-distribution-gate.ts",
+] as const;
+
 const INVENTORY: ReadonlyArray<{
   readonly assets: readonly string[];
   readonly componentId: string;
@@ -88,6 +113,11 @@ const INVENTORY: ReadonlyArray<{
     assets: providerAssets("codex"),
     componentId: "provider-codex",
     componentKind: "PROVIDER_ADAPTER",
+  },
+  {
+    assets: JETBRAINS_ADAPTER_ASSETS,
+    componentId: "ide-adapter-jetbrains",
+    componentKind: "IDE_ADAPTER",
   },
 ];
 
@@ -192,13 +222,15 @@ function expectRefusal(result: { readonly ok: boolean }, reason: DistributionRef
 }
 
 describe("hand-reviewed distribution inventory", () => {
-  test("the inventory is exactly the five components that exist on disk", () => {
-    expect(INVENTORY.length).toBe(5);
+  test("the inventory is exactly the six components that exist on disk", () => {
+    expect(INVENTORY.length).toBe(6);
     expect(INVENTORY.map((entry) => entry.componentId)).toEqual([
       "daemon", "control-room", "mcp-bridge", "provider-claude", "provider-codex",
+      "ide-adapter-jetbrains",
     ]);
     expect(INVENTORY.map((entry) => entry.componentKind)).toEqual([
       "DAEMON", "CONTROL_ROOM", "MCP_BRIDGE", "PROVIDER_ADAPTER", "PROVIDER_ADAPTER",
+      "IDE_ADAPTER",
     ]);
     for (const entry of INVENTORY) {
       expect(entry.assets.length, `${entry.componentId} must enumerate assets`)
@@ -206,9 +238,22 @@ describe("hand-reviewed distribution inventory", () => {
     }
   });
 
-  test("no shipped component claims the IDE_ADAPTER kind", () => {
+  test("exactly one shipped component claims IDE_ADAPTER, built from real files", () => {
     expect(DISTRIBUTION_COMPONENT_KINDS).toContain("IDE_ADAPTER");
-    expect(INVENTORY.some((entry) => entry.componentKind === "IDE_ADAPTER")).toBe(false);
+    const shipped = INVENTORY.filter((entry) => entry.componentKind === "IDE_ADAPTER");
+    expect(shipped.length).toBe(1);
+    expect(shipped[0]!.componentId).toBe("ide-adapter-jetbrains");
+    // It is NOT the labelled contract fixture exercised at the bottom of this file.
+    expect(shipped[0]!.componentId).not.toBe("ide-adapter-contract-fixture");
+
+    // Every asset must be a real file with real bytes. `read` throws on a missing
+    // path, so a placeholder that was never written cannot pass by being empty
+    // either — this is the guard against a fixture creeping back in as a shipped
+    // artifact, which task rail 2 forbids.
+    expect(shipped[0]!.assets.length).toBe(12);
+    for (const path of shipped[0]!.assets) {
+      expect(read(path).byteLength, `${path} must be real shipped bytes`).toBeGreaterThan(0);
+    }
   });
 
   test("the durable instruction template set is exactly three files", () => {
@@ -233,7 +278,7 @@ describe("deterministic packaging", () => {
 
   test("every inventory component rebuilds byte-identically", () => {
     const rebuilt = allContainers();
-    expect(rebuilt.length).toBe(5);
+    expect(rebuilt.length).toBe(6);
     expect(allContainers()).toEqual(rebuilt);
   });
 
@@ -321,7 +366,8 @@ describe("production startup admission", () => {
     );
     expect(result.ok).toBe(true);
     expect(launched.sort()).toEqual([
-      "control-room", "daemon", "mcp-bridge", "provider-claude", "provider-codex",
+      "control-room", "daemon", "ide-adapter-jetbrains", "mcp-bridge", "provider-claude",
+      "provider-codex",
     ]);
   });
 
@@ -623,7 +669,7 @@ describe("production startup admission", () => {
 });
 
 describe("IDE_ADAPTER packaging contract", () => {
-  test("packages and admits as a labelled fixture, with no JetBrains artifact claimed", () => {
+  test("packages and admits a labelled fixture distinct from the shipped adapter", () => {
     const FIXTURE_BYTES = new TextEncoder().encode("// contract fixture, not a shipped adapter\n");
     const built = buildDistributionContainer(
       buildInput({

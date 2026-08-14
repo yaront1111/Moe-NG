@@ -155,6 +155,87 @@ it("still refuses an unbridged test module with ERR_MODULE_NOT_FOUND", async () 
   });
 }, CHILD_TIMEOUT_MS);
 
+/**
+ * The HOST, reached through its `.js` bridge exactly as a plugin would reach it.
+ * This module imports the adapter by its own bare package name, so a successful
+ * load here also proves Node's self-reference resolved through the exports map —
+ * something vitest's aliasing would satisfy either way.
+ */
+const REPORT_HOST_ENTRY = `
+const report = (value) => process.stdout.write(JSON.stringify(value));
+try {
+  const ns = await import("./src/host/jetbrains-host.js");
+  const keys = Object.keys(ns).filter((key) => key !== "default");
+  report({
+    outcome: "IMPORTED",
+    createHostType: typeof ns.createJetBrainsHost,
+    undefinedBindingCount: keys.filter((key) => ns[key] === undefined).length,
+  });
+} catch (error) {
+  report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
+}
+`;
+
+const REPORT_HOST_PORTS = `
+const report = (value) => process.stdout.write(JSON.stringify(value));
+try {
+  const ns = await import("./src/host/jetbrains-host-ports.js");
+  report({
+    outcome: "IMPORTED",
+    openControlRoomType: typeof ns.openControlRoom,
+    probeDaemonType: typeof ns.probeDaemon,
+    readInstalledDistributionsType: typeof ns.readInstalledDistributions,
+    startDaemonType: typeof ns.startDaemon,
+  });
+} catch (error) {
+  report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
+}
+`;
+
+/** Returns the child's stderr. Used only where the child MUST fail. */
+const failingProbe = async (source: string): Promise<string> => {
+  try {
+    await execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", source],
+      { cwd: PACKAGE_ROOT, timeout: CHILD_KILL_MS },
+    );
+    return "UNEXPECTEDLY_SUCCEEDED";
+  } catch (error) {
+    return String((error as { readonly stderr?: unknown }).stderr ?? "");
+  }
+};
+
+it("loads the host through its bridge in a real Node process", async () => {
+  expect(await probe(REPORT_HOST_ENTRY)).toEqual({
+    createHostType: "function",
+    outcome: "IMPORTED",
+    undefinedBindingCount: 0,
+  });
+}, CHILD_TIMEOUT_MS);
+
+it("loads the host ports through their bridge with all four bindings defined", async () => {
+  expect(await probe(REPORT_HOST_PORTS)).toEqual({
+    openControlRoomType: "function",
+    outcome: "IMPORTED",
+    probeDaemonType: "function",
+    readInstalledDistributionsType: "function",
+    startDaemonType: "function",
+  });
+}, CHILD_TIMEOUT_MS);
+
+it("fails on a name the host does not export, proving the probes can detect failure", async () => {
+  // Negative control. Without it, the two probes above would read as proof even
+  // against a toolchain that resolved everything to an empty namespace.
+  const stderr = await failingProbe(
+    'import { createJetBrainsBoard } from "./src/host/jetbrains-host.js";',
+  );
+  expect(stderr).toContain("does not provide an export named 'createJetBrainsBoard'");
+  // And it failed for THAT reason: a missing bridge would report a resolution
+  // error instead, which would make this control agree for the wrong reason.
+  expect(stderr).not.toContain("ERR_MODULE_NOT_FOUND");
+}, CHILD_TIMEOUT_MS);
+
 const walk = (dir: string): readonly string[] =>
   readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
@@ -227,6 +308,7 @@ it("excludes every test module for a named reason, and only those", () => {
   // Pinned by name AND reason so promoting one onto the runtime surface, or
   // silently reclassifying it, is a visible decision rather than a side effect.
   expect(verdicts).toEqual({
+    "host/jetbrains-host.test.ts": "test-file",
     "jetbrains-adapter.test.ts": "test-file",
     "jetbrains-runtime-entrypoint.test.ts": "test-file",
   });
