@@ -338,7 +338,11 @@ describe("durable authority construction", () => {
       }
     }
     const authority = new DaemonAuthority();
-    const launch = composeDurableLauncher(dependencies(boundaryHarness(), []), authority);
+    // The assignment IS the assertion: a daemon-shaped class must satisfy the
+    // published port interface, and if it stopped doing so this file would fail
+    // to typecheck rather than merely fail an expectation.
+    const published: ClaudeLauncherAuthority = authority;
+    const launch = composeDurableLauncher(dependencies(boundaryHarness(), []), published);
     const result = await launch(request());
     expect(result.kind).toBe("OBSERVED");
     expect(authority.grants.calls.length).toBe(1);
