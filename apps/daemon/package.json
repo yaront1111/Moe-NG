@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "bin": {
-    "moe-daemon": "./src/daemon-main.ts"
+    "moe-daemon": "./src/daemon-main.ts",
+    "moe-mcp-http": "./src/mcp-http/mcp-http-main.ts"
   },
   "exports": {
     ".": "./src/index.ts"
