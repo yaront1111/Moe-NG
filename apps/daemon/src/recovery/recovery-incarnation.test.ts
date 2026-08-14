@@ -1109,7 +1109,13 @@ describe("the synchronous genesis mint", () => {
   });
 
   it("refuses a project identity nobody could have asserted", () => {
-    expectGenesisRefusal(mintGenesisIncarnation(""), "RECOVERY_INCARNATION_INPUT_INVALID");
+    const empty = mintGenesisIncarnation("");
+    expectGenesisRefusal(empty, "RECOVERY_INCARNATION_INPUT_INVALID");
+    // Same code and layer as the restore branch, but the reason names the input
+    // that was actually refused rather than a restore request nobody sent.
+    expect(empty.ok ? "" : empty.reason).toBe(
+      "A genesis recovery incarnation must name exactly one asserted project identity.",
+    );
     expectGenesisRefusal(
       mintGenesisIncarnation("project with spaces"),
       "RECOVERY_INCARNATION_INPUT_INVALID",

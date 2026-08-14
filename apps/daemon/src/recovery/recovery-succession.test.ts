@@ -13,7 +13,12 @@ import type {
   RecoveryIncarnationKeyHandle,
   RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
-import { anchorIncarnation, readAnchoredIncarnation } from "./recovery-incarnation-anchor.js";
+import {
+  anchorIncarnation,
+  hasAnchoredIncarnation,
+  readAnchoredIncarnation,
+} from "./recovery-incarnation-anchor.js";
+import { mintGenesisIncarnation } from "./recovery-incarnation-genesis.js";
 import {
   RECOVERY_INCARNATION_ANCHOR_COMMAND_KIND,
   RECOVERY_SUCCESSION_COMMAND_KIND,
@@ -660,6 +665,31 @@ describe("recovery succession durability", () => {
     const unanchored = await mint(createNodeRecoveryCryptoPort(), "restore-origin");
 
     const chain = readSuccessionChain(state.store, PROJECT_ID, unanchored.binding.incarnationRef);
+    expect(chain.ok).toBe(false);
+    if (chain.ok) throw new Error("unreachable: the refusal branch was asserted above");
+    expect(chain.code).toBe("RECOVERY_PREDECESSOR_NOT_FOUND");
+    expect(chain.layer).toBe(RECOVERY_SUCCESSION_LAYER);
+  });
+});
+
+describe("a genesis fence is never a restore lineage", () => {
+  it("anchors a GENESIS binding and still reads NO restore incarnation for it", () => {
+    // A genesis fence proves a never-restored store's identity. It is not a
+    // restore predecessor, and the reader every restore path uses must say so
+    // by ABSENCE rather than by handing back a row with no restore facts on it.
+    const state = harness();
+    const genesis = mintGenesisIncarnation("project-recovery-succession-genesis");
+    if (!genesis.ok) throw new Error(`the genesis mint must succeed: ${genesis.code}`);
+    expect(anchorIncarnation(state.store, anchorRequest, genesis.binding)).toBe(true);
+
+    const reopened = state.reopen();
+    // The row IS durable — so the null below is the origin check refusing, not
+    // a write that never happened.
+    expect(hasAnchoredIncarnation(reopened, PROJECT_ID)).toBe(true);
+    expect(readAnchoredIncarnation(reopened, PROJECT_ID, genesis.binding.incarnationRef))
+      .toBeNull();
+
+    const chain = readSuccessionChain(reopened, PROJECT_ID, genesis.binding.incarnationRef);
     expect(chain.ok).toBe(false);
     if (chain.ok) throw new Error("unreachable: the refusal branch was asserted above");
     expect(chain.code).toBe("RECOVERY_PREDECESSOR_NOT_FOUND");

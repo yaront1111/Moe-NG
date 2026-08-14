@@ -139,6 +139,15 @@ export const RECOVERY_INPUT_INVALID = refusal(
   "RECOVERY_INCARNATION_INPUT_INVALID",
   "A recovery incarnation request must name exactly one restore command and one backup generation digest.",
 );
+/**
+ * Same CODE and LAYER as the restore refusal above — a caller-supplied context
+ * the daemon must derive is one failure, not two — with a reason that describes
+ * the genesis input rather than a restore request nobody sent.
+ */
+export const RECOVERY_GENESIS_INPUT_INVALID = refusal(
+  "RECOVERY_INCARNATION_INPUT_INVALID",
+  "A genesis recovery incarnation must name exactly one asserted project identity.",
+);
 export const RECOVERY_ENTROPY_UNAVAILABLE = refusal(
   "RECOVERY_ENTROPY_UNAVAILABLE",
   "The recovery incarnation nonce could not be proven fresh from the system CSPRNG.",

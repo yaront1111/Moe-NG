@@ -5,8 +5,8 @@ import {
   PORT_FAILED,
   RECOVERY_ENTROPY_BYTES,
   RECOVERY_ENTROPY_UNAVAILABLE,
+  RECOVERY_GENESIS_INPUT_INVALID,
   RECOVERY_INCARNATION_SCHEMA_VERSION,
-  RECOVERY_INPUT_INVALID,
   RECOVERY_KEY_EPOCH_UNAVAILABLE,
   digestOf,
 } from "./recovery-incarnation-contract.js";
@@ -106,7 +106,7 @@ export function mintGenesisIncarnation(
   shell: GenesisCryptoShell = nodeGenesisCryptoShell,
 ): GenesisMintResult {
   const context = snapshotGenesisContext({ projectId });
-  if (context === null) return RECOVERY_INPUT_INVALID;
+  if (context === null) return RECOVERY_GENESIS_INPUT_INVALID;
 
   const entropy = attemptShell(() => shell.randomBytes(RECOVERY_ENTROPY_BYTES));
   if (!(entropy instanceof Uint8Array) || entropy.byteLength !== RECOVERY_ENTROPY_BYTES) {
