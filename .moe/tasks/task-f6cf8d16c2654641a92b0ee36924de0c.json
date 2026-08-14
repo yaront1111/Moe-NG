@@ -175,7 +175,7 @@
       "completedAt": "2026-08-14T09:22:53.153Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -207,9 +207,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-14T09:23:42.931Z",
+  "updatedAt": "2026-08-14T09:39:27.586Z",
   "contextFetchedBy": [
-    "worker-06df66bb"
+    "worker-06df66bb",
+    "qa-50f0d628"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
@@ -217,7 +218,9 @@
     "plannedDistinctFileCount": 10,
     "executedStepCount": 24,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-14T09:39:27.586Z",
+    "wallClockMs": 43284148
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -320,7 +323,7 @@
     "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
     "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-14T08:54:26.369Z",
+  "reviewCompletedAt": "2026-08-14T09:39:27.586Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2: the durable decoded ADOPTED disposition must require an exact restored intent; hostile self-consistent bytes currently admit ADOPTED with no restoredIntentDigest.",
@@ -437,5 +440,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-14T09:39:27.586Z",
+  "reviewSummary": "APPROVED at HEAD 55028d1. Verified with my own probe, not the worker's tests. Full evidence in chan-ced99359.\n\nGATE re-run by me, foreground: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test => exit 0. daemon 69 files/1492 tests, store 41/469.\n\nMY FORGERY PROBE 16/16 (run then deleted; worktree clean): build a legit record via the production builder, mutate one semantic invariant, recompute recordDigest via production recoveryReconciliationDigest, re-encode+decode via the production codec. Each asserted exact RECOVERY_INVENTORY_RECORD_INCOHERENT at RECOVERY_INVENTORY plus not.toBe(DIGEST_MISMATCH). All reopen #2 defects refuse: proof UNKNOWN under record COMPLETE; sentinel slot claiming COMPLETE at itemCount 0; ABSENT without terminal proof; ADOPTED without intent digest; reversed item order; duplicated class-scoped identity. Builder refuses COMPLETE+upstream with RECOVERY_INVENTORY_PROOF_TRUTH_CONTRADICTS instead of laundering; a legit UNKNOWN proof retains INVENTORY_ADAPTER provenance. Controls held: untouched sealed bytes decode; a valid change without re-digesting still gives DIGEST_MISMATCH.\n\nMUTATION DRILLS 5, sha256-checked before/after/restore: itemShape reddened 5 named cases, itemSequence 2, proofSlot 1; truth-equality pinned by the worker's own forgery test.\n\nNUL at record.ts:164 fixed via String.fromCharCode(0); 0 NUL in worktree AND HEAD blob, positive control printed 1.\n\nDoD 1-6 evidenced: hand-written 6-class/7-population table with exact CLASS_EXTRA/UNKNOWN/DUPLICATE/OMITTED codes; ADOPTION_IDENTITY_MISMATCH/INCARNATION_STALE/KEY_EPOCH_STALE; real SqliteEventStore close/reopen, two handles.\n\nPer-file lines under cap (max 300). Diff 12 files, all apps/daemon/src/recovery/.\n\nFOREIGN RED DISCLOSED: peer edits in packages/runner redden repo-wide typecheck (TS2339); owned gate exit 0."
 }

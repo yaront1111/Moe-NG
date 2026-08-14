@@ -33,19 +33,25 @@
     {
       "stepId": "step-2",
       "description": "TDD RED for the selection module. Create claude-launch-selection.test.ts against the not-yet-existing module, importing it by relative specifier (it is an internal module at this point). Specify and pin, each with the EXACT code and the EXACT layer TELEMETRY_CONFIGURATION: (1) `snapshotLaunchSelection(value)` returns a deeply frozen record for a valid selection and null for anything else, rejecting extra keys, missing keys, accessor properties, proxies, and prototype-borrowed values — reuse the package's existing `snapshotExactRecord` and the descriptor-reading idiom rather than reimplementing hostile-value defence. (2) The verifier `verifyLaunchSelection(selection, argv)` accepts argv that carries exactly one model flag whose value string-EQUALS selectedModelId and exactly one effort flag whose value equals reasoningEffort. (3) It refuses CLAUDE_LAUNCH_MODEL_UNPROVEN when no model flag is present, CLAUDE_LAUNCH_MODEL_AMBIGUOUS when the model flag appears more than once (whether the values agree or not — duplicate evidence is not evidence), and CLAUDE_LAUNCH_MODEL_MISMATCH when the single value differs from selectedModelId, which is also how an ALIAS-ONLY argv value is refused since an alias never string-equals a dated exact id. (4) The three mirror cases for effort with the three EFFORT codes — model and effort must refuse with DIFFERENT codes, because DoD 4 requires them mutation-checked independently and a shared code makes the two drills indistinguishable. (5) CLAUDE_LAUNCH_SELECTION_MALFORMED for a selection that does not snapshot. (6) NO refusal message, and no field of any refusal, contains any argv element, the selected model id, the effort value, or any digest — assert over the JSON-serialized refusal, not just the message. (7) A dated exact model evidence value is preserved verbatim while unavailable snapshot evidence is the explicit literal UNKNOWN and never gains authority. (8) Any swept table carries a hand-written non-zero cardinality assertion plus a `ran` counter checked against it. Run and record the red.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.test.ts"
       ],
-      "startedAt": "2026-08-14T09:30:43.768Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "RED recorded against the four reproduced defects, written before any production byte. `pnpm --filter @moe/runner test` exit 1: Test Files 2 failed | 56 passed (58); Tests 4 failed | 1811 passed. Failing set is exactly the new specifications:\n- claude-launch-selection.test.ts fails to resolve ./claude-launch-verify.js (the verifier module does not exist yet).\n- claude-launcher.test.ts \"runs the logical gates before opening...\" — the verbatim-argv assertion now hand-spells `--effort`, production still emits `--reasoning-effort`.\n- claude-launcher.test.ts \"launches on a hand-spelled provider-correct argv and refuses the invented flag\" — expected OBSERVED, received REFUSED (production rejects the real provider flag).\n- claude-launcher.test.ts \"refuses a child environment that would override the effort or model argv proved\" — expected failure, received OBSERVED (env is unchecked).\n- claude-launcher.test.ts \"answers a malformed selection at the SELECTION layer\" replaces the test that pinned CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER; it now sweeps 6 malformed shapes (extra-key, missing-key, accessor, proxy, null, ceiling-zero) and requires CLAUDE_LAUNCH_SELECTION_MALFORMED/TELEMETRY_CONFIGURATION with an exactly-empty dependency log and an exactly-empty boundary log, plus traps === 0.\n\nNew selection-module specifications: hand-spelled `{model:\"--model\",effort:\"--effort\"}` and `{model:\"ANTHROPIC_MODEL\",effort:\"CLAUDE_CODE_EFFORT_LEVEL\"}` equality (not read back from the constant); provider-correct positive with `--reasoning-effort` refused as EFFORT_UNPROVEN; 6 proxy cases across all three operands with trap counters pinned to 0; hostile toString pinned to 0 invocations with the bare snapshot answering null rather than throwing; 5 env-override refusals with the override value proven absent from the serialized refusal; 7 accepting env cases including the CLAUDE_EFFORT negative control (the provider EXPORTS it, never reads it); 6 malformed-environment refusals. Every sweep carries a hand-written cardinality plus a `ran` counter.",
+      "startedAt": "2026-08-14T09:30:43.768Z",
+      "completedAt": "2026-08-14T09:33:28.876Z"
     },
     {
       "stepId": "step-3",
       "description": "Land claude-launch-selection.ts plus its MANDATORY .js bridge until step 2 is green. The module owns: the `ClaudeLaunchSelection` interface with exactly the fields DoD 1 names — provider, selectedModelId, model snapshot/build evidence (an exact dated value or the explicit literal UNKNOWN), reasoningEffort, profileRevisionId, configurationDigest, policyDigest, orchestrationDigest, and a concurrencyCeiling that must be a positive safe integer; the frozen closed vocabularies for reasoning effort and for model-evidence kind, each including an UNKNOWN member that never gains authority; the frozen flag-spelling constants the verifier matches on, declared as data so no CLI trivia is hardcoded in a branch; `snapshotLaunchSelection`; and `verifyLaunchSelection`. selectedModelId must reject whitespace — the daemon wrapper spawns with shell:true on win32 where argv elements are concatenated unescaped, so a model id containing a space would be shredded downstream. Compose the existing `snapshotExactRecord` from ../../platform/platform-contract.js and `deepFreeze` from ../../canonical.js; do not reimplement hostile-value defence. Keep the file under 250 physical lines measured with `grep -c ''`; if it will not fit, split the verifier into a second module rather than exceeding the cap, and give THAT module its own bridge too. THE BRIDGE IS AN ENFORCED TEST, not a convention: runtime-entrypoint.test.ts:129 walks the whole packages/runner/src tree and requires claude-launch-selection.js to contain byte-exactly `export * from \"./claude-launch-selection.ts\";` followed by a trailing newline. It computes test-tier as a transitive import CLOSURE, so this module must not import any test fixture or its bridge becomes forbidden instead of required. Run runtime-entrypoint.test.ts explicitly to prove the bridge is right.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.ts",
         "packages/runner/src/providers/claude/claude-launch-selection.js"
@@ -53,65 +59,109 @@
       "newFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.ts",
         "packages/runner/src/providers/claude/claude-launch-selection.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launch-selection.ts",
+        "packages/runner/src/providers/claude/claude-launch-verify.ts",
+        "packages/runner/src/providers/claude/claude-launch-verify.js"
+      ],
+      "note": "Split the module rather than exceed the per-file cap, exactly as this step authorised. claude-launch-selection.ts now owns the contract, the closed vocabularies, the MEASURED flag and environment-variable constants, the static refusal messages, refuseSelection, isHostileObject and snapshotLaunchSelection (169 lines). The new claude-launch-verify.ts owns snapshotArgv, snapshotEnvironment, flagValues and verifyLaunchSelection (141 lines), with its own bridge claude-launch-verify.js written byte-exact as `export * from \"./claude-launch-verify.ts\";` plus one LF, verified with cat -A against the sibling bridge. packages/runner/src/runtime-entrypoint.test.ts run explicitly: 1 file / 3 tests passed, so both the tree walk and the child-process undefinedBindingCount probe accept the new module and its bridge.\n\nThree defect fixes landed here:\n1. CLAUDE_LAUNCH_SELECTION_FLAGS.effort is now `--effort`, with the measurement recorded in the constant's doc comment. CLAUDE_LAUNCH_SELECTION_ENV added as `{model:\"ANTHROPIC_MODEL\", effort:\"CLAUDE_CODE_EFFORT_LEVEL\"}`, with the CLAUDE_EFFORT exclusion documented as measured (the binary exports it to hooks, never reads it).\n2. isHostileObject runs BEFORE any reflection on all three operands — selection, argv, environment. types.isProxy throwing (revoked proxy) is read as hostile, so it fails closed. The proxy trap counters in the new tests are pinned at 0, which is the assertion that the guard runs before reflection rather than after.\n3. snapshotLaunchSelection no longer coerces: `String(raw[\"selectedModelId\"])` is gone and every field is typeof-checked before any regex touches it, so a hostile toString neither runs nor escapes; the bare snapshot is total and answers null.\n\nThe environment arm is a comparison, not a ban: an override that AGREES with the selection still launches, and only a conflicting one refuses, with MODEL_MISMATCH and EFFORT_MISMATCH kept in their own families so the two mutation drills stay independent.",
+      "startedAt": "2026-08-14T09:33:29.433Z",
+      "completedAt": "2026-08-14T09:36:54.757Z"
     },
     {
       "stepId": "step-4",
       "description": "Extend claude-launcher-contract.ts only. Add the `launchSelection: ClaudeLaunchSelection` field to ClaudeLaunchRequest, re-exporting the selection types from the new module so the published request type stays fully nameable — a published interface with an unnameable field type is a broken publication. Append the new LAYER literal `TELEMETRY_CONFIGURATION` to the two inline literals at the end of CLAUDE_LAUNCH_LAYERS, and append the seven new codes to the private LOCAL_CODES array: CLAUDE_LAUNCH_SELECTION_MALFORMED, CLAUDE_LAUNCH_MODEL_UNPROVEN, CLAUDE_LAUNCH_MODEL_AMBIGUOUS, CLAUDE_LAUNCH_MODEL_MISMATCH, CLAUDE_LAUNCH_EFFORT_UNPROVEN, CLAUDE_LAUNCH_EFFORT_AMBIGUOUS, CLAUDE_LAUNCH_EFFORT_MISMATCH. This costs ZERO test edits — neither CLAUDE_LAUNCH_ERROR_CODES nor CLAUDE_LAUNCH_LAYERS has any length or membership assertion anywhere — but re-verify that with a fresh grep for `.length` and `.toEqual` over both names before relying on it. Do NOT append to SUPERVISOR_ERROR_CODES: effect-properties.test.ts:248 is a closed-set REACHABILITY sweep and a new member there must be returned by a production supervisor refusal or the toEqual fails. Add a short comment in the file's existing voice recording WHY the layer is spelled TELEMETRY_CONFIGURATION while the codes carry the CLAUDE_LAUNCH_ prefix: the DoD requires that exact layer spelling, every launcher-local code in the 93-member vocabulary carries the prefix, and model and effort need distinct codes so they can be mutation-checked independently. Keep the file under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher-contract.ts"
+      ],
+      "note": "The contract already carried the launchSelection field, the TELEMETRY_CONFIGURATION layer literal and the seven codes from the first attempt; none of that was reopened, so this step reduced to one addition: CLAUDE_LAUNCH_SELECTION_ENV joins the selection re-export block so the published closure names the environment variables the launcher now refuses conflicts on. A consumer able to name the flags but not the override variables could satisfy argv and still have its launch refused by a variable it could not learn the name of. File is 237 lines, under the cap.",
+      "startedAt": "2026-08-14T09:36:54.806Z",
+      "completedAt": "2026-08-14T09:37:01.283Z"
     },
     {
       "stepId": "step-5",
       "description": "Wire the snapshot in claude-launcher-input.ts. Add \"launchSelection\" to REQUEST_KEYS and snapshot the field through `snapshotLaunchSelection`, returning null for the whole request when the selection does not snapshot — null is this module's single rejection channel and it must never throw. THIS IS THE SILENT-FAILURE SITE: `snapshotExactRecord` length-checks Object.keys against REQUEST_KEYS, so an interface field without its key entry, or a key entry without its interface field, makes EVERY request return null and EVERY launch refuse CLAUDE_LAUNCH_REQUEST_MALFORMED — and because there is no test for this module, the symptom shows up as an unrelated generic malformed somewhere else. Immediately after this edit, assert the invariant directly: confirm REQUEST_KEYS length equals the ClaudeLaunchRequest field count you recorded in step 1(c), plus one. Keep the file under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-input.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher-input.ts"
+      ],
+      "note": "DELIBERATE DEVIATION FROM THIS STEP'S TEXT, and it is the point of QA defect 4. The step says \"returning null for the whole request when the selection does not snapshot\". That is exactly what QA rejected: collapsing the request meant launchClaude answered CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER — the same generic answer a bad cwd produces — and the dedicated selection guard never ran, so the required TELEMETRY_CONFIGURATION refusal was unreachable for accessor/proxy/malformed selections.\n\nWhat landed instead: `launchSelection === null` is removed from the whole-request reject condition, and ClaudeLaunchSnapshot now declares `Omit<ClaudeLaunchRequest,\"launchSelection\"> & { launchSelection: ClaudeLaunchSelection | null }`. A selection that does not snapshot becomes null and reaches the selection gate, which names it CLAUDE_LAUNCH_SELECTION_MALFORMED at TELEMETRY_CONFIGURATION. The hostile value itself is NOT carried forward — only the null — so no trap can be read downstream and the frozen request never holds a proxy. The reason is recorded in the interface's doc comment, not just here.\n\nThe step's real safety concern is preserved and re-measured: REQUEST_KEYS has exactly 15 members (runtime, duplicateDelivery, effect, attempt, grant, claim, wrapperIdentity, bootstrapCredentialDigest, priorRegistration, argv, cwd, environment, reconciliation, limits, launchSelection) and ClaudeLaunchRequest declares exactly 15 readonly fields, counted independently. The file's own RequestKeyIsDeclared/DeclaredFieldHasKey compile-time aliases enforce both directions and typecheck exits 0. File is 149 lines.",
+      "startedAt": "2026-08-14T09:37:01.609Z",
+      "completedAt": "2026-08-14T09:37:24.557Z"
     },
     {
       "stepId": "step-6",
       "description": "Give the shared fixture a VALID default selection so the existing suites keep testing their own subjects. In claude-launcher-test-fixtures.ts, add a `launchSelection` to what `request()` returns and extend its default argv with a matching model flag and effort flag, so the default fixture passes the new gate. This is deliberate: `request()` is called dozens of times across claude-launcher.test.ts and claude-launcher-authority.test.ts, and eight of the nine pre-open table cases build from it and pin codes produced by LATER phases — a gate that refused the default would flip all of them at once and every one would then be testing the gate instead of its own subject. Export the default selection and a helper that returns a selection with one named field overridden, so step 7's negative cases can express drift without hand-building a record. RE-READ THIS FILE FIRST: task-de496f47 changed COMMIT from a module-scope const to an exported `let` assigned in beforeAll and added DRIFTED_COMMIT, so any edit anchored on `export const COMMIT` will not match. Keep every existing export name and signature intact. CHECKPOINT: after this step the pre-existing failures recorded in step 1(e) must be unchanged in name and count — no new failure may appear, because the gate does not exist yet.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts"
-      ]
+      ],
+      "note": "No edit required, and re-measured rather than assumed. claude-launcher-test-fixtures.ts already exports SELECTION, SELECTED_MODEL, SELECTED_EFFORT, SELECTION_ARGV and selectionWith from the first attempt, and request() already returns a valid launchSelection with matching argv. SELECTION_ARGV is built from CLAUDE_LAUNCH_SELECTION_FLAGS, so the corrected `--effort` spelling propagated to every call site with no fixture change — which is also why the launcher suite's verbatim-argv assertion had to be hand-spelled to catch the wrong flag in the first place.\n\nChecked the two things this step warns about. The default environment is {SYSTEMROOT, LANG}: it names neither ANTHROPIC_MODEL nor CLAUDE_CODE_EFFORT_LEVEL, so the new environment arm cannot silently answer for any existing case, and no existing case became vacuous. The peer's COMMIT/DRIFTED_COMMIT rework is committed at HEAD c576110 and the file was clean before I started, so no anchor drifted under me. File is 265 lines (test-tier, not subject to the production cap) and every existing export name and signature is intact.",
+      "startedAt": "2026-08-14T09:37:25.071Z",
+      "completedAt": "2026-08-14T09:37:38.936Z"
     },
     {
       "stepId": "step-7",
       "description": "Compose the gate into production launchClaude and prove it in the launcher suite. In claude-launcher.ts, call `verifyLaunchSelection(request.launchSelection, request.argv)` AFTER the duplicate short-circuit and BEFORE `prepareRuntime`. That position satisfies DoD 2 exactly — it precedes runtime preparation, grant consumption, lock acquisition and boundary open — while leaving adoption and EXIT_BEFORE_LAUNCH alone, which open no process, consume no grant, and describe a process an earlier gated launch already created. Route the refusal through the existing `directFailure` with the delegated code and the TELEMETRY_CONFIGURATION layer, and add a distinct PHASE map entry; do not reuse another phase's message. Wrap the call so a throw cannot escape and reject the public promise, mapping a throw to CLAUDE_LAUNCH_SELECTION_MALFORMED at TELEMETRY_CONFIGURATION. Then in claude-launcher.test.ts add: an exact-ordering test asserting that on a selection refusal the fixture `log` is EXACTLY empty — no runtime, no validate, no consume, no lock, no open, and `boundary.log` empty too, which in one assertion proves all four DoD-named cutoffs; one case per new code added to the pre-open refusal table with its hand-written cardinality pin bumped by hand; a test proving runtime reportedVersion/closure and profileRevisionId CANNOT satisfy the model or effort requirement — set those and nothing else, and require the exact UNPROVEN codes, which is DoD 3's whole point; and a no-echo assertion over the serialized refusal. Do not grow claude-launcher-lifecycle.ts or claude-launcher-port-results.ts; keep claude-launcher.ts under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "The gate position, the directFailure routing, the distinct PHASE.selection message and the throw containment all survived from the first attempt untouched; the reopened part is WHAT the gate is given and WHAT the suite pins.\n\nProduction: the call is now `verifyLaunchSelection(request.launchSelection, request.argv, request.environment)`, still after the duplicate short-circuit and before prepareRuntime. The environment is the third operand because the SAME record is forwarded to openBoundary ~60 lines below, and the provider lets CLAUDE_CODE_EFFORT_LEVEL override the effort flag for that session — an argv-only gate proves the request, not the launch. Import split to ./claude-launch-verify.js; claude-launcher.ts is 215 lines. claude-launcher-lifecycle.ts (249) and claude-launcher-port-results.ts (250) were not touched.\n\nSuite, three additions plus one replacement:\n- REPLACED the test that pinned CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER for a malformed nested selection. It now sweeps 6 shapes (extra-key, missing-key, accessor, proxy, null, ceiling-zero), requires CLAUDE_LAUNCH_SELECTION_MALFORMED/TELEMETRY_CONFIGURATION on each, and asserts an exactly-empty dependency log AND an exactly-empty boundary log per case — the four DoD-named cutoffs in one assertion — with the proxy's ownKeys trap counter pinned at 0.\n- HAND-SPELLED production positive: launchClaude with argv [\"--print\",\"--model\",\"claude-opus-5-20260514\",\"--effort\",\"high\"] reaches OBSERVED and logs \"open\"; the same launch with \"--reasoning-effort\" refuses CLAUDE_LAUNCH_EFFORT_UNPROVEN/TELEMETRY_CONFIGURATION with an empty log. Neither side reads the production constant, so the constant itself is under test.\n- ENVIRONMENT precedence, on the production launcher: CLAUDE_CODE_EFFORT_LEVEL=low against a high selection refuses CLAUDE_LAUNCH_EFFORT_MISMATCH; ANTHROPIC_MODEL=claude-opus-5 against the dated id refuses CLAUDE_LAUNCH_MODEL_MISMATCH; both with empty log and zero boundary requests. The agreeing direction (both variables set to the selected values) still reaches OBSERVED, so the arm is a comparison and not a blanket ban.\n- The verbatim-argv assertion at the top of the suite now hand-spells \"--effort\", which is what makes a wrong frozen flag impossible to keep green.\n\npnpm --filter @moe/runner typecheck exit 0; pnpm --filter @moe/runner test exit 0, 58 files / 1837 tests (baseline was 1827).",
+      "startedAt": "2026-08-14T09:37:39.207Z",
+      "completedAt": "2026-08-14T09:37:58.848Z"
     },
     {
       "stepId": "step-8",
       "description": "Publish the selection closure and repair the two FORCED sites in the runner root surface test. In surface/claude-surface.ts add, to the existing curated launcher block, the runtime vocabularies (reasoning effort, model-evidence kind, and the flag-spelling constants) and the type closure — ClaudeLaunchSelection and every type its fields reference. A consumer that can name ClaudeLaunchRequest but cannot construct its launchSelection has an unusable published type. Do NOT publish snapshotLaunchSelection or verifyLaunchSelection: the launcher already applies them, and publishing them would let a consumer pre-validate and then hand in something else. Then update packages/runner/src/index-surface.test.ts — note this is the RUNNER root surface test, not the scheduler one that task-5fa25bb3 owns exclusively. Three edits are FORCED there and cannot be avoided from inside the task's other owned paths: the `satisfies Record<keyof ClaudeLaunchRequest, unknown>` literal fails to compile without the new key; that same literal EXECUTES a real launchClaude with `argv: []` and pins {GRANT_WRAPPER_MISMATCH, GRANT, UNKNOWN}, which the new gate preempts; and the EXPECTED_EXPORTS table and its hand-written count need the new runtime values. REPAIR THE EXECUTING LITERAL BY GIVING IT A VALID SELECTION AND MATCHING argv SO IT STILL REACHES THE GRANT PHASE AND STILL PINS THE SAME TRIPLE — do not rewrite its expectation to a selection code, which would silently retire a grant-layer assertion unrelated to this task. Insert new EXPECTED_EXPORTS names at their sorted position if that table compares an unsorted expected side, and name every new TYPE in the file's `import type { ... } from \"@moe/runner\"` block with a real value annotated by it, because type-only exports are invisible to the Object.keys guard. Add a negative control asserting snapshotLaunchSelection and verifyLaunchSelection are ABSENT from the root namespace.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/surface/claude-surface.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/claude-surface.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "The vocabularies, the flag constants and the ClaudeLaunchSelection type closure were already published from the first attempt, and the executing literal was already repaired with a valid selection and matching argv — it still reaches the grant phase and still pins {GRANT_WRAPPER_MISMATCH, GRANT, UNKNOWN}, which the green suite confirms rather than my reading of it. Its environment is {}, which names neither override variable, so the new environment arm cannot preempt that grant-layer assertion either.\n\nThis step's reopened work: CLAUDE_LAUNCH_SELECTION_ENV joins the curated launcher block in claude-surface.ts, EXPECTED_EXPORTS gains [\"CLAUDE_LAUNCH_SELECTION_ENV\",\"object\"] at its sorted position and the hand-written count moves 164 -> 165, and the withheld negative control grows from 2 names to 4: snapshotLaunchSelection, verifyLaunchSelection, isHostileObject, refuseSelection. The last two are exported from the selection module only so the verifier module can compose them; publishing them would hand a consumer the guard primitives without the gate that applies them. The control's positive half is unchanged, so it still proves `in` is working rather than passing vacuously.\n\nverifyLaunchSelection stays withheld even though its signature changed — a consumer able to pre-validate one selection and then hand launchClaude another is precisely the disagreement this seam exists to prevent.",
+      "startedAt": "2026-08-14T09:37:59.593Z",
+      "completedAt": "2026-08-14T09:38:19.380Z"
     },
     {
       "stepId": "step-9",
       "description": "VERIFY — the single concentrated gate. (1) Run `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` and paste the fresh tail. Compare the failure set against the step 1(e) baseline: the ONLY acceptable failures are the pre-existing foreign ones from task-de496f47, reported verbatim with their exact failing lines and attributed with `git log -1 -- <path>`. Any NEW failing path is yours. If the peer has landed in the meantime, the suite must be fully green. (2) Run packages/runner/src/runtime-entrypoint.test.ts explicitly and confirm the new module's .js bridge passes both the tree walk and the child-process `undefinedBindingCount: 0` probe. (3) Path-attributed repo baseline per the epic rail: repo-wide `pnpm typecheck` and `pnpm test` at the merge-base and at HEAD, reporting the HEAD-minus-merge-base failing-path set intersected with this task's owned paths; it must be empty. (4) MUTATION DRILLS — sha256 each file before and after, restore by REVERSE EDIT never `git checkout` (which reverts to HEAD and destroys a peer's uncommitted work), and verify restoration by the recorded hash, since `git diff` is blind to the three new UNTRACKED files. D1: break ONLY the model comparison in verifyLaunchSelection — the model cases must redden on their exact codes and the EFFORT cases must stay GREEN. D2: break ONLY the effort comparison — the mirror. D1 and D2 together are what prove DoD 4's \"independently\"; if either drill reddens the other family, the two share a code path and the codes are decorative. D3: delete the gate call from claude-launcher.ts — the selection cases redden while every pre-existing pre-open case stays green, proving the gate is not silently answering for cases that belong to later phases. D4: move the gate call to AFTER the grant phase — the exact-empty-`log` assertion must redden, proving the four DoD-named cutoffs are really tested. D5: remove the `launchSelection` entry from REQUEST_KEYS while leaving the interface field — confirm the symptom is a WAVE of generic CLAUDE_LAUNCH_REQUEST_MALFORMED rather than a named failure, and record that as evidence for why step 5's length invariant exists. Every drill must redden on an OUTCOME assertion; a green drill indicts the test. (5) `grep -c ''` every production file touched and confirm none exceeds 250, and that claude-launcher-lifecycle.ts and claude-launcher-port-results.ts are byte-identical to their step 1 measurements.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.ts",
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-input.ts",
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts"
+      ],
+      "note": "GATES. pnpm --filter @moe/runner typecheck exit 0. pnpm --filter @moe/runner test exit 0: 58 files / 1840 tests passed (baseline before any byte was 58 / 1827). runtime-entrypoint.test.ts run explicitly: 1 file / 3 tests, so both new bridges pass the tree walk and the child-process undefinedBindingCount probe.\n\nPATH-ATTRIBUTED REPO BASELINE. The whole repo is green at HEAD c576110 with my working tree applied: pnpm typecheck exit 0 across every package (runner, review, scheduler, mcp, skills, testkit, control-room, daemon), pnpm test 256 files / 5822 passed | 1 skipped. The HEAD-minus-merge-base failing-path set is therefore EMPTY, and there is no foreign red to disclose this cycle. The pre-work baseline was also green, so any failure would have been mine.\n\nNINE MUTATION DRILLS, each restored by reverse edit and each restoration confirmed against the sha256 recorded before it (selection 48e05d6d, verify def1af67, launcher 350a64a1, input 09f46602). Test-file counts below are focused runs over claude-launch-selection.test.ts + claude-launcher.test.ts (66 tests) unless stated.\n- D1 model comparison disabled: 11 red. Every pure-EFFORT test stayed green — the effort argv table, the effort environment test in both suites, and both hand-spelled positives.\n- D2 effort comparison disabled: 10 red, exact mirror. Every pure-MODEL test stayed green. D1 and D2 together are the independence proof; I first found the environment table mixed both families, which would have reddened under either drill, so I SPLIT it into a model test and an effort test in both suites before re-running.\n- D3 gate call deleted from launchClaude: 8 red in claude-launcher.test.ts while claude-launcher-authority.test.ts and index-surface.test.ts stayed fully green (290 passed), proving the gate is not silently answering for cases belonging to later phases or other suites.\n- D4 gate moved to after the grant phase: 6 red, including the exactly-empty-log cutoff assertions — the four DoD-named cutoffs are really tested.\n- D5 launchSelection removed from REQUEST_KEYS with the interface field left: 71 red across two suites, every one a generic CLAUDE_LAUNCH_REQUEST_MALFORMED. That is the anonymous wave the module comment warns about, and it is why the compile-time RequestKeyIsDeclared/DeclaredFieldHasKey aliases exist.\n- D6 effort flag reverted to the invented --reasoning-effort: 4 red, ALL of them hand-spelled — the flag equality test, both hand-spelled positives, and the verbatim-argv boundary assertion. This is the drill the previous attempt could not have passed, because every test then derived the flag from the constant under test.\n- D7 environment half of the effort arm removed, argv half untouched: exactly 2 red, the effort environment test in each suite.\n- D8 pre-reflection proxy guard removed: 2 red, the six-case proxy sweep (trap counters) and the launcher malformed-selection sweep.\n- D9 String() coercion restored ahead of the typeof guard: 1 red, the coercion test, on the bare snapshot answering null rather than throwing.\n\nSIZES, grep -c '': claude-launch-selection.ts 169, claude-launch-verify.ts 141, claude-launcher.ts 215, claude-launcher-contract.ts 237, claude-launcher-input.ts 149, claude-surface.ts 141 — all under 250. claude-launcher-lifecycle.ts 249 and claude-launcher-port-results.ts 250 are byte-identical to their step 1 measurements; neither was touched.",
+      "startedAt": "2026-08-14T09:38:19.645Z",
+      "completedAt": "2026-08-14T09:42:49.013Z"
     },
     {
       "stepId": "step-10",
       "description": "ADVERSARIAL SELF-REVIEW, record the consumer edge AND the name disagreement, then commit. Read the diff as an attacker: can any launch reach prepareRuntime, consumeGrant, acquireLock or openBoundary with a model or effort the snapshot never named? Can a hostile selection object escape snapshotLaunchSelection through an accessor, a proxy, or a prototype-borrowed property? Does duplicate ADOPTION now bypass a check it should not — and is the justification (the adopted process was gated by the launch that created it) actually true for a restart delivered from durable state? Does any refusal echo an argv element, the model id, or a digest, in ANY field and not just the message? Did the default fixture's new selection make some existing test vacuous by satisfying a gate it was never meant to reach? Is every cardinality pin hand-written rather than derived from the table it polices? Then post TWO records. First, `moe.add_comment` on task-159f4c21ef9149e8a65f24735c9c1475 naming the exact published symbol and field spellings this task landed — and stating plainly that DoD 5's consumer clause is satisfied as ROOT REACHABILITY plus a recorded task id, not as a compiling import, because task-159 is BLOCKED behind four prerequisites none of which is DONE. Second, in the same comment or a sibling one, record the unresolved NAME DISAGREEMENT for that task's architect: task-159 asks for runtime observation/profile digests while this task's DoD specifies configuration/policy/orchestration digests (disjoint noun sets); task-159 wants achieved AND ceiling concurrency while this task delivers only the ceiling, the achieved half belonging to task-cbc42f; and task-159 names profileRevisionId only as a prohibition while this task carries it as a positive field. This task implemented its own DoD verbatim and did not reconcile those unilaterally. Finally commit by EXPLICIT PATHSPEC listing every owned path — `git status --porcelain` first, `git restore --staged` anything foreign (three peers are editing this directory), then `git show --stat` to confirm no peer file, probe, or drill leftover landed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.ts",
         "packages/runner/src/providers/claude/claude-launch-selection.js",
@@ -120,11 +170,18 @@
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/surface/claude-surface.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launch-verify.ts",
+        "packages/runner/src/providers/claude/claude-launch-selection.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW FOUND ONE REAL HOLE AND I FIXED IT BEFORE COMMITTING. Windows environment variable names are CASE-INSENSITIVE and this launcher refuses every platform but win32, so `Claude_Code_Effort_Level: \"low\"` reached the child as the same override while my brand-new environment arm — matching the name case-sensitively — passed it. A one-keystroke bypass of the arm I had just added to close QA defect 2. Fixed by uppercasing the name for the match while keeping the VALUE comparison exact (model ids and effort levels are case-sensitive), and by refusing two spellings of one name as AMBIGUOUS rather than guessing which one the OS keeps. Specified tests-first: 3 red, then green. Drill D10 (revert to `key === wanted`) reddens exactly those 3 and nothing else; hash restored to 4f85f414.\n\nThe rest of the checklist, answered:\n- Can a launch reach prepareRuntime/consumeGrant/acquireLock/openBoundary with an unnamed model or effort? No, and there is no TOCTOU: openBoundary is handed `request.argv` and `request.environment`, the SAME frozen snapshot objects the gate verified, not a re-read of the caller's originals.\n- Can a hostile selection escape via accessor, proxy or prototype-borrowed property? Accessor and prototype-borrowed are refused by snapshotExactRecord's own-data-descriptor read; proxies are refused before any reflection, with a revoked proxy's throw from types.isProxy read as hostile. Drills D8/D9 prove both are load-bearing.\n- Duplicate ADOPTION still precedes the gate. Adoption opens no process and consumes no grant. RESIDUAL RISK, disclosed rather than fixed: the justification \"the adopted process was gated by the launch that created it\" holds only for a duplicate whose originating launch ran under this gate. A duplicate replayed from durable state written BEFORE the gate existed would be adopted without a selection check. Moving the gate ahead of the duplicate branch is out of DoD 2's four named cutoffs and would break the existing `log === [\"duplicate\"]` assertion, so I left the order and recorded it.\n- Refusal echo: every message is a static per-code string; assertions run over the JSON-SERIALIZED refusal, and the environment tests additionally prove the override VALUE never appears.\n- Vacuous fixture: request()'s default environment is {SYSTEMROOT, LANG} and names neither override variable, so the new arm cannot silently answer for any existing case.\n- Cardinality pins: every sweep has a hand-written literal count plus a `ran` counter compared against it; none is derived from the table it polices.\n\nCOMMITTED 44fefa6 by explicit pathspec, exactly the ten owned paths (two of them new: claude-launch-verify.ts and its .js bridge, staged with git add first because a pathspec cannot name an untracked file). git show --stat confirms 10 files, no peer file, no probe, no drill leftover. Repo-wide pnpm test was momentarily 1-failed mid-run from a concurrent peer write and re-ran clean at 256 files / 5823 passed | 1 skipped; the test total moved 5823 -> 5824 during the window, which is the peer's own new test.\n\nProducer note posted to task-159f4c21ef9149e8a65f24735c9c1475 (comment-d16cd7511aef47b2916ac687bc20777b) naming every published symbol and field, flagging the two CHANGED spellings, stating the DoD 5 consumer clause as root reachability plus a recorded task id rather than a compiling import, and recording all three halves of the name disagreement unreconciled.",
+      "startedAt": "2026-08-14T09:42:49.928Z",
+      "completedAt": "2026-08-14T09:45:59.728Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -167,12 +224,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.900Z",
-  "updatedAt": "2026-08-14T09:30:43.768Z",
+  "updatedAt": "2026-08-14T09:46:53.164Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:45:50.536Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 11,
+    "executedStepCount": 20,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -184,7 +241,16 @@
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [
     {
@@ -228,12 +294,12 @@
   },
   "planApprovedAt": "2026-08-13T23:10:15.034Z",
   "workStartedAt": "2026-08-13T23:14:55.320Z",
-  "reviewStartedAt": "2026-08-14T08:58:25.160Z",
+  "reviewStartedAt": "2026-08-14T09:46:53.164Z",
   "verification": {
     "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  58 passed (58)\n      Tests  1827 passed (1827)\n   Start at  11:56:31\n   Duration  4.51s (transform 12.88s, setup 0ms, import 19.98s, tests 15.36s, environment 4ms)",
-    "reportedAt": "2026-08-14T08:58:25.160Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  58 passed (58)\n      Tests  1841 passed (1841)\n   Start at  12:44:22\n   Duration  4.55s\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-14T09:46:53.164Z"
   },
   "filesModified": [
     "packages/runner/src/providers/claude/claude-launcher.ts",
@@ -241,7 +307,8 @@
     "packages/runner/src/providers/claude/claude-launcher.test.ts",
     "packages/runner/src/providers/claude/claude-launch-selection.test.ts",
     "packages/runner/src/providers/claude/claude-launch-selection.ts",
-    "packages/runner/src/providers/claude/claude-launch-selection.js",
+    "packages/runner/src/providers/claude/claude-launch-verify.ts",
+    "packages/runner/src/providers/claude/claude-launch-verify.js",
     "packages/runner/src/providers/claude/claude-launcher-contract.ts",
     "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
     "packages/runner/src/surface/claude-surface.ts",

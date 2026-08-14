@@ -135,7 +135,7 @@
       "completedAt": "2026-08-14T09:27:48.899Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -161,16 +161,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:07.402Z",
-  "updatedAt": "2026-08-14T09:28:34.768Z",
+  "updatedAt": "2026-08-14T09:45:18.938Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:24.289Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-14T09:45:18.938Z",
+    "wallClockMs": 2454649
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
-    "worker-4e189bb5"
+    "worker-4e189bb5",
+    "qa-50f0d628"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -221,5 +224,8 @@
     "packages/contracts/src/configuration/project-configuration-parser.ts",
     "packages/contracts/src/configuration/project-configuration-parser.js",
     "packages/contracts/src/index.ts"
-  ]
+  ],
+  "completedAt": "2026-08-14T09:45:18.938Z",
+  "reviewCompletedAt": "2026-08-14T09:45:18.938Z",
+  "reviewSummary": "Gate re-run by QA, each leg STANDALONE so && could not mask a later leg. contracts exit 0 (12 files/416 tests, baseline 10/243). core exit 0 (28/579). daemon exit 0 (69/1492). pnpm typecheck EXIT 1 — FOREIGN, disclosed: \"packages/contracts typecheck: Done\"; only red is packages/runner/src/providers/claude/claude-launcher.ts(13,1) TS6192 unused import, (15,10) TS6133 'verifyLaunchSelection' unused. Those runner files are UNCOMMITTED peer edits in git status, the symbol comes from the peer's UNTRACKED claude-launch-verify.ts, and grep for ProjectConfiguration in packages/runner returns ZERO. Failing paths INTERSECT owned paths = EMPTY -> global rail 3.\n\n3 QA-run mutation drills (sha256 -> Edit mutate -> run -> Edit revert -> sha256sum -c OK; never git checkout). D1 drop \\ and : from isLogicalRef: exactly 3 red (drive backslash, drive relative, UNC); C:/x and file:///x stayed refused via the surviving / rule and ALL 8 LEGITIMATE_REFS stayed green — table tests the rule, matcher not over-narrowed. D2 move schemaVersion ahead of hasExactKeys: exactly 1 red, \"checks the structure BEFORE the version\" — order genuinely pinned. D3 return caller's limits array: 2 red, both NAMED immutability assertions, not a JSON compare. Green again after restore, 416/416.\n\nDoD 1-5 evidenced. No node: in the 2 new sources or any transitive import (runtime-guards uses only the sanctioned getBuiltinModule lookup). No path key in the closed contract. No design number frozen as a default. settingsDigest on the manifest only. Hand-written counts 30/17/8/9/7/63/8/8/14 asserted. Production files 229 and 227 lines, under 250. All 8 owned paths: git rev-parse HEAD:<p> == git hash-object <p>, so committed bytes are the gated bytes; carrier is foreign whole-tree c576110 (global rail 5, not a rejection reason). Consumer task-5dfc98fc3e7f4035a8012bd9ba032de3 and codec prerequisite task-bcea70569f714367b2e50c1734433631 both exist on the board."
 }
