@@ -2,7 +2,8 @@ import { deepFreeze, isPlainRecord } from "../../canonical.js";
 import { snapshotExactRecord } from "../../platform/platform-contract.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 import { type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
-import { snapshotLaunchSelection } from "./claude-launch-selection.js";
+import { snapshotLaunchSelection,
+  type ClaudeLaunchSelection } from "./claude-launch-selection.js";
 
 /**
  * This list and `ClaudeLaunchRequest` must name the SAME set: `snapshotExactRecord`
@@ -33,7 +34,21 @@ const AUTHORITY_KEYS = ["duplicateDelivery", "effect", "attempt", "grant", "clai
   "priorRegistration", "reconciliation"] as const;
 const INVALID = Symbol("invalid-launch-input");
 
-export interface ClaudeLaunchSnapshot extends ClaudeLaunchRequest {}
+/**
+ * The snapshot differs from the request in exactly one place: a selection that
+ * does not snapshot becomes `null` rather than collapsing the whole request.
+ *
+ * That is the difference between a caller being told its SELECTION is unusable,
+ * at TELEMETRY_CONFIGURATION, and being told its request is malformed somewhere
+ * — the same generic answer a bad `cwd` produces. The launcher's selection gate
+ * is the only thing entitled to name a selection defect, so this module hands
+ * it the absence instead of answering first. The hostile value itself is NOT
+ * carried through: only the null survives, so nothing downstream can be made to
+ * read a trap.
+ */
+export interface ClaudeLaunchSnapshot extends Omit<ClaudeLaunchRequest, "launchSelection"> {
+  readonly launchSelection: ClaudeLaunchSelection | null;
+}
 
 function cloneData(value: unknown, budget = { remaining: 2_048 }, depth = 0): unknown | typeof INVALID {
   if (value === null || typeof value === "boolean") return value;
@@ -121,7 +136,6 @@ export function snapshotClaudeLaunchRequest(value: unknown): ClaudeLaunchSnapsho
   const numbers = limits === null ? [] : LIMIT_KEYS.map((key) => limits[key]);
   const launchSelection = snapshotLaunchSelection(raw["launchSelection"]);
   if (argv === null || environment === null || runtime === null || limits === null ||
-    launchSelection === null ||
     numbers.some((item) => !Number.isSafeInteger(item) || (item as number) <= 0) ||
     (limits["stdoutBytes"] as number) > 1_048_576 || (limits["stderrBytes"] as number) > 1_048_576 ||
     (limits["tailBytes"] as number) > 65_536 || (limits["timeoutMs"] as number) > 600_000 ||

@@ -141,7 +141,7 @@ describe("Windows Claude launcher", () => {
     // reaches the boundary VERBATIM, selection flags and all, so a gate that
     // rewrote or dropped an element would be caught here.
     expect(boundary.requests[0]).toMatchObject({
-      argv: ["--print", "hello", "--model", "claude-opus-5-20260514", "--reasoning-effort", "high"],
+      argv: ["--print", "hello", "--model", "claude-opus-5-20260514", "--effort", "high"],
       cwd: "C:\\work",
     });
     expect((boundary.requests[0] as Record<string, unknown>)["shell"]).toBeUndefined();
@@ -302,19 +302,110 @@ describe("Windows Claude launcher", () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
-  it("refuses a malformed selection at the INPUT layer, before the selection gate", async () => {
-    // Worth pinning WHICH layer answers: the request snapshot rejects a selection
-    // that is not an exact record, so the gate never sees one. That makes
-    // CLAUDE_LAUNCH_SELECTION_MALFORMED a containment arm here rather than an
-    // input arm, and its input arms are proven in claude-launch-selection.test.ts.
+  it("answers a malformed selection at the SELECTION layer, not the generic input layer", async () => {
+    // WHICH layer answers is the point. A generic CLAUDE_LAUNCH_REQUEST_MALFORMED
+    // from the request snapshot would tell a caller its request was unusable
+    // somewhere, and would read identically for a bad cwd; the requirement is
+    // that a selection defect is named as one, at TELEMETRY_CONFIGURATION,
+    // before runtime, grant, lock or open.
+    const accessor = { ...SELECTION } as unknown as Record<string, unknown>;
+    Object.defineProperty(accessor, "selectedModelId",
+      { enumerable: true, get: () => SELECTED_MODEL });
+    let traps = 0;
+    const proxied = new Proxy({ ...SELECTION }, {
+      ownKeys(target: object): ArrayLike<string | symbol> {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const cases: readonly (readonly [string, unknown])[] = [
+      ["extra-key", { ...SELECTION, extra: "value" }],
+      ["missing-key", (() => {
+        const { policyDigest: _drop, ...rest } = SELECTION; return rest;
+      })()],
+      ["accessor", accessor],
+      ["proxy", proxied],
+      ["null", null],
+      ["ceiling-zero", selectionWith({ concurrencyCeiling: 0 })],
+    ];
+    expect(cases.length).toBe(6);
+    let ran = 0;
+    for (const [name, launchSelection] of cases) {
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const result = await launchClaude(
+        request({ launchSelection: launchSelection as typeof SELECTION }),
+        { platform: "win32", deps: dependencies(boundary, log) });
+      expect({ name, ...failureOf(result) }).toEqual({
+        name, code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" });
+      expect({ name, log }).toEqual({ name, log: [] });
+      expect({ name, boundary: boundary.log }).toEqual({ name, boundary: [] });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+    expect(traps).toBe(0);
+  });
+
+  it("launches on a hand-spelled provider-correct argv and refuses the invented flag", async () => {
+    // HAND-SPELLED, not built from the production constant: a positive derived
+    // from the constant would still pass if the constant named a flag the
+    // provider does not read.
+    const log: string[] = [];
+    const boundary = boundaryHarness({ stdout: Buffer.from("ok"), stderr: Buffer.from("") });
+    const result = await launchClaude(
+      request({ argv: ["--print", "--model", "claude-opus-5-20260514", "--effort", "high"] }),
+      { platform: "win32", deps: dependencies(boundary, log) });
+    expect(result.kind).toBe("OBSERVED");
+    expect(log).toContain("open");
+    const refusedLog: string[] = [];
+    const refusedBoundary = boundaryHarness();
+    const refused = await launchClaude(
+      request({ argv: ["--print", "--model", "claude-opus-5-20260514",
+        "--reasoning-effort", "high"] }),
+      { platform: "win32", deps: dependencies(refusedBoundary, refusedLog) });
+    expect(failureOf(refused))
+      .toEqual({ code: "CLAUDE_LAUNCH_EFFORT_UNPROVEN", layer: "TELEMETRY_CONFIGURATION" });
+    expect(refusedLog).toEqual([]);
+  });
+
+  // The launcher forwards request.environment to the boundary verbatim, and
+  // CLAUDE_CODE_EFFORT_LEVEL overrides the effort flag for that session, so a gate
+  // that read argv alone would certify high while low actually launched. The two
+  // arms are separate tests so each mutation drill reddens only its own family.
+  it("refuses a child environment that would override the effort argv proved", async () => {
     const log: string[] = [];
     const boundary = boundaryHarness();
     const result = await launchClaude(
-      request({ launchSelection: { ...SELECTION, extra: "value" } as unknown as typeof SELECTION }),
+      request({ environment: { SYSTEMROOT: "C:\\Windows", CLAUDE_CODE_EFFORT_LEVEL: "low" } }),
       { platform: "win32", deps: dependencies(boundary, log) });
     expect(failureOf(result))
-      .toEqual({ code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" });
+      .toEqual({ code: "CLAUDE_LAUNCH_EFFORT_MISMATCH", layer: "TELEMETRY_CONFIGURATION" });
     expect(log).toEqual([]);
+    expect(boundary.requests).toEqual([]);
+  });
+
+  it("refuses a child environment that would override the model argv proved", async () => {
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(
+      request({ environment: { SYSTEMROOT: "C:\\Windows", ANTHROPIC_MODEL: "claude-opus-5" } }),
+      { platform: "win32", deps: dependencies(boundary, log) });
+    expect(failureOf(result))
+      .toEqual({ code: "CLAUDE_LAUNCH_MODEL_MISMATCH", layer: "TELEMETRY_CONFIGURATION" });
+    expect(log).toEqual([]);
+    expect(boundary.requests).toEqual([]);
+  });
+
+  it("still launches when the child environment names the same model and effort", async () => {
+    // The arm is a comparison, not a blanket ban on ever naming the variable.
+    const log: string[] = [];
+    const boundary = boundaryHarness({ stdout: Buffer.from("ok"), stderr: Buffer.from("") });
+    const agreed = await launchClaude(
+      request({ environment: { SYSTEMROOT: "C:\\Windows", CLAUDE_CODE_EFFORT_LEVEL: "high",
+        ANTHROPIC_MODEL: "claude-opus-5-20260514" } }),
+      { platform: "win32", deps: dependencies(boundary, log) });
+    expect(agreed.kind).toBe("OBSERVED");
+    expect(log).toContain("open");
   });
 
   it("never lets a runtime version, pinned closure or profile revision prove model or effort", async () => {

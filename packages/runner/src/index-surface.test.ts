@@ -184,8 +184,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   // The launch-selection closure. The two selection FUNCTIONS stay internal —
   // see the withheld-name control below — because the launcher applies them
   // itself before it prepares a runtime or consumes a grant.
-  ["CLAUDE_LAUNCH_SELECTION_FLAGS", "object"], ["CLAUDE_MODEL_EVIDENCE_KINDS", "array"],
-  ["CLAUDE_REASONING_EFFORTS", "array"],
+  ["CLAUDE_LAUNCH_SELECTION_ENV", "object"], ["CLAUDE_LAUNCH_SELECTION_FLAGS", "object"],
+  ["CLAUDE_MODEL_EVIDENCE_KINDS", "array"], ["CLAUDE_REASONING_EFFORTS", "array"],
   // The durable-authority overlay. The FACTORY is published; the shipped default
   // port set behind it is not, so the two authority slots are the only ones a
   // consumer can reach. See the withheld-name control below.
@@ -215,7 +215,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(164);
+  expect(EXPECTED_EXPORTS.length).toBe(165);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -641,8 +641,9 @@ it("withholds the launcher's default ports and internals from the root", () => {
  * seam exists to make impossible.
  */
 it("withholds the selection snapshot and verifier from the root", () => {
-  const withheld = ["snapshotLaunchSelection", "verifyLaunchSelection"];
-  expect(withheld.length).toBe(2);
+  const withheld = ["snapshotLaunchSelection", "verifyLaunchSelection", "isHostileObject",
+    "refuseSelection"];
+  expect(withheld.length).toBe(4);
   expect(withheld.filter((name) => name in surface)).toEqual([]);
   // Positive control: the same membership test finds the names this seam DOES
   // publish, so the assertion above cannot be passing because `in` is broken.

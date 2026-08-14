@@ -10,8 +10,9 @@ import { consumeActivationGrant, validateActivationCommit, validateRuntimeBindin
 import { registerLaunchLock } from "../../supervisor/launch-lock.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
-import { CLAUDE_LAUNCH_SELECTION_LAYER, verifyLaunchSelection,
+import { CLAUDE_LAUNCH_SELECTION_LAYER,
   type ClaudeLaunchSelectionVerdict } from "./claude-launch-selection.js";
+import { verifyLaunchSelection } from "./claude-launch-verify.js";
 import { directFailure, settleClaudeLaunch } from "./claude-launcher-lifecycle.js";
 import { decodeCommit, decodeDuplicate, decodeGrant, decodeLease, decodeRegistration,
   decodeRuntime, isSafeNativePromise, snapshotLaunchEntry, snapshotLauncherPorts,
@@ -141,9 +142,13 @@ export async function launchClaude(
   // reaches none of them. Duplicate resolution is deliberately AHEAD of it:
   // adoption opens no process and consumes no grant, and the process it adopts
   // was gated by the launch that created it.
+  //
+  // The environment goes in with argv because the SAME environment is forwarded
+  // to the boundary below, and the provider lets it override what argv asked
+  // for. Checking argv alone would prove the request, not the launch.
   let selection: ClaudeLaunchSelectionVerdict;
   try {
-    selection = verifyLaunchSelection(request.launchSelection, request.argv);
+    selection = verifyLaunchSelection(request.launchSelection, request.argv, request.environment);
   } catch {
     return directFailure("CLAUDE_LAUNCH_SELECTION_MALFORMED",
       CLAUDE_LAUNCH_SELECTION_LAYER, PHASE.selection);

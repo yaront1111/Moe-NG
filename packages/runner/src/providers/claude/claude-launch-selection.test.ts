@@ -44,10 +44,16 @@ const NO_ENV: Readonly<Record<string, string>> = Object.freeze({ SYSTEMROOT: "C:
 const argvFor = (model: string = MODEL, effort: string = EFFORT): readonly string[] =>
   [MODEL_FLAG, model, EFFORT_FLAG, effort];
 
-/** Every refusal is read through here so no arm can pass by throwing instead. */
+/**
+ * Every refusal is read through here so no arm can pass by throwing instead.
+ * The environment arrives as a REST parameter rather than a defaulted one: a
+ * default would swallow an explicitly-passed `undefined` and quietly test the
+ * benign environment instead of the hostile one the case named.
+ */
 function refusalOf(
-  value: unknown, argv: unknown, environment: unknown = NO_ENV,
+  value: unknown, argv: unknown, ...rest: readonly unknown[]
 ): { readonly code: string; readonly layer: string; readonly serialized: string } {
+  const environment = rest.length === 0 ? NO_ENV : rest[0];
   const verdict = verifyLaunchSelection(value, argv, environment);
   if (verdict.ok) throw new Error("expected a refusal, received an accepted selection");
   return { code: verdict.code, layer: verdict.layer, serialized: JSON.stringify(verdict) };
@@ -314,6 +320,200 @@ describe("Claude launch selection", () => {
       ran += 1;
     }
     expect(ran).toBe(refusals.length);
+  });
+
+  it("spells the provider's own flags and override variables, hand-written here", () => {
+    // HAND-SPELLED, never derived from the production constant: a test that read
+    // the constant back could not discover the constant itself was invented.
+    // Measured against the installed provider: claude --help exits 0 and lists
+    // --model <model> and --effort <level>, and there is no --reasoning-effort.
+    // The override variable names come from the installed binary's own strings,
+    // where CLAUDE_CODE_EFFORT_LEVEL= is documented as overriding effort for the
+    // session and ANTHROPIC_MODEL names the model.
+    expect(CLAUDE_LAUNCH_SELECTION_FLAGS).toEqual({ model: "--model", effort: "--effort" });
+    expect(CLAUDE_LAUNCH_SELECTION_ENV)
+      .toEqual({ model: "ANTHROPIC_MODEL", effort: "CLAUDE_CODE_EFFORT_LEVEL" });
+    expect(Object.isFrozen(CLAUDE_LAUNCH_SELECTION_ENV)).toBe(true);
+  });
+
+  it("proves a hand-spelled provider-correct argv and refuses the invented spelling", () => {
+    const real = verifyLaunchSelection(selection(), ["--model", MODEL, "--effort", EFFORT], NO_ENV);
+    expect(real.ok).toBe(true);
+    // The spelling this gate used to freeze. It is not a provider flag, so argv
+    // carrying it names no effort at all — the launch would run at whatever the
+    // provider defaulted to while this record claimed otherwise.
+    expect(refusalOf(selection(), ["--model", MODEL, "--reasoning-effort", EFFORT]).code)
+      .toBe("CLAUDE_LAUNCH_EFFORT_UNPROVEN");
+  });
+
+  it("refuses a proxy before any trap of it can run, on either operand", () => {
+    let selectionTraps = 0;
+    let argvTraps = 0;
+    let environmentTraps = 0;
+    const count = (counter: () => void): ProxyHandler<object> => ({
+      ownKeys(target: object): ArrayLike<string | symbol> {
+        counter();
+        return Reflect.ownKeys(target);
+      },
+      getOwnPropertyDescriptor(target, key): PropertyDescriptor | undefined {
+        counter();
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    const proxiedSelection = new Proxy({ ...selection() }, count(() => { selectionTraps += 1; }));
+    const proxiedArgv = new Proxy([...argvFor()], count(() => { argvTraps += 1; }));
+    const proxiedEnvironment = new Proxy({ ...NO_ENV }, count(() => { environmentTraps += 1; }));
+    const cases: readonly (readonly [string, unknown, unknown, unknown])[] = [
+      ["selection", proxiedSelection, argvFor(), NO_ENV],
+      ["argv", selection(), proxiedArgv, NO_ENV],
+      ["environment", selection(), argvFor(), proxiedEnvironment],
+      // A transparent proxy is refused for the same reason a trapping one is:
+      // the gate cannot tell them apart without reflecting, and reflecting is
+      // what runs the trap.
+      ["transparent-selection", new Proxy({ ...selection() }, {}), argvFor(), NO_ENV],
+      ["transparent-argv", selection(), new Proxy([...argvFor()], {}), NO_ENV],
+      ["transparent-environment", selection(), argvFor(), new Proxy({ ...NO_ENV }, {})],
+    ];
+    expect(cases.length).toBe(6);
+    let ran = 0;
+    for (const [name, value, argv, environment] of cases) {
+      const refusal = refusalOf(value, argv, environment);
+      expect({ name, code: refusal.code, layer: refusal.layer }).toEqual({
+        name, code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+    expect({ selectionTraps, argvTraps, environmentTraps })
+      .toEqual({ selectionTraps: 0, argvTraps: 0, environmentTraps: 0 });
+    expect(snapshotLaunchSelection(proxiedSelection)).toBeNull();
+    expect(selectionTraps).toBe(0);
+  });
+
+  it("never coerces a hostile field, so the caller's code cannot run inside the guard", () => {
+    let coercions = 0;
+    const hostileModel = {
+      toString: (): string => { coercions += 1; throw new Error("coercion escaped the guard"); },
+    };
+    const value = { ...selection(), selectedModelId: hostileModel as unknown as string };
+    // The bare snapshot is TOTAL: it answers null rather than throwing, so a
+    // caller that uses it without the verifier around it is defended too.
+    expect(snapshotLaunchSelection(value)).toBeNull();
+    expect(refusalOf(value, argvFor()).code).toBe("CLAUDE_LAUNCH_SELECTION_MALFORMED");
+    expect(coercions).toBe(0);
+  });
+
+  // The two environment arms live in SEPARATE tests, mirroring the two argv
+  // arms. A single mixed table would redden under either mutation drill and so
+  // could not show that the model and effort comparisons are independent.
+  it("refuses an environment that overrides the effort argv proved", () => {
+    // CLAUDE_CODE_EFFORT_LEVEL overrides the effort flag for the session, so a
+    // conflicting value means the launched effort is not the claimed one.
+    const cases: readonly (readonly [string, Record<string, string>])[] = [
+      ["low", { ...NO_ENV, CLAUDE_CODE_EFFORT_LEVEL: "low" }],
+      ["case-drift", { ...NO_ENV, CLAUDE_CODE_EFFORT_LEVEL: EFFORT.toUpperCase() }],
+      ["empty", { ...NO_ENV, CLAUDE_CODE_EFFORT_LEVEL: "" }],
+      ["not-a-member", { ...NO_ENV, CLAUDE_CODE_EFFORT_LEVEL: "extreme" }],
+      // Windows environment variable names are CASE-INSENSITIVE and this
+      // launcher is win32-only, so this spelling reaches the child as the same
+      // override. A case-sensitive gate would be bypassed by one keystroke.
+      ["case-variant-name", { ...NO_ENV, Claude_Code_Effort_Level: "low" }],
+      ["lowercase-name", { ...NO_ENV, claude_code_effort_level: "low" }],
+    ];
+    expect(cases.length).toBe(6);
+    let ran = 0;
+    for (const [name, environment] of cases) {
+      const refusal = refusalOf(selection(), argvFor(), environment);
+      expect({ name, code: refusal.code, layer: refusal.layer }).toEqual({
+        name, code: "CLAUDE_LAUNCH_EFFORT_MISMATCH", layer: "TELEMETRY_CONFIGURATION" });
+      // An override refusal may not echo the override value either.
+      for (const secret of Object.values(environment)) {
+        if (secret.length > 0) expect(refusal.serialized).not.toContain(secret);
+      }
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
+  it("refuses an environment that overrides the model argv proved", () => {
+    const cases: readonly (readonly [string, Record<string, string>])[] = [
+      ["alias", { ...NO_ENV, ANTHROPIC_MODEL: ALIAS }],
+      ["other-dated", { ...NO_ENV, ANTHROPIC_MODEL: "claude-opus-5-20260515" }],
+      ["empty", { ...NO_ENV, ANTHROPIC_MODEL: "" }],
+      ["case-variant-name", { ...NO_ENV, Anthropic_Model: ALIAS }],
+      ["lowercase-name", { ...NO_ENV, anthropic_model: ALIAS }],
+    ];
+    expect(cases.length).toBe(5);
+    let ran = 0;
+    for (const [name, environment] of cases) {
+      const refusal = refusalOf(selection(), argvFor(), environment);
+      expect({ name, code: refusal.code, layer: refusal.layer }).toEqual({
+        name, code: "CLAUDE_LAUNCH_MODEL_MISMATCH", layer: "TELEMETRY_CONFIGURATION" });
+      for (const secret of Object.values(environment)) {
+        if (secret.length > 0) expect(refusal.serialized).not.toContain(secret);
+      }
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
+  it("accepts an environment that agrees, and invents no override it never measured", () => {
+    const cases: readonly (readonly [string, Record<string, string>])[] = [
+      ["absent", { ...NO_ENV }],
+      ["empty", {}],
+      ["agreeing-effort", { ...NO_ENV, CLAUDE_CODE_EFFORT_LEVEL: EFFORT }],
+      ["agreeing-model", { ...NO_ENV, ANTHROPIC_MODEL: MODEL }],
+      ["agreeing-both", { CLAUDE_CODE_EFFORT_LEVEL: EFFORT, ANTHROPIC_MODEL: MODEL }],
+      // CLAUDE_EFFORT is EXPORTED by the provider to hooks and Bash, never read
+      // as an override. Refusing on it would refuse launches the provider
+      // honours, so this is the measurement's negative control.
+      ["exported-not-read", { ...NO_ENV, CLAUDE_EFFORT: "low" }],
+      ["unrelated", { ...NO_ENV, ANTHROPIC_DEFAULT_OPUS_MODEL: ALIAS }],
+      // Case-insensitive matching must not turn into a case-insensitive BAN:
+      // a differently-spelled name that AGREES still launches.
+      ["agreeing-case-variant", { ...NO_ENV, Claude_Code_Effort_Level: EFFORT }],
+    ];
+    expect(cases.length).toBe(8);
+    let ran = 0;
+    for (const [name, environment] of cases) {
+      const verdict = verifyLaunchSelection(selection(), argvFor(), environment);
+      expect({ name, ok: verdict.ok }).toEqual({ name, ok: true });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
+  it("refuses two spellings of one override name rather than guessing which wins", () => {
+    // On win32 the OS keeps one of them and this gate does not get to choose, so
+    // duplicate evidence is refused as ambiguous exactly as duplicate argv is.
+    const effort = refusalOf(selection(), argvFor(),
+      { CLAUDE_CODE_EFFORT_LEVEL: EFFORT, Claude_Code_Effort_Level: EFFORT });
+    expect({ code: effort.code, layer: effort.layer }).toEqual({
+      code: "CLAUDE_LAUNCH_EFFORT_AMBIGUOUS", layer: "TELEMETRY_CONFIGURATION" });
+    const model = refusalOf(selection(), argvFor(),
+      { ANTHROPIC_MODEL: MODEL, anthropic_model: MODEL });
+    expect({ code: model.code, layer: model.layer }).toEqual({
+      code: "CLAUDE_LAUNCH_MODEL_AMBIGUOUS", layer: "TELEMETRY_CONFIGURATION" });
+  });
+
+  it("refuses an environment that is not a bounded plain string record", () => {
+    const cases: readonly (readonly [string, unknown])[] = [
+      ["null", null],
+      ["undefined", undefined],
+      ["array", [["CLAUDE_CODE_EFFORT_LEVEL", "low"]]],
+      ["non-string-value", { CLAUDE_CODE_EFFORT_LEVEL: 5 }],
+      ["accessor", Object.defineProperty({}, "CLAUDE_CODE_EFFORT_LEVEL",
+        { enumerable: true, get: () => "low" })],
+      ["nul-byte", { CLAUDE_CODE_EFFORT_LEVEL: `lo${String.fromCharCode(0)}w` }],
+    ];
+    expect(cases.length).toBe(6);
+    let ran = 0;
+    for (const [name, environment] of cases) {
+      const refusal = refusalOf(selection(), argvFor(), environment);
+      expect({ name, code: refusal.code, layer: refusal.layer }).toEqual({
+        name, code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
   });
 
   it("never throws and never rejects, whatever it is handed", () => {

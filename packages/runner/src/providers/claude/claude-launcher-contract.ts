@@ -48,6 +48,7 @@ export const CLAUDE_LAUNCH_TRUTH_CLASSES = Object.freeze(["PROVEN", "UNKNOWN", "
  * not construct that field cannot use it at all.
  */
 export {
+  CLAUDE_LAUNCH_SELECTION_ENV,
   CLAUDE_LAUNCH_SELECTION_FLAGS,
   CLAUDE_LAUNCH_SELECTION_LAYER,
   CLAUDE_MODEL_EVIDENCE_ABSENT,
