@@ -81,23 +81,46 @@ export type AmbiguityClass = (typeof AMBIGUITY_CLASSES)[number];
  */
 export const AMBIGUITY_OUTCOME = "NEEDS_RECONCILIATION" as const;
 
-/** Which layer refused. More than one can, so tests must pin which. */
+/**
+ * Which layer refused. More than one can, so tests must pin which.
+ *
+ * Listed in pipeline order. DECODE sits between MANIFEST and CANONICAL because a decoder
+ * turns manifest-covered bytes into records, so its refusals precede any canonicalisation.
+ * SHADOW is last and is ADVISORY: it compares an already-imported projection against a
+ * new-side one and can therefore never be on the path that writes anything.
+ */
 export const IMPORT_REFUSAL_LAYERS = Object.freeze([
   "INPUT",
   "MANIFEST",
+  "DECODE",
   "CANONICAL",
   "APPLY",
+  "SHADOW",
 ] as const);
 
 export type ImportRefusalLayer = (typeof IMPORT_REFUSAL_LAYERS)[number];
 
-/** Every code has a planned emitter; an unreachable code is a claim no test can pin. */
+/**
+ * Every code has a planned emitter; an unreachable code is a claim no test can pin.
+ *
+ * The four DECODE codes are deliberately distinct rather than one "bad file" code. They
+ * answer different operator questions and must never be able to stand in for each other:
+ * MALFORMED means the bytes are not the shape they claim, UNSUPPORTED means this decoder
+ * version knowingly declines a real shape, AMBIGUOUS means the bytes admit more than one
+ * reading (§21.6's "never a guess"), and DIGEST_MISMATCH means the file changed after the
+ * manifest hashed it — the one case where the bytes are fine and the evidence is not.
+ */
 export const IMPORT_REFUSAL_CODES = Object.freeze([
   "IMPORT_COMMIT_FAILED",
   "IMPORT_MANIFEST_EMPTY",
   "IMPORT_RECORD_UNCANONICAL",
   "IMPORT_ROOT_INVALID",
+  "IMPORT_SHADOW_FIELD_UNMAPPED",
+  "IMPORT_SOURCE_AMBIGUOUS",
+  "IMPORT_SOURCE_DIGEST_MISMATCH",
+  "IMPORT_SOURCE_MALFORMED",
   "IMPORT_SOURCE_UNREADABLE",
+  "IMPORT_SOURCE_UNSUPPORTED",
   "IMPORT_TOO_LARGE_FOR_ONE_COMMIT",
 ] as const);
 

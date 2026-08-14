@@ -69,5 +69,50 @@ export type {
 export { reconcileImport } from "./import-reconcile.js";
 export type { ReconcileEntry, ReconcileInput, ReconcileReport } from "./import-reconcile.js";
 
+/**
+ * The production owner of legacy payload SEMANTICS: manifest-covered bytes to frozen
+ * records. Callers get records from here rather than assembling them, which is what keeps
+ * a payload from being invented out of a file path.
+ */
+export {
+  LEGACY_DECODER_VERSION,
+  RECORD_ENVELOPE_KEYS,
+  SUPPORTED_SOURCE_FAMILIES,
+  decodeLegacySources,
+} from "./legacy-decoder.js";
+export type {
+  DecodeLegacySourcesInput,
+  DecodeRefusal,
+  DecodeReport,
+  SupportedSourceFamily,
+} from "./legacy-decoder.js";
+
+/**
+ * The versioned shadow-projection vocabulary. Published separately from the comparator so
+ * a consumer can pin the version and the declared fields without importing the walk.
+ */
+export {
+  SHADOW_DISPOSITIONS,
+  SHADOW_ENTITY_FIELDS,
+  SHADOW_ENTITY_KINDS,
+  SHADOW_MISMATCH_DISPOSITIONS,
+  SHADOW_MISMATCH_KINDS,
+  SHADOW_PROJECTION_VERSION,
+  SHADOW_WHOLE_ENTITY_FIELD,
+} from "./shadow-contract.js";
+export type {
+  LegacyImportFacts,
+  ShadowComparison,
+  ShadowDisposition,
+  ShadowEntity,
+  ShadowEntityKind,
+  ShadowMismatch,
+  ShadowMismatchKind,
+  ShadowProjection,
+} from "./shadow-contract.js";
+
+/** The advisory old-to-new comparison. Read-only: it takes data and returns findings. */
+export { compareShadowProjections, projectLegacyImport } from "./shadow-projection.js";
+
 export { buildSourceManifest } from "./source-manifest.js";
 export type { SourceFileEntry, SourceManifest, SourceManifestResult } from "./source-manifest.js";

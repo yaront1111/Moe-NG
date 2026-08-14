@@ -24,6 +24,7 @@
     "release:evidence": "node scripts/release/supply-chain.mjs --head",
     "typecheck:release": "tsc --noEmit --strict --allowJs --checkJs --allowImportingTsExtensions --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames scripts/release/release-subject.mjs scripts/release/supply-chain.mjs",
     "typecheck:packaging": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts",
+    "typecheck:import": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/import/import-shadow.ts tools/import/shadow-input.ts",
     "verify:foundation": "pnpm typecheck && pnpm test:meta",
     "verify:store": "pnpm typecheck && pnpm test:store",
     "verify:release": "pnpm typecheck:release && pnpm test:integration && pnpm release:evidence"
