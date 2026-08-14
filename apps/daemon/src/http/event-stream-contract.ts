@@ -1,5 +1,7 @@
 import { MAX_PAGE_SIZE } from "@moe/store";
 
+import type { WireEventIdentity, WireObservation } from "./event-stream-observation.js";
+
 /**
  * Wire vocabulary for the resumable event stream.
  *
@@ -27,9 +29,29 @@ export interface StreamSnapshot {
   readonly stateDigest: string;
 }
 
+/**
+ * The structural view of one committed event. It may declare ONLY what the store's own
+ * event record provides, because a real `StoredEvent` has to stay assignable to it: the
+ * optional `decisionTrace` is absent for non-decision events, and its fields are typed as
+ * plain `string` so the store's literal-typed `requestIdentityVersion` still satisfies it.
+ *
+ * There is deliberately NO daemon-observed reading here. The store record has none, so
+ * requiring one would break that assignability and force a change to a package this seam
+ * does not own. A daemon reading is produced during encode and therefore lives on
+ * `WireEvent` alone.
+ */
 export interface StreamEvent {
   readonly aggregateId: string;
+  readonly commandId: string;
   readonly committedAt: string;
+  readonly decisionTrace?: Readonly<{
+    readonly commandId: string;
+    readonly commandKind: string;
+    readonly principalId: string;
+    readonly projectId: string;
+    readonly requestIdentityVersion: string;
+    readonly requestSha256: string;
+  }>;
   readonly eventId: string;
   readonly eventType: string;
   readonly globalPosition: bigint;
@@ -98,7 +120,21 @@ export const EVENT_STREAM_REFUSAL_CODES = Object.freeze([
 
 export type EventStreamRefusalCode = (typeof EVENT_STREAM_REFUSAL_CODES)[number];
 
-export const EVENT_STREAM_LAYER = "SEAM" as const;
+export {
+  EVENT_STREAM_CLOCKS,
+  EVENT_STREAM_LAYER,
+  EVENT_STREAM_OBSERVERS,
+  EVENT_STREAM_UNKNOWN_CODES,
+  type EventStreamClock,
+  type EventStreamObserver,
+  type EventStreamUnknownCode,
+  type SeamObserver,
+  type WireEventIdentity,
+  type WireKnownValue,
+  type WireObservation,
+  type WireUnknownValue,
+  type WireValue,
+} from "./event-stream-observation.js";
 
 /** The wire cursor. `position` is the store's own opaque string; the seam never parses it. */
 export interface WireCursor {
@@ -112,6 +148,9 @@ export interface WireEvent {
   readonly eventId: string;
   readonly eventType: string;
   readonly globalPosition: string;
+  readonly identity: WireEventIdentity;
+  readonly ledgerObservation: WireObservation;
+  readonly seamObservation: WireObservation;
 }
 
 export interface WireSnapshot {

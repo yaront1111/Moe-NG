@@ -11,6 +11,7 @@ import type {
   EventResumeFrame,
   EventResumeRequest,
   EventStreamRefusalCode,
+  SeamObserver,
   StreamCursor,
   StreamEvent,
   StreamGap,
@@ -22,6 +23,11 @@ import type {
   WireEvent,
   WireSnapshot,
 } from "./event-stream-contract.js";
+import {
+  DEFAULT_SEAM_OBSERVER,
+  identityOf,
+  observation,
+} from "./event-stream-observation.js";
 
 /**
  * Transport, bounds and shape for the committed subscription surface. This module adds NO
@@ -62,20 +68,26 @@ function wireSnapshot(snapshot: StreamSnapshot): WireSnapshot {
 }
 
 /** Ledger positions are bigint in the store and must not reach JSON as one. */
-function wireEvent(event: StreamEvent): WireEvent {
+function wireEvent(event: StreamEvent, seamReading: string): WireEvent {
   return Object.freeze({
     aggregateId: event.aggregateId,
     committedAt: event.committedAt,
     eventId: event.eventId,
     eventType: event.eventType,
     globalPosition: String(event.globalPosition),
+    identity: identityOf(event),
+    ledgerObservation: observation("STORE_LEDGER", "STORE_COMMIT_CLOCK", event.committedAt),
+    seamObservation: observation("DAEMON_SEAM", "DAEMON_WALL_CLOCK", seamReading),
   });
 }
 
-function pageFrame(page: StreamPage): EventPageFrame {
+function pageFrame(page: StreamPage, observer: SeamObserver): EventPageFrame {
+  // ONE reading per frame, not one per event. Ten readings off a single clock would
+  // manufacture precision this seam does not have and invite a consumer to diff two of them.
+  const seamReading = observer.now();
   return Object.freeze({
     checkpoint: String(page.checkpoint),
-    events: Object.freeze(page.events.map(wireEvent)),
+    events: Object.freeze(page.events.map((event) => wireEvent(event, seamReading))),
     hasMore: page.hasMore,
     nextCursor: page.nextCursor === null ? null : wireCursor(page.nextCursor),
     outcome: "PAGE" as const,
@@ -91,10 +103,13 @@ function gapFrame(gap: StreamGap): EventGapFrame {
   });
 }
 
-function encode(result: StreamGap | StreamPage | StreamRefused): EventReadFrame {
+function encode(
+  result: StreamGap | StreamPage | StreamRefused,
+  observer: SeamObserver,
+): EventReadFrame {
   if (result.outcome === "REFUSED") return forward(result);
   if (result.outcome === "CURSOR_GAP") return gapFrame(result);
-  return pageFrame(result);
+  return pageFrame(result, observer);
 }
 
 function limitRefusal(limit: number | undefined): EventRefusedFrame | null {
@@ -108,10 +123,17 @@ function limitRefusal(limit: number | undefined): EventRefusedFrame | null {
   return null;
 }
 
-/** Reads one page. The bound is checked before the port is touched at all. */
+/**
+ * Reads one page. The bound is checked before the port is touched at all.
+ *
+ * `observer` is optional and LAST on purpose: http-listener.ts calls this with two
+ * arguments, so a required parameter would ripple into the listener options type and every
+ * listener fixture. The blast radius of injecting a clock stays inside this seam.
+ */
 export function readEventPage(
   port: SubscriptionPort,
   request: EventReadRequest,
+  observer: SeamObserver = DEFAULT_SEAM_OBSERVER,
 ): EventReadFrame {
   const refusal = limitRefusal(request.limit);
   if (refusal !== null) return refusal;
@@ -124,7 +146,7 @@ export function readEventPage(
         projection: request.projection,
         subscriberId: request.subscriberId,
       },
-  ));
+  ), observer);
 }
 
 /**

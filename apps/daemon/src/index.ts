@@ -70,8 +70,11 @@ export {
 } from "./work/work-ingress.js";
 export { claimWork } from "./work/work-claim.js";
 export {
+  EVENT_STREAM_CLOCKS,
   EVENT_STREAM_LAYER,
+  EVENT_STREAM_OBSERVERS,
   EVENT_STREAM_REFUSAL_CODES,
+  EVENT_STREAM_UNKNOWN_CODES,
   MAX_EVENT_PAGE_SIZE,
   type EventGapFrame,
   type EventPageFrame,
@@ -81,7 +84,11 @@ export {
   type EventReseatedFrame,
   type EventResumeFrame,
   type EventResumeRequest,
+  type EventStreamClock,
+  type EventStreamObserver,
   type EventStreamRefusalCode,
+  type EventStreamUnknownCode,
+  type SeamObserver,
   type StreamCursor,
   type StreamEvent,
   type StreamGap,
@@ -96,7 +103,12 @@ export {
   type SubscriptionPort,
   type WireCursor,
   type WireEvent,
+  type WireEventIdentity,
+  type WireKnownValue,
+  type WireObservation,
   type WireSnapshot,
+  type WireUnknownValue,
+  type WireValue,
 } from "./http/event-stream-contract.js";
 export { readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
 export {

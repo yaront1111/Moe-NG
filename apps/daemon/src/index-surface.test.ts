@@ -65,7 +65,10 @@ import type {
   EventReseatedFrame,
   EventResumeFrame,
   EventResumeRequest,
+  EventStreamClock,
+  EventStreamObserver,
   EventStreamRefusalCode,
+  EventStreamUnknownCode,
   GenesisIncarnationBinding,
   GraphPreviewInputRejected,
   GraphPreviewRequestError,
@@ -134,6 +137,7 @@ import type {
   StartedDaemon,
   StartListenerOptions,
   StartListenerResult,
+  SeamObserver,
   StreamCursor,
   StreamEvent,
   StreamGap,
@@ -148,6 +152,11 @@ import type {
   SubscriptionPort,
   WireCursor,
   WireEvent,
+  WireEventIdentity,
+  WireKnownValue,
+  WireObservation,
+  WireUnknownValue,
+  WireValue,
   WireProtocolVersion,
   WireSnapshot,
   WorkApplied,
@@ -182,8 +191,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["DOCTOR_COMMAND_KINDS", "object"],
   ["DOCTOR_ERROR_CODES", "object"],
   ["DOCTOR_RECOVERY_SCHEMA_VERSION", "string"],
+  ["EVENT_STREAM_CLOCKS", "object"],
   ["EVENT_STREAM_LAYER", "string"],
+  ["EVENT_STREAM_OBSERVERS", "object"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
+  ["EVENT_STREAM_UNKNOWN_CODES", "object"],
   ["GOAL_HANDLERS", "object"],
   ["HTTP_BOUNDARY_ERROR_CODES", "object"],
   ["HTTP_INPUT_BOUNDS", "object"],
@@ -252,7 +264,7 @@ const surface: Readonly<Record<string, unknown>> = daemon;
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(58);
+    expect(EXPECTED_EXPORTS.length).toBe(61);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -416,11 +428,22 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<EventGapFrame | EventPageFrame | EventRefusedFrame>();
     expectTypeOf<EventResumeFrame>().toEqualTypeOf<EventRefusedFrame | EventReseatedFrame>();
     expectTypeOf<Parameters<typeof daemon.readEventPage>>()
-      .toEqualTypeOf<[port: SubscriptionPort, request: EventReadRequest]>();
+      .toEqualTypeOf<
+        [port: SubscriptionPort, request: EventReadRequest, observer?: SeamObserver | undefined]
+      >();
     expectTypeOf<ReturnType<typeof daemon.readEventPage>>().toEqualTypeOf<EventReadFrame>();
     expectTypeOf<Parameters<typeof daemon.resumeFromSnapshot>>()
       .toEqualTypeOf<[port: SubscriptionPort, request: EventResumeRequest]>();
     expectTypeOf<ReturnType<typeof daemon.resumeFromSnapshot>>().toEqualTypeOf<EventResumeFrame>();
+    expectTypeOf<(typeof daemon.EVENT_STREAM_OBSERVERS)[number]>()
+      .toEqualTypeOf<EventStreamObserver>();
+    expectTypeOf<(typeof daemon.EVENT_STREAM_CLOCKS)[number]>().toEqualTypeOf<EventStreamClock>();
+    expectTypeOf<(typeof daemon.EVENT_STREAM_UNKNOWN_CODES)[number]>()
+      .toEqualTypeOf<EventStreamUnknownCode>();
+    expectTypeOf<WireValue>().toEqualTypeOf<WireKnownValue | WireUnknownValue>();
+    expectTypeOf<WireEvent["identity"]>().toEqualTypeOf<WireEventIdentity>();
+    expectTypeOf<WireEvent["ledgerObservation"] | WireEvent["seamObservation"]>()
+      .toEqualTypeOf<WireObservation>();
   });
 
   it("names every doctor command result branch", () => {

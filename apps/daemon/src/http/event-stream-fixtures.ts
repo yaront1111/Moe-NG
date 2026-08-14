@@ -1,4 +1,5 @@
 import type {
+  SeamObserver,
   StreamEvent,
   StreamReadResult,
   StreamRefused,
@@ -18,18 +19,47 @@ export const SUBSCRIBER = "control-room-1";
 export const SNAPSHOT_CHECKPOINT = "4";
 export const STATE_DIGEST = "d".repeat(64);
 
+/**
+ * Hand-written cardinalities. The ledger is generated, so a test that only checked
+ * "some events had a trace" would still pass if the generator silently produced none.
+ */
+export const LEDGER_SIZE = 10;
+export const TRACED_EVENT_COUNT = 4;
+export const UNTRACED_EVENT_COUNT = 6;
+
+/** The reading the injected seam clock hands back, distinct from every committedAt above. */
+export const SEAM_READING = "2026-08-09T00:05:00.000Z";
+
 const LEDGER: readonly StreamEvent[] = Object.freeze(
-  Array.from({ length: 10 }, (_unused, index): StreamEvent => {
+  Array.from({ length: LEDGER_SIZE }, (_unused, index): StreamEvent => {
     const position = index + 1;
-    return Object.freeze({
+    const tag = String(position).padStart(2, "0");
+    const base = {
       aggregateId: "goal-0001",
-      committedAt: `2026-08-09T00:00:${String(position).padStart(2, "0")}.000Z`,
-      eventId: `evt-${String(position).padStart(2, "0")}`,
+      commandId: `cmd-${tag}`,
+      committedAt: `2026-08-09T00:00:${tag}.000Z`,
+      eventId: `evt-${tag}`,
       eventType: "goal.created",
       globalPosition: BigInt(position),
+    };
+    // A decision trace is absent for non-decision events, exactly as the store emits them.
+    if (position > TRACED_EVENT_COUNT) return Object.freeze(base);
+    return Object.freeze({
+      ...base,
+      decisionTrace: Object.freeze({
+        commandId: base.commandId,
+        commandKind: "goal.create",
+        principalId: `principal-${tag}`,
+        projectId: "proj-0001",
+        requestIdentityVersion: "1",
+        requestSha256: "a".repeat(64),
+      }),
     });
   }),
 );
+
+/** The source page, so a test can compare the wire against it rather than against itself. */
+export const LEDGER_EVENTS: readonly StreamEvent[] = LEDGER;
 
 export const LEDGER_EVENT_IDS: readonly string[] = Object.freeze(
   LEDGER.map((event) => event.eventId),
@@ -48,6 +78,24 @@ export interface StreamPortOptions {
   readonly gap?: string;
   readonly generation?: number;
   readonly refuse?: boolean;
+  /** Emits a first event whose committedAt is present but unusable as a reading. */
+  readonly unusableReading?: boolean;
+}
+
+export interface SeamObserverDouble extends SeamObserver {
+  readonly calls: () => number;
+}
+
+/** Counts readings, so "one observation per frame" can be asserted rather than assumed. */
+export function seamObserver(reading: string = SEAM_READING): SeamObserverDouble {
+  let calls = 0;
+  return {
+    calls: () => calls,
+    now(): string {
+      calls += 1;
+      return reading;
+    },
+  };
 }
 
 const CHECKPOINT = BigInt(SNAPSHOT_CHECKPOINT);
@@ -82,7 +130,11 @@ export function streamPort(options: StreamPortOptions = {}): StreamPortDouble {
           snapshot,
         });
       }
-      const events = LEDGER.filter((event) => event.globalPosition > cursor);
+      const visible = LEDGER.filter((event) => event.globalPosition > cursor);
+      const events = options.unusableReading === true
+        ? visible.map((event, index) =>
+          index === 0 ? Object.freeze({ ...event, committedAt: "" }) : event)
+        : visible;
       const last = events.at(-1);
       return Object.freeze({
         checkpoint: 10n,
