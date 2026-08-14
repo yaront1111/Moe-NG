@@ -117,8 +117,8 @@
       "completedAt": "2026-08-14T09:21:58.996Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -173,14 +173,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T09:26:29.459Z",
+  "updatedAt": "2026-08-14T09:30:37.835Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
     "executedStepCount": 18,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-14T09:30:37.835Z",
+    "wallClockMs": 45747283
   },
   "contextFetchedBy": [
     "architect-b1a46457",
@@ -242,7 +244,7 @@
     "apps/daemon/src/work/work-slot-ceiling.ts",
     "apps/daemon/src/work/work-claim.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T22:53:19.675Z",
+  "reviewCompletedAt": "2026-08-14T09:30:37.835Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2: accessors and non-exact records must refuse before publishing any successor.",
@@ -298,5 +300,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-14T09:30:37.835Z",
+  "reviewSummary": "APPROVED (3rd submission). Gate re-run by QA, exit 0: pnpm --filter @moe/daemon typecheck && test (69 files / 1491 tests) && pnpm --filter @moe/scheduler test (43 / 1319). Owned paths clean; test bytes ride in foreign commit 671409f + 88af27a, verified by disk not commit id.\n\nReopen-#2 defect closed at the property: mirrorList (work-claim-shape.ts:139-143) routes the array through the same detachList/detach recursion as every deep section, so liveClaims elements reach countOccupyingSlots as daemon-owned own data. work-slot-ceiling.ts:20-26 adds the exact 3-own-key element check.\n\nMY OWN drills (Edit-applied, reverse-edited, sha256 restored — shape f714c470, ceiling 85e3158e):\nD-A forwarded mirrorList elements by reference: exactly 12 reds, all liveClaims-element cases; accessor case failed \"expected 1 to be +0\" (probe.hits — QA's literal reproduction) and the transparent-proxy case returned WORK_GRANTED.\nD-B dropped the element exact-key clause: exactly 1 red, \"entry carrying an extra own key\" at leg slotCeiling. Both restored, suite green.\n\nDoD 1: five-record closure asserted with budgetView.version+1, bucket 70/30, dimension \"gpu\" pass-through. DoD 2/4: HOSTILE_TARGETS is a mechanical descriptor walk pinned to a hand-written 26-path list containing liveClaims.0 and slot.rows.0; 260 structural + 6 content + 10 live-claim + 9 table cases each assert code/leg/layer/upstreamCode, zero successor keys, probe.hits 0; matrix sizes hand-counted; whole-graph 25-node/94-accessor zero-read test plus recursive identity+descriptor walk (catches the leaseBinding alias). DoD 3: WORK_INTENT_COMMAND_MISMATCH/AUTHORITY/effectIntent pinned, existing legs unmoved. DoD 5: root exports claimWork + ClaimSuccessors (5 fields).\n\nPer-file lines 144/195/77, all <=250. work-kernel.ts 261 pre-existing and untouched — disclosed, over target, under the 400 bar, not a rejection. No scratch or debug files."
 }

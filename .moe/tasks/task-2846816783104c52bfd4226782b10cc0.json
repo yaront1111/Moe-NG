@@ -210,8 +210,8 @@
       "completedAt": "2026-08-14T09:29:59.043Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40286572",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -223,7 +223,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:29:59.044Z",
+  "updatedAt": "2026-08-14T09:30:37.528Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
@@ -271,5 +271,33 @@
     "wallClockMs": 9000000
   },
   "planApprovedAt": "2026-08-14T08:58:49.000Z",
-  "workStartedAt": "2026-08-14T09:08:33.418Z"
+  "workStartedAt": "2026-08-14T09:08:33.418Z",
+  "reviewStartedAt": "2026-08-14T09:30:37.528Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/recovery-incarnation.test.ts src/identity/genesis-recovery-binding.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n\n Test Files  2 passed (2)\n      Tests  110 passed (110)\n   Start at  12:29:37\n   Duration  1.64s (transform 1.88s, setup 0ms, import 2.37s, tests 65ms, environment 0ms)\n\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-14T09:30:37.528Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/recovery-incarnation-context.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-context.js",
+    "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.ts",
+    "apps/daemon/src/recovery/recovery-incarnation.test.ts",
+    "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
+    "apps/daemon/src/recovery/recovery-succession.test.ts",
+    "apps/daemon/src/recovery/restore-test-harness.ts",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-binding-codec.js",
+    "apps/daemon/src/recovery/recovery-incarnation-anchor.ts",
+    "apps/daemon/src/recovery/recovery-succession.ts",
+    "apps/daemon/src/recovery/recovery-key-provider.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
+    "apps/daemon/src/recovery/recovery-incarnation-genesis.js",
+    "apps/daemon/src/identity/genesis-recovery-binding.ts",
+    "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
+  ]
 }

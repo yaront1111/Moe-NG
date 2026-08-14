@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   CLAUDE_LAUNCH_SELECTION_CODES,
+  CLAUDE_LAUNCH_SELECTION_ENV,
   CLAUDE_LAUNCH_SELECTION_FLAGS,
   CLAUDE_LAUNCH_SELECTION_LAYER,
   CLAUDE_MODEL_EVIDENCE_KINDS,
   CLAUDE_REASONING_EFFORTS,
   snapshotLaunchSelection,
-  verifyLaunchSelection,
   type ClaudeLaunchSelection,
 } from "./claude-launch-selection.js";
+import { verifyLaunchSelection } from "./claude-launch-verify.js";
 
 const MODEL = "claude-opus-5-20260514";
 const ALIAS = "claude-opus-5";
@@ -37,15 +38,17 @@ const selection = (overrides: Partial<ClaudeLaunchSelection> = {}): ClaudeLaunch
 
 const MODEL_FLAG = CLAUDE_LAUNCH_SELECTION_FLAGS.model;
 const EFFORT_FLAG = CLAUDE_LAUNCH_SELECTION_FLAGS.effort;
+/** An environment that names neither half, so an env case has to opt in. */
+const NO_ENV: Readonly<Record<string, string>> = Object.freeze({ SYSTEMROOT: "C:\\Windows" });
 
 const argvFor = (model: string = MODEL, effort: string = EFFORT): readonly string[] =>
   [MODEL_FLAG, model, EFFORT_FLAG, effort];
 
 /** Every refusal is read through here so no arm can pass by throwing instead. */
 function refusalOf(
-  value: unknown, argv: unknown,
+  value: unknown, argv: unknown, environment: unknown = NO_ENV,
 ): { readonly code: string; readonly layer: string; readonly serialized: string } {
-  const verdict = verifyLaunchSelection(value, argv);
+  const verdict = verifyLaunchSelection(value, argv, environment);
   if (verdict.ok) throw new Error("expected a refusal, received an accepted selection");
   return { code: verdict.code, layer: verdict.layer, serialized: JSON.stringify(verdict) };
 }
@@ -178,7 +181,7 @@ describe("Claude launch selection", () => {
     expect(cases.length).toBe(4);
     let ran = 0;
     for (const [name, argv] of cases) {
-      const verdict = verifyLaunchSelection(selection(), argv);
+      const verdict = verifyLaunchSelection(selection(), argv, NO_ENV);
       expect({ name, ok: verdict.ok }).toEqual({ name, ok: true });
       if (!verdict.ok) throw new Error(`${name} was refused`);
       expect(verdict.selection.selectedModelId).toBe(MODEL);
@@ -272,7 +275,7 @@ describe("Claude launch selection", () => {
 
   it("verifies an UNKNOWN-evidence selection on argv alone, never on the evidence", () => {
     const absent = selection({ modelSnapshotKind: "UNKNOWN", modelSnapshotEvidence: "UNKNOWN" });
-    const verdict = verifyLaunchSelection(absent, argvFor());
+    const verdict = verifyLaunchSelection(absent, argvFor(), NO_ENV);
     expect(verdict.ok).toBe(true);
     if (!verdict.ok) throw new Error("UNKNOWN evidence must not block a model argv proves");
     expect(verdict.selection.modelSnapshotEvidence).toBe("UNKNOWN");
@@ -324,7 +327,7 @@ describe("Claude launch selection", () => {
     expect(cases.length).toBe(5);
     let ran = 0;
     for (const [name, value, argv] of cases) {
-      const verdict = verifyLaunchSelection(value, argv);
+      const verdict = verifyLaunchSelection(value, argv, NO_ENV);
       expect({ name, ok: verdict.ok }).toEqual({ name, ok: false });
       if (verdict.ok) throw new Error(`${name} was accepted`);
       expect(verdict.code).toBe("CLAUDE_LAUNCH_SELECTION_MALFORMED");

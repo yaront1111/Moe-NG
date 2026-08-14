@@ -20,24 +20,27 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE AND ATTRIBUTE THE FOREIGN RED. Do not write a byte. (a) Confirm the gap is still open: `grep -rni \"modelid\\|reasoningeffort\\|launchselection\\|TELEMETRY_CONFIGURATION\" packages/runner/src` must return zero, and pair it with the positive control `grep -rnic \"wrapperidentity\" packages/runner/src` which must return a large non-zero — an absence claim without a matching control is a broken command, not an absence. If the gap has closed, STOP and report_blocked rather than land a duplicate. (b) Record `grep -c ''` for claude-launcher.ts, claude-launcher-contract.ts, claude-launcher-input.ts, claude-launcher-lifecycle.ts, claude-launcher-port-results.ts, claude-launcher-test-fixtures.ts and index.ts; rail 3 forbids growing the lifecycle and port-results files, both measured at the cap. (c) Re-read REQUEST_KEYS in claude-launcher-input.ts and record its exact current member list and length. (d) Record every hand-written cardinality pin in claude-launcher.test.ts and claude-launcher-authority.test.ts by grepping for `.length).toBe(` and `.toBe(cases.length)`, and record the current EXPECTED_EXPORTS count and its line in packages/runner/src/index-surface.test.ts — all of these moved during planning and will move again. (e) ATTRIBUTION, do this before touching anything: run `pnpm --filter @moe/runner test` and record the failures verbatim, then run `git status --porcelain` and `git log -1 --format=%h%d%s -- packages/runner/src/providers/claude/claude-launcher.test.ts`. The suite is expected to be RED from task-de496f47's in-flight tests-first loop, which is NOT your defect and NOT yours to repair. Never run `git stash`, `git checkout --`, `git reset`, or any tree-cleaning command; a peer's uncommitted work is in this tree. Record the pre-existing failing test names as your merge-base baseline for the path-attributed gate in step 9.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-input.ts",
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
       ],
-      "startedAt": "2026-08-14T09:26:09.906Z"
+      "note": "Re-measured on reopen #1. Baseline gate GREEN before any byte: `pnpm --filter @moe/runner typecheck` exit 0; `pnpm --filter @moe/runner test` exit 0, 58 files / 1827 tests. So every new failure from here is mine, not foreign. git status shows only .moe metadata dirty; HEAD c576110.\n\nAll four QA defects reproduced against primary sources:\n1. FLAG SPELLING. `claude --help` exit 0, line 72 `--effort <level>`, line 123 `--model <model>`; `grep -c reasoning-effort` on the help output = 0. Production freezes `--reasoning-effort` at claude-launch-selection.ts:36. CONFIRMED.\n2. ENV PRECEDENCE. Strings in the installed binary (/c/Users/Yaron/.local/bin/claude): `CLAUDE_CODE_EFFORT_LEVEL=` ... \"overrides effort this session\" / \"still controls this session\" (17 occurrences); `ANTHROPIC_MODEL` (22) sits in the model-config env group. launchClaude verifies argv only and forwards request.environment. CONFIRMED. Negative control measured too: `CLAUDE_EFFORT` (11) is documented in-binary as \"Also exposed to hook commands and Bash as the CLAUDE_EFFORT env var\" — an OUTPUT, not an override, so it must NOT be refused on.\n3. PROXY/COERCION. isPlainRecord (canonical.ts) is `typeof object && !null && !isArray` — no proxy check; snapshotExactRecord reflects (Object.keys + getOwnPropertyDescriptor) so traps run. snapshotLaunchSelection calls `String(raw[\"selectedModelId\"])` BEFORE the typeof guard, so a hostile toString executes and throws out of the bare snapshot surface. CONFIRMED. The package already has the right idiom: types.isProxy at claude-launcher-port-results.ts:50,83 and effect-shape.ts:87.\n4. LAYER. claude-launcher-input.ts:122 lists `launchSelection === null` in the whole-request reject condition, so a malformed nested selection returns null and launchClaude answers CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER; claude-launcher.test.ts:305 pins that wrong layer in a comment-justified test. CONFIRMED.\n\nSizes (grep -c ''): claude-launch-selection.ts 196, claude-launcher.ts 210, claude-launcher-contract.ts 236, claude-launcher-input.ts 135, claude-launcher-lifecycle.ts 249, claude-launcher-port-results.ts 250 (both at cap, not to be grown), claude-launcher-test-fixtures.ts 265, claude-launch-selection.test.ts 336, claude-launcher.test.ts 1203. REQUEST_KEYS = 15 members, matching ClaudeLaunchRequest's 15 fields. index-surface.test.ts pins EXPECTED_EXPORTS.length = 164 at line 218. Pre-open table pins cases.length = 16, MODEL_ = 4, EFFORT_ = 3 at claude-launcher.test.ts:263-265.",
+      "startedAt": "2026-08-14T09:26:09.906Z",
+      "completedAt": "2026-08-14T09:30:32.494Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED for the selection module. Create claude-launch-selection.test.ts against the not-yet-existing module, importing it by relative specifier (it is an internal module at this point). Specify and pin, each with the EXACT code and the EXACT layer TELEMETRY_CONFIGURATION: (1) `snapshotLaunchSelection(value)` returns a deeply frozen record for a valid selection and null for anything else, rejecting extra keys, missing keys, accessor properties, proxies, and prototype-borrowed values — reuse the package's existing `snapshotExactRecord` and the descriptor-reading idiom rather than reimplementing hostile-value defence. (2) The verifier `verifyLaunchSelection(selection, argv)` accepts argv that carries exactly one model flag whose value string-EQUALS selectedModelId and exactly one effort flag whose value equals reasoningEffort. (3) It refuses CLAUDE_LAUNCH_MODEL_UNPROVEN when no model flag is present, CLAUDE_LAUNCH_MODEL_AMBIGUOUS when the model flag appears more than once (whether the values agree or not — duplicate evidence is not evidence), and CLAUDE_LAUNCH_MODEL_MISMATCH when the single value differs from selectedModelId, which is also how an ALIAS-ONLY argv value is refused since an alias never string-equals a dated exact id. (4) The three mirror cases for effort with the three EFFORT codes — model and effort must refuse with DIFFERENT codes, because DoD 4 requires them mutation-checked independently and a shared code makes the two drills indistinguishable. (5) CLAUDE_LAUNCH_SELECTION_MALFORMED for a selection that does not snapshot. (6) NO refusal message, and no field of any refusal, contains any argv element, the selected model id, the effort value, or any digest — assert over the JSON-serialized refusal, not just the message. (7) A dated exact model evidence value is preserved verbatim while unavailable snapshot evidence is the explicit literal UNKNOWN and never gains authority. (8) Any swept table carries a hand-written non-zero cardinality assertion plus a `ran` counter checked against it. Run and record the red.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-launch-selection.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:30:43.768Z"
     },
     {
       "stepId": "step-3",
@@ -164,12 +167,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.900Z",
-  "updatedAt": "2026-08-14T09:26:09.906Z",
+  "updatedAt": "2026-08-14T09:30:43.768Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:45:50.536Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 10,
+    "executedStepCount": 11,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -180,7 +183,9 @@
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 2: launchClaude does not verify the real provider effort argv, and proxy/accessor inputs do not consistently refuse at TELEMETRY_CONFIGURATION before downstream effects.",
