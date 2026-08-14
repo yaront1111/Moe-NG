@@ -79,12 +79,30 @@ export {
  * `durableRegistrationPort` stay internal.
  */
 export { createClaudeLauncher } from "../providers/claude/claude-launcher-authority.js";
+/**
+ * The launch-selection closure travels with the launcher because
+ * `ClaudeLaunchRequest` names `ClaudeLaunchSelection`: a consumer able to declare
+ * the request but unable to construct that field could not launch at all. The
+ * vocabularies come with it for the same reason — a closed union whose members
+ * cannot be read is a field nobody can fill — and the flag spellings come because
+ * the launcher refuses argv that does not name the selection in exactly those
+ * spellings, which a consumer must be able to produce rather than guess.
+ *
+ * `snapshotLaunchSelection` and `verifyLaunchSelection` are deliberately WITHHELD.
+ * The launcher applies both itself, before it prepares a runtime or touches a
+ * grant; publishing them would let a consumer pre-validate one selection and then
+ * hand `launchClaude` a different one, which is exactly the disagreement between
+ * the claimed selection and the launched one that this seam exists to prevent.
+ */
 export {
   CLAUDE_LAUNCHER_VERSION,
   CLAUDE_LAUNCH_ERROR_CODES,
   CLAUDE_LAUNCH_LAYERS,
   CLAUDE_LAUNCH_REGISTRATION_PHASES,
+  CLAUDE_LAUNCH_SELECTION_FLAGS,
   CLAUDE_LAUNCH_TRUTH_CLASSES,
+  CLAUDE_MODEL_EVIDENCE_KINDS,
+  CLAUDE_REASONING_EFFORTS,
   launchClaude,
   type ClaudeLaunchDuplicate,
   type ClaudeLaunchErrorCode,
@@ -100,9 +118,12 @@ export {
   type ClaudeLaunchRegistrationPhase,
   type ClaudeLaunchRequest,
   type ClaudeLaunchResult,
+  type ClaudeLaunchSelection,
   type ClaudeLaunchTruthClass,
   type ClaudeLauncherAuthority,
   type ClaudeLauncherDependencies,
+  type ClaudeModelEvidenceKind,
+  type ClaudeReasoningEffort,
   type ClaudeRegistrationCommit,
   type ClaudeStreamEvidence,
 } from "../providers/claude/claude-launcher.js";

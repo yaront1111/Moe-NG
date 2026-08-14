@@ -8,6 +8,7 @@ import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
 import {
   CLAUDE_LAUNCHER_VERSION,
   CLAUDE_LAUNCH_ERROR_CODES,
+  CLAUDE_LAUNCH_SELECTION_FLAGS,
   acquireWindowsLaunchLock,
   launchClaude,
   type ClaudeLaunchRequest,
@@ -15,8 +16,9 @@ import {
 } from "./claude-launcher.js";
 import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import {
-  CLAIM, COMMIT, DIGEST, DRIFTED_COMMIT, PROCESS, PROVEN, boundaryHarness, dependencies,
-  failureOf, prepared, request, runtimeRequest, sha256,
+  CLAIM, COMMIT, DIGEST, DRIFTED_COMMIT, PROCESS, PROVEN, SELECTED_EFFORT, SELECTED_MODEL,
+  SELECTION, SELECTION_ARGV, boundaryHarness, dependencies,
+  failureOf, prepared, request, runtimeRequest, selectionWith, sha256,
   type BoundaryHarness,
 } from "./claude-launcher-test-fixtures.js";
 type ReflectionTrap = "ownKeys" | "getOwnPropertyDescriptor";
@@ -236,9 +238,40 @@ describe("Windows Claude launcher", () => {
       ["nested", { effect: hostileEffect }, (deps) => deps, "CLAUDE_LAUNCH_REQUEST_MALFORMED", "LAUNCHER"],
       ["runtimeDrift", { effect: DRIFTED_COMMIT.intent, attempt: DRIFTED_COMMIT.attempt,
         grant: DRIFTED_COMMIT.grant }, (deps) => deps, "PROVIDER_CAPABILITY_CHANGED", "ACTIVATION"],
+      // Selection drift is refused from BOTH sides: the record can disagree with
+      // argv, or argv can disagree with the record. Model and effort carry
+      // separate codes so either comparison can be broken on its own and only
+      // its own family reddens.
+      ["selectionModelDrift", { launchSelection: selectionWith({
+        selectedModelId: "claude-opus-5-20260515" }) }, (deps) => deps,
+        "CLAUDE_LAUNCH_MODEL_MISMATCH", "TELEMETRY_CONFIGURATION"],
+      ["argvModelAbsent", { argv: ["--print", CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT] },
+        (deps) => deps, "CLAUDE_LAUNCH_MODEL_UNPROVEN", "TELEMETRY_CONFIGURATION"],
+      ["argvModelDuplicate", { argv: [...SELECTION_ARGV, CLAUDE_LAUNCH_SELECTION_FLAGS.model,
+        SELECTED_MODEL] }, (deps) => deps, "CLAUDE_LAUNCH_MODEL_AMBIGUOUS", "TELEMETRY_CONFIGURATION"],
+      ["argvModelAlias", { argv: [CLAUDE_LAUNCH_SELECTION_FLAGS.model, "claude-opus-5",
+        CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT] }, (deps) => deps,
+        "CLAUDE_LAUNCH_MODEL_MISMATCH", "TELEMETRY_CONFIGURATION"],
+      ["selectionEffortDrift", { launchSelection: selectionWith({ reasoningEffort: "low" }) },
+        (deps) => deps, "CLAUDE_LAUNCH_EFFORT_MISMATCH", "TELEMETRY_CONFIGURATION"],
+      ["argvEffortAbsent", { argv: [CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL] },
+        (deps) => deps, "CLAUDE_LAUNCH_EFFORT_UNPROVEN", "TELEMETRY_CONFIGURATION"],
+      ["argvEffortDuplicate", { argv: [...SELECTION_ARGV, CLAUDE_LAUNCH_SELECTION_FLAGS.effort,
+        SELECTED_EFFORT] }, (deps) => deps, "CLAUDE_LAUNCH_EFFORT_AMBIGUOUS",
+        "TELEMETRY_CONFIGURATION"],
     ];
-    expect(cases.length).toBe(9);
+    expect(cases.length).toBe(16);
     expect(cases.map(([name]) => name)).toContain("runtimeDrift");
+    expect(cases.filter(([, , , code]) => code.startsWith("CLAUDE_LAUNCH_MODEL_")).length).toBe(4);
+    expect(cases.filter(([, , , code]) => code.startsWith("CLAUDE_LAUNCH_EFFORT_")).length).toBe(3);
+    // All six selection codes are actually REACHED here, not merely declared.
+    expect([...new Set(cases.map(([, , , code]) => code)
+      .filter((code) => code.startsWith("CLAUDE_LAUNCH_MODEL_") ||
+        code.startsWith("CLAUDE_LAUNCH_EFFORT_")))].sort()).toEqual([
+      "CLAUDE_LAUNCH_EFFORT_AMBIGUOUS", "CLAUDE_LAUNCH_EFFORT_MISMATCH",
+      "CLAUDE_LAUNCH_EFFORT_UNPROVEN", "CLAUDE_LAUNCH_MODEL_AMBIGUOUS",
+      "CLAUDE_LAUNCH_MODEL_MISMATCH", "CLAUDE_LAUNCH_MODEL_UNPROVEN",
+    ]);
     let ran = 0;
     for (const [, overrides, alter, code, layer] of cases) {
       const log: string[] = [];
@@ -251,6 +284,107 @@ describe("Windows Claude launcher", () => {
       ran += 1;
     }
     expect(ran).toBe(cases.length);
+  });
+
+  it("cuts off runtime, grant, lock and open together when the selection is unproven", async () => {
+    // One assertion covering all four cutoffs the requirement names: the fixture
+    // `log` records prepareRuntime, validateCommit, consumeGrant, registerLock,
+    // acquireLock and openBoundary, so EXACTLY empty means none of them ran.
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(request({ argv: ["--print"] }),
+      { platform: "win32", deps: dependencies(boundary, log) });
+    expect(failureOf(result))
+      .toEqual({ code: "CLAUDE_LAUNCH_MODEL_UNPROVEN", layer: "TELEMETRY_CONFIGURATION" });
+    expect(log).toEqual([]);
+    expect(boundary.log).toEqual([]);
+    expect(boundary.requests).toEqual([]);
+    expect(Object.isFrozen(result)).toBe(true);
+  });
+
+  it("refuses a malformed selection at the INPUT layer, before the selection gate", async () => {
+    // Worth pinning WHICH layer answers: the request snapshot rejects a selection
+    // that is not an exact record, so the gate never sees one. That makes
+    // CLAUDE_LAUNCH_SELECTION_MALFORMED a containment arm here rather than an
+    // input arm, and its input arms are proven in claude-launch-selection.test.ts.
+    const log: string[] = [];
+    const boundary = boundaryHarness();
+    const result = await launchClaude(
+      request({ launchSelection: { ...SELECTION, extra: "value" } as unknown as typeof SELECTION }),
+      { platform: "win32", deps: dependencies(boundary, log) });
+    expect(failureOf(result))
+      .toEqual({ code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" });
+    expect(log).toEqual([]);
+  });
+
+  it("never lets a runtime version, pinned closure or profile revision prove model or effort", async () => {
+    // DoD 3 in one table: the facts that DO describe this launch — the runtime's
+    // reported version, its pinned closure digest, the profile revision — are in
+    // argv as bare tokens or handed in as the flag value, and none of them
+    // satisfies either requirement.
+    const reportedVersion = prepared.observation.reportedVersion;
+    if (reportedVersion === null) throw new Error("runtime fixture reported no version");
+    const cases: readonly (readonly [string, readonly string[], string])[] = [
+      ["bare-runtime-version", [reportedVersion, SELECTION.profileRevisionId],
+        "CLAUDE_LAUNCH_MODEL_UNPROVEN"],
+      ["bare-closure-digest", [prepared.pinnedClosureDigest], "CLAUDE_LAUNCH_MODEL_UNPROVEN"],
+      ["version-as-model", [CLAUDE_LAUNCH_SELECTION_FLAGS.model,
+        reportedVersion, CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT],
+        "CLAUDE_LAUNCH_MODEL_MISMATCH"],
+      ["profile-as-model", [CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTION.profileRevisionId,
+        CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT], "CLAUDE_LAUNCH_MODEL_MISMATCH"],
+      ["profile-as-effort", [CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL,
+        CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTION.profileRevisionId],
+        "CLAUDE_LAUNCH_EFFORT_MISMATCH"],
+      ["version-as-effort", [CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL,
+        CLAUDE_LAUNCH_SELECTION_FLAGS.effort, reportedVersion],
+        "CLAUDE_LAUNCH_EFFORT_MISMATCH"],
+    ];
+    expect(cases.length).toBe(6);
+    expect(reportedVersion.length).toBeGreaterThan(0);
+    expect(SELECTION.profileRevisionId).not.toBe(SELECTED_MODEL);
+    let ran = 0;
+    for (const [name, argv, code] of cases) {
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const result = await launchClaude(request({ argv }),
+        { platform: "win32", deps: dependencies(boundary, log) });
+      expect({ name, ...failureOf(result) })
+        .toEqual({ name, code, layer: "TELEMETRY_CONFIGURATION" });
+      expect({ name, log }).toEqual({ name, log: [] });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
+  it("echoes no selected model, effort, digest or argv element in a selection refusal", async () => {
+    const secrets: readonly string[] = [
+      SELECTED_MODEL, SELECTED_EFFORT, SELECTION.modelSnapshotEvidence, SELECTION.profileRevisionId,
+      SELECTION.configurationDigest, SELECTION.policyDigest, SELECTION.orchestrationDigest,
+      CLAUDE_LAUNCH_SELECTION_FLAGS.model, CLAUDE_LAUNCH_SELECTION_FLAGS.effort,
+    ];
+    expect(secrets).toHaveLength(9);
+    const argvs: readonly (readonly string[])[] = [
+      ["--print"],
+      [...SELECTION_ARGV, CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL],
+      [CLAUDE_LAUNCH_SELECTION_FLAGS.model, "claude-opus-5",
+        CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT],
+      [CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL],
+    ];
+    expect(argvs).toHaveLength(4);
+    let ran = 0;
+    for (const argv of argvs) {
+      const result = await launchClaude(request({ argv }),
+        { platform: "win32", deps: dependencies(boundaryHarness(), []) });
+      const serialized = JSON.stringify(result);
+      expect(serialized).toContain("TELEMETRY_CONFIGURATION");
+      for (const secret of secrets) {
+        expect(secret.length).toBeGreaterThan(0);
+        expect(serialized).not.toContain(secret);
+      }
+      ran += 1;
+    }
+    expect(ran).toBe(argvs.length);
   });
 
   it("passes through a physical-boundary refusal without inventing a launch", async () => {

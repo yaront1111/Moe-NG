@@ -60,9 +60,9 @@ import type {
   CandidateTreePort, ClaudeLaunchErrorCode, ClaudeLaunchFailure, ClaudeLaunchLayer,
   ClaudeLaunchLimits, ClaudeLaunchLockLease, ClaudeLaunchLockResult, ClaudeLaunchObservation,
   ClaudeLaunchOptions, ClaudeLaunchRegistrationPhase, ClaudeLaunchRequest,
-  ClaudeLaunchResult, ClaudeLaunchTruthClass, ClaudeLauncherAuthority,
-  ClaudeLauncherDependencies, ClaudeProcessExit,
-  ClaudeRawRetention, ClaudeReconciledOutcome, ClaudeRegistrationCommit,
+  ClaudeLaunchResult, ClaudeLaunchSelection, ClaudeLaunchTruthClass, ClaudeLauncherAuthority,
+  ClaudeLauncherDependencies, ClaudeModelEvidenceKind, ClaudeProcessExit,
+  ClaudeRawRetention, ClaudeReasoningEffort, ClaudeReconciledOutcome, ClaudeRegistrationCommit,
   ClaudeReconciliation, ClaudeStreamAnomaly, ClaudeStreamDisposition, ClaudeStreamEvent,
   ClaudeStreamRecord, CrashClassification, DeclaredInput, DischargedObligation, DrainAdvance,
   DrainDisposition, DrainReason, DrainTerminalTarget, EvidenceFailure, EvidenceObligationKind,
@@ -94,12 +94,14 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
   expect(typeof runner.observeScope).toBe("function");
 });
 
-type ExportKind = "array" | "function" | "number" | "regexp" | "string";
+type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "string";
 /**
  * Hand-transcribed: 29 runner scope/artifact/workspace values, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
  * process wrapper publishes, the 11 values the platform boundary seam publishes,
- * and the 4 registration factories the recovery-inventory seam publishes.
+ * the 4 registration factories the recovery-inventory seam publishes, and the 3
+ * launch-selection values the launcher seam publishes so a consumer can fill
+ * `ClaudeLaunchRequest.launchSelection` and spell the argv it is checked against.
  * Read off the module sources, never off the namespace under test —
  * a list derived from what it checks asserts only that the namespace equals
  * itself.
@@ -179,6 +181,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["CLAUDE_LAUNCHER_VERSION", "string"], ["CLAUDE_LAUNCH_ERROR_CODES", "array"],
   ["CLAUDE_LAUNCH_LAYERS", "array"], ["CLAUDE_LAUNCH_TRUTH_CLASSES", "array"],
   ["launchClaude", "function"],
+  // The launch-selection closure. The two selection FUNCTIONS stay internal —
+  // see the withheld-name control below — because the launcher applies them
+  // itself before it prepares a runtime or consumes a grant.
+  ["CLAUDE_LAUNCH_SELECTION_FLAGS", "object"], ["CLAUDE_MODEL_EVIDENCE_KINDS", "array"],
+  ["CLAUDE_REASONING_EFFORTS", "array"],
   // The durable-authority overlay. The FACTORY is published; the shipped default
   // port set behind it is not, so the two authority slots are the only ones a
   // consumer can reach. See the withheld-name control below.
@@ -208,7 +215,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(161);
+  expect(EXPECTED_EXPORTS.length).toBe(164);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -491,6 +498,30 @@ function commitFixture(overrides: Readonly<Record<string, unknown>> = {}): Activ
 }
 
 /**
+ * What a launch claims it is launching, built from published names only. The
+ * launcher re-verifies this against argv BEFORE it prepares a runtime, consumes
+ * a grant, takes a lock or opens a boundary, so a request that carries the
+ * selection without the matching argv — or the argv without the selection —
+ * never reaches any leg downstream of that gate.
+ *
+ * `modelSnapshotEvidence` is a DATED value rather than a version or a profile
+ * revision: neither of those is evidence of WHICH MODEL was asked for.
+ */
+const SELECTED_MODEL = "claude-opus-5-20260514";
+const SELECTED_EFFORT = "high";
+const SELECTION: ClaudeLaunchSelection = {
+  provider: "claude", selectedModelId: SELECTED_MODEL,
+  modelSnapshotKind: "DATED_SNAPSHOT", modelSnapshotEvidence: "2026-05-14",
+  reasoningEffort: SELECTED_EFFORT, profileRevisionId: "profile-rev-1",
+  configurationDigest: DIGEST, policyDigest: DIGEST, orchestrationDigest: DIGEST,
+  concurrencyCeiling: 4,
+};
+const SELECTION_ARGV: readonly string[] = [
+  runner.CLAUDE_LAUNCH_SELECTION_FLAGS.model, SELECTED_MODEL,
+  runner.CLAUDE_LAUNCH_SELECTION_FLAGS.effort, SELECTED_EFFORT,
+];
+
+/**
  * Publication/composition contract only. Durable grant CAS belongs to daemon dispatch task
  * task-6cbff01023b14b26a78fc5e3eb1dd8a9; canary task-97554aa4293e40eab56c0b642e18513a
  * eventually certifies that composed edge.
@@ -528,8 +559,9 @@ it("lets a root-only consumer construct and narrow the Claude launcher", async (
     pinRoot: "C:\\pins", fs: {}, facts: {}, clock: {} }, duplicateDelivery: null, effect: commit.intent,
     attempt: commit.attempt, grant: commit.grant, claim: CLAIM_RECORD,
     wrapperIdentity: "wrapper:other", bootstrapCredentialDigest: DIGEST,
-    priorRegistration: null, argv: [], cwd: "C:\\work", environment: {},
-    reconciliation: null, limits } satisfies Record<keyof ClaudeLaunchRequest, unknown>;
+    priorRegistration: null, argv: [...SELECTION_ARGV], cwd: "C:\\work", environment: {},
+    reconciliation: null, limits, launchSelection: SELECTION
+  } satisfies Record<keyof ClaudeLaunchRequest, unknown>;
   const options: ClaudeLaunchOptions = { platform: "win32", deps };
   const result: ClaudeLaunchResult = await runner.launchClaude(request, options);
   if (result.kind !== "REFUSED") throw new Error(`expected refusal, received ${result.kind}`);
@@ -562,6 +594,18 @@ it("gives a root-only consumer the durable launcher authority type closure", asy
       return { kind: "REGISTERED", ok: true, registration: commit.registration, phase };
     },
   };
+  // The launch-selection closure, annotated so a type that stopped being
+  // published fails here rather than in a consumer's own repository. Both
+  // vocabularies must keep their explicit UNKNOWN member: unavailable snapshot
+  // evidence stays UNKNOWN instead of being back-filled from something else.
+  const kinds: readonly ClaudeModelEvidenceKind[] = runner.CLAUDE_MODEL_EVIDENCE_KINDS;
+  const efforts: readonly ClaudeReasoningEffort[] = runner.CLAUDE_REASONING_EFFORTS;
+  const selection: ClaudeLaunchSelection = SELECTION;
+  expect(kinds).toContain("UNKNOWN");
+  expect(efforts).toContain("UNKNOWN");
+  expect(kinds).toContain(selection.modelSnapshotKind);
+  expect(efforts).toContain(selection.reasoningEffort);
+  expect(runner.CLAUDE_LAUNCH_LAYERS).toContain("TELEMETRY_CONFIGURATION");
   const launch = runner.createClaudeLauncher(authority);
   const result: ClaudeLaunchResult = await launch({}, { platform: "linux" });
   expect(phases).toEqual(["PREFLIGHT", "STARTED"]);
@@ -586,6 +630,25 @@ it("withholds the launcher's default ports and internals from the root", () => {
   ];
   expect(withheld.length).toBe(9);
   expect(withheld.filter((name) => name in surface)).toEqual([]);
+});
+
+/**
+ * Negative control for the launch-selection seam specifically. The launcher
+ * applies both of these itself, before it prepares a runtime or consumes a
+ * grant. Publishing either would let a consumer snapshot or verify ONE selection
+ * and then hand `launchClaude` a different one — the claimed selection and the
+ * launched selection would be free to disagree, which is the whole failure this
+ * seam exists to make impossible.
+ */
+it("withholds the selection snapshot and verifier from the root", () => {
+  const withheld = ["snapshotLaunchSelection", "verifyLaunchSelection"];
+  expect(withheld.length).toBe(2);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the same membership test finds the names this seam DOES
+  // publish, so the assertion above cannot be passing because `in` is broken.
+  expect(["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]
+    .filter((name) => name in surface)).toEqual(
+    ["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]);
 });
 
 function recordsOf(overrides: Overrides = {}): Overrides {

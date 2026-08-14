@@ -10,6 +10,8 @@ import { consumeActivationGrant, validateActivationCommit, validateRuntimeBindin
 import { registerLaunchLock } from "../../supervisor/launch-lock.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
+import { CLAUDE_LAUNCH_SELECTION_LAYER, verifyLaunchSelection,
+  type ClaudeLaunchSelectionVerdict } from "./claude-launch-selection.js";
 import { directFailure, settleClaudeLaunch } from "./claude-launcher-lifecycle.js";
 import { decodeCommit, decodeDuplicate, decodeGrant, decodeLease, decodeRegistration,
   decodeRuntime, isSafeNativePromise, snapshotLaunchEntry, snapshotLauncherPorts,
@@ -54,6 +56,10 @@ export const CLAUDE_LAUNCHER_DEFAULTS: ClaudeLauncherDependencies = Object.freez
 const REQUEST_MALFORMED = "launch request is not bounded plain data";
 const PHASE = Object.freeze({
   duplicate: "the duplicate-delivery authority did not answer usably",
+  // Its own message, never another phase's, and deliberately free of every
+  // operand: naming the model, the effort or a flag here would echo the
+  // caller's configuration back out of a failure path.
+  selection: "the launch arguments do not prove the selection this launch declared",
   runtime: "runtime preparation did not answer usably",
   activation: "the activation-commit authority did not answer usably",
   binding: "the prepared runtime is not the runtime this activation committed",
@@ -129,6 +135,20 @@ export async function launchClaude(
     }
     return duplicateResult(decided.value);
   }
+  // WHAT is being launched has to be proven before anything can exist to launch
+  // it. This sits ahead of runtime preparation, grant consumption, lock
+  // acquisition and the boundary open, so a selection argv does not corroborate
+  // reaches none of them. Duplicate resolution is deliberately AHEAD of it:
+  // adoption opens no process and consumes no grant, and the process it adopts
+  // was gated by the launch that created it.
+  let selection: ClaudeLaunchSelectionVerdict;
+  try {
+    selection = verifyLaunchSelection(request.launchSelection, request.argv);
+  } catch {
+    return directFailure("CLAUDE_LAUNCH_SELECTION_MALFORMED",
+      CLAUDE_LAUNCH_SELECTION_LAYER, PHASE.selection);
+  }
+  if (!selection.ok) return directFailure(selection.code, selection.layer, PHASE.selection);
   const runtime = await containedAsync(() => ports.prepareRuntime(request.runtime), decodeRuntime);
   if (runtime.kind === "REFUSED") return directFailure(runtime.code, runtime.layer, PHASE.runtime);
   if (runtime.kind === "MALFORMED") {
