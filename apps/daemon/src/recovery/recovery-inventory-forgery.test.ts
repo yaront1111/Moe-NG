@@ -358,6 +358,27 @@ describe("item order and class-scoped identity are re-derived, not trusted", () 
     expect(refusedBytes({ ...record, items: [...record.items].reverse() })).toEqual(INCOHERENT);
   });
 
+  it("ranks declared population above identity inside one class", () => {
+    // Identities are chosen to CONTRADICT the declared population order, so an
+    // implementation that ordered by identity alone would emit the other
+    // sequence. Without this the two orders coincide and the rule is untested.
+    const record = reconciled({
+      ...baseInput(),
+      subjects: absentSubjects().map((subject) =>
+        subject.population === "EFFECT_LOCK_WRAPPER_REGISTRATION"
+          ? { ...subject, identity: "zzz-lock-registration" }
+          : subject.population === "PROVIDER_RUN"
+            ? { ...subject, identity: "aaa-provider-run" }
+            : subject,
+      ),
+    });
+    expect(record.items[0]?.identity).toBe("zzz-lock-registration");
+    expect(record.items[1]?.identity).toBe("aaa-provider-run");
+    expect(record.items[0]?.population).toBe("EFFECT_LOCK_WRAPPER_REGISTRATION");
+    // And the identity-sorted sequence is refused, not merely unproduced.
+    expect(refusedBytes(swap(record, 0, 1))).toEqual(INCOHERENT);
+  });
+
   it("refuses two populations of one class presented out of declared order", () => {
     // A class-grouping-only check would pass this: both items stay adjacent and
     // inside PROVIDER_PROCESS_LAUNCH_LOCK, only the population order inverts.

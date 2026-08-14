@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file. event-stream-contract.ts is 177 and event-stream.ts is 182 today."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "SPIDR slice 1 of 3 from task-1eeb2dccce204671b442704cd60b38ad and the only one with no unmet sibling dependency, so it is the claimable head. Siblings task-371c80bd94094db48b15d32eb8e4b931 and task-bcae0b7e74bd4590baf0d901039e5401 stay BACKLOG deliberately: both need the command identity this task puts on the wire, and promoting them now would let an architect plan against fields that do not exist yet. Promote them once this lands.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
   "priority": "HIGH",
@@ -32,5 +32,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:07:53.919Z",
-  "updatedAt": "2026-08-14T09:07:53.919Z"
+  "updatedAt": "2026-08-14T09:09:08.944Z"
 }

@@ -83,15 +83,15 @@ const EFFECT_INTENT = {
 } as const;
 
 function validPayload(): Record<string, unknown> {
-  return {
+  return structuredClone({
     budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: PROOF, record: LEASE_RECORD },
-    liveClaims: [],
+    liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
     slot: {
       dimension: "default", requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1",
     },
-  };
+  });
 }
 
 /**
@@ -560,10 +560,11 @@ describe("work.claim — the design-427 provider slot ceiling", () => {
     ["an entry whose state is not a string", [{ dimension: "default", slotRef: "s", state: 1 }]],
     ["an entry whose slotRef is not a string", [{ dimension: "default", slotRef: 2, state: "RESERVED" }]],
     ["one good entry followed by a bad one", [{ dimension: "default", slotRef: "s", state: "RESERVED" }, null]],
+    ["an entry carrying an extra own key", [{ dimension: "default", extra: true, slotRef: "s", state: "RESERVED" }]],
   ];
 
   it("covers every declared malformed-table shape", () => {
-    expect(malformedTables.length).toBe(8);
+    expect(malformedTables.length).toBe(9);
   });
 
   it.each(malformedTables)(
@@ -572,7 +573,11 @@ describe("work.claim — the design-427 provider slot ceiling", () => {
       const refusal = refusalOf(claimWithLive(table as never));
       expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
       expect(refusal.failure.leg).toBe("slotCeiling");
-      expect(Object.keys(refusal)).not.toContain("successors");
+      expect(refusal.failure.layer).toBe("AUTHORITY");
+      expect(refusal.failure.upstreamCode).toBeNull();
+      const keys = Object.keys(refusal);
+      expect(keys).not.toContain("successors");
+      for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
     },
   );
 });
@@ -657,7 +662,7 @@ interface Probe { hits: number }
 
 interface PoisonSpec {
   readonly label: string;
-  readonly apply: (value: Record<string, unknown>, probe: Probe) => unknown;
+  readonly apply: (value: object, probe: Probe) => unknown;
   /**
    * `true` when the poisoned node is a Proxy. Proxies are refused
    * CATEGORICALLY — `types.isProxy` answers before any trap can run — so these
@@ -668,34 +673,48 @@ interface PoisonSpec {
   readonly proxy: boolean;
 }
 
-function firstKeyOf(value: Record<string, unknown>): string {
-  const key = Reflect.ownKeys(value)[0];
-  if (typeof key !== "string") throw new Error("fixture record has no leading string key");
+function cloneNode(value: object): Record<string, unknown> | unknown[] {
+  return Array.isArray(value) ? [...value] : { ...value };
+}
+
+function firstEnumerableKeyOf(value: object): string {
+  const key = Reflect.ownKeys(value).find((candidate) => {
+    if (typeof candidate !== "string") return false;
+    return Object.getOwnPropertyDescriptor(value, candidate)?.enumerable === true;
+  });
+  if (key === undefined) throw new Error("fixture node has no enumerable string key");
   return key;
 }
 
-const POISONS: readonly PoisonSpec[] = [
+const CONTENT_POISONS: readonly PoisonSpec[] = [
   {
-    apply: (value) => ({ ...value, borrowedKey: 1 }),
+    apply: (value) => Object.assign(cloneNode(value), { borrowedKey: 1 }),
     label: "an extra own string key",
     proxy: false,
   },
+];
+
+const STRUCTURAL_POISONS: readonly PoisonSpec[] = [
   {
-    apply: (value) => ({ ...value, [Symbol("hostile")]: 1 }),
+    apply: (value) => Object.assign(cloneNode(value), { [Symbol("hostile")]: 1 }),
     label: "an own symbol key",
     proxy: false,
   },
   {
     // The getter must never run: the parser reads descriptors, not properties.
     apply: (value, probe) => {
-      const key = firstKeyOf(value);
-      const clone: Record<string, unknown> = { ...value };
+      const key = firstEnumerableKeyOf(value);
+      const clone = cloneNode(value);
+      const original = Object.getOwnPropertyDescriptor(value, key);
+      if (original === undefined || !("value" in original)) {
+        throw new Error("fixture node does not carry an own data property");
+      }
       Object.defineProperty(clone, key, {
         configurable: true,
         enumerable: true,
         get: () => {
           probe.hits += 1;
-          return value[key];
+          return original.value;
         },
       });
       return clone;
@@ -706,6 +725,11 @@ const POISONS: readonly PoisonSpec[] = [
   {
     apply: (value) => Object.create({ inherited: true }, Object.getOwnPropertyDescriptors(value)),
     label: "a borrowed prototype",
+    proxy: false,
+  },
+  {
+    apply: () => () => undefined,
+    label: "a function value",
     proxy: false,
   },
   {
@@ -789,8 +813,8 @@ interface HostileTarget {
   readonly path: readonly string[];
 }
 
-/** Each target names the leg that OWNS it, so a fault cannot drift legs. */
-const HOSTILE_TARGETS: readonly HostileTarget[] = [
+/** Content validation belongs only at nodes with an exact-key owner. */
+const CONTENT_TARGETS: readonly HostileTarget[] = [
   { label: "the outer payload", leg: "lease", path: [] },
   { label: "the lease section", leg: "lease", path: ["lease"] },
   { label: "the slot section", leg: "providerSlot", path: ["slot"] },
@@ -798,6 +822,74 @@ const HOSTILE_TARGETS: readonly HostileTarget[] = [
   { label: "the effect section", leg: "effectIntent", path: ["effect"] },
   { label: "the effect command", leg: "effectIntent", path: ["effect", "command"] },
 ];
+
+/** Every object/array path, with aliases enumerated at each reachable path. */
+function discoverNodePaths(
+  value: unknown,
+  path: readonly string[] = [],
+  paths: string[][] = [],
+): readonly string[][] {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) return paths;
+  paths.push([...path]);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string" || key === "length") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !("value" in descriptor)) continue;
+    discoverNodePaths(descriptor.value, [...path, key], paths);
+  }
+  return paths;
+}
+
+const EXPECTED_NODE_PATHS = [
+  "",
+  "budget",
+  "budget.admission",
+  "budget.admission.amounts",
+  "budget.admission.amounts.0",
+  "budget.admission.amounts.1",
+  "budget.admission.amounts.2",
+  "budget.admission.amounts.3",
+  "budget.admission.amounts.4",
+  "budget.gate",
+  "budget.gate.allowance",
+  "budget.view",
+  "budget.view.meters",
+  "budget.view.meters.0",
+  "effect",
+  "effect.command",
+  "effect.intent",
+  "effect.intent.leaseBinding",
+  "lease",
+  "lease.proof",
+  "lease.record",
+  "liveClaims",
+  "liveClaims.0",
+  "slot",
+  "slot.rows",
+  "slot.rows.0",
+] as const;
+
+const LEG_BY_ROOT: Readonly<Record<string, string>> = Object.freeze({
+  "": "lease",
+  budget: "budgetReservation",
+  effect: "effectIntent",
+  lease: "lease",
+  liveClaims: "lease",
+  slot: "providerSlot",
+});
+
+function legForPath(path: readonly string[]): string {
+  const root = path[0] ?? "";
+  const leg = LEG_BY_ROOT[root];
+  if (leg === undefined) throw new Error(`fixture path ${path.join(".")} has no owning leg`);
+  return leg;
+}
+
+const HOSTILE_TARGETS: readonly HostileTarget[] = discoverNodePaths(validPayload()).map((path) => ({
+  label: path.length === 0 ? "the outer payload" : path.join("."),
+  leg: legForPath(path),
+  path,
+}));
 
 interface HostileCase {
   readonly label: string;
@@ -824,23 +916,37 @@ function nodeAt(root: unknown, path: readonly string[]): unknown {
   return node;
 }
 
-const HOSTILE_CASES: readonly HostileCase[] = HOSTILE_TARGETS.flatMap((target) =>
-  POISONS.map((poison): HostileCase => ({
+function replaceNode(root: Record<string, unknown>, path: readonly string[], value: unknown): unknown {
+  if (path.length === 0) return value;
+  const leaf = path[path.length - 1];
+  if (leaf === undefined) throw new Error("hostile target path is empty");
+  const parent = nodeAt(root, path.slice(0, -1));
+  if ((typeof parent !== "object" && typeof parent !== "function") || parent === null) {
+    throw new Error(`hostile parent ${path.slice(0, -1).join(".")} is not a node`);
+  }
+  (parent as Record<string, unknown>)[leaf] = value;
+  return root;
+}
+
+function hostileCases(
+  targets: readonly HostileTarget[],
+  poisons: readonly PoisonSpec[],
+): readonly HostileCase[] {
+  return targets.flatMap((target) => poisons.map((poison): HostileCase => ({
     build: (probe) => {
       const payload = validPayload();
-      if (target.path.length === 0) return poison.apply(payload, probe);
-      const leaf = target.path[target.path.length - 1];
-      if (leaf === undefined) throw new Error("hostile target path is empty");
-      const parent = at(payload, ...target.path.slice(0, -1));
-      parent[leaf] = poison.apply(at(payload, ...target.path), probe);
-      return payload;
+      const poisoned = poison.apply(nodeAt(payload, target.path) as object, probe);
+      return replaceNode(payload, target.path, poisoned);
     },
     label: `${target.label} carrying ${poison.label}`,
     leg: target.leg,
     path: target.path,
     proxy: poison.proxy,
-  })),
-);
+  })));
+}
+
+const HOSTILE_CASES = hostileCases(HOSTILE_TARGETS, STRUCTURAL_POISONS);
+const CONTENT_CASES = hostileCases(CONTENT_TARGETS, CONTENT_POISONS);
 
 const HELD_CLAIM = { dimension: "default", slotRef: "s", state: "RELEASED" };
 
@@ -953,15 +1059,27 @@ function liveClaimProxyAt(table: unknown): "none" | "table" | "element" {
 
 describe("work.claim — hostile shapes refuse before any successor exists", () => {
   it("generated a positive, hand-counted case matrix", () => {
-    expect(POISONS.length).toBe(10);
-    expect(HOSTILE_TARGETS.length).toBe(6);
-    expect(HOSTILE_CASES.length).toBe(60);
+    expect(STRUCTURAL_POISONS.length).toBe(10);
+    expect(CONTENT_POISONS.length).toBe(1);
+    expect(HOSTILE_TARGETS.length).toBe(26);
+    expect(HOSTILE_CASES.length).toBe(260);
+    expect(CONTENT_TARGETS.length).toBe(6);
+    expect(CONTENT_CASES.length).toBe(6);
     expect(LIVE_CLAIM_CASES.length).toBe(10);
-    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(60);
+    expect(new Set(HOSTILE_CASES.map((hostile) => hostile.label)).size).toBe(260);
     // Hand-counted so a poison silently dropped from the proxy family — the
     // family QA proved was granted — shrinks the matrix instead of passing.
-    expect(POISONS.filter((poison) => poison.proxy).length).toBe(6);
+    expect(STRUCTURAL_POISONS.filter((poison) => poison.proxy).length).toBe(6);
     expect(LIVE_CLAIM_CASES.filter((live) => live.proxyAt !== "none").length).toBe(5);
+  });
+
+  it("discovers every hand-written object and array path", () => {
+    const discovered = HOSTILE_TARGETS.map((target) => target.path.join(".")).sort();
+    expect(discovered).toStrictEqual([...EXPECTED_NODE_PATHS].sort());
+    expect(discovered).toContain("liveClaims.0");
+    expect(discovered).toContain("slot.rows.0");
+    expect([...new Set(HOSTILE_TARGETS.map((target) => target.path[0] ?? ""))].sort())
+      .toStrictEqual(Object.keys(LEG_BY_ROOT).sort());
   });
 
   it.each(HOSTILE_CASES.map((hostile) => [hostile.label, hostile] as const))(
@@ -982,6 +1100,23 @@ describe("work.claim — hostile shapes refuse before any successor exists", () 
       // Every trap here is attacker code. A proxy is refused for BEING one, so
       // not one of its traps may run — including the descriptor and ownKeys
       // traps the parser used to consult before deciding.
+      expect(probe.hits).toBe(0);
+    },
+  );
+
+  it.each(CONTENT_CASES.map((hostile) => [hostile.label, hostile] as const))(
+    "refuses content violation %s at its exact-key owner",
+    (_label, hostile) => {
+      const probe: Probe = { hits: 0 };
+      const payload = hostile.build(probe);
+      const refusal = refusalOf(claimWork(payload));
+      expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+      expect(refusal.failure.leg).toBe(hostile.leg);
+      expect(refusal.failure.layer).toBe("AUTHORITY");
+      expect(refusal.failure.upstreamCode).toBeNull();
+      const keys = Object.keys(refusal);
+      expect(keys).not.toContain("successors");
+      for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
       expect(probe.hits).toBe(0);
     },
   );
@@ -1349,6 +1484,61 @@ function descriptorShape(value: unknown): unknown {
   };
 }
 
+interface AccessorGraph {
+  readonly accessors: number;
+  readonly nodes: number;
+  readonly value: unknown;
+}
+
+/** Rebuilds the entire graph with counting accessors without reading through it. */
+function countingAccessorGraph(root: unknown, probe: Probe): AccessorGraph {
+  const copies = new WeakMap<object, object>();
+  let accessors = 0;
+  let nodes = 0;
+  const copy = (value: unknown): unknown => {
+    if (typeof value !== "object" || value === null) return value;
+    const prior = copies.get(value);
+    if (prior !== undefined) return prior;
+    const clone: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
+    copies.set(value, clone);
+    nodes += 1;
+    for (const key of Reflect.ownKeys(value)) {
+      if (key === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+        throw new Error("valid fixture contains a non-enumerable or accessor property");
+      }
+      const child = copy(descriptor.value);
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          probe.hits += 1;
+          return child;
+        },
+      });
+      accessors += 1;
+    }
+    return clone;
+  };
+  const value = copy(root);
+  return { accessors, nodes, value };
+}
+
+function ownDescriptorSnapshot(value: object): readonly unknown[] {
+  return Reflect.ownKeys(value).map((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) throw new Error("reachable own key has no descriptor");
+    return [
+      key,
+      descriptor.configurable,
+      descriptor.enumerable,
+      "value" in descriptor ? descriptor.value : descriptor.get,
+      "value" in descriptor ? descriptor.writable : descriptor.set,
+    ];
+  });
+}
+
 /**
  * A payload a real caller still holds after the call, with ONE lease record in
  * both the lease section and the intent's binding — the exact shape QA used to
@@ -1361,6 +1551,40 @@ function mutablePayload(): Record<string, unknown> {
 }
 
 describe("work.claim — the caller's graph is neither frozen nor retained", () => {
+  it("reads no accessor anywhere in a fully instrumented input graph", () => {
+    const probe: Probe = { hits: 0 };
+    const instrumented = countingAccessorGraph(validPayload(), probe);
+    expect(instrumented.nodes).toBe(25);
+    expect(instrumented.accessors).toBe(94);
+    const refusal = refusalOf(claimWork(instrumented.value));
+    expect(probe.hits).toBe(0);
+    expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
+    expect(refusal.failure.layer).toBe("AUTHORITY");
+    expect(refusal.failure.leg).toBe("lease");
+    expect(refusal.failure.upstreamCode).toBeNull();
+    const keys = Object.keys(refusal);
+    expect(keys).not.toContain("successors");
+    for (const key of SUCCESSOR_KEYS) expect(keys).not.toContain(key);
+  });
+
+  it("retains no input identity and changes no input descriptor after a grant", () => {
+    const payload = validPayload();
+    const inputNodes = reachable(payload);
+    expect(inputNodes.size).toBe(25);
+    expect(inputNodes.has(nodeAt(payload, ["liveClaims", "0"]) as object)).toBe(true);
+    const before = new Map(
+      [...inputNodes].map((node) => [node, ownDescriptorSnapshot(node)] as const),
+    );
+    const grant = grantOf(claimWork(payload));
+    const published = [...reachable(grant.successors)];
+    expect(published.length).toBeGreaterThan(10);
+    expect(published.filter((node) => inputNodes.has(node))).toStrictEqual([]);
+    for (const node of inputNodes) {
+      expect(Object.isFrozen(node)).toBe(false);
+      expect(ownDescriptorSnapshot(node)).toStrictEqual(before.get(node));
+    }
+  });
+
   it("shares one mutable lease record across the sections it hands over", () => {
     const payload = mutablePayload();
     expect(at(payload, "effect", "intent")["leaseBinding"]).toBe(at(payload, "lease")["record"]);

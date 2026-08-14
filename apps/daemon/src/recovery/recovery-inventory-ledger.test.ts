@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createNodeRecoveryCryptoPort } from "./recovery-incarnation.node.js";
 import { createRecoveryIncarnationService } from "./recovery-incarnation.js";
-import type { RecoveryIncarnationBinding } from "./recovery-incarnation-contract.js";
+import type { RestoreIncarnationBinding } from "./recovery-incarnation-contract.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
   RECOVERY_INVENTORY_POPULATIONS,
@@ -79,7 +79,7 @@ const writeRequest = Object.freeze({
 
 const mintBinding = async (
   backupGenerationDigest: string,
-): Promise<RecoveryIncarnationBinding> => {
+): Promise<RestoreIncarnationBinding> => {
   const service = createRecoveryIncarnationService(createNodeRecoveryCryptoPort());
   const minted = await service.mint({
     backupGenerationDigest,
@@ -90,7 +90,7 @@ const mintBinding = async (
 };
 
 interface Prepared {
-  readonly binding: RecoveryIncarnationBinding;
+  readonly binding: RestoreIncarnationBinding;
   readonly path: string;
   readonly store: SqliteEventStore;
 }

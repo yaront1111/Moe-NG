@@ -1,0 +1,37 @@
+{
+  "id": "task-371c80bd94094db48b15d32eb8e4b931",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Live control-room timing consumer edge",
+  "description": "Objective: give the existing timing evaluator a REAL production consumer that feeds it observed timestamps, replacing the current state where only tests ever call it. Deliverable: the live control-room path records its own client-received and surface-rendered observations against an injected clock, carries the daemon's command identity through the live feed, and at least one actual live surface calls evaluateTiming/describeTimingReceipt with those observed values. SPIDR slice 2 of 3 from parent task-1eeb2dccce204671b442704cd60b38ad. HARD DEPENDENCY on sibling task-1430dfae1a0e4e8c88fafc7bf011ba9f, which puts command identity and daemon readings on the wire; re-measure that those fields exist on disk before planning against them and report blocked if absent. MEASURED AT HEAD 6ffb4fe (re-measure, this WILL be stale): apps/control-room/src/performance/timing.ts:162 evaluateTiming is pure and takes CALLER-SUPPLIED {start,end} pairs; grep shows its only call sites are command-latency.test.tsx and timing.test.ts - ZERO production callers. Production command-latency.tsx:5 imports only describeTimingReceipt and measureElapsed and receives the receipt as a PROP, so production renders a receipt it never computes. live-event-feed.ts:13 LiveEventRow is {aggregateId, committedAt, eventId, eventType, position} and its header states rows copy the wire fields and add nothing. measureElapsed already exists and already returns TIMING_CLOCK_UNAVAILABLE with no clock - reuse it, do not write a second elapsed helper. KNOWN HAZARD: packages/control-room-client/src/generated/generated-client.ts is marked GENERATED FILE - DO NOT EDIT BY HAND, source of truth @moe/contracts, regenerate with pnpm --filter @moe/control-room-client generate; if the client must carry new fields, that is a contracts+codegen task, so report blocked rather than hand-editing generated output. NOT in scope: daemon-side emission, decision-effort/attention/focus records, benchmark statistics or thresholds. Verification: pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm typecheck.",
+  "definitionOfDone": [
+    "At least one actual live control-room surface calls evaluateTiming and describeTimingReceipt with timestamps OBSERVED on the live path, not fixture values and not props supplied by a test; the call site is production code reachable from the live app.",
+    "Client-received and surface-rendered observations are recorded separately against an injected clock, and the live event rows carry the daemon's command identity so a receipt can be attributed to one command.",
+    "System latency and response time remain separate phases; no code path sums, averages or collapses the four named phases into one number.",
+    "A missing clock, a missing observation or a cross-clock pair yields the existing exact UNKNOWN code (TIMING_CLOCK_UNAVAILABLE, TIMING_SOURCE_ABSENT, TIMING_SOURCE_UNPARSEABLE, TIMING_NEGATIVE_INTERVAL) with its observer - never zero, never an absolute value, never an interpolated duration.",
+    "Tests prove the REAL edge: a live-path test drives the production call site and asserts the rendered receipt, and a mutation that bypasses the production render timestamp turns a named live test red. Refusal tests pin exact code and observer; generated phase cases assert a nonzero exact cardinality covering every timing split.",
+    "Fresh pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm typecheck exits 0."
+  ],
+  "taskRails": [
+    "Do not hand-edit packages/control-room-client/src/generated/generated-client.ts; it is generated from @moe/contracts. If new client fields are needed, report blocked and name a contracts/codegen task.",
+    "Do not collapse server, stream/client receipt, render and human time; response time is not system latency.",
+    "Do not compare cross-machine timestamps without an explicit shared observer or clock-offset uncertainty; unresolved skew stays UNKNOWN.",
+    "Reuse the landed measureElapsed/fromInterval discipline in timing.ts rather than writing a second elapsed or skew helper.",
+    "Instrumentation is observational and grants no authority or evidence strength.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
+  "priority": "HIGH",
+  "order": 30.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-14T09:08:21.413Z",
+  "updatedAt": "2026-08-14T09:08:21.413Z"
+}

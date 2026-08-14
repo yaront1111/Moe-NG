@@ -33,28 +33,41 @@
     {
       "stepId": "step-2",
       "description": "TDD RED 1 — make the generator find the depths nobody listed. In work-claim.test.ts, `HOSTILE_TARGETS` is six hand-written paths of depth 0-2 (`[]`, `lease`, `slot`, `budget`, `effect`, `effect.command`); that hand-listing is the test-side twin of the production bug, because no target ever reaches an array element. Replace it with a MECHANICAL walk of the valid payload that enumerates every object and array node path, INCLUDING array element paths, dot-joined. Two changes make the walk meaningful: (a) the sweep's base payload must carry a non-empty `liveClaims` (today `validPayload()` has `liveClaims: []`, so an element path cannot exist and the sweep would silently cover nothing at that depth) — use one RESERVED entry so the ceiling still passes at 1 of 4; (b) assert the discovered path set against a HAND-WRITTEN sorted array of dot-joined paths, deliberately NOT derived from the walk, so a fixture change reddens loudly instead of shrinking coverage silently — and assert the set contains `liveClaims.0` and `slot.rows.0` by name, the two depths reopen #2 and its neighbours live at. Split the existing 10 POISONS into STRUCTURAL (own accessor, own symbol key, custom prototype, function value, and all six proxy variants — things `detach` refuses at ANY depth, structurally, before upstream sees anything) and CONTENT (an extra own string key — `detach` copies it and the upstream validator decides, so its outcome is leg-specific and it must NOT be swept blindly). Assert both counts hand-written. Sweep STRUCTURAL x EVERY discovered path, asserting per case: `WORK_PAYLOAD_MALFORMED`, layer AUTHORITY, the owning leg from a hand-written path-root -> leg map (`lease`/`liveClaims`/root -> \"lease\", `slot` -> \"providerSlot\", `budget` -> \"budgetReservation\", `effect` -> \"effectIntent\"), null upstreamCode, no `successors` key and none of the five SUCCESSOR_KEYS, and `probe.hits === 0`. Keep the CONTENT poison on the section-level targets where the exact-key check owns the outcome. Assert the map covers every discovered root. Expect RED today at `liveClaims.0` with the accessor poison — that is QA's exact reproduction; record the failure text.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "TDD RED 1. validPayload now contains one RESERVED live claim (1/4) and returns a fresh structuredClone so generated mutations cannot poison shared fixtures. A descriptor-based mechanical walk discovered 26 object/array paths; the suite pins all 26 against a hand-written sorted list, explicitly requires liveClaims.0 and slot.rows.0, and proves the hand-written root->owning-leg map covers every discovered root. Split poisons into 10 STRUCTURAL (symbol/accessor/custom prototype/function/six proxy variants) swept across all 26 paths = 260 positive hand-counted cases, plus 1 CONTENT poison across six exact-key-owned section paths. Exact code/layer/leg/upstream, no successor keys, and zero probe hits are asserted. Focused command `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/work-claim.test.ts` RED as intended: 1 file, 380 tests, 4 failed/376 passed. The exact liveClaims.0 failures are: symbol/accessor/borrowed prototype were incorrectly GRANTED; function refused at slotCeiling instead of the required lease boundary. This is the production gap, not a test error.",
+      "startedAt": "2026-08-14T09:08:07.582Z",
+      "completedAt": "2026-08-14T09:11:04.238Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED 2 — the two property assertions no per-case fixture can replace. (A) WHOLE-GRAPH ZERO-READ: build the valid payload with EVERY node at EVERY depth instrumented so each own property is an enumerable counting accessor, call claimWork, and assert the counter is EXACTLY zero, the refusal is WORK_PAYLOAD_MALFORMED / AUTHORITY / leg \"lease\" / null upstream, and no successor key exists. This is the assertion that would have caught all three rejections: a matrix of hostile fixtures only covers the depths someone thought of, and the counter finds the one they did not. (B) GRANTED-SIDE NON-RETENTION: on a fully valid payload (with one live claim element, so element copies are covered too), snapshot every input node's own-property descriptors and frozen state BEFORE the call; after a granted claim, walk the ENTIRE successor graph and the ENTIRE input graph and assert no object identity is shared at any depth, then assert every input node is still non-frozen with byte-identical descriptors. Note the fixture already aliases `EFFECT_INTENT.leaseBinding` to `LEASE_RECORD`, which is precisely the shared node reject #1b travelled through — a top-level or JSON comparison passes while that alias survives, so the walk must be recursive and identity-based, not structural. (C) Add the element-exactness case to `malformedTables` (8 -> 9, with the hand-written count updated): a live claim element carrying an extra own string key alongside the three counted fields must refuse WORK_PAYLOAD_MALFORMED at leg \"slotCeiling\" — QA's finding names extras as well as accessors and prototypes. Run only these tests and record the RED for each.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "TDD RED 2. Added a whole-graph accessor builder that instruments all 25 unique caller nodes / 94 enumerable own properties (the 26th discovered path is the deliberate lease-record alias) without reading them; claimWork refuses WORK_PAYLOAD_MALFORMED/AUTHORITY/lease/null with zero getter hits and no successor fields. Added granted-side recursive identity/descriptor proof over a valid payload containing liveClaims.0: 25 input nodes, full successor walk has zero shared identity, every input node remains unfrozen, and each exact own descriptor is unchanged. Added ninth malformed live-claim table case for an element carrying an extra own key, with exact code WORK_PAYLOAD_MALFORMED, leg slotCeiling, layer AUTHORITY, null upstream and no successor keys. Focused file run: 383 tests, 5 failed/378 passed. Whole-graph zero-read and granted non-retention tests are green against already-landed prior fixes; new exact-key case RED because production incorrectly GRANTS. The four step-2 liveClaims.0 structural reds remain (symbol/accessor/prototype granted; function refuses at slotCeiling instead of lease), precisely isolating the remaining production hole.",
+      "startedAt": "2026-08-14T09:11:09.420Z",
+      "completedAt": "2026-08-14T09:12:51.982Z"
     },
     {
       "stepId": "step-4",
       "description": "PRODUCTION — close the property, not the reported line. One primitive, applied at every depth. In work-claim-shape.ts, `mirrorList` must stop being a second, weaker copy routine: delete its by-reference element path (line 150's proxy-only element check included) and route the array through the SAME `detach`/`detachList` recursion every other section already uses, returning null where that recursion answers UNSAFE. Keep `types.isProxy` before `Array.isArray`. The result is that liveClaims elements arrive at `countOccupyingSlots` as daemon-owned own-data records, which closes accessors, inherited prototype fields, element proxies, functions and nested holes CATEGORICALLY rather than case by case. Rewrite the file's header comment to state the invariant as one property: every exported helper returns daemon-owned own data, with the single deliberate exception of the shallow `mirror` used to route the outer record — whose section values are never read by anything before that section's own deep snapshot, and the audit table from step 1 is the evidence. In work-slot-ceiling.ts, make `countOccupyingSlots` refuse an element carrying any own key outside {dimension, slotRef, state}, keeping the existing WORK_PAYLOAD_MALFORMED / \"slotCeiling\" mapping so no existing leg attribution moves. In work-claim.ts, update the now-false `readClaimSections` comment (\"every section value stays unvalidated\") to state the routing invariant precisely. Do NOT touch work-kernel.ts, the scheduler, the runner, or daemon index exports — DoD 1/3/5 are already satisfied and QA confirmed the closure, shifted view, dimension, fixed command and exports are present; this step must not disturb them. Verify every existing refusal keeps its leg: a null/string/numeric/nested-array element still refuses at \"slotCeiling\" after the deep snapshot because primitives and arrays pass through `detach` unchanged and fail `isRecord` exactly as before.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim-shape.ts",
         "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:12:56.636Z"
     },
     {
       "stepId": "step-5",
@@ -134,12 +147,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T09:07:59.136Z",
+  "updatedAt": "2026-08-14T09:12:56.636Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 13,
+    "executedStepCount": 15,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -160,7 +173,9 @@
     }
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T09:01:10.471Z",

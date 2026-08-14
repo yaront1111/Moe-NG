@@ -310,10 +310,12 @@ describe("decoder re-derives the item-to-proof provenance link", () => {
     const decoded = decodeRecoveryReconciliationRecord(new TextEncoder().encode(tampered));
     expect(decoded.ok).toBe(false);
     if (decoded.ok) throw new Error("unreachable");
-    // The STRUCTURAL guard must answer before the digest guard, or a forged
-    // record whose digest was recomputed would decode as authoritative.
+    // The SEMANTIC guard must answer before the digest guard, or a forged
+    // record whose digest was recomputed would decode as authoritative. It is
+    // INCOHERENT rather than NONCANONICAL because these bytes are a perfectly
+    // well-formed spelling — what they assert is what cannot be true.
     expect(decoded.upstream).toEqual({
-      code: "RECOVERY_INVENTORY_RECORD_NONCANONICAL",
+      code: "RECOVERY_INVENTORY_RECORD_INCOHERENT",
       layer: "RECOVERY_INVENTORY",
     });
   });
@@ -326,6 +328,22 @@ describe("decoder re-derives the item-to-proof provenance link", () => {
     const text = new TextDecoder().decode(encodeRecoveryReconciliationRecord(record));
     expect(text.split('"disposition":"UNKNOWN"')).toHaveLength(2);
     const tampered = text.replace('"disposition":"UNKNOWN"', '"disposition":"ABSENT"');
+    const decoded = decodeRecoveryReconciliationRecord(new TextEncoder().encode(tampered));
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) throw new Error("unreachable");
+    expect(decoded.upstream).toEqual({
+      code: "RECOVERY_INVENTORY_RECORD_INCOHERENT",
+      layer: "RECOVERY_INVENTORY",
+    });
+  });
+
+  it("still answers NONCANONICAL for a malformed spelling, not INCOHERENT", () => {
+    // The separation is load-bearing: if every structural fault collapsed onto
+    // one code, a test asserting it could not tell a shape reader from a
+    // re-derived invariant. A duplicate key is pure spelling.
+    const record = reconciled(baseInput());
+    const text = new TextDecoder().decode(encodeRecoveryReconciliationRecord(record));
+    const tampered = text.replace('{"schemaVersion"', '{"truth":"COMPLETE","schemaVersion"');
     const decoded = decodeRecoveryReconciliationRecord(new TextEncoder().encode(tampered));
     expect(decoded.ok).toBe(false);
     if (decoded.ok) throw new Error("unreachable");

@@ -19,7 +19,7 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": "architect-2aea4111",
   "branch": null,
   "prLink": null,
@@ -39,11 +39,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-14T09:04:42.097Z",
+  "updatedAt": "2026-08-14T09:09:34.859Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:36.184Z"
   },
   "contextFetchedBy": [
     "architect-2aea4111"
-  ]
+  ],
+  "blockedReason": "OVERSIZED, SPIDR-split into 3 children. NOT blocked on a missing dependency — the description's gap measurement is ACCURATE; the task just cannot be planned within the plan-shape thresholds.\n\nSize: needs >=13 distinct files against the 10 hard cap, across 3-4 packages (@moe/daemon, @moe/control-room, @moe/control-room-client, plus @moe/contracts if the generated client changes), ~15 steps against the 12 cap. Split on plan shape, never LOC.\n\nChildren created (parentTaskId set):\n1. task-1430dfae1a0e4e8c88fafc7bf011ba9f Daemon stream command identity + server timing observations — promoted to PLANNING, the claimable head.\n2. task-371c80bd94094db48b15d32eb8e4b931 Live control-room timing consumer edge — BACKLOG, hard-depends on 1.\n3. task-bcae0b7e74bd4590baf0d901039e5401 Decision-effort and attention observation records — BACKLOG, depends on 1.\n\n2 and 3 are deliberately BACKLOG so nobody plans against wire fields that do not exist yet. PROMOTE THEM ONCE 1 LANDS or this epic stalls silently.\n\nRe-measured at HEAD 6ffb4fe (description cited 2b15b8f). All four gap claims CONFIRMED: StreamEvent/WireEvent are exactly 5 fields, no commandId/actor/session (event-stream-contract.ts:30); LiveEventRow copies wire fields and adds nothing (live-event-feed.ts:13); evaluateTiming has ZERO production callers — command-latency.tsx takes the receipt as a PROP, only tests call it; the attention/effort domain does not exist at all (grep attentionSwitch/focusInterval/decisionEffort/recoveryBurden = zero files; positive control, same grep form for committedAt = 60 files).\n\nTwo hazards recorded in the children: packages/store is NOT owned by the stream seam (its own header says so), and generated-client.ts is codegen from @moe/contracts marked DO NOT EDIT BY HAND.\n\nRe-plan this parent as the final integration/hardening slice — cross-package mutation drills and the 4-package gate — after the children land.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-14T09:09:34.859Z"
 }

@@ -1,0 +1,36 @@
+{
+  "id": "task-bcae0b7e74bd4590baf0d901039e5401",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Decision-effort and attention observation records",
+  "description": "Objective: give the control-room a way to record what a human actually had to do, as frozen observations with explicit provenance, so human-effort claims rest on recorded evidence rather than on inference. Deliverable: a focused observation domain that records demanded decision commands, free interactions, attention switches, focus/away intervals, recovery actions and recovery burden, and scroll/focus evidence, each frozen, each naming its source, and each attributable to a command identity. SPIDR slice 3 of 3 from parent task-1eeb2dccce204671b442704cd60b38ad. DEPENDS on sibling task-1430dfae1a0e4e8c88fafc7bf011ba9f for the command identity that makes attribution possible; re-measure that identity exists on disk before planning against it. MEASURED AT HEAD 6ffb4fe (re-measure, this WILL be stale): a repo-wide grep for attentionSwitch, focusInterval, decisionEffort, DecisionEffort and recoveryBurden across apps and packages returns ZERO files, verified against a positive control (the same grep form for committedAt returns 60 files), so this domain does not exist in any form and nothing is being duplicated. The existing timing.ts UNKNOWN vocabulary (TIMING_SOURCE_ABSENT, TIMING_SOURCE_UNPARSEABLE, TIMING_NEGATIVE_INTERVAL, TIMING_CLOCK_UNAVAILABLE) is the precedent to follow for absent/unparseable observations - extend that discipline rather than inventing a parallel one. NOT in scope: daemon-side emission, the timing consumer edge, benchmark statistics, thresholds, gate scoring, competitor screen-capture, or any claim about how much effort is acceptable. Verification: pnpm --filter @moe/control-room test && pnpm typecheck.",
+  "definitionOfDone": [
+    "Demanded decision commands, free interactions, attention switches, recovery actions with their burden, and scroll/focus evidence are each emitted as FROZEN observation records carrying an explicit source/provenance field; no record is mutable and none is inferred from another.",
+    "The domain distinguishes create/approve/accept from any ADDITIONAL demanded decision, so a surface that demands a second decision is recorded as such rather than folded into the first.",
+    "Focus and away intervals are recorded SEPARATELY from each other and from any timing duration; an unterminated or overlapping interval yields a stable UNKNOWN code plus exact layer rather than a zero, a negative, or a silently closed interval.",
+    "An absent, unparseable or contradictory observation returns the exact stable reason code and layer following the existing timing.ts UNKNOWN precedent; nothing is interpolated and no observation is invented from a default.",
+    "Refusal tests pin exact code AND layer; generated cases assert a nonzero exact cardinality covering EVERY decision kind and EVERY interval state, and a mutation that weakens the decision-command attribution guard turns a named test red.",
+    "Fresh pnpm --filter @moe/control-room test && pnpm typecheck exits 0."
+  ],
+  "taskRails": [
+    "Instrumentation is observational and grants NO authority or evidence strength; a recorded effort observation never becomes a verdict, a score, or a threshold.",
+    "No benchmark thresholds, gate scoring, competitor screen-capture or confirmatory corpus bytes belong here.",
+    "Do not infer one observation from another; a free interaction is not a demanded decision, and an away interval is not the absence of a focus interval.",
+    "Follow the existing timing.ts UNKNOWN vocabulary and observer-binding discipline rather than inventing a parallel reason-code family.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file. Prefer two focused modules (record vocabulary, collector) over one large one."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
+  "priority": "HIGH",
+  "order": 30.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-14T09:08:44.795Z",
+  "updatedAt": "2026-08-14T09:08:44.795Z"
+}

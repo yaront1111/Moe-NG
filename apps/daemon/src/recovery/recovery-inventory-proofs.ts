@@ -51,6 +51,10 @@ const PROOF_REFUSALS = Object.freeze({
     local("RECOVERY_INVENTORY_PROOF_CLASS_UNKNOWN"),
     "A supplied proof named a class the frozen mapping does not declare.",
   ),
+  TRUTH_CONTRADICTS: recoveryInventoryRefusal(
+    local("RECOVERY_INVENTORY_PROOF_TRUTH_CONTRADICTS"),
+    "A supplied proof asserted complete coverage while carrying an upstream refusal.",
+  ),
 });
 
 export type RecoveryProofIndex = ReadonlyMap<RecoveryProofClass, RecoveryConfiguredProof>;
@@ -76,6 +80,14 @@ export function indexConfiguredProofs(
     if (index.has(proofClass)) return PROOF_REFUSALS.ROW_DUPLICATE;
     if (proof.sourceProofDigest === RECOVERY_UNKNOWN_PROOF_DIGEST) {
       return PROOF_REFUSALS.DIGEST_RESERVED;
+    }
+    // COMPLETE means "this adapter enumerated the whole population and proved
+    // it". A row asserting that WHILE reporting an upstream refusal states two
+    // facts that cannot both hold, and the normalisation below would have
+    // resolved it by keeping COMPLETE and dropping the refusal on the floor —
+    // laundering an adapter's own admission of incomplete coverage into proof.
+    if (proof.truth === "COMPLETE" && proof.upstream !== null) {
+      return PROOF_REFUSALS.TRUTH_CONTRADICTS;
     }
     index.set(proofClass, proof);
   }

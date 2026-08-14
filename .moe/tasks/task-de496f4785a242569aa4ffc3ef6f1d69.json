@@ -20,106 +20,69 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE, DO NOT WRITE. HEAD moves under this shared worktree and task-c81953d2 is editing claude-launcher.ts in parallel. Confirm: (a) `grep -rn \"runtimeObservationDigest\" packages/runner/src/providers/` still returns zero hits — if it does not, the gap has been closed by someone else and you must STOP and report_blocked rather than land a duplicate; (b) effect-activation.ts still refuses PROVIDER_CAPABILITY_CHANGED with leg `runtimeObservation` at the comparison near line 215, and `refuse()` still maps a non-null leg to layer ACTIVATION; (c) claude-runtime-pin.ts still sources `quotedObservationDigest` from `quote.digest` via `readQuote(request.quotedObservation)`; (d) every `COMMIT` reference in claude-launcher.test.ts is still inside an `it(...)` body and none is in a `describe` body; (e) `grep -c ''` on effect-grant.ts, effect-activation.ts, claude-launcher.ts, claude-launcher-test-fixtures.ts and record the pre-change counts you must stay at or under. Record all five in the step note.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-activation.ts",
         "packages/runner/src/supervisor/effect-grant.ts",
         "packages/runner/src/providers/claude/claude-launcher.ts"
-      ],
-      "note": "RE-MEASURE after qa_reject #1 (rejection was NOT about my bytes; it was the shared-tree gate red from live peer WIP).\n\nSTATE OF THE WORK: steps 2-6 already landed in commit b08d95b (\"feat(task-de496f...): bind the prepared runtime to the committed activation\"), which is in history behind HEAD d7a71cb. acfd5c8 is the Moe hook's whole-tree .moe-only commit carrying the same task id (board state, no source). Merge-base of my work = 35f7b7f.\n\n(a) grep -rn \"runtimeObservationDigest\" providers/ -> now NON-zero because MY commit closed it; guard verified present and unclobbered in the working tree: claude-launcher.ts:8 imports validateRuntimeBinding, :170 calls it with runtime.value.quotedObservationDigest.\n(b) Authoritative mapping preserved and single-sourced: effect-grant.ts:167 refuseRuntimeObservationDrift, :185 validateRuntimeBinding, :193 delegation; effect-activation.ts:18 imports it and :216 delegates. No second copy.\n(c) Ordering re-read at claude-launcher.ts:157-180: validateCommit -> [binding guard] -> consumeGrant -> registerLock -> acquireLock -> openBoundary. Strictly after commit, strictly before grant/preflight/lock/open. PHASE.binding is a distinct phase entry, not PHASE.activation.\n(d) Fixture: DRIFTED_COMMIT present at claude-launcher-test-fixtures.ts:99; matched default commit derived from the same quoted observation.\n(e) Line counts now (grep -c ''): effect-grant 195, effect-activation 257 (pre-existing, not grown by me), claude-launcher 190 at my commit / 210 in working tree (foreign +20 from task-c81953d2), claude-launcher-test-fixtures 226 at my commit / 265 at HEAD (foreign +39 from task-d23a913f's SELECTION fixture; test-support, not production).\n\nBLOCKER RE-MEASURED: `pnpm --filter @moe/runner typecheck` exit 1, ONE error left (was 6 at rejection time):\n  src/index-surface.test.ts(534,36): error TS2741: Property 'launchSelection' is missing in type '{...}' but required in type 'Record<keyof ClaudeLaunchRequest, unknown>'.\nAttribution: index-surface.test.ts and claude-launcher-authority.ts have LastWriteTime one second before my probe — worker-25ca55c6 is writing them RIGHT NOW for task-c81953d2 (WORKING, 6/8 steps). None of my owned paths are dirty. The 4 nullable-string errors QA saw in claude-launcher.test.ts:326-342 are already gone. Waiting for the peer to settle before rerunning the exact gate.",
-      "startedAt": "2026-08-14T08:47:32.976Z",
-      "completedAt": "2026-08-14T08:49:26.510Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "TDD RED at the supervisor layer. In effect-activation.test.ts add tests for the not-yet-existing shared helper and its wrapper-side entry: (1) `refuseRuntimeObservationDrift` returns null when the observed digest equals the intent's `runtimeObservationDigest`, and returns a refusal pinning code PROVIDER_CAPABILITY_CHANGED, layer ACTIVATION and leg `runtimeObservation` when it does not; (2) it refuses for a non-string observed digest, for a digest differing in one character, and for a value that merely coerces to the right string — never a loose comparison; (3) `validateRuntimeBinding(effectValue, observedRuntimeDigest)` refuses EFFECT_INTENT_MALFORMED at KERNEL for an unparseable effect, refuses PROVIDER_CAPABILITY_CHANGED at ACTIVATION for a parseable intent whose digest drifted, and returns the BOUND arm otherwise; (4) no refusal message or detail contains either digest operand. Leave the two EXISTING activation-side drift assertions (effect-activation.test.ts:113-116 and :326) untouched — they are the regression proof that step 3's refactor preserves the authoritative mapping. Run the file and record the red.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-activation.test.ts"
-      ],
-      "modifiedFiles": [
-        "packages/runner/src/supervisor/effect-activation.test.ts"
-      ],
-      "note": "Already landed in b08d95b; re-verified on disk this session, not re-authored (re-doing TDD RED would mean deleting landed production bytes in a worktree with two live peers).\n\neffect-activation.test.ts imports refuseRuntimeObservationDrift and validateRuntimeBinding (lines 12-13) and asserts:\n- :354 equal digests -> toBeNull()\n- :358-363 drift -> exact {code PROVIDER_CAPABILITY_CHANGED, layer ACTIVATION, leg runtimeObservation}\n- :390 non-string / coercing observed value still refuses (strict !==, no loose comparison)\n- :397 unparseable effect -> EFFECT_INTENT_MALFORMED at KERNEL\n- :404-407 parseable intent with drifted digest -> PROVIDER_CAPABILITY_CHANGED / leg runtimeObservation\n- :411-412 matching intent -> BOUND arm typed RuntimeBindingCheck\n- :421-422 no-echo assertion over both entry points\nThe two pre-existing activation-side drift assertions (:113-118) are untouched and still pin leg \"runtimeObservation\" — the regression proof that step 3's extraction preserved the mapping.",
-      "startedAt": "2026-08-14T08:49:42.886Z",
-      "completedAt": "2026-08-14T08:49:51.914Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "Make step 2 green by extracting ONE comparison, not by adding a second. In effect-grant.ts add `refuseRuntimeObservationDrift(expectedRuntimeObservationDigest: string, observedRuntimeDigest: unknown)` returning `{kind:\"REFUSED\", failure} | null`, built with the existing `grantRefusal(\"PROVIDER_CAPABILITY_CHANGED\", \"ACTIVATION\", \"runtime observation digest does not match the quote\", \"runtimeObservation\")` so the code, layer, leg and message are byte-identical to today's; and `validateRuntimeBinding(effectValue: unknown, observedRuntimeDigest: unknown): RuntimeBindingCheck` which calls the already-imported `parseEffectIntent`, refuses EFFECT_INTENT_MALFORMED at KERNEL on null, and otherwise returns the helper's refusal or a frozen `{kind:\"BOUND\", ok:true}`. Then REWIRE effect-activation.ts: replace the inline comparison at ~213-218 with `const drifted = refuseRuntimeObservationDrift(intent.runtimeObservationDigest, request.observedRuntimeDigest); if (drifted !== null) return drifted;`, keeping the existing explanatory comment about digest-strings-only. Do NOT add either symbol to src/index.ts — index.ts uses explicit named lists, the daemon does not need these, and publishing them would break the root export-count guard. effect-activation.ts must end at or below its pre-change 257 lines; effect-grant.ts must stay under 250. The two pre-existing activation drift tests and effect-properties.test.ts:216-217 must pass unchanged — that is the composition proof.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-grant.ts",
         "packages/runner/src/supervisor/effect-activation.ts"
-      ],
-      "modifiedFiles": [
-        "packages/runner/src/supervisor/effect-grant.ts",
-        "packages/runner/src/supervisor/effect-activation.ts"
-      ],
-      "note": "Already landed in b08d95b; re-verified on disk this session.\n\neffect-grant.ts:167 refuseRuntimeObservationDrift(expected, observed) built from the existing grantRefusal(\"PROVIDER_CAPABILITY_CHANGED\",\"ACTIVATION\",\"runtime observation digest does not match the quote\",\"runtimeObservation\") — byte-identical to the pre-existing mapping. :185 validateRuntimeBinding parses via parseEffectIntent, refuses EFFECT_INTENT_MALFORMED at KERNEL on null, else :193 delegates to the helper or returns the frozen BOUND arm.\n\neffect-activation.ts:18 imports the helper and :216 delegates — the inline comparison is GONE, so there is exactly ONE definition of the triple. Neither symbol was added to src/index.ts (the root export-count guard is untouched; index-surface.test.ts is red for an unrelated foreign reason, not an export-count change).\n\nLine counts: effect-grant 195 (<250), effect-activation 257 — equal to its recorded pre-change 257, did not grow.",
-      "startedAt": "2026-08-14T08:50:00.521Z",
-      "completedAt": "2026-08-14T08:50:08.092Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "FIXTURE SURGERY, behaviour-neutral checkpoint. In claude-launcher-test-fixtures.ts move the activation commit construction out of module scope and into the existing `beforeAll`, after `observation` is built, following the file's own `export let ... ; beforeAll` precedent already used for `runtimeRequest` and `prepared`. Export TWO commits: the MATCHED one, built as `activateEffect(makeActivationRequest({ intent: makeIntent({ runtimeObservationDigest: observation.observationDigest }), observedRuntimeDigest: observation.observationDigest }))`, which becomes the `COMMIT` that `request()` returns by default; and a DRIFTED one built from the plain `makeActivationRequest()` whose intent still carries `DIGEST.runtime` — a fully COHERENT activation that simply names a different runtime. Import `makeIntent` alongside the existing `makeActivationRequest, makeClaim`; do NOT edit effect-test-fixtures.ts, which fourteen other files share. Keep every existing export name and signature (`request`, `dependencies`, `boundaryHarness`, `failureOf`, `CLAIM`, `DIGEST`, `PROCESS`, `PROVEN`, `prepared`, `runtimeRequest`) so the parallel task-c81953d2 is not broken. Throw a named error if either activation refuses, the way the file already does for its runtime and quote fixtures. CHECKPOINT: run claude-launcher.test.ts with NO guard in production yet — it must be entirely green, proving the fixture change alone changed no behaviour. Keep the file under 250 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts"
-      ],
-      "modifiedFiles": [
-        "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts"
-      ],
-      "note": "Already landed in b08d95b; re-verified on disk.\n\nDEVIATION FROM THE WRITTEN STEP, recorded: the two commits stayed at MODULE scope instead of moving into beforeAll. The step assumed the quoted observation was only available asynchronously, but the fixture builds QUOTE synchronously at module scope (buildProviderRuntimeObservation over a temp executable written with writeFileSync, lines 74-85), so QUOTED_DIGEST is a module-scope constant. Keeping COMMIT at module scope is therefore both simpler AND stricter: it preserves the file's existing `export const COMMIT` shape, so no consumer had to change from a value to a lazy read, and it avoids the known lazy-export hazard (see Serena gotcha-module-scope-fixture-read-breaks-on-lazy-export). The step's actual objective — the committed intent and the prepared runtime carry ONE observation digest — is met exactly.\n\n:87-91 COMMIT = activatedCommit(makeActivationRequest({ intent: makeIntent({ runtimeObservationDigest: QUOTED_DIGEST }), observedRuntimeDigest: QUOTED_DIGEST }), \"matched\").\n:93-99 DRIFTED_COMMIT = activatedCommit(makeActivationRequest(), \"drifted\") — a fully COHERENT activation naming a different runtime; drift is on the observed side, never by mutating the covered intent (a tampered intent would be refused ACTIVATION_COMMIT_INCOHERENT first, the rail-2 trap).\nactivatedCommit throws a named error when either activation refuses, matching the file's existing quote/runtime fixture precedent. effect-test-fixtures.ts untouched (14 consumers). All existing export names/signatures preserved, which is why the parallel task-c81953d2 still compiles against it. File was 226 lines at b08d95b (<250); it is 265 now purely from foreign task-d23a913f SELECTION additions.",
-      "startedAt": "2026-08-14T08:50:17.990Z",
-      "completedAt": "2026-08-14T08:50:30.259Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "TDD RED at the launcher. In claude-launcher.test.ts add: (1) a dedicated ordering test — launch with the DRIFTED commit and assert `failureOf(result)` equals exactly `{code:\"PROVIDER_CAPABILITY_CHANGED\", layer:\"ACTIVATION\"}` AND that the fixture `log` EQUALS exactly `[\"runtime\",\"validate\"]` and `boundary.log` equals `[]`; the exact-equality on `log` is the assertion that proves the guard ran strictly after runtime preparation and validateCommit and strictly before consume, lock and open, and it is far more mutation-sensitive than a `not.toContain(\"open\")`; (2) a distinguishing test proving WHICH layer answered — the drifted-but-coherent case must give PROVIDER_CAPABILITY_CHANGED while the existing incoherent-attempt case still gives ACTIVATION_COMMIT_INCOHERENT at the same ACTIVATION layer, so code alone separates them; (3) the drift case added to the pre-open refusal table at ~222-231, with the generated-case guard bumped from `expect(cases.length).toBe(8)` to 9 as the epic's generated-case rail requires; (4) a no-echo assertion — the serialized refusal contains neither the prepared runtime's executable path, nor either digest operand, nor the grant id, nor the bootstrap credential digest; (5) a matched-runtime happy path that still reaches OBSERVED, so the guard is proven not to refuse a correct launch. Run and record the red.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
-      ],
-      "modifiedFiles": [
-        "packages/runner/src/providers/claude/claude-launcher.test.ts"
-      ],
-      "note": "Already landed in b08d95b; re-verified on disk at claude-launcher.test.ts:1108-1165.\n\n(1) Ordering test :1122-1132 — failureOf(result) toEqual exactly {code PROVIDER_CAPABILITY_CHANGED, layer ACTIVATION}; log toEqual EXACTLY [\"runtime\",\"validate\"]; boundary.log and boundary.requests both []. That exact-equality is the ordering proof (after runtime + validate, before consume/register/lock/open) and is what drill D4 reddens.\n(2) Distinguishing test :1134-1146 — drifted-but-coherent gives PROVIDER_CAPABILITY_CHANGED while the incoherent-attempt case gives ACTIVATION_COMMIT_INCOHERENT; it then asserts the two LAYERS are equal and the two CODES differ, so the test states outright that layer cannot separate them and code must.\n(3) Drift case added to the pre-open refusal table at :239-240 (\"runtimeDrift\"). NOTE: the generated-case guard is now `expect(cases.length).toBe(16)` at :263, not the 9 the step predicted — the table has since absorbed foreign task-d23a913f selection-drift cases (selectionModelDrift :245, selectionEffortDrift :255). The count guard is present and non-vacuous, which is what the epic's generated-case rail requires; the specific literal moved because the table grew under two other tasks.\n(4) No-echo test :1148+ — serializes the whole result and asserts it contains none of prepared.executablePath, prepared.pinnedRoot, quotedObservationDigest, freshObservationDigest, bindingDigest, DRIFTED_COMMIT.intent.runtimeObservationDigest, DRIFTED_COMMIT.grant.grantId, DIGEST. It asserts `secrets).toHaveLength(8)` and that every operand is non-empty first, so the loop cannot pass vacuously on an empty or undefined operand.\n(5) Matched-runtime happy path still reaches OBSERVED (full-launch trace :135 \"runtime\",\"validate\",\"consume\",\"register\",\"lock\",\"open\",\"register\",\"observe\",\"unlock\"), proving the guard does not refuse a correct launch; drill D5 is the positive control for it.",
-      "startedAt": "2026-08-14T08:50:36.837Z",
-      "completedAt": "2026-08-14T08:50:49.762Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "Make step 5 green with the minimum production change in claude-launcher.ts. Immediately AFTER the commit phase returns OK and BEFORE the grant phase, call `validateRuntimeBinding(request.effect, runtime.value.quotedObservationDigest)` — `quotedObservationDigest`, never `freshObservationDigest`, which digests the pinned closure and can never equal the quote. Wrap the call in try/catch because it is a direct import rather than an injected port, so nothing else contains a throw: map a throw to `directFailure(\"CLAUDE_LAUNCH_DEPENDENCY_THROWN\", \"ACTIVATION\", ...)`. On the REFUSED arm return `directFailure(bound.failure.code, bound.failure.layer, ...)` so the delegated code and layer pass through untranslated. Add a DISTINCT entry to the module's PHASE map for this refusal — do not reuse `PHASE.activation`, whose text names the activation-commit authority and would misdescribe a runtime mismatch — and make sure the new message names no digest, path or identifier. `SupervisorErrorCode` and `SupervisorLayer` are already spread into CLAUDE_LAUNCH_ERROR_CODES and CLAUDE_LAUNCH_LAYERS, so no contract change is needed and no new code is minted. Keep claude-launcher.ts under 250 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts"
-      ],
-      "modifiedFiles": [
-        "packages/runner/src/providers/claude/claude-launcher.ts"
-      ],
-      "note": "Already landed in b08d95b; re-read on disk this session at claude-launcher.ts:164-180 (the file has since grown from 190 to 210 lines under foreign task-c81953d2 edits; my region is intact and unclobbered).\n\n- Guard sits immediately after the commit phase returns OK and before the grant phase: ... validateCommit -> [binding] -> consumeGrant -> registerLock -> acquireLock -> openBoundary.\n- Operand is `runtime.value.quotedObservationDigest`, never freshObservationDigest (which digests the PINNED closure whose paths live under the pin root and can never equal the quote — comparing it would refuse every correct launch).\n- try/catch around the direct import; a throw maps to directFailure(\"CLAUDE_LAUNCH_DEPENDENCY_THROWN\", \"ACTIVATION\", PHASE.binding), so the launcher's total-result containment holds for a hostile request.effect.\n- REFUSED arm returns directFailure(bound.failure.code, bound.failure.layer, PHASE.binding) — delegated code and layer pass through untranslated, no launcher-local code minted.\n- PHASE.binding is a DISTINCT entry (:65) \"the prepared runtime is not the runtime this activation committed\" — not PHASE.activation, whose text names the activation-commit authority. It names no digest, path or identifier.\n- No contract change: SupervisorErrorCode/SupervisorLayer are already spread into CLAUDE_LAUNCH_ERROR_CODES/LAYERS.\n- claude-launcher.ts 190 lines at my commit, 210 in the working tree (foreign +20), both <250.",
-      "startedAt": "2026-08-14T08:50:52.157Z",
-      "completedAt": "2026-08-14T08:51:01.639Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "VERIFY — the single concentrated gate. (1) Run the exact command `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` from the repo root in PowerShell and paste the fresh tail with its file/test counts as completion evidence; exit 0 required, and the count must be at or above the 55 files / 1711 tests previously recorded. (2) Path-attributed repo baseline per the epic rail: run `pnpm typecheck` and `pnpm test` at the merge-base and at HEAD, and report the HEAD-minus-merge-base failing-path set intersected with this task's owned paths; it must be empty, and any foreign red is disclosed verbatim with exact failing lines. (3) MUTATION DRILLS — sha256 each file before and after, restore by reverse edit (never `git checkout`, which reverts to HEAD and destroys uncommitted work), and re-verify by the recorded hash: D1 flip the comparison in `refuseRuntimeObservationDrift` so it never refuses — BOTH the supervisor drift tests AND the launcher drift test must redden; if only one reddens the extraction is not a single source and task rail 1 is unmet. D2 delete ONLY the guard call from claude-launcher.ts, leaving the helper intact — the launcher drift test must redden while the supervisor tests stay green, which is what proves the launcher-side enforcement is separately tested and not answered by validateCommit. D3 change the refusal code in the helper to a different SupervisorErrorCode — both suites must redden on the exact code, not on a shape assertion. D4 move the guard call in claude-launcher.ts to after the grant phase — the `log` exact-equality assertion must redden, proving the ordering requirement is really tested. D5 POSITIVE CONTROL for the fixture: revert the matched commit in the fixture to the plain `makeActivationRequest()` — the OBSERVED happy-path tests must redden, proving the matched fixture is genuinely matched and the whole suite is not green because the guard is dead. Every drill must redden on an OUTCOME assertion; a green drill indicts the test, not the drill. (4) `grep -c ''` on all four production files and confirm none in providers/claude exceeds 250 and that effect-activation.ts did not grow past its recorded pre-change 257.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-grant.ts",
         "packages/runner/src/supervisor/effect-activation.ts",
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts"
-      ],
-      "note": "VERIFY — all four items run fresh this session at clean HEAD 7dbf9ba (the two peers committed while I waited; working tree source is now CLEAN, zero dirty source files).\n\n(1) EXACT NAMED GATE — `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test`, repo root, PowerShell:\n  $ tsc --project tsconfig.json\n  $ vitest run --root ../.. packages/runner/src\n  Test Files  58 passed (58)\n  Tests  1827 passed (1827)\n  Duration 4.42s   GATE_EXIT=0\nAbove the recorded floor of 55 files / 1711 tests. This is the leg that failed at qa_reject; it was red only from foreign WIP. I waited 4.5 min for packages/runner/src to quiesce (120s no-write window) before running it — the 6 errors QA saw are gone with the peers' commits (dadea79 task-c81953d2, 7dbf9ba task-d23a913f).\n\n(2) PATH-ATTRIBUTED REPO BASELINE. My merge-base is 35f7b7f. Repo-wide legs at HEAD both exit 1, and the ENTIRE failing-path set is ONE foreign file:\n  `pnpm typecheck` -> Scope: 18 of 19 projects; 11 errors, all packages/store/src/recovery-initial-install.test.ts(179,203,217,239,250,265,292,328,372,399,437): error TS2551: Property 'installInitialRecoveryBinding' does not exist on type 'SqliteEventStore'. Did you mean 'installRecoveryBinding'?\n  `pnpm test` -> Test Files 1 failed | 253 passed (254); Tests 11 failed | 5615 passed | 1 skipped (5627); every failure in packages/store/src/recovery-initial-install.test.ts (\"genesis recovery-binding initial install: ...\").\nAttribution proof: `git cat-file -e 35f7b7f:packages/store/src/recovery-initial-install.test.ts` -> \"exists on disk, but not in '35f7b7f'\". The file did not exist at my merge-base, so it is inside the HEAD-minus-merge-base delta but outside my owned paths. HEAD-failing-paths MINUS merge-base-failing-paths INTERSECTED with my owned paths = EMPTY. Disclosed verbatim, not hidden; it belongs to the genesis-recovery work, not to this task.\n\n(3) MUTATION DRILLS — all five run fresh on CURRENT bytes (important: claude-launcher.ts is no longer the file I committed; foreign edits grew it 190->210, so the guard had to be re-proven live). sha256 recorded before, mutated by Edit, restored by reverse Edit, never `git checkout`. All four post-drill hashes match pre-drill exactly and `git diff` over owned paths is empty:\n  effect-grant.ts             B2CDAE6112CDDC0B2DB9BE2EFC18F00A02D4FA6A6F6497ADE521684193844898\n  effect-activation.ts        8F754E3086E41F0047B21E4D1577ED26294F6665D98FCDC347CC9BA3A7BD7057\n  claude-launcher.ts          7C0284F30C69CD339227E852599DA8B1E6C500ED87075F08AB25116008C6D1C0\n  claude-launcher-test-fixtures.ts 4CF6C8280EF30D49CFBCE7B3B49775DDC4E8E92D4655488A6DB9A98442B9846E\n  D1 helper never refuses (`if (true) return null`) -> BOTH suites red: effect-activation 11 failed (\"expected a refusal, received ACTIVATED\"; \"expected a refusal, received BOUND\"; all 7 swept non-string/coercing/one-char/whitespace cases), claude-launcher 4 failed (\"expected failure, received OBSERVED\"). Single source proven.\n  D2 launcher guard alone neutralised (`if (false)`) -> claude-launcher 4 failed at :281, :1127, :1143, :1161 (\"expected failure, received OBSERVED\"), effect-activation.test.ts 1 PASSED file, 0 failures. Proves the launcher-side enforcement is separately tested and is NOT answered by validateCommit.\n  D3 code swapped to ACTIVATION_COMMIT_INCOHERENT -> BOTH red on the EXACT code: \"expected 'ACTIVATION_COMMIT_INCOHERENT' to be 'PROVIDER_CAPABILITY_CHANGED'\" (effect-activation 10 failed, claude-launcher 3 failed) — an outcome assertion, not a shape one.\n  D4 guard moved AFTER the grant phase -> exactly one failure, the ordering assertion: \"AssertionError: expected [ 'runtime', 'validate', 'consume' ] to deeply equal [ 'runtime', 'validate' ]\" at claude-launcher.test.ts:1131. The refusal still happens; only its POSITION changed, and only the ordering test noticed. That is the ordering requirement genuinely tested.\n  D5 POSITIVE CONTROL, matched fixture reverted to plain makeActivationRequest() -> 25 of 40 launcher tests red, including \"expected 'REFUSED' to be 'OBSERVED'\" at :176 and the full-launch trace at :134. The suite is NOT green because the guard is dead; the matched fixture is genuinely matched.\n\n(4) LINE COUNTS (grep -c ''): effect-grant 195 (<250); effect-activation 257 — EQUAL to its recorded pre-change 257, did not grow; claude-launcher 210 (<250; 174 at merge-base, 190 after my commit, 210 after foreign edits); claude-launcher-test-fixtures 265 (test-support, 226 at my commit, foreign +39). DISCLOSURE: six files in providers/claude exceed 250 — claude-render 372, claude-runtime-pin 301, claude-observation 300, claude-capabilities 289, claude-runtime-pin-closure 281, claude-stream-anomalies 265. Every one is byte-for-byte the SAME line count at merge-base 35f7b7f as at HEAD, so all six are pre-existing and untouched by this task. The only production file this task authored in that directory is claude-launcher.ts at 210.",
-      "startedAt": "2026-08-14T08:51:05.058Z",
-      "completedAt": "2026-08-14T09:00:13.348Z"
+      ]
     },
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL SELF-REVIEW, then commit. Read your own diff as an attacker: can a coherent activation still reach `openBoundary` with a runtime the intent never named? Can a hostile `request.effect` escape the try/catch and reject launchClaude's public promise? Does the duplicate-delivery path — which returns before the runtime phase — now behave differently, and is that correct given adoption never opens a process? Does any refusal echo a digest, a runtime path, a grant id or the bootstrap credential digest? Is the drift case genuinely unanswerable by validateCommit, or did you accidentally mutate the intent and re-create the layered-refusal trap? Did the guard change any behaviour for a MATCHED runtime, and is the matched fixture proven matched by drill D5 rather than assumed? Then commit by EXPLICIT PATHSPEC only — `git status --porcelain` first, unstage any foreign path with `git restore --staged` (task-c81953d2 is editing claude-launcher.ts in parallel; re-read the file and confirm you are not clobbering its region), then `git commit -- <owned paths>`, then `git show --stat` to confirm only owned paths landed. No drill leftovers, probe files or scratch files in the commit.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "packages/runner/src/supervisor/effect-grant.ts",
         "packages/runner/src/supervisor/effect-activation.ts",
@@ -127,18 +90,15 @@
         "packages/runner/src/providers/claude/claude-launcher.test.ts",
         "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
         "packages/runner/src/supervisor/effect-activation.test.ts"
-      ],
-      "note": "ADVERSARIAL SELF-REVIEW, each question answered from bytes, not intent.\n\nQ: Can a coherent activation still reach openBoundary with a runtime the intent never named? NO. openBoundary is reachable only through the single linear phase chain, and drill D2 is the proof: neutralise ONLY the launcher guard and the drifted activation runs all the way to OBSERVED/PROVEN (4 named failures, \"expected failure, received OBSERVED\"). The guard sits on the sole path.\n\nQ: Can a hostile request.effect escape the try/catch and reject launchClaude's public promise? NO, on two independent layers. `snapshotClaudeLaunchRequest(value)` is itself try/caught at claude-launcher.ts:125 and has already bounded request.effect to frozen plain data before the guard runs, so a throwing getter cannot survive to my call site; and the property READ `request.effect` is itself inside my try block, not an argument evaluated outside it. A throw maps to CLAUDE_LAUNCH_DEPENDENCY_THROWN / ACTIVATION, a total result.\n\nQ: NEW ATTACK I checked that the step did not name — can the two operands be equal by both being ABSENT? NO. decodeRuntime (claude-launcher-port-results.ts:190) refuses MALFORMED unless isHex64(quotedObservationDigest), so the observed operand is always a 64-hex string before the guard; parseEffectIntent requires a string runtimeObservationDigest on the other side. There is no undefined===undefined bypass, which is the classic way this shape of guard dies.\n\nQ: Does the duplicate-delivery path behave differently? NO, and that is correct. It returns duplicateResult() at :136, BEFORE the runtime phase — adoption reports an already-delivered launch and never opens a process, so there is no prepared runtime to bind and nothing for this guard to say. The full-launch trace test and the duplicate tests are unchanged.\n\nQ: Does any refusal echo a digest, runtime path, grant id or bootstrap credential? NO. PHASE.binding is \"the prepared runtime is not the runtime this activation committed\" — a distinct entry, not PHASE.activation (whose text names the activation-commit authority and would misdescribe this), and it carries no operand. The supervisor message is likewise operand-free. The no-echo test serialises the whole result against 8 operands and asserts each is non-empty first, so it cannot pass vacuously.\n\nQ: Is the drift case genuinely unanswerable by validateCommit, or did I re-create the layered-refusal trap? GENUINELY UNANSWERABLE. DRIFTED_COMMIT is built by activatedCommit, which THROWS a named error if the activation refuses, so the fixture is provably COHERENT; drift is expressed on the observed/prepared side only, never by mutating the intent (grantId derives from the whole intent, so a tampered intent would be refused ACTIVATION_COMMIT_INCOHERENT first). D2 confirms empirically: with the guard gone the same request reaches OBSERVED, so validateCommit really has nothing to say about it. The distinguishing test additionally asserts the two refusals share a layer and differ in code.\n\nQ: Did the guard change behaviour for a MATCHED runtime, and is the matched fixture proven matched? Unchanged, and PROVEN not assumed: D5 reverts the matched commit to the plain makeActivationRequest() and 25 of 40 launcher tests go red, including \"expected 'REFUSED' to be 'OBSERVED'\".\n\nConcurrency/state: the guard is a pure comparison over already-snapshotted frozen data; no shared state, no check-then-act, no handle or subprocess opened on this path, so no cleanup obligation on the refusal exit. TOCTOU against the filesystem is out of this guard's scope by construction — it binds the QUOTE to the INTENT; the pin's own content-addressed binding digest covers the closure.\n\nCOMMIT: nothing to commit. My bytes are already in history at b08d95b (7 files, +341/-50) from the pre-rejection session; the working tree is CLEAN over every path this task owns (`git diff` over owned paths is empty, all four sha256 hashes match pre-drill), so the committed bytes ARE the bytes the gate just ran. I created no new commit rather than manufacture an empty or duplicate one.\n\nEVIDENCE FOR QA — review by base-ref diff, not by commit: `git diff 35f7b7f..HEAD -- packages/runner/src/supervisor/effect-grant.ts packages/runner/src/supervisor/effect-activation.ts packages/runner/src/supervisor/effect-activation.test.ts packages/runner/src/providers/claude/claude-launcher.ts packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts packages/runner/src/providers/claude/claude-launcher.test.ts packages/runner/src/index-surface.test.ts`. NOTE claude-launcher.ts and claude-launcher-test-fixtures.ts in that range ALSO carry foreign task-c81953d2 and task-d23a913f work that landed on top (dadea79, 92e277a, 7dbf9ba); `git show b08d95b` isolates mine.\n\nFOREIGN STATE AT HANDOFF, disclosed: packages/store/src/recovery-initial-install{,-contracts}.ts and recovery-install.ts plus packages/scheduler/src/index-surface.test.ts are dirty under another agent right now, and they are the ent",
-      "startedAt": "2026-08-14T09:00:55.659Z",
-      "completedAt": "2026-08-14T09:01:26.104Z"
+      ]
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Rejected because the exact required verification is not reproducible on current shared bytes. The production runtime-binding diff and its focused mutation check passed, but `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` stops at runner typecheck exit 1. The failures are in active foreign launch-selection WIP; preserve it and rerun after that work stabilizes.",
+  "reopenCount": 2,
+  "reopenReason": "NOT a craft defect — the production work is correct and I drilled it hard (full evidence: #general msg-9db335ec). Rejecting because the deliverable is not at HEAD.\n\nYour fixture surgery was reverted. claude-launcher-test-fixtures.ts is dirty and the delta IS the deliverable: HEAD carries `runtimeObservationDigest: DIGEST.runtime` / `observedRuntimeDigest: DIGEST.runtime`; the working tree carries QUOTED_DIGEST. Measured provenance: your own commit b08d95b landed QUOTED_DIGEST correctly; foreign whole-tree commit 71ae334 (task-2d37939d) reverted those two lines. Your other five owned paths match HEAD exactly.\n\nI made the working tree byte-identical to HEAD and ran the declared leg: `pnpm --filter @moe/runner test` FAILS — 3 files fail to LOAD (\"production matched activation fixture refused: EFFECT_INTENT_MALFORMED\"), Test Files 3 failed | 55 passed, Tests 1716 (111 never run). Restored to sha256 4cf6c828..., re-ran: 58/1827 green. Verification exit 0 is reproducible only against uncommitted bytes; the rail requires committed bytes to match gated bytes.\n\nFIX (working tree already correct, no foreign repair):\n  git commit -- packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts\nthen re-run the declared gate and confirm `git status --porcelain -- packages/runner/src` is empty for owned paths. Do NOT amend or revert 71ae334.\n\nALREADY VERIFIED — do not redo: guard placement at claude-launcher.ts:164-180 (after validateCommit, before grant/lock/open) on quotedObservationDigest; single source refuseRuntimeObservationDrift at effect-grant.ts:167 used by effect-activation.ts:216 and claude-launcher.ts:170, authoritative triple byte-identical, no new code minted. D1 break-helper reddens BOTH suites (10 supervisor + 4 launcher). D2 neuter-only-launcher gives 4 failures \"expected failure, received OBSERVED\" with supervisor green. D5 positive control reddens 25. No file you touched exceeds 250.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -159,38 +119,35 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:20:28.370Z",
-  "updatedAt": "2026-08-14T09:05:59.067Z",
+  "updatedAt": "2026-08-14T09:12:04.294Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:28:01.713Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 16,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "rejectCount": 2,
+    "reopenCount": 2
   },
-  "contextFetchedBy": [
-    "qa-41bfec20",
-    "worker-40286572",
-    "qa-50f0d628"
-  ],
+  "contextFetchedBy": [],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7",
-    "step-8"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [
     {
       "item": "Focused @moe/runner typecheck and tests pass; repo-wide legs are recorded as a merge-base-vs-HEAD path-attributed baseline; no production file in packages/runner/src/providers/claude exceeds 250 physical lines.",
       "rejectedAt": "2026-08-13T23:30:33.999Z",
       "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "DoD 3: the fixture is restructured so its activation commit and its prepared runtime carry the same observation digest — true in the working tree, but reverted at HEAD by foreign commit 71ae334.",
+      "rejectedAt": "2026-08-14T09:12:04.294Z",
+      "rejectedBy": "qa-50f0d628"
+    },
+    {
+      "item": "DoD 5: focused @moe/runner typecheck and tests pass — at committed HEAD bytes the test leg exits non-zero with 3 suites failing to load and 111 tests never run.",
+      "rejectedAt": "2026-08-14T09:12:04.294Z",
+      "rejectedBy": "qa-50f0d628"
     }
   ],
   "planSubmittedAt": "2026-08-13T22:33:12.190Z",
@@ -231,21 +188,51 @@
     "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
     "packages/runner/src/providers/claude/claude-launcher.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T23:30:33.999Z",
+  "reviewCompletedAt": "2026-08-14T09:12:04.294Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "Focused @moe/runner typecheck and tests pass; repo-wide legs are recorded as a merge-base-vs-HEAD path-attributed baseline; no production file in packages/runner/src/providers/claude exceeds 250 physical lines."
+      "DoD 3: the fixture is restructured so its activation commit and its prepared runtime carry the same observation digest — true in the working tree, but reverted at HEAD by foreign commit 71ae334.",
+      "DoD 5: focused @moe/runner typecheck and tests pass — at committed HEAD bytes the test leg exits non-zero with 3 suites failing to load and 111 tests never run."
     ],
     "issues": [
       {
+        "type": "regression",
+        "file": "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
+        "line": 88,
+        "description": "Matched-activation surgery is uncommitted. HEAD has runtimeObservationDigest: DIGEST.runtime / observedRuntimeDigest: DIGEST.runtime; working tree has QUOTED_DIGEST. Your commit b08d95b landed it correctly; foreign whole-tree commit 71ae334 reverted it. Re-land with an explicit-pathspec commit of this one owned path: git commit -- packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts. Do not amend or revert 71ae334."
+      },
+      {
         "type": "test_failure",
         "file": "packages/runner/src/providers/claude/claude-launcher.test.ts",
-        "line": 326,
-        "description": "Fresh required gate fails before tests. Runner typecheck reports missing launchSelection at index-surface.test.ts:532, an unused ClaudeLauncherAuthority import at claude-launcher-authority.test.ts:30, and nullable-string errors here at 326/330/338/342. These are active task-d23a913f launch-selection WIP. Do not revert or repair foreign bytes; coordinate/re-run after they stabilize, then ensure the exact runner gate exits 0."
+        "line": 1,
+        "description": "At HEAD's committed bytes pnpm --filter @moe/runner test exits non-zero: claude-launcher.test.ts, claude-launcher-authority.test.ts and claude-launcher-authority-echo.test.ts all fail to LOAD with 'production matched activation fixture refused: EFFECT_INTENT_MALFORMED'. Test Files 3 failed | 55 passed; Tests 1716 vs the reported 1827. After re-committing, re-run the gate and confirm git status is empty for owned paths."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "NOT a craft defect — the production work is correct and I drilled it hard (full evidence: #general msg-9db335ec). Rejecting because the deliverable is not at HEAD.\n\nYour fixture surgery was reverted. claude-launcher-test-fixtures.ts is dirty and the delta IS the deliverable: HEAD carries `runtimeObservationDigest: DIGEST.runtime` / `observedRuntimeDigest: DIGEST.runtime`; the working tree carries QUOTED_DIGEST. Measured provenance: your own commit b08d95b landed QUOTED_DIGEST correctly; foreign whole-tree commit 71ae334 (task-2d37939d) reverted those two lines. Your other five owned paths match HEAD exactly.\n\nI made the working tree byte-identical to HEAD and ran the declared leg: `pnpm --filter @moe/runner test` FAILS — 3 files fail to LOAD (\"production matched activation fixture refused: EFFECT_INTENT_MALFORMED\"), Test Files 3 failed | 55 passed, Tests 1716 (111 never run). Restored to sha256 4cf6c828..., re-ran: 58/1827 green. Verification exit 0 is reproducible only against uncommitted bytes; the rail requires committed bytes to match gated bytes.\n\nFIX (working tree already correct, no foreign repair):\n  git commit -- packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts\nthen re-run the declared gate and confirm `git status --porcelain -- packages/runner/src` is empty for owned paths. Do NOT amend or revert 71ae334.\n\nALREADY VERIFIED — do not redo: guard placement at claude-launcher.ts:164-180 (after validateCommit, before grant/lock/open) on quotedObservationDigest; single source refuseRuntimeObservationDrift at effect-grant.ts:167 used by effect-activation.ts:216 and claude-launcher.ts:170, authoritative triple byte-identical, no new code minted. D1 break-helper reddens BOTH suites (10 supervisor + 4 launcher). D2 neuter-only-launcher gives 4 failures \"expected failure, received OBSERVED\" with supervisor green. D5 positive control reddens 25. No file you touched exceeds 250.",
+      "rejectedAt": "2026-08-14T09:12:04.294Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "DoD 3: the fixture is restructured so its activation commit and its prepared runtime carry the same observation digest — true in the working tree, but reverted at HEAD by foreign commit 71ae334.",
+        "DoD 5: focused @moe/runner typecheck and tests pass — at committed HEAD bytes the test leg exits non-zero with 3 suites failing to load and 111 tests never run."
+      ],
+      "issues": [
+        {
+          "type": "regression",
+          "file": "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
+          "line": 88,
+          "description": "Matched-activation surgery is uncommitted. HEAD has runtimeObservationDigest: DIGEST.runtime / observedRuntimeDigest: DIGEST.runtime; working tree has QUOTED_DIGEST. Your commit b08d95b landed it correctly; foreign whole-tree commit 71ae334 reverted it. Re-land with an explicit-pathspec commit of this one owned path: git commit -- packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts. Do not amend or revert 71ae334."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/runner/src/providers/claude/claude-launcher.test.ts",
+          "line": 1,
+          "description": "At HEAD's committed bytes pnpm --filter @moe/runner test exits non-zero: claude-launcher.test.ts, claude-launcher-authority.test.ts and claude-launcher-authority-echo.test.ts all fail to LOAD with 'production matched activation fixture refused: EFFECT_INTENT_MALFORMED'. Test Files 3 failed | 55 passed; Tests 1716 vs the reported 1827. After re-committing, re-run the gate and confirm git status is empty for owned paths."
+        }
+      ]
+    },
     {
       "reason": "Rejected because the exact required verification is not reproducible on current shared bytes. The production runtime-binding diff and its focused mutation check passed, but `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` stops at runner typecheck exit 1. The failures are in active foreign launch-selection WIP; preserve it and rerun after that work stabilizes.",
       "rejectedAt": "2026-08-13T23:30:33.999Z",

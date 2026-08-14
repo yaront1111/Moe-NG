@@ -50,7 +50,7 @@
     {
       "stepId": "step-3",
       "description": "Implement the focused contract and exact LF NodeNext bridge. Freeze ordered proof classes as `PROVIDER_PROCESS_LAUNCH_LOCK`, `RESOURCE`, `WORKSPACE`, `INTEGRATION_TARGET`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`; freeze the seven design populations and the explicit class-to-population rows, with only the provider class containing two populations. Define closed proof/truth/disposition/result vocabularies, precise mapping error codes (`RECOVERY_INVENTORY_CLASS_EXTRA|UNKNOWN|DUPLICATE|OMITTED`), coordinator `UNKNOWN_TRUTH`, layer `RECOVERY_INVENTORY`, ledger upstream codes/layer, bounds, and immutable record/input/result types. Model terminal cancellation explicitly without granting retry/history authority; do not let Git/submodule evidence certify durable integration attempts or artifact-object evidence certify scheduler resources.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
@@ -59,12 +59,19 @@
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
       ],
-      "startedAt": "2026-08-14T09:05:52.797Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/recovery-inventory-invariants.ts",
+        "apps/daemon/src/recovery/recovery-inventory-invariants.js"
+      ],
+      "note": "Contract extended and the shared invariant surface landed. Contract gains exactly two closed-vocabulary codes: RECOVERY_INVENTORY_PROOF_TRUTH_CONTRADICTS (builder refuses a configured proof asserting COMPLETE while carrying an upstream refusal) and RECOVERY_INVENTORY_RECORD_INCOHERENT (decoder refuses self-consistent bytes whose SEMANTICS the builder could never have emitted). INCOHERENT is deliberately distinct from RECORD_NONCANONICAL (shape/keys/vocabulary/byte-spelling) and RECORD_DIGEST_MISMATCH (binding), so a green test proves WHICH of the three guards answered — the exact defect class that let these forgeries ship twice. New apps/daemon/src/recovery/recovery-inventory-invariants.ts (186 lines, LF bridge .js one-liner) is the ONE production home for: compareRecoveryReconciliationItems (class rank, then DECLARED population rank inside the class, then identity — population outranks identity so the mapping row order is the canonical order), orderRecoveryReconciliationItems, isCanonicalRecoveryItemSequence (strictly increasing AND class-scoped unique), isCanonicalRecoveryItemShape (the exact adjudicator-emitted required/forbidden field combinations per disposition), isCanonicalRecoveryProofSlot (the reserved sentinel may only ever be UNKNOWN + PROOF_MISSING/RECOVERY_INVENTORY), deriveRecoveryReconciliationTruth and sameRecoveryUpstream. The builder will EMIT with these and the decoder will RE-DERIVE against them, so the property is pinned on the production surface rather than on a test reimplementation. GOTCHA hit and worked around: the write path silently converts an intended `\u0000` source escape into a real 0x00 byte (the same trap that produced the QA-flagged record.ts:164 blob) — the separator is therefore spelled String.fromCharCode(0), which is plain ASCII source with the identical runtime value. Verified 0 NUL bytes in the new file.",
+      "startedAt": "2026-08-14T09:05:52.797Z",
+      "completedAt": "2026-08-14T09:08:47.075Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement total record normalization/adjudication and its exact LF bridge. Validate hostile inputs with own enumerable data descriptors before property access; require the exact configured six-class set and normalize a missing/incomplete configured proof into its canonical UNKNOWN proof slot rather than shrinking the mapping. Bind each subject to its one mapped proof, project/project-tag, verified backup cursor+generation, selected anchor binding digest/incarnation/key epoch, source proof digest, restored-intent reference/digest, terminal proof or quarantine reference, disposition, and separate coordinator/upstream refusal tuples. Enforce: ABSENT only from complete negative proof; CANCELLED only from terminal cancellation proof; ADOPTED only when external/restored identity and both selected recovery refs match exactly; unmatched items only QUARANTINED or UNKNOWN; any incomplete/non-fenceable/artifact-or-key/unresolved fact makes the persisted truth `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY`. Deep-freeze copied data and expose no secret/message bytes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
@@ -72,12 +79,19 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
+        "apps/daemon/src/recovery/recovery-inventory-record.ts"
+      ],
+      "note": "Builder side repaired. (1) indexConfiguredProofs now refuses a supplied proof row asserting truth COMPLETE while carrying a non-null upstream, with exact RECOVERY_INVENTORY_PROOF_TRUTH_CONTRADICTS at RECOVERY_INVENTORY. That is the QA-reported laundering path: readProof accepted the contradictory tuple and normaliseProofs then kept COMPLETE and set upstream null, so an adapter's own admission of incomplete coverage was silently converted into proof. It is refused rather than downgraded because the caller supplied two facts that cannot both hold. The identical upstream tuple under truth UNKNOWN remains legitimate and is retained verbatim — pinned by a positive control. (2) The builder now EMITS through the shared invariant surface: orderRecoveryReconciliationItems and deriveRecoveryReconciliationTruth replace the local orderItems/populationIndex and the inline truth ladder, so the decoder's re-derivation in step-5 is provably the same function, not a reimplementation. Note the ordering is now strictly stronger: the old populationIndex returned the CLASS row index, so two populations of one class always tied and fell through to identity; the shared comparator ranks by DECLARED population order first. (3) record.ts:164's literal 0x00 is gone — the identity key is now recoveryClassScopedIdentity(declared, subject.identity), same runtime bytes, plain-ASCII source. Verified 0 NUL bytes in the file. Focused run `npx vitest run --root . --config package.json src/recovery/recovery-inventory` => 13 failed | 65 passed (78): the builder contradiction case flipped green, all three pre-existing inventory suites stay green, and the 13 remaining reds are exactly the decoder forgeries step-5 owns. TWO FOREIGN CONDITIONS DISCLOSED, neither caused by this diff and neither repairable here: (a) daemon typecheck is now red on foreign uncommitted apps/daemon/src/recovery/recovery-incarnation.test.ts:34-35 TS2307 importing a not-yet-existing ./recovery-incarnation-context.js — a peer mid-TDD-red; baseline at step-1 was exit 0. (b) A foreign whole-tree commit (71ae334/79d01e6, task-2d37939ddd) captured my in-progress recovery-inventory-contract.ts and the new forgery test; per the project rail I will not amend, reset, or re-commit, and will hand QA a base-ref diff from 7dbf9ba over the owned paths instead.",
+      "startedAt": "2026-08-14T09:08:49.918Z",
+      "completedAt": "2026-08-14T09:10:26.657Z"
     },
     {
       "stepId": "step-5",
       "description": "Implement the strict canonical codec and exact LF bridge. Encode a versioned, fixed-key-order, bounded UTF-8 JSON body with deterministic class/population/item ordering; compute SHA-256 over every body field except `recordDigest`, then append that digest. Decode with fatal UTF-8, exact keys/vocabularies/bounds/cardinalities, re-derived six-to-seven mapping and disposition invariants, digest recomputation, and byte-for-byte canonical re-encoding so whitespace, key order, duplicate keys, extensions, truncation, or any semantic byte mutation cannot become an alternate authoritative record. Return the stable unreadable upstream code/layer under coordinator UNKNOWN rather than throwing or defaulting.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
@@ -85,7 +99,8 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:10:29.779Z"
     },
     {
       "stepId": "step-6",
@@ -152,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-14T09:05:52.797Z",
+  "updatedAt": "2026-08-14T09:10:29.779Z",
   "contextFetchedBy": [
     "worker-06df66bb"
   ],
@@ -160,7 +175,7 @@
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 18,
+    "executedStepCount": 20,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -169,7 +184,9 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [
     {

@@ -21,11 +21,6 @@ export const RECOVERY_INCARNATION_ERROR_CODES = Object.freeze([
 export type RecoveryIncarnationErrorCode = (typeof RECOVERY_INCARNATION_ERROR_CODES)[number];
 
 export const RECOVERY_ENTROPY_BYTES = 32;
-const MAX_COMMAND_ID_CHARS = 200;
-const HEX64 = /^[0-9a-f]{64}$/;
-/** Whitespace, control and format characters: an identifier nobody can retype. */
-const UNSAFE_ID = /[\s\p{Cc}\p{Cf}]/u;
-const REQUEST_KEYS = Object.freeze(["backupGenerationDigest", "restoreCommandId"]);
 /** NUL cannot occur in a hex digest or in an admitted command id. */
 const FRAME = "\u0000";
 
@@ -65,10 +60,9 @@ export interface RecoveryIncarnationProof {
   readonly verified: true;
 }
 
-export interface RecoveryIncarnationBinding {
+/** Everything an incarnation proves about ITSELF, whatever it was minted for. */
+export interface RecoveryIncarnationBindingCommon {
   readonly schemaVersion: typeof RECOVERY_INCARNATION_SCHEMA_VERSION;
-  readonly restoreCommandId: string;
-  readonly backupGenerationDigest: string;
   readonly incarnationDigest: string;
   readonly incarnationRef: string;
   readonly keyEpochRef: string;
@@ -79,11 +73,32 @@ export interface RecoveryIncarnationBinding {
   readonly proof: RecoveryIncarnationProof;
 }
 
+/** Both restore fields stay exactly where every existing caller reads them. */
+export interface RestoreIncarnationBinding extends RecoveryIncarnationBindingCommon {
+  readonly origin: "RESTORE";
+  readonly restoreCommandId: string;
+  readonly backupGenerationDigest: string;
+}
+
+/**
+ * A never-restored store possesses no restore command and no backup generation,
+ * so the genesis branch cannot NAME them: counterfeiting a restore fact is a
+ * type error rather than a runtime check somebody can forget to write.
+ */
+export interface GenesisIncarnationBinding extends RecoveryIncarnationBindingCommon {
+  readonly origin: "GENESIS";
+  readonly projectId: string;
+  readonly storeContextDigest: string;
+}
+
+export type RecoveryIncarnationBinding = GenesisIncarnationBinding | RestoreIncarnationBinding;
+
 export interface RecoveryIncarnationMinted {
   readonly ok: true;
   readonly outcome: "MINTED";
   readonly authority: "NONE";
-  readonly binding: RecoveryIncarnationBinding;
+  /** RESTORE only: this service mints against a restore command, never genesis. */
+  readonly binding: RestoreIncarnationBinding;
   /** Non-enumerable, so it cannot ride along in serialized evidence. */
   readonly keyHandle: RecoveryIncarnationKeyHandle;
 }
@@ -148,45 +163,6 @@ export const digestOf = (
     hash.update(typeof part === "string" ? `${part.length}:${part}${FRAME}` : part);
   }
   return hash.digest("hex");
-};
-
-const isCommandId = (value: unknown): value is string =>
-  typeof value === "string" &&
-  value.length > 0 &&
-  value.length <= MAX_COMMAND_ID_CHARS &&
-  !UNSAFE_ID.test(value) &&
-  value.normalize("NFC") === value;
-
-const isGenerationDigest = (value: unknown): value is string =>
-  typeof value === "string" && HEX64.test(value);
-
-const isDataProperty = (descriptor: PropertyDescriptor | undefined): boolean =>
-  descriptor !== undefined && descriptor.get === undefined && descriptor.set === undefined;
-
-/**
- * One synchronous read of own property DESCRIPTORS, before any await. Values
- * come from the descriptors rather than from a second property access, so an
- * accessor or a proxy cannot answer differently the second time — and a caller
- * mutating the object while the mint is in flight cannot move the binding.
- *
- * Extra keys are refused rather than ignored: a caller-supplied `nonce`,
- * `keyEpoch`, `counter` or `timestamp` is exactly what this service must never
- * accept, and silently dropping one would look like it had been honoured.
- */
-export const snapshotRequest = (value: unknown): RecoveryIncarnationRequest | null => {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  const keys = Reflect.ownKeys(descriptors);
-  if (keys.length !== REQUEST_KEYS.length) return null;
-  if (keys.some((key) => typeof key !== "string" || !REQUEST_KEYS.includes(key))) return null;
-
-  const command = descriptors["restoreCommandId"];
-  const digest = descriptors["backupGenerationDigest"];
-  if (!isDataProperty(command) || !isDataProperty(digest)) return null;
-  const restoreCommandId: unknown = command?.value;
-  const backupGenerationDigest: unknown = digest?.value;
-  if (!isCommandId(restoreCommandId) || !isGenerationDigest(backupGenerationDigest)) return null;
-  return Object.freeze({ backupGenerationDigest, restoreCommandId });
 };
 
 /** What the service keeps once the port's answer has been read and copied. */

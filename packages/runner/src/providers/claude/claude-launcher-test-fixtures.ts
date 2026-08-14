@@ -86,8 +86,8 @@ const QUOTED_DIGEST = QUOTE.observation.observationDigest;
 
 /** The activation whose committed intent names the runtime `prepared` really pins. */
 export const COMMIT = activatedCommit(makeActivationRequest({
-  intent: makeIntent({ runtimeObservationDigest: DIGEST.runtime }),
-  observedRuntimeDigest: DIGEST.runtime,
+  intent: makeIntent({ runtimeObservationDigest: QUOTED_DIGEST }),
+  observedRuntimeDigest: QUOTED_DIGEST,
 }), "matched");
 
 /**

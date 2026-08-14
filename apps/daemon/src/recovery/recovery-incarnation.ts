@@ -7,8 +7,8 @@ import {
   attemptPort,
   digestOf,
   snapshotKeyMaterial,
-  snapshotRequest,
 } from "./recovery-incarnation-contract.js";
+import { snapshotRequest } from "./recovery-incarnation-context.js";
 import type {
   RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,

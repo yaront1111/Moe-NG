@@ -9,9 +9,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createNodeRecoveryCryptoPort } from "./recovery-incarnation.node.js";
 import { createRecoveryIncarnationService } from "./recovery-incarnation.js";
 import type {
-  RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,
   RecoveryIncarnationKeyHandle,
+  RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
 import { anchorIncarnation, readAnchoredIncarnation } from "./recovery-incarnation-anchor.js";
 import {
@@ -85,7 +85,7 @@ afterEach(() => {
 });
 
 interface Incarnation {
-  readonly binding: RecoveryIncarnationBinding;
+  readonly binding: RestoreIncarnationBinding;
   readonly keyHandle: RecoveryIncarnationKeyHandle;
 }
 
@@ -267,7 +267,7 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
     run: async (state) => {
       const port = createNodeRecoveryCryptoPort();
       const origin = await mint(port, "restore-origin");
-      const tampered: RecoveryIncarnationBinding = {
+      const tampered: RestoreIncarnationBinding = {
         ...origin.binding,
         proof: {
           ...origin.binding.proof,
@@ -287,7 +287,7 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
       // The proof is untouched and still verifies perfectly under this binding's
       // own key. Only recomputing digestOf("challenge", bindingDigest) catches
       // that it is now attached to a statement it never signed.
-      const tampered: RecoveryIncarnationBinding = {
+      const tampered: RestoreIncarnationBinding = {
         ...origin.binding,
         bindingDigest: flipHex(origin.binding.bindingDigest),
       };
@@ -301,7 +301,7 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
     run: async (state) => {
       const port = createNodeRecoveryCryptoPort();
       const origin = await mint(port, "restore-origin");
-      const tampered: RecoveryIncarnationBinding = {
+      const tampered: RestoreIncarnationBinding = {
         ...origin.binding,
         verificationKeyFingerprint: flipHex(origin.binding.verificationKeyFingerprint),
       };

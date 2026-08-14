@@ -143,17 +143,23 @@
     {
       "stepId": "step-8",
       "description": "Close out. Re-measure every production file touched with `grep -c ''` (PowerShell Measure-Object -Line undercounts) and confirm recovery-initial-install.ts is <=250 and sqlite-event-store.ts is under 400. Run the fresh full gate `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` from the repo root and keep its verbatim tail as the completion evidence, plus the pass count compared against the ~453-test store baseline so no existing test silently disappeared. Run the adversarial-self-review skill over the whole diff, specifically: what happens if this runs twice concurrently on the same file; what a caller does with CURRENT versus INSTALLED (authority must come only from INSTALLED); whether any refusal constant leaked observed data; whether any guard can be answered by an earlier one and thereby go untested; and whether a poisoned handle can still be mistaken for a benign refusal. Then stage the owned paths explicitly — `git add` is required first for the new untracked files, because a commit pathspec naming an untracked path commits nothing at all — verify `git status --porcelain` shows no foreign path staged (this worktree is shared; .moe/** and packages/runner/** belong to other agents), commit with `git commit -- <the 8 owned paths>`, and confirm with `git show --stat` that only those paths landed. Report the base-ref diff `git diff <merge-base>..HEAD -- packages/store/src` for QA.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.test.ts",
         "packages/store/src/index.ts"
       ],
-      "startedAt": "2026-08-14T09:06:41.201Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.ts",
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "SIZES (grep -c '', not Measure-Object): recovery-initial-install.ts 177, recovery-initial-install-contracts.ts 102, recovery-install.ts 191, decision-ledger.ts 149, sqlite-event-store.ts 368, index.ts 117. All under the 250 target; sqlite-event-store.ts under the 400 bar. No stray NUL bytes in any new file.\n\nFRESH GATE (post-commit): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` -> EXIT 0, Test Files 41 passed (41), Tests 468 passed (468). Baseline was 40 files / 453 tests; the delta is exactly this task's 15 new tests, so nothing existing silently disappeared.\n\nADVERSARIAL SELF-REVIEW — two real defects found and FIXED (committed as 33c7afe), not just noted:\n1. VACUOUS LEG. readPristineBlocker re-read `this.projectId` (typed string|null) to bind the command_decisions leg. Bound as NULL, `WHERE project_id = ?` matches no row and that leg goes silently false rather than failing — precisely the \"sweep that silently produces zero cases\" failure mode. Unreachable today because the scope check returns first, but one reordering away from live. Now the narrowed id is captured at the scope check and threaded down as `string`, making it unrepresentable.\n2. UNPINNED GUARD ORDER. Every prior test reaches at most one guard, so history-versus-ALREADY_BOUND and PENDING-versus-HISTORY were both unpinned — reversing them left the suite green. Added a precedence test: history + valid ACTIVE incumbent must answer HISTORY_PRESENT (not CURRENT), then adding PENDING must answer PENDING_PRESENT, and neither attempt disturbs the incumbent. D5 DRILL: moving the ACTIVE check ahead of the history check reddens exactly that test with \"AssertionError: history and active: expected a refusal, got CURRENT\"; restored, sha256 verified.\n\nChecklist answers: (a) TWICE CONCURRENTLY — BEGIN IMMEDIATE takes the write lock before any guard reads, so the loser blocks then observes the winner's row; the race test proves outcomes are exactly [CURRENT, INSTALLED]. A lock that cannot be taken within busy_timeout throws STORE_BUSY, never a benign refusal. (b) CURRENT vs INSTALLED — authority comes only from INSTALLED; CURRENT is ok:true/outcome CURRENT/authority NONE, documented at the type and the facade and asserted in both the restore-preservation and race tests. (c) REFUSAL DATA LEAK — all three refusals are frozen constants built from literals; nothing from the failure site reaches them. CURRENT does carry observed data but is not a refusal, and its binding comes from decodeRecoveryBinding's validated output rather than the raw columns (D4 proves the cross-check is live). (d) POISONED vs BENIGN — the refusal ROLLBACK sits INSIDE the try, so a failing ROLLBACK routes through releaseInstallTransaction, poisons the handle and throws OUTCOME_UNKNOWN; a poisoned handle then throws STORE_UNAVAILABLE from requireOpen. (e) NOTED, not a risk: the four unscoped history legs would count another project's rows, but store_project_binding is a singleton and openForProject asserts the live binding matches, so a store only ever holds one project.\n\nKNOWN HAZARD, DISCLOSED. Foreign whole-tree commit 6ffb4fe (task-de496f4785a242569aa4ffc3ef6f1d69) captured 8 of my 10 owned paths mid-task. Per the project rail I did not amend, reset, or claim it. I verified the captured bytes are the CORRECT post-restore bytes, not a drilled state: the working tree was clean against HEAD and its sha256 matched the pre-drill hash. My own two remaining paths are committed by explicit pathspec as 33c7afe (`git show --stat`: only recovery-initial-install.ts and recovery-initial-install.test.ts).\n\nQA should review by BASE-REF DIFF, not by commit: `git diff d7a71cb..HEAD -- packages/store/src` = exactly the 10 owned paths, 1062 insertions / 7 deletions, no foreign path — decision-ledger.ts, index.ts, recovery-install.ts, sqlite-event-store.ts, recovery-initial-install{,-contracts}.{ts,js}, recovery-initial-install.test.ts, recovery-initial-install-race-worker.mjs.",
+      "startedAt": "2026-08-14T09:06:41.201Z",
+      "completedAt": "2026-08-14T09:11:02.413Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5dfdc624",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-50f0d628",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -165,17 +171,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T09:06:41.201Z",
+  "updatedAt": "2026-08-14T09:13:13.632Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
     "governor-18a42000",
-    "worker-5dfdc624"
+    "worker-5dfdc624",
+    "qa-50f0d628"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -187,7 +194,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:53:56.349Z",
@@ -215,5 +223,24 @@
     "wallClockMs": 7200000
   },
   "planApprovedAt": "2026-08-14T08:53:58.406Z",
-  "workStartedAt": "2026-08-14T08:55:22.349Z"
+  "workStartedAt": "2026-08-14T08:55:22.349Z",
+  "reviewStartedAt": "2026-08-14T09:12:28.886Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n Test Files  41 passed (41)\n      Tests  468 passed (468)\n   Start at  12:11:35\n   Duration  4.26s (transform 10.21s, setup 0ms, import 18.64s, tests 22.86s, environment 3ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-14T09:12:28.886Z"
+  },
+  "filesModified": [
+    "packages/store/src/recovery-initial-install.ts",
+    "packages/store/src/recovery-initial-install.js",
+    "packages/store/src/recovery-initial-install.test.ts",
+    "packages/store/src/recovery-install.ts",
+    "packages/store/src/recovery-initial-install-contracts.ts",
+    "packages/store/src/recovery-initial-install-contracts.js",
+    "packages/store/src/decision-ledger.ts",
+    "packages/store/src/sqlite-event-store.ts",
+    "packages/store/src/index.ts",
+    "packages/store/src/recovery-initial-install-race-worker.mjs"
+  ]
 }

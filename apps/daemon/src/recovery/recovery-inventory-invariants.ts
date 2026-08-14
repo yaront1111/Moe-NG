@@ -31,13 +31,24 @@ const populationRank = (population: RecoveryInventoryPopulation): number =>
   RECOVERY_INVENTORY_POPULATIONS.indexOf(population);
 
 /**
+ * U+0000, built with `fromCharCode` rather than written into the source. A
+ * literal NUL byte makes Git classify the whole TypeScript blob as binary and
+ * kills line diff, blame and merge for the file, and the backslash-u escape for
+ * it does not survive every editor and shell that touches this repo; computing
+ * it leaves the source plain ASCII with the identical runtime value. A control
+ * character is the correct separator because identity validation rejects every
+ * `\p{Cc}`/`\p{Cf}` code point, so it can never occur inside an identity.
+ */
+const IDENTITY_SEPARATOR = String.fromCharCode(0);
+
+/**
  * Class-scoped, never global: one external identity may legitimately appear in
- * two different proof classes, and NUL is used as the separator because it
- * cannot occur inside a validated identity, so no pair of distinct
- * (class, identity) tuples can collide onto one key.
+ * two different proof classes, and the separator cannot occur inside a
+ * validated identity, so no pair of distinct (class, identity) tuples can
+ * collide onto one key.
  */
 export const recoveryClassScopedIdentity = (proofClass: string, identity: string): string =>
-  `${proofClass}0000${identity}`;
+  `${proofClass}${IDENTITY_SEPARATOR}${identity}`;
 
 /**
  * Declared class order, then declared POPULATION order inside that class, then

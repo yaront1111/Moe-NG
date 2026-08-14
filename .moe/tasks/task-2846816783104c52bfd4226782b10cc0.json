@@ -21,23 +21,34 @@
     {
       "stepId": "step-1",
       "description": "TDD. Create the tagged context union and the ONE shared derivation core. Export: RECOVERY_INCARNATION_ORIGINS = Object.freeze(['GENESIS','RESTORE'] as const) and RecoveryIncarnationOrigin; RestoreIncarnationContext {origin:'RESTORE'; restoreCommandId; backupGenerationDigest}; GenesisIncarnationContext {origin:'GENESIS'; projectId; storeContextDigest}; the union RecoveryIncarnationContext; snapshotRestoreContext(value) and snapshotGenesisContext(value) reusing the existing descriptor-snapshot discipline (exact own-key set, data properties only, refuse extra keys) copied in style from snapshotRequest; contextParts(context) returning the framed derivation parts with the ORIGIN TAG FIRST for BOTH origins ([origin, restoreCommandId, backupGenerationDigest] / [origin, projectId, storeContextDigest]); and deriveIncarnation({context, incarnationDigest, verificationKeyFingerprint, publicKeySpkiHex}) returning frozen {incarnationRef, keyEpochRef, bindingDigest, challengeDigest} using the existing digestOf domains 'incarnation' / 'key-epoch' / 'binding' / 'challenge'. CRITICAL: snapshotGenesisContext must NOT accept a caller-supplied storeContextDigest — it derives it as digestOf('genesis-store', projectId) internally and refuses an object that carries the key at all, because DoD-3 forbids caller-selected context. Import digestOf and RECOVERY_INCARNATION_SCHEMA_VERSION from recovery-incarnation-contract.js; do NOT re-implement framing. Tests in recovery-incarnation.test.ts: assert a GENESIS and a RESTORE context whose raw string parts are deliberately identical derive DIFFERENT incarnationRef/keyEpochRef/bindingDigest (cross-origin collision resistance), and assert snapshotGenesisContext refuses a caller-supplied storeContextDigest.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-context.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-context.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-context.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-context.js",
+        "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "note": "Added recovery-incarnation-context.ts (174 lines) + its .js bridge: RECOVERY_INCARNATION_ORIGINS (frozen GENESIS/RESTORE), Restore/Genesis context interfaces + union, exactDataValues descriptor snapshot, snapshotRequest (MOVED here from contract.ts so contract stays under the 250 cap; behavior byte-identical), snapshotRestoreContext, snapshotGenesisContext (derives storeContextDigest=digestOf('genesis-store',projectId), refuses an object carrying that key at all), contextParts (origin tag FIRST for both branches), deriveIncarnation (one core: incarnation/key-epoch/binding/challenge). No import cycle: context imports contract, contract does not import context. RED first: focused run failed with \"Cannot find module ./recovery-incarnation-context.js\"; now 79 passed, and --reporter=verbose confirms all 7 new named tests ran (cross-origin collision with byte-identical raw parts, caller-supplied storeContextDigest refused, accessor-backed context refused, SPKI moves bindingDigest). Owned-path typecheck clean; foreign in-flight red exists in recovery-inventory-codec.ts / recovery-inventory-invariants.ts / work-claim.test.ts from a live peer (files dirty in git status, not mine).",
+      "startedAt": "2026-08-14T09:08:33.418Z",
+      "completedAt": "2026-08-14T09:11:38.891Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD. Turn RecoveryIncarnationBinding into an exact discriminated union in recovery-incarnation-contract.ts. Factor the shared members into RecoveryIncarnationBindingCommon (schemaVersion, incarnationDigest, incarnationRef, keyEpochRef, verificationKeyFingerprint, publicKeyAlgorithm:'Ed25519', publicKeySpkiHex, bindingDigest, proof) and define RestoreIncarnationBinding = Common & {origin:'RESTORE'; restoreCommandId: string; backupGenerationDigest: string} and GenesisIncarnationBinding = Common & {origin:'GENESIS'; projectId: string; storeContextDigest: string}; RecoveryIncarnationBinding is their union. RESTORE keeps its two field names at TOP LEVEL and its exact types — do not move them into a nested context object, because DoD-1 requires the existing restore API preserved. GENESIS is structurally incapable of carrying restoreCommandId/backupGenerationDigest, satisfying task rail 1 at the type level. Leave RecoveryIncarnationRequest, snapshotRequest, REQUEST_KEYS, the three refusal constants, digestOf, snapshotKeyMaterial, attemptPort and PORT_FAILED untouched. Re-export the context symbols from step 1 so existing importers still see one module. Keep this file at or under 250 physical lines (it is 233 now) — move any overflow into recovery-incarnation-context.ts rather than growing it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:11:58.555Z"
     },
     {
       "stepId": "step-3",
@@ -132,11 +143,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:04:38.496Z",
+  "updatedAt": "2026-08-14T09:11:58.555Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -147,7 +159,9 @@
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:58:46.948Z",
   "planningNotes": {
@@ -167,5 +181,6 @@
   "budget": {
     "wallClockMs": 9000000
   },
-  "planApprovedAt": "2026-08-14T08:58:49.000Z"
+  "planApprovedAt": "2026-08-14T08:58:49.000Z",
+  "workStartedAt": "2026-08-14T09:08:33.418Z"
 }

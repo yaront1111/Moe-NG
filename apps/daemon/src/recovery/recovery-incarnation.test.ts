@@ -21,15 +21,34 @@ import type {
   RecoveryIncarnationErrorCode,
   RecoveryIncarnationKeyPair,
   RecoveryIncarnationMinted,
+  RecoveryIncarnationProof,
   RecoveryIncarnationRefused,
   RecoveryIncarnationRequest,
   RecoveryIncarnationResult,
 } from "@moe/daemon";
+import { digestOf } from "./recovery-incarnation-contract.js";
+import type {
+  GenesisIncarnationBinding,
+  RestoreIncarnationBinding,
+} from "./recovery-incarnation-contract.js";
+import {
+  RECOVERY_INCARNATION_ORIGINS,
+  deriveIncarnation,
+  snapshotGenesisContext,
+  snapshotRestoreContext,
+} from "./recovery-incarnation-context.js";
+import type { RecoveryIncarnationOrigin } from "./recovery-incarnation-context.js";
 
 const DIGEST_A = "a".repeat(64);
 const DIGEST_B = `${"b".repeat(63)}9`;
 const COMMAND_A = "restore-command-alpha";
 const COMMAND_B = "restore-command-beta";
+const PROJECT = "proj-genesis-alpha";
+
+const restoreContextInput = (): Record<string, unknown> => ({
+  backupGenerationDigest: DIGEST_A,
+  restoreCommandId: COMMAND_A,
+});
 
 const request = (
   restoreCommandId: string = COMMAND_A,
@@ -753,5 +772,139 @@ describe("the Node adapter protects its private key", () => {
     );
     expect(imported.algorithm.name).toBe("Ed25519");
     expect(await port.verify(pair.publicKeySpki, bytes(6, 8), bytes(0, 64))).toBe(false);
+  });
+});
+
+/**
+ * The tagged origin union and the ONE derivation core both mints share. Imported
+ * from the module rather than the package root because neither the context nor
+ * the genesis shell is part of the daemon's published runtime surface; they are
+ * still production code, never a local reimplementation.
+ */
+describe("the tagged recovery origin union", () => {
+  it("publishes exactly two frozen origins", () => {
+    expect([...RECOVERY_INCARNATION_ORIGINS]).toEqual(["GENESIS", "RESTORE"]);
+    expect(Object.isFrozen(RECOVERY_INCARNATION_ORIGINS)).toBe(true);
+    expectTypeOf<RecoveryIncarnationOrigin>().toEqualTypeOf<"GENESIS" | "RESTORE">();
+  });
+
+  it("derives the genesis store context itself instead of accepting one", () => {
+    const context = snapshotGenesisContext({ projectId: PROJECT });
+    expect(context).not.toBeNull();
+    expect(context?.origin).toBe("GENESIS");
+    expect(context?.storeContextDigest).toBe(digestOf("genesis-store", PROJECT));
+  });
+
+  it("refuses a caller-supplied store context digest rather than dropping it", () => {
+    expect(
+      snapshotGenesisContext({
+        projectId: PROJECT,
+        storeContextDigest: digestOf("genesis-store", PROJECT),
+      }),
+    ).toBeNull();
+    expect(snapshotGenesisContext({ origin: "GENESIS", projectId: PROJECT })).toBeNull();
+    expect(snapshotGenesisContext({ projectId: PROJECT, restoreCommandId: COMMAND_A })).toBeNull();
+    expect(snapshotGenesisContext({})).toBeNull();
+    expect(snapshotGenesisContext({ projectId: "project with spaces" })).toBeNull();
+  });
+
+  it("refuses a restore context carrying genesis fields", () => {
+    expect(snapshotRestoreContext(restoreContextInput())).not.toBeNull();
+    expect(
+      snapshotRestoreContext({ ...restoreContextInput(), projectId: PROJECT }),
+    ).toBeNull();
+    expect(snapshotRestoreContext({ restoreCommandId: COMMAND_A })).toBeNull();
+  });
+
+  it("reads a restore context from descriptors, never from an accessor", () => {
+    const hostile = Object.defineProperty({ restoreCommandId: COMMAND_A }, "backupGenerationDigest", {
+      configurable: true,
+      enumerable: true,
+      get: () => DIGEST_A,
+    });
+    expect(snapshotRestoreContext(hostile)).toBeNull();
+  });
+
+  it("separates two origins whose raw context parts are byte-identical", () => {
+    // The genesis store digest is what a restore generation digest looks like, so
+    // this restore request can name EXACTLY the two strings genesis derives. Only
+    // the origin tag is left to tell them apart.
+    const storeContextDigest = digestOf("genesis-store", PROJECT);
+    const genesis = snapshotGenesisContext({ projectId: PROJECT });
+    const restore = snapshotRestoreContext({
+      backupGenerationDigest: storeContextDigest,
+      restoreCommandId: PROJECT,
+    });
+    expect(genesis).not.toBeNull();
+    expect(restore).not.toBeNull();
+    expect([genesis?.projectId, genesis?.storeContextDigest])
+      .toEqual([restore?.restoreCommandId, restore?.backupGenerationDigest]);
+
+    const material = {
+      incarnationDigest: DIGEST_A,
+      publicKeySpkiHex: "ab".repeat(22),
+      verificationKeyFingerprint: DIGEST_B,
+    };
+    const fromGenesis = deriveIncarnation({ context: genesis!, ...material });
+    const fromRestore = deriveIncarnation({ context: restore!, ...material });
+    expect(fromGenesis.incarnationRef).not.toBe(fromRestore.incarnationRef);
+    expect(fromGenesis.keyEpochRef).not.toBe(fromRestore.keyEpochRef);
+    expect(fromGenesis.bindingDigest).not.toBe(fromRestore.bindingDigest);
+    expect(fromGenesis.challengeDigest).not.toBe(fromRestore.challengeDigest);
+  });
+
+  it("binds the published SPKI into the binding digest", () => {
+    const context = snapshotGenesisContext({ projectId: PROJECT })!;
+    const base = {
+      context,
+      incarnationDigest: DIGEST_A,
+      publicKeySpkiHex: "ab".repeat(22),
+      verificationKeyFingerprint: DIGEST_B,
+    };
+    const moved = deriveIncarnation({ ...base, publicKeySpkiHex: "cd".repeat(22) });
+    expect(moved.bindingDigest).not.toBe(deriveIncarnation(base).bindingDigest);
+    expect(Object.isFrozen(deriveIncarnation(base))).toBe(true);
+  });
+});
+
+describe("the binding is an exact discriminated union", () => {
+  it("names both branches and nothing else", () => {
+    expectTypeOf<RecoveryIncarnationBinding>()
+      .toEqualTypeOf<GenesisIncarnationBinding | RestoreIncarnationBinding>();
+    expectTypeOf<RestoreIncarnationBinding["origin"]>().toEqualTypeOf<"RESTORE">();
+    expectTypeOf<GenesisIncarnationBinding["origin"]>().toEqualTypeOf<"GENESIS">();
+  });
+
+  it("keeps the restore branch's two fields at top level and their exact types", () => {
+    expectTypeOf<RestoreIncarnationBinding["restoreCommandId"]>().toEqualTypeOf<string>();
+    expectTypeOf<RestoreIncarnationBinding["backupGenerationDigest"]>().toEqualTypeOf<string>();
+    expectTypeOf<RestoreIncarnationBinding["proof"]>().toEqualTypeOf<RecoveryIncarnationProof>();
+  });
+
+  it("makes a genesis branch structurally incapable of carrying restore facts", () => {
+    // Exact key sets rather than four negative probes: an exact set also refuses
+    // a field a later edit adds, which a `not.toHaveProperty` list never would.
+    expectTypeOf<keyof GenesisIncarnationBinding>().toEqualTypeOf<
+      | "bindingDigest" | "incarnationDigest" | "incarnationRef" | "keyEpochRef" | "origin"
+      | "projectId" | "proof" | "publicKeyAlgorithm" | "publicKeySpkiHex" | "schemaVersion"
+      | "storeContextDigest" | "verificationKeyFingerprint"
+    >();
+    expectTypeOf<keyof RestoreIncarnationBinding>().toEqualTypeOf<
+      | "backupGenerationDigest" | "bindingDigest" | "incarnationDigest" | "incarnationRef"
+      | "keyEpochRef" | "origin" | "proof" | "publicKeyAlgorithm" | "publicKeySpkiHex"
+      | "restoreCommandId" | "schemaVersion" | "verificationKeyFingerprint"
+    >();
+  });
+
+  it("keeps the port-based service a RESTORE-only mint", () => {
+    expectTypeOf<RecoveryIncarnationMinted["binding"]>().toEqualTypeOf<RestoreIncarnationBinding>();
+  });
+
+  it("tags every binding the port-based service actually mints", async () => {
+    const service = createRecoveryIncarnationService(createNodeRecoveryCryptoPort());
+    const value = minted(await service.mint(request()));
+    expect(value.binding.origin).toBe("RESTORE");
+    expect(value.binding.restoreCommandId).toBe(COMMAND_A);
+    expect(value.binding.backupGenerationDigest).toBe(DIGEST_A);
   });
 });
