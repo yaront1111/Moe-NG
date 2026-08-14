@@ -453,30 +453,36 @@ describe("genesis recovery-binding initial install: durable outcomes", () => {
         throw new Error("simulated lost genesis COMMIT acknowledgement");
       }
     };
-    let caught: unknown;
     try {
-      store.installInitialRecoveryBinding(binding("ACTIVE", REF_X));
-    } catch (error) {
-      caught = error;
-    } finally {
-      DatabaseSync.prototype.exec = originalExec;
-    }
-    expect(caught, "an unprovable genesis outcome must throw, never return a refusal").toBeInstanceOf(
-      DurableStoreError,
-    );
-    expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+      let caught: unknown;
+      try {
+        store.installInitialRecoveryBinding(binding("ACTIVE", REF_X));
+      } catch (error) {
+        caught = error;
+      }
+      expect(
+        caught,
+        "an unprovable genesis outcome must throw, never return a refusal",
+      ).toBeInstanceOf(DurableStoreError);
+      expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
 
-    // Quarantined, not merely closed: STORE_UNAVAILABLE names the poisoned state.
-    let afterward: unknown;
-    try {
-      store.readRecoveryBinding("ACTIVE");
-    } catch (error) {
-      afterward = error;
+      // Quarantined, not merely closed: STORE_UNAVAILABLE names the poisoned state.
+      let afterward: unknown;
+      try {
+        store.readRecoveryBinding("ACTIVE");
+      } catch (error) {
+        afterward = error;
+      }
+      expect(afterward).toBeInstanceOf(DurableStoreError);
+      expect((afterward as DurableStoreError).code).toBe("STORE_UNAVAILABLE");
+      expect((afterward as DurableStoreError).message).toContain("quarantined");
+    } finally {
+      // Restore the prototype and release the handle on EVERY exit path: a held
+      // SQLite handle makes the Windows afterEach rmSync throw EPERM and kills
+      // the vitest worker, hiding whichever assertion actually failed.
+      DatabaseSync.prototype.exec = originalExec;
+      store.close();
     }
-    expect(afterward).toBeInstanceOf(DurableStoreError);
-    expect((afterward as DurableStoreError).code).toBe("STORE_UNAVAILABLE");
-    expect((afterward as DurableStoreError).message).toContain("quarantined");
-    store.close();
 
     const reopened = SqliteEventStore.openForProject(path, PROJECT_ID);
     try {
