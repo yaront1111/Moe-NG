@@ -117,8 +117,8 @@
       "completedAt": "2026-08-14T09:21:58.996Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-25ca55c6",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -173,7 +173,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T09:21:58.996Z",
+  "updatedAt": "2026-08-14T09:23:41.402Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
@@ -228,21 +228,18 @@
   },
   "planApprovedAt": "2026-08-14T09:01:12.558Z",
   "workStartedAt": "2026-08-13T21:00:34.365Z",
-  "reviewStartedAt": "2026-08-13T22:33:32.497Z",
+  "reviewStartedAt": "2026-08-14T09:23:41.402Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  65 passed (65)\n      Tests  1112 passed (1112)\n   Duration  3.41s\n$ vitest run --root ../.. packages/scheduler/src\n RUN v4.1.10 D:/projexts/moe-next\n Test Files  42 passed (42)\n      Tests  1219 passed (1219)\n   Duration  1.07s\nGATE_EXIT=0",
-    "reportedAt": "2026-08-13T22:33:32.497Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files  69 passed (69)\nTests  1490 passed (1490)\nDuration  5.50s\n\nRUN v4.1.10 D:/projexts/moe-next\nTest Files  43 passed (43)\nTests  1319 passed (1319)\nDuration  2.21s\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n$ vitest run --root ../.. packages/scheduler/src",
+    "reportedAt": "2026-08-14T09:23:41.402Z"
   },
   "filesModified": [
-    "apps/daemon/src/work/work-claim.test.ts",
-    "apps/daemon/src/work/work-kernel.ts",
-    "apps/daemon/src/work/work-claim.ts",
     "apps/daemon/src/work/work-claim-shape.ts",
-    "apps/daemon/src/work/work-claim-shape.js",
-    "apps/daemon/src/work/work-vocabulary.test.ts",
-    "apps/daemon/src/index-surface.test.ts"
+    "apps/daemon/src/work/work-claim.ts",
+    "apps/daemon/src/work/work-slot-ceiling.ts",
+    "apps/daemon/src/work/work-claim.test.ts"
   ],
   "reviewCompletedAt": "2026-08-13T22:53:19.675Z",
   "rejectionDetails": {

@@ -440,6 +440,57 @@ describe("genesis recovery-binding initial install: durable outcomes", () => {
     }
   });
 
+  it("quarantines the handle with OUTCOME_UNKNOWN when the genesis COMMIT is unacknowledged", () => {
+    const path = databasePath("commit-ambiguity");
+    const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+    const originalExec = DatabaseSync.prototype.exec;
+    let loseAcknowledgement = true;
+    DatabaseSync.prototype.exec = function execWithLostAcknowledgement(sql: string): void {
+      originalExec.call(this, sql);
+      // The COMMIT lands durably; only its acknowledgement is lost.
+      if (loseAcknowledgement && sql.trim() === "COMMIT") {
+        loseAcknowledgement = false;
+        throw new Error("simulated lost genesis COMMIT acknowledgement");
+      }
+    };
+    let caught: unknown;
+    try {
+      store.installInitialRecoveryBinding(binding("ACTIVE", REF_X));
+    } catch (error) {
+      caught = error;
+    } finally {
+      DatabaseSync.prototype.exec = originalExec;
+    }
+    expect(caught, "an unprovable genesis outcome must throw, never return a refusal").toBeInstanceOf(
+      DurableStoreError,
+    );
+    expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+
+    // Quarantined, not merely closed: STORE_UNAVAILABLE names the poisoned state.
+    let afterward: unknown;
+    try {
+      store.readRecoveryBinding("ACTIVE");
+    } catch (error) {
+      afterward = error;
+    }
+    expect(afterward).toBeInstanceOf(DurableStoreError);
+    expect((afterward as DurableStoreError).code).toBe("STORE_UNAVAILABLE");
+    expect((afterward as DurableStoreError).message).toContain("quarantined");
+    store.close();
+
+    const reopened = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      const active = reopened.readRecoveryBinding("ACTIVE");
+      expect(active.ok, "the unacknowledged genesis row did land durably").toBe(true);
+      if (!active.ok || active.outcome !== "FOUND") {
+        throw new Error(`expected FOUND, got ${active.outcome}`);
+      }
+      expect(active.binding.incarnationRef).toBe(REF_X);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it("yields to an already-installed restore binding without touching its bytes", () => {
     const path = databasePath("restore-preservation");
     let restoreDigest: string;

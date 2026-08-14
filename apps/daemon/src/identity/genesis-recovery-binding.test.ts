@@ -15,6 +15,7 @@ import {
   ensureGenesisRecoveryBinding,
 } from "./genesis-recovery-binding.js";
 import { readCurrentRecoveryAuthenticationBinding } from "./recovery-authentication-binding.js";
+import { mintGenesisIncarnation } from "../recovery/recovery-incarnation-genesis.js";
 import {
   PROJECT_ID,
   closeStores,
@@ -100,6 +101,29 @@ describe("genesis recovery binding — first boot", () => {
     expect(result.binding.keyEpochRef).toBe("72".repeat(32));
   });
 
+  it("installs the SHARED mint's store context, not a locally invented one", () => {
+    // Delegation is the point of this rewire: the installed payload must be the
+    // context digest the shared genesis mint derives for this project, and it
+    // must be stable across boots while the identity itself stays fresh.
+    const independent = mintGenesisIncarnation(PROJECT_ID);
+    if (!independent.ok) throw new Error(`the shared mint must succeed: ${independent.code}`);
+    let payload: Uint8Array | null = null;
+    const store = {
+      installRecoveryBinding: (input: unknown): RecoveryInstallResult => {
+        payload = (input as { payload: Uint8Array }).payload;
+        return Object.freeze({
+          ok: false as const, code: "RECOVERY_INSTALL_SCOPE_REQUIRED", layer: "STORE",
+        }) as unknown as RecoveryInstallResult;
+      },
+      readCommandDecisionsAfter: (): DecisionPage => NO_DECISIONS,
+      readRecoveryBinding: (): RecoveryBindingReadResult =>
+        Object.freeze({ ok: true as const, outcome: "ABSENT" as const, slot: "ACTIVE" as const }),
+    };
+    ensureGenesisRecoveryBinding(store, { clock: CLOCK, projectId: PROJECT_ID });
+    expect(payload).not.toBeNull();
+    expect(new TextDecoder().decode(payload!)).toBe(independent.binding.storeContextDigest);
+  });
+
   it("two fresh stores mint distinct incarnations", () => {
     const a = requireBinding(ensureGenesisRecoveryBinding(openUnboundStore(), {
       clock: CLOCK, projectId: PROJECT_ID,
@@ -133,6 +157,9 @@ describe("genesis recovery binding — fail closed", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("GENESIS_SLOT_UNREADABLE");
+    // Which layer refused, not merely that something did: the store's own code
+    // is carried through rather than collapsed into the genesis code.
+    expect(result.storeCode).toBe("RECOVERY_BINDING_DIGEST_MISMATCH");
     expect(GENESIS_RECOVERY_ERROR_CODES).toContain(result.code);
   });
 
@@ -155,6 +182,7 @@ describe("genesis recovery binding — fail closed", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
     expect(result.code).toBe("GENESIS_INSTALL_REFUSED");
+    expect(result.storeCode).toBe("RECOVERY_INSTALL_SCOPE_REQUIRED");
   });
 
   it("defers to a restore waiting to quiesce instead of stealing the slot", () => {

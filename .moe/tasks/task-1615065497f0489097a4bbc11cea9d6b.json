@@ -20,7 +20,7 @@
     {
       "stepId": "step-1",
       "description": "Land the capability vocabulary in a NEW file packages/store/src/recovery-initial-install.ts (plus its one-line ESM bridge recovery-initial-install.js: `export * from \"./recovery-initial-install.ts\";`, matching every sibling production module). Define its OWN closed registry — do NOT extend RECOVERY_INSTALL_REASON_CODES: packages/store/src/recovery-install-entrypoint.test.ts:33 asserts `reasonCodeCount: 8` inside a whole-object toEqual, so growing the shared registry reddens an existing test the DoD requires to stay green. Publish: `RECOVERY_INITIAL_INSTALL_REASON_CODES = Object.freeze([\"RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED\", \"RECOVERY_INITIAL_INSTALL_PENDING_PRESENT\", \"RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT\", \"RECOVERY_INITIAL_INSTALL_ALREADY_BOUND\"] as const)` + its type; three FROZEN MODULE-CONSTANT refusals (same 7-field shape as RecoveryInstallRefused — ok:false, outcome:\"REFUSED\", authority:\"NONE\", truth:\"UNKNOWN\", code, layer, reason — nothing observed at the failure site may reach them) for the first three codes, all at RECOVERY_INSTALL_TRANSACTION_LAYER; and the result union `RecoveryInitialInstallResult = RecoveryInstallCommitted | RecoveryInitialInstallCurrent | RecoveryInstallRefused | RecoveryInitialInstallRefused`. RecoveryInstallCommitted is REUSED unchanged so a committed genesis record is byte-for-byte the same shape as a replacement install. RecoveryInitialInstallCurrent is a NEW ok:true observation, not a refusal: `{ ok: true, outcome: \"CURRENT\", authority: \"NONE\", code: \"RECOVERY_INITIAL_INSTALL_ALREADY_BOUND\", layer: typeof RECOVERY_INSTALL_TRANSACTION_LAYER, binding: RecoveryBindingRecord, bindingDigest: string }` — it carries the exact valid current winner AND a stable code+layer, so the caller can neither mistake it for an install (outcome !== \"INSTALLED\", authority NONE) nor be left without a stable identifier. Reuse the existing two layers verbatim; do NOT add a third — recovery-install.test.ts:77 asserts RECOVERY_INSTALL_LAYERS toEqual exactly two.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.js"
@@ -28,26 +28,40 @@
       "newFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install-contracts.ts",
+        "packages/store/src/recovery-initial-install-contracts.js"
+      ],
+      "note": "Already landed at 671409f; re-verified on disk, not rewritten. recovery-initial-install-contracts.ts (102 lines) publishes the closed 4-code registry RECOVERY_INITIAL_INSTALL_REASON_CODES, three frozen module-constant refusals at RECOVERY_INSTALL_TRANSACTION_LAYER, and the RecoveryInitialInstallResult union with the ok:true/outcome:\"CURRENT\"/authority:\"NONE\" winner. Shared registry untouched, so recovery-install-entrypoint.test.ts reasonCodeCount:8 stays green. QA confirmed this step correct; the rejection is a test gap in step-3 scope only.",
+      "startedAt": "2026-08-14T09:24:00.328Z",
+      "completedAt": "2026-08-14T09:24:09.356Z"
     },
     {
       "stepId": "step-2",
       "description": "Write the failing refusal-surface tests in a NEW file packages/store/src/recovery-initial-install.test.ts, following recovery-install.test.ts conventions (mkdtempSync temp dirs pushed onto a module array, afterEach rmSync, every store opened and closed inside the `it` body with try/finally — never in a describe body; a held SQLite handle makes the Windows afterEach rmSync throw EPERM and kills the vitest worker with zero test output). Cases, each asserting BOTH the exact code and the exact layer: (a) registry closure — RECOVERY_INITIAL_INSTALL_REASON_CODES has 4 entries, is unique, and is DISJOINT from RECOVERY_INSTALL_REASON_CODES (no code can be ambiguous between the two surfaces); (b) unscoped handle via SqliteEventStore.open(...) with both a well-formed AND a malformed binding -> RECOVERY_INSTALL_SCOPE_REQUIRED / RECOVERY_INSTALL_TRANSACTION_LAYER, proving scope is asked before the codec; (c) codec refusals on a scoped handle (extra key -> RECOVERY_BINDING_SHAPE_INVALID, bad codec version -> RECOVERY_BINDING_CODEC_VERSION_UNSUPPORTED) at RECOVERY_BINDING_CODEC_LAYER; (d) a valid binding naming slot PENDING -> RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED / TRANSACTION layer, and ACTIVE stays ABSENT; (e) a store holding only a PENDING binding (installed through the existing installRecoveryBinding) -> RECOVERY_INITIAL_INSTALL_PENDING_PRESENT, and a store holding BOTH a PENDING and a valid ACTIVE -> still PENDING_PRESENT (pins which guard answers first); (f) closed handle -> throws DurableStoreError with code STORE_CLOSED, not a refusal. Expect this file NOT to compile yet — installInitialRecoveryBinding does not exist. Record that tsc error text as the RED evidence for the step.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.test.ts"
       ],
       "newFiles": [
         "packages/store/src/recovery-initial-install.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Already landed at 671409f; re-verified on disk. recovery-initial-install.test.ts carries all six refusal-surface cases (registry closure/disjointness :171, unscoped-before-codec :188, codec layer :204, PENDING-slot :229, PENDING_PRESENT + precedence :245, closed-handle STORE_CLOSED :276), each asserting exact code AND layer. QA re-ran these green and drilled D4 (PENDING guard off) red on the code assertion. No changes needed.",
+      "startedAt": "2026-08-14T09:24:11.742Z",
+      "completedAt": "2026-08-14T09:24:17.284Z"
     },
     {
       "stepId": "step-3",
       "description": "Add the history, malformed-row, durability and restore-preservation tests to packages/store/src/recovery-initial-install.test.ts. HISTORY (hand-written table of exactly 2 fixtures, with `expect(historyFixtures.length).toBe(2)` and per-fixture pre-state row counts asserted BEFORE the install attempt so a fixture that silently generated nothing cannot pass): H1 commits one real decision through commitExpectedVersionDecision (one event carrying one outbox message) and asserts command_decisions/command_receipts/domain_events/aggregate_heads/outbox_messages all count > 0; H2 uses a raw `new DatabaseSync(path)` handle to insert ONE aggregate_heads row only (that table carries no foreign key, so it is the one history source reachable in isolation) and asserts heads count 1 with receipts/events/decisions counts 0. Both must return RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT / TRANSACTION layer, and ACTIVE must still read ABSENT afterwards. MALFORMED ACTIVE: after a replacement install, tamper binding_bytes only -> RECOVERY_BINDING_DIGEST_MISMATCH at CODEC layer; tamper the incarnation_ref COLUMN only (bytes and digest still agree) -> RECOVERY_BINDING_ROW_DIVERGED at TRANSACTION layer; in both, the initial install must refuse rather than overwrite the unreadable row. DURABILITY: on a fresh file-backed project store, installInitialRecoveryBinding returns outcome INSTALLED with the caller's binding and digest; reopen and assert readRecoveryBinding(\"ACTIVE\") is FOUND with the same incarnationRef, digest and payload bytes, and PENDING is ABSENT. RESTORE PRESERVATION (the mutation-drill anchor): install an ACTIVE binding through the EXISTING replacement installRecoveryBinding (this is the restore path), capture its digest, then call installInitialRecoveryBinding with a DIFFERENT valid binding — assert ok true, outcome \"CURRENT\", authority \"NONE\", code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND, layer TRANSACTION, and that binding.incarnationRef/bindingDigest are the RESTORE's values, not the caller's; then reopen and assert the stored ACTIVE digest and payload are still byte-identical to the restore's.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:24:40.700Z"
     },
     {
       "stepId": "step-4",
@@ -101,7 +115,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5dfdc624",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -113,22 +127,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T09:20:44.926Z",
+  "updatedAt": "2026-08-14T09:24:40.700Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8,
+    "executedStepCount": 10,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
-    "qa-50f0d628"
+    "qa-50f0d628",
+    "worker-5dfdc624"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [
     {
       "item": "A concurrent/pre-existing ACTIVE restore binding, any PENDING binding, ordinary authoritative decision/event history, malformed row, or unprovable transaction outcome grants no genesis authority and returns an exact stable code and layer.",

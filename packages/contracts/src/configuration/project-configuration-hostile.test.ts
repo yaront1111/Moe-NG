@@ -141,6 +141,35 @@ describe("the ordered limit table is dense, exact and positionally bound", () =>
     );
   });
 
+  /**
+   * The density guard is unreachable through a plain hole — `value[3]` reads back as
+   * `undefined` and isPlainRecord already refuses that. Only a polluted Array.prototype
+   * can fill the hole with a valid-looking entry, so this is the case that can kill it.
+   * The polluted window is exactly the parser call; the assertion runs after restore.
+   */
+  it("refuses a sparse table even when Array.prototype fills the hole", () => {
+    const input = mutated(["settings", "limits"], (node) => {
+      const limits = node as unknown as unknown[];
+      delete limits[3];
+      return limits;
+    });
+    const filler = { key: EXPECTED_LIMIT_KEYS[3], value: 3 };
+    Object.defineProperty(Array.prototype, 3, {
+      configurable: true, value: filler, writable: true,
+    });
+    let result: ReturnType<typeof parseProjectConfigurationManifest>;
+    try {
+      result = parseProjectConfigurationManifest(input);
+    } finally {
+      delete (Array.prototype as unknown as Record<number, unknown>)[3];
+    }
+    expect(Object.hasOwn(Array.prototype, 3)).toBe(false);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PROJECT_CONFIGURATION_INPUT_INVALID");
+    expect(result.layer).toBe("PROJECT_CONFIGURATION_MANIFEST");
+  });
+
   it("refuses an entry whose key is the wrong member of the closed vocabulary", () => {
     expectRefusal(
       mutated(["settings", "limits", 0], (node) => ({ ...node, key: EXPECTED_LIMIT_KEYS[1] })),

@@ -137,21 +137,28 @@
     {
       "stepId": "step-7",
       "description": "TDD. Rewire identity/genesis-recovery-binding.ts to consume the shared mint, deleting the duplicate crypto implementation that task rail 2 forbids. Remove the local mintGenesis function entirely along with its generateKeyPairSync/randomBytes/sign/verify imports and its 'genesis:' string-prefix context hack, and call mintGenesisIncarnation(config.projectId) instead. Map a refusal to the existing GENESIS_MINT_FAILED code, keeping the refuse()/present() shapes, GENESIS_RECOVERY_ERROR_CODES and the DEFERRED/PRESENT/INSTALLED outcomes exactly as they are. IMPORTANT SCOPE LINE: the installed payload bytes and the installRecoveryBinding call are OUT OF SCOPE for this task (the description excludes SQLite installation) — keep installing the same payload shape, sourced from the new binding, and do NOT start persisting the full proof here. Persisting it is the downstream consumer edge; see planningNotes for the named consumer tasks. ensureGenesisRecoveryBinding must remain SYNCHRONOUS — createStoreDependencies calls it synchronously and daemon startup changes are out of scope.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/identity/genesis-recovery-binding.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
       ],
-      "startedAt": "2026-08-14T09:22:00.775Z"
+      "modifiedFiles": [
+        "apps/daemon/src/identity/genesis-recovery-binding.ts",
+        "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
+      ],
+      "note": "genesis-recovery-binding.ts is 164 -> 129 lines. The duplicate crypto is GONE: local mintGenesis, the MintedGenesis interface, the node:crypto generateKeyPairSync/randomBytes/sign/verify imports and the 'genesis:${projectId}' string-prefix context are all deleted (grep for generateKeyPairSync|randomBytes|'genesis:' in that file returns nothing). It now calls mintGenesisIncarnation(config.projectId) and maps a refusal to refuse('GENESIS_MINT_FAILED', minted.code) — the store-code slot carries the mint's exact reason code instead of the hardcoded 'SELF_PROOF_FAILED'. Kept exactly: synchronous signature, refuse()/present() shapes, GENESIS_RECOVERY_ERROR_CODES, DEFERRED/PRESENT/INSTALLED, the read-back-is-authority check. SCOPE LINE HELD: the installed payload is still the 64-hex store context digest (encoder.encode(binding.storeContextDigest)) — byte-identical to the old genesisDigest, since both are digestOf('genesis-store', projectId) — and installRecoveryBinding is untouched. The full proof is now RETURNED but still NOT persisted; that is the consuming task's edge and the discarded-proof defect survives this task by design. New test \"installs the SHARED mint's store context, not a locally invented one\" captures the install input and pins the payload to an independently minted binding's storeContextDigest, so a future local re-derivation would redden it. src/identity/ 61/61 green (verbose output confirms the new case ran); owned-path typecheck clean.",
+      "startedAt": "2026-08-14T09:22:00.775Z",
+      "completedAt": "2026-08-14T09:23:22.285Z"
     },
     {
       "stepId": "step-8",
       "description": "Harden the tests to DoD-5 and epic rail 6, which a green suite cannot show you. (a) Generated sweeps: build the GENESIS/RESTORE case table and assert a NONZERO EXACT count (e.g. expect(cases).toHaveLength(<literal>)) before iterating — a sweep that silently generates zero cases passes while testing nothing. (b) Run three mutation drills against the PRODUCTION surface and record that each reddens a named assertion, then restore: [1] delete the origin tag from contextParts so both origins derive identically — the cross-origin collision test must go red; [2] drop publicKeySpkiHex from the deriveIncarnation bindingDigest input — the SPKI-binding test must go red; [3] make decodeBinding accept a GENESIS payload carrying restoreCommandId — the counterfeit-refusal test must go red. (c) Confirm every refusal assertion pins the exact code AND the layer, not merely that the call failed. Restore each mutation with Edit and verify the file hash matches pre-drill before the next drill; do not use git checkout to restore, and do not leave any drill edit on disk.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation.test.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:23:29.323Z"
     },
     {
       "stepId": "step-9",
@@ -187,12 +194,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:22:00.775Z",
+  "updatedAt": "2026-08-14T09:23:29.323Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -209,7 +216,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:58:46.948Z",

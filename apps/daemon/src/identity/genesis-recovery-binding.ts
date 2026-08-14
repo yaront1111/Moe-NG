@@ -19,11 +19,11 @@ import {
  * so a fresh store that never restored could not authenticate anyone — the
  * operator included.
  *
- * Minted here is a GENESIS fencing identity for a store with no recovery
- * history: fresh CSPRNG entropy and a fresh Ed25519 key epoch, derived through
- * the same domain-separated `digestOf` framing the restore mint uses, under a
- * `genesis:` context no restore command produces. The private key dies with
- * this call by design, exactly as the restore key dies with its process.
+ * The fencing identity is minted by `mintGenesisIncarnation`, the ONE shared
+ * mint, under the explicit `GENESIS` origin — never by a second crypto
+ * implementation here, and never by synthesizing a restore command a store that
+ * has not restored does not possess. The private key dies with that call by
+ * design, exactly as the restore key dies with its process.
  *
  * What it deliberately does NOT do: overwrite. A FOUND slot — restore-installed
  * or a prior genesis — is returned as PRESENT untouched, because re-minting on

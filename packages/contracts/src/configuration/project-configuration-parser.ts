@@ -77,7 +77,7 @@ function parseSource(value: unknown): DistributionSource | undefined {
  * short table is a different table, not a table to be rescued.
  */
 function parseLimits(value: unknown): readonly ProjectConfigurationLimitEntry[] | undefined {
-  if (!isSafeArray(value) || value.length < PROJECT_CONFIGURATION_LIMIT_KEYS.length) {
+  if (!isSafeArray(value) || value.length !== PROJECT_CONFIGURATION_LIMIT_KEYS.length) {
     return undefined;
   }
   const entries: ProjectConfigurationLimitEntry[] = [];
