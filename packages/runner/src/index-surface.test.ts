@@ -109,6 +109,16 @@ import type {
   PlatformBoundary, PlatformBoundaryVerdict, PlatformFactEnvelope, PlatformFailure,
   PlatformHostIdentity, PlatformLayer, PlatformObservation, PlatformTruthClass,
 } from "@moe/runner";
+/**
+ * The macOS half of that seam, through the same root and in its own block. A
+ * darwin consumer must be able to compose a whole observation without naming a
+ * single `Linux*` type — if it could not, the two adapters would not really be
+ * independent and macOS would be reachable only by borrowing Linux's closure.
+ */
+import type {
+  MacosBoundaryFacts, MacosClassificationContext, MacosPathFact, MacosWorkspaceFact,
+  ObserveMacosPlatformInput,
+} from "@moe/runner";
 /** The Git ref and artifact object enumeration seam, through the same root. */
 import type {
   ArtifactDirectoryEntry, ArtifactDirectoryEntryKind, ArtifactEnumerationFailure,
@@ -125,7 +135,8 @@ type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "strin
 /**
  * Hand-transcribed: 29 runner scope/artifact/workspace values, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
- * process wrapper publishes, the 11 values the platform boundary seam publishes,
+ * process wrapper publishes, the 15 values the platform boundary seam publishes
+ * (11 neutral-plus-Linux and 4 macOS),
  * the 4 registration factories the recovery-inventory seam publishes, and the 3
  * launch-selection values the launcher seam publishes so a consumer can fill
  * `ClaudeLaunchRequest.launchSelection` and spell the argv it is checked against,
@@ -225,6 +236,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PLATFORM_TRUTH_CLASSES", "array"], ["classifyLinuxBoundary", "function"],
   ["isPlatformFailure", "function"], ["observeLinuxPlatform", "function"],
   ["platformFailure", "function"],
+  // platform/macos/: the darwin classifier, published beside Linux rather than
+  // through it. Four values only — the neutral vocabulary above is shared, and
+  // the nine reason codes are reused under a macOS LAYER instead of duplicated.
+  ["MACOS_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_MACOS_LAYER", "string"],
+  ["classifyMacosBoundary", "function"], ["observeMacosPlatform", "function"],
   // recovery-inventory/: the coverage vocabulary plus the port-composing aggregate.
   ["MAX_RECOVERY_INVENTORY_ITEMS", "number"], ["RECOVERY_INVENTORY_CLASSES", "array"],
   ["RECOVERY_INVENTORY_ERROR_CODES", "array"], ["RECOVERY_INVENTORY_LAYERS", "array"],
@@ -270,7 +286,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(195);
+  expect(EXPECTED_EXPORTS.length).toBe(199);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1336,6 +1352,66 @@ it("lets a consumer drive the Linux platform seam using root exports alone", () 
     "PLATFORM_BOUNDARY_UNKNOWN", "PLATFORM_CONTRACT", null,
   ]);
   expect(runner.PLATFORM_ERROR_CODES).toContain(refused.code);
+});
+
+/**
+ * The same drive, on darwin, deliberately naming NO `Linux*` symbol. Reaching
+ * both UNKNOWN and PROVEN through the root proves the macOS closure is
+ * self-sufficient; asserting `PLATFORM_MACOS_LAYER` rather than merely "some
+ * refusal happened" proves the verdict is not Linux's wearing a new name.
+ *
+ * The facts below are supplied by this test, not observed from a machine. This
+ * asserts deterministic darwin classification; it is not macOS conformance.
+ */
+it("lets a consumer drive the macOS platform seam using root exports alone", () => {
+  const host: PlatformHostIdentity = { os: "darwin", arch: "arm64", osVersion: "24.6.0" };
+  const context: MacosClassificationContext = {
+    host,
+    asOf: "2026-08-09T12:00:00.000Z",
+    maxFactAgeMs: 60_000,
+  };
+  const facts: MacosBoundaryFacts = {
+    PROVIDER_LAUNCH: null, GIT_WORKSPACE: null, PATH_SYMLINK: null, LOCK: null,
+    SIGNAL_CANCELLATION: null, RUNTIME_CLOSURE: null, CRASH_RECOVERY: null,
+  };
+  const input: ObserveMacosPlatformInput = { ...context, facts };
+
+  const observation: PlatformObservation = runner.observeMacosPlatform(input);
+  expect(observation.truthClass).toBe("UNKNOWN");
+  expect(observation.verdicts.map((verdict: PlatformBoundaryVerdict) => verdict.boundary))
+    .toEqual([...runner.PLATFORM_BOUNDARIES]);
+
+  const absent: PlatformFailure | null = observation.verdicts[0]?.failure ?? null;
+  expect(absent?.code).toBe("PLATFORM_FACT_ABSENT");
+  const layer: PlatformLayer | undefined = absent?.layer;
+  expect(layer).toBe(runner.PLATFORM_MACOS_LAYER);
+  expect(layer).not.toBe(runner.PLATFORM_LINUX_LAYER);
+
+  const boundary: PlatformBoundary = "PATH_SYMLINK";
+  const fact: MacosPathFact = {
+    path: "/Users/moe/work", symlinkTarget: null, resolvedPath: "/Users/moe/work",
+  };
+  const envelope: PlatformFactEnvelope<MacosPathFact> = {
+    host, observedAt: "2026-08-09T11:59:59.000Z", truthClass: "PROVEN", fact,
+  };
+  const verdict = runner.classifyMacosBoundary(boundary, envelope, context);
+  if (runner.isPlatformFailure(verdict)) throw new Error("a known boundary must return a verdict");
+  expect([verdict.boundary, verdict.truthClass, verdict.failure]).toEqual([
+    "PATH_SYMLINK", "PROVEN", null,
+  ]);
+
+  // The workspace pair type is part of the published closure too: a consumer
+  // that cannot spell it cannot supply the GIT_WORKSPACE boundary at all.
+  const workspaceFactShape: (value: MacosWorkspaceFact) => readonly string[] =
+    (value) => Object.keys(value).sort();
+  expect(runner.MACOS_SUPPORTED_ARCHITECTURES).toContain(host.arch);
+  expect(typeof workspaceFactShape).toBe("function");
+
+  const refusedBoundary = runner.classifyMacosBoundary("APFS", envelope, context);
+  if (!runner.isPlatformFailure(refusedBoundary)) throw new Error("an unknown boundary must refuse");
+  expect([refusedBoundary.code, refusedBoundary.layer, refusedBoundary.boundary]).toEqual([
+    "PLATFORM_BOUNDARY_UNKNOWN", "PLATFORM_CONTRACT", null,
+  ]);
 });
 
 it("composes the recovery-inventory seam through the root, naming every closure type", async () => {

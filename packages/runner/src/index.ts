@@ -168,14 +168,20 @@ export * from "./surface/recovery-surface.js";
 /**
  * The platform boundary seam. `PLATFORM_BOUNDARIES` and `PLATFORM_ERROR_CODES`
  * are the frozen vocabulary an OS conformance task schedules faults against.
- * `PLATFORM_LAYERS` beside `PLATFORM_LINUX_LAYER` is what lets a consumer tell
- * the OS-neutral shape gate's refusal from the Linux classifier's — a
- * distinction that is the whole reason the two modules are separate, and one
- * macOS will need in order NOT to inherit a Linux verdict. `platformFailure`
- * and `isPlatformFailure` narrow a refusal without redeclaring its shape, and
- * `observeLinuxPlatform` / `classifyLinuxBoundary` are the whole-observation
- * and single-boundary entry points. Named explicitly rather than `export *`:
- * this seam is a reviewed decision and must not grow on its own.
+ * `PLATFORM_LAYERS` beside `PLATFORM_LINUX_LAYER` and `PLATFORM_MACOS_LAYER` is
+ * what lets a consumer tell the OS-neutral shape gate's refusal from a
+ * particular OS classifier's — the whole reason the modules are separate, and
+ * what stops a darwin verdict from being an inherited Linux one. The nine
+ * reason codes are shared; the LAYER is what distinguishes them.
+ * `platformFailure` and `isPlatformFailure` narrow a refusal without
+ * redeclaring its shape, and `observe*Platform` / `classify*Boundary` are the
+ * whole-observation and single-boundary entry points per OS. Named explicitly
+ * rather than `export *`: this seam is a reviewed decision and must not grow on
+ * its own.
+ *
+ * Both classifiers judge CALLER-SUPPLIED observations against a host the caller
+ * names. A PROVEN result means the supplied observation is coherent; it never
+ * means the process running this code is on that host.
  */
 export {
   PLATFORM_BOUNDARIES,
@@ -206,6 +212,17 @@ export {
   type LinuxWorkspaceFact,
   type ObserveLinuxPlatformInput,
 } from "./platform/linux-observation.js";
+export {
+  MACOS_SUPPORTED_ARCHITECTURES,
+  PLATFORM_MACOS_LAYER,
+  classifyMacosBoundary,
+  observeMacosPlatform,
+  type MacosBoundaryFacts,
+  type MacosClassificationContext,
+  type MacosPathFact,
+  type MacosWorkspaceFact,
+  type ObserveMacosPlatformInput,
+} from "./platform/macos/macos-observation.js";
 
 export {
   MAX_WORKSPACE_ENTRIES,

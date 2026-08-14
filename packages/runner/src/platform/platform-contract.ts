@@ -4,11 +4,11 @@ import { isNormalizedText, isPlainRecord } from "../canonical.js";
  * OS-neutral vocabulary for platform boundary observation.
  *
  * Declares WHAT a platform boundary is and HOW a refusal is shaped; classifies
- * nothing. Every judgement about a particular operating system lives in that
- * OS's adapter, so a second OS can be added without touching the shared shape
- * and — the point of the separation — without inheriting another OS's proven
- * facts. The only OS name in this file is the `PLATFORM_LINUX` member of
- * `PLATFORM_LAYERS`, which names a refusing layer rather than any behaviour.
+ * nothing. Every judgement about an operating system lives in that OS's own
+ * adapter, so a second OS can be added without touching the shared shape and —
+ * the point of the separation — without inheriting another OS's proven facts.
+ * The only OS names here are the `PLATFORM_LINUX` and `PLATFORM_MACOS` members
+ * of `PLATFORM_LAYERS`, which name refusing layers, not behaviour.
  */
 export const PLATFORM_OBSERVATION_VERSION = "moe-platform-observation/1" as const;
 
@@ -30,13 +30,17 @@ export const PLATFORM_BOUNDARIES = Object.freeze([
 export type PlatformBoundary = (typeof PLATFORM_BOUNDARIES)[number];
 
 /**
- * Two layers, because "the observation was refused" is not an answer. A caller
- * must be able to tell the OS-neutral shape gate — this is not a boundary name,
- * this is not a host record — from an OS adapter's judgement that a
- * well-formed fact does not hold on this host. Only the second is evidence
- * about a platform; the first is evidence about the call.
+ * Layers, because "the observation was refused" is not an answer. A caller must
+ * be able to tell the OS-neutral shape gate — this is not a boundary name, this
+ * is not a host record — from an OS adapter's judgement that a well-formed fact
+ * does not hold on this host. Only the second is evidence about a platform.
+ * One member per OS adapter and no shared "PLATFORM_OS" catch-all: a darwin
+ * refusal spelled the same way as a Linux one is indistinguishable from an
+ * inherited one, which is the failure this split exists to prevent.
  */
-export const PLATFORM_LAYERS = Object.freeze(["PLATFORM_CONTRACT", "PLATFORM_LINUX"] as const);
+export const PLATFORM_LAYERS = Object.freeze(
+  ["PLATFORM_CONTRACT", "PLATFORM_LINUX", "PLATFORM_MACOS"] as const,
+);
 export type PlatformLayer = (typeof PLATFORM_LAYERS)[number];
 
 /** UNKNOWN is the default and the floor: nothing in this area may raise it. */
@@ -58,10 +62,10 @@ export type PlatformErrorCode = (typeof PLATFORM_ERROR_CODES)[number];
 
 /**
  * Declared here rather than imported. `PlatformIdentity` already exists twice —
- * in the Claude adapter and in the Codex one — and each is that adapter's local
- * record of what it observed. Importing either would bind the OS-neutral
- * contract to one provider and silently bless one duplicate as canonical;
- * unifying them is a refactor of two adapters and not this boundary's call.
+ * in the Claude adapter and in the Codex one — each that adapter's local record
+ * of what it observed. Importing either would bind the OS-neutral contract to
+ * one provider and bless one duplicate as canonical; unifying them is a
+ * refactor of two adapters, not this boundary's call.
  */
 export interface PlatformHostIdentity {
   readonly os: string;
@@ -72,10 +76,9 @@ export interface PlatformHostIdentity {
 /**
  * Most runner contracts a platform boundary classifies — a workspace manifest,
  * a mirrored lease, a reconciliation, a crash classification — carry neither a
- * host nor an instant, because neither is a fact about them. So the caller
- * states both alongside the fact, and the adapter classifies the envelope.
- * `truthClass` is the caller's own claim about the payload; an adapter maps it
- * onto a platform verdict and never simply adopts it.
+ * host nor an instant, because neither is a fact about them; the caller states
+ * both alongside the fact. `truthClass` is the caller's own claim about the
+ * payload, which an adapter maps onto a verdict and never simply adopts.
  */
 export interface PlatformFactEnvelope<Fact> {
   readonly host: PlatformHostIdentity;
@@ -84,12 +87,7 @@ export interface PlatformFactEnvelope<Fact> {
   readonly fact: Fact;
 }
 
-export const PLATFORM_ENVELOPE_KEYS = Object.freeze([
-  "host",
-  "observedAt",
-  "truthClass",
-  "fact",
-] as const);
+export const PLATFORM_ENVELOPE_KEYS = Object.freeze(["host", "observedAt", "truthClass", "fact"] as const);
 
 export const PLATFORM_HOST_KEYS = Object.freeze(["os", "arch", "osVersion"] as const);
 
@@ -137,17 +135,11 @@ export interface PlatformObservation {
 }
 
 export function isPlatformBoundary(value: unknown): value is PlatformBoundary {
-  return (
-    typeof value === "string" &&
-    (PLATFORM_BOUNDARIES as readonly string[]).includes(value)
-  );
+  return typeof value === "string" && (PLATFORM_BOUNDARIES as readonly string[]).includes(value);
 }
 
 /** The OS-neutral shape gate: is this even a boundary this package knows? */
-export function platformBoundaryRejection(
-  boundary: unknown,
-  layer: PlatformLayer,
-): PlatformFailure | null {
+export function platformBoundaryRejection(boundary: unknown, layer: PlatformLayer): PlatformFailure | null {
   if (isPlatformBoundary(boundary)) {
     return null;
   }
@@ -183,8 +175,8 @@ export function platformHostRejection(
 
 /**
  * Returns the host as a frozen copy rather than a boolean, so a caller compares
- * the same bytes the gate validated. Reading the original a second time is what
- * lets a hostile record pass validation and then be recorded as something else.
+ * the bytes the gate validated. Re-reading the original is what lets a hostile
+ * record pass validation and then be recorded as something else.
  */
 export function readHostIdentity(value: unknown): PlatformHostIdentity | null {
   const snapshot = snapshotExactRecord(value, PLATFORM_HOST_KEYS);
@@ -222,29 +214,37 @@ export function isBoundedIdentityText(value: unknown): value is string {
 /**
  * Lifts every named key out of its own property DESCRIPTOR into a
  * null-prototype snapshot, so no accessor is ever invoked — not even once. A
- * fact is data; a record that computes its own fields can answer one way for
- * validation and another for the record, and refusing it outright is cheaper
- * than out-reading it. An unexpected own key is a rejection rather than
- * something to ignore: a record carrying a field this package does not
- * understand is not a record this package may classify.
+ * record that computes its own fields can answer one way for validation and
+ * another for the record, and refusing it outright is cheaper than out-reading
+ * it. An unexpected own key is a rejection, not something to ignore.
+ *
+ * Exactness is counted over `Reflect.ownKeys`, not `Object.keys`, which reports
+ * neither symbol-keyed nor non-enumerable own properties — two places to hide a
+ * field from a count meant to be exact. Each expected key must then be an
+ * ENUMERABLE own data property, because `Reflect.ownKeys` alone would accept
+ * the hidden spelling of a field the old count rejected.
  */
 export function snapshotExactRecord(
   value: unknown,
   keys: readonly string[],
 ): Record<string, unknown> | null {
-  if (!isPlainRecord(value)) {
-    return null;
-  }
-  if (Object.keys(value).length !== keys.length) {
-    return null;
-  }
-  const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-  for (const key of keys) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !("value" in descriptor)) {
+  // Every reflective call below can be trapped by a proxy and made to throw.
+  // Refusing is the fail-closed answer; propagating would turn a hostile input
+  // into an exception out of a seam whose callers can only handle a refusal.
+  try {
+    if (!isPlainRecord(value) || Reflect.ownKeys(value).length !== keys.length) {
       return null;
     }
-    snapshot[key] = descriptor.value;
+    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {
+        return null;
+      }
+      snapshot[key] = descriptor.value;
+    }
+    return snapshot;
+  } catch {
+    return null;
   }
-  return snapshot;
 }
