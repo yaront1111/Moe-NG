@@ -1,5 +1,5 @@
-import { CLAUDE_LAUNCH_SELECTION_ENV, CLAUDE_LAUNCH_SELECTION_FLAGS, isHostileObject,
-  refuseSelection, snapshotLaunchSelection, type ClaudeLaunchSelection,
+import { CLAUDE_LAUNCH_RESUME_FLAGS, CLAUDE_LAUNCH_SELECTION_ENV, CLAUDE_LAUNCH_SELECTION_FLAGS,
+  isHostileObject, refuseSelection, snapshotLaunchSelection, type ClaudeLaunchSelection,
   type ClaudeLaunchSelectionCode, type ClaudeLaunchSelectionVerdict } from "./claude-launch-selection.js";
 /**
  * The pre-open launch-selection gate.
@@ -75,6 +75,22 @@ function flagValues(argv: readonly string[], flag: string): readonly (string | n
   }
   return found;
 }
+/**
+ * Whether argv attaches this launch to a prior conversation.
+ *
+ * Matched as a WHOLE element, or as the `--flag=value` spelling — never as a
+ * substring. An argv element that merely contains the word (a prompt, a session
+ * display name) is not that flag, and refusing it would refuse launches the
+ * provider honours, which is the same defect as accepting one it ignores.
+ */
+function resumesPriorSession(argv: readonly string[]): boolean {
+  for (const element of argv) {
+    for (const flag of CLAUDE_LAUNCH_RESUME_FLAGS) {
+      if (element === flag || element.startsWith(`${flag}=`)) return true;
+    }
+  }
+  return false;
+}
 type ArmCodes = readonly [ClaudeLaunchSelectionCode, ClaudeLaunchSelectionCode,
   ClaudeLaunchSelectionCode];
 const MODEL_CODES: ArmCodes = ["CLAUDE_LAUNCH_MODEL_UNPROVEN", "CLAUDE_LAUNCH_MODEL_AMBIGUOUS",
@@ -141,6 +157,10 @@ export function verifyLaunchSelection(
   if (selection === null || args === null || env === null) {
     return refuseSelection("CLAUDE_LAUNCH_SELECTION_MALFORMED");
   }
+  // Ahead of both arms, because a resumed session defeats them TOGETHER: the
+  // model and the effort both come from the transcript, so answering
+  // MODEL_MISMATCH here would name a comparison that is not what went wrong.
+  if (resumesPriorSession(args)) return refuseSelection("CLAUDE_LAUNCH_SESSION_RESUMED");
   const model = verifyArgvArm(args, CLAUDE_LAUNCH_SELECTION_FLAGS.model,
     selection.selectedModelId, MODEL_CODES) ??
     verifyEnvironmentArm(env, CLAUDE_LAUNCH_SELECTION_ENV.model, selection.selectedModelId,

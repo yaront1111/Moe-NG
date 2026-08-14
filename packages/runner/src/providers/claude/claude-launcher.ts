@@ -20,7 +20,7 @@ import { decodeCommit, decodeDuplicate, decodeGrant, decodeLease, decodeRegistra
 import { pendingProcessIdentity, type ClaudeLaunchDuplicate, type ClaudeLaunchFailure,
   type ClaudeLaunchLockLease, type ClaudeLaunchLockResult, type ClaudeLaunchOptions,
   type ClaudeLaunchResult, type ClaudeLauncherDependencies } from "./claude-launcher-contract.js";
-import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
+import { HOSTILE_LAUNCH_OPERAND, snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 export * from "./claude-launcher-contract.js";
 /**
  * The ordered launch facade.
@@ -124,6 +124,14 @@ export async function launchClaude(
   }
   let snapshot;
   try { snapshot = snapshotClaudeLaunchRequest(value); } catch { return malformed(REQUEST_MALFORMED); }
+  // A hostile argv or environment is a SELECTION defect, and it is answered
+  // here rather than at the gate below because the gate can only see operands
+  // the snapshot already reflected over — which is precisely the reflection
+  // that must not happen. The refusal is the gate's, the position is earlier.
+  if (snapshot === HOSTILE_LAUNCH_OPERAND) {
+    return directFailure("CLAUDE_LAUNCH_SELECTION_MALFORMED",
+      CLAUDE_LAUNCH_SELECTION_LAYER, PHASE.selection);
+  }
   if (snapshot === null) return malformed(REQUEST_MALFORMED);
   const request = snapshot;
   const ports = snapshotLauncherPorts(entry.deps ?? CLAUDE_LAUNCHER_DEFAULTS);

@@ -30,6 +30,10 @@ export const CLAUDE_LAUNCH_SELECTION_CODES = Object.freeze([
   "CLAUDE_LAUNCH_SELECTION_MALFORMED",
   "CLAUDE_LAUNCH_MODEL_UNPROVEN", "CLAUDE_LAUNCH_MODEL_AMBIGUOUS", "CLAUDE_LAUNCH_MODEL_MISMATCH",
   "CLAUDE_LAUNCH_EFFORT_UNPROVEN", "CLAUDE_LAUNCH_EFFORT_AMBIGUOUS", "CLAUDE_LAUNCH_EFFORT_MISMATCH",
+  // Its own code rather than MODEL_UNPROVEN: a resumed session defeats the
+  // model AND the effort at once, and a shared code would make the drill for
+  // this guard indistinguishable from the drill for a missing `--model`.
+  "CLAUDE_LAUNCH_SESSION_RESUMED",
 ] as const);
 export const CLAUDE_MODEL_EVIDENCE_KINDS =
   Object.freeze(["DATED_SNAPSHOT", "BUILD_STAMP", "UNKNOWN"] as const);
@@ -60,6 +64,27 @@ export const CLAUDE_LAUNCH_SELECTION_FLAGS =
  */
 export const CLAUDE_LAUNCH_SELECTION_ENV =
   Object.freeze({ model: "ANTHROPIC_MODEL", effort: "CLAUDE_CODE_EFFORT_LEVEL" } as const);
+/**
+ * Argv that attaches this launch to a PRIOR conversation. Transcribed from the
+ * installed binary's own `--help`, one line each: `-r, --resume [value]`,
+ * `-c, --continue`, `--from-pr [value]` ("Resume a session linked to a PR"),
+ * and `--cloud [description|session_id|url]` ("attach to an existing one by
+ * session ID or claude.ai/code URL").
+ *
+ * A resumed session keeps the transcript's model whatever `--model` says on
+ * this command line, so argv that both names the selected model and resumes
+ * proves the REQUEST and not the LAUNCH — which is the one thing this gate
+ * exists to tell apart. `--cloud` is in the list even though it can also
+ * create a new session: argv alone cannot tell its two meanings apart, and an
+ * unprovable model stays unproven rather than being read favourably.
+ *
+ * `--fork-session` is deliberately ABSENT. Its own help says it only works with
+ * `--resume` or `--continue`, both already here, so listing it would only
+ * refuse launches that start a fresh session the `--model` does apply to.
+ */
+export const CLAUDE_LAUNCH_RESUME_FLAGS = Object.freeze([
+  "--resume", "-r", "--continue", "-c", "--from-pr", "--cloud",
+] as const);
 export const CLAUDE_MODEL_EVIDENCE_ABSENT = "UNKNOWN" as const;
 export type ClaudeLaunchSelectionCode = (typeof CLAUDE_LAUNCH_SELECTION_CODES)[number];
 export type ClaudeLaunchSelectionLayer = typeof CLAUDE_LAUNCH_SELECTION_LAYER;
@@ -110,6 +135,8 @@ const MESSAGES: Readonly<Record<ClaudeLaunchSelectionCode, string>> = Object.fre
   CLAUDE_LAUNCH_EFFORT_AMBIGUOUS: "the launch arguments name a reasoning effort more than once",
   CLAUDE_LAUNCH_EFFORT_MISMATCH:
     "the launch names a reasoning effort this selection did not select",
+  CLAUDE_LAUNCH_SESSION_RESUMED:
+    "the launch resumes a prior session whose model this selection cannot prove",
 });
 export const refuseSelection = (code: ClaudeLaunchSelectionCode): ClaudeLaunchSelectionVerdict =>
   deepFreeze({ ok: false as const, code, layer: CLAUDE_LAUNCH_SELECTION_LAYER,

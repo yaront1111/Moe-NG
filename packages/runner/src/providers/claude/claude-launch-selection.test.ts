@@ -66,11 +66,82 @@ describe("Claude launch selection", () => {
     expect(CLAUDE_MODEL_EVIDENCE_KINDS).toContain("UNKNOWN");
     expect(CLAUDE_REASONING_EFFORTS.length).toBe(6);
     expect(CLAUDE_REASONING_EFFORTS).toContain("UNKNOWN");
-    expect(CLAUDE_LAUNCH_SELECTION_CODES.length).toBe(7);
+    expect(CLAUDE_LAUNCH_SELECTION_CODES.length).toBe(8);
+    expect(CLAUDE_LAUNCH_SELECTION_CODES).toContain("CLAUDE_LAUNCH_SESSION_RESUMED");
     expect(Object.isFrozen(CLAUDE_MODEL_EVIDENCE_KINDS)).toBe(true);
     expect(Object.isFrozen(CLAUDE_REASONING_EFFORTS)).toBe(true);
     expect(Object.isFrozen(CLAUDE_LAUNCH_SELECTION_CODES)).toBe(true);
     expect(Object.isFrozen(CLAUDE_LAUNCH_SELECTION_FLAGS)).toBe(true);
+  });
+
+  it("refuses every resume-family argv the installed CLI accepts, and only those", () => {
+    // Spellings transcribed BY HAND from `claude --help` on the installed
+    // binary, not derived from the production constant — a table built out of
+    // the thing under test cannot discover that the thing under test is wrong.
+    const resuming: readonly (readonly string[])[] = [
+      ["--resume", "session-1", ...argvFor()],
+      ["-r", "session-1", ...argvFor()],
+      ["--resume=session-1", ...argvFor()],
+      ["--resume", ...argvFor()],
+      ["--continue", ...argvFor()],
+      ["-c", ...argvFor()],
+      ["--from-pr", "4207", ...argvFor()],
+      ["--from-pr=4207", ...argvFor()],
+      ["--cloud", "session-1", ...argvFor()],
+      [...argvFor(), "--continue"],
+    ];
+    expect(resuming.length).toBe(10);
+    let refused = 0;
+    for (const argv of resuming) {
+      const answer = refusalOf(selection(), argv);
+      expect({ argv: argv[0], code: answer.code, layer: answer.layer })
+        .toEqual({ argv: argv[0], code: "CLAUDE_LAUNCH_SESSION_RESUMED",
+          layer: "TELEMETRY_CONFIGURATION" });
+      expect(answer.serialized).not.toContain("session-1");
+      expect(answer.serialized).not.toContain("4207");
+      refused += 1;
+    }
+    expect(refused).toBe(resuming.length);
+    // PRECEDENCE, not just presence. Each of these argv ALSO fails an arm on its
+    // own — a drifted model, a duplicated effort, no model at all — so if the
+    // resume guard were moved below the arms every one would answer with an arm
+    // code instead. Without this the guard's POSITION is untested and a
+    // reordering mutant survives every case above.
+    const alsoBroken: readonly { readonly name: string; readonly argv: readonly string[] }[] = [
+      { name: "resume+model-drift", argv: ["--resume", "s", ...argvFor(ALIAS)] },
+      { name: "resume+effort-drift", argv: ["--continue", ...argvFor(MODEL, "low")] },
+      { name: "resume+model-absent", argv: ["-r", "s", EFFORT_FLAG, EFFORT] },
+      { name: "resume+effort-duplicate",
+        argv: ["--continue", ...argvFor(), EFFORT_FLAG, "low"] },
+    ];
+    expect(alsoBroken.length).toBe(4);
+    let precedence = 0;
+    for (const item of alsoBroken) {
+      expect({ name: item.name, code: refusalOf(selection(), item.argv).code })
+        .toEqual({ name: item.name, code: "CLAUDE_LAUNCH_SESSION_RESUMED" });
+      precedence += 1;
+    }
+    expect(precedence).toBe(alsoBroken.length);
+    // The negative half. `--fork-session` only works WITH a resume flag, so on
+    // its own it starts a fresh session the `--model` applies to; and a value
+    // that merely CONTAINS a resume spelling is not that flag. Without these a
+    // guard that refuses every argv would pass the ten cases above.
+    const accepted: readonly (readonly string[])[] = [
+      [...argvFor()],
+      ["--print", ...argvFor()],
+      ["--fork-session", ...argvFor()],
+      [...argvFor(), "--append-system-prompt", "please --resume the review"],
+      ["--model", MODEL, "--effort", EFFORT, "--name", "continue-the-work"],
+    ];
+    expect(accepted.length).toBe(5);
+    let allowed = 0;
+    for (const argv of accepted) {
+      const verdict = verifyLaunchSelection(selection(), argv, NO_ENV);
+      expect({ argv: argv.join(" "), ok: verdict.ok })
+        .toEqual({ argv: argv.join(" "), ok: true });
+      allowed += 1;
+    }
+    expect(allowed).toBe(accepted.length);
   });
 
   it("keeps the model and effort refusal families disjoint so each drills alone", () => {

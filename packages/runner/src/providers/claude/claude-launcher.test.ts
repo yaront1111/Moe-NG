@@ -27,6 +27,23 @@ function hostileProxy(target: object, trap: ReflectionTrap, counter: TrapCounter
   const raise = (): never => { counter.fired += 1; throw new Error("hostile reflection trap"); };
   return new Proxy(target, trap === "ownKeys" ? { ownKeys: raise } : { getOwnPropertyDescriptor: raise });
 }
+/**
+ * A proxy that COUNTS and then forwards. Nothing throws, so every reflective
+ * read succeeds and the value looks ordinary to any guard that reflects first
+ * and asks whether it is a proxy second. `Array.isArray` is deliberately not
+ * trapped here — it answers from the target and fires nothing — which is why a
+ * guard built on it cannot see this at all.
+ */
+function transparentProxy(target: object, counter: TrapCounter): object {
+  const tally = <T>(run: () => T): T => { counter.fired += 1; return run(); };
+  return new Proxy(target, {
+    get: (t, k, r) => tally(() => Reflect.get(t, k, r)),
+    has: (t, k) => tally(() => Reflect.has(t, k)),
+    ownKeys: (t) => tally(() => Reflect.ownKeys(t)),
+    getPrototypeOf: (t) => tally(() => Reflect.getPrototypeOf(t)),
+    getOwnPropertyDescriptor: (t, k) => tally(() => Reflect.getOwnPropertyDescriptor(t, k)),
+  });
+}
 describe("Windows Claude launcher", () => {
   it("bounds the recursive plain-data authority snapshot", () => {
     const huge = Array.from({ length: 2_049 }, (_, index) => index);
@@ -81,22 +98,37 @@ describe("Windows Claude launcher", () => {
   it("contains hostile request reflection and pins the malformed launch refusal", async () => {
     const counters: TrapCounter[] = [];
     const track = (): TrapCounter => { const item = { fired: 0 }; counters.push(item); return item; };
-    const cases: readonly { readonly name: string; readonly build: (counter: TrapCounter) => unknown }[] = [
-      { name: "outer-own-keys", build: (c) => hostileProxy(request(), "ownKeys", c) },
-      { name: "outer-descriptor", build: (c) => hostileProxy(request(), "getOwnPropertyDescriptor", c) },
+    // Each case declares the code AND layer it must answer with. argv and the
+    // environment are the two operands the selection gate owns, so a hostile
+    // shape in either is a SELECTION defect named at TELEMETRY_CONFIGURATION —
+    // not the generic request answer a bad `cwd` produces. Every other operand
+    // stays a request-shape defect at LAUNCHER.
+    const cases: readonly { readonly name: string; readonly build: (counter: TrapCounter) => unknown;
+      readonly code: string; readonly layer: string }[] = [
+      { name: "outer-own-keys", build: (c) => hostileProxy(request(), "ownKeys", c),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
+      { name: "outer-descriptor", build: (c) => hostileProxy(request(), "getOwnPropertyDescriptor", c),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
       { name: "runtime-own-keys",
-        build: (c) => ({ ...request(), runtime: hostileProxy({ ...runtimeRequest }, "ownKeys", c) }) },
+        build: (c) => ({ ...request(), runtime: hostileProxy({ ...runtimeRequest }, "ownKeys", c) }),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
       { name: "quoted-observation-own-keys", build: (c) => ({ ...request(),
-        runtime: { ...runtimeRequest, quotedObservation: hostileProxy({}, "ownKeys", c) } }) },
+        runtime: { ...runtimeRequest, quotedObservation: hostileProxy({}, "ownKeys", c) } }),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
       { name: "authority-own-keys",
-        build: (c) => ({ ...request(), reconciliation: { nested: hostileProxy({}, "ownKeys", c) } }) },
+        build: (c) => ({ ...request(), reconciliation: { nested: hostileProxy({}, "ownKeys", c) } }),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
       { name: "authority-descriptor", build: (c) => ({ ...request(),
-        reconciliation: { nested: hostileProxy({ probe: "value" }, "getOwnPropertyDescriptor", c) } }) },
-      { name: "argv-own-keys", build: (c) => ({ ...request(), argv: hostileProxy(["--print"], "ownKeys", c) }) },
+        reconciliation: { nested: hostileProxy({ probe: "value" }, "getOwnPropertyDescriptor", c) } }),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
+      { name: "argv-own-keys", build: (c) => ({ ...request(), argv: hostileProxy(["--print"], "ownKeys", c) }),
+        code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" },
       { name: "environment-own-keys",
-        build: (c) => ({ ...request(), environment: hostileProxy({ SYSTEMROOT: "C:\\Windows" }, "ownKeys", c) }) },
+        build: (c) => ({ ...request(), environment: hostileProxy({ SYSTEMROOT: "C:\\Windows" }, "ownKeys", c) }),
+        code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" },
       { name: "limits-own-keys", build: (c) => ({ ...request(), limits: hostileProxy(
-        { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 1_000 }, "ownKeys", c) }) },
+        { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 1_000 }, "ownKeys", c) }),
+        code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" },
     ];
     expect(cases.length).toBe(9);
     let ran = 0;
@@ -112,19 +144,112 @@ describe("Windows Claude launcher", () => {
       const result = settled.value;
       expect({ name: item.name, kind: result.kind, ok: result.ok, truth: result.truthClass,
         code: result.code, layer: result.layer }).toEqual({ name: item.name, kind: "REFUSED", ok: false,
-        truth: "UNKNOWN", code: "CLAUDE_LAUNCH_REQUEST_MALFORMED", layer: "LAUNCHER" });
+        truth: "UNKNOWN", code: item.code, layer: item.layer });
       expect(Object.isFrozen(result)).toBe(true);
       if (result.kind !== "REFUSED") throw new Error(`${item.name} was not refused`);
       expect(result.message).not.toContain("hostile");
       expect(result.message).not.toContain("trap");
-      expect({ name: item.name, fired: counter.fired > 0, deps: log,
+      // ZERO traps, not "the trap threw and we caught it". A trap that ran is
+      // caller code that already executed inside the guard deciding whether to
+      // trust the caller; catching its throw afterwards does not un-run it.
+      expect({ name: item.name, fired: counter.fired, deps: log,
         requests: boundary.requests, boundary: boundary.log })
-        .toEqual({ name: item.name, fired: true, deps: [], requests: [], boundary: [] });
+        .toEqual({ name: item.name, fired: 0, deps: [], requests: [], boundary: [] });
       ran += 1;
     }
     expect(ran).toBe(9);
     expect(counters.length).toBe(9);
-    expect(counters.filter((entry) => entry.fired > 0)).toHaveLength(9);
+    expect(counters.filter((entry) => entry.fired > 0)).toHaveLength(0);
+  });
+
+  it("refuses a TRANSPARENT proxy argv or environment at the selection layer, zero traps", async () => {
+    // The throwing proxy above is the easy half: its trap throws, the snapshot's
+    // own try/catch answers, and the launch refuses for the wrong reason. This
+    // is the half that shipped broken — a proxy whose traps FORWARD to Reflect
+    // never throws, so every `Array.isArray`/`Object.keys`/descriptor read
+    // succeeds and the hostile value is normalized into a plain frozen copy
+    // before the verifier's own proxy guard can ever see it. The launch then
+    // ran the full runtime-to-open path with 15 traps executed.
+    const cases: readonly { readonly name: string;
+      readonly build: (counter: TrapCounter) => unknown }[] = [
+      { name: "argv-transparent",
+        build: (c) => ({ ...request(), argv: transparentProxy([...SELECTION_ARGV], c) }) },
+      { name: "environment-transparent", build: (c) => ({ ...request(),
+        environment: transparentProxy({ SYSTEMROOT: "C:\\Windows" }, c) }) },
+      { name: "selection-transparent",
+        build: (c) => ({ ...request(), launchSelection: transparentProxy({ ...SELECTION }, c) }) },
+    ];
+    expect(cases.length).toBe(3);
+    let ran = 0;
+    for (const item of cases) {
+      const counter: TrapCounter = { fired: 0 };
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const [settled] = await Promise.allSettled([launchClaude(item.build(counter),
+        { platform: "win32", deps: dependencies(boundary, log) })]);
+      expect({ name: item.name, status: settled?.status })
+        .toEqual({ name: item.name, status: "fulfilled" });
+      if (settled === undefined || settled.status !== "fulfilled") throw new Error(`${item.name} rejected`);
+      const result = settled.value;
+      expect({ name: item.name, kind: result.kind, ok: result.ok, code: result.code,
+        layer: result.layer }).toEqual({ name: item.name, kind: "REFUSED", ok: false,
+        code: "CLAUDE_LAUNCH_SELECTION_MALFORMED", layer: "TELEMETRY_CONFIGURATION" });
+      // The whole point: not one trap ran, and nothing downstream happened.
+      expect({ name: item.name, fired: counter.fired, deps: log,
+        requests: boundary.requests, boundary: boundary.log })
+        .toEqual({ name: item.name, fired: 0, deps: [], requests: [], boundary: [] });
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+  });
+
+  it("fails closed when argv resumes a prior session whose model it cannot prove", async () => {
+    // Every spelling here is READ FROM THE INSTALLED `claude --help`, not
+    // invented: `-r, --resume [value]`, `-c, --continue`, `--from-pr [value]`
+    // ("Resume a session linked to a PR"), and `--cloud [description|session_id
+    // |url]` ("attach to an existing one by session ID"). A resumed session
+    // keeps the transcript's model regardless of the `--model` on this command
+    // line, so argv that names the selected model AND resumes proves nothing.
+    const cases: readonly { readonly name: string; readonly argv: readonly string[] }[] = [
+      { name: "resume-long", argv: ["--print", "--resume", "session-1", ...SELECTION_ARGV] },
+      { name: "resume-short", argv: ["--print", "-r", "session-1", ...SELECTION_ARGV] },
+      { name: "resume-joined", argv: ["--print", "--resume=session-1", ...SELECTION_ARGV] },
+      { name: "resume-bare-picker", argv: ["--print", "--resume", ...SELECTION_ARGV] },
+      { name: "continue-long", argv: ["--print", "--continue", ...SELECTION_ARGV] },
+      { name: "continue-short", argv: ["--print", "-c", ...SELECTION_ARGV] },
+      { name: "from-pr", argv: ["--print", "--from-pr", "4207", ...SELECTION_ARGV] },
+      { name: "cloud-attach", argv: ["--print", "--cloud", "session-1", ...SELECTION_ARGV] },
+    ];
+    expect(cases.length).toBe(8);
+    let ran = 0;
+    for (const item of cases) {
+      const log: string[] = [];
+      const boundary = boundaryHarness();
+      const result = await launchClaude(request({ argv: [...item.argv] }),
+        { platform: "win32", deps: dependencies(boundary, log) });
+      expect({ name: item.name, kind: result.kind, code: result.code, layer: result.layer })
+        .toEqual({ name: item.name, kind: "REFUSED", code: "CLAUDE_LAUNCH_SESSION_RESUMED",
+          layer: "TELEMETRY_CONFIGURATION" });
+      // Refused BEFORE runtime preparation, grant consumption, lock acquisition
+      // and the boundary open — the four cutoffs DoD 2 names, in one assertion.
+      expect({ name: item.name, deps: log, requests: boundary.requests, boundary: boundary.log })
+        .toEqual({ name: item.name, deps: [], requests: [], boundary: [] });
+      if (result.kind !== "REFUSED") throw new Error(`${item.name} was not refused`);
+      // The session id is an argv element and must not come back out.
+      expect(result.message).not.toContain("session-1");
+      expect(result.message).not.toContain("4207");
+      ran += 1;
+    }
+    expect(ran).toBe(cases.length);
+    // Positive control on the SAME argv shape: strip only the resume flag and
+    // the identical command line must launch. Without this the eight refusals
+    // above are satisfied by a gate that refuses everything.
+    const control: string[] = [];
+    const controlBoundary = boundaryHarness();
+    const launched = await launchClaude(request({ argv: ["--print", ...SELECTION_ARGV] }),
+      { platform: "win32", deps: dependencies(controlBoundary, control) });
+    expect({ kind: launched.kind, opened: control.includes("open") })
+      .toEqual({ kind: "OBSERVED", opened: true });
   });
 
   it("runs the logical gates before opening and binds exact dual-stream evidence", async () => {

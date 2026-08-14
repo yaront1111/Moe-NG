@@ -2,7 +2,7 @@ import { deepFreeze, isPlainRecord } from "../../canonical.js";
 import { snapshotExactRecord } from "../../platform/platform-contract.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
 import { type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
-import { snapshotLaunchSelection,
+import { isHostileObject, snapshotLaunchSelection,
   type ClaudeLaunchSelection } from "./claude-launch-selection.js";
 
 /**
@@ -33,6 +33,19 @@ const RUNTIME_KEYS = ["quotedObservation", "installedRoot", "pinRoot", "fs", "fa
 const AUTHORITY_KEYS = ["duplicateDelivery", "effect", "attempt", "grant", "claim",
   "priorRegistration", "reconciliation"] as const;
 const INVALID = Symbol("invalid-launch-input");
+/**
+ * argv and the environment are the two operands the SELECTION gate owns, so a
+ * hostile shape in either has to reach that gate's vocabulary rather than be
+ * restamped as a generic malformed request — the same reasoning that already
+ * hands the gate a null selection instead of answering for it.
+ *
+ * It is a distinct value rather than `null` because the two answers pick
+ * different layers, and collapsing them would make TELEMETRY_CONFIGURATION
+ * unreachable for exactly the inputs most worth naming precisely.
+ */
+export const HOSTILE_LAUNCH_OPERAND = Symbol("hostile-launch-operand");
+export type LaunchRequestSnapshot =
+  ClaudeLaunchSnapshot | null | typeof HOSTILE_LAUNCH_OPERAND;
 
 /**
  * The snapshot differs from the request in exactly one place: a selection that
@@ -55,6 +68,11 @@ function cloneData(value: unknown, budget = { remaining: 2_048 }, depth = 0): un
   if (typeof value === "string") return value.length <= 65_536 && !value.includes("\0") ? value : INVALID;
   if (typeof value === "number") return Number.isSafeInteger(value) ? value : INVALID;
   if (depth > 16 || budget.remaining-- <= 0) return INVALID;
+  // Before `Array.isArray`, before any descriptor read: reflection is what runs
+  // a trap, and a trap that has run has already had its effect no matter what
+  // this function decides afterwards. Catching the throw of a trap that already
+  // executed is containment, not refusal.
+  if (isHostileObject(value)) return INVALID;
   if (Array.isArray(value)) {
     if (value.length > 256 || Object.keys(value).length !== value.length ||
         Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return INVALID;
@@ -82,6 +100,7 @@ function cloneData(value: unknown, budget = { remaining: 2_048 }, depth = 0): un
 }
 
 function snapshotRuntime(value: unknown): ClaudeRuntimePinRequest | null {
+  if (isHostileObject(value)) return null;
   const raw = snapshotExactRecord(value, RUNTIME_KEYS);
   if (raw === null || typeof raw["installedRoot"] !== "string" || typeof raw["pinRoot"] !== "string") return null;
   const quotedObservation = cloneData(raw["quotedObservation"]);
@@ -89,7 +108,8 @@ function snapshotRuntime(value: unknown): ClaudeRuntimePinRequest | null {
   return Object.freeze({ ...raw, quotedObservation }) as unknown as ClaudeRuntimePinRequest;
 }
 
-function snapshotArray(value: unknown): readonly string[] | null {
+function snapshotArray(value: unknown): readonly string[] | null | typeof HOSTILE_LAUNCH_OPERAND {
+  if (isHostileObject(value)) return HOSTILE_LAUNCH_OPERAND;
   try {
     if (!Array.isArray(value) || value.length > 128 || Object.keys(value).length !== value.length ||
       Object.getOwnPropertyDescriptor(value, Symbol.iterator) !== undefined) return null;
@@ -104,7 +124,10 @@ function snapshotArray(value: unknown): readonly string[] | null {
   } catch { return null; }
 }
 
-function snapshotEnvironment(value: unknown): Readonly<Record<string, string>> | null {
+function snapshotEnvironment(
+  value: unknown,
+): Readonly<Record<string, string>> | null | typeof HOSTILE_LAUNCH_OPERAND {
+  if (isHostileObject(value)) return HOSTILE_LAUNCH_OPERAND;
   try {
     if (!isPlainRecord(value)) return null;
     const names = Object.keys(value);
@@ -120,11 +143,19 @@ function snapshotEnvironment(value: unknown): Readonly<Record<string, string>> |
   } catch { return null; }
 }
 
-export function snapshotClaudeLaunchRequest(value: unknown): ClaudeLaunchSnapshot | null {
+export function snapshotClaudeLaunchRequest(value: unknown): LaunchRequestSnapshot {
+  // The FIRST reflection on this call path is the exact-record read below, so
+  // the request itself is proven non-hostile ahead of it. `raw` then holds the
+  // operands by reference, unread — naming a proxy is not reflecting on it, so
+  // the per-operand checks that follow still run before any trap could.
+  if (isHostileObject(value)) return null;
   const raw = snapshotExactRecord(value, REQUEST_KEYS);
   if (raw === null) return null;
   const argv = snapshotArray(raw["argv"]);
   const environment = snapshotEnvironment(raw["environment"]);
+  if (argv === HOSTILE_LAUNCH_OPERAND || environment === HOSTILE_LAUNCH_OPERAND) {
+    return HOSTILE_LAUNCH_OPERAND;
+  }
   const runtime = snapshotRuntime(raw["runtime"]);
   const authority: Record<string, unknown> = {};
   for (const key of AUTHORITY_KEYS) {
@@ -132,6 +163,7 @@ export function snapshotClaudeLaunchRequest(value: unknown): ClaudeLaunchSnapsho
     if (copied === INVALID) return null;
     authority[key] = copied;
   }
+  if (isHostileObject(raw["limits"])) return null;
   const limits = snapshotExactRecord(raw["limits"], LIMIT_KEYS);
   const numbers = limits === null ? [] : LIMIT_KEYS.map((key) => limits[key]);
   const launchSelection = snapshotLaunchSelection(raw["launchSelection"]);
