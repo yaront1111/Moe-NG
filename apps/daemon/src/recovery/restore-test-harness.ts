@@ -13,7 +13,7 @@ import {
   createNodeRecoveryCryptoPort,
   createRecoveryIncarnationService,
 } from "./recovery-incarnation.js";
-import type { RecoveryIncarnationBinding } from "./recovery-incarnation.js";
+import type { RestoreIncarnationBinding } from "./recovery-incarnation.js";
 import type { RestoreControllerRequest } from "./restore-controller-contract.js";
 
 /**
@@ -49,7 +49,7 @@ export interface RestoreHarness {
   readonly mint: (
     generationDigest: string,
     restoreCommandId: string,
-  ) => Promise<RecoveryIncarnationBinding>;
+  ) => Promise<RestoreIncarnationBinding>;
   readonly root: string;
   readonly store: SqliteEventStore;
   readonly storePath: string;
@@ -213,7 +213,7 @@ export async function restoreHarness(label: string): Promise<RestoreHarness> {
 
 export function anchorInto(
   store: SqliteEventStore,
-  binding: RecoveryIncarnationBinding,
+  binding: RestoreIncarnationBinding,
 ): void {
   const anchored = anchorIncarnation(
     store,
@@ -232,7 +232,7 @@ export function anchorInto(
 export async function anchoredIncarnation(
   harness: RestoreHarness,
   restoreCommandId: string,
-): Promise<RecoveryIncarnationBinding> {
+): Promise<RestoreIncarnationBinding> {
   const binding = await harness.mint(harness.generationDigest, restoreCommandId);
   anchorInto(harness.store, binding);
   return binding;
@@ -240,7 +240,7 @@ export async function anchoredIncarnation(
 
 export function restoreRequest(
   harness: RestoreHarness,
-  binding: RecoveryIncarnationBinding,
+  binding: RestoreIncarnationBinding,
   overrides: Partial<RestoreControllerRequest> = {},
 ): RestoreControllerRequest {
   return {

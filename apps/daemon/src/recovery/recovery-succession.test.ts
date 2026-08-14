@@ -403,6 +403,8 @@ const ANCHORED_KEYS = Object.freeze([
   "incarnationDigest",
   "incarnationRef",
   "keyEpochRef",
+  // The origin tag is part of the durable row now: an untagged row is refused.
+  "origin",
   "proof",
   "publicKeyAlgorithm",
   "publicKeySpkiHex",

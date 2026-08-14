@@ -1,6 +1,10 @@
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
-import type { RecoveryIncarnationBinding } from "./recovery-incarnation-contract.js";
+import { decodeBinding, encodeBinding } from "./recovery-incarnation-binding-codec.js";
+import type {
+  RecoveryIncarnationBinding,
+  RestoreIncarnationBinding,
+} from "./recovery-incarnation-contract.js";
 import {
   RECOVERY_INCARNATION_ANCHOR_COMMAND_KIND,
   incarnationAggregateId,
@@ -22,113 +26,6 @@ import type { RecoveryDurableWriteRequest } from "./recovery-succession-contract
  */
 const PAGE_SIZE = 100;
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-const HEX64 = /^[0-9a-f]{64}$/;
-/** A signature, not a digest: Ed25519 is 64 bytes, but the bound is what matters. */
-const HEX_BLOB = /^[0-9a-f]{2,1024}$/;
-
-const isHex64 = (value: unknown): value is string =>
-  typeof value === "string" && HEX64.test(value);
-
-/**
- * Serialized in ONE fixed field order, never from the caller's object. Two
- * callers holding the same binding therefore produce the same bytes, which is
- * what lets a re-anchor after a crash be recognised as a repeat rather than as
- * a conflicting second anchor.
- */
-function encodeBinding(binding: RecoveryIncarnationBinding): Uint8Array {
-  return encoder.encode(
-    JSON.stringify({
-      backupGenerationDigest: binding.backupGenerationDigest,
-      bindingDigest: binding.bindingDigest,
-      incarnationDigest: binding.incarnationDigest,
-      incarnationRef: binding.incarnationRef,
-      keyEpochRef: binding.keyEpochRef,
-      proof: {
-        challengeDigest: binding.proof.challengeDigest,
-        signatureHex: binding.proof.signatureHex,
-        verified: binding.proof.verified,
-      },
-      publicKeyAlgorithm: binding.publicKeyAlgorithm,
-      publicKeySpkiHex: binding.publicKeySpkiHex,
-      restoreCommandId: binding.restoreCommandId,
-      schemaVersion: binding.schemaVersion,
-      verificationKeyFingerprint: binding.verificationKeyFingerprint,
-    }),
-  );
-}
-
-const BINDING_KEYS = Object.freeze([
-  "backupGenerationDigest",
-  "bindingDigest",
-  "incarnationDigest",
-  "incarnationRef",
-  "keyEpochRef",
-  "proof",
-  "publicKeyAlgorithm",
-  "publicKeySpkiHex",
-  "restoreCommandId",
-  "schemaVersion",
-  "verificationKeyFingerprint",
-]);
-const PROOF_KEYS = Object.freeze(["challengeDigest", "signatureHex", "verified"]);
-
-const hasExactKeys = (value: unknown, expected: readonly string[]): value is Record<string, unknown> => {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const keys = Object.keys(value);
-  return keys.length === expected.length && keys.every((key) => expected.includes(key));
-};
-
-/**
- * A bounded exact-shape decode, not a cast. A row that has drifted, been
- * truncated or gained a field is returned as absent rather than admitted with
- * fields the reader would then be free to invent.
- */
-function decodeBinding(bytes: Uint8Array): RecoveryIncarnationBinding | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(decoder.decode(bytes));
-  } catch {
-    return null;
-  }
-  if (!hasExactKeys(parsed, BINDING_KEYS)) return null;
-  const proof: unknown = parsed["proof"];
-  if (!hasExactKeys(proof, PROOF_KEYS)) return null;
-  if (proof["verified"] !== true) return null;
-  if (!isHex64(proof["challengeDigest"])) return null;
-  const signatureHex: unknown = proof["signatureHex"];
-  if (typeof signatureHex !== "string" || !HEX_BLOB.test(signatureHex)) return null;
-
-  if (parsed["publicKeyAlgorithm"] !== "Ed25519") return null;
-  if (parsed["schemaVersion"] !== "moe-recovery-incarnation/1") return null;
-  const publicKeySpkiHex: unknown = parsed["publicKeySpkiHex"];
-  if (typeof publicKeySpkiHex !== "string" || !HEX_BLOB.test(publicKeySpkiHex)) return null;
-  const restoreCommandId: unknown = parsed["restoreCommandId"];
-  if (typeof restoreCommandId !== "string" || restoreCommandId.length === 0) return null;
-  for (const key of ["backupGenerationDigest", "bindingDigest", "incarnationDigest",
-    "incarnationRef", "keyEpochRef", "verificationKeyFingerprint"]) {
-    if (!isHex64(parsed[key])) return null;
-  }
-
-  return Object.freeze({
-    backupGenerationDigest: parsed["backupGenerationDigest"] as string,
-    bindingDigest: parsed["bindingDigest"] as string,
-    incarnationDigest: parsed["incarnationDigest"] as string,
-    incarnationRef: parsed["incarnationRef"] as string,
-    keyEpochRef: parsed["keyEpochRef"] as string,
-    proof: Object.freeze({
-      challengeDigest: proof["challengeDigest"] as string,
-      signatureHex,
-      verified: true as const,
-    }),
-    publicKeyAlgorithm: "Ed25519" as const,
-    publicKeySpkiHex,
-    restoreCommandId,
-    schemaVersion: "moe-recovery-incarnation/1" as const,
-    verificationKeyFingerprint: parsed["verificationKeyFingerprint"] as string,
-  });
-}
 
 function isAnchorRow(decision: CommandDecisionRecord, projectId: string): boolean {
   return (
@@ -158,16 +55,22 @@ export function hasAnchoredIncarnation(
 }
 
 /**
- * Returns the anchored binding for one incarnation, or null when nothing
- * anchored it. The aggregate id is recomputed from the DECODED content, so a
- * row filed under one incarnation while carrying another's binding is dropped
- * rather than answered with.
+ * Returns the anchored RESTORE binding for one incarnation, or null when
+ * nothing anchored it. The aggregate id is recomputed from the DECODED content,
+ * so a row filed under one incarnation while carrying another's binding is
+ * dropped rather than answered with.
+ *
+ * Every caller of this reader — the restore controller, the succession chain,
+ * the inventory ledger — asks about a restore lineage and reads restore facts
+ * off the answer. A GENESIS row therefore reads as ABSENT here rather than
+ * being handed back for each of them to re-refuse: one place fails closed, and
+ * the return type says so. A future genesis anchor needs its own reader.
  */
 export function readAnchoredIncarnation(
   store: SqliteEventStore,
   projectId: string,
   incarnationRef: string,
-): RecoveryIncarnationBinding | null {
+): RestoreIncarnationBinding | null {
   const wanted = incarnationAggregateId(incarnationRef);
   let cursor = 0n;
   for (;;) {
@@ -175,7 +78,7 @@ export function readAnchoredIncarnation(
     for (const decision of page.items) {
       if (!isAnchorRow(decision, projectId) || decision.targetAggregateId !== wanted) continue;
       const binding = decodeBinding(decision.resultBytes);
-      if (binding === null) continue;
+      if (binding === null || binding.origin !== "RESTORE") continue;
       if (incarnationAggregateId(binding.incarnationRef) !== wanted) continue;
       return binding;
     }

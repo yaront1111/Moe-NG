@@ -165,6 +165,28 @@ describe("record truth is re-derived from its own children", () => {
     expect(refusedBytes({ ...record, proofs })).toEqual(INCOHERENT);
   });
 
+  it("refuses truth COMPLETE while the retained code already admits an incomplete proof", () => {
+    // Isolates the truth comparison. The forged record keeps the upstream code
+    // the derivation would produce, so the upstream guard agrees and stays
+    // silent; only recomputing TRUTH itself can refuse. Without this case a
+    // mutation drill that deletes the truth check stays green, because the
+    // neighbouring upstream check answers for it.
+    const record = reconciled(baseInput());
+    const forged = {
+      ...record,
+      coordinator: null,
+      proofs: record.proofs.map((proof, index) =>
+        index === 1 ? { ...proof, truth: "UNKNOWN" as const, upstream: ADAPTER_UNKNOWN } : proof,
+      ),
+      truth: "COMPLETE" as const,
+      upstream: {
+        code: "RECOVERY_INVENTORY_PROOF_INCOMPLETE" as const,
+        layer: "RECOVERY_INVENTORY" as const,
+      },
+    };
+    expect(refusedBytes(forged)).toEqual(INCOHERENT);
+  });
+
   it("refuses an item UNKNOWN under record truth COMPLETE", () => {
     const record = reconciled(baseInput());
     const forged = patchItem(record, 0, {

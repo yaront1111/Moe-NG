@@ -91,7 +91,7 @@
     {
       "stepId": "step-5",
       "description": "Implement the strict canonical codec and exact LF bridge. Encode a versioned, fixed-key-order, bounded UTF-8 JSON body with deterministic class/population/item ordering; compute SHA-256 over every body field except `recordDigest`, then append that digest. Decode with fatal UTF-8, exact keys/vocabularies/bounds/cardinalities, re-derived six-to-seven mapping and disposition invariants, digest recomputation, and byte-for-byte canonical re-encoding so whitespace, key order, duplicate keys, extensions, truncation, or any semantic byte mutation cannot become an alternate authoritative record. Return the stable unreadable upstream code/layer under coordinator UNKNOWN rather than throwing or defaulting.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
@@ -100,12 +100,22 @@
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
       ],
-      "startedAt": "2026-08-14T09:10:29.779Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+        "apps/daemon/src/recovery/recovery-inventory-reader.ts",
+        "apps/daemon/src/recovery/recovery-inventory-reader.js",
+        "apps/daemon/src/recovery/recovery-inventory-hardening.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-forgery.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-ledger.ts"
+      ],
+      "note": "Decoder now re-derives every builder invariant BEFORE the digest, and all 14 forgeries refuse. Guards added: (a) record truth and retained upstream are RECOMPUTED from the children via the shared deriveRecoveryReconciliationTruth and compared, so COMPLETE cannot survive an UNKNOWN proof or an unresolved item and the retained code cannot name the wrong cause; (b) the reserved sentinel slot must itself be UNKNOWN with PROOF_MISSING/RECOVERY_INVENTORY; (c) every item must carry the exact adjudicator-emitted required/forbidden field combination for its disposition; (d) the item sequence must be the single canonical order AND class-scoped-identity unique. Ordering of guards matters and is pinned: structure/semantics settle first, so DIGEST_MISMATCH can never shadow a semantic guard. Introduced RECOVERY_INVENTORY_RECORD_INCOHERENT as a code distinct from RECORD_NONCANONICAL; the two pre-existing hardening cases (item-vs-proof provenance, terminal disposition under an unknown slot) are semantic and now correctly answer INCOHERENT, and I added a NONCANONICAL positive control (duplicate JSON key) so a test can still prove the shape reader answered rather than the semantic one. SPLIT FOR THE PER-FILE CAP: codec.ts had reached 391 lines, so the strict readers moved to new recovery-inventory-reader.ts (266) with an LF bridge; codec.ts is now 158 and owns only the byte boundary (canonical field order, digest, encode, decode entry). Focused run: 4 files / 80 tests passed. FOREIGN CONDITION, disclosed and re-attributed: a peer landed RecoveryIncarnationBinding as a GENESIS|RESTORE discriminated union in the already-committed recovery-incarnation-contract.ts and is mid-flight on its consumers. That broke my owned recovery-inventory-ledger.ts:165, which read anchored.backupGenerationDigest. I fixed only my own file, with an `in`-narrowed read that treats the absent field as a refusal (BINDING_MISMATCH) — chosen over narrowing on `origin` because the peer's readAnchoredIncarnation does not yet emit the discriminant, so an origin-based guard typechecked but refused every real anchored binding and reddened 9 of my own ledger tests. The `in` form is correct under both the old and new runtime shapes and keeps the comparison fail-closed. Daemon typecheck is still red on EIGHT foreign paths I must not touch: index-surface.test.ts, recovery-incarnation-anchor.ts, recovery-incarnation.test.ts, recovery-incarnation.ts, recovery-key-provider.ts, recovery-succession.ts, restore-controller-commands.ts, restore-controller.ts. No owned path is on that list.",
+      "startedAt": "2026-08-14T09:10:29.779Z",
+      "completedAt": "2026-08-14T09:15:53.222Z"
     },
     {
       "stepId": "step-6",
       "description": "Implement content-addressed durable persistence/readback and its exact LF bridge using only the existing public `SqliteEventStore` transaction surface—no schema change or raw SQLite. The write service must read the fixed ACTIVE recovery binding from the project store and the exact anchored incarnation, cross-check key epoch/project/backup generation, and only then build the record; it must accept no request-selected current refs. Commit canonical bytes once under a domain-separated record-digest aggregate with command kind `recovery.reconcile_external`, expectedVersion 0, exact domain schema/event IDs, and identical request/result/event bytes; exact retries replay one event. The reader addresses an explicit record digest (never an invented 'latest'), verifies the sole sequence-1 event plus decision trace/decision bytes and codec/digest/aggregate identity, and maps absent, conflicting, malformed, or unverifiable evidence to `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY` while retaining `RECORD_NOT_FOUND|UNREADABLE|CONFLICT` at `RECOVERY_INVENTORY_LEDGER`. R3 may later bind this immutable digest; this task grants no recovery.complete authority.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
@@ -113,12 +123,19 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-ledger.ts"
+      ],
+      "note": "Durable path re-verified against the repaired decoder and extended. The ledger already satisfied this step (content-addressed write under a domain-separated record-digest aggregate at expectedVersion 0, exact-retry replay onto one event, digest-addressed readback with no invented 'latest', close/reopen and second-handle visibility, RECORD_NOT_FOUND|UNREADABLE|CONFLICT retained at RECOVERY_INVENTORY_LEDGER under coordinator UNKNOWN_TRUTH/RECOVERY_INVENTORY, and no recovery.complete authority) and its 15 tests drive a real temporary-file SqliteEventStore. Added the case that was missing for DoD 5: a SELF-CONSISTENT semantic forgery driven through the real durable path. A legitimately committed record is mutated to claim truth COMPLETE over an UNKNOWN proof carrying an INVENTORY_ADAPTER refusal, re-digested with production recoveryReconciliationDigest, encoded with the production encoder, and committed under the aggregate for the digest it NOW hashes to — so the attacker controls the bytes and the address, the stored evidence is internally consistent, and neither the digest guard nor the aggregate-identity guard can answer. readRecoveryReconciliation refuses with RECORD_UNREADABLE at RECOVERY_INVENTORY_LEDGER under coordinator UNKNOWN_TRUTH/RECOVERY_INVENTORY, which proves the new decode-layer re-derivation is reachable through persistence rather than only in unit tests. Paired with a positive control in the same test: the untouched record at its own digest still reads back ok, so the refusal is the forgery and not a broken durable path. Also folded in the ledger's binding-union adaptation from step-5 (the `in`-narrowed anchored generation read). Focused run: 4 files / 81 tests passed.",
+      "startedAt": "2026-08-14T09:15:55.867Z",
+      "completedAt": "2026-08-14T09:16:47.006Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review the owned diff as a trust boundary. Confirm each production source targets <=250 lines and remains below 400, all four bridges are exact LF one-liners, caller objects are never frozen/mutated, combined proofs are stored once, no COMPLETE resource/integration proof is synthesized, no raw credential/key/nonce/message is serialized, and Windows tests close both store handles before reopen/delete. Perform byte-restored mutation drills that (a) delete one population/mapping edge, (b) omit a bound body leaf from the digest, (c) bypass recovery-incarnation equality, and (d) bypass key-epoch equality; require each named production-surface test to turn red, restore exact bytes, and rerun the focused tests green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
@@ -126,13 +143,20 @@
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-forgery.test.ts"
+      ],
+      "note": "Adversarial review done and ELEVEN byte-restored mutation drills all turned their named production-surface test red. Each drill asserted three things, because two of the three failure modes are invisible otherwise: the mutation actually changed the file (sha256 before != after, so a missed anchor cannot read as green), the named test went red, and the file restored to the exact original sha256. Drills: D1 derived truth, D2 derived upstream code, D3 sentinel slot, D4 disposition field shape, D5 item order, D6 class-scoped identity uniqueness, D7 builder COMPLETE+upstream refusal, D8 delete the PROVIDER_RUN population edge, D9 omit keyEpochRef from the digest body, D10 bypass incarnation equality, D11 bypass key-epoch equality. Suite exit 0; all six touched sources verified byte-identical afterwards. D1 CAUGHT A REAL TEST DEFECT and is the reason the drill was worth running: deleting the truth comparison left \"refuses a child proof UNKNOWN under record truth COMPLETE\" GREEN, because the neighbouring derived-upstream guard answered for it — the exact \"refusal answered by another guard\" failure this epic's rail 6 warns about. I added an isolating case, \"refuses truth COMPLETE while the retained code already admits an incomplete proof\", which keeps the upstream code the derivation would produce so the upstream guard agrees and stays silent and only recomputing truth can refuse; D1 then went red. Review checks: zero NUL bytes across all 16 owned files (record.ts:164 repaired); zero CR bytes in every source and all eight .js bridges, each an exact one-line LF re-export, verified with a positive control that the CR probe does fire; production line counts contract 287, record 188, subject 300, proofs 166, codec 146, reader 266, ledger 289, invariants 186 — all below the 400 cap, and codec came DOWN from 391 via the reader split; no secret, key, nonce or adapter message is serialized (the only `payload` references are the record's own canonical bytes and the result/event byte equality check); ledger tests track every SqliteEventStore handle and close both before reopen/delete for Windows; the combined provider proof is still stored once over two populations. Scratch drill script removed — no evidence file remains. FOREIGN CONDITION NOW CLEARED: the peer completed the RecoveryIncarnationBinding GENESIS|RESTORE union refactor, daemon typecheck is back to exit 0, and the full daemon suite is 69 files / 1479 tests passing.",
+      "startedAt": "2026-08-14T09:16:49.617Z",
+      "completedAt": "2026-08-14T09:20:13.730Z"
     },
     {
       "stepId": "step-8",
       "description": "Run the single final foreground gate and capture fresh exit codes/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded merge-base failing-path baseline, require zero new failures intersecting the owned recovery paths and all owned-package legs green, report any foreign red verbatim, verify the final diff contains only the ten explicit owned paths, and hand QA the record digest/replay/reopen evidence plus consumer IDs `task-47eecd22b3b94a57a9632672c19ebd97`, `task-cf7fb147bd1c47698cbd65c9535370aa`, and downstream `task-6f786c58cabf4f85be8ed4135e68a752`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-14T09:20:16.785Z"
     }
   ],
   "status": "WORKING",
@@ -167,7 +191,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-14T09:10:29.779Z",
+  "updatedAt": "2026-08-14T09:20:16.785Z",
   "contextFetchedBy": [
     "worker-06df66bb"
   ],
@@ -175,7 +199,7 @@
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 20,
+    "executedStepCount": 23,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -186,7 +210,10 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {

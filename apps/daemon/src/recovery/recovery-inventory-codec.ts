@@ -38,6 +38,25 @@ export type RecoveryReconciliationDecodeResult =
   | RecoveryReconciliationDecoded
   | RecoveryInventoryRefusal;
 
+const local = (code: RecoveryInventoryUpstream["code"]): RecoveryInventoryUpstream =>
+  Object.freeze({ code, layer: "RECOVERY_INVENTORY" as const });
+
+const UNREADABLE = recoveryInventoryRefusal(
+  local("RECOVERY_INVENTORY_RECORD_UNREADABLE"),
+  "The stored reconciliation bytes are not decodable as a record.",
+);
+const NONCANONICAL = recoveryInventoryRefusal(
+  local("RECOVERY_INVENTORY_RECORD_NONCANONICAL"),
+  "The stored bytes are not the one canonical spelling of the record they claim.",
+);
+const INCOHERENT = recoveryInventoryRefusal(
+  local("RECOVERY_INVENTORY_RECORD_INCOHERENT"),
+  "The stored record asserts facts its own contents cannot support.",
+);
+const DIGEST_MISMATCH = recoveryInventoryRefusal(
+  local("RECOVERY_INVENTORY_RECORD_DIGEST_MISMATCH"),
+  "The record digest does not cover the record body it is stored with.",
+);
 
 const upstreamBody = (
   upstream: RecoveryInventoryUpstream | null,
@@ -110,7 +129,10 @@ export function decodeRecoveryReconciliationRecord(
   } catch {
     return UNREADABLE;
   }
-  const record = readRecord(parsed);
+  // Structure AND semantics are settled first, so a forgery whose digest was
+  // recomputed over it is refused by the invariant it broke rather than being
+  // waved through by a digest that now matches its own lie.
+  const record = readRecoveryReconciliationRecordBody(parsed);
   if (record === "NONCANONICAL") return NONCANONICAL;
   if (record === "INCOHERENT") return INCOHERENT;
   if (recoveryReconciliationDigest(record) !== record.recordDigest) return DIGEST_MISMATCH;

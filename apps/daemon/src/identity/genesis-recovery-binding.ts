@@ -1,5 +1,3 @@
-import { generateKeyPairSync, randomBytes, sign, verify } from "node:crypto";
-
 import { RECOVERY_BINDING_CODEC_VERSION, RECOVERY_BINDING_SLOTS } from "@moe/store";
 import type {
   RecoveryBindingReadResult,
@@ -9,10 +7,7 @@ import type {
 import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import { hasAnchoredIncarnation } from "../recovery/recovery-incarnation-anchor.js";
-import {
-  RECOVERY_ENTROPY_BYTES,
-  digestOf,
-} from "../recovery/recovery-incarnation-contract.js";
+import { mintGenesisIncarnation } from "../recovery/recovery-incarnation-genesis.js";
 import {
   isRecoveryAuthenticationRef,
   projectRecoveryAuthenticationBinding,
@@ -87,42 +82,6 @@ const bindingFrom = (read: RecoveryBindingReadResult): RecoveryAuthenticationBin
   return Object.freeze({ keyEpochRef, recoveryIncarnationRef: incarnationRef });
 };
 
-interface MintedGenesis {
-  readonly genesisDigest: string;
-  readonly incarnationRef: string;
-  readonly keyEpochRef: string;
-}
-
-/**
- * Same derivation discipline as the restore mint — framed digests over fresh
- * entropy and a fresh key epoch, self-proven through a real sign/verify round
- * trip — with the restore's (command, generation) context replaced by a
- * genesis context, so the two mints can never claim each other's refs.
- */
-const mintGenesis = (projectId: string): MintedGenesis | null => {
-  const entropy = randomBytes(RECOVERY_ENTROPY_BYTES);
-  if (entropy.byteLength !== RECOVERY_ENTROPY_BYTES) return null;
-  const incarnationDigest = digestOf("nonce", entropy);
-
-  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const spki = publicKey.export({ format: "der", type: "spki" });
-  const fingerprint = digestOf("key", new Uint8Array(spki));
-
-  const genesisDigest = digestOf("genesis-store", projectId);
-  const context = [`genesis:${projectId}`, genesisDigest] as const;
-  const incarnationRef = digestOf("incarnation", incarnationDigest, ...context);
-  const keyEpochRef = digestOf("key-epoch", fingerprint, ...context);
-
-  // Self-proof before anything durable: a key epoch whose own signature does
-  // not verify must never become the fence every credential is judged against.
-  const bindingDigest = digestOf("binding", ...context, incarnationRef, keyEpochRef, fingerprint);
-  const challenge = Buffer.from(digestOf("challenge", bindingDigest), "hex");
-  const signature = sign(null, challenge, privateKey);
-  if (verify(null, challenge, publicKey, signature) !== true) return null;
-
-  return Object.freeze({ genesisDigest, incarnationRef, keyEpochRef });
-};
-
 export function ensureGenesisRecoveryBinding(
   store: GenesisBindingStore,
   config: GenesisRecoveryConfig,
@@ -141,15 +100,21 @@ export function ensureGenesisRecoveryBinding(
     return Object.freeze({ ok: true, outcome: "DEFERRED" } as const);
   }
 
-  const minted = mintGenesis(config.projectId);
-  if (minted === null) return refuse("GENESIS_MINT_FAILED", "SELF_PROOF_FAILED");
+  // ONE mint implementation, shared with the restore path: the fence a fresh
+  // store runs under is derived, self-proven and tagged by the same code.
+  const minted = mintGenesisIncarnation(config.projectId);
+  if (!minted.ok) return refuse("GENESIS_MINT_FAILED", minted.code);
+  const { binding } = minted;
 
+  // The installed payload keeps its existing shape on purpose: persisting the
+  // full public proof is the consuming task's edge, not this one's. The binding
+  // now HAS that proof, and `encodeBinding` is the codec that will carry it.
   const installed = store.installRecoveryBinding({
     bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
-    incarnationRef: minted.incarnationRef,
+    incarnationRef: binding.incarnationRef,
     installedAt: config.clock(),
-    keyEpochRef: minted.keyEpochRef,
-    payload: encoder.encode(minted.genesisDigest),
+    keyEpochRef: binding.keyEpochRef,
+    payload: encoder.encode(binding.storeContextDigest),
     slot: ACTIVE_SLOT,
   });
   if (!installed.ok) return refuse("GENESIS_INSTALL_REFUSED", installed.code);
@@ -158,7 +123,7 @@ export function ensureGenesisRecoveryBinding(
   // raced this one, the slot's CURRENT content is the authority, not ours.
   const current = bindingFrom(store.readRecoveryBinding(ACTIVE_SLOT));
   if (current === null) return refuse("GENESIS_INSTALL_UNVERIFIED", "READ_BACK_FAILED");
-  const ours = current.recoveryIncarnationRef === minted.incarnationRef
-    && current.keyEpochRef === minted.keyEpochRef;
+  const ours = current.recoveryIncarnationRef === binding.incarnationRef
+    && current.keyEpochRef === binding.keyEpochRef;
   return present(ours ? "INSTALLED" : "PRESENT", current);
 }

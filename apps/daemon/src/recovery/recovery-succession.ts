@@ -2,9 +2,9 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { attemptPort, digestOf } from "./recovery-incarnation-contract.js";
 import type {
-  RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,
   RecoveryIncarnationKeyHandle,
+  RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
 import { createRecoveryIncarnationService } from "./recovery-incarnation.js";
 import { anchorIncarnation, readAnchoredIncarnation } from "./recovery-incarnation-anchor.js";
@@ -55,7 +55,7 @@ export async function verifyAnchoredPredecessor(
   store: SqliteEventStore,
   projectId: string,
   predecessorIncarnationRef: string,
-): Promise<RecoveryIncarnationBinding | RecoverySuccessionRefused> {
+): Promise<RestoreIncarnationBinding | RecoverySuccessionRefused> {
   // 1. Existence is a DURABLE fact, never a caller assertion. A binding that
   //    was minted but never anchored is indistinguishable from one a caller
   //    minted a moment ago purely to claim succession from it.
@@ -95,7 +95,7 @@ export async function verifyAnchoredPredecessor(
 
 /** What a mint hands back: the published binding plus the process-local handle. */
 interface Successor {
-  readonly binding: RecoveryIncarnationBinding;
+  readonly binding: RestoreIncarnationBinding;
   readonly keyHandle: RecoveryIncarnationKeyHandle;
 }
 
@@ -130,7 +130,7 @@ export async function mintSuccessor(
  */
 export async function proveSuccession(
   port: RecoveryIncarnationCryptoPort,
-  predecessor: RecoveryIncarnationBinding,
+  predecessor: RestoreIncarnationBinding,
   successor: Successor,
 ): Promise<RecoverySuccessionRecord | RecoverySuccessionRefused> {
   const successionDigest = digestOf(

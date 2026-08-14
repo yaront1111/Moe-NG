@@ -38,7 +38,7 @@
     {
       "stepId": "step-3",
       "description": "Land the vocabulary and types in the new packages/contracts/src/configuration/project-configuration-contract.ts plus its LF `.js` bridge whose single line is `export * from \"./project-configuration-contract.ts\";` (byte-identical in form to distribution-contract.js; the repo is `text=auto eol=lf`, so verify with `git ls-files --eol` after adding that both new files report `i/lf w/lf`). Publish: PROJECT_CONFIGURATION_SCHEMA_VERSION as a `moe-project-configuration/1`-style literal; the frozen ordered PROJECT_CONFIGURATION_LIMIT_KEYS array from step 1 with its `(typeof)[number]` key type; each closed enum vocabulary from step 1 (gate modes, provider-egress, daemon-exposure, workspace isolation, host containment) frozen with its own type; the closed refusal vocabulary — exactly two codes, PROJECT_CONFIGURATION_INPUT_INVALID and PROJECT_CONFIGURATION_VERSION_UNSUPPORTED, and the single layer PROJECT_CONFIGURATION_MANIFEST — with two FROZEN MODULE-CONSTANT refusal objects `{ok:false, code, layer}` carrying nothing observed from the failure site; and the interfaces: ProjectConfigurationSettings (policy revision/evaluator plus the three gate modes and the auto-approval opt-in digest; the seven selection refs — provider, model, snapshot, reasoning effort, runtime, profile, structured-output schema; the ordered limit table as a readonly array of `{key, value}` entries; network policy; workspace and host-containment isolation; the canonical command/query/error schema versions; and `orchestrationSource: DistributionSource` imported type-only from ../distribution/distribution-contract.js) and ProjectConfigurationManifest (schemaVersion, projectId, settings, and settingsDigest — which appears ONLY here, never on Settings). Comment each limit key group with its design section. NO `node:` import anywhere, no hashing, no path key of any kind. Target <=250 physical lines measured with `grep -c ''`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/configuration/project-configuration-contract.ts",
         "packages/contracts/src/configuration/project-configuration-contract.js"
@@ -47,23 +47,37 @@
         "packages/contracts/src/configuration/project-configuration-contract.ts",
         "packages/contracts/src/configuration/project-configuration-contract.js"
       ],
-      "startedAt": "2026-08-14T09:12:33.949Z"
+      "modifiedFiles": [
+        "packages/contracts/src/configuration/project-configuration-contract.ts",
+        "packages/contracts/src/configuration/project-configuration-contract.js"
+      ],
+      "note": "Landed the vocabulary + types. project-configuration-contract.ts = 213 physical lines (grep -c ''), under the 250 target. Bridge = exactly 1 line, `export * from \"./project-configuration-contract.ts\";`.\n\nBYTES VERIFIED at the byte level, not by eye: node read of both files reports .ts 9239 bytes / CR 0 / NUL 0 / 213 lines, .js 53 bytes / CR 0 / NUL 0 / 1 line. .gitattributes:1 is `* text=auto eol=lf`, so working-tree LF is what git will store; `git ls-files --eol` runs at step 7 once the paths are tracked (it reports nothing for an untracked path). NOTE for anyone repeating this: `grep -c $'\\x00' f` is USELESS in bash — the NUL collapses to an empty pattern and matches every line (it printed 213 here, which is line count, not NUL count).\n\nPUBLISHED: PROJECT_CONFIGURATION_SCHEMA_VERSION = \"moe-project-configuration/1\"; PROJECT_CONFIGURATION_LIMIT_KEYS frozen in design order, 30 keys, commented per design section (2.1 / 11.2 / 19.1); five closed enums (gate modes 2, egress 3, exposure 2, workspace isolation 2, host containment 2) each frozen with its (typeof)[number] type; refusal vocabulary of exactly 2 codes + 1 layer; two FROZEN MODULE-CONSTANT refusals PROJECT_CONFIGURATION_INPUT_INVALID / PROJECT_CONFIGURATION_VERSION_UNSUPPORTED carrying only {code, layer, ok:false} — nothing observed at the failure site; interfaces ProjectConfigurationPolicy / Selection / LimitEntry / Network / Isolation / SchemaVersions / Settings / Manifest; both result unions; and the shared `isLogicalRef` predicate + PROJECT_CONFIGURATION_MAX_REF_CHARS.\n\nRAIL COMPLIANCE, each checked deliberately: (1) zero `node:` specifiers — the only import is a TYPE-ONLY `DistributionSource` from ../distribution/distribution-contract.js; (2) no default value anywhere — the design's numbers 4/3/6/9/24/64/8/10000/1s/3/1 MiB/... are absent by construction, only the key vocabulary and its order are frozen; (3) no hashing; (4) no path key — `settingsDigest` is on the Manifest ONLY, never on Settings, because a digest over the settings cannot be one of the settings it covers.\n\nREF PREDICATE IS ONE RULE, NOT A BLOCKLIST: bounded (<=128), well-formed, NFC-stable, no leading \".\", and no \"/\", \"\\\" or \":\" code unit, plus C0/DEL refused. That single rule categorically excludes drive (C:\\x, C:/x, C:x), UNC (\\\\host\\share), POSIX-absolute (/etc/x), file URI (file:///x) and dot-segment (. .. ./x ../x) spellings without naming any of them — which is exactly why step 4 must carry a POSITIVE control table beside the hostile one.",
+      "startedAt": "2026-08-14T09:12:33.949Z",
+      "completedAt": "2026-08-14T09:13:55.387Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD red — write packages/contracts/src/configuration/project-configuration.test.ts against the bare root only (`import ... from \"@moe/contracts\"`, never a relative path), so a symbol that is not exported from index.ts cannot be tested at all. Sections: (1) VOCABULARY — assert the limit-key array equals the hand-written ordered list from step 1 and its length equals the hand-written count, each closed enum equals its hand-written member list, and every vocabulary is frozen and duplicate-free; write these lists out by hand rather than deriving them from the exports, because a list read off the surface under test agrees with it by construction. (2) POSITIVE — one fully valid settings and one valid manifest parse to a snapshot that is deep-frozen at every depth, equals the input value-for-value with ZERO normalization (no trimming, no case folding, no `./` stripping, no coercion: every accepted string is `===` the input string), shares no object identity with the input at any depth, and leaves the input's own-property descriptors and non-frozen state untouched after the call. (3) REFS — a hand-written table of hostile ref spellings that must ALL refuse: `C:\\\\x`, `C:/x`, `C:x` (drive-relative), `\\\\\\\\host\\\\share`, `/etc/x`, `./x`, `../x`, `.`, `..`, `file:///x`, `file://host/x`, a ref with an embedded NUL or lone surrogate, an over-long ref; PAIRED with a positive-control table of legitimate refs that must ALL be accepted (`gpt-4.1-mini`, `anthropic-claude`, `profile_v2`) — without the positive controls an over-narrowed matcher that refuses everything passes the whole table. (4) HOSTILE STRUCTURE — generated cases for accessor, proxy (transparent and revoked), own symbol key, extra key, missing key, custom prototype, sparse/duplicate/misordered/short/long limit table, non-safe-integer and negative-zero limit values, malformed source sha, and unsupported schema version, applied at the manifest, the settings record, the policy record, the selection record, each limit entry, the network record, the isolation record, the schema-version record and the orchestrationSource record; assert a hand-written positive case count and, for EVERY case, the exact `code` and `layer` — INPUT_INVALID for structure, VERSION_UNSUPPORTED only for a well-formed record whose schemaVersion is not the supported literal — plus that no partial snapshot escapes. (5) GATE CROSS-RULE — an AUTO gate without the opt-in digest refuses, and a MANUAL gate carrying a digest refuses; both directions, both pinned. (6) BROWSER SAFETY — read both new production sources from disk and assert neither matches `/[\"']node:/`, following the bounded-json-hostile.test.ts:156 precedent, and include a positive control asserting the same regex DOES match a file that genuinely imports a builtin, so an always-passing regex cannot read as proof. Run and record the RED (nothing is implemented yet).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/configuration/project-configuration.test.ts"
       ],
       "newFiles": [
         "packages/contracts/src/configuration/project-configuration.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/configuration/project-configuration.test.ts",
+        "packages/contracts/src/configuration/project-configuration-hostile.test.ts",
+        "packages/contracts/src/configuration/project-configuration.test-fixtures.ts"
+      ],
+      "note": "RED RECORDED, and red FOR THE RIGHT REASON — I checked the messages, not just the count. `pnpm --filter @moe/contracts test` -> exit 1, \"Test Files 2 failed | 10 passed (12) / Tests 146 failed | 250 passed (396)\". Failure messages grouped: 17x \"TypeError: parseProjectConfigurationManifest is not a function\", 6x \"TypeError: parseProjectConfigurationSettings is not a function\", \"TypeError: PROJECT_CONFIGURATION_LIMIT_KEYS is not iterable\", \"expected undefined to be 'moe-project-configuration/1'\", and \"ENOENT ... project-configuration-parser.ts\". Nothing is red from a broken harness; every red names an absent parser or an unpublished export.\n\nDEVIATION, disclosed: the plan named ONE test file. I landed THREE, because one file honestly covering this matrix is ~470 lines. Split along a real seam per convention-contracts-250-line-splits: project-configuration.test.ts 189 (vocabulary, positive/immutability, refs, browser safety) + project-configuration-hostile.test.ts 254 (hostile structure matrix, limit table, field values, gate cross-rule, refusal order) + project-configuration.test-fixtures.ts 121 (hand-written expectations and input builders). The `.test-fixtures.ts` suffix and the `./x.test-fixtures.js` import specifier copy the existing document-work-proposal.test-fixtures.ts precedent in this same package — that file has NO .js bridge, so neither does mine. Owned-path count goes 6 -> 8, still under the 10 threshold.\n\nBARE ROOT ONLY: both test files and the fixture import from \"@moe/contracts\", never a relative path into the module under test. A symbol missing from index.ts is untestable — which is precisely why 146 tests are red right now.\n\nHAND-WRITTEN, NOT DERIVED: EXPECTED_LIMIT_KEYS is typed out from the design and EXPECTED_LIMIT_KEY_COUNT = 30 is a literal; the vocabulary test asserts the EXPORT equals that list AND that the hand list itself has length 30, so neither side can drift silently. Same for all five enums and both refusal vocabularies. The valid fixture builds its limit table from the HAND list, so a production reorder makes the positive case refuse.\n\nSWEEP COUNTS ARE PINNED (a sweep that generates zero cases passes): TARGETS 9, STRUCTURES 7, STRUCTURE_CASES 63, LIMIT_TABLES 8, LIMIT_VALUES 8, FIELD_CASES 14, HOSTILE_REFS 17, LEGITIMATE_REFS 8 — every one asserted with a literal.\n\nPOSITIVE CONTROLS, both directions: (a) 8 legitimate refs must be ACCEPTED and returned `===` the input, so an always-refusing matcher cannot pass the 17 hostile rows; (b) the browser-safety regex /[\"']node:/ is asserted to MATCH runtime-entrypoint-smoke-worker.mjs (`import { parentPort } from \"node:worker_threads\";`) so an always-passing regex cannot read as proof; (c) an opt-in gate WITH its digest must be accepted, so the gate cross-rule is not \"always refuse\".\n\nEVERY refusal case asserts the exact code AND layer, that the refusal has exactly keys {code, layer, ok} — no partial snapshot escapes — and that it is frozen. Order pins are explicit and bidirectional: bad-version + bad-field -> VERSION_UNSUPPORTED (version before fields); extra-key + bad-version -> INPUT_INVALID (structure before version).",
+      "startedAt": "2026-08-14T09:13:58.021Z",
+      "completedAt": "2026-08-14T09:17:56.149Z"
     },
     {
       "stepId": "step-5",
       "description": "Implement the parsers in the new packages/contracts/src/configuration/project-configuration-parser.ts plus its LF `.js` bridge. Export `parseProjectConfigurationSettings(value)` and `parseProjectConfigurationManifest(value)`, each returning `{ok:true, settings|manifest} | ProjectConfigurationRefusal`. Build every guard on runtime-guards.js — `isPlainRecord`, `hasExactKeys`, `isSafeArray`, `isHex64`, `isSafeCount`, `isNonEmptyString` — and do NOT reimplement descriptor or proxy handling; the guard order there is already correct and load-bearing. Fixed refusal ORDER, because two guards can both be true and the test pins which one answered: structure first (plain record, exact keys) at INPUT_INVALID, then schemaVersion equality at VERSION_UNSUPPORTED, then field-level validation at INPUT_INVALID. Logical refs: one shared predicate accepting a bounded, well-formed, NFC single token matching a slash-free, backslash-free, colon-free pattern — that one rule categorically excludes drive, drive-relative, UNC, POSIX-absolute, file-URI and dot-segment spellings without enumerating them, which is why the test carries both hostile and legitimate tables. The limit table must be a dense safe array whose length equals PROJECT_CONFIGURATION_LIMIT_KEYS.length, whose entry `i` has `key === PROJECT_CONFIGURATION_LIMIT_KEYS[i]` (fixed order, no sorting and no reordering rescue), each entry an exact two-key own-data record with a safe nonnegative integer value, negative zero refused. Copy every array and record element-by-element into fresh daemon-owned objects and `Object.freeze` the whole result graph without ever freezing or mutating the caller's input. `settingsDigest` is validated on the manifest only, as hex64, and is never synthesized. Nothing here computes a hash, reads a path, or supplies a default. Target <=250 physical lines; if the file crosses it, split the limit-table parsing into a third focused module rather than shrinking comments.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/configuration/project-configuration-parser.ts",
         "packages/contracts/src/configuration/project-configuration-parser.js"
@@ -71,26 +85,42 @@
       "newFiles": [
         "packages/contracts/src/configuration/project-configuration-parser.ts",
         "packages/contracts/src/configuration/project-configuration-parser.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/configuration/project-configuration-parser.ts",
+        "packages/contracts/src/configuration/project-configuration-parser.js",
+        "packages/contracts/src/configuration/project-configuration-contract.ts"
+      ],
+      "note": "Parsers landed. project-configuration-parser.ts = 227 lines, bridge 1 line LF. project-configuration-contract.ts grew 213 -> 229 (both under the 250 target), because I refactored isLogicalRef to COMPOSE the existing production isCanonicalText from distribution-contract.js instead of re-spelling isWellFormed/NFC, and added isBoundedText + PROJECT_CONFIGURATION_MAX_TEXT_CHARS. Reusing production rather than duplicating it is the point of the global test rail's \"asserted against the production surface, not a helper that reimplements it\".\n\nGUARDS ARE ALL BORROWED: isPlainRecord, hasExactKeys, isSafeArray, isHex64, isSafeCount from runtime-guards.js; isCanonicalText and SOURCE_SHA_LENGTHS from distribution-contract.js. Zero descriptor/proxy handling written here.\n\nREFUSAL ORDER IS EXPLICIT, not incidental: manifest = isPlainRecord+hasExactKeys (INPUT_INVALID) -> schemaVersion !== literal (VERSION_UNSUPPORTED) -> projectId/settingsDigest/settings (INPUT_INVALID). Settings has no version of its own, so it is structure -> fields only.\n\nLIMIT TABLE is dense and positional: length must equal PROJECT_CONFIGURATION_LIMIT_KEYS.length, `Object.hasOwn(value, index)` rejects a hole left by `delete limits[3]` (a sparse array still reports the right length), entry i must ALREADY carry key i. Nothing sorts, nothing back-fills, nothing is rescued.\n\nTWO PROTOTYPE-POLLUTION DETAILS, deliberate: objectFormat is looked up with `Object.hasOwn(SOURCE_SHA_LENGTHS, objectFormat)` so \"__proto__\"/\"toString\" cannot resolve through the chain; closed-vocabulary membership goes through `member()` which type-checks the string first and never coerces a non-string in.\n\nNO NORMALIZATION ANYWHERE: every accepted string is stored as the identical value read from the input; the only substituted literal is schemaVersion, which is provably `===` the input by the equality guard immediately above it. Nothing trims, case-folds, strips \"./\", or supplies a default. No hash is computed and settingsDigest is validated (hex64) on the manifest only, never synthesized.\n\nIMMUTABILITY: every record and array is rebuilt element-by-element into fresh objects and Object.freeze'd on the way out; the caller's input is never frozen, never mutated, and never aliased into the result.\n\nsourceSha width is taken from the DECLARED objectFormat (sha1 -> 40, sha256 -> 64) and must be lowercase hex, so a valid-looking sha1 presented under sha256 refuses.",
+      "startedAt": "2026-08-14T09:17:58.564Z",
+      "completedAt": "2026-08-14T09:20:13.774Z"
     },
     {
       "stepId": "step-6",
       "description": "Publish through the package root: add the value exports (schema version, limit keys, every closed vocabulary, the refusal code/layer arrays, the two parser functions) and the `export type` block (settings, manifest, limit entry and key, every enum type, refusal, and both result unions) to packages/contracts/src/index.ts, following the existing distribution/document-work block style and alphabetical ordering within each block. Then turn step 4's suite green. Remember that `export type` is erased at runtime, so a type-only publication satisfies tsc while leaving nothing importable: the test's root-import section must reach at least one RUNTIME value from each new module (a frozen vocabulary array and each parser function) so a value that silently failed to publish cannot pass. Re-measure `grep -c ''` on both new production sources against the 250 target and record the numbers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/contracts/src/index.ts",
+        "packages/contracts/src/configuration/project-configuration.test.ts"
+      ],
+      "note": "GREEN. `pnpm --filter @moe/contracts test` -> exit 0, \"Test Files 12 passed (12) / Tests 415 passed (415)\". Baseline was 10 files / 243 tests, so this task adds 2 files and 172 tests and regresses none.\n\nindex.ts 155 -> 197 lines: one value block (13 constants + isBoundedText + isLogicalRef), one `export type` block (19 types), one parser value block (both functions), all alphabetical within the block, matching the existing distribution/document-work style.\n\nCLOSED THE \"export type IS ERASED AT RUNTIME\" HOLE EXPLICITLY. Publishing through index.ts is not proof that a VALUE landed — tsc is happy either way. Added a root-publication block that does `import * as contracts from \"@moe/contracts\"` and asserts `typeof contracts[name]` for all 17 runtime symbols with their expected kind (object/string/number/function), so a symbol that silently failed to publish, or landed as a type-only export, fails loudly. Paired with a NEGATIVE CONTROL in the same block: the type name \"ProjectConfigurationSettings\" and the near-miss typo \"PROJECT_CONFIGURATION_LIMIT_KEY\" must both be undefined — without that, a probe that resolves everything would read as proof. Also pinned both module-constant refusals at the root: frozen, keys exactly {code, layer, ok}, ok false, layer PROJECT_CONFIGURATION_MANIFEST, and each carrying its own code. Those four exports (both refusals, isBoundedText, isLogicalRef) and the two char bounds had no runtime reader before this block.\n\nLINE COUNTS RE-MEASURED with grep -c '': contract 229, parser 227 — both production sources under the 250 target. Tests 238 + 254, fixtures 121, index 197. Bridges 1 line each.",
+      "startedAt": "2026-08-14T09:20:17.327Z",
+      "completedAt": "2026-08-14T09:21:18.668Z"
     },
     {
       "stepId": "step-7",
       "description": "Mutation drills, then gate, review and commit. Drills (for each: sha256 first, edit with the Edit tool, confirm the anchor matched once, run the focused test, reverse the edit, confirm the sha256 is restored — never `git checkout`, which reverts to HEAD and would destroy uncommitted work in this shared worktree): D1 make the ref predicate accept a backslash — the drive/UNC rows redden while the legitimate-ref rows stay green, proving the table tests the rule and not the parser's mere existence; D2 sort the limit table before comparing — the misordered-table case reddens; D3 accept a limit table shorter than the key list — the missing-key case reddens; D4 swap the VERSION_UNSUPPORTED branch ahead of the structure check — a structurally hostile record with a bad version must change which code it reports, proving the order is pinned; D5 return the caller's array instead of the copy — the identity/immutability assertions redden on a named node, not on a JSON comparison. Then run the exact verification command `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` in the foreground, keep the verbatim tail, and subtract the step-2 baseline: any remaining red must not intersect the six owned paths and is disclosed verbatim, never fabricated green. Adversarial review: no `node:` specifier in either production source; no path key anywhere in the closed contract; no default value invented; no hash computed; refusals carry nothing observed; the snapshot cannot alias or freeze caller input; `settingsDigest` exists only on the manifest. Record task-5dfc98fc3e7f4035a8012bd9ba032de3 as the named production consumer (global rail clause 1 — this is a pure package, so the consumer task id is the required edge). Finally `git add` the five new files first (a commit pathspec naming an untracked path commits nothing at all), confirm `git status --porcelain` stages no foreign entry, commit with an explicit six-path pathspec, and verify with `git show --stat`. State plainly in the completion note that the plan added the parser module and its bridge beyond the four owned paths named in the task description, because the exact schema cannot fit one <=250-line module and the global rail directs architects to split the FILE rather than the task — the split follows the package's own distribution/ contract-plus-parser convention.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/contracts/src/configuration/project-configuration-contract.ts",
         "packages/contracts/src/configuration/project-configuration-parser.ts",
         "packages/contracts/src/configuration/project-configuration.test.ts",
         "packages/contracts/src/index.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:21:20.922Z"
     }
   ],
   "status": "WORKING",
@@ -119,12 +149,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:07.402Z",
-  "updatedAt": "2026-08-14T09:12:33.949Z",
+  "updatedAt": "2026-08-14T09:21:20.922Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:24.289Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 2
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -135,7 +165,11 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T09:09:21.454Z",

@@ -8,9 +8,12 @@ import {
   digestOf,
   snapshotKeyMaterial,
 } from "./recovery-incarnation-contract.js";
-import { snapshotRequest } from "./recovery-incarnation-context.js";
+import {
+  deriveIncarnation,
+  snapshotRequest,
+  snapshotRestoreContext,
+} from "./recovery-incarnation-context.js";
 import type {
-  RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,
   RecoveryIncarnationKeyMaterial,
   RecoveryIncarnationMinted,
@@ -18,15 +21,30 @@ import type {
   RecoveryIncarnationRequest,
   RecoveryIncarnationResult,
   RecoveryIncarnationService,
+  RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
 
 export { createNodeRecoveryCryptoPort } from "./recovery-incarnation.node.js";
+export {
+  RECOVERY_INCARNATION_ORIGINS,
+  deriveIncarnation,
+  snapshotGenesisContext,
+  snapshotRequest,
+  snapshotRestoreContext,
+  type GenesisIncarnationContext,
+  type RecoveryIncarnationContext,
+  type RecoveryIncarnationDerivation,
+  type RecoveryIncarnationOrigin,
+  type RestoreIncarnationContext,
+} from "./recovery-incarnation-context.js";
 export {
   RECOVERY_ENTROPY_BYTES,
   RECOVERY_INCARNATION_ERROR_CODES,
   RECOVERY_INCARNATION_LAYER,
   RECOVERY_INCARNATION_SCHEMA_VERSION,
+  type GenesisIncarnationBinding,
   type RecoveryIncarnationBinding,
+  type RecoveryIncarnationBindingCommon,
   type RecoveryIncarnationCryptoPort,
   type RecoveryIncarnationErrorCode,
   type RecoveryIncarnationKeyHandle,
@@ -38,6 +56,7 @@ export {
   type RecoveryIncarnationRequest,
   type RecoveryIncarnationResult,
   type RecoveryIncarnationService,
+  type RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
 
 /**
@@ -92,20 +111,16 @@ export function createRecoveryIncarnationService(
   ): Promise<RecoveryIncarnationResult> => {
     const { backupGenerationDigest, restoreCommandId } = request;
     const publicKeySpkiHex = Buffer.from(material.publicKeySpki).toString("hex");
-    const context = [restoreCommandId, backupGenerationDigest] as const;
-    const incarnationRef = digestOf("incarnation", incarnationDigest, ...context);
-    const keyEpochRef = digestOf("key-epoch", verificationKeyFingerprint, ...context);
-    const bindingDigest = digestOf(
-      "binding",
-      RECOVERY_INCARNATION_SCHEMA_VERSION,
-      ...context,
+    // The request was already admitted, so this cannot refuse; it is re-read
+    // through the shared snapshot so the tag comes from ONE place.
+    const context = snapshotRestoreContext(request);
+    if (context === null) return discard(material, RECOVERY_INPUT_INVALID);
+    const { bindingDigest, challengeDigest, incarnationRef, keyEpochRef } = deriveIncarnation({
+      context,
       incarnationDigest,
-      incarnationRef,
-      keyEpochRef,
-      verificationKeyFingerprint,
       publicKeySpkiHex,
-    );
-    const challengeDigest = digestOf("challenge", bindingDigest);
+      verificationKeyFingerprint,
+    });
     const challenge = Buffer.from(challengeDigest, "hex");
 
     const signed = await attemptPort(() => port.sign(material.handle, challenge));
@@ -122,12 +137,13 @@ export function createRecoveryIncarnationService(
     );
     if (verified !== true) return discard(material, RECOVERY_KEY_EPOCH_UNAVAILABLE);
 
-    const binding: RecoveryIncarnationBinding = Object.freeze({
+    const binding: RestoreIncarnationBinding = Object.freeze({
       backupGenerationDigest,
       bindingDigest,
       incarnationDigest,
       incarnationRef,
       keyEpochRef,
+      origin: "RESTORE" as const,
       proof: Object.freeze({
         challengeDigest,
         signatureHex: Buffer.from(signature).toString("hex"),

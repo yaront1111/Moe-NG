@@ -1,3 +1,4 @@
+import { isCanonicalText } from "../distribution/distribution-contract.js";
 import type { DistributionSource } from "../distribution/distribution-contract.js";
 
 export const PROJECT_CONFIGURATION_SCHEMA_VERSION = "moe-project-configuration/1" as const;
@@ -193,21 +194,36 @@ export const PROJECT_CONFIGURATION_VERSION_UNSUPPORTED: ProjectConfigurationRefu
   });
 
 export const PROJECT_CONFIGURATION_MAX_REF_CHARS = 128;
+export const PROJECT_CONFIGURATION_MAX_TEXT_CHARS = 256;
+
+/** No C0 control or DEL: those spellings survive JSON but not a stable identity. */
+function hasNoControlUnit(value: string): boolean {
+  for (const unit of value) {
+    if (unit <= "\u001f" || unit === "\u007f") return false;
+  }
+  return true;
+}
+
+/** Bounded, non-empty, well-formed, NFC-stable, control-free text. */
+export function isBoundedText(value: unknown): value is string {
+  return (
+    isCanonicalText(value) &&
+    value.length <= PROJECT_CONFIGURATION_MAX_TEXT_CHARS &&
+    hasNoControlUnit(value)
+  );
+}
 
 /**
- * A logical reference token: bounded, well-formed, NFC, and free of every separator
- * a filesystem spelling needs. Refusing `/`, `\` and `:` categorically excludes
+ * A logical reference token: bounded text that is also free of every separator a
+ * filesystem spelling needs. Refusing `/`, `\` and `:` categorically excludes
  * `C:\x`, `C:/x`, `C:x`, `\\host\share`, `/etc/x` and `file:///x` without
  * enumerating them; refusing a leading `.` excludes `.`, `..`, `./x` and `../x`.
  */
 export function isLogicalRef(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0) return false;
-  if (value.length > PROJECT_CONFIGURATION_MAX_REF_CHARS) return false;
-  if (!value.isWellFormed() || value.normalize("NFC") !== value) return false;
+  if (!isBoundedText(value) || value.length > PROJECT_CONFIGURATION_MAX_REF_CHARS) return false;
   if (value.startsWith(".")) return false;
   for (const unit of value) {
     if (unit === "/" || unit === "\\" || unit === ":") return false;
-    if (unit <= "\u001f" || unit === "\u007f") return false;
   }
   return true;
 }

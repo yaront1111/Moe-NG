@@ -5,7 +5,7 @@
  * reimplementation, because a property asserted against a test helper proves
  * only that the helper agrees with itself.
  */
-import { createHash, webcrypto } from "node:crypto";
+import { createHash, createPublicKey, verify as nodeVerify, webcrypto } from "node:crypto";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -26,6 +26,15 @@ import type {
   RecoveryIncarnationRequest,
   RecoveryIncarnationResult,
 } from "@moe/daemon";
+import { decodeBinding, encodeBinding } from "./recovery-incarnation-binding-codec.js";
+import {
+  mintGenesisIncarnation,
+  nodeGenesisCryptoShell,
+} from "./recovery-incarnation-genesis.js";
+import type {
+  GenesisCryptoShell,
+  GenesisMintResult,
+} from "./recovery-incarnation-genesis.js";
 import { digestOf } from "./recovery-incarnation-contract.js";
 import type {
   GenesisIncarnationBinding,
@@ -906,5 +915,290 @@ describe("the binding is an exact discriminated union", () => {
     expect(value.binding.origin).toBe("RESTORE");
     expect(value.binding.restoreCommandId).toBe(COMMAND_A);
     expect(value.binding.backupGenerationDigest).toBe(DIGEST_A);
+  });
+});
+
+/** A GENESIS binding shaped exactly as the codec must accept it. */
+const genesisBinding = (): GenesisIncarnationBinding => {
+  const context = snapshotGenesisContext({ projectId: PROJECT })!;
+  const derived = deriveIncarnation({
+    context,
+    incarnationDigest: DIGEST_A,
+    publicKeySpkiHex: "ab".repeat(22),
+    verificationKeyFingerprint: DIGEST_B,
+  });
+  return Object.freeze({
+    bindingDigest: derived.bindingDigest,
+    incarnationDigest: DIGEST_A,
+    incarnationRef: derived.incarnationRef,
+    keyEpochRef: derived.keyEpochRef,
+    origin: "GENESIS" as const,
+    projectId: context.projectId,
+    proof: Object.freeze({
+      challengeDigest: derived.challengeDigest,
+      signatureHex: "cd".repeat(64),
+      verified: true as const,
+    }),
+    publicKeyAlgorithm: "Ed25519" as const,
+    publicKeySpkiHex: "ab".repeat(22),
+    schemaVersion: RECOVERY_INCARNATION_SCHEMA_VERSION,
+    storeContextDigest: context.storeContextDigest,
+    verificationKeyFingerprint: DIGEST_B,
+  });
+};
+
+const decodeObject = (value: unknown): RecoveryIncarnationBinding | null =>
+  decodeBinding(new TextEncoder().encode(JSON.stringify(value)));
+
+const encodedObject = (binding: RecoveryIncarnationBinding): Record<string, unknown> =>
+  JSON.parse(new TextDecoder().decode(encodeBinding(binding))) as Record<string, unknown>;
+
+describe("the durable binding codec is origin-aware", () => {
+  it("round-trips both origins through the wire form", async () => {
+    const restore = minted(await nodeService().mint(request())).binding;
+    expect(decodeBinding(encodeBinding(restore))).toEqual(restore);
+    const genesis = genesisBinding();
+    expect(decodeBinding(encodeBinding(genesis))).toEqual(genesis);
+  });
+
+  it("emits ONE field order per origin, never the caller's", async () => {
+    const restore = minted(await nodeService().mint(request())).binding;
+    // A binding whose own key insertion order is reversed must still serialize
+    // byte-identically, or a re-anchor after a crash would look like a conflict.
+    const reordered = Object.fromEntries(
+      Object.entries(restore).reverse(),
+    ) as unknown as RestoreIncarnationBinding;
+    expect(encodeBinding(reordered)).toEqual(encodeBinding(restore));
+    expect(Object.keys(encodedObject(genesisBinding()))).toEqual([
+      "bindingDigest", "incarnationDigest", "incarnationRef", "keyEpochRef", "origin",
+      "proof", "publicKeyAlgorithm", "publicKeySpkiHex", "schemaVersion",
+      "verificationKeyFingerprint", "projectId", "storeContextDigest",
+    ]);
+  });
+
+  it("refuses a genesis payload that counterfeits a restore fact", () => {
+    const genesis = encodedObject(genesisBinding());
+    expect(decodeObject({ ...genesis, restoreCommandId: COMMAND_A })).toBeNull();
+    expect(decodeObject({ ...genesis, backupGenerationDigest: DIGEST_A })).toBeNull();
+    const { projectId: _projectId, ...withoutProject } = genesis;
+    expect(decodeObject({ ...withoutProject, restoreCommandId: COMMAND_A })).toBeNull();
+  });
+
+  it("refuses a restore payload that claims genesis context", async () => {
+    const restore = encodedObject(minted(await nodeService().mint(request())).binding);
+    expect(decodeObject({ ...restore, projectId: PROJECT })).toBeNull();
+    expect(decodeObject({ ...restore, storeContextDigest: DIGEST_A })).toBeNull();
+  });
+
+  it("refuses a pre-origin row rather than inventing an origin for it", async () => {
+    const restore = encodedObject(minted(await nodeService().mint(request())).binding);
+    const { origin: _origin, ...legacy } = restore;
+    expect(decodeObject(legacy)).toBeNull();
+    expect(decodeObject({ ...restore, origin: "RESTORED" })).toBeNull();
+    expect(decodeObject({ ...restore, origin: null })).toBeNull();
+  });
+
+  it("generated the whole drifted-row matrix and refuses every case", async () => {
+    const restore = encodedObject(minted(await nodeService().mint(request())).binding);
+    const genesis = encodedObject(genesisBinding());
+    const drop = (row: Record<string, unknown>, key: string): Record<string, unknown> =>
+      Object.fromEntries(Object.entries(row).filter(([name]) => name !== key));
+    const cases: readonly (readonly [string, unknown])[] = [
+      ...Object.keys(restore).map(
+        (key) => [`restore without ${key}`, drop(restore, key)] as const,
+      ),
+      ...Object.keys(genesis).map(
+        (key) => [`genesis without ${key}`, drop(genesis, key)] as const,
+      ),
+      ["restore with an extra key", { ...restore, extra: 1 }],
+      ["genesis with an extra key", { ...genesis, extra: 1 }],
+      ["a drifted schema version", { ...restore, schemaVersion: "moe-recovery-incarnation/2" }],
+      ["a foreign key algorithm", { ...restore, publicKeyAlgorithm: "Ed448" }],
+      ["an unverified proof", { ...restore, proof: { ...(restore["proof"] as object), verified: false } }],
+      ["a truncated binding digest", { ...restore, bindingDigest: "abc" }],
+      ["a non-hex SPKI", { ...genesis, publicKeySpkiHex: "zz".repeat(22) }],
+      ["an empty project id", { ...genesis, projectId: "" }],
+      ["a non-hex store context digest", { ...genesis, storeContextDigest: "nope" }],
+      ["an empty restore command id", { ...restore, restoreCommandId: "" }],
+      ["an array in place of a row", []],
+      ["a null row", null],
+    ];
+    // The sweep must be proven non-empty: a generator that silently yields
+    // nothing passes every assertion below while testing nothing at all.
+    expect(cases).toHaveLength(36);
+    for (const [label, row] of cases) {
+      expect(decodeObject(row), label).toBeNull();
+    }
+    expect(decodeBinding(new TextEncoder().encode("{not json"))).toBeNull();
+  });
+});
+
+/**
+ * The synchronous genesis shell. It exists because `createStoreDependencies` is
+ * synchronous and the landed WebCrypto port is async-only; it shares the
+ * derivation and self-proof with the port-based service, and differs ONLY in
+ * which crypto API it calls.
+ */
+const genesisShell = (
+  overrides: Partial<GenesisCryptoShell> = {},
+): GenesisCryptoShell => Object.freeze({ ...nodeGenesisCryptoShell, ...overrides });
+
+const genesisMinted = (result: GenesisMintResult): GenesisIncarnationBinding => {
+  if (!result.ok) throw new Error(`the genesis mint must succeed: ${result.code}`);
+  return result.binding;
+};
+
+const expectGenesisRefusal = (result: GenesisMintResult, code: RecoveryIncarnationErrorCode) => {
+  if (result.ok) throw new Error(`expected ${code}, got a minted genesis binding`);
+  expect(result.code).toBe(code);
+  expect(result.layer).toBe("RECOVERY_INCARNATION");
+  expect(result.truth).toBe("UNKNOWN");
+  expect(result.authority).toBe("NONE");
+  expect(result.outcome).toBe("REFUSED");
+  expect(Object.hasOwn(result, "binding")).toBe(false);
+  expect(Object.hasOwn(result, "keyHandle")).toBe(false);
+};
+
+describe("the synchronous genesis mint", () => {
+  it("mints a GENESIS binding whose proof verifies against its own published SPKI", () => {
+    const binding = genesisMinted(mintGenesisIncarnation(`${PROJECT}-1`));
+    expect(binding.origin).toBe("GENESIS");
+    expect(binding.projectId).toBe(`${PROJECT}-1`);
+    expect(binding.storeContextDigest).toBe(digestOf("genesis-store", `${PROJECT}-1`));
+    expect(binding.schemaVersion).toBe(RECOVERY_INCARNATION_SCHEMA_VERSION);
+    expect(binding.publicKeyAlgorithm).toBe("Ed25519");
+    expect(binding.proof.verified).toBe(true);
+    // Verified HERE, from the published bytes alone — exactly what a later
+    // process holding only the durable row can do.
+    const publicKey = createPublicKey({
+      format: "der",
+      key: Buffer.from(binding.publicKeySpkiHex, "hex"),
+      type: "spki",
+    });
+    const ok = nodeVerify(
+      null,
+      Buffer.from(binding.proof.challengeDigest, "hex"),
+      publicKey,
+      Buffer.from(binding.proof.signatureHex, "hex"),
+    );
+    expect(ok).toBe(true);
+    expect(binding.verificationKeyFingerprint)
+      .toBe(digestOf("key", new Uint8Array(Buffer.from(binding.publicKeySpkiHex, "hex"))));
+  });
+
+  it("derives every reference through the SHARED core, not a second derivation", () => {
+    const binding = genesisMinted(mintGenesisIncarnation(`${PROJECT}-2`));
+    const derived = deriveIncarnation({
+      context: snapshotGenesisContext({ projectId: `${PROJECT}-2` })!,
+      incarnationDigest: binding.incarnationDigest,
+      publicKeySpkiHex: binding.publicKeySpkiHex,
+      verificationKeyFingerprint: binding.verificationKeyFingerprint,
+    });
+    expect(binding.incarnationRef).toBe(derived.incarnationRef);
+    expect(binding.keyEpochRef).toBe(derived.keyEpochRef);
+    expect(binding.bindingDigest).toBe(derived.bindingDigest);
+    expect(binding.proof.challengeDigest).toBe(derived.challengeDigest);
+  });
+
+  it("gives two projects distinct identities and never repeats one", () => {
+    const first = genesisMinted(mintGenesisIncarnation(`${PROJECT}-3`));
+    const second = genesisMinted(mintGenesisIncarnation(`${PROJECT}-4`));
+    expect(first.incarnationRef).not.toBe(second.incarnationRef);
+    expect(first.keyEpochRef).not.toBe(second.keyEpochRef);
+    expect(first.publicKeySpkiHex).not.toBe(second.publicKeySpkiHex);
+  });
+
+  it("refuses a project identity nobody could have asserted", () => {
+    expectGenesisRefusal(mintGenesisIncarnation(""), "RECOVERY_INCARNATION_INPUT_INVALID");
+    expectGenesisRefusal(
+      mintGenesisIncarnation("project with spaces"),
+      "RECOVERY_INCARNATION_INPUT_INVALID",
+    );
+  });
+
+  it("refuses a repeated CSPRNG block with the exact code and layer", () => {
+    const repeated = bytes(7);
+    const shell = genesisShell({ randomBytes: () => Uint8Array.from(repeated) });
+    genesisMinted(mintGenesisIncarnation(`${PROJECT}-5`, shell));
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-6`, shell),
+      "RECOVERY_ENTROPY_UNAVAILABLE",
+    );
+  });
+
+  it("burns a block that was exposed on an attempt which later failed", () => {
+    const repeated = bytes(9);
+    const dead = genesisShell({
+      generateSigningKey: () => {
+        throw new Error("no key material");
+      },
+      randomBytes: () => Uint8Array.from(repeated),
+    });
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-7`, dead),
+      "RECOVERY_KEY_EPOCH_UNAVAILABLE",
+    );
+    // The RESERVATION happened before the key attempt, so the same block cannot
+    // be retried through a healthy shell afterwards.
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-8`, genesisShell({ randomBytes: () => Uint8Array.from(repeated) })),
+      "RECOVERY_ENTROPY_UNAVAILABLE",
+    );
+  });
+
+  it("refuses a repeated key epoch even when the entropy is fresh", () => {
+    const pair = nodeGenesisCryptoShell.generateSigningKey();
+    const shell = genesisShell({ generateSigningKey: () => pair });
+    genesisMinted(mintGenesisIncarnation(`${PROJECT}-9`, shell));
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-10`, shell),
+      "RECOVERY_KEY_EPOCH_UNAVAILABLE",
+    );
+  });
+
+  it("refuses a truthy non-boolean self-proof rather than reading it as verified", () => {
+    const shell = genesisShell({ verify: () => "verified" as unknown as boolean });
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-11`, shell),
+      "RECOVERY_KEY_EPOCH_UNAVAILABLE",
+    );
+  });
+
+  it("refuses an absurd SPKI before it publishes anything derived from it", () => {
+    const shell = genesisShell({
+      generateSigningKey: () => ({
+        ...nodeGenesisCryptoShell.generateSigningKey(),
+        publicKeySpki: new Uint8Array(0),
+      }),
+    });
+    expectGenesisRefusal(
+      mintGenesisIncarnation(`${PROJECT}-12`, shell),
+      "RECOVERY_KEY_EPOCH_UNAVAILABLE",
+    );
+  });
+
+  it("returns no key handle and leaks no private material into evidence", () => {
+    const nonce = bytes(11);
+    const shell = genesisShell({ randomBytes: () => Uint8Array.from(nonce) });
+    const result = mintGenesisIncarnation(`${PROJECT}-13`, shell);
+    const binding = genesisMinted(result);
+    expect(Reflect.ownKeys(result).sort()).toEqual(["authority", "binding", "ok", "outcome"]);
+    expect(result.ok && result.authority).toBe("NONE");
+    const serialized = JSON.stringify(result);
+    for (const banned of ["keyHandle", "privateKey", "PRIVATE KEY", "pkcs8", "secret", "nonce"]) {
+      expect(serialized).not.toContain(banned);
+    }
+    // The RAW nonce never appears, in either spelling.
+    expect(serialized).not.toContain(Buffer.from(nonce).toString("hex"));
+    expect(serialized).not.toContain(Buffer.from(nonce).toString("base64"));
+    expect(binding.incarnationDigest).toBe(digestOf("nonce", nonce));
+    expect(JSON.parse(serialized)).toEqual({
+      authority: "NONE", binding, ok: true, outcome: "MINTED",
+    });
+  });
+
+  it("survives the durable codec round trip it will be persisted through", () => {
+    const binding = genesisMinted(mintGenesisIncarnation(`${PROJECT}-14`));
+    expect(decodeBinding(encodeBinding(binding))).toEqual(binding);
   });
 });

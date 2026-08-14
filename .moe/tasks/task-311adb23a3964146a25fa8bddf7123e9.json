@@ -61,34 +61,60 @@
     {
       "stepId": "step-4",
       "description": "PRODUCTION — close the property, not the reported line. One primitive, applied at every depth. In work-claim-shape.ts, `mirrorList` must stop being a second, weaker copy routine: delete its by-reference element path (line 150's proxy-only element check included) and route the array through the SAME `detach`/`detachList` recursion every other section already uses, returning null where that recursion answers UNSAFE. Keep `types.isProxy` before `Array.isArray`. The result is that liveClaims elements arrive at `countOccupyingSlots` as daemon-owned own-data records, which closes accessors, inherited prototype fields, element proxies, functions and nested holes CATEGORICALLY rather than case by case. Rewrite the file's header comment to state the invariant as one property: every exported helper returns daemon-owned own data, with the single deliberate exception of the shallow `mirror` used to route the outer record — whose section values are never read by anything before that section's own deep snapshot, and the audit table from step 1 is the evidence. In work-slot-ceiling.ts, make `countOccupyingSlots` refuse an element carrying any own key outside {dimension, slotRef, state}, keeping the existing WORK_PAYLOAD_MALFORMED / \"slotCeiling\" mapping so no existing leg attribution moves. In work-claim.ts, update the now-false `readClaimSections` comment (\"every section value stays unvalidated\") to state the routing invariant precisely. Do NOT touch work-kernel.ts, the scheduler, the runner, or daemon index exports — DoD 1/3/5 are already satisfied and QA confirmed the closure, shifted view, dimension, fixed command and exports are present; this step must not disturb them. Verify every existing refusal keeps its leg: a null/string/numeric/nested-array element still refuses at \"slotCeiling\" after the deep snapshot because primitives and arrays pass through `detach` unchanged and fail `isRecord` exactly as before.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim-shape.ts",
         "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts"
       ],
-      "startedAt": "2026-08-14T09:12:56.636Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts",
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "GREEN. mirrorList no longer contains an element-by-reference path: after proxy-before-Array.isArray containment it calls the same detachList/detach recursion as every deep section snapshot, so every liveClaims element and descendant is daemon-owned own data before slot counting. Header documents the single shallow outer-routing exception and the per-leg deep-snapshot invariant. countOccupyingSlots now uses the descriptor-safe exact mirror for {dimension,slotRef,state} before any field read, rejecting extras with the existing slotCeiling mapping. readClaimSections comment now accurately says liveClaims is deep-snapshotted there. Null/string/numeric/nested-array content still reaches and refuses at slotCeiling. Focused production test: 1 file / 383 tests passed. Daemon typecheck has no owned-path errors; it remains red only in concurrent foreign recovery files (RecoveryIncarnationBinding/RestoreIncarnationBinding mismatches). Physical lines/hash: shape 144/F714C470..., claim 195/9A00EA49..., slot-ceiling 71/EEFA2B68..., all <250; work-kernel untouched.",
+      "startedAt": "2026-08-14T09:12:56.636Z",
+      "completedAt": "2026-08-14T09:14:20.652Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS — prove each guard is live and that the new tests are attached to production, not to themselves. For each drill: record the file's sha256 first, apply the mutation with the Edit tool (never a shell one-liner — escape collapse can duplicate a guard), confirm the anchor matched exactly once, run only the named test, then reverse the Edit and confirm the sha256 matches the pre-drill value (never git checkout, which reverts to HEAD and would destroy uncommitted work in this shared worktree). D1: restore `mirrorList` to forwarding elements by reference — the swept `liveClaims.0` accessor case must redden AND its `probe.hits` must go nonzero; this is the literal reopen #2 reproduction and is the drill that proves the repair. D2: drop the element exact-key check — the new malformedTables entry reddens at leg \"slotCeiling\". D3: return the caller's lease object instead of the detached copy in the successor closure — the granted-side identity walk reddens on a named node, not on a JSON comparison. D4 (DoD 5, existing): change the server-owned `{kind:\"claim\"}` literal to forward the caller's command — the fixed-command test reddens. D5 (DoD 5, existing): assign the caller's input view instead of `result.view` — the budget-view retention test reddens. Read every failure message: a red for the wrong reason (a compile error, every test failing at once, or a hung run) means the drill or the environment is broken, not that the guard is proven. Record the reddened test name and decisive line for each of the five.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim-shape.ts",
         "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts",
+        "apps/daemon/src/work/work-claim.test.ts"
+      ],
+      "note": "Five mutation drills reddened on production outcomes and were reverse-edited; final focused file is green (383/383). D1 shape hash F714C470... -> by-reference mirrorList -> test `refuses liveClaims.0 carrying an accessor...` reddened at work-claim.test.ts:1096 with probe hits 1 vs 0, then hash restored exactly. D2 slot hash 85E3158E... -> exact-key check removed -> `refuses an entry carrying an extra own key...` reddened because production GRANTED instead of WORK_PAYLOAD_MALFORMED/slotCeiling, hash restored. D3 claim hash 9A00EA49... -> caller lease.record published -> `retains no input identity...` reddened at line 1585 showing the exact shared lease record, hash restored. D4 forwarding only the exact prevalidated command is behaviorally shadowed by the earlier fixed-command check; the meaningful authority mutant removed that check and forwarded the caller command. `refuses the requestCancel command as a command mismatch` reddened because production granted instead of returning WORK_INTENT_COMMAND_MISMATCH/effectIntent/AUTHORITY (and cancellation test showed ok true). Restored claim hash. D5 caller/input budget view mutant reddened `retains the post-reservation budget view...`: received version 2 / available 100 / reserved 0 instead of 3/70/30; hash restored. Structural test now asserts probe.hits before refusal decoding, so a getter-running grant cannot hide the hit behind refusalOf. Final hashes: shape F714C470..., claim 9A00EA49..., slot 85E3158E..., test DEF9B978....",
+      "startedAt": "2026-08-14T09:14:25.295Z",
+      "completedAt": "2026-08-14T09:19:04.975Z"
     },
     {
       "stepId": "step-6",
       "description": "FINAL GATE, REVIEW, COMMIT. Run `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test` fresh in the foreground and keep the verbatim tail; compare against the step-1 baseline (daemon 65 files/1112 tests, scheduler 42/1219 at the last recorded run) and confirm the sweep ADDED cases rather than replacing them — a mechanical walk that discovered fewer paths than the six hand-written targets would shrink coverage while staying green. Also run the repo-wide legs, subtract the baseline failures, and confirm the remaining failing-path set does not intersect the four owned paths; report any foreign red verbatim rather than fabricating green. Re-measure `grep -c ''` on each owned production file against the 250 target (disclose that work-kernel.ts sits at 261 lines, is pre-existing from the prior attempt, and is deliberately untouched by this repair). Then run the adversarial-self-review skill over the owned diff with these questions: is there now ANY path on which a caller-derived value has a property read before passing through `detach`; does any exported helper still return a caller-owned object; can a refusal leg have drifted for an existing case; does the granted closure still publish exactly five records; and would the whole-graph zero-read test still be zero if a new nested collection were added tomorrow. Finally: `git add` the four owned paths first (a commit pathspec naming an untracked path commits nothing), confirm `git status --porcelain` stages no foreign entry (.moe/**, packages/runner/**, packages/store/** belong to other agents), commit with an explicit four-path pathspec, and verify with `git show --stat`. Reopen budget is 2 of 3 — before handing to QA, re-read QA's three findings and confirm each names a depth the new sweep now covers by path name.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim-shape.ts",
         "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-claim.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim.test.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts"
+      ],
+      "note": "FINAL GATE/REVIEW/COMMIT. Exact named gate passed on the final owned bytes before commit: daemon 69 files/1479 tests, scheduler 43/1319, exit 0 (`pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test`). Committing changed no owned bytes; hashes match the gated hashes and owned paths are clean. A post-commit retry was foreign-red only at apps/daemon/src/recovery/recovery-incarnation.test.ts:33,37 TS2307 missing ./recovery-incarnation-genesis.js from concurrent recovery WIP. Repo-wide legs were run: current typecheck red only in foreign packages/contracts/src/configuration/project-configuration-hostile.test.ts and project-configuration.test.ts missing unfinished root exports; current test red only the same two foreign files (146 failures, 254 passed files/5642 passed tests/1 skipped). Step-1 baseline red was foreign packages/runner/src/providers/claude/claude-launcher.ts:175 TS2339 x2. HEAD-minus-baseline failing paths intersected with the four owned paths is EMPTY; owned daemon/scheduler gate is exit 0. Production lines: shape 144, claim 195, slot-ceiling 77 (<250); work-kernel.ts remains pre-existing 261 and untouched. Adversarial review: all claimWork property reads are preceded by the owning detach; mirror is the sole shallow router and no routed value is read before mirrorDeep/mirrorList; mirrorList returns recursively daemon-owned data; existing content faults keep slotCeiling while structural liveClaims faults stay lease; exactly five successors remain; mechanical walk pins 26 paths and hard-fails on fixture growth, with 25 unique nodes/94 accessors. QA findings map to explicit paths: outer transparent proxy = root/section paths, retained lease alias = lease.record + effect.intent.leaseBinding and identity walk, ordinary live-claim element = liveClaims.0. Commit 88af27a contains only four owned paths. Known whole-tree hazard occurred: foreign commit 671409f (task-161506...) captured the 288-line generated-test expansion mid-task; per rail it was not amended/reset. QA should review `git diff 79d01e69..HEAD -- <four owned paths>` (285 insertions/59 deletions); final task commit carries the remaining 31/29 delta.",
+      "startedAt": "2026-08-14T09:19:13.379Z",
+      "completedAt": "2026-08-14T09:21:58.996Z"
     }
   ],
   "status": "WORKING",
@@ -147,12 +173,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T09:12:56.636Z",
+  "updatedAt": "2026-08-14T09:21:58.996Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 15,
+    "executedStepCount": 18,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -175,7 +201,10 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T09:01:10.471Z",

@@ -18,7 +18,10 @@ import {
   recoveryReconciliationAggregateId,
 } from "./recovery-inventory-contract.js";
 import type { RecoveryProofClass } from "./recovery-inventory-contract.js";
-import { encodeRecoveryReconciliationRecord } from "./recovery-inventory-codec.js";
+import {
+  encodeRecoveryReconciliationRecord,
+  recoveryReconciliationDigest,
+} from "./recovery-inventory-codec.js";
 import {
   readRecoveryReconciliation,
   recordRecoveryReconciliation,
@@ -248,6 +251,76 @@ describe("ledger refusals", () => {
       code: "RECORD_NOT_FOUND",
       layer: "RECOVERY_INVENTORY_LEDGER",
     });
+  });
+
+  it("refuses a self-consistent semantic forgery filed at its own digest", async () => {
+    // The strongest durable attack available: the forger controls the bytes AND
+    // the address. A legitimate record is mutated to claim COMPLETE over an
+    // UNKNOWN proof, re-digested with the production digest surface, encoded
+    // with the production encoder and filed under the digest it now hashes to.
+    // Nothing is inconsistent, so only the decoder re-deriving truth can refuse.
+    const { binding, store } = await prepare();
+    const written = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest),
+    );
+    if (!written.ok) throw new Error("write must succeed");
+    expect(written.record.truth).toBe("COMPLETE");
+    const forged = {
+      ...written.record,
+      proofs: written.record.proofs.map((proof, index) =>
+        index === 0
+          ? {
+              ...proof,
+              truth: "UNKNOWN" as const,
+              upstream: {
+                code: "RECOVERY_INVENTORY_COVERAGE_UNKNOWN" as const,
+                layer: "INVENTORY_ADAPTER" as const,
+              },
+            }
+          : proof,
+      ),
+    };
+    const digest = recoveryReconciliationDigest(forged);
+    expect(digest).not.toBe(written.record.recordDigest);
+    const bytes = encodeRecoveryReconciliationRecord({ ...forged, recordDigest: digest });
+    const response = store.commitExpectedVersionDecision({
+      commandKind: RECOVERY_RECONCILIATION_COMMAND_KIND,
+      committedResultBytes: bytes,
+      correlationId: writeRequest.correlationId,
+      decidedAt: AT,
+      events: [
+        {
+          eventId: `forged:${digest}`,
+          eventType: RECOVERY_RECONCILIATION_EVENT_TYPE,
+          payload: bytes,
+        },
+      ],
+      expectedVersion: 0,
+      key: {
+        commandId: `recovery-reconcile:${digest}`,
+        principalId: writeRequest.principalId,
+        projectId: PROJECT_ID,
+      },
+      requestBytes: encoder.encode("{}"),
+      targetAggregateId: recoveryReconciliationAggregateId(digest),
+    });
+    expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+
+    const read = readRecoveryReconciliation(store, PROJECT_ID, digest);
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error("unreachable");
+    expect(read.code).toBe("UNKNOWN_TRUTH");
+    expect(read.layer).toBe("RECOVERY_INVENTORY");
+    expect(read.upstream).toEqual({
+      code: "RECORD_UNREADABLE",
+      layer: "RECOVERY_INVENTORY_LEDGER",
+    });
+    // The untouched record at its own digest still reads back, so the refusal
+    // above is the forgery and not the durable path being broken.
+    const control = readRecoveryReconciliation(store, PROJECT_ID, written.record.recordDigest);
+    expect(control.ok).toBe(true);
   });
 
   it("refuses malformed and truncated stored bytes with RECORD_UNREADABLE", async () => {

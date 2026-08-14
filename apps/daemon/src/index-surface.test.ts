@@ -66,6 +66,7 @@ import type {
   EventResumeFrame,
   EventResumeRequest,
   EventStreamRefusalCode,
+  GenesisIncarnationBinding,
   GraphPreviewInputRejected,
   GraphPreviewRequestError,
   GraphPreviewRequestEvaluated,
@@ -104,6 +105,7 @@ import type {
   RecoverySuccessionRequest,
   RecoverySuccessionResult,
   RecoverySuccessionService,
+  RestoreIncarnationBinding,
   ReviewAccepted,
   ReviewCommandHandler,
   ReviewCommandKind,
@@ -465,8 +467,12 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<RecoveryIncarnationErrorCode>();
     expectTypeOf<RecoveryIncarnationResult>()
       .toEqualTypeOf<RecoveryIncarnationMinted | RecoveryIncarnationRefused>();
+    // The published binding is an exact tagged union, and the port-based mint
+    // publishes ONLY the restore branch: a genesis fence never travels this way.
+    expectTypeOf<RecoveryIncarnationBinding>()
+      .toEqualTypeOf<GenesisIncarnationBinding | RestoreIncarnationBinding>();
     expectTypeOf<RecoveryIncarnationMinted["binding"]>()
-      .toEqualTypeOf<RecoveryIncarnationBinding>();
+      .toEqualTypeOf<RestoreIncarnationBinding>();
     // Both branches carry authority NONE: neither a mint nor a refusal may be
     // read as PREPARED. RecoveryAnchor alone owns that.
     expectTypeOf<RecoveryIncarnationMinted["authority"]>().toEqualTypeOf<"NONE">();
@@ -518,7 +524,7 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<RecoverySuccessionChain["links"]>()
       .toEqualTypeOf<readonly RecoverySuccessionRecord[]>();
     expectTypeOf<ReturnType<typeof daemon.readAnchoredIncarnation>>()
-      .toEqualTypeOf<RecoveryIncarnationBinding | null>();
+      .toEqualTypeOf<RestoreIncarnationBinding | null>();
     expectTypeOf<ReturnType<typeof daemon.anchorIncarnation>>().toEqualTypeOf<boolean>();
   });
 

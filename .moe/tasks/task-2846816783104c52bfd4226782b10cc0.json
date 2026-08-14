@@ -43,62 +43,106 @@
     {
       "stepId": "step-2",
       "description": "TDD. Turn RecoveryIncarnationBinding into an exact discriminated union in recovery-incarnation-contract.ts. Factor the shared members into RecoveryIncarnationBindingCommon (schemaVersion, incarnationDigest, incarnationRef, keyEpochRef, verificationKeyFingerprint, publicKeyAlgorithm:'Ed25519', publicKeySpkiHex, bindingDigest, proof) and define RestoreIncarnationBinding = Common & {origin:'RESTORE'; restoreCommandId: string; backupGenerationDigest: string} and GenesisIncarnationBinding = Common & {origin:'GENESIS'; projectId: string; storeContextDigest: string}; RecoveryIncarnationBinding is their union. RESTORE keeps its two field names at TOP LEVEL and its exact types — do not move them into a nested context object, because DoD-1 requires the existing restore API preserved. GENESIS is structurally incapable of carrying restoreCommandId/backupGenerationDigest, satisfying task rail 1 at the type level. Leave RecoveryIncarnationRequest, snapshotRequest, REQUEST_KEYS, the three refusal constants, digestOf, snapshotKeyMaterial, attemptPort and PORT_FAILED untouched. Re-export the context symbols from step 1 so existing importers still see one module. Keep this file at or under 250 physical lines (it is 233 now) — move any overflow into recovery-incarnation-context.ts rather than growing it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
       ],
-      "startedAt": "2026-08-14T09:11:58.555Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts",
+        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
+        "apps/daemon/src/recovery/recovery-succession.test.ts",
+        "apps/daemon/src/recovery/restore-test-harness.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "RecoveryIncarnationBinding is now an exact tagged union: RecoveryIncarnationBindingCommon (9 shared members) + RestoreIncarnationBinding {origin:'RESTORE', restoreCommandId, backupGenerationDigest at TOP LEVEL, unchanged types} + GenesisIncarnationBinding {origin:'GENESIS', projectId, storeContextDigest}. RecoveryIncarnationMinted.binding narrowed to RestoreIncarnationBinding — the port-based service only ever mints RESTORE, and that narrowing is what keeps recovery-key-provider/recovery-succession/restore-test-harness free of union churn. RED first: tsc reported TS2305/TS2724 for the missing branch types; the exact-keyof assertions (chosen over not.toHaveProperty, which needs 2 args in this expect-type and also would not catch a later added field) then went green. Retyped RESTORE-only annotations in recovery-inventory-ledger.test.ts, recovery-succession.test.ts, restore-test-harness.ts, index-surface.test.ts. index.ts + recovery-incarnation.ts re-export the new TYPE names only — no new runtime export, so index-surface's 58-name catalogue is untouched. Focused run: 83 passed, 1 failed — \"tags every binding the port-based service actually mints\" is the deliberate RED for step 5 (prove() does not emit origin yet). Remaining tsc errors are exactly the anchor/service/consumer sites steps 3-5 own.",
+      "startedAt": "2026-08-14T09:11:58.555Z",
+      "completedAt": "2026-08-14T09:14:37.123Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD. Move the durable binding wire codec OUT of recovery-incarnation-anchor.ts into a new focused module and make it origin-aware. Relocate encodeBinding, decodeBinding, BINDING_KEYS, PROOF_KEYS, hasExactKeys, isHex64 and HEX_BLOB verbatim, then extend: the serialized object gains a required 'origin' field, and the exact-key set becomes per-origin (common keys + the two RESTORE keys, or common keys + projectId/storeContextDigest). Keep the ONE fixed field order property that makes re-anchor idempotent — emit keys in a single deterministic order per origin, never from the caller's object. decodeBinding must refuse: an unknown/missing origin, a GENESIS payload carrying restoreCommandId or backupGenerationDigest, a RESTORE payload carrying projectId or storeContextDigest, and any drifted/truncated/extended row — all by returning null, unchanged in kind from today. Keep RECOVERY_INCARNATION_SCHEMA_VERSION at 'moe-recovery-incarnation/1'; see planningNotes for why the version is NOT bumped. Export encodeBinding/decodeBinding for the anchor to import.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-binding-codec.js",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "note": "New recovery-incarnation-binding-codec.ts (168 lines) + .js bridge holds the wire codec: encodeBinding emits ONE fixed key order per origin (common 10, then the origin's own 2) built from a local literal, never from the caller's object; decodeBinding reads the origin FIRST, selects the exact per-origin key set, and only then reads fields. Consequences proved by test: a GENESIS row carrying restoreCommandId/backupGenerationDigest and a RESTORE row carrying projectId/storeContextDigest are both refused structurally (null), and a pre-origin row (no tag) decodes null instead of being admitted under an invented origin. schemaVersion stays 'moe-recovery-incarnation/1' and is now compared against the imported constant rather than a re-typed literal. Focused run: 87 passed, 3 failed — all three are the deliberate RED for step 5: the port mint still emits no origin, so encodeBinding takes the genesis branch and drops the restore fields (measured: 9 keys emitted today, will be 12 once tagged). The sweep's exact count literal is 36 = 12 restore-key drops + 12 genesis-key drops + 12 hand-written rows; it currently reports 33 for exactly that reason and is the count I re-verify in step 5.",
+      "startedAt": "2026-08-14T09:15:00.350Z",
+      "completedAt": "2026-08-14T09:16:51.469Z"
     },
     {
       "stepId": "step-4",
       "description": "Rewire recovery-incarnation-anchor.ts onto the extracted codec: delete the moved codec bodies, import encodeBinding/decodeBinding from recovery-incarnation-binding-codec.js, and leave anchorIncarnation, readAnchoredIncarnation, hasAnchoredIncarnation, isAnchorRow and incarnationAggregateId semantically UNCHANGED. The single-shot expectedVersion:0 guarantee, the recompute-aggregate-id-from-decoded-content check, the sameBytes idempotence check and the deliberate absence of try/catch must all survive byte-for-byte in behavior. This step adds no new capability — it is a pure move plus import rewrite, and existing anchor and inventory-ledger tests are the proof it did not change meaning. Confirm the file drops back under the 250-line target.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-anchor.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-anchor.ts",
+        "apps/daemon/src/recovery/recovery-succession.ts",
+        "apps/daemon/src/recovery/recovery-key-provider.ts"
+      ],
+      "note": "recovery-incarnation-anchor.ts is 236 -> 139 lines: the codec bodies are gone and encodeBinding/decodeBinding now come from recovery-incarnation-binding-codec.js. anchorIncarnation, hasAnchoredIncarnation, isAnchorRow, the expectedVersion:0 single-shot write, the recompute-aggregate-id-from-decoded-content check, sameBytes idempotence and the deliberate absence of try/catch are untouched. ONE deviation from the plan text, forced by the union and disclosed: readAnchoredIncarnation now returns RestoreIncarnationBinding | null and skips a decoded row whose origin is not RESTORE. Reason: every caller (restore-controller, restore-controller-commands, recovery-succession, recovery-inventory-ledger) reads restore-only fields off the answer, so returning the raw union would have forced four separate re-refusals with four invented code choices; failing closed once, in the reader, keeps the refusal in one place and makes the return type state it. A future genesis anchor needs its own reader — said so in the doc comment. Same forcing function retyped Successor.binding / verifyAnchoredPredecessor / proveSuccession's predecessor in recovery-succession.ts and Successor.binding in recovery-key-provider.ts to RestoreIncarnationBinding (annotations only, no logic touched). Owned-path typecheck now shows only the two step-5 sites in recovery-incarnation.ts. Behavioural proof for the anchor is the existing anchor/succession/ledger/restore-controller suites, which cannot pass until step 5 tags the mint (an untagged binding serializes down the genesis branch); that run is step 5's evidence, not a claim made here.",
+      "startedAt": "2026-08-14T09:16:53.544Z",
+      "completedAt": "2026-08-14T09:17:55.186Z"
     },
     {
       "stepId": "step-5",
       "description": "TDD. Rewire the async port-based mint in recovery-incarnation.ts onto the shared derivation core. Replace the inline context/derivation block in prove() (currently const context = [restoreCommandId, backupGenerationDigest] plus four digestOf calls) with snapshotRestoreContext + deriveIncarnation, and emit origin:'RESTORE' in the assembled binding alongside the existing restoreCommandId/backupGenerationDigest fields. Everything else about this service is preserved exactly: port-based entropy, the seenNonceDigests raw-block reservation taken BEFORE the key await, the settled map keyed on restoreCommandId, the SPKI/signature copies, the !== true self-proof check, discard() on every failure path, the non-enumerable keyHandle, and the three existing refusal constants with layer RECOVERY_INCARNATION. NOTE: derived incarnationRef/keyEpochRef values change for the same inputs because the origin tag now participates in the derivation — this is intended and is covered in planningNotes; update any test that pins a hardcoded ref digest rather than deriving it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-succession.test.ts"
+      ],
+      "note": "prove() now runs the shared core: snapshotRestoreContext(request) + deriveIncarnation({context, incarnationDigest, publicKeySpkiHex, verificationKeyFingerprint}) replace the inline 2-part context and four digestOf calls, and the assembled binding carries origin:'RESTORE' beside its unchanged restoreCommandId/backupGenerationDigest. Untouched: port entropy, the raw-block seenNonceDigests reservation before the key await, seenKeyFingerprints, the settled/inFlight maps keyed on restoreCommandId, the SPKI and signature copies, the !== true self-proof, discard() on every failure path, the non-enumerable keyHandle, all three refusal constants. Derived refs deliberately MOVE for identical inputs (origin now hashes first) — no test pinned a hardcoded ref, so nothing needed re-pinning; the one durable-shape test that did need updating is recovery-succession.test.ts's hand-written ANCHORED_KEYS, which gained \"origin\" (exact key set, so it would have caught a silently added field too). Evidence: pnpm --filter @moe/daemon typecheck now reports ZERO errors in this task's paths; focused recovery-incarnation.test.ts 90/90 including the 36-case drifted-row sweep (count re-verified: 12 restore + 12 genesis + 12 hand-written); and the 14 suites that exercise mint/anchor/succession/restore-controller/key-provider/restart-reconciliation/identity are 231/231 green. Foreign red in src/recovery/recovery-inventory-*.test.ts (27 failures) belongs to a live peer editing recovery-inventory-codec/ledger/invariants/reader right now — it grew from 1 to 27 between two of my runs and my only edit there is a type annotation, which cannot change runtime. Attribution gets a merge-base baseline in step 9.",
+      "startedAt": "2026-08-14T09:17:57.533Z",
+      "completedAt": "2026-08-14T09:19:33.252Z"
     },
     {
       "stepId": "step-6",
       "description": "TDD. Add the startup-composable SYNCHRONOUS genesis mint in a new focused module. Export mintGenesisIncarnation(projectId: string): GenesisMintResult, a discriminated result of {ok:true; outcome:'MINTED'; authority:'NONE'; binding: GenesisIncarnationBinding} or the EXISTING RecoveryIncarnationRefused shape reusing RECOVERY_ENTROPY_UNAVAILABLE / RECOVERY_KEY_EPOCH_UNAVAILABLE at layer RECOVERY_INCARNATION — do not invent new codes. It must be sync: use node:crypto randomBytes, generateKeyPairSync('ed25519'), sign and verify. It MUST call snapshotGenesisContext + deriveIncarnation from step 1, so derivation and self-proof are single-sourced with the async service. Carry over the landed discipline explicitly: a module-level seenNonceDigests Set so repeated entropy is refused with RECOVERY_ENTROPY_UNAVAILABLE; the raw-nonce block reserved before the keypair is generated; the SPKI exported once and copied; a real sign/verify round trip checked with !== true before anything is returned. Per task rail 3 this returns NO key handle at all and the private KeyObject must go out of scope immediately — never stored in a map, never returned, never serialized. Tests in recovery-incarnation.test.ts assert the returned binding's proof verifies against its own publicKeySpkiHex, that origin is 'GENESIS', that a second call with a stubbed repeated nonce is refused with the exact code AND layer, and that JSON.stringify of the binding contains no private key, PKCS8, nonce or handle.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
         "apps/daemon/src/recovery/recovery-incarnation.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-genesis.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-genesis.js",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "note": "New recovery-incarnation-genesis.ts (181 lines) + .js bridge: mintGenesisIncarnation(projectId, shell = nodeGenesisCryptoShell) returns {ok:true, outcome:'MINTED', authority:'NONE', binding: GenesisIncarnationBinding} or an EXISTING RecoveryIncarnationRefused constant — RECOVERY_INPUT_INVALID for an unassertable projectId, RECOVERY_ENTROPY_UNAVAILABLE, RECOVERY_KEY_EPOCH_UNAVAILABLE. No new codes, no new layer. It calls snapshotGenesisContext + deriveIncarnation, so derivation and challenge are single-sourced with the async service. Landed discipline carried over verbatim: module-level seenNonceDigests/seenKeyFingerprints shared across ALL shells (an injected shell cannot dodge freshness), the raw-nonce reservation taken BEFORE generateSigningKey, SPKI read once/copied/bounds-checked, sign+verify round trip checked with !== true, and verification done through the PUBLISHED SPKI bytes (createPublicKey from the hex a later reader holds), not the generated key object. Rail 3: the result object has exactly four keys — no handle field exists to leak, and the KeyObject is a plain local that dies at return; the injectable shell param mirrors the async service, which already takes its port as an argument. RED first (Cannot find module ./recovery-incarnation-genesis.js), now 101/101 in the focused file. 11 new tests including: proof re-verified in the test from publicKeySpkiHex alone; refs equal deriveIncarnation over the snapshotted context; repeated nonce refused with exact code AND layer AND truth/authority; a burned block not retryable through a healthy shell (proves reservation precedes key material); repeated key epoch; truthy non-boolean self-proof refused; zero-length SPKI refused; JSON.stringify contains no handle/private key/PKCS8/secret and neither hex nor base64 of the raw nonce; and a genesis binding round-trips the durable codec. Owned-path typecheck exits clean.",
+      "startedAt": "2026-08-14T09:19:37.013Z",
+      "completedAt": "2026-08-14T09:21:54.492Z"
     },
     {
       "stepId": "step-7",
       "description": "TDD. Rewire identity/genesis-recovery-binding.ts to consume the shared mint, deleting the duplicate crypto implementation that task rail 2 forbids. Remove the local mintGenesis function entirely along with its generateKeyPairSync/randomBytes/sign/verify imports and its 'genesis:' string-prefix context hack, and call mintGenesisIncarnation(config.projectId) instead. Map a refusal to the existing GENESIS_MINT_FAILED code, keeping the refuse()/present() shapes, GENESIS_RECOVERY_ERROR_CODES and the DEFERRED/PRESENT/INSTALLED outcomes exactly as they are. IMPORTANT SCOPE LINE: the installed payload bytes and the installRecoveryBinding call are OUT OF SCOPE for this task (the description excludes SQLite installation) — keep installing the same payload shape, sourced from the new binding, and do NOT start persisting the full proof here. Persisting it is the downstream consumer edge; see planningNotes for the named consumer tasks. ensureGenesisRecoveryBinding must remain SYNCHRONOUS — createStoreDependencies calls it synchronously and daemon startup changes are out of scope.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/identity/genesis-recovery-binding.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:22:00.775Z"
     },
     {
       "stepId": "step-8",
@@ -143,12 +187,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:11:58.555Z",
+  "updatedAt": "2026-08-14T09:22:00.775Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 1
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -160,7 +204,12 @@
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:58:46.948Z",

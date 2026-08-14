@@ -162,7 +162,14 @@ export function recordRecoveryReconciliation(
   if (anchored === null) return REFUSALS.ANCHOR_UNAVAILABLE;
   if (anchored.keyEpochRef !== selected.keyEpochRef) return REFUSALS.BINDING_MISMATCH;
   if (anchored.incarnationRef !== selected.recoveryIncarnationRef) return REFUSALS.BINDING_MISMATCH;
-  if (anchored.backupGenerationDigest !== external["backupGenerationDigest"]) {
+  // A reconciliation record binds a backup cursor AND generation, so only a
+  // restored incarnation can anchor one: a genesis binding was never restored
+  // and does not carry the generation this cross-check exists to compare. The
+  // absent field is read as a refusal rather than invented, which keeps the
+  // comparison fail-closed for every binding shape.
+  const anchoredGeneration =
+    "backupGenerationDigest" in anchored ? anchored.backupGenerationDigest : null;
+  if (anchoredGeneration !== external["backupGenerationDigest"]) {
     return REFUSALS.BINDING_MISMATCH;
   }
 

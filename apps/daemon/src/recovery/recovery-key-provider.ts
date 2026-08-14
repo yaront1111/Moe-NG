@@ -3,7 +3,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import { createRecoveryIncarnationService } from "./recovery-incarnation.js";
 import type {
-  RecoveryIncarnationBinding, RecoveryIncarnationCryptoPort, RecoveryIncarnationKeyHandle,
+  RecoveryIncarnationCryptoPort, RecoveryIncarnationKeyHandle, RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
 import {
   commitSuccessionRecord, readKeyEpochPointer, readRecordedSuccessor, writeKeyEpochPointer,
@@ -47,7 +47,7 @@ export * from "./recovery-key-provider-contract.js";
  * platform work is behind `RecoveryKeyProviderPort`.
  */
 interface Successor {
-  readonly binding: RecoveryIncarnationBinding;
+  readonly binding: RestoreIncarnationBinding;
   readonly keyHandle: RecoveryIncarnationKeyHandle;
 }
 

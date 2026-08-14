@@ -201,12 +201,14 @@ export type {
 export {
   RECOVERY_INCARNATION_ERROR_CODES, RECOVERY_INCARNATION_SCHEMA_VERSION,
   createNodeRecoveryCryptoPort, createRecoveryIncarnationService,
-  type RecoveryIncarnationBinding, type RecoveryIncarnationCryptoPort,
+  type GenesisIncarnationBinding, type RecoveryIncarnationBinding,
+  type RecoveryIncarnationBindingCommon, type RecoveryIncarnationCryptoPort,
   type RecoveryIncarnationErrorCode, type RecoveryIncarnationKeyHandle,
   type RecoveryIncarnationKeyPair, type RecoveryIncarnationMinted,
-  type RecoveryIncarnationProof, type RecoveryIncarnationRefused,
-  type RecoveryIncarnationRequest, type RecoveryIncarnationResult,
-  type RecoveryIncarnationService,
+  type RecoveryIncarnationOrigin, type RecoveryIncarnationProof,
+  type RecoveryIncarnationRefused, type RecoveryIncarnationRequest,
+  type RecoveryIncarnationResult, type RecoveryIncarnationService,
+  type RestoreIncarnationBinding,
 } from "./recovery/recovery-incarnation.js";
 // The durable half of the same identity. `anchorIncarnation` is published
 // alongside the succession service because an ORIGIN incarnation has to be
