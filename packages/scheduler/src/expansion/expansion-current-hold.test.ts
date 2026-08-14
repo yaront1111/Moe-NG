@@ -115,6 +115,31 @@ function refusedWithoutBinding(value: unknown): ExpansionCurrentHoldResult {
   return result;
 }
 
+/**
+ * The three refusal vocabularies MOVED source file in this change. Nothing else pins them by
+ * value — every other assertion is a `toContain`, which stays green if a code is dropped or the
+ * set silently grows. Transcribed by hand in the production order, so a lost entry, an unreviewed
+ * addition and a thawed array are each one failing assertion.
+ */
+it("keeps the moved refusal vocabularies frozen and byte-identical", () => {
+  expect([...scheduler.EXPANSION_BINDING_ORIGINS])
+    .toEqual(["BRIDGE", "EXPANSION_HOLD", "FAIRNESS", "PLANNING_CONTRACT"]);
+  expect([...scheduler.EXPANSION_BINDING_LAYERS])
+    .toEqual(["CURRENT_AUTHORITY", "FAIRNESS", "HOLD", "PREPARATION", "REQUEST"]);
+  expect([...scheduler.EXPANSION_BINDING_ISSUE_CODES]).toEqual([
+    "EXPANSION_BINDING_CURRENT_AUTHORITY_UNKNOWN", "EXPANSION_BINDING_GOAL_VERSION_MISMATCH",
+    "EXPANSION_BINDING_GRAPH_EPOCH_MISMATCH", "EXPANSION_BINDING_HOLD_ID_MISMATCH",
+    "EXPANSION_BINDING_HOLD_INACTIVE", "EXPANSION_BINDING_HOLD_STATE_MISMATCH",
+    "EXPANSION_BINDING_HOLD_VERSION_MISMATCH",
+    "EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH", "EXPANSION_BINDING_PLANNING_RUN_MISMATCH",
+    "EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH", "EXPANSION_BINDING_REQUEST_MALFORMED",
+  ]);
+  for (const vocabulary of [scheduler.EXPANSION_BINDING_ORIGINS, scheduler.EXPANSION_BINDING_LAYERS,
+    scheduler.EXPANSION_BINDING_ISSUE_CODES]) {
+    expect(Object.isFrozen(vocabulary)).toBe(true);
+  }
+});
+
 it("completes its whole type closure from the bare root, with no @moe/core import", () => {
   // Written entirely in ROOT-published types: hold in, binding out, nothing deep-imported.
   const hold: RootHoldState = activeHold();
