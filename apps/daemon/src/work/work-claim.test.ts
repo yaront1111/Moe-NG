@@ -682,7 +682,7 @@ function firstEnumerableKeyOf(value: object): string {
     if (typeof candidate !== "string") return false;
     return Object.getOwnPropertyDescriptor(value, candidate)?.enumerable === true;
   });
-  if (key === undefined) throw new Error("fixture node has no enumerable string key");
+  if (typeof key !== "string") throw new Error("fixture node has no enumerable string key");
   return key;
 }
 
@@ -1089,7 +1089,12 @@ describe("work.claim — hostile shapes refuse before any successor exists", () 
       const payload = hostile.build(probe);
       // The case is only real if the poison it names is the poison it planted.
       expect(types.isProxy(nodeAt(payload, hostile.path))).toBe(hostile.proxy);
-      const refusal = refusalOf(claimWork(payload));
+      const result = claimWork(payload);
+      // Assert attacker-code containment before decoding the outcome, so a
+      // mutant that both runs a getter and grants cannot hide the getter hit
+      // behind refusalOf's earlier "received an ok result" exception.
+      expect(probe.hits).toBe(0);
+      const refusal = refusalOf(result);
       expect(refusal.failure.code).toBe("WORK_PAYLOAD_MALFORMED");
       expect(refusal.failure.leg).toBe(hostile.leg);
       expect(refusal.failure.layer).toBe("AUTHORITY");
@@ -1100,7 +1105,6 @@ describe("work.claim — hostile shapes refuse before any successor exists", () 
       // Every trap here is attacker code. A proxy is refused for BEING one, so
       // not one of its traps may run — including the descriptor and ownKeys
       // traps the parser used to consult before deciding.
-      expect(probe.hits).toBe(0);
     },
   );
 

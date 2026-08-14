@@ -3,7 +3,13 @@ import { types } from "node:util";
 /**
  * Own-data snapshotting for the `work.claim` authority boundary.
  *
- * TWO SEPARATE PROPERTIES, both load-bearing.
+ * Every exported helper returns daemon-owned own data. The sole deliberate
+ * exception is `mirror`, whose one-level copy routes outer section values to
+ * their owning leg; no routed value is read until that leg calls `mirrorDeep`
+ * (or, for live claims, `mirrorList`). Keeping that exception narrow preserves
+ * each upstream leg's refusal attribution without retaining caller authority.
+ *
+ * TWO PROPERTIES are load-bearing.
  *
  * 1. NO CALLER CODE RUNS INSIDE THE BOUNDARY. Values are read from
  *    DESCRIPTORS, never by property access, so a getter is never invoked; and a
@@ -129,26 +135,10 @@ export function mirrorDeep(
   return copy;
 }
 
-/**
- * Own-data mirror of a dense array. Elements stay by reference for their own
- * reader, EXCEPT a proxy element: `countOccupyingSlots` reads element
- * properties directly, so an element membrane is the last place a `get` trap
- * could still run inside the boundary.
- */
+/** Deep own-data mirror of a dense array, using the same recursion as sections. */
 export function mirrorList(value: unknown): readonly unknown[] | null {
-  if (types.isProxy(value) || !Array.isArray(value)) return null;
-  if (Object.getPrototypeOf(value) !== Array.prototype) return null;
-  const length = Object.getOwnPropertyDescriptor(value, "length");
-  if (length === undefined || typeof length.value !== "number") return null;
-  if (Reflect.ownKeys(value).length !== length.value + 1) return null;
-  const copy: unknown[] = [];
-  for (let index = 0; index < length.value; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-      return null;
-    }
-    if (types.isProxy(descriptor.value)) return null;
-    copy.push(descriptor.value);
-  }
-  return copy;
+  if (typeof value !== "object" || value === null || types.isProxy(value)) return null;
+  if (!Array.isArray(value)) return null;
+  const copied = detachList(value, 0);
+  return copied === UNSAFE ? null : copied;
 }

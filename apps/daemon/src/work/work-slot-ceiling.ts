@@ -15,9 +15,14 @@ import type { WorkResult } from "./work-kernel.js";
 const PROVIDER_SLOT_CEILING = 4;
 const DEFAULT_SLOT_DIMENSION = "default";
 const OCCUPYING_SLOT_STATES: readonly string[] = ["RESERVED", "ACTIVE"];
+const LIVE_CLAIM_KEYS = ["dimension", "slotRef", "state"] as const;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isExactClaim(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const keys = Reflect.ownKeys(value);
+  return keys.length === LIVE_CLAIM_KEYS.length
+    && keys.every((key) => typeof key === "string"
+      && (LIVE_CLAIM_KEYS as readonly string[]).includes(key));
 }
 
 /**
@@ -31,7 +36,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function countOccupyingSlots(liveClaims: readonly unknown[]): number | null {
   let held = 0;
   for (const claim of liveClaims) {
-    if (!isRecord(claim)) return null;
+    if (!isExactClaim(claim)) return null;
     const dimension = claim["dimension"];
     const state = claim["state"];
     if (typeof dimension !== "string" || typeof state !== "string") return null;

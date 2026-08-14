@@ -61,7 +61,10 @@ interface BudgetLeg {
   readonly view: BudgetAvailableView;
 }
 
-/** Mirrors the outer shape only; every section value stays unvalidated for its own leg. */
+/**
+ * Mirrors outer routing values only. Each section stays unread until its own
+ * deep snapshot; liveClaims is deep-snapshotted here before the ceiling reads it.
+ */
 export function readClaimSections(payload: unknown): ClaimSections | null {
   const outer = mirror(payload, OUTER_KEYS, true);
   if (outer === null) return null;
