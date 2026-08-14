@@ -106,19 +106,24 @@
     {
       "stepId": "step-6",
       "description": "Complete the mutation-resistant test pass against production, never a helper reimplementation: independently remove/alter reducer replay, presented-state exact comparison, each of graphEpoch-to-hold, holdId, holdVersion, planningRunRef, goalVersion-to-preparation, and graphEpoch-to-preparation comparisons, the bindExpansionAdmission call site, and inspector target propagation; require the named direct/admission test to go red for every mutation, then restore exact bytes and rerun the focused tests. Assert every generated sweep's exact or positive case count and add compound-fault precedence pins showing preparation beats fairness/hold, fairness/winner beats hold, and hold evidence beats unknown current.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
         "packages/scheduler/src/index-surface.test.ts"
       ],
-      "startedAt": "2026-08-14T08:58:18.676Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "note": "13 mutation drills, every one against PRODUCTION bytes (never a test helper), every one reddening on the assertion it was aimed at, every one restored and proven restored by sha256 — not by `git diff`, which is blind here (see the foreign-commit note below). The harness aborted unless the anchor matched EXACTLY once and printed the replaced line number, so a drill that silently applied nothing could not read as green.\n\nAgainst `expansion-current-hold.ts` (baseline sha256 0e48b38c45d4dbe1892d74a64c831c2aeafd1156da8ce2121d84ab76e23b22fe, restored identically after all 8):\n1. reducer delegation (line 171, replayed.code/layer -> literals) -> 2 red: both the focused and index-surface \"delegates a hold the core reducer refuses\" tests.\n2. presented-vs-replayed comparison (174, matchesTrusted(value,…) -> matchesTrusted(replayed.state,…)) -> **28 red**: all 10 focused forged-leaf cases, nested handoff, and the 14 index-surface forgery cases.\n3. graphEpoch-to-hold (200) -> 2 red. NOTE the non-obvious result: with the hold comparison dead, the binding takes graphEpoch from the HOLD (11), so the admission-level bound comparison sees 11 vs 11 and passes — the input binds cleanly. The two operands really are distinct.\n4. holdId (201) -> 3 red, including the new compound-precedence pin.\n5. holdVersion (202) -> 4 red, including BOTH laundered-hold tests.\n6. planningRunRef (203) -> 2 red.\n7. inspector target propagation (223, inspection.target -> null) -> 2 red on the target assertions specifically.\n8. COMPOSITION through the real primitive (214, generation -> generation + 1) -> index-surface's admission success test went red on `generation: 1`. That is the proof `bindExpansionAdmission`'s planningHoldBinding is produced by this file and not by a surviving local copy.\n\nAgainst `expansion-binding.ts` (baseline 1ad977068ba542bcefca7963b055db1e3ae5f43b215f0edca7cdbb6c441af6a7, restored identically):\n9. goalVersion-to-bound (128) -> 1 red, the goalVersion case.\n10. graphEpoch-to-bound (132) -> 1 red, and ONLY the new second-operand test. Confirms that guard had no other coverage.\n11. call-site operands (118, hold: request[\"hold\"] -> request[\"currentAuthority\"]) -> 39 red.\n12. verbatim refusal propagation (120, `return held` -> a re-minted local refusal) -> 31 red, including every delegation and UNKNOWN case.\n\nAgainst `index.ts` (baseline eaa05c4476caf4b8ae18a5839c63286f1f282731108c7bcd27671d1e77ab25ca, restored identically):\n13. root type closure — dropped `PlanningExpansionHoldBinding` from the core re-export -> `error TS2305: Module '\"@moe/scheduler\"' has no exported member 'PlanningExpansionHoldBinding'`. First attempt at this drill failed for the WRONG reason (TS1161 unterminated regex from the replacement text, not a missing export); it was redone with a precise name removal so the red names the actual invariant.\n\nTests added this step (both were needed — drills 4 and 10 prove neither is decorative):\n- the SECOND GRAPH OPERAND case: hold and daemon AGREE at epoch 12 while the preparation bound 11, so only the bound comparison can refuse. Paired with a positive control asserting the same pair binds cleanly through `bindCurrentExpansionHold`, so the case is not vacuous.\n- 4 COMPOUND-FAULT precedence pins, each wrong at BOTH named gates: preparation identity over bad opportunity + dead hold; fairness winner over dead hold; proven hold evidence over unreadable current authority; and the one order this refactor CHANGED — a hold-backed mismatch now answers before the admission-only goalVersion fence — pinned deliberately with the reason in a comment rather than left to drift. Count and distinct-code count both asserted.\n\nEvery generated sweep now asserts its own cardinality: 15 request shapes (+ name-set uniqueness), 9 hold cases (+ 2 distinct codes), 10 forged leaves, 5 missing-authority fields, 12 invalid-authority cases (+ uniqueness), 4 hold mismatches (+ 4 distinct codes), 4 precedence cases (+ 4 distinct codes), 15 BINDING_CASES (+ 9 distinct codes), 14 forged hold fields, 3 withheld names, 86 root exports.\n\nPost-drill state verified: `sha256sum -c` OK on both production baselines, index.ts hash identical, `pnpm --filter @moe/scheduler typecheck` exit 0, `pnpm --filter @moe/scheduler test` **43 files / 1318 tests passed**. Drill harness deleted from /tmp; no probe or scratch file anywhere in the repo.\n\nFOREIGN WHOLE-TREE COMMIT HAZARD — disclosed, not repaired. Commit **7dbf9ba** `feat(task-d23a913f0586431d9dccc0cfd1f66fd5): Bind Claude model and effort launch selection` swept five of my six owned paths into its whole-tree commit (expansion-current-hold.ts/.js/.test.ts, expansion-binding.ts, index.ts, and the then-current index-surface.test.ts). Per the standing rail I did NOT amend, reset, or mint an empty claim commit. I verified the committed bytes are the RESTORED ones, not a drill: `git show HEAD:<path> | sha256sum` matches the working tree for all five (0e48b38c45d4 / c239f2e4a33b / b238d7c9c5e1 / 1ad977068ba5 / eaa0",
+      "startedAt": "2026-08-14T08:58:18.676Z",
+      "completedAt": "2026-08-14T09:02:17.966Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the single completion-evidence command fresh in the foreground: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test`. Then run the repository/public-consumer legs required by AGENTS.md (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`), comparing failures with the recorded merge-base baseline and reporting every foreign failing path verbatim. Confirm both production files are <=250 lines, the bridge bytes/LF are exact, no probe/generated evidence remains, and the scoped diff contains only the six owned paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.js",
@@ -126,7 +131,8 @@
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:02:20.349Z"
     },
     {
       "stepId": "step-8",
@@ -174,12 +180,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:48:41.262Z",
-  "updatedAt": "2026-08-14T08:58:18.676Z",
+  "updatedAt": "2026-08-14T09:02:20.349Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:57:18.499Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -194,7 +200,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T23:11:43.356Z",

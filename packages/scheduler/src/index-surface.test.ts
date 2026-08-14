@@ -1132,6 +1132,69 @@ it.each(BINDING_CASES)("refuses %s with its own code, layer and origin",
     expect(scheduler.EXPANSION_BINDING_ORIGINS).toContain(issueOrigin);
   });
 
+/**
+ * THE SECOND GRAPH OPERAND, which no other case can reach.
+ *
+ * `graphEpoch` is compared twice for two different reasons: against the HOLD (does the daemon
+ * still hold what it thinks it holds) and against the scheduler's BOUND facts (is the admission
+ * still the one that was prepared). Every other epoch case perturbs the daemon's value, so the
+ * hold comparison answers first and the bound comparison could be deleted unnoticed. Here the
+ * hold and the daemon AGREE at epoch 12 while the preparation was bound at 11, so only the
+ * second operand can refuse — and it must still speak the same code and layer.
+ */
+it("refuses a hold and current authority that agree at an epoch the preparation did not bind", () => {
+  const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(bindingRequest({
+    currentAuthority: { ...CURRENT, graphEpoch: 12 }, hold: activeHold({ graphEpoch: 12 }),
+  })));
+  expect([issue.code, issue.layer, issue.origin, issue.target]).toEqual([
+    "EXPANSION_BINDING_GRAPH_EPOCH_MISMATCH", "CURRENT_AUTHORITY", "BRIDGE", null,
+  ]);
+  // Not vacuous: the same pair minus the preparation disagreement binds cleanly.
+  const agreed = scheduler.bindCurrentExpansionHold({
+    currentAuthority: { ...CURRENT, graphEpoch: 12 }, hold: activeHold({ graphEpoch: 12 }),
+  });
+  expect(agreed.ok).toBe(true);
+});
+
+/**
+ * COMPOUND FAULTS. A gate order is only pinned by inputs that are wrong at more than one gate at
+ * once; with one fault per case any order passes. Each case below is wrong at BOTH named gates
+ * and asserts which one speaks.
+ */
+const PRECEDENCE_CASES: readonly (readonly [string, () => unknown, string])[] = [
+  ["preparation identity over a bad opportunity and a dead hold", () => ({
+    ...bindingRequest() as object,
+    preparation: { bound: admittedPreparation().bound, identity: DIGEST_A },
+    opportunity: { ...OPPORTUNITY, winnerWorkItemId: "item.b" },
+    hold: { ...activeHold(), lifecycle: "RESOLVED", version: 2 },
+  }), "EXPANSION_BINDING_PREPARATION_IDENTITY_MISMATCH"],
+  ["the fairness winner over a dead hold", () => bindingRequest({
+    opportunity: { ...OPPORTUNITY, winnerWorkItemId: "item.b" },
+    hold: { ...activeHold(), lifecycle: "RESOLVED", version: 2 },
+  }), "EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH"],
+  ["proven hold evidence over an unreadable current authority", () => bindingRequest({
+    hold: { ...activeHold(), lifecycle: "RESOLVED", version: 2 }, currentAuthority: null,
+  }), "EXPANSION_BINDING_HOLD_INACTIVE"],
+  /**
+   * The one order this refactor CHANGED, pinned deliberately rather than left to drift: the
+   * hold-backed comparisons now run inside `bindCurrentExpansionHold`, which is called before
+   * the admission-only goalVersion fence. A compound goalVersion+holdId fault is therefore
+   * answered by the hold-backed code. Isolated faults are unaffected.
+   */
+  ["a hold-backed mismatch over the admitted goal version", () => bindingRequest({
+    currentAuthority: { ...CURRENT, goalVersion: 8, holdId: "hold:expansion:2" },
+  }), "EXPANSION_BINDING_HOLD_ID_MISMATCH"],
+];
+
+it("generated one precedence case per compound-fault pair", () => {
+  expect(PRECEDENCE_CASES.length).toBe(4);
+  expect([...new Set(PRECEDENCE_CASES.map(([, , code]) => code))].length).toBe(4);
+});
+
+it.each(PRECEDENCE_CASES)("answers with %s", (_name, build, code) => {
+  expect(onlyBindingIssue(scheduler.bindExpansionAdmission(build())).code).toBe(code);
+});
+
 const AUTHORITY_FIELDS: readonly string[] =
   ["goalVersion", "graphEpoch", "holdId", "holdVersion", "planningRunRef"];
 

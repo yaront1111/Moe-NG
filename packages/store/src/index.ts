@@ -77,6 +77,13 @@ export type {
   RecoveryInstallReasonCode,
   RecoveryInstallResult,
 } from "./recovery-install-contracts.js";
+export { RECOVERY_INITIAL_INSTALL_REASON_CODES } from "./recovery-initial-install-contracts.js";
+export type {
+  RecoveryInitialInstallCurrent,
+  RecoveryInitialInstallReasonCode,
+  RecoveryInitialInstallRefused,
+  RecoveryInitialInstallResult,
+} from "./recovery-initial-install-contracts.js";
 export { decodeRecoveryBinding, encodeRecoveryBinding } from "./recovery-install-codec.js";
 export type {
   RecoveryBindingDecodeResult,

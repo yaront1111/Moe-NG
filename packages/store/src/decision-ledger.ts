@@ -14,13 +14,14 @@ import type {
   StoreHealth,
 } from "./store-contracts.js";
 import type { CommitApply } from "./event-ledger-transaction.js";
-import { RecoveryInstallStore } from "./recovery-install.js";
+import { RecoveryInitialInstallStore } from "./recovery-initial-install.js";
+import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
 import type {
   RecoveryBindingReadResult,
   RecoveryInstallResult,
 } from "./recovery-install-contracts.js";
 
-class DecisionLedgerStore extends RecoveryInstallStore {
+class DecisionLedgerStore extends RecoveryInitialInstallStore {
   public constructor(
     database: DatabaseSync,
     databasePath: string | null,
@@ -53,6 +54,7 @@ export interface DecisionLedgerCore {
   readonly getCommandDecision: (key: CommandDecisionKey) => CommandDecisionRecord | null;
   readonly getCommandReceipt: (commandId: string) => CommandReceipt | null;
   readonly getHealth: () => StoreHealth;
+  readonly installInitialRecoveryBinding: (input: unknown) => RecoveryInitialInstallResult;
   readonly installRecoveryBinding: (input: unknown) => RecoveryInstallResult;
   readonly readAggregateEvents: (
     aggregateId: string,
@@ -110,6 +112,7 @@ export function createDecisionLedgerCore(
     getCommandDecision: (key: CommandDecisionKey) => ledger.getCommandDecision(key),
     getCommandReceipt: (commandId: string) => ledger.getCommandReceipt(commandId),
     getHealth: () => ledger.getHealth(),
+    installInitialRecoveryBinding: (input: unknown) => ledger.installInitialRecoveryBinding(input),
     installRecoveryBinding: (input: unknown) => ledger.installRecoveryBinding(input),
     readAggregateEvents: (
       aggregateId: string,

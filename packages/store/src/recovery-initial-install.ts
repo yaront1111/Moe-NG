@@ -1,102 +1,172 @@
-/**
- * Vocabulary for the GENESIS recovery-binding install: the initial, non-replacing
- * install a store may accept exactly once, while it is still pristine.
- *
- * This registry is deliberately its OWN closed set rather than an extension of
- * RECOVERY_INSTALL_REASON_CODES. The replacement installer's registry is a
- * published, pinned surface; genesis refusals answer a different question ("may
- * this store be bound for the first time?") and must never be confusable with a
- * replacement refusal. The two sets are asserted disjoint.
- */
-import { RECOVERY_INSTALL_TRANSACTION_LAYER } from "./recovery-install-contracts.js";
-import type {
-  RecoveryBindingRecord,
-  RecoveryInstallCommitted,
-  RecoveryInstallRefused,
+import { DurableStoreError } from "./store-contracts.js";
+import {
+  decodeRecoveryBinding,
+  encodeRecoveryBinding,
+} from "./recovery-install-codec.js";
+import {
+  INSERT_BINDING_SQL,
+  RecoveryInstallStore,
+  SELECT_BINDING_SQL,
+  isUniqueConstraintViolation,
+  rowMatchesBinding,
+} from "./recovery-install.js";
+import {
+  RECOVERY_BINDING_ROW_DIVERGED,
+  RECOVERY_INSTALL_INCARNATION_CONFLICT,
+  RECOVERY_INSTALL_SCOPE_REQUIRED,
+  RECOVERY_INSTALL_TRANSACTION_LAYER,
 } from "./recovery-install-contracts.js";
-
-export const RECOVERY_INITIAL_INSTALL_REASON_CODES = Object.freeze([
-  "RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED",
-  "RECOVERY_INITIAL_INSTALL_PENDING_PRESENT",
-  "RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT",
-  "RECOVERY_INITIAL_INSTALL_ALREADY_BOUND",
-] as const);
-export type RecoveryInitialInstallReasonCode =
-  (typeof RECOVERY_INITIAL_INSTALL_REASON_CODES)[number];
+import type { RecoveryBindingEncoded } from "./recovery-install-contracts.js";
+import {
+  RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT,
+  RECOVERY_INITIAL_INSTALL_PENDING_PRESENT,
+  RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED,
+} from "./recovery-initial-install-contracts.js";
+import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
+import { requireRowString } from "./store-rows.js";
 
 /**
- * No third layer is introduced. Every genesis-specific guard reads durable rows
- * under the write lock, so the transaction layer is the only one that can
- * answer them; codec refusals are returned verbatim from the shared codec and
- * still name RECOVERY_BINDING_CODEC.
+ * The five tables below are the AUTHORITATIVE history of this store: business
+ * decisions, their receipts, the events they produced and the outbox rows those
+ * events emitted, plus the aggregate heads that index them. Any one of them
+ * being non-empty means the store has already served a real workload, and
+ * genesis identity — which claims to be the FIRST binding this store ever had —
+ * can no longer honestly be minted here.
+ *
+ * Deliberately excluded:
+ *  - projections, inbox_receipts, event_subscriptions, cursor_generations are
+ *    DERIVED. They can be dropped and rebuilt from the authoritative tables, so
+ *    a row there is not independent evidence of history.
+ *  - store_metadata and store_project_binding always carry bootstrap rows on a
+ *    brand new database. Counting them would make every store non-pristine and
+ *    the guard would refuse unconditionally, which is the same as no guard.
+ *
+ * command_decisions is scoped `WHERE project_id = ?` because a decision is
+ * project-owned; the remaining four carry no project column, and their contents
+ * belong to this store's single bound project by construction. All five legs
+ * are read even though foreign keys are forced ON at open (so receipts are
+ * implied by decisions/events/outbox in a consistent database): a foreign
+ * writer with foreign_keys off can leave an orphan, and a pristine claim that
+ * relies on the constraint holding is a claim about the constraint, not the
+ * data.
  */
-export interface RecoveryInitialInstallRefused {
-  readonly ok: false;
-  readonly outcome: "REFUSED";
-  readonly authority: "NONE";
-  readonly code: RecoveryInitialInstallReasonCode;
-  readonly layer: typeof RECOVERY_INSTALL_TRANSACTION_LAYER;
-  readonly reason: string;
-  readonly truth: "UNKNOWN";
+const HISTORY_PRESENT_SQL = `
+  SELECT (
+    EXISTS (SELECT 1 FROM command_decisions WHERE project_id = ?)
+    OR EXISTS (SELECT 1 FROM command_receipts)
+    OR EXISTS (SELECT 1 FROM domain_events)
+    OR EXISTS (SELECT 1 FROM aggregate_heads)
+    OR EXISTS (SELECT 1 FROM outbox_messages)
+  ) AS present
+`;
+
+/**
+ * The genesis install: one BEGIN IMMEDIATE that both PROVES the store pristine
+ * and writes the binding. There is no read-then-write window and no
+ * caller-asserted pristine flag — every guard reads the same write lock the
+ * INSERT holds, so two concurrent handles that both observed an absent slot
+ * cannot both commit. It never DELETEs and never replaces: an already-bound
+ * store yields CURRENT (the existing winner) instead.
+ */
+export class RecoveryInitialInstallStore extends RecoveryInstallStore {
+  public installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult {
+    this.requireOpen();
+    // Scope is asked BEFORE the codec, matching the replacement installer, so a
+    // caller who may not write cannot probe whether their record was well formed.
+    if (this.projectId === null || !this.writeProjectAsserted) {
+      return RECOVERY_INSTALL_SCOPE_REQUIRED;
+    }
+    const encoded = encodeRecoveryBinding(input);
+    if (!encoded.ok) return encoded;
+    // Genesis mints the live identity, never a staged successor.
+    if (encoded.binding.slot !== "ACTIVE") return RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED;
+    return this.runInitialInstallTransaction(encoded);
+  }
+
+  private runInitialInstallTransaction(
+    encoded: RecoveryBindingEncoded,
+  ): RecoveryInitialInstallResult {
+    try {
+      this.database.exec("BEGIN IMMEDIATE");
+    } catch (error) {
+      throw this.normalizeOperationalError(error, "begin genesis recovery install transaction");
+    }
+    let commitAttempted = false;
+    try {
+      this.assertDurableProjectBinding();
+      const blocked = this.readPristineBlocker();
+      if (blocked !== null) {
+        // A refusal is not a fault: release the lock cleanly and report it.
+        this.database.exec("ROLLBACK");
+        return blocked;
+      }
+      this.insertBindingUnderLock(encoded);
+      commitAttempted = true;
+      this.database.exec("COMMIT");
+      return Object.freeze({
+        binding: encoded.binding,
+        bindingDigest: encoded.digest,
+        ok: true as const,
+        outcome: "INSTALLED" as const,
+      });
+    } catch (error) {
+      const unprovable = this.releaseInstallTransaction(error, commitAttempted);
+      if (unprovable !== null) throw unprovable;
+      if (isUniqueConstraintViolation(error)) return RECOVERY_INSTALL_INCARNATION_CONFLICT;
+      if (error instanceof DurableStoreError) throw error;
+      throw this.normalizeOperationalError(error, "commit genesis recovery install");
+    }
+  }
+
+  /** Null means pristine and unbound; anything else is the caller's answer. */
+  private readPristineBlocker(): RecoveryInitialInstallResult | null {
+    if (this.database.prepare(SELECT_BINDING_SQL).get("PENDING") !== undefined) {
+      return RECOVERY_INITIAL_INSTALL_PENDING_PRESENT;
+    }
+    const history = this.database.prepare(HISTORY_PRESENT_SQL).get(this.projectId);
+    if (Number((history as Record<string, unknown>)["present"]) !== 0) {
+      return RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT;
+    }
+    const active = this.database.prepare(SELECT_BINDING_SQL).get("ACTIVE");
+    if (active === undefined) return null;
+    return this.currentWinner(active);
+  }
+
+  /**
+   * The DECODED bytes are the authority. An incumbent whose bytes cannot be
+   * read, or whose indexed columns disagree with them, is refused whole — never
+   * reconciled and never overwritten, because an unreadable row is exactly the
+   * case where "just install over it" would destroy the only evidence.
+   */
+  private currentWinner(row: Record<string, unknown>): RecoveryInitialInstallResult {
+    const bindingDigest = requireRowString(row, "binding_digest");
+    const decoded = decodeRecoveryBinding(row["binding_bytes"], bindingDigest);
+    if (!decoded.ok) return decoded;
+    if (!rowMatchesBinding(row, "ACTIVE", decoded.binding)) return RECOVERY_BINDING_ROW_DIVERGED;
+    return Object.freeze({
+      authority: "NONE" as const,
+      binding: decoded.binding,
+      bindingDigest,
+      code: "RECOVERY_INITIAL_INSTALL_ALREADY_BOUND" as const,
+      layer: RECOVERY_INSTALL_TRANSACTION_LAYER,
+      ok: true as const,
+      outcome: "CURRENT" as const,
+    });
+  }
+
+  /** INSERT alone: no DELETE, no INSERT OR REPLACE, no UPSERT. */
+  private insertBindingUnderLock(encoded: RecoveryBindingEncoded): void {
+    const { binding } = encoded;
+    this.database
+      .prepare(INSERT_BINDING_SQL)
+      .run(
+        binding.slot,
+        binding.incarnationRef,
+        binding.keyEpochRef,
+        binding.bindingCodecVersion,
+        encoded.digest,
+        encoded.bytes,
+        binding.installedAt,
+      );
+  }
 }
-
-/**
- * The loser's answer, and NOT authority. `ok` is true because nothing went
- * wrong — the store is validly bound already — but `outcome` is CURRENT rather
- * than INSTALLED and `authority` is NONE, so a caller that gates genesis on
- * `outcome === "INSTALLED"` can never mistake it for having minted anything. It
- * carries the exact valid winner so the caller can adopt it, plus a stable
- * code+layer so it is still identifiable without inspecting the binding.
- */
-export interface RecoveryInitialInstallCurrent {
-  readonly ok: true;
-  readonly outcome: "CURRENT";
-  readonly authority: "NONE";
-  readonly binding: RecoveryBindingRecord;
-  readonly bindingDigest: string;
-  readonly code: "RECOVERY_INITIAL_INSTALL_ALREADY_BOUND";
-  readonly layer: typeof RECOVERY_INSTALL_TRANSACTION_LAYER;
-}
-
-/**
- * A committed genesis binding REUSES RecoveryInstallCommitted unchanged, so a
- * durable row installed by genesis is byte-for-byte the same shape as one
- * installed by restore. Nothing downstream may branch on how a binding arrived.
- */
-export type RecoveryInitialInstallResult =
-  | RecoveryInstallCommitted
-  | RecoveryInitialInstallCurrent
-  | RecoveryInstallRefused
-  | RecoveryInitialInstallRefused;
-
-/**
- * Refusals are FIXED module constants, matching the replacement installer's
- * rule: nothing observed at the failure site — a stored byte, a row count, a
- * SQLite message — has any path into the returned evidence, even by accident.
- */
-const refusal = (
-  code: RecoveryInitialInstallReasonCode,
-  reason: string,
-): RecoveryInitialInstallRefused =>
-  Object.freeze({
-    authority: "NONE" as const,
-    code,
-    layer: RECOVERY_INSTALL_TRANSACTION_LAYER,
-    ok: false as const,
-    outcome: "REFUSED" as const,
-    reason,
-    truth: "UNKNOWN" as const,
-  });
-
-export const RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED = refusal(
-  "RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED",
-  "A genesis recovery binding may only be installed into the ACTIVE slot.",
-);
-export const RECOVERY_INITIAL_INSTALL_PENDING_PRESENT = refusal(
-  "RECOVERY_INITIAL_INSTALL_PENDING_PRESENT",
-  "A pending recovery binding is already staged; the store is not pristine.",
-);
-export const RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT = refusal(
-  "RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT",
-  "The store already carries authoritative history; genesis identity is no longer installable.",
-);

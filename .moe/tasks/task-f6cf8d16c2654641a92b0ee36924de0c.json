@@ -22,13 +22,16 @@
     {
       "stepId": "step-1",
       "description": "Reconfirm the planning baseline before edits: verify the pinned design hash, re-read design lines 978/1201, run the bare `@moe/runner` probe, and record the owned-path and repo-gate failing-path baseline. Lock the measured contract in the work note as six unique proof classes covering seven semantic populations (one and only one shared proof: `PROVIDER_PROCESS_LAUNCH_LOCK` covers lock registrations and provider runs); stop rather than edit if the public root or owned paths have drifted.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline re-measured at HEAD 7dbf9ba (reopen #2). Design SHA-256 = 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191 — matches the pinned epic rail. Frozen contract unchanged and correct: 6 unique proof classes over 7 semantic populations, PROVIDER_PROCESS_LAUNCH_LOCK the only shared row (2 populations). `pnpm --filter @moe/daemon typecheck` is exit 0 at baseline — the previously disclosed foreign packages/runner claude-launcher.ts TS2339 red is GONE (landed in commit 7dbf9ba), so this reopen has no foreign typecheck excuse and the chain must be fully green. Owned recovery paths are clean in git status. Confirmed on disk all five QA defects: proofs.ts:141-151 drops upstream on COMPLETE; codec readRecord:248+ never derives truth from children nor constrains the sentinel slot; codec readItems:210+ has no per-disposition field combination check, no canonical order check, no class-scoped identity uniqueness; record.ts:164 identity template carries a literal 0x00 (cat -A shows `${declared}^@${subject.identity}`). Repair shape locked: a new shared `recovery-inventory-invariants.ts` holds the ONE canonical order/identity/disposition-shape/derived-truth surface that the builder emits with AND the decoder re-derives against, so the property is asserted against production, not a test reimplementation.",
+      "startedAt": "2026-08-14T08:59:48.251Z",
+      "completedAt": "2026-08-14T09:02:17.425Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red: add focused record/codec and ledger tests against the planned production imports. Pin the exact six-class/ seven-population hand-written mapping and nonzero cardinalities; exact `EXTRA`, `UNKNOWN`, `DUPLICATE`, and `OMITTED` mapping refusal codes at layer `RECOVERY_INVENTORY`; every disposition arm (including design-required terminal `CANCELLED` alongside task-required `ABSENT`, `ADOPTED`, `QUARANTINED`, `UNKNOWN`); stale-incarnation and stale-key adoption refusals; UNKNOWN normalization with separately retained upstream code/layer; canonical field/digest mutations; nested freeze and secret absence. Add real temporary-file `SqliteEventStore` tests for exact replay, two-handle contention, close/reopen, missing/corrupt/truncated/extra-event evidence, and assert every generated sweep ran its exact nonzero case count. Run only these tests and record the expected missing-module/red failures.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
@@ -36,7 +39,8 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:02:19.984Z"
     },
     {
       "stepId": "step-3",
@@ -111,7 +115,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-06df66bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -142,20 +146,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-14T08:54:26.369Z",
-  "contextFetchedBy": [],
+  "updatedAt": "2026-08-14T09:02:19.984Z",
+  "contextFetchedBy": [
+    "worker-06df66bb"
+  ],
   "metrics": {
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 16,
+    "executedStepCount": 17,
     "rejectCount": 2,
     "reopenCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",

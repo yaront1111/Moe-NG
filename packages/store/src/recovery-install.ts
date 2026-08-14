@@ -20,13 +20,13 @@ import type {
 } from "./recovery-install-contracts.js";
 import { requireRowString } from "./store-rows.js";
 
-const SELECT_BINDING_SQL = `
+export const SELECT_BINDING_SQL = `
   SELECT slot, incarnation_ref, key_epoch_ref, binding_codec_version, binding_digest, binding_bytes
   FROM recovery_bindings
   WHERE slot = ?
 `;
 const DELETE_BINDING_SQL = "DELETE FROM recovery_bindings WHERE slot = ?";
-const INSERT_BINDING_SQL = `
+export const INSERT_BINDING_SQL = `
   INSERT INTO recovery_bindings (
     slot,
     incarnation_ref,
@@ -41,7 +41,7 @@ const INSERT_BINDING_SQL = `
 /** SQLITE_CONSTRAINT_UNIQUE and SQLITE_CONSTRAINT_PRIMARYKEY, measured on node:sqlite. */
 const UNIQUE_CONSTRAINT_CODES = Object.freeze([2067, 1555]);
 
-function isUniqueConstraintViolation(error: unknown): boolean {
+export function isUniqueConstraintViolation(error: unknown): boolean {
   if (error === null || typeof error !== "object") return false;
   const errcode: unknown = (error as Record<string, unknown>)["errcode"];
   return typeof errcode === "number" && UNIQUE_CONSTRAINT_CODES.includes(errcode);
@@ -51,7 +51,7 @@ interface InstallAttempt {
   commitAttempted: boolean;
 }
 
-function rowMatchesBinding(
+export function rowMatchesBinding(
   row: Record<string, unknown>,
   querySlot: RecoveryBindingSlot,
   binding: RecoveryBindingRecord,
@@ -164,7 +164,7 @@ export class RecoveryInstallStore extends DecisionTransactionStore {
    * that ended the transaction before it threw, leaves durable state UNKNOWN —
    * which quarantines the handle rather than reporting a benign refusal.
    */
-  private releaseInstallTransaction(
+  protected releaseInstallTransaction(
     error: unknown,
     commitAttempted: boolean,
   ): DurableStoreError | null {

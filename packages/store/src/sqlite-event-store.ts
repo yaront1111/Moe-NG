@@ -24,6 +24,7 @@ import type {
   RecoveryBindingReadResult,
   RecoveryInstallResult,
 } from "./recovery-install-contracts.js";
+import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
 import type { CommitApply, CommitApplyContext } from "./event-ledger-transaction.js";
 import { requireIdentifier } from "./store-input.js";
 import { readScalar, requireRowString } from "./store-rows.js";
@@ -288,6 +289,15 @@ export class SqliteEventStore {
 
   public getHealth(): StoreHealth {
     return this.#core.getHealth();
+  }
+
+  /**
+   * Genesis recovery-install: INSERTS only into a still-pristine store and never
+   * replaces. Only `outcome === "INSTALLED"` grants authority; `CURRENT` reports
+   * the existing valid winner the caller lost to.
+   */
+  public installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult {
+    return this.#core.installInitialRecoveryBinding(input);
   }
 
   /** Atomic recovery-install: one transaction, or the prior slot left untouched. */

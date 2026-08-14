@@ -19,63 +19,64 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Reconfirm the five owned paths are free of foreign WIP, record their physical line counts and the design hash, inspect the public @moe/scheduler and @moe/runner root types plus every claimWork caller, and run/record the pre-change focused and repo-wide gate outputs as the path-attributed baseline. Do not edit scheduler, runner, daemon index.ts, or the unrelated board-work claim service.",
+      "description": "AUDIT, NO EDITS. This is a re-plan after two rejections on ONE property, so start by proving where that property currently holds. Record `sha256sum` and `grep -c ''` for the four owned files (measured today: work-claim-shape.ts 154, work-claim.ts 192, work-slot-ceiling.ts 72, work-kernel.ts 261 — kernel is NOT owned by this repair and must not be touched). Then build the boundary-read audit table: for EVERY site in apps/daemon/src/work/** where a caller-derived value has a property read (`x[\"k\"]`, destructuring, spread, iteration, `.length`), record the site and the snapshot that precedes it. Known sites to include and confirm: work-lease.ts:62-63 reads lease[\"record\"]/[\"proof\"] (preceded by mirrorDeep in claimLease); work-claim.ts:90 reads slot[\"rows\"]/[\"dimension\"]/[\"slotRef\"]/[\"requestId\"] (mirrorDeep); work-claim.ts:106 reads budget[\"view\"]/[\"admission\"]/[\"gate\"] (mirrorDeep); work-claim.ts:140-142 reads effect[\"command\"]/[\"intent\"] (mirrorDeep); work-slot-ceiling.ts:35-38 reads claim[\"dimension\"]/[\"state\"]/[\"slotRef\"] — THIS is the one with no deep snapshot in front of it, because mirrorList (work-claim-shape.ts:138-154) forwards elements by reference. Also answer the governor's two open questions explicitly in the audit: (a) every other array or nested collection that crosses the boundary — slot.rows and budget.admission.amounts both ride inside mirrorDeep and are therefore already detached; confirm by reading, not assuming; (b) any snapshot taken AFTER a length or type check rather than before — confirm mirror/mirrorList/detach all ask `types.isProxy` before `Array.isArray` (a revoked proxy makes Array.isArray throw). Run the named gate `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test` and keep its output as the pre-change path-attributed baseline.",
       "status": "PENDING",
-      "affectedFiles": []
+      "affectedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-claim.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts"
+      ]
     },
     {
       "stepId": "step-2",
-      "description": "TDD red: extend the production-boundary claim tests with an exact five-key successor assertion and exact values for ACTIVE lease, dimension-bound RESERVED/null-attempt slot, RESERVED reservation, the actual shifted budget view version and available/reserved buckets, and CLAIMED intent; assert input non-mutation, no successor/input aliasing, and recursive freezing. Add generated hostile outer/section/liveClaims/command cases for missing/extra/string-or-symbol keys, own accessors, proxies, custom prototypes, and sparse/unsafe arrays; assert a positive case count and, for every refusal, exact stable code, AUTHORITY layer, owning leg, upstreamCode, and zero successor keys. Add a generated non-claim command set that expects WORK_INTENT_COMMAND_MISMATCH/effectIntent/AUTHORITY/null and an earlier-leg-precedence case. Update the closed vocabulary producer and public-root compile-time equality assertions so ClaimSuccessors has exactly the five public package-root field types. Run only the named focused tests to demonstrate they fail for the missing code/view and permissive parsing before production edits.",
+      "description": "TDD RED 1 — make the generator find the depths nobody listed. In work-claim.test.ts, `HOSTILE_TARGETS` is six hand-written paths of depth 0-2 (`[]`, `lease`, `slot`, `budget`, `effect`, `effect.command`); that hand-listing is the test-side twin of the production bug, because no target ever reaches an array element. Replace it with a MECHANICAL walk of the valid payload that enumerates every object and array node path, INCLUDING array element paths, dot-joined. Two changes make the walk meaningful: (a) the sweep's base payload must carry a non-empty `liveClaims` (today `validPayload()` has `liveClaims: []`, so an element path cannot exist and the sweep would silently cover nothing at that depth) — use one RESERVED entry so the ceiling still passes at 1 of 4; (b) assert the discovered path set against a HAND-WRITTEN sorted array of dot-joined paths, deliberately NOT derived from the walk, so a fixture change reddens loudly instead of shrinking coverage silently — and assert the set contains `liveClaims.0` and `slot.rows.0` by name, the two depths reopen #2 and its neighbours live at. Split the existing 10 POISONS into STRUCTURAL (own accessor, own symbol key, custom prototype, function value, and all six proxy variants — things `detach` refuses at ANY depth, structurally, before upstream sees anything) and CONTENT (an extra own string key — `detach` copies it and the upstream validator decides, so its outcome is leg-specific and it must NOT be swept blindly). Assert both counts hand-written. Sweep STRUCTURAL x EVERY discovered path, asserting per case: `WORK_PAYLOAD_MALFORMED`, layer AUTHORITY, the owning leg from a hand-written path-root -> leg map (`lease`/`liveClaims`/root -> \"lease\", `slot` -> \"providerSlot\", `budget` -> \"budgetReservation\", `effect` -> \"effectIntent\"), null upstreamCode, no `successors` key and none of the five SUCCESSOR_KEYS, and `probe.hits === 0`. Keep the CONTENT poison on the section-level targets where the exact-key check owns the outcome. Assert the map covers every discovered root. Expect RED today at `liveClaims.0` with the accessor poison — that is QA's exact reproduction; record the failure text.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/work/work-claim.test.ts",
-        "apps/daemon/src/work/work-vocabulary.test.ts",
-        "apps/daemon/src/index-surface.test.ts"
+        "apps/daemon/src/work/work-claim.test.ts"
       ]
     },
     {
       "stepId": "step-3",
-      "description": "Define the closed contract in work-kernel.ts: add WORK_INTENT_COMMAND_MISMATCH; change ClaimSuccessors from unknown placeholders to readonly LeaseRecord, ProviderSlotReservation, ReservationRecord, BudgetAvailableView, and EffectIntent fields imported type-only from the @moe/scheduler and @moe/runner public roots; add budgetView while retaining the four causal CLAIM_LEGS and all existing result/refusal shapes. Keep the production source focused and near the <=250-line target.",
+      "description": "TDD RED 2 — the two property assertions no per-case fixture can replace. (A) WHOLE-GRAPH ZERO-READ: build the valid payload with EVERY node at EVERY depth instrumented so each own property is an enumerable counting accessor, call claimWork, and assert the counter is EXACTLY zero, the refusal is WORK_PAYLOAD_MALFORMED / AUTHORITY / leg \"lease\" / null upstream, and no successor key exists. This is the assertion that would have caught all three rejections: a matrix of hostile fixtures only covers the depths someone thought of, and the counter finds the one they did not. (B) GRANTED-SIDE NON-RETENTION: on a fully valid payload (with one live claim element, so element copies are covered too), snapshot every input node's own-property descriptors and frozen state BEFORE the call; after a granted claim, walk the ENTIRE successor graph and the ENTIRE input graph and assert no object identity is shared at any depth, then assert every input node is still non-frozen with byte-identical descriptors. Note the fixture already aliases `EFFECT_INTENT.leaseBinding` to `LEASE_RECORD`, which is precisely the shared node reject #1b travelled through — a top-level or JSON comparison passes while that alias survives, so the walk must be recursive and identity-based, not structural. (C) Add the element-exactness case to `malformedTables` (8 -> 9, with the hand-written count updated): a live claim element carrying an extra own string key alongside the three counted fields must refuse WORK_PAYLOAD_MALFORMED at leg \"slotCeiling\" — QA's finding names extras as well as accessors and prototypes. Run only these tests and record the RED for each.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/work/work-kernel.ts"
+        "apps/daemon/src/work/work-claim.test.ts"
       ]
     },
     {
       "stepId": "step-4",
-      "description": "Implement the minimum claim composition in work-claim.ts. Exact-snapshot the outer record first, then exact-snapshot each section immediately before its existing leg, accepting only ordinary/null-prototype own-data records with the declared keys and a safe dense own-data liveClaims array; catch/reject proxies and descriptor traps without reading getters. Map structural failures to WORK_PAYLOAD_MALFORMED at the owning leg with AUTHORITY/null while retaining the established lease -> slotCeiling -> providerSlot -> budgetReservation -> effectIntent precedence and all upstream mappings. At the effect leg, distinguish a structurally valid non-'claim' kind as WORK_INTENT_COMMAND_MISMATCH, then invoke applyEffectCommand only with a server-owned {kind:'claim'} literal. Return both reservation and the exact shifted result.view from the single reserveForAdmission call, construct all five typed successors only after every leg succeeds, and rely on the existing deep-freeze boundary without freezing or aliasing caller input. Add concise contract comments only where the fixed-command or second budget output would otherwise be non-obvious; keep this source below 250 lines if practical and never approach 400.",
+      "description": "PRODUCTION — close the property, not the reported line. One primitive, applied at every depth. In work-claim-shape.ts, `mirrorList` must stop being a second, weaker copy routine: delete its by-reference element path (line 150's proxy-only element check included) and route the array through the SAME `detach`/`detachList` recursion every other section already uses, returning null where that recursion answers UNSAFE. Keep `types.isProxy` before `Array.isArray`. The result is that liveClaims elements arrive at `countOccupyingSlots` as daemon-owned own-data records, which closes accessors, inherited prototype fields, element proxies, functions and nested holes CATEGORICALLY rather than case by case. Rewrite the file's header comment to state the invariant as one property: every exported helper returns daemon-owned own data, with the single deliberate exception of the shallow `mirror` used to route the outer record — whose section values are never read by anything before that section's own deep snapshot, and the audit table from step 1 is the evidence. In work-slot-ceiling.ts, make `countOccupyingSlots` refuse an element carrying any own key outside {dimension, slotRef, state}, keeping the existing WORK_PAYLOAD_MALFORMED / \"slotCeiling\" mapping so no existing leg attribution moves. In work-claim.ts, update the now-false `readClaimSections` comment (\"every section value stays unvalidated\") to state the routing invariant precisely. Do NOT touch work-kernel.ts, the scheduler, the runner, or daemon index exports — DoD 1/3/5 are already satisfied and QA confirmed the closure, shifted view, dimension, fixed command and exports are present; this step must not disturb them. Verify every existing refusal keeps its leg: a null/string/numeric/nested-array element still refuses at \"slotCeiling\" after the deep snapshot because primitives and arrays pass through `detach` unchanged and fail `isRecord` exactly as before.",
       "status": "PENDING",
       "affectedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts"
       ]
     },
     {
       "stepId": "step-5",
-      "description": "Run the single final verification gate in the foreground and record fresh exit status/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded baseline and require no new failing path intersecting the five owned paths; report any unchanged foreign red verbatim rather than fabricating green.",
+      "description": "MUTATION DRILLS — prove each guard is live and that the new tests are attached to production, not to themselves. For each drill: record the file's sha256 first, apply the mutation with the Edit tool (never a shell one-liner — escape collapse can duplicate a guard), confirm the anchor matched exactly once, run only the named test, then reverse the Edit and confirm the sha256 matches the pre-drill value (never git checkout, which reverts to HEAD and would destroy uncommitted work in this shared worktree). D1: restore `mirrorList` to forwarding elements by reference — the swept `liveClaims.0` accessor case must redden AND its `probe.hits` must go nonzero; this is the literal reopen #2 reproduction and is the drill that proves the repair. D2: drop the element exact-key check — the new malformedTables entry reddens at leg \"slotCeiling\". D3: return the caller's lease object instead of the detached copy in the successor closure — the granted-side identity walk reddens on a named node, not on a JSON comparison. D4 (DoD 5, existing): change the server-owned `{kind:\"claim\"}` literal to forward the caller's command — the fixed-command test reddens. D5 (DoD 5, existing): assign the caller's input view instead of `result.view` — the budget-view retention test reddens. Read every failure message: a red for the wrong reason (a compile error, every test failing at once, or a hung run) means the drill or the environment is broken, not that the guard is proven. Record the reddened test name and decisive line for each of the five.",
       "status": "PENDING",
       "affectedFiles": [
-        "apps/daemon/src/work/work-claim.ts",
-        "apps/daemon/src/work/work-kernel.ts",
-        "apps/daemon/src/work/work-claim.test.ts",
-        "apps/daemon/src/work/work-vocabulary.test.ts",
-        "apps/daemon/src/index-surface.test.ts"
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts",
+        "apps/daemon/src/work/work-claim.ts"
       ]
     },
     {
       "stepId": "step-6",
-      "description": "Perform the final adversarial review over the owned diff: recheck parser trap safety, leg precedence, no optimistic authority, exact public-root type closure, five-record deep immutability, no recomputed budget view, and per-production-file line counts. Prove the guards are live by temporarily mutating the production non-claim check and the retained budget-view assignment one at a time, showing the named production-boundary tests red, then reverse each exact edit and confirm the original file hashes are restored (no reset/stash or leftover evidence). Inspect `git status --porcelain`, remove only owned staged entries if necessary, commit only the five explicit owned pathspecs, verify `git show --stat` contains nothing else, and submit for QA; on rejection, reproduce the exact production-surface claim, add a red regression, fix only owned paths, and repeat the final gate/review.",
+      "description": "FINAL GATE, REVIEW, COMMIT. Run `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test` fresh in the foreground and keep the verbatim tail; compare against the step-1 baseline (daemon 65 files/1112 tests, scheduler 42/1219 at the last recorded run) and confirm the sweep ADDED cases rather than replacing them — a mechanical walk that discovered fewer paths than the six hand-written targets would shrink coverage while staying green. Also run the repo-wide legs, subtract the baseline failures, and confirm the remaining failing-path set does not intersect the four owned paths; report any foreign red verbatim rather than fabricating green. Re-measure `grep -c ''` on each owned production file against the 250 target (disclose that work-kernel.ts sits at 261 lines, is pre-existing from the prior attempt, and is deliberately untouched by this repair). Then run the adversarial-self-review skill over the owned diff with these questions: is there now ANY path on which a caller-derived value has a property read before passing through `detach`; does any exported helper still return a caller-owned object; can a refusal leg have drifted for an existing case; does the granted closure still publish exactly five records; and would the whole-graph zero-read test still be zero if a new nested collection were added tomorrow. Finally: `git add` the four owned paths first (a commit pathspec naming an untracked path commits nothing), confirm `git status --porcelain` stages no foreign entry (.moe/**, packages/runner/**, packages/store/** belong to other agents), commit with an explicit four-path pathspec, and verify with `git show --stat`. Reopen budget is 2 of 3 — before handing to QA, re-read QA's three findings and confirm each names a depth the new sweep now covers by path name.",
       "status": "PENDING",
       "affectedFiles": [
+        "apps/daemon/src/work/work-claim-shape.ts",
+        "apps/daemon/src/work/work-slot-ceiling.ts",
         "apps/daemon/src/work/work-claim.ts",
-        "apps/daemon/src/work/work-kernel.ts",
-        "apps/daemon/src/work/work-claim.test.ts",
-        "apps/daemon/src/work/work-vocabulary.test.ts",
-        "apps/daemon/src/index-surface.test.ts"
+        "apps/daemon/src/work/work-claim.test.ts"
       ]
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-8b21d0bb",
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -130,11 +131,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T08:55:26.716Z",
+  "updatedAt": "2026-08-14T09:01:12.558Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 5,
+    "plannedDistinctFileCount": 4,
     "executedStepCount": 12,
     "rejectCount": 2,
     "reopenCount": 2
@@ -155,39 +156,19 @@
     }
   ],
   "stepsCompleted": [],
-  "failedDodItems": [
-    {
-      "item": "claimWork accepts only the exact outer/section records required by the production command and only {kind:\"claim\"} for the effect leg; alternate commands, accessors, prototype/extra keys, or missing facts refuse before publishing any successor.",
-      "rejectedAt": "2026-08-13T22:14:57.765Z",
-      "rejectedBy": "qa-41bfec20"
-    },
-    {
-      "item": "Focused tests assert every refusal has no successor keys, generated hostile cases have a positive case count, and input/result graphs are deeply immutable.",
-      "rejectedAt": "2026-08-13T22:14:57.765Z",
-      "rejectedBy": "qa-41bfec20"
-    },
-    {
-      "item": "DoD 2: accessors and non-exact records must refuse before publishing any successor.",
-      "rejectedAt": "2026-08-13T22:53:19.675Z",
-      "rejectedBy": "qa-41bfec20"
-    },
-    {
-      "item": "DoD 4: hostile cases must prove exact refusal/no successors and input/result boundary safety.",
-      "rejectedAt": "2026-08-13T22:53:19.675Z",
-      "rejectedBy": "qa-41bfec20"
-    }
-  ],
-  "planSubmittedAt": "2026-08-13T21:00:11.165Z",
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-14T09:01:10.471Z",
   "planningNotes": {
-    "approachesConsidered": "Use the existing pure daemon claim composition and the newly landed public scheduler slot shape; do not add durability, activation, attempt creation, or daemon registry work. Rejected recomputing the post-reservation budget view because reserveForAdmission already returns the authoritative shifted view. Rejected forwarding any caller-selected EffectCommand because work.claim must own a fixed claim transition. Rejected changing scheduler/runner or daemon index exports because all required types/functions are already public. Keep exact-shape helpers local to work-claim.ts so the task stays within five files; both production files have enough headroom to remain focused near the 250-line target.",
-    "codebaseInsights": "Current-byte measurement at HEAD ca77c05: authoritative design SHA-256 is 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191. apps/daemon/src/work/work-claim.ts is 158 lines and orders lease -> slot ceiling -> slot -> budget -> effect; it already passes slot.dimension to reserveProviderSlot, but readClaimSections is permissive, claimBudget drops reserveForAdmission.result.view, and claimIntent forwards effect.command. apps/daemon/src/work/work-kernel.ts is 239 lines; ClaimSuccessors has four unknown fields and WORK_ERROR_CODES lacks WORK_INTENT_COMMAND_MISMATCH. Public roots already export LeaseRecord, ProviderSlotReservation, ReservationRecord, BudgetAvailableView, EffectIntent, claimWork, and ClaimSuccessors. The scheduler prerequisite task-c956fd56f0d24e84a33644934982828f is DONE at 2a82819 and its RESERVED slot carries dimension/attemptRef. No relevant owned-path WIP was present. The eventual real consumer remains task-e33747f982e0452a9f9d784fd1cb914d.",
-    "risks": "Do not validate all nested sections eagerly: preserve the existing authority order so an earlier lease/ceiling/slot/budget refusal still wins over a later malformed or non-claim effect command. Outer and section snapshots must use own data descriptors and Reflect.ownKeys, reject proxies, accessors, custom prototypes, symbols, extras, missing keys, and unsafe/sparse liveClaims arrays without invoking attacker code. Keep CLAIM_LEGS at four; budgetView is the second authoritative output of the budget leg, not a fifth refusal leg. Return the exact view from the one reserveForAdmission call and pass a server-owned frozen/literal {kind:'claim'} to the runner. Every refusal test must assert code, AUTHORITY layer, exact leg, upstreamCode, and complete absence of successor authority. Preserve all pre-existing non-command refusal mappings and precedence.",
+    "approachesConsidered": "The governor deliberately did NOT re-plan after reject #2 and then handed it back to PLANNING anyway, so the question this plan had to answer is what a re-plan changes. Answer: the previous plan told the worker to snapshot exactly and the worker did — at the depths the plan and the TEST GENERATOR named. `HOSTILE_TARGETS` is six hand-written paths of depth 0-2; no target reaches an array element, so no test could have found the element-depth hole, and each repair closed the depth QA reported. This plan therefore changes the SHAPE of the coverage rather than repeating the instruction: the target list becomes a mechanical walk of the whole payload graph, and one whole-graph zero-read property assertion is added that no per-case fixture can substitute for. REJECTED: deep-detaching the entire payload at the outer boundary — it is the obvious 'one primitive everywhere' move and it is wrong here, because every nested structural fault would then refuse at the outer leg and DoD 3 plus the existing suite require lease/slot/budget/effect refusals to keep their own leg and upstreamCode. The correct formulation is not 'detach everything at the door' but 'nothing reads a property of a caller value before that value's own detach', which the step-1 audit table proves site by site. REJECTED: sweeping the CONTENT poison (extra own string key) over every discovered path — deep extra keys are decided by the scheduler/runner and would answer with WORK_BUDGET_REFUSED or WORK_INTENT_REFUSED and a non-null upstreamCode, so a blanket WORK_PAYLOAD_MALFORMED expectation would be wrong; only STRUCTURAL poisons are refused by the snapshot at every depth. REJECTED: touching work-kernel.ts, the scheduler, the runner or daemon exports — QA confirmed DoD 1/3/5 are satisfied and the governor asked for a narrow holistic repair, not rediscovery.",
+    "codebaseInsights": "RE-MEASURED at HEAD 7dbf9ba, 2026-08-14. `git status --porcelain -- apps/daemon/src/work` is EMPTY: no foreign WIP on the owned paths, and the prior attempt's bytes are committed. Line counts (grep -c ''): work-claim.ts 192, work-claim-shape.ts 154, work-slot-ceiling.ts 72, work-kernel.ts 261.\n\nTHE DEFECT, EXACTLY. work-claim-shape.ts holds three helpers over one `detach` recursion: `mirror` (one level, descriptor reads, proxies refused categorically), `mirrorDeep` (mirror + detach every value), `mirrorList` (array, dense-own-data check, but elements pushed BY REFERENCE with only `types.isProxy(descriptor.value)` rejected — line 150). work-claim.ts:172 hands that list to `checkSlotCeiling`, and work-slot-ceiling.ts:35-38 then reads `claim[\"dimension\"]`, `claim[\"state\"]`, `claim[\"slotRef\"]` by property access. An ordinary non-proxy element with an enumerable `dimension` getter therefore runs caller code inside the boundary and, since `isRecord` is satisfied, returns WORK_GRANTED — QA's reproduction. `isRecord` also accepts inherited fields from a custom prototype. Every OTHER section is already safe: claimLease/claimSlot/claimBudget/claimIntent all call `mirrorDeep` before any read, which is why slot.rows and budget.admission.amounts — the other two nested collections — are already detached.\n\nWHY THE TESTS MISSED IT. work-claim.test.ts already has the right machinery: a `Probe` counter, `probe.hits === 0` assertions, hand-counted matrix sizes (POISONS 10, HOSTILE_TARGETS 6, HOSTILE_CASES 60, LIVE_CLAIM_CASES 10, malformedTables 8), and a `proxyAt` assertion so an element case cannot silently degrade into a table case. The gap is purely reach: HOSTILE_TARGETS lists `[]`, `lease`, `slot`, `budget`, `effect`, `effect.command` and stops, and `validPayload()` sets `liveClaims: []`, so no fixture in the file has ever had a live claim element for a poison to land on. The generator mirrors the production bug one-for-one.\n\nLEG ATTRIBUTION TO PRESERVE (existing, asserted today): liveClaims table-shape faults refuse at leg \"lease\" (work-claim.test.ts:999, because readClaimSections answers null and claimWork maps that to malformed(\"lease\")); element FIELD faults — missing keys, non-string state/slotRef, null/string/number/array entries — refuse at leg \"slotCeiling\" (work-claim.test.ts:574). Element extras therefore belong in `countOccupyingSlots` at \"slotCeiling\", not in the snapshot. Making `mirrorList` deep does NOT move any of these: primitives and arrays pass through `detach` unchanged and still fail `isRecord` in the ceiling exactly as before.\n\nFIXTURE ALIAS ALREADY PRESENT: `EFFECT_INTENT.leaseBinding` IS `LEASE_RECORD`, the same object the lease section carries — the node reject #1b travelled through. The granted-side check must be a recursive identity walk; a JSON or top-level comparison passes with that alias intact.\n\nSCOPE CONFIRMED CLOSED ELSEWHERE: DoD 1/3/5 were verified present by QA in both reviews (five-record closure, shifted view from the single reserveForAdmission call, slot dimension, WORK_INTENT_COMMAND_MISMATCH, root exports). Only DoD 2 and DoD 4 failed, and both failed on the same property.",
+    "risks": "1. REOPEN BUDGET IS 2 OF 3. A third rejection parks this task and the durable-activation chain behind it. Do not close only the site QA named; the pass criterion for this repair is that the whole-graph zero-read assertion is green and the mechanical walk names `liveClaims.0` and `slot.rows.0` explicitly.\n2. A SWEEP THAT DISCOVERS NOTHING PASSES. The base payload must carry a live claim element or the element depth is silently absent; assert the discovered path set against a hand-written list, never against the walk's own output, and assert the two deep paths by name.\n3. LEG DRIFT IS A REJECTION. Every existing refusal must keep its exact code, layer, leg and upstreamCode. The riskiest edit is making `mirrorList` deep: re-run the eight malformedTables cases and the ten LIVE_CLAIM_CASES and confirm they still answer \"slotCeiling\" and \"lease\" respectively.\n4. STRUCTURAL VS CONTENT POISONS. Sweeping the extra-own-string-key poison at depth would expect WORK_PAYLOAD_MALFORMED where the scheduler or runner actually answers with its own code and a non-null upstreamCode. Classify before sweeping and assert both counts.\n5. PROXY ORDER. `Array.isArray` throws on a revoked proxy, so `types.isProxy` must stay the first question in every helper; a reordering turns a stable refusal into an escaping exception with no leg.\n6. SHARED WORKTREE. Other agents hold uncommitted work in .moe/**, packages/runner/** and packages/store/**. Never git add -A, never stash, never reset; drill restores go through a reversing Edit plus a sha256 check, never git checkout.\n7. WORK-KERNEL.TS IS 261 LINES, over the 250 target and under the 400 split bar. It is pre-existing from the prior attempt and is not owned by this repair; disclose the measurement rather than restructuring it, since editing it risks the vocabulary and index-surface tests that are currently green.",
     "keyFiles": [
+      "apps/daemon/src/work/work-claim-shape.ts",
+      "apps/daemon/src/work/work-slot-ceiling.ts",
       "apps/daemon/src/work/work-claim.ts",
-      "apps/daemon/src/work/work-kernel.ts",
       "apps/daemon/src/work/work-claim.test.ts",
-      "apps/daemon/src/work/work-vocabulary.test.ts",
-      "apps/daemon/src/index-surface.test.ts"
+      "apps/daemon/src/work/work-lease.ts",
+      "apps/daemon/src/work/work-kernel.ts"
     ]
   },
   "budget": {
@@ -195,7 +176,7 @@
     "warnedAt": "2026-08-13T22:10:54.915Z",
     "escalatedAt": "2026-08-13T22:10:54.915Z"
   },
-  "planApprovedAt": "2026-08-13T21:00:13.229Z",
+  "planApprovedAt": "2026-08-14T09:01:12.558Z",
   "workStartedAt": "2026-08-13T21:00:34.365Z",
   "reviewStartedAt": "2026-08-13T22:33:32.497Z",
   "verification": {

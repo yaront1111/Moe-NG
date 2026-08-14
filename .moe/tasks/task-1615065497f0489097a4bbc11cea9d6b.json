@@ -57,42 +57,67 @@
     {
       "stepId": "step-3",
       "description": "Add the history, malformed-row, durability and restore-preservation tests to packages/store/src/recovery-initial-install.test.ts. HISTORY (hand-written table of exactly 2 fixtures, with `expect(historyFixtures.length).toBe(2)` and per-fixture pre-state row counts asserted BEFORE the install attempt so a fixture that silently generated nothing cannot pass): H1 commits one real decision through commitExpectedVersionDecision (one event carrying one outbox message) and asserts command_decisions/command_receipts/domain_events/aggregate_heads/outbox_messages all count > 0; H2 uses a raw `new DatabaseSync(path)` handle to insert ONE aggregate_heads row only (that table carries no foreign key, so it is the one history source reachable in isolation) and asserts heads count 1 with receipts/events/decisions counts 0. Both must return RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT / TRANSACTION layer, and ACTIVE must still read ABSENT afterwards. MALFORMED ACTIVE: after a replacement install, tamper binding_bytes only -> RECOVERY_BINDING_DIGEST_MISMATCH at CODEC layer; tamper the incarnation_ref COLUMN only (bytes and digest still agree) -> RECOVERY_BINDING_ROW_DIVERGED at TRANSACTION layer; in both, the initial install must refuse rather than overwrite the unreadable row. DURABILITY: on a fresh file-backed project store, installInitialRecoveryBinding returns outcome INSTALLED with the caller's binding and digest; reopen and assert readRecoveryBinding(\"ACTIVE\") is FOUND with the same incarnationRef, digest and payload bytes, and PENDING is ABSENT. RESTORE PRESERVATION (the mutation-drill anchor): install an ACTIVE binding through the EXISTING replacement installRecoveryBinding (this is the restore path), capture its digest, then call installInitialRecoveryBinding with a DIFFERENT valid binding — assert ok true, outcome \"CURRENT\", authority \"NONE\", code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND, layer TRANSACTION, and that binding.incarnationRef/bindingDigest are the RESTORE's values, not the caller's; then reopen and assert the stored ACTIVE digest and payload are still byte-identical to the restore's.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.test.ts"
       ],
-      "startedAt": "2026-08-14T08:57:04.597Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Added history, malformed-row, durability and restore-preservation tests to packages/store/src/recovery-initial-install.test.ts (now 467 lines, 11 tests total).\n\nHISTORY: hand-written `historyFixtures` table of exactly 2, guarded by its own test asserting `length === 2` AND the exact label list (a generator that produced nothing cannot pass). Each fixture asserts pre-state row counts over all five history tables BEFORE the attempt. H1 commits one real decision via commitExpectedVersionDecision (proposedDecision with one event carrying one outbox message, disposition DECIDED) and asserts all five tables > 0. H2 bootstraps an empty store, then a raw `new DatabaseSync(path)` inserts ONE aggregate_heads row (no FK, so reachable in isolation without tripping validateAllReceipts/validateAllCommandDecisions at open) and asserts heads=1 with receipts/events/decisions/outbox all 0. Both assert HISTORY_PRESENT / TRANSACTION layer and ACTIVE still ABSENT.\n\nMALFORMED ACTIVE: tampered binding_bytes only -> RECOVERY_BINDING_DIGEST_MISMATCH at CODEC layer; tampered incarnation_ref COLUMN only (bytes+digest still agree, so the codec cannot answer and the row cross-check must) -> RECOVERY_BINDING_ROW_DIVERGED at TRANSACTION layer. Both re-read the raw row afterwards and assert the incumbent was NOT overwritten.\n\nDURABILITY: fresh file-backed project store -> outcome INSTALLED with caller's ref/slot; reopen asserts ACTIVE FOUND with same incarnationRef, same digest, same payload bytes, PENDING ABSENT.\n\nRESTORE PRESERVATION (mutation-drill anchor D1): restore path installs ACTIVE via the EXISTING replacement installRecoveryBinding; genesis then proposes a DIFFERENT valid binding and must return ok true / outcome CURRENT / authority NONE / code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND / layer TRANSACTION, with binding.incarnationRef, bindingDigest and payload all the RESTORE's values, not the caller's; reopen asserts the stored bytes are still byte-identical to the restore's.\n\nStill RED for the right reason: fresh `pnpm --filter @moe/store typecheck` exit 1, and filtering out TS2551 leaves ZERO other errors — i.e. every failure is \"Property 'installInitialRecoveryBinding' does not exist on type 'SqliteEventStore'\", nothing is failing on a typo or bad fixture type.",
+      "startedAt": "2026-08-14T08:57:04.597Z",
+      "completedAt": "2026-08-14T08:58:45.275Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the transaction in packages/store/src/recovery-initial-install.ts as `export class RecoveryInitialInstallStore extends RecoveryInstallStore` with the single public method `installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult`. Reuse, do not re-derive: in packages/store/src/recovery-install.ts widen `releaseInstallTransaction` from private to protected and export `SELECT_BINDING_SQL`, `INSERT_BINDING_SQL`, `rowMatchesBinding` and `isUniqueConstraintViolation` — no behavior change there, so its existing tests stay green and the two installers cannot drift on row validation or on unprovable-outcome handling. Exact order: requireOpen(); scope check (projectId === null || !writeProjectAsserted -> RECOVERY_INSTALL_SCOPE_REQUIRED) BEFORE the codec; encodeRecoveryBinding(input) and return its refusal as-is; slot !== \"ACTIVE\" -> RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED; then ONE `BEGIN IMMEDIATE` covering everything that follows — assertDurableProjectBinding(); PENDING row present -> PENDING_PRESENT; history present -> HISTORY_PRESENT via a single statement of EXISTS legs over command_decisions (scoped `WHERE project_id = ?` with this.projectId), command_receipts, domain_events, aggregate_heads and outbox_messages; ACTIVE row present -> decode it with decodeRecoveryBinding (return the codec refusal on bad bytes), cross-check with rowMatchesBinding (return RECOVERY_BINDING_ROW_DIVERGED), else return the CURRENT winner built from the DECODED bytes; otherwise run INSERT_BINDING_SQL ALONE — no DELETE, no INSERT OR REPLACE, no UPSERT — and COMMIT, returning INSTALLED. There is no read-then-write window and no caller-asserted pristine flag: every guard reads under the write lock the same transaction inserts in. A guard that refuses must ROLLBACK and return its refusal (a refusal is not a fault); route every thrown failure and any failing ROLLBACK through releaseInstallTransaction so an unprovable outcome poisons the handle and raises DurableStoreError OUTCOME_UNKNOWN rather than reporting a benign refusal, and map a UNIQUE violation to RECOVERY_INSTALL_INCARNATION_CONFLICT. Comment WHY the history legs are those five and why derived tables (projections, inbox_receipts, event_subscriptions, cursor_generations) and the bootstrap rows in store_metadata/store_project_binding are excluded. Keep the file under 250 physical lines (`grep -c '' <file>`); if it grows past that, split the vocabulary into recovery-initial-install-contracts.ts plus its .js bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-install.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-install.ts",
+        "packages/store/src/recovery-initial-install.ts",
+        "packages/store/src/recovery-initial-install-contracts.ts",
+        "packages/store/src/recovery-initial-install-contracts.js",
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Implemented the genesis transaction. REUSE (no behavior change in recovery-install.ts, still 191 lines): widened `releaseInstallTransaction` private->protected and exported SELECT_BINDING_SQL, INSERT_BINDING_SQL, rowMatchesBinding, isUniqueConstraintViolation, so the two installers cannot drift on row validation or unprovable-outcome handling.\n\n`RecoveryInitialInstallStore extends RecoveryInstallStore` with the single public `installInitialRecoveryBinding(input: unknown)`. Exact order: requireOpen(); scope check before the codec -> RECOVERY_INSTALL_SCOPE_REQUIRED; encodeRecoveryBinding, refusal returned as-is; slot !== \"ACTIVE\" -> SLOT_UNSUPPORTED; then ONE BEGIN IMMEDIATE covering assertDurableProjectBinding -> PENDING row -> history EXISTS -> ACTIVE row -> INSERT + COMMIT. Every guard reads under the same write lock the INSERT holds; no read-then-write window, no caller-asserted pristine flag. The write is INSERT_BINDING_SQL ALONE — no DELETE, no INSERT OR REPLACE, no UPSERT. A guard that refuses ROLLBACKs and returns (a refusal is not a fault); that ROLLBACK is inside the try, so if it itself fails it routes through releaseInstallTransaction and poisons the handle with DurableStoreError OUTCOME_UNKNOWN rather than reporting a benign refusal. UNIQUE violation maps to RECOVERY_INSTALL_INCARNATION_CONFLICT. CURRENT is built from the DECODED bytes, never the indexed columns; unreadable bytes return the codec refusal and a diverged column returns ROW_DIVERGED — neither overwrites the incumbent.\n\nHistory legs are the five authoritative tables (command_decisions scoped WHERE project_id = ?, command_receipts, domain_events, aggregate_heads, outbox_messages) in one statement; the comment records WHY derived tables (projections, inbox_receipts, event_subscriptions, cursor_generations) are excluded, why store_metadata/store_project_binding bootstrap rows are excluded (counting them would refuse unconditionally = no guard), and why all five legs are read despite foreign_keys being ON.\n\nSIZE: the single file hit 267 lines, over the 250 target, so I took the plan's stated contingency and split the vocabulary into NEW packages/store/src/recovery-initial-install-contracts.ts (102 lines) + its .js bridge. Now recovery-initial-install.ts = 172, recovery-initial-install-contracts.ts = 102, recovery-install.ts = 191. Test import redirected to the contracts module (matching how recovery-install.test.ts imports recovery-install-contracts.js). Owned-path count is now 10, still at the bar.\n\nVerified: fresh typecheck with TS2551 filtered out shows ZERO other errors — the implementation compiles clean and the only remaining red is the not-yet-published facade passthrough (step 5).",
+      "startedAt": "2026-08-14T08:58:47.778Z",
+      "completedAt": "2026-08-14T09:00:53.642Z"
     },
     {
       "stepId": "step-5",
       "description": "Publish the capability through the existing chain and turn steps 2-3 green. In packages/store/src/decision-ledger.ts: `class DecisionLedgerStore extends RecoveryInitialInstallStore` (the new class extends RecoveryInstallStore, so the chain order is preserved), add `installInitialRecoveryBinding` to the DecisionLedgerCore interface and to the frozen delegate object created by createDecisionLedgerCore. In packages/store/src/sqlite-event-store.ts add the public passthrough `installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult` next to installRecoveryBinding, with a one-line comment stating it INSERTS only into a pristine store and never replaces (measured: that file is 358 physical lines today and this adds ~8, staying under the 400 split bar; do not restructure it in this task). In packages/store/src/index.ts export RECOVERY_INITIAL_INSTALL_REASON_CODES as a runtime value plus the RecoveryInitialInstall* types. Then run `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` and confirm every case from steps 2-3 is green and that recovery-install.test.ts, recovery-install-entrypoint.test.ts (its reasonCodeCount 8 assertion must be untouched and passing), recovery-anchor*.test.ts and store-schema-v4-migration.test.ts are unchanged and green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/decision-ledger.ts",
         "packages/store/src/sqlite-event-store.ts",
         "packages/store/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/index.ts",
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Published through all four places: decision-ledger.ts now has `class DecisionLedgerStore extends RecoveryInitialInstallStore` (chain order preserved, the new class extends RecoveryInstallStore), plus the DecisionLedgerCore interface entry and the frozen delegate entry; sqlite-event-store.ts has the public passthrough with a comment stating it INSERTS only into a pristine store, never replaces, and that only outcome INSTALLED grants authority; index.ts exports RECOVERY_INITIAL_INSTALL_REASON_CODES as a RUNTIME value in its own value block plus the four RecoveryInitialInstall* types in a type block.\n\nPLAN PREMISE CORRECTED — measured, not assumed. Step 3's H2 fixture (\"aggregate_heads carries no foreign key, so it is the one history source reachable in isolation\") is FALSE. A lone aggregate_heads row makes the store unopenable: validateSchema (sqlite-schema-integrity.ts:89-129) cross-checks heads against domain_events and throws `DurableStoreError: STORE_CORRUPT: aggregate heads do not exactly match the event ledger` at SqliteEventStore.openForProject, and PRAGMA foreign_key_check at line 24 blocks every orphan in the other four tables. NO authoritative history table can be populated in isolation and still be reopened, so that fixture could never have reached the guard.\n\nReplaced H2 with a fixture that IS reachable and still isolates legs: a plain `store.commit(...)` with one event and NO outbox drafts, which writes no command_decisions row and no outbox_messages row. Pre-state now asserted exactly: command_receipts 1, domain_events 1, aggregate_heads 1, command_decisions 0, outbox_messages 0. This keeps the discrimination the two-fixture table exists for — without it the sweep could not distinguish a five-leg guard from a command_decisions-only one — and the reason it is not a raw single-table insert is recorded in the fixture comment with the file:line of the validator. H1 (full decision, all five legs > 0) is unchanged. The `historyFixtures.length === 2` + exact-label test is updated and still guards against a silently-empty table.\n\nGREEN: `pnpm --filter @moe/store typecheck` exit 0, then `pnpm --filter @moe/store test`:\n Test Files  41 passed (41)\n      Tests  466 passed (466)\nBaseline was 40 files / 453 tests; +1 file / +13 tests is exactly this task's additions, so nothing silently disappeared. recovery-install.test.ts, recovery-install-entrypoint.test.ts (reasonCodeCount 8 untouched), recovery-anchor*.test.ts and store-schema-v4-migration.test.ts are all unmodified and passing.\n\nLine counts (grep -c ''): recovery-initial-install.ts 172, recovery-initial-install-contracts.ts 102, recovery-install.ts 191, decision-ledger.ts 149, sqlite-event-store.ts 368 (under the 400 bar), index.ts 117.",
+      "startedAt": "2026-08-14T09:01:02.967Z",
+      "completedAt": "2026-08-14T09:02:51.750Z"
     },
     {
       "stepId": "step-6",
       "description": "Prove the concurrency claim with two file-backed handles. Add packages/store/src/recovery-initial-install-race-worker.mjs modelled on command-decision-race-worker.mjs: import { SqliteEventStore } from \"./index.ts\" (importing through the package ROOT also proves the method is a real runtime value and not a type-only export), post PREOPEN_READY, Atomics.wait on gate slot 0, openForProject, post READY, Atomics.wait on gate slot 1, call installInitialRecoveryBinding with the worker's own distinct valid binding, then CLOSE THE STORE IN A FINALLY BEFORE posting the RESULT (a still-open handle makes the test's rmSync fail with EPERM on Windows). The RESULT message carries kind, ok, outcome, code, layer, incarnationRef, bindingDigest and `initialInstallType: typeof SqliteEventStore.prototype.installInitialRecoveryBinding`. Add the two-phase gate/start/release harness inline in recovery-initial-install.test.ts (same shape as startDecisionRaceWorker/releaseDecisionRace) and assert: both workers returned a RESULT (results.length === 2 — the race actually executed, not zero cases); each result's initialInstallType is \"function\"; the sorted outcomes are exactly [\"CURRENT\", \"INSTALLED\"]; the CURRENT result's incarnationRef and bindingDigest equal the INSTALLED one's and its code/layer are RECOVERY_INITIAL_INSTALL_ALREADY_BOUND / RECOVERY_INSTALL_TRANSACTION_LAYER; the winning ref is one of the two proposed refs; and after reopening the file, ACTIVE reads FOUND with that same incarnationRef and digest while PENDING is ABSENT. Bound the wait — if a worker never reports, fail by name rather than hanging the suite.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs",
         "packages/store/src/recovery-initial-install.test.ts"
       ],
       "newFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:02:56.767Z"
     },
     {
       "stepId": "step-7",
@@ -127,12 +152,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T08:57:04.597Z",
+  "updatedAt": "2026-08-14T09:02:56.767Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -144,7 +169,10 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:53:56.349Z",
