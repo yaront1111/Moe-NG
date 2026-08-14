@@ -20,12 +20,13 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE AND ATTRIBUTE THE FOREIGN RED. Do not write a byte. (a) Confirm the gap is still open: `grep -rni \"modelid\\|reasoningeffort\\|launchselection\\|TELEMETRY_CONFIGURATION\" packages/runner/src` must return zero, and pair it with the positive control `grep -rnic \"wrapperidentity\" packages/runner/src` which must return a large non-zero — an absence claim without a matching control is a broken command, not an absence. If the gap has closed, STOP and report_blocked rather than land a duplicate. (b) Record `grep -c ''` for claude-launcher.ts, claude-launcher-contract.ts, claude-launcher-input.ts, claude-launcher-lifecycle.ts, claude-launcher-port-results.ts, claude-launcher-test-fixtures.ts and index.ts; rail 3 forbids growing the lifecycle and port-results files, both measured at the cap. (c) Re-read REQUEST_KEYS in claude-launcher-input.ts and record its exact current member list and length. (d) Record every hand-written cardinality pin in claude-launcher.test.ts and claude-launcher-authority.test.ts by grepping for `.length).toBe(` and `.toBe(cases.length)`, and record the current EXPECTED_EXPORTS count and its line in packages/runner/src/index-surface.test.ts — all of these moved during planning and will move again. (e) ATTRIBUTION, do this before touching anything: run `pnpm --filter @moe/runner test` and record the failures verbatim, then run `git status --porcelain` and `git log -1 --format=%h%d%s -- packages/runner/src/providers/claude/claude-launcher.test.ts`. The suite is expected to be RED from task-de496f47's in-flight tests-first loop, which is NOT your defect and NOT yours to repair. Never run `git stash`, `git checkout --`, `git reset`, or any tree-cleaning command; a peer's uncommitted work is in this tree. Record the pre-existing failing test names as your merge-base baseline for the path-attributed gate in step 9.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-input.ts",
         "packages/runner/src/providers/claude/claude-launcher.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:26:09.906Z"
     },
     {
       "stepId": "step-2",
@@ -120,7 +121,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-06df66bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -163,7 +164,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.900Z",
-  "updatedAt": "2026-08-14T09:15:19.476Z",
+  "updatedAt": "2026-08-14T09:26:09.906Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:45:50.536Z",
     "plannedStepCount": 10,
@@ -172,7 +173,9 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-06df66bb"
+  ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."

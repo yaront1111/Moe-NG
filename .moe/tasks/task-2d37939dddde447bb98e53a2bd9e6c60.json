@@ -156,8 +156,8 @@
       "completedAt": "2026-08-14T09:06:45.091Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -188,12 +188,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:48:41.262Z",
-  "updatedAt": "2026-08-14T09:21:15.645Z",
+  "updatedAt": "2026-08-14T09:25:20.094Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:57:18.499Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-14T09:25:20.094Z",
+    "wallClockMs": 37681595
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -250,5 +252,8 @@
     "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
     "packages/scheduler/src/expansion/expansion-current-hold.ts",
     "packages/scheduler/src/expansion/expansion-current-hold.js"
-  ]
+  ],
+  "completedAt": "2026-08-14T09:25:20.094Z",
+  "reviewCompletedAt": "2026-08-14T09:25:20.094Z",
+  "reviewSummary": "APPROVED. Reviewed by base-ref diff `git diff d7a71cb..HEAD -- packages/scheduler/` = exactly the 6 owned paths (990+/222-). Scheduler tree clean vs HEAD, so gated bytes == committed bytes (commit 71ae334 bearing the task id carries foreign bytes; per rail not a rejection reason).\n\nGATE re-run by me, foreground, fresh: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` exit 0, 43 files / 1319 tests. Repo-wide `pnpm typecheck` also exit 0.\n\nDoD1 OK: exact 2-key request, 18-key ACTIVE/v1/no-terminal hold, replay through core reduceExpansionPlanningHold, presented-vs-replayed via production matchesTrusted, all 5 current values required (else UNKNOWN naming currentAuthority), graphEpoch/holdId/holdVersion/planningRunRef compared to the hold, deepFrozen binding re-inspected by core. goalVersion has no hold-side operand: architect-sanctioned in planningNotes.risks, domain-checked + inspector-judged.\nDoD2 OK: expansion-binding.ts 291->141, one call, old activeHoldOf/currentOf/authorityMismatch/holdBindingOf deleted (checked vs d7a71cb). Success bytes identical. All 5 isolated mismatch codes still CURRENT_AUTHORITY/BRIDGE. The one compound-fault reorder (goalVersion+holdId now HOLD_ID_MISMATCH) is forced by the chosen API and pinned in PRECEDENCE_CASES.\nDoD3 OK: nullable target everywhere; inspector target verbatim (HOLD_BINDING), null for local/reducer/fairness, compared vs core called directly.\nDoD4 OK: root publishes function + full type closure; bridge byte-pinned 45B LF; plain-Node bare-specifier smoke; refusal constructors withheld with positive control.\nDoD5 OK: every sweep asserts its exact count (15/9/10/5/12/4/4).\n\nMY DRILLS: inspection.target->null reddened exactly the 2 target tests; disabling planningRunRef inside the producer reddened BOTH the direct and the ADMISSION test, proving one producer. Restored, sha256 verified.\n\nPer-file cap OK: 250/141 production, index.ts 385<400. No scratch files."
 }

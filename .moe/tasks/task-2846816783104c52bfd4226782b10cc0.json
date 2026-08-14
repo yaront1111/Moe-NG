@@ -153,32 +153,61 @@
     {
       "stepId": "step-8",
       "description": "Harden the tests to DoD-5 and epic rail 6, which a green suite cannot show you. (a) Generated sweeps: build the GENESIS/RESTORE case table and assert a NONZERO EXACT count (e.g. expect(cases).toHaveLength(<literal>)) before iterating — a sweep that silently generates zero cases passes while testing nothing. (b) Run three mutation drills against the PRODUCTION surface and record that each reddens a named assertion, then restore: [1] delete the origin tag from contextParts so both origins derive identically — the cross-origin collision test must go red; [2] drop publicKeySpkiHex from the deriveIncarnation bindingDigest input — the SPKI-binding test must go red; [3] make decodeBinding accept a GENESIS payload carrying restoreCommandId — the counterfeit-refusal test must go red. (c) Confirm every refusal assertion pins the exact code AND the layer, not merely that the call failed. Restore each mutation with Edit and verify the file hash matches pre-drill before the next drill; do not use git checkout to restore, and do not leave any drill edit on disk.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation.test.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
       ],
-      "startedAt": "2026-08-14T09:23:29.323Z"
+      "modifiedFiles": [
+        "apps/daemon/src/identity/genesis-recovery-binding.test.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts"
+      ],
+      "note": "(a) The drifted-row sweep spans BOTH origins and pins an exact literal count before iterating: expect(cases).toHaveLength(36) = 12 restore-key drops + 12 genesis-key drops + 12 hand-written rows. It was measured at 33 while the mint was untagged, so the literal is one a wrong generator cannot satisfy silently. (b) Three mutation drills against PRODUCTION, each applied with Edit, confirmed applied by grep, run, then restored with Edit and hash-verified against a pre-drill sha256 manifest (no git checkout, nothing left on disk; final `sha256sum -c` OK for both files). [1] origin tag deleted from contextParts -> RED on exactly \"separates two origins whose raw context parts are byte-identical\", message \"expected 'f73589df...' not to be 'f73589df...'\" i.e. the two origins collided. [2] publicKeySpkiHex dropped from the deriveIncarnation bindingDigest input -> RED on exactly \"binds the published SPKI into the binding digest\". [3] decodeBinding taught to accept a GENESIS payload carrying restoreCommandId -> RED on \"refuses a genesis payload that counterfeits a restore fact\" with \"expected { …(12) } to be null\" (the forged row decoded), plus two round-trip tests that over-redden for the coherent reason that the mutation also changed the accepted key count for honest genesis rows. (c) Refusal assertions audited: expectGenesisRefusal pins code + layer RECOVERY_INCARNATION + truth UNKNOWN + authority NONE + outcome + absence of binding/keyHandle; the codec has no code vocabulary and its refusals are labelled null assertions; and I strengthened the two identity refusal tests to also pin storeCode (RECOVERY_BINDING_DIGEST_MISMATCH, RECOVERY_INSTALL_SCOPE_REQUIRED) so they say WHICH layer refused, not merely that genesis did. Focused file 101/101 green after restore; identity 9/9.",
+      "startedAt": "2026-08-14T09:23:29.323Z",
+      "completedAt": "2026-08-14T09:25:06.641Z"
     },
     {
       "stepId": "step-9",
       "description": "Verification gate. Run the task's named command first: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run src/recovery/recovery-incarnation.test.ts src/identity/genesis-recovery-binding.test.ts. That command is NARROWER than DoD-5, which also requires succession, anchor and hostile-input suites green, so ALSO run: pnpm --filter @moe/daemon exec vitest run src/recovery/ src/identity/ src/index-surface.test.ts. Both must exit 0 on fresh output pasted into complete_task — never a remembered or paraphrased result. If index-surface.test.ts fails on the RecoveryIncarnationBinding type assertions, fixing it is in scope; add it to the owned paths. Apply the path-attributed baseline rail for any repo-wide red: record failures at merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation.test.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-context.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-anchor.ts",
+        "apps/daemon/src/identity/genesis-recovery-binding.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "All legs fresh and exit 0. (1) Task-named command, run as one chain: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/recovery-incarnation.test.ts src/identity/genesis-recovery-binding.test.ts` -> tsc silent, \"Test Files 2 passed (2) / Tests 110 passed (110)\", exit 0. The `--root . --config package.json` flags are REQUIRED and are not padding: without them vitest picks the repo-root config whose include is adapters|packages|tests, so the literal command in the task description exits 1 with \"No test files found\". (2) Broader DoD-5 leg: `... vitest run --root . --config package.json src/recovery/ src/identity/ src/index-surface.test.ts` -> 24 files / 507 tests passed, exit 0 (covers succession, anchor, restore-controller, key-provider, restart-reconciliation, hostile-input inventory suites and the published-surface assertions). (3) Whole owned package: `pnpm --filter @moe/daemon test` -> 69 files / 1491 tests passed, exit 0. NO path-attributed baseline is needed: nothing is red anywhere in the owned package. The foreign red I reported in steps 4-5 (27 recovery-inventory failures, plus the architect's noted graph-preview/runtime-entrypoint baseline) is GONE — those peers landed their work. index-surface.test.ts needed no repair beyond the two type assertions I already retargeted to RestoreIncarnationBinding plus the added published-union assertion. COMMIT SITUATION, disclosed per the known hazard: my bytes are already committed, by THREE foreign whole-tree commits belonging to other tasks — 671409f (task-1615065497f0489097a4bbc11cea9d6b) carries recovery-incarnation-context.ts and -contract.ts, 7b3d1e7 (task-de496f4785a242569aa4ffc3ef6f1d69) carries the codec, genesis mint, service, anchor, index.ts and index-surface.test.ts, c576110 (task-f6cf8d16c2654641a92b0ee36924de0c) carries identity/genesis-recovery-binding.ts. git status shows no apps/** entry at all, so the committed bytes ARE the gated bytes. I have not amended, reset, or made an empty claiming commit. QA should review with: git diff 6ffb4fe..HEAD -- <the 18 owned paths> (1133 insertions / 254 deletions). One caveat: apps/daemon/src/recovery/recovery-inventory-ledger.test.ts carries my single type annotation entangled with ~81 lines of a peer's work in the same base-ref range.",
+      "startedAt": "2026-08-14T09:25:15.577Z",
+      "completedAt": "2026-08-14T09:26:49.137Z"
     },
     {
       "stepId": "step-10",
       "description": "Adversarial self-review before complete_task; load the adversarial-self-review skill. Read your own diff as an attacker: (1) Can any caller reach a GENESIS binding carrying restore fields, or a RESTORE binding carrying genesis fields, through ANY path — mint, codec decode, or a cast? (2) Does a pre-existing anchored row without an origin field fail CLOSED (decode null) rather than being admitted with an invented origin? (3) Is the private KeyObject in the sync genesis mint truly unreachable after the call — no closure capture, no map, no property? (4) Does JSON.stringify of every result and refusal contain no nonce, private key, PKCS8, handle or bearer? (5) Does the seenNonceDigests reservation still happen BEFORE the key material exists on both paths, so a burned block cannot be retried? (6) Are the derivation parts still length-framed so no two contexts can collide? (7) Confirm every production source touched is at or under 250 physical lines using grep -c '' (PowerShell Measure-Object -Line undercounts). Then run git status --porcelain, confirm no drill/scratch file remains, and commit by explicit pathspec only — git commit -- <owned path> ... — never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-incarnation-context.ts",
         "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
         "apps/daemon/src/recovery/recovery-incarnation-binding-codec.ts",
         "apps/daemon/src/identity/genesis-recovery-binding.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-incarnation-contract.ts",
+        "apps/daemon/src/recovery/recovery-incarnation-genesis.ts",
+        "apps/daemon/src/recovery/recovery-incarnation.test.ts",
+        "apps/daemon/src/recovery/recovery-succession.test.ts"
+      ],
+      "note": "Adversarial pass, seven questions answered by probe not by reading intent. (1) Cross-origin reach: grep for casts across the union in production returns NONE; both mints build literals of their own branch only, and decodeBinding picks the exact key set from the origin BEFORE reading a field. (2) Pre-origin row: refused (drill 3 plus the \"refuses a pre-origin row rather than inventing an origin for it\" test). I also found and closed a real gap here — nothing pinned that an anchored GENESIS row is not a restore lineage, so recovery-succession.test.ts gained \"anchors a GENESIS binding and still reads NO restore incarnation for it\": it anchors a real minted genesis binding, asserts hasAnchoredIncarnation is TRUE (so the null is the origin check, not a missing write), readAnchoredIncarnation is null, and readSuccessionChain refuses RECOVERY_PREDECESSOR_NOT_FOUND at layer RECOVERY_SUCCESSION. That test failed first on a guessed code name, which is evidence the assertion is real. (3) Private key: grep shows privateKey only as a destructured local and a shell parameter — never a returned property, map entry or retained closure; result has exactly [authority, binding, ok, outcome] and both it and the binding are frozen. (4) Serialized evidence: probed every refusal — {ok,outcome,authority,layer,code,truth,reason} only. THIS FOUND A DEFECT: the genesis path was returning the RESTORE input-invalid constant, whose reason says \"must name exactly one restore command and one backup generation digest\" — a false statement about a genesis failure. Fixed with RECOVERY_GENESIS_INPUT_INVALID, same code RECOVERY_INCARNATION_INPUT_INVALID and same layer (no invented code), accurate reason, now asserted verbatim in the test. (5) Hostile projectId sweep (42, null, undefined, toString object, 500 chars, NUL, zero-width space, whitespace) all refuse with exact code AND layer; a row with a real own \"__proto__\" key decodes null; a duplicate-origin-key JSON decodes null. (6) Reservation order re-read on both paths: raw-nonce digest reserved before any key material, proven by the burn test. (7) Length framing unchanged (digestOf untouched). Sizes with grep -c '': context 174, codec 176, genesis 181, contract 218, service 236, anchor 139, identity 129 — all at or under 250. Two files I touched are over the cap and were BEFORE this task: index.ts 333->335 (a type-only export list) and recovery-succession.ts 369->369 (annotations only); neither is a file this task created and neither grew materially. Committed by explicit pathspec only, after confirming the shared index had nothing staged: a9dadd9 over exactly 4 owned paths (git show --stat verified). No drill or scratch file remains. One disclosure: `pnpm --filter @moe/daemon test` reported 12 failures on one run and 1492/1492 passed on the immediately following run with no edit of mine in between — a live peer was writing apps/daemon/src/work/work-claim-shape.ts during the first run. The definitive run is green.",
+      "startedAt": "2026-08-14T09:26:52.049Z",
+      "completedAt": "2026-08-14T09:29:59.043Z"
     }
   ],
   "status": "WORKING",
@@ -194,12 +223,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:23:29.323Z",
+  "updatedAt": "2026-08-14T09:29:59.044Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 10
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -217,7 +246,10 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:58:46.948Z",

@@ -113,18 +113,30 @@
     {
       "stepId": "step-7",
       "description": "Mutation drills, then gate, review and commit. Drills (for each: sha256 first, edit with the Edit tool, confirm the anchor matched once, run the focused test, reverse the edit, confirm the sha256 is restored — never `git checkout`, which reverts to HEAD and would destroy uncommitted work in this shared worktree): D1 make the ref predicate accept a backslash — the drive/UNC rows redden while the legitimate-ref rows stay green, proving the table tests the rule and not the parser's mere existence; D2 sort the limit table before comparing — the misordered-table case reddens; D3 accept a limit table shorter than the key list — the missing-key case reddens; D4 swap the VERSION_UNSUPPORTED branch ahead of the structure check — a structurally hostile record with a bad version must change which code it reports, proving the order is pinned; D5 return the caller's array instead of the copy — the identity/immutability assertions redden on a named node, not on a JSON comparison. Then run the exact verification command `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` in the foreground, keep the verbatim tail, and subtract the step-2 baseline: any remaining red must not intersect the six owned paths and is disclosed verbatim, never fabricated green. Adversarial review: no `node:` specifier in either production source; no path key anywhere in the closed contract; no default value invented; no hash computed; refusals carry nothing observed; the snapshot cannot alias or freeze caller input; `settingsDigest` exists only on the manifest. Record task-5dfc98fc3e7f4035a8012bd9ba032de3 as the named production consumer (global rail clause 1 — this is a pure package, so the consumer task id is the required edge). Finally `git add` the five new files first (a commit pathspec naming an untracked path commits nothing at all), confirm `git status --porcelain` stages no foreign entry, commit with an explicit six-path pathspec, and verify with `git show --stat`. State plainly in the completion note that the plan added the parser module and its bridge beyond the four owned paths named in the task description, because the exact schema cannot fit one <=250-line module and the global rail directs architects to split the FILE rather than the task — the split follows the package's own distribution/ contract-plus-parser convention.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/configuration/project-configuration-contract.ts",
         "packages/contracts/src/configuration/project-configuration-parser.ts",
         "packages/contracts/src/configuration/project-configuration.test.ts",
         "packages/contracts/src/index.ts"
       ],
-      "startedAt": "2026-08-14T09:21:20.922Z"
+      "modifiedFiles": [
+        "packages/contracts/src/configuration/project-configuration-contract.ts",
+        "packages/contracts/src/configuration/project-configuration-contract.js",
+        "packages/contracts/src/configuration/project-configuration-parser.ts",
+        "packages/contracts/src/configuration/project-configuration-parser.js",
+        "packages/contracts/src/configuration/project-configuration.test.ts",
+        "packages/contracts/src/configuration/project-configuration-hostile.test.ts",
+        "packages/contracts/src/configuration/project-configuration.test-fixtures.ts",
+        "packages/contracts/src/index.ts"
+      ],
+      "note": "MUTATION DRILLS — 8 run. Protocol every time: sha256 first, Edit-tool mutation (never git checkout, which would revert to HEAD and destroy uncommitted work in this shared worktree), focused run, Edit-tool reversal, `sha256sum -c` proving byte-identical restore. Every restore verified OK.\n\nD1 ref predicate accepts backslash -> RED \"refuses a unc share ref\". Precise: the drive rows still refuse via the `:` rule, and all 8 legitimate rows stay green, so the table tests the RULE.\nD2 rescue misordering by looking the entry up by key -> RED \"refuses a misordered table\".\nD3 `length !== N` -> `length > N` -> SURVIVED. Not a hole in the tests: the short direction is genuinely answered first by the density guard, so this is an equivalent mutant. Disclosed rather than papered over.\nD3b `length !== N` -> `length < N` -> RED on TWO rows, \"refuses a table one entry long\" and \"refuses a duplicated entry\". That is the direction that actually pins the equality.\nD3c remove `Object.hasOwn(value, index)` -> SURVIVED, all 416 green. Investigated instead of shrugging: `delete limits[3]` leaves a hole that reads back as `undefined`, and isPlainRecord already refuses that. The guard is NOT dead code — it is the only defense against a polluted Array.prototype filling the hole with a valid-looking entry, and no test could reach it. FIXED BY ADDING THE MISSING TEST, not by deleting the guard: \"refuses a sparse table even when Array.prototype fills the hole\" installs Array.prototype[3] = {key: EXPECTED_LIMIT_KEYS[3], value: 3}, calls the parser inside try, deletes it in finally, asserts the restore happened, then asserts the code/layer.\nD3d re-drilled the density guard with the new test present -> RED. The guard now has a killing test.\nD4 version check ahead of the structure check -> RED \"checks the structure BEFORE the version\", and the message is a CODE SWAP: \"expected 'PROJECT_CONFIGURATION_VERSION_UNSUPPO…' to be 'PROJECT_CONFIGURATION_INPUT_INVALID'\". Order is pinned, not incidental.\nD5 return the caller's array instead of the copy -> RED on THREE named assertions: deep-freeze at every depth, no shared identity, caller input left unfrozen. Not a JSON comparison.\nD6 drop the `!optIn && digest !== null` leg -> RED \"refuses fully manual gates carrying an opt-in digest\", proving the cross-rule is bidirectional.\n\nADVERSARIAL REVIEW, each item measured not asserted: zero `node:` specifiers in either production source (grep exit 1); no path key anywhere in the closed contract (raw unfiltered grep for path|dir|file|cwd|url|uri hits only comments and the substring inside \"profileRef\"); no hash computed (no createHash/subtle/webcrypto/digest(); the only numeric literals in the contract are the two char bounds 128 and 256, which are this parser's own input bounds, NOT design authority defaults — the design's 4/3/6/9/24/64/8/10000/1/3 are absent); refusals carry only {code, layer, ok}; the Settings interface body printed in full has 7 fields and NO settingsDigest.\n\nGATE — the EXACT command, fresh, foreground, at current HEAD c576110: `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` -> EXIT 0. contracts 12 files/416 tests, core 28/579, daemon 69/1491, typecheck all 18 projects Done.\n\nBASELINE SUBTRACTION: step 2 recorded daemon RED (2 files, 17 tests) and typecheck RED (apps/daemon) from a peer's uncommitted recovery work. Both cleared on their own before completion — the peer finished. Nothing to disclose and nothing fabricated: the chain genuinely exits 0 now. Intersection of the failing-path delta with my owned paths was EMPTY throughout.\n\nCOMMIT — REPORTING A HAZARD, NOT A CLEAN PATHSPEC COMMIT. A foreign whole-tree completion commit swept all eight of my owned paths mid-task; `git log -- packages/contracts/src/configuration/` names c576110 (task-f6cf8d16...), not this task. Per the global rail I did NOT amend it, reset, or create an empty claiming commit. I PROVED the committed bytes are the gated bytes: for all 8 paths `git rev-parse HEAD:<path>` equals `git hash-object <path>` — 8/8 MATCH — and `git status --porcelain -- packages/contracts` is empty in both directions. `git ls-files --eol` reports `i/lf w/lf attr/text=auto eol=lf` for all 7 configuration files, so both bridges are the required exact-LF single line.\n\nQA SHOULD REVIEW BY BASE-REF DIFF, not by a commit bearing this task id:\n`git diff 1e3057ab938236a98105177fb060021ff992b529..HEAD -- packages/contracts/src/configuration/ packages/contracts/src/index.ts` = 8 files, 1183 insertions, 0 deletions. CAVEAT on index.ts: it shows +83 lines against that base, of which only the three `./configuration/...` blocks (42 lines) are mine; the other 41 are earlier document-work/distribution tasks that landed in the same window.\n\nCONSUMER EDGE (global rail clause 1): pure package, so the named production consumer is task-5dfc98fc3e7f4035a8012bd9ba032de3 (daemon path-neutral manifest persistence), reached through the core",
+      "startedAt": "2026-08-14T09:21:20.922Z",
+      "completedAt": "2026-08-14T09:27:48.899Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4e189bb5",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -149,12 +161,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:07.402Z",
-  "updatedAt": "2026-08-14T09:21:20.922Z",
+  "updatedAt": "2026-08-14T09:28:34.768Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:24.289Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -169,7 +181,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T09:09:21.454Z",
@@ -191,5 +204,22 @@
     "wallClockMs": 6300000
   },
   "planApprovedAt": "2026-08-14T09:09:23.508Z",
-  "workStartedAt": "2026-08-14T09:09:44.190Z"
+  "workStartedAt": "2026-08-14T09:09:44.190Z",
+  "reviewStartedAt": "2026-08-14T09:28:34.768Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "contracts: Test Files 12 passed (12) / Tests 416 passed (416)\ncore: Test Files 28 passed (28) / Tests 579 passed (579)\ndaemon: Test Files 69 passed (69) / Tests 1491 passed (1491)\ntypecheck: Scope 18 of 19 workspace projects; packages/contracts typecheck: Done ... apps/daemon typecheck: Done\n===CHAIN_EXIT=0===\nBaseline at step 2 had daemon (2 files/17 tests) and typecheck (apps/daemon) RED from a peer's uncommitted recovery work; that cleared on its own before completion. Contracts baseline was 10 files/243 tests, so this task adds 2 files and 173 tests and regresses none.",
+    "reportedAt": "2026-08-14T09:28:34.768Z"
+  },
+  "filesModified": [
+    "packages/contracts/src/configuration/project-configuration-contract.ts",
+    "packages/contracts/src/configuration/project-configuration-contract.js",
+    "packages/contracts/src/configuration/project-configuration.test.ts",
+    "packages/contracts/src/configuration/project-configuration-hostile.test.ts",
+    "packages/contracts/src/configuration/project-configuration.test-fixtures.ts",
+    "packages/contracts/src/configuration/project-configuration-parser.ts",
+    "packages/contracts/src/configuration/project-configuration-parser.js",
+    "packages/contracts/src/index.ts"
+  ]
 }

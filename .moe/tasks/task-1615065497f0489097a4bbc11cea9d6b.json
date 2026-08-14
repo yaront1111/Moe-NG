@@ -57,65 +57,105 @@
     {
       "stepId": "step-3",
       "description": "Add the history, malformed-row, durability and restore-preservation tests to packages/store/src/recovery-initial-install.test.ts. HISTORY (hand-written table of exactly 2 fixtures, with `expect(historyFixtures.length).toBe(2)` and per-fixture pre-state row counts asserted BEFORE the install attempt so a fixture that silently generated nothing cannot pass): H1 commits one real decision through commitExpectedVersionDecision (one event carrying one outbox message) and asserts command_decisions/command_receipts/domain_events/aggregate_heads/outbox_messages all count > 0; H2 uses a raw `new DatabaseSync(path)` handle to insert ONE aggregate_heads row only (that table carries no foreign key, so it is the one history source reachable in isolation) and asserts heads count 1 with receipts/events/decisions counts 0. Both must return RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT / TRANSACTION layer, and ACTIVE must still read ABSENT afterwards. MALFORMED ACTIVE: after a replacement install, tamper binding_bytes only -> RECOVERY_BINDING_DIGEST_MISMATCH at CODEC layer; tamper the incarnation_ref COLUMN only (bytes and digest still agree) -> RECOVERY_BINDING_ROW_DIVERGED at TRANSACTION layer; in both, the initial install must refuse rather than overwrite the unreadable row. DURABILITY: on a fresh file-backed project store, installInitialRecoveryBinding returns outcome INSTALLED with the caller's binding and digest; reopen and assert readRecoveryBinding(\"ACTIVE\") is FOUND with the same incarnationRef, digest and payload bytes, and PENDING is ABSENT. RESTORE PRESERVATION (the mutation-drill anchor): install an ACTIVE binding through the EXISTING replacement installRecoveryBinding (this is the restore path), capture its digest, then call installInitialRecoveryBinding with a DIFFERENT valid binding — assert ok true, outcome \"CURRENT\", authority \"NONE\", code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND, layer TRANSACTION, and that binding.incarnationRef/bindingDigest are the RESTORE's values, not the caller's; then reopen and assert the stored ACTIVE digest and payload are still byte-identical to the restore's.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.test.ts"
       ],
-      "startedAt": "2026-08-14T09:24:40.700Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "THE REJECTION FIX. History/malformed-row/durability/restore-preservation tests were already landed and QA-verified; added the ONE missing DoD-3 condition — unprovable transaction outcome.\n\nNew case recovery-initial-install.test.ts:443 \"quarantines the handle with OUTCOME_UNKNOWN when the genesis COMMIT is unacknowledged\", using the harness at store-commit-ambiguity.test.ts:104-133: patch DatabaseSync.prototype.exec to run the REAL COMMIT then throw a simulated lost acknowledgement, restore in finally. Asserts (a) the thrown error is DurableStoreError with code exactly OUTCOME_UNKNOWN — never a returned refusal; (b) the handle is POISONED afterwards, pinned by code STORE_UNAVAILABLE plus message containing \"quarantined\", which distinguishes quarantine from a plain STORE_CLOSED; (c) reopening the file shows ACTIVE FOUND with REF_X — the row did land durably, which is what makes the outcome unprovable rather than failed.\n\nQA drill D5 RE-RUN AND NOW RED: moving `commitAttempted = true` to after `this.database.exec(\"COMMIT\")` fails on the code assertion at line 467 — \"AssertionError: expected 'STORE_UNAVAILABLE' to be 'OUTCOME_UNKNOWN'\", 1 failed | 15 passed. Not a compile error, not a mass failure. Restored by reversing the Edit; sha256 back to cf3b7574cb99e5ea.\n\nFile run green: 16 passed (was 15). pnpm --filter @moe/store typecheck exit 0.\n\nHAZARD: foreign whole-tree commit c576110 (task-f6cf8d16c2654641a92b0ee36924de0c) captured these +51 test lines. Not amending or resetting per project rail; HEAD's production bytes are the correct undrilled ones.",
+      "startedAt": "2026-08-14T09:24:40.700Z",
+      "completedAt": "2026-08-14T09:25:56.740Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the transaction in packages/store/src/recovery-initial-install.ts as `export class RecoveryInitialInstallStore extends RecoveryInstallStore` with the single public method `installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult`. Reuse, do not re-derive: in packages/store/src/recovery-install.ts widen `releaseInstallTransaction` from private to protected and export `SELECT_BINDING_SQL`, `INSERT_BINDING_SQL`, `rowMatchesBinding` and `isUniqueConstraintViolation` — no behavior change there, so its existing tests stay green and the two installers cannot drift on row validation or on unprovable-outcome handling. Exact order: requireOpen(); scope check (projectId === null || !writeProjectAsserted -> RECOVERY_INSTALL_SCOPE_REQUIRED) BEFORE the codec; encodeRecoveryBinding(input) and return its refusal as-is; slot !== \"ACTIVE\" -> RECOVERY_INITIAL_INSTALL_SLOT_UNSUPPORTED; then ONE `BEGIN IMMEDIATE` covering everything that follows — assertDurableProjectBinding(); PENDING row present -> PENDING_PRESENT; history present -> HISTORY_PRESENT via a single statement of EXISTS legs over command_decisions (scoped `WHERE project_id = ?` with this.projectId), command_receipts, domain_events, aggregate_heads and outbox_messages; ACTIVE row present -> decode it with decodeRecoveryBinding (return the codec refusal on bad bytes), cross-check with rowMatchesBinding (return RECOVERY_BINDING_ROW_DIVERGED), else return the CURRENT winner built from the DECODED bytes; otherwise run INSERT_BINDING_SQL ALONE — no DELETE, no INSERT OR REPLACE, no UPSERT — and COMMIT, returning INSTALLED. There is no read-then-write window and no caller-asserted pristine flag: every guard reads under the write lock the same transaction inserts in. A guard that refuses must ROLLBACK and return its refusal (a refusal is not a fault); route every thrown failure and any failing ROLLBACK through releaseInstallTransaction so an unprovable outcome poisons the handle and raises DurableStoreError OUTCOME_UNKNOWN rather than reporting a benign refusal, and map a UNIQUE violation to RECOVERY_INSTALL_INCARNATION_CONFLICT. Comment WHY the history legs are those five and why derived tables (projections, inbox_receipts, event_subscriptions, cursor_generations) and the bootstrap rows in store_metadata/store_project_binding are excluded. Keep the file under 250 physical lines (`grep -c '' <file>`); if it grows past that, split the vocabulary into recovery-initial-install-contracts.ts plus its .js bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-install.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.ts",
+        "packages/store/src/recovery-initial-install.js",
+        "packages/store/src/recovery-install.ts"
+      ],
+      "note": "Already landed at 671409f; re-verified on disk, unchanged this session (sha256 cf3b7574cb99e5ea before and after the D5 drill). recovery-initial-install.ts is 177 lines: guard order SCOPE -> codec -> slot -> BEGIN IMMEDIATE -> PENDING -> HISTORY (five EXISTS legs, command_decisions scoped by project_id) -> ACTIVE decode + rowMatchesBinding -> INSERT alone. No DELETE / OR REPLACE / UPSERT. Refusals ROLLBACK and return; throws route through the widened protected releaseInstallTransaction. recovery-install.ts got visibility widening only. QA re-verified this step correct and drilled D1-D4 red against it; the rejection was a missing test, not a code defect. NOTE on the rejection's second issue: the `commitAttempted = true` placement at line 109 is genuinely genesis-specific wiring — that is why the new step-3 test pins it directly rather than relying on the shared method's coverage. Code left as-is because it is already correct.",
+      "startedAt": "2026-08-14T09:25:59.796Z",
+      "completedAt": "2026-08-14T09:26:09.479Z"
     },
     {
       "stepId": "step-5",
       "description": "Publish the capability through the existing chain and turn steps 2-3 green. In packages/store/src/decision-ledger.ts: `class DecisionLedgerStore extends RecoveryInitialInstallStore` (the new class extends RecoveryInstallStore, so the chain order is preserved), add `installInitialRecoveryBinding` to the DecisionLedgerCore interface and to the frozen delegate object created by createDecisionLedgerCore. In packages/store/src/sqlite-event-store.ts add the public passthrough `installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult` next to installRecoveryBinding, with a one-line comment stating it INSERTS only into a pristine store and never replaces (measured: that file is 358 physical lines today and this adds ~8, staying under the 400 split bar; do not restructure it in this task). In packages/store/src/index.ts export RECOVERY_INITIAL_INSTALL_REASON_CODES as a runtime value plus the RecoveryInitialInstall* types. Then run `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` and confirm every case from steps 2-3 is green and that recovery-install.test.ts, recovery-install-entrypoint.test.ts (its reasonCodeCount 8 assertion must be untouched and passing), recovery-anchor*.test.ts and store-schema-v4-migration.test.ts are unchanged and green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/decision-ledger.ts",
         "packages/store/src/sqlite-event-store.ts",
         "packages/store/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/index.ts"
+      ],
+      "note": "Already landed at 671409f; re-verified. Published in all four required places: DecisionLedgerStore extends RecoveryInitialInstallStore, the DecisionLedgerCore interface, the frozen delegate literal in createDecisionLedgerCore, and the SqliteEventStore facade passthrough. index.ts exports RECOVERY_INITIAL_INSTALL_REASON_CODES as a runtime value plus the types. Verified this session: pnpm --filter @moe/store typecheck exit 0.",
+      "startedAt": "2026-08-14T09:26:11.660Z",
+      "completedAt": "2026-08-14T09:26:16.251Z"
     },
     {
       "stepId": "step-6",
       "description": "Prove the concurrency claim with two file-backed handles. Add packages/store/src/recovery-initial-install-race-worker.mjs modelled on command-decision-race-worker.mjs: import { SqliteEventStore } from \"./index.ts\" (importing through the package ROOT also proves the method is a real runtime value and not a type-only export), post PREOPEN_READY, Atomics.wait on gate slot 0, openForProject, post READY, Atomics.wait on gate slot 1, call installInitialRecoveryBinding with the worker's own distinct valid binding, then CLOSE THE STORE IN A FINALLY BEFORE posting the RESULT (a still-open handle makes the test's rmSync fail with EPERM on Windows). The RESULT message carries kind, ok, outcome, code, layer, incarnationRef, bindingDigest and `initialInstallType: typeof SqliteEventStore.prototype.installInitialRecoveryBinding`. Add the two-phase gate/start/release harness inline in recovery-initial-install.test.ts (same shape as startDecisionRaceWorker/releaseDecisionRace) and assert: both workers returned a RESULT (results.length === 2 — the race actually executed, not zero cases); each result's initialInstallType is \"function\"; the sorted outcomes are exactly [\"CURRENT\", \"INSTALLED\"]; the CURRENT result's incarnationRef and bindingDigest equal the INSTALLED one's and its code/layer are RECOVERY_INITIAL_INSTALL_ALREADY_BOUND / RECOVERY_INSTALL_TRANSACTION_LAYER; the winning ref is one of the two proposed refs; and after reopening the file, ACTIVE reads FOUND with that same incarnationRef and digest while PENDING is ABSENT. Bound the wait — if a worker never reports, fail by name rather than hanging the suite.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs",
         "packages/store/src/recovery-initial-install.test.ts"
       ],
       "newFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install-race-worker.mjs",
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Already landed at 671409f; re-verified green this session as part of the 16-test file run. recovery-initial-install-race-worker.mjs plus the inline two-phase gate harness at recovery-initial-install.test.ts:593 assert results.length === 2 (the race actually executed — nonzero generated cases), initialInstallType \"function\" through the package root import, sorted outcomes exactly [\"CURRENT\",\"INSTALLED\"], the loser echoing the winner's incarnationRef/digest with code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND at TRANSACTION layer, and ACTIVE FOUND / PENDING ABSENT after reopen. Wait is bounded and fails by name. QA drill D1 (ACTIVE branch -> DELETE+INSERT) reddens this test on the outcome assertion.",
+      "startedAt": "2026-08-14T09:26:18.369Z",
+      "completedAt": "2026-08-14T09:26:24.843Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the mutation drills that prove these tests are attached to the production surface. For EACH drill: record `sha256sum` of the file first, apply the mutation with the Edit tool (never a shell one-liner — backslash and escape collapse through the shell can duplicate or corrupt a guard), confirm the anchor matched exactly once, run only the affected test file, then restore by reversing the Edit and re-check the sha256 equals the pre-drill value (never `git checkout`, which reverts to HEAD and would destroy uncommitted work in this shared worktree). D1 REPLACEMENT: change the ACTIVE-present branch from returning CURRENT to DELETE-then-INSERT returning INSTALLED — the restore-preservation test AND the race test must go red on an OUTCOME assertion (the winner's digest/refs and the sorted-outcomes assertion), not on a compile error. D2: delete the PENDING guard — the PENDING_PRESENT cases must go red on the code assertion. D3: delete the history EXISTS check — both history fixtures must go red. D4: delete the rowMatchesBinding cross-check — the diverged-column case must go red. Read each failure message and confirm it names the assertion the drill targets; a red for the wrong reason (a compile error, a hung worker, or every test failing at once) means the drill or the environment is broken, not that the guard is proven. Record the reddened test names and the decisive failure line for the completion evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.ts"
+      ],
+      "note": "Drills re-run this session against the unchanged production file (pre-drill sha256 cf3b7574cb99e5ea, restored to cf3b7574cb99e5ea after each, verified by hash — no git checkout).\n\nD5 (THE REJECTION DRILL, previously green, now RED): moved `commitAttempted = true` to after `this.database.exec(\"COMMIT\")` at recovery-initial-install.ts:109. Reddens ONLY the new case — \"quarantines the handle with OUTCOME_UNKNOWN when the genesis COMMIT is unacknowledged\", line 467: \"AssertionError: expected 'STORE_UNAVAILABLE' to be 'OUTCOME_UNKNOWN'\". 1 failed | 15 passed. A durably-landed but unacknowledged COMMIT now cannot silently degrade to an ordinary operational error on an unpoisoned handle.\n\nD1 REPLACEMENT (task rail 3 anchor, re-run): ACTIVE-present branch changed to DELETE-then-fall-through-to-INSERT. 4 failed | 12 passed, each on an OUTCOME assertion, none a compile error:\n- race: \"expected [ 'INSTALLED', 'INSTALLED' ] to deeply equal [ 'CURRENT', 'INSTALLED' ]\"\n- restore-preservation: \"yields to an already-installed restore binding without touching its bytes\"\n- \"tampered bytes: expected a refusal, got INSTALLED\"\n- \"diverged column: expected a refusal, got INSTALLED\"\n\nD2 (PENDING guard off), D3 (history EXISTS off), D4 (rowMatchesBinding cross-check off): verified RED by QA at this identical sha cf3b7574cb99e5ea during the rejection review — D2 PENDING_PRESENT + precedence red on the code assertion, D3 both history fixtures red, D4 diverged-column red. The production file has not changed by one byte since those drills; this session's diff is test-only, so those results still bind. Not re-burned.",
+      "startedAt": "2026-08-14T09:26:33.058Z",
+      "completedAt": "2026-08-14T09:27:06.182Z"
     },
     {
       "stepId": "step-8",
       "description": "Close out. Re-measure every production file touched with `grep -c ''` (PowerShell Measure-Object -Line undercounts) and confirm recovery-initial-install.ts is <=250 and sqlite-event-store.ts is under 400. Run the fresh full gate `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` from the repo root and keep its verbatim tail as the completion evidence, plus the pass count compared against the ~453-test store baseline so no existing test silently disappeared. Run the adversarial-self-review skill over the whole diff, specifically: what happens if this runs twice concurrently on the same file; what a caller does with CURRENT versus INSTALLED (authority must come only from INSTALLED); whether any refusal constant leaked observed data; whether any guard can be answered by an earlier one and thereby go untested; and whether a poisoned handle can still be mistaken for a benign refusal. Then stage the owned paths explicitly — `git add` is required first for the new untracked files, because a commit pathspec naming an untracked path commits nothing at all — verify `git status --porcelain` shows no foreign path staged (this worktree is shared; .moe/** and packages/runner/** belong to other agents), commit with `git commit -- <the 8 owned paths>`, and confirm with `git show --stat` that only those paths landed. Report the base-ref diff `git diff <merge-base>..HEAD -- packages/store/src` for QA.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.test.ts",
         "packages/store/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "SIZES (grep -c ''): recovery-initial-install.ts 177, recovery-initial-install-contracts.ts 102, recovery-install.ts 191, decision-ledger.ts 149, sqlite-event-store.ts 368, index.ts 117. All under the 250 target except the two pre-existing files, both under the 400 split bar. Production bytes unchanged this session — sha256 cf3b7574cb99e5ea before and after every drill.\n\nGATE: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exit 0 — 41 files / 469 tests (QA's baseline was 41/468; the delta is exactly the one new case, so nothing silently disappeared).\n\nADVERSARIAL REVIEW of the diff, item by item:\n- Concurrent double-run: unchanged — every guard reads under the same BEGIN IMMEDIATE that inserts, proven by the two-handle race test asserting exactly [\"CURRENT\",\"INSTALLED\"].\n- CURRENT vs INSTALLED: CURRENT carries authority \"NONE\" and outcome != \"INSTALLED\"; only INSTALLED grants genesis authority. Documented at the method.\n- Leaked observed data: the three refusals remain frozen module constants; the new test adds none.\n- Guard masking: precedence test still pins PENDING before HISTORY before ALREADY_BOUND, and D1/D5 both reddened on their own assertions, not on a neighbour's.\n- Poisoned handle mistaken for a benign refusal: THIS WAS THE GAP AND IT IS NOW CLOSED — the new case asserts the throw is OUTCOME_UNKNOWN and that the handle is quarantined (STORE_UNAVAILABLE + \"quarantined\"), distinguishing it from STORE_CLOSED.\n- Side effects on the error path: FOUND AND FIXED IN THIS STEP. The first draft restored DatabaseSync.prototype.exec in a finally but called store.close() inline, so a failing assertion would leak an open SQLite handle into the Windows afterEach rmSync (EPERM kills the vitest worker with zero output and hides which assertion failed). Restructured so both the prototype restore and store.close() run in one finally covering every exit path. Re-ran the file green (16/16) and re-ran drill D5 against the restructured test — still red on \"expected 'STORE_UNAVAILABLE' to be 'OUTCOME_UNKNOWN'\", 1 failed | 15 passed.\n\nCOMMIT a509233, explicit pathspec, git show --stat confirms ONE path: packages/store/src/recovery-initial-install.test.ts. No foreign path staged; .moe/** and apps/daemon/** left untouched for their owners.\n\nHAZARD DISCLOSED: the +51-line first draft of this test was swept into foreign whole-tree commit c576110 (task-f6cf8d16c2654641a92b0ee36924de0c) before I could commit it. Per project rail I did not amend, reset, or re-stage it. QA should review by base-ref diff: git diff d7a71cb..HEAD -- packages/store/src (10 files, all owned, +1119/-7).",
+      "startedAt": "2026-08-14T09:27:08.528Z",
+      "completedAt": "2026-08-14T09:29:01.168Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5dfdc624",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -127,12 +167,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T09:24:40.700Z",
+  "updatedAt": "2026-08-14T09:30:09.561Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -145,7 +185,13 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -180,20 +226,20 @@
   },
   "planApprovedAt": "2026-08-14T08:53:58.406Z",
   "workStartedAt": "2026-08-14T08:55:22.349Z",
-  "reviewStartedAt": "2026-08-14T09:12:28.886Z",
+  "reviewStartedAt": "2026-08-14T09:30:09.561Z",
   "verification": {
     "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n\n Test Files  41 passed (41)\n      Tests  468 passed (468)\n   Start at  12:11:35\n   Duration  4.26s (transform 10.21s, setup 0ms, import 18.64s, tests 22.86s, environment 3ms)\n\nGATE_EXIT=0",
-    "reportedAt": "2026-08-14T09:12:28.886Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  41 passed (41)\n      Tests  469 passed (469)\n   Start at  12:28:45\n   Duration  4.79s (transform 10.54s, setup 0ms, import 18.63s, tests 22.90s, environment 3ms)",
+    "reportedAt": "2026-08-14T09:30:09.561Z"
   },
   "filesModified": [
-    "packages/store/src/recovery-initial-install.ts",
-    "packages/store/src/recovery-initial-install.js",
-    "packages/store/src/recovery-initial-install.test.ts",
-    "packages/store/src/recovery-install.ts",
     "packages/store/src/recovery-initial-install-contracts.ts",
     "packages/store/src/recovery-initial-install-contracts.js",
+    "packages/store/src/recovery-initial-install.test.ts",
+    "packages/store/src/recovery-initial-install.ts",
+    "packages/store/src/recovery-initial-install.js",
+    "packages/store/src/recovery-install.ts",
     "packages/store/src/decision-ledger.ts",
     "packages/store/src/sqlite-event-store.ts",
     "packages/store/src/index.ts",
