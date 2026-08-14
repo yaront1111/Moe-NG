@@ -123,7 +123,7 @@
     {
       "stepId": "step-7",
       "description": "Run the single completion-evidence command fresh in the foreground: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test`. Then run the repository/public-consumer legs required by AGENTS.md (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`), comparing failures with the recorded merge-base baseline and reporting every foreign failing path verbatim. Confirm both production files are <=250 lines, the bridge bytes/LF are exact, no probe/generated evidence remains, and the scoped diff contains only the six owned paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.js",
@@ -132,12 +132,14 @@
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts"
       ],
-      "startedAt": "2026-08-14T09:02:20.349Z"
+      "note": "All gates run fresh in the FOREGROUND. Every leg is exit 0 — there is no foreign red left to disclose, and the two repo legs are strictly BETTER than the baseline I recorded in step 1.\n\nCOMPLETION EVIDENCE (the plan's named command, run as one chain): `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` -> exit **0**, `Test Files 43 passed (43)`, `Tests 1318 passed (1318)`. Baseline was 42 / 1237, so +1 file and +81 tests, all mine.\n\nAGENTS.md legs, each compared against the step-1 pre-diff baseline:\n- `pnpm typecheck` -> exit **0**, all 12 packages Done including packages/scheduler. Baseline was RED (packages/runner TS2741 'launchSelection'); the peer's task-d23a913f landed and cleared it. My delta introduces no new failing path.\n- `pnpm test` -> exit **0**, `254 passed (254)`, `5632 passed | 1 skipped (5633)`. Baseline was RED (packages/runner/src/index-surface.test.ts:540 GRANT_WRAPPER_MISMATCH). Now green; file count 251 -> 254 and tests 5535 -> 5633.\n- `pnpm verify:foundation` -> exit **0** (30 files / 488 tests; the `pnpm typecheck &&` prefix that pre-blocked it at baseline now passes).\n- `pnpm verify:store` -> exit **0** (41 files / 466 tests; baseline leg was 40 / 453 — the growth is foreign store WIP, not mine).\n- `pnpm --filter @moe/daemon test` -> exit **0** (68 files / 1230 tests, identical to baseline).\nPath-attributed delta (HEAD failures minus baseline failures, intersected with owned paths) is EMPTY, trivially: HEAD has no failures.\n\nHYGIENE, measured not assumed:\n- Production line counts by `grep -c ''` (never PowerShell Measure-Object): expansion-current-hold.ts **250**, expansion-binding.ts **141** (was 291), index.ts **385** barrel — all at or under the 250 target except the pre-existing barrel, which is under the 400 split threshold.\n- Bridge is byte-exact: 45 bytes, `export * from \"./expansion-current-hold.ts\";` + LF, confirmed by `cat -A` (trailing `$`, no `^M$`).\n- Byte-level scan of all six owned files: CR=0, NUL=0, every file ends in LF. (The shell `grep -c $'\\r'` form reports a false positive on every line here — I re-ran it in Python against raw bytes.)\n- No probe, scratch, drill or generated evidence file anywhere: the drill harness lived in /tmp and was deleted; `git status --porcelain --untracked-files=all -- packages apps` lists no untracked file of mine.\n\nSCOPE: `git diff --name-only d7a71cb -- packages/scheduler/` (d7a71cb was HEAD when I claimed) returns EXACTLY the six owned paths and nothing else — 965 insertions, 222 deletions. Every other path changed since d7a71cb was attributed by `git log -1 -- <path>` to another task: packages/runner + .codex to task-d23a913f/task-c81953d2, packages/store to task-b6e3dd2a/task-584f4af0/the recovery fixes. None of it is mine and none of it was touched.\n\nStanding note for QA: five of my six files were captured by the FOREIGN whole-tree commit 7dbf9ba (task-d23a913f). Per the rail I did not amend, reset, or claim it. Review by base-ref diff `git diff d7a71cb -- packages/scheduler/` — I verified the committed bytes equal the gated bytes by sha256 for all five, so the commit carries the exact code these numbers were produced from.",
+      "startedAt": "2026-08-14T09:02:20.349Z",
+      "completedAt": "2026-08-14T09:04:10.349Z"
     },
     {
       "stepId": "step-8",
       "description": "Perform the final adversarial review over the owned-path merge-base diff: attack hostile descriptors/proxies, replay laundering, UNKNOWN upgrades, provenance/target fabrication, missing current facts, detached immutability, goal/graph comparison ordering, public-root runtime reachability, and accidental duplicated mapping. If review changes bytes, rerun the exact completion-evidence command. Before completion, inspect shared staging, unstage foreign entries only, and commit strictly by explicit owned pathspec; verify `git show --stat` and report any foreign whole-tree commit hazard rather than rewriting history.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.js",
@@ -145,11 +147,17 @@
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts"
+      ],
+      "note": "Adversarial review of the owned-path base-ref diff, read as an attacker rather than the author. One real gap found and closed; the rest are recorded as considered-and-cleared so QA does not have to re-derive them.\n\nGAP FOUND AND FIXED. The three refusal vocabularies MOVED source file in this change, and nothing pinned them BY VALUE — every existing assertion is a `toContain`, which stays green if the move dropped a code or if the set later grows unreviewed. Added a hand-transcribed exact-contents pin for all three plus a frozen assertion. Proven non-vacuous: deleting `EXPANSION_BINDING_HOLD_VERSION_MISMATCH` from the production array reddened the new test BY NAME.\n\nThat drill's restore initially went wrong and I caught it rather than trusting it: my removal anchor omitted the two leading spaces, so the restore left `EXPANSION_BINDING_OPPORTUNITY_WINNER_MISMATCH` over-indented. sha256 disagreed with the baseline (ab9f30f4… vs 0e48b38c…) even though tests were green — the hash is the only thing that caught it. Repaired by exact edit (never `git checkout`, which would have destroyed uncommitted peer work in this shared tree); the file is now byte-identical: sha256 0e48b38c45d4dbe1892d74a64c831c2aeafd1156da8ce2121d84ab76e23b22fe, `git diff` empty, 250 lines.\n\nATTACK SURFACE WALKED, each cleared with the reason:\n- Hostile descriptors/proxies: every read goes through `exactRecord` -> `isPlainRecord`/`hasOnlyOwnStringKeys`/`readOwnDataProperty`, which reject a proxy (revoked included, via a try/catch around `types.isProxy`), a custom prototype, a symbol key, a non-enumerable key and an accessor WITHOUT invoking it. Pinned by 15 cases plus a getter-invocation counter asserting `reads === 0`.\n- Replay laundering: the lifecycle/version/terminal-receipt gate runs BEFORE the replay, and the presented value is compared to the replayed state after it. A stripped terminal receipt is caught only by `currentAuthority.holdVersion`, which is why it is required — pinned by two laundered-hold tests.\n- UNKNOWN upgrades: no path converts an UNKNOWN into a success or into a REFUSED. `unknownAuthority` is the only UNKNOWN minter and it always names `missingInput`; the composer returns the producer's refusal object unmodified.\n- Provenance/target fabrication: `target` is non-null on exactly one path, copied from `inspection.target`, and the inspector is always called with our own `\"HOLD_BINDING\"` literal so no caller can influence it. Drill 7 proved the copy is load-bearing.\n- Detached immutability: the binding is built from `replayed.state` — the REDUCER's object — not from the caller's presented value, so there is no caller aliasing to break in the first place; `deepFreeze` covers the nested `workerHandoff`. Asserted by mutating the caller's authority record, the handoff and the hold after the call.\n- Comparison ordering: goalVersion-then-graphEpoch preserved in the composer; the changed compound-fault precedence is pinned explicitly rather than left implicit.\n- Duplicated mapping: `grep` confirms ONE hold-binding projection in the repo (expansion-current-hold.ts:217) and that `reduceExpansionPlanningHold` / `inspectPlanningExpansionContract` / `matchesTrusted` appear in no other non-test scheduler source. (expansion-binding-facts.ts:196 is the ADMITTED-facts projection — a different shape, untouched.)\n- Concurrency: a pure total function with no IO and no shared state; two concurrent calls cannot interact. The real TOCTOU risk lives in the CALLER reading the five current values non-atomically, which the module header and the consumer comment both state as the caller's obligation rather than papering over.\n- Error-path side effects: none to leak. The only subprocess is the test's Node smoke, spawned with an argument array, `shell: false`, and a 20s timeout so it is reaped rather than orphaned.\n- `isBindingRefusal`/`refusalOf` are structural and could in principle be abused — they are deliberately NOT root-published, and the step-5 negative control asserts all three withheld names stay absent.\n\nGate re-run after the review edit: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` exit **0**, 43 files / **1319 tests**.\n\nCOMMIT. Staging area inspected first and found EMPTY, so no foreign entry needed unstaging. Committed strictly by explicit pathspec — `git add -- packages/scheduler/src/expansion/expansion-current-hold.test.ts`, no `git add -A`, no push, no reset, no stash. `git show --stat` on **79d01e6**: 1 file changed, 25 insertions. `git status --porcelain -- packages/scheduler/` is now empty.\n\nFOREIGN WHOLE-TREE COMMIT HAZARD — reported, not rewritten. Two foreign commits swept my in-progress files: **7dbf9ba** (task-d23a913f) took five of six paths, and **6ffb4fe** (task-de496f47) later took the index-surface.test.ts additions. Per the standing rail I did not amend, reset, or mint an empty claim commit. I verified instead that the committed bytes ARE the gated bytes: `git show HEAD:<path> | sha256sum`",
+      "startedAt": "2026-08-14T09:04:14.940Z",
+      "completedAt": "2026-08-14T09:06:45.091Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4e189bb5",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -180,12 +188,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:48:41.262Z",
-  "updatedAt": "2026-08-14T09:02:20.349Z",
+  "updatedAt": "2026-08-14T09:07:58.847Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:57:18.499Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -201,7 +209,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T23:11:43.356Z",
@@ -224,5 +234,20 @@
     "escalatedAt": "2026-08-14T08:43:16.837Z"
   },
   "planApprovedAt": "2026-08-13T23:11:45.415Z",
-  "workStartedAt": "2026-08-13T23:28:48.323Z"
+  "workStartedAt": "2026-08-13T23:28:48.323Z",
+  "reviewStartedAt": "2026-08-14T09:07:58.847Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/scheduler/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  43 passed (43)\n      Tests  1319 passed (1319)\n   Start at  12:06:51\n   Duration  1.45s (transform 10.62s, setup 0ms, import 14.58s, tests 2.03s, environment 3ms)\n\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-14T09:07:58.847Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/expansion/expansion-binding.ts",
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/index-surface.test.ts",
+    "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+    "packages/scheduler/src/expansion/expansion-current-hold.ts",
+    "packages/scheduler/src/expansion/expansion-current-hold.js"
+  ]
 }

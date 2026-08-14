@@ -1,0 +1,36 @@
+{
+  "id": "task-1430dfae1a0e4e8c88fafc7bf011ba9f",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Daemon stream command identity and server timing observations",
+  "description": "Objective: make the daemon's event-stream seam emit the command/run identity and the daemon-observed timing readings that every downstream timing and effort attribution needs, without inventing either. Deliverable: StreamEvent and WireEvent carry the command identity (commandId, and the actor/principal plus session/run identity the source actually provides) and DISTINCT daemon-observed timestamps, each bound to an explicit observer so no later layer compares two clocks silently. SPIDR slice 1 of 3 from parent task-1eeb2dccce204671b442704cd60b38ad; siblings are the live consumer edge and the decision-effort observations. MEASURED AT HEAD 6ffb4fe (re-measure, this WILL be stale): apps/daemon/src/http/event-stream-contract.ts:30 StreamEvent is exactly {aggregateId, committedAt, eventId, eventType, globalPosition} and WireEvent is the same five with globalPosition as string - no commandId, no actor, no session, one timestamp only. packages/store/src/command-decision-test-helpers.ts:85 shows domain_events HAS a command_id column NOT NULL with an FK to command_receipts, and packages/store/src/outbox-relay/transactional-outbox-relay.ts:54 queries domain_events BY command_id, so command identity exists at the source. OPEN RISK THIS TASK MUST RESOLVE FIRST: event-stream-contract.ts states in its own header comment that the store subscription surface is deliberately NOT imported and that the daemon does not own packages/store. If the subscription read page cannot surface command_id without editing @moe/store, do NOT edit it - report blocked and name a store task. NOT in scope: control-room, client, render or human timing, focus/attention/effort records, benchmark statistics or thresholds. Verification: pnpm --filter @moe/daemon test && pnpm typecheck.",
+  "definitionOfDone": [
+    "StreamEvent and WireEvent carry the command identity (commandId plus the actor/principal and session/run identity the source genuinely provides) alongside the existing five fields, and every identity value is COPIED from the source - no layer synthesizes, defaults or derives one.",
+    "Daemon-observed timing readings are distinct and each names its observer explicitly; a server-emitted reading is never collapsed into a server-committed one, and the wire carries enough observer/clock binding that a consumer can tell which clock produced each reading.",
+    "An event whose source lacks an identity or a reading yields the exact stable UNKNOWN/absent code plus exact layer at the seam - never an empty string, a zero timestamp, a fabricated id, or a silently dropped field.",
+    "Seam refusals stay separate from forwarded store refusals exactly as today: EVENT_STREAM_REFUSAL_CODES remains closed and every frame still names its layer, so a seam refusal is never mistaken for a store refusal.",
+    "Refusal tests pin the exact code AND layer; generated identity/observation cases assert a nonzero exact cardinality, and a mutation that drops an identity field from the wire mapping or collapses two readings turns a named test red.",
+    "Fresh pnpm --filter @moe/daemon test && pnpm typecheck exits 0."
+  ],
+  "taskRails": [
+    "Do not edit packages/store. The stream contract deliberately does not own that package; if command identity cannot reach the seam without a store change, report blocked and name a store task instead of reaching across the boundary.",
+    "Do not collapse distinct daemon readings into one timestamp; a server-emitted reading is not a server-committed reading.",
+    "Never compare or subtract timestamps from different clocks at this layer. This task emits readings with observer binding; it computes no durations.",
+    "Instrumentation is observational and grants no authority or evidence strength; identity fields are copied, never minted.",
+    "Target <=250 physical lines per production source and split before 400; the cap is per file. event-stream-contract.ts is 177 and event-stream.ts is 182 today."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
+  "priority": "HIGH",
+  "order": 30.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-14T09:07:53.919Z",
+  "updatedAt": "2026-08-14T09:07:53.919Z"
+}

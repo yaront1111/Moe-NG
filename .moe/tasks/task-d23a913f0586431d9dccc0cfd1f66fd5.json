@@ -187,7 +187,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-111488fe",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -230,7 +230,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.900Z",
-  "updatedAt": "2026-08-14T08:58:25.160Z",
+  "updatedAt": "2026-08-14T09:05:39.496Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:45:50.536Z",
     "plannedStepCount": 10,
@@ -240,7 +240,8 @@
   "contextFetchedBy": [
     "architect-b1a46457",
     "worker-68608f71",
-    "worker-06df66bb"
+    "worker-06df66bb",
+    "qa-111488fe"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",

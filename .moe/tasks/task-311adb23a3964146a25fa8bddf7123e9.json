@@ -20,12 +20,15 @@
     {
       "stepId": "step-1",
       "description": "AUDIT, NO EDITS. This is a re-plan after two rejections on ONE property, so start by proving where that property currently holds. Record `sha256sum` and `grep -c ''` for the four owned files (measured today: work-claim-shape.ts 154, work-claim.ts 192, work-slot-ceiling.ts 72, work-kernel.ts 261 — kernel is NOT owned by this repair and must not be touched). Then build the boundary-read audit table: for EVERY site in apps/daemon/src/work/** where a caller-derived value has a property read (`x[\"k\"]`, destructuring, spread, iteration, `.length`), record the site and the snapshot that precedes it. Known sites to include and confirm: work-lease.ts:62-63 reads lease[\"record\"]/[\"proof\"] (preceded by mirrorDeep in claimLease); work-claim.ts:90 reads slot[\"rows\"]/[\"dimension\"]/[\"slotRef\"]/[\"requestId\"] (mirrorDeep); work-claim.ts:106 reads budget[\"view\"]/[\"admission\"]/[\"gate\"] (mirrorDeep); work-claim.ts:140-142 reads effect[\"command\"]/[\"intent\"] (mirrorDeep); work-slot-ceiling.ts:35-38 reads claim[\"dimension\"]/[\"state\"]/[\"slotRef\"] — THIS is the one with no deep snapshot in front of it, because mirrorList (work-claim-shape.ts:138-154) forwards elements by reference. Also answer the governor's two open questions explicitly in the audit: (a) every other array or nested collection that crosses the boundary — slot.rows and budget.admission.amounts both ride inside mirrorDeep and are therefore already detached; confirm by reading, not assuming; (b) any snapshot taken AFTER a length or type check rather than before — confirm mirror/mirrorList/detach all ask `types.isProxy` before `Array.isArray` (a revoked proxy makes Array.isArray throw). Run the named gate `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/scheduler test` and keep its output as the pre-change path-attributed baseline.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/work-claim-shape.ts",
         "apps/daemon/src/work/work-claim.ts",
         "apps/daemon/src/work/work-slot-ceiling.ts"
-      ]
+      ],
+      "note": "AUDIT at HEAD 79d01e69. Owned-file hashes/physical lines: work-claim-shape.ts 0C7C0759AAD519073A7B97D60F97FB11CED9705C910D096C1B5233B8A4F3B861 / 154; work-claim.ts AA1DBC41250CA6ABE31390EAD045DB0E5ADA35C359827B6614B2B39C128B5E5E / 192; work-slot-ceiling.ts 10C3B9870EA16AC15A8428C4BE71B8FBF62985468843D4EB3E7D229967A7B98E / 72. work-kernel.ts (measured only, deliberately not owned/touched) 295C951FBFBEABBBB39CC4D5B56E7BC3DB5E9D5103C2014853AFE6E6B4F096E6 / 261 pre-existing lines. Property-read audit: outer routing uses shallow mirror only, then claimLease/claimSlot/claimBudget/claimIntent each call mirrorDeep before property reads; slot.rows and budget.admission.amounts are recursively detached by mirrorDeep->detach. detach checks types.isProxy before Array.isArray; mirror checks proxy before Array.isArray; mirrorList checks proxy before Array.isArray. Confirmed sole gap: mirrorList validates array descriptors but forwards each descriptor.value, after only a proxy check, and countOccupyingSlots then reads dimension/state/slotRef directly without exact-key checking. Exact baseline command was run; it stopped at foreign runner typecheck errors packages/runner/src/providers/claude/claude-launcher.ts:175 TS2339 x2 (RuntimeBindingCheck.failure), before daemon/scheduler tests. No owned files changed in this audit.",
+      "startedAt": "2026-08-14T09:05:56.011Z",
+      "completedAt": "2026-08-14T09:07:59.136Z"
     },
     {
       "stepId": "step-2",
@@ -76,7 +79,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-25ca55c6",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -131,18 +134,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-14T09:01:12.558Z",
+  "updatedAt": "2026-08-14T09:07:59.136Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 12,
+    "executedStepCount": 13,
     "rejectCount": 2,
     "reopenCount": 2
   },
   "contextFetchedBy": [
     "architect-b1a46457",
-    "architect-8b21d0bb"
+    "architect-8b21d0bb",
+    "worker-25ca55c6"
   ],
   "priorHandoffs": [
     {
@@ -155,7 +159,9 @@
       "reason": "Human explicitly confirmed the assigned architect worker is dead and requested unclaim; releasing only this confirmed-crash assignment."
     }
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T09:01:10.471Z",
   "planningNotes": {

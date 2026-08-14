@@ -131,8 +131,8 @@
       "completedAt": "2026-08-14T08:57:07.337Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -175,14 +175,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:26.455Z",
-  "updatedAt": "2026-08-14T08:58:30.703Z",
+  "updatedAt": "2026-08-14T09:05:20.732Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:12:53.445Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-14T09:05:20.732Z",
+    "wallClockMs": 39147287
   },
   "contextFetchedBy": [
     "worker-28758e8f",
@@ -256,7 +258,7 @@
     "packages/runner/src/surface/claude-surface.ts",
     "packages/runner/src/index-surface.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T23:01:28.344Z",
+  "reviewCompletedAt": "2026-08-14T09:05:20.732Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2: the injected grant port must perform and accept only the exact one-use CAS transition.",
@@ -301,5 +303,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-14T09:05:20.732Z",
+  "reviewSummary": "APPROVED (retry #1). Full evidence: #general msg-2293f9e8. Both rejected defects fixed and drilled by me; authority.ts sha256 523981b5... restored byte-exact after each drill, owned paths clean.\n\nD1 grant echo neutered to `return answer` -> 4 GRANT_ECHOES red, \"expected failure, received OBSERVED\" (substituted grant would otherwise drive a full launch). Bind: durable CAS first (delegated refusals raw, code/layer preserved), then pure consumeActivationGrant as ORACLE over presented bytes, then field-for-field echo on grantId/intentId/wrapperIdentity/state/version. Oracle emits version+1, so the echo IS \"same identities + exact input version+1\".\nD2 registration echo neutered -> all 10 cases red (5 fields x 2 phases). My original attack (lock-other / pending:attacker at PREFLIGHT) covered, opens=0, trace exactly [\"runtime\",\"validate\"].\nD3 deps refusal neutered -> 2 public-seam tests red.\n\nField maps are Record<keyof T,true> so a new field fails compile until compared; fields primitive so === sound. Hostile cases assert decode .kind===\"OK\" first (positive control). Fixture store uses production consumeActivationGrant/parseActivationGrant — no test-owned authority. TOCTOU closed: exactRecord reads via readOwnDataProperty (data-only, proxy-rejecting).\n\nGATES re-run foreground: declared `pnpm --filter @moe/runner typecheck && test` exit 0, 58 files/1827 tests (matches task.verification). Repo-wide typecheck exit 0 (18/19); repo-wide test exit 0, 254 files/5632 passed -> HEAD-minus-base failures intersected with owned paths empty. Bare-root smoke via bare @moe/runner, no deep import, probe deleted: REFUSED/CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED/LAUNCHER, grants 0, regs 0.\n\nDoD 5: surface publishes only factory + phases + 3 types; 9-name negative control withholds CLAUDE_LAUNCHER_DEFAULTS. Consumer edge comment-ba05dec3 on task-6cbff010. Per-file caps 208/210/249/236, all <250. Scope judged on base-ref diff per governor note."
 }

@@ -31,7 +31,7 @@
     {
       "stepId": "step-2",
       "description": "TDD red: add focused record/codec and ledger tests against the planned production imports. Pin the exact six-class/ seven-population hand-written mapping and nonzero cardinalities; exact `EXTRA`, `UNKNOWN`, `DUPLICATE`, and `OMITTED` mapping refusal codes at layer `RECOVERY_INVENTORY`; every disposition arm (including design-required terminal `CANCELLED` alongside task-required `ABSENT`, `ADOPTED`, `QUARANTINED`, `UNKNOWN`); stale-incarnation and stale-key adoption refusals; UNKNOWN normalization with separately retained upstream code/layer; canonical field/digest mutations; nested freeze and secret absence. Add real temporary-file `SqliteEventStore` tests for exact replay, two-handle contention, close/reopen, missing/corrupt/truncated/extra-event evidence, and assert every generated sweep ran its exact nonzero case count. Run only these tests and record the expected missing-module/red failures.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
@@ -40,12 +40,17 @@
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
       ],
-      "startedAt": "2026-08-14T09:02:19.984Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-forgery.test.ts"
+      ],
+      "note": "TDD red recorded. New apps/daemon/src/recovery/recovery-inventory-forgery.test.ts drives SELF-CONSISTENT hostile bytes: each case mutates one semantic invariant on a record built by the production builder, recomputes recordDigest via production recoveryReconciliationDigest, re-encodes via production encodeRecoveryReconciliationRecord, then decodes via production decodeRecoveryReconciliationRecord. `npx vitest run --root . --config package.json src/recovery/recovery-inventory-forgery.test.ts` => 14 failed | 3 passed (17). The 3 GREEN are the deliberate positive controls and they prove the machine is real, not broken: (a) an untouched re-sealed record still decodes ok:true with 7 items/6 proofs and the identical digest, so every red below is the forgery and not the seal; (b) all five untouched dispositions decode ok:true; (c) an UNKNOWN-truth proof retains the verbatim INVENTORY_ADAPTER upstream tuple. The 14 RED are exactly the QA-named defects plus their siblings: child proof UNKNOWN under record COMPLETE; item UNKNOWN under record COMPLETE; forged derived-upstream code; sentinel slot claiming COMPLETE; sentinel slot with a foreign upstream code; a required-field drop on all 5 dispositions; a forbidden-field add on 4; ADOPTED without restoredIntentRef; fully reversed items; population-order swap inside one class (a class-grouping-only check would pass this); identity-order swap inside one population; one class-scoped identity claimed by two populations (order stays canonical so only uniqueness can answer); appended duplicate with itemCount adjusted; and the builder accepting COMPLETE+upstream. Every sweep asserts its exact nonzero count (5, 4, 5). refusedBytes() additionally asserts the answer is NOT RECOVERY_INVENTORY_RECORD_DIGEST_MISMATCH, so a digest guard cannot shadow a missing semantic guard.",
+      "startedAt": "2026-08-14T09:02:19.984Z",
+      "completedAt": "2026-08-14T09:05:50.257Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement the focused contract and exact LF NodeNext bridge. Freeze ordered proof classes as `PROVIDER_PROCESS_LAUNCH_LOCK`, `RESOURCE`, `WORKSPACE`, `INTEGRATION_TARGET`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`; freeze the seven design populations and the explicit class-to-population rows, with only the provider class containing two populations. Define closed proof/truth/disposition/result vocabularies, precise mapping error codes (`RECOVERY_INVENTORY_CLASS_EXTRA|UNKNOWN|DUPLICATE|OMITTED`), coordinator `UNKNOWN_TRUTH`, layer `RECOVERY_INVENTORY`, ledger upstream codes/layer, bounds, and immutable record/input/result types. Model terminal cancellation explicitly without granting retry/history authority; do not let Git/submodule evidence certify durable integration attempts or artifact-object evidence certify scheduler resources.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
@@ -53,7 +58,8 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:05:52.797Z"
     },
     {
       "stepId": "step-4",
@@ -146,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-14T09:02:19.984Z",
+  "updatedAt": "2026-08-14T09:05:52.797Z",
   "contextFetchedBy": [
     "worker-06df66bb"
   ],
@@ -154,7 +160,7 @@
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 17,
+    "executedStepCount": 18,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -162,7 +168,8 @@
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [
     {

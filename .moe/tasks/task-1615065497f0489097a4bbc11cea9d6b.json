@@ -109,7 +109,7 @@
     {
       "stepId": "step-6",
       "description": "Prove the concurrency claim with two file-backed handles. Add packages/store/src/recovery-initial-install-race-worker.mjs modelled on command-decision-race-worker.mjs: import { SqliteEventStore } from \"./index.ts\" (importing through the package ROOT also proves the method is a real runtime value and not a type-only export), post PREOPEN_READY, Atomics.wait on gate slot 0, openForProject, post READY, Atomics.wait on gate slot 1, call installInitialRecoveryBinding with the worker's own distinct valid binding, then CLOSE THE STORE IN A FINALLY BEFORE posting the RESULT (a still-open handle makes the test's rmSync fail with EPERM on Windows). The RESULT message carries kind, ok, outcome, code, layer, incarnationRef, bindingDigest and `initialInstallType: typeof SqliteEventStore.prototype.installInitialRecoveryBinding`. Add the two-phase gate/start/release harness inline in recovery-initial-install.test.ts (same shape as startDecisionRaceWorker/releaseDecisionRace) and assert: both workers returned a RESULT (results.length === 2 — the race actually executed, not zero cases); each result's initialInstallType is \"function\"; the sorted outcomes are exactly [\"CURRENT\", \"INSTALLED\"]; the CURRENT result's incarnationRef and bindingDigest equal the INSTALLED one's and its code/layer are RECOVERY_INITIAL_INSTALL_ALREADY_BOUND / RECOVERY_INSTALL_TRANSACTION_LAYER; the winning ref is one of the two proposed refs; and after reopening the file, ACTIVE reads FOUND with that same incarnationRef and digest while PENDING is ABSENT. Bound the wait — if a worker never reports, fail by name rather than hanging the suite.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs",
         "packages/store/src/recovery-initial-install.test.ts"
@@ -117,26 +117,39 @@
       "newFiles": [
         "packages/store/src/recovery-initial-install-race-worker.mjs"
       ],
-      "startedAt": "2026-08-14T09:02:56.767Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install-race-worker.mjs",
+        "packages/store/src/recovery-initial-install.test.ts"
+      ],
+      "note": "Proved the concurrency claim with two file-backed handles. NEW packages/store/src/recovery-initial-install-race-worker.mjs, modelled on command-decision-race-worker.mjs: imports SqliteEventStore from \"./index.ts\" (through the package ROOT, so reaching the method also proves it is a real runtime value and not a type-only export under --experimental-strip-types), posts PREOPEN_READY, Atomics.wait on gate slot 0, openForProject, posts READY, Atomics.wait on gate slot 1, installs its OWN distinct valid binding, and closes the store in a `finally` BEFORE posting RESULT (a still-open handle makes the test's rmSync throw EPERM on Windows). RESULT carries kind, ok, outcome, code, layer, incarnationRef, bindingDigest, proposedRef and initialInstallType: typeof SqliteEventStore.prototype.installInitialRecoveryBinding.\n\nTwo-phase gate/start/release harness added inline in recovery-initial-install.test.ts. Every wait is BOUNDED by a 30s deadline that rejects with \"race worker never reported: <label>\" — a dead worker fails by name instead of hanging the suite.\n\nAssertions: results.length === 2 (the race actually executed, not zero cases); both initialInstallType === \"function\"; sorted outcomes exactly [\"CURRENT\", \"INSTALLED\"]; the two workers really proposed the two distinct refs; the winner's incarnationRef equals its OWN proposal and is one of the two; the loser's incarnationRef and bindingDigest equal the WINNER's and explicitly NOT its own proposal; loser code RECOVERY_INITIAL_INSTALL_ALREADY_BOUND at RECOVERY_INSTALL_TRANSACTION_LAYER; after reopening the file, ACTIVE reads FOUND with the winner's ref and digest and PENDING is ABSENT.\n\nGREEN: typecheck exit 0; `pnpm --filter @moe/store test` -> Test Files 41 passed (41), Tests 467 passed (467) — +1 over the previous run, so the race test really executed rather than being collected-and-skipped.",
+      "startedAt": "2026-08-14T09:02:56.767Z",
+      "completedAt": "2026-08-14T09:04:13.328Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the mutation drills that prove these tests are attached to the production surface. For EACH drill: record `sha256sum` of the file first, apply the mutation with the Edit tool (never a shell one-liner — backslash and escape collapse through the shell can duplicate or corrupt a guard), confirm the anchor matched exactly once, run only the affected test file, then restore by reversing the Edit and re-check the sha256 equals the pre-drill value (never `git checkout`, which reverts to HEAD and would destroy uncommitted work in this shared worktree). D1 REPLACEMENT: change the ACTIVE-present branch from returning CURRENT to DELETE-then-INSERT returning INSTALLED — the restore-preservation test AND the race test must go red on an OUTCOME assertion (the winner's digest/refs and the sorted-outcomes assertion), not on a compile error. D2: delete the PENDING guard — the PENDING_PRESENT cases must go red on the code assertion. D3: delete the history EXISTS check — both history fixtures must go red. D4: delete the rowMatchesBinding cross-check — the diverged-column case must go red. Read each failure message and confirm it names the assertion the drill targets; a red for the wrong reason (a compile error, a hung worker, or every test failing at once) means the drill or the environment is broken, not that the guard is proven. Record the reddened test names and the decisive failure line for the completion evidence.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-initial-install.ts"
+      ],
+      "note": "Ran 5 mutation drills. Protocol for each: sha256sum recorded first (3de383f17f3dd99a2942dbe215d79508a6b8e93852927335cd9304d61997b81c), mutation applied with the Edit tool (never a shell one-liner), anchor matched exactly once, only the affected test file run, restored by reversing the Edit, and `sha256sum -c` confirmed byte-identical to pre-drill. No git checkout was used at any point (this worktree carries uncommitted foreign work).\n\nD1 REPLACEMENT — ACTIVE-present branch changed to DELETE-then-INSERT returning INSTALLED. 4 red, all on OUTCOME assertions, none a compile error:\n  × yields to an already-installed restore binding without touching its bytes -> \"Error: expected CURRENT, got INSTALLED\"\n  × commits exactly one of two racing bindings and tells the loser the winner -> \"AssertionError: expected [ 'INSTALLED', 'INSTALLED' ] to deeply equal [ 'CURRENT', 'INSTALLED' ]\"\n  (plus both tamper tests: \"expected a refusal, got INSTALLED\" — correct, replacement also destroys the unreadable incumbent)\n\nD2 PENDING GUARD DELETED — 1 red, correctly scoped:\n  × refuses while a PENDING binding is staged, and answers PENDING before ALREADY_BOUND -> \"AssertionError: pending only: expected a refusal, got INSTALLED\"\n\nD3 HISTORY EXISTS CHECK DELETED — both fixtures red, each named:\n  × refuses genesis over one real committed decision -> \"expected a refusal, got INSTALLED\"\n  × refuses genesis over an event commit carrying no decision and no outbox -> \"expected a refusal, got INSTALLED\"\n\nD3b (added, not in the plan) LEG DISCRIMINATION — history SQL narrowed to the command_decisions leg alone. Exactly ONE red: the H2 fixture (\"an event commit carrying no decision and no outbox\"), H1 stays green. This is the drill that proves the replacement H2 does real discriminating work — a decisions-only guard would otherwise pass the whole sweep. Worth recording because the plan's original H2 (isolated aggregate_heads) could never have reached the guard at all.\n\nD4 rowMatchesBinding CROSS-CHECK DELETED — 1 red, on the right layer boundary:\n  × refuses a diverged indexed column at the transaction layer -> \"AssertionError: diverged column: expected a refusal, got CURRENT\" (CURRENT, not INSTALLED — the divergent row was about to be handed back as a valid winner, which is exactly the failure the guard prevents)\n\nEvery red named the assertion its drill targeted; no drill produced a compile error, a hung worker, or an all-tests-fail sweep. After the last restore: recovery-initial-install.test.ts 14 passed (14), hash verified OK.",
+      "startedAt": "2026-08-14T09:04:17.883Z",
+      "completedAt": "2026-08-14T09:06:29.336Z"
     },
     {
       "stepId": "step-8",
       "description": "Close out. Re-measure every production file touched with `grep -c ''` (PowerShell Measure-Object -Line undercounts) and confirm recovery-initial-install.ts is <=250 and sqlite-event-store.ts is under 400. Run the fresh full gate `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` from the repo root and keep its verbatim tail as the completion evidence, plus the pass count compared against the ~453-test store baseline so no existing test silently disappeared. Run the adversarial-self-review skill over the whole diff, specifically: what happens if this runs twice concurrently on the same file; what a caller does with CURRENT versus INSTALLED (authority must come only from INSTALLED); whether any refusal constant leaked observed data; whether any guard can be answered by an earlier one and thereby go untested; and whether a poisoned handle can still be mistaken for a benign refusal. Then stage the owned paths explicitly — `git add` is required first for the new untracked files, because a commit pathspec naming an untracked path commits nothing at all — verify `git status --porcelain` shows no foreign path staged (this worktree is shared; .moe/** and packages/runner/** belong to other agents), commit with `git commit -- <the 8 owned paths>`, and confirm with `git show --stat` that only those paths landed. Report the base-ref diff `git diff <merge-base>..HEAD -- packages/store/src` for QA.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-initial-install.ts",
         "packages/store/src/recovery-initial-install.test.ts",
         "packages/store/src/index.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T09:06:41.201Z"
     }
   ],
   "status": "WORKING",
@@ -152,12 +165,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T09:02:56.767Z",
+  "updatedAt": "2026-08-14T09:06:41.201Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -172,7 +185,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T08:53:56.349Z",
