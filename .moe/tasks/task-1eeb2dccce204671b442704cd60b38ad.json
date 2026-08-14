@@ -20,7 +20,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-2aea4111",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -39,7 +39,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-14T09:09:34.859Z",
+  "updatedAt": "2026-08-14T09:48:27.647Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:36.184Z"
   },
@@ -49,5 +49,16 @@
   "blockedReason": "OVERSIZED, SPIDR-split into 3 children. NOT blocked on a missing dependency — the description's gap measurement is ACCURATE; the task just cannot be planned within the plan-shape thresholds.\n\nSize: needs >=13 distinct files against the 10 hard cap, across 3-4 packages (@moe/daemon, @moe/control-room, @moe/control-room-client, plus @moe/contracts if the generated client changes), ~15 steps against the 12 cap. Split on plan shape, never LOC.\n\nChildren created (parentTaskId set):\n1. task-1430dfae1a0e4e8c88fafc7bf011ba9f Daemon stream command identity + server timing observations — promoted to PLANNING, the claimable head.\n2. task-371c80bd94094db48b15d32eb8e4b931 Live control-room timing consumer edge — BACKLOG, hard-depends on 1.\n3. task-bcae0b7e74bd4590baf0d901039e5401 Decision-effort and attention observation records — BACKLOG, depends on 1.\n\n2 and 3 are deliberately BACKLOG so nobody plans against wire fields that do not exist yet. PROMOTE THEM ONCE 1 LANDS or this epic stalls silently.\n\nRe-measured at HEAD 6ffb4fe (description cited 2b15b8f). All four gap claims CONFIRMED: StreamEvent/WireEvent are exactly 5 fields, no commandId/actor/session (event-stream-contract.ts:30); LiveEventRow copies wire fields and adds nothing (live-event-feed.ts:13); evaluateTiming has ZERO production callers — command-latency.tsx takes the receipt as a PROP, only tests call it; the attention/effort domain does not exist at all (grep attentionSwitch/focusInterval/decisionEffort/recoveryBurden = zero files; positive control, same grep form for committedAt = 60 files).\n\nTwo hazards recorded in the children: packages/store is NOT owned by the stream seam (its own header says so), and generated-client.ts is codegen from @moe/contracts marked DO NOT EDIT BY HAND.\n\nRe-plan this parent as the final integration/hardening slice — cross-package mutation drills and the 4-package gate — after the children land.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-14T09:09:34.859Z"
+  "blockedAt": "2026-08-14T09:09:34.859Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measurement at HEAD 6ffb4fe and a SPIDR split into three children (task-1430dfae1a0e4e8c88fafc7bf011ba9f PLANNING, task-371c80bd94094db48b15d32eb8e4b931 BACKLOG, task-bcae0b7e74bd4590baf0d901039e5401 BACKLOG). Full detail in Serena memory task-task-1eeb2dccce204671b442704cd60b38ad-handoff. No plan submitted for the parent and no production code written.",
+      "whatRemains": "Re-plan this parent as the FINAL integration/hardening slice after all three children land: cross-package mutation drills (bypass a production render timestamp; weaken a decision-command attribution guard) plus the 4-package gate pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room test && pnpm typecheck. DoD 1/3/4 are the union of the children's capabilities, so they are only checkable once all three exist.",
+      "pitfalls": "Children 2 and 3 are BACKLOG deliberately and are NOT claimable until promoted — create_task defaults to BACKLOG and agents claim only PLANNING/WORKING/REVIEW. Promote them once child 1 lands or this epic stalls with no signal. Do not hand-edit packages/control-room-client/src/generated/generated-client.ts. Do not reach into packages/store from the daemon stream seam. Do not collapse the four timing phases into one number; evaluateTiming currently has ZERO production callers, which is the actual gap.",
+      "openQuestions": "Can the daemon's subscription seam surface domain_events.command_id WITHOUT editing packages/store? event-stream-contract.ts's own header states it deliberately does not import that surface and does not own the package. Child 1 must resolve this first and report blocked naming a store task if the answer is no. Second: does the control-room client need new fields? If so that is a @moe/contracts codegen task, since generated-client.ts is marked DO NOT EDIT BY HAND.",
+      "releasedAt": "2026-08-14T09:48:27.645Z",
+      "releasedBy": "architect-2aea4111",
+      "reason": "Parent is BLOCKED pending its three SPIDR children; releasing the assignment so the daemon's claim gate lets me pick up the next PLANNING task. Task stays BLOCKED with its recorded reason and children."
+    }
+  ]
 }

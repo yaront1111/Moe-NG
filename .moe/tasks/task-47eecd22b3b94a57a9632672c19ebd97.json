@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Explicit human confirmation to unblock this remaining prerequisite now. Permit pipelined planning of durable resource/integration readers, but the architect must consume the frozen class mapping from task-f6cf8d16 for registration identity, avoid overlapping schema authority, and report BLOCKED rather than inventing any class/cardinality contract that has not landed.",
+  "reopenReason": "UNBLOCKED by governor-18a42000 on the human's instruction to unblock tasks. The block's literal resume condition is met and I verified the decisive claim on committed bytes myself.\n\nThe literal blockedReason: \"Resume only after task-f6cf8d16 is DONE and re-measure its exact public frozen mapping/registration identity; then select non-overlapping focused schema/readers/adapters against those landed bytes.\"\n\ntask-f6cf8d16c2654641a92b0ee36924de0c is now DONE (QA-approved 09:39Z by qa-50f0d628, after two rejections, with an independently re-run gate).\n\nTHE DECISIVE FACT, re-measured by me at HEAD rather than taken from the audit. The block refused planning because only runner's four adapter classes existed, so this task's readers would have had to INVENT registration identity and cardinality. That is no longer true:\n- apps/daemon/src/recovery/recovery-inventory-contract.ts, committed blob 6ed4a8a473297d6e502b1c2a9266cf4f9f9cd25c (verified with git rev-parse HEAD:<path>, so this is committed bytes, not an untracked working-tree illusion).\n- It freezes SIX proof classes — PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING — over SEVEN populations.\n- packages/runner still holds exactly its original four. 6 = runner's 4 + RESOURCE + INTEGRATION_TARGET, and those two added classes ARE the registration identity this task's resource and integration readers must bind to. The contract now exists to measure instead of invent.\n\nThe frozen mapping has real production callers across recovery-inventory-invariants/-proofs/-reader/-record, and the ledger imports the record builder — composition among production modules, not an orphan export, so Clause 1 is satisfied.\n\nThe \"would overlap live WIP\" clause is also dead: it named short id task-2d969616 (a 32-hex-only regex misses that form), which resolves to task-2d9696160e674f26a8d422c45829d80e, now DONE, and packages/scheduler is clean.\n\nDIRECTION TRAP, recorded so the next reader does not re-park this: task-cf7fb147bd1c47698cbd65c9535370aa appears in the text and is BLOCKED, but it is this task's parentTaskId and declared consumer — it depends on THIS task. Counting it unmet would keep this parked forever.\n\nWHAT IS STILL ABSENT IS THE WORK, NOT A BLOCKER: the scheduler resource inventory reader and the integration-attempt record/reader do not exist. Those are this task's own DoD items 1 and 2, verbatim in its MEASURED GAP. Their absence was confirmed against a positive control in the same scope.\n\nDISCLOSED RESIDUAL: the reconciliation ledger has no production caller outside apps/daemon/src/recovery/ yet. That external wiring belongs to consumer task-cf7fb147, which is blocked behind THIS task and therefore cannot be a precondition — but expect to compose against the recovery folder's modules directly, since no daemon-wide seam exists yet.\n\nFOR THE ARCHITECT: re-measure the frozen mapping and registration identity yourself before planning, then select NON-OVERLAPPING focused schema/readers/adapters against those landed bytes, as the block requires. Scope selection is the judgment the block deliberately deferred to planning time.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
@@ -32,17 +32,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:41.056Z",
-  "updatedAt": "2026-08-13T16:23:16.989Z",
+  "updatedAt": "2026-08-14T10:59:14.284Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:21:56.007Z"
   },
   "contextFetchedBy": [
     "architect-a9210e34"
   ],
-  "blockedReason": "The required authority-owning class mapping is not landed, so a production plan would have to invent registration identity/cardinality in direct conflict with the task's human-unblock condition and stale-dependency rail. Live Moe context shows task-f6cf8d16c2654641a92b0ee36924de0c still PLANNING with no implementation plan or worker. Fresh disk probes find only runner's existing four adapter classes (`PROVIDER_PROCESS_LAUNCH_LOCK`, `WORKSPACE`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`); no daemon/store/scheduler RecoveryInventory population/class mapping, reconciliation record, resource inventory reader, or integration-attempt record/reader exists. The current scheduler root is also foreign-modified by active task-2d969616, so planning a cross-package public export now would overlap live WIP. Resume only after task-f6cf8d16 is DONE and re-measure its exact public frozen mapping/registration identity; then select non-overlapping focused schema/readers/adapters against those landed bytes.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T16:23:04.281Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Fetched full context and architect channel; loaded planning guidance; re-measured prerequisite task-f6cf8d16 as PLANNING/unassigned and probed current code. Confirmed only runner's four legacy recovery classes exist; no frozen daemon semantic-population mapping, recovery reconciliation record, scheduler resource inventory reader, or integration-attempt record/reader exists. Reported this task BLOCKED with needsFrom task-f6cf8d16.",

@@ -154,8 +154,8 @@
       "completedAt": "2026-08-14T09:29:01.168Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -167,14 +167,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:49:53.327Z",
-  "updatedAt": "2026-08-14T09:45:53.297Z",
+  "updatedAt": "2026-08-14T09:48:25.891Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:13.003Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-14T09:48:25.891Z",
+    "wallClockMs": 3912888
   },
   "contextFetchedBy": [
     "qa-50f0d628",
@@ -245,7 +247,7 @@
     "packages/store/src/index.ts",
     "packages/store/src/recovery-initial-install-race-worker.mjs"
   ],
-  "reviewCompletedAt": "2026-08-14T09:19:45.154Z",
+  "reviewCompletedAt": "2026-08-14T09:48:25.891Z",
   "rejectionDetails": {
     "failedDodItems": [
       "A concurrent/pre-existing ACTIVE restore binding, any PENDING binding, ordinary authoritative decision/event history, malformed row, or unprovable transaction outcome grants no genesis authority and returns an exact stable code and layer."
@@ -288,5 +290,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-14T09:48:25.891Z",
+  "reviewSummary": "APPROVED after reopen #1; my rejection gap is closed and I verified it myself.\n\nGATE (re-run, foreground): pnpm --filter @moe/store typecheck && test = exit 0, 41 files / 469 tests (baseline 468; delta is exactly the one new case).\n\nREJECTION DRILL, re-run by me: pre-sha cf3b7574cb99e5ea; moved `commitAttempted = true` (recovery-initial-install.ts:109) to AFTER exec(\"COMMIT\") via Edit. Previously all-green; now RED on the right assertion - \"expected 'STORE_UNAVAILABLE' to be 'OUTCOME_UNKNOWN'\", 1 failed | 15 passed, naming the new case. That STORE_UNAVAILABLE is normalizeOperationalError on an UNPOISONED handle - exactly the defect I described. Reverse Edit restored; sha back to cf3b7574cb99e5ea; git status -- packages/store/ empty. No git checkout.\n\nNEW TEST (recovery-initial-install.test.ts:443) not vacuous: patches DatabaseSync.prototype.exec to run the REAL COMMIT then throw; asserts code exactly OUTCOME_UNKNOWN, then STORE_UNAVAILABLE + message containing \"quarantined\" (store-runtime.ts:233 is the POISONED branch, plain close is STORE_CLOSED at :238, so the pair separates quarantine from closed), then reopen reads ACTIVE FOUND with REF_X. Prototype restore and store.close() share one finally, so a failed assertion cannot leak a handle into the Windows rmSync.\n\nDoD 1-5 met. Production bytes unchanged since round 1 (identical sha), so drills D1-D4 stay proven. Retry commit a509233 is test-only (26/20). Pins intact: results.length===2 :662, sorted [\"CURRENT\",\"INSTALLED\"] :666, historyFixtures.length===2 :292, entrypoint reasonCodeCount:8 untouched.\n\nSIZES grep -c '': 177/102/191/149/368/117 - under 250 except two pre-existing files, both under 400. Committed bytes == gated bytes on all 10 owned paths (git show HEAD:<path> sha match). Base-ref diff d7a71cb..HEAD = 10 files, all packages/store/src. Foreign-commit sweep of the original lines is the known hook hazard, not a rejection reason."
 }

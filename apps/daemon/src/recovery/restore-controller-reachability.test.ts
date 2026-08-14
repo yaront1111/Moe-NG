@@ -95,6 +95,35 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
     });
   });
 
+  it("classifies a FRESH production store as genesis-fenced, not unreadable", async () => {
+    // The task's original live symptom, reproduced through the exact surface
+    // that produced it: a fresh createStoreDependencies followed by
+    // provider.restore().inspect() returned RESTORE_RECORD_UNREADABLE, because
+    // readInstalledRestore assumed every ACTIVE payload was a restore record.
+    // Nothing here installs a row by hand — the provider's own genesis installer
+    // writes it — so this proves the INSTALLER and the classifier agree, not
+    // merely that the decoder can read bytes a fixture wrote.
+    const h = await restoreHarness("reach-genesis");
+    h.store.close();
+
+    const provider = dependenciesFor(h.storePath);
+    const inspection = provider.restore().inspect();
+
+    expect(inspection).toMatchObject({ ok: true, outcome: "GENESIS_FENCED" });
+    expect(inspection).not.toMatchObject({ code: "RESTORE_RECORD_UNREADABLE" });
+    expect(inspection).not.toMatchObject({ outcome: "ABSENT" });
+    provider.close();
+    closers.pop();
+
+    // And again on a second boot through a fresh provider: the genesis anchor is
+    // re-offered, recognised as a repeat, and the classification stays stable.
+    const reopened = dependenciesFor(h.storePath);
+    expect(reopened.restore().inspect()).toMatchObject({
+      ok: true,
+      outcome: "GENESIS_FENCED",
+    });
+  });
+
   it("surfaces a refusal through the provider with its code and its layer", async () => {
     const h = await restoreHarness("reach-refuse");
     const binding = await h.mint(h.generationDigest, "restore-cmd-1");

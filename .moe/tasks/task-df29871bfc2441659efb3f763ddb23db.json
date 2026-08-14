@@ -18,12 +18,12 @@
     "Use only public package roots across boundaries; target <=250 physical lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "UNBLOCKED by governor-18a42000 on the human's instruction to unblock tasks. This is the block's own stated re-promotion trigger firing, not a judgment call.\n\nThe literal blockedReason: \"Hard dependency task-311 is still REVIEW, not QA-approved DONE. Its bytes are now committed at b64e336/50c492a/284d5dd and expose the typed five-record ClaimSuccessors, but the task's own governor sequencing comment explicitly requires waiting for QA DONE and re-measurement after review. Submitting df298 while the producer can still be rejected would couple the durable codec to unapproved authority. No plan submitted; RE-PROMOTE IMMEDIATELY AFTER TASK-311 REACHES DONE.\"\n\ntask-311adb23a3964146a25fa8bddf7123e9 is now DONE. The blocking architect named exactly one condition, stated the re-promotion trigger in advance, and that trigger has fired.\n\nWorth noting WHY the wait was correct rather than bureaucratic: task-311 was rejected by QA twice and re-planned. Had df298 been planned against its earlier bytes, the durable codec would have been coupled to authority that was subsequently rewritten. The final approved surface came out of a re-plan whose central fix was routing array elements through the same detach recursion as every other section, closing a by-reference forwarding hole in mirrorList.\n\nVERIFICATION: this verdict was produced by an independent audit agent, attacked by a separate refuter instructed to default to \"refuted\", which found no unmet dependency, and then re-checked by me directly against the task JSON rather than accepted from either. The dependency status was read from disk, not from a report.\n\nFOR THE ARCHITECT — the block requires re-measurement, not just a status check: \"re-measurement after review\". Re-measure task-311's exact landed public surface before planning. Do NOT plan against the b64e336/50c492a/284d5dd bytes named above; those predate the QA rejections and the re-plan, so the five-record ClaimSuccessors shape may differ from what finally landed. Confirm the exact record set and its refusal codes/layers on current bytes, symbol by symbol, and record the command and result in planningNotes.codebaseInsights per the stale-by-default rail.",
   "createdBy": "WORKER",
   "parentTaskId": "task-e33747f982e0452a9f9d784fd1cb914d",
   "priority": "CRITICAL",
@@ -44,17 +44,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:11.801Z",
-  "updatedAt": "2026-08-13T21:37:58.646Z",
+  "updatedAt": "2026-08-14T10:58:56.705Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:00:46.726Z"
   },
   "contextFetchedBy": [
     "architect-a42f4965"
   ],
-  "blockedReason": "Hard dependency task-311 is still REVIEW, not QA-approved DONE. Its bytes are now committed at b64e336/50c492a/284d5dd and expose the typed five-record ClaimSuccessors, but the task's own governor sequencing comment explicitly requires waiting for QA DONE and re-measurement after review. Submitting df298 while the producer can still be rejected would couple the durable codec to unapproved authority. No plan submitted; re-promote immediately after task-311 reaches DONE.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T21:37:41.106Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured task-311 status and committed surface; it is committed with typed five-record closure but still REVIEW. Reported df298 BLOCKED and updated Serena handoff.",

@@ -17,6 +17,7 @@ import {
   restoreRefusal,
   snapshotRestoreRequest,
 } from "./restore-controller-contract.js";
+import { inspectGenesisFence } from "./restore-genesis-classifier.js";
 import type {
   InstalledRestoreRecord,
   RestoreControllerFaultPoint,
@@ -40,7 +41,10 @@ const INSERT_BINDING_SQL = `INSERT INTO recovery_bindings (
   binding_digest, binding_bytes, installed_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
-export function readInstalledRestore(store: SqliteEventStore): RestoreInspection {
+export function readInstalledRestore(
+  store: SqliteEventStore,
+  projectId: string,
+): RestoreInspection {
   let read: ReturnType<SqliteEventStore["readRecoveryBinding"]>;
   try {
     read = store.readRecoveryBinding(RESTORE_BINDING_SLOT);
@@ -52,7 +56,10 @@ export function readInstalledRestore(store: SqliteEventStore): RestoreInspection
   if (!read.ok) return restoreRefusal(read.layer, read.code);
   if (read.outcome === "ABSENT") return Object.freeze({ ok: true, outcome: "ABSENT" });
   const record = decodeRestoreRecord(read.binding.payload);
-  if (record === null) return controllerRefusal("RESTORE_RECORD_UNREADABLE");
+  // NOT "null means genesis": the classifier demands positive exact proof and
+  // otherwise returns this very same controller refusal. Absence of a restore
+  // record is never, by itself, the presence of a fence.
+  if (record === null) return inspectGenesisFence(store, projectId, read.binding);
   if (
     record.incarnationRef !== read.binding.incarnationRef
     || record.keyEpochRef !== read.binding.keyEpochRef
@@ -108,9 +115,12 @@ function settledOutcome(
   request: RestoreControllerRequest,
   preparedIdentity: string,
 ): RestoreResult | null {
-  const installed = readInstalledRestore(store);
+  const installed = readInstalledRestore(store, request.projectId);
   if (!installed.ok) return installed;
-  if (installed.outcome === "ABSENT") return null;
+  // A verified genesis fence is NOT a settled restore: the store has never
+  // restored, so the restore below proceeds and atomically replaces the fence
+  // through the existing transaction. Treated exactly like ABSENT here.
+  if (installed.outcome === "ABSENT" || installed.outcome === "GENESIS_FENCED") return null;
   const { record } = installed;
   if (record.preparedIdentity === preparedIdentity) {
     return Object.freeze({

@@ -133,7 +133,7 @@
       "completedAt": "2026-08-14T09:20:50.496Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -159,17 +159,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:20:28.370Z",
-  "updatedAt": "2026-08-14T09:22:23.612Z",
+  "updatedAt": "2026-08-14T09:59:29.907Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:28:01.713Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 24,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-14T09:59:29.907Z",
+    "wallClockMs": 41488194
   },
   "contextFetchedBy": [
-    "worker-5dfdc624"
+    "worker-5dfdc624",
+    "qa-50f0d628"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -239,7 +242,7 @@
     "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts",
     "packages/runner/src/providers/claude/claude-launcher.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-14T09:12:04.294Z",
+  "reviewCompletedAt": "2026-08-14T09:59:29.907Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 3: the fixture is restructured so its activation commit and its prepared runtime carry the same observation digest — true in the working tree, but reverted at HEAD by foreign commit 71ae334.",
@@ -300,5 +303,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-14T09:59:29.907Z",
+  "reviewSummary": "APPROVED (reopen#2). Rejection premise gone: `git status --porcelain -- packages/runner/src` EMPTY, so the gate ran on COMMITTED bytes; fixture at HEAD carries QUOTED_DIGEST (lines 88-90).\n\nGATE, my run at HEAD: `pnpm --filter @moe/runner typecheck` exit 0; `... test` exit 0, 58 files / 1841 tests (prior red run: 55/1716, 3 suites failing to LOAD).\n\nDoD1 guard claude-launcher.ts:174-181 — after validateCommit(:164), before consumeGrant(:183)/registerLock/acquireLock/openBoundary; operand quotedObservationDigest; try/catch.\nDoD2 single source effect-grant.ts:167 refuseRuntimeObservationDrift; effect-activation.ts:216 delegates; no launcher-local copy, no new code; distinct PHASE.binding(:66) names no operand.\nDoD3 happy path still OBSERVED with full 9-step log (:1256).\nDoD4 drift test pins {PROVIDER_CAPABILITY_CHANGED, ACTIVATION} exactly, log toEqual [\"runtime\",\"validate\"], boundary.log/requests []; layer-separation vs ACTIVATION_COMMIT_INCOHERENT; generated table bumped to 9 (:101); 8-secret no-echo sweep.\n\nDRILLS I RAN MYSELF (claude-launcher.ts changed since last QA, now 215 lines):\nD1 dead helper -> 15 failures across BOTH suites (single source proven).\nD2 neuter ONLY launcher guard -> 4 launcher failures, supervisor GREEN.\nD4 guard moved after grant -> ordering assertion reds: ['runtime','validate','consume'] != ['runtime','validate'].\nD5 fixture positive control -> 27 failures (first attempt applied nothing and read green; re-applied, verified).\nAll restored, sha256 3/3 each drill, worktree clean.\n\nREPO BASELINE: `pnpm typecheck`/`pnpm test` exit 1, 100% foreign — apps/daemon/src/http/event-stream.ts(66,3) TS2739, and tests/runtime/package-loadability.test.ts ERR_MODULE_NOT_FOUND event-stream-observation.js (untracked live daemon TDD). Owned intersection EMPTY.\n\nLINES: claude-launcher 215, effect-grant 195, effect-activation 257 (pre-existing, did not grow)."
 }

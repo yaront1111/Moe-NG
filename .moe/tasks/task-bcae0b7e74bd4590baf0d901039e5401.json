@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file. Prefer two focused modules (record vocabulary, collector) over one large one."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-18a42000 on the human's explicit instruction to unblock tasks. Dependency satisfied and verified on disk.\n\nSPIDR slice 3 of 3 from parent task-1eeb2dcc. Its own description states it \"DEPENDS on sibling task-1430dfae1a0e4e8c88fafc7bf011ba9f for the command identity that makes attribution possible; re-measure that id\".\n\ntask-1430dfae is now DONE — committed 4c39f3a, QA-approved by qa-50f0d628 against an independently re-run gate (daemon 70 files / 1516 tests, exit 0).\n\nI ran the re-measurement its description demanded rather than accepting the DONE status:\n- `commandId: string` present on StreamEvent at apps/daemon/src/http/event-stream-contract.ts:45, and again at :48 within the trace shape.\n- optional `decisionTrace` block present at :47.\n- Positive control hit, negative control zero on the same file, so the readings are real.\n\nThe command identity this slice needs for attribution now exists on the wire.\n\nSibling task-371c80bd94094db48b15d32eb8e4b931 (slice 2 of 3) is promoted in the same sweep. It depends on task-1430dfae, NOT on this task, so both are independently plannable and may proceed in parallel — but note both will touch control-room surfaces in a SHARED worktree, so whoever plans second should re-measure rather than trust the first plan's baseline.\n\nFOR THE ARCHITECT: parent task-1eeb2dcc stays BLOCKED until all three slices are DONE — do not plan the parent and do not re-draw this chain. This task records what a human actually had to do as frozen observations with explicit provenance; per the epic rail, every observation must name its source and be attributable to a command identity — do not infer effort where no observation was recorded.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
   "priority": "HIGH",
@@ -32,5 +32,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:44.795Z",
-  "updatedAt": "2026-08-14T09:08:44.795Z"
+  "updatedAt": "2026-08-14T10:43:55.833Z"
 }

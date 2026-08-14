@@ -210,7 +210,7 @@
       "completedAt": "2026-08-14T09:29:59.043Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -223,17 +223,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:17.121Z",
-  "updatedAt": "2026-08-14T09:30:37.528Z",
+  "updatedAt": "2026-08-14T09:54:31.654Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:37.244Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-14T09:54:31.654Z",
+    "wallClockMs": 4254410
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
     "architect-2aea4111",
-    "worker-40286572"
+    "worker-40286572",
+    "qa-50f0d628"
   ],
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -299,5 +302,8 @@
     "apps/daemon/src/recovery/recovery-incarnation-genesis.js",
     "apps/daemon/src/identity/genesis-recovery-binding.ts",
     "apps/daemon/src/identity/genesis-recovery-binding.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-14T09:54:31.654Z",
+  "reviewCompletedAt": "2026-08-14T09:54:31.654Z",
+  "reviewSummary": "APPROVED. Verified by base-ref diff 6ffb4fe..HEAD over owned paths; tree clean, so HEAD bytes == gated bytes. 55028d1 carries this task id but is a foreign whole-tree hook commit; judged bytes, not label.\n\nGATES RE-RUN BY QA (fresh, foreground):\n1. Task command verbatim -> CHAIN_EXIT=0, 110 tests.\n2. DoD-5 breadth src/recovery/ src/identity/ src/index-surface.test.ts -> 508 tests, exit 0.\n3. Whole package @moe/daemon test -> 69 files / 1492 tests, exit 0.\nPer-file (grep -c ''): 174/176/181/218/236/139/129 — all <=250.\n\nMUTATION DRILLS I RAN ON PRODUCTION (Edit, sha256-verified restore, tree clean after):\n- origin tag removed from contextParts -> cross-origin collision test RED on incarnationRef.\n- publicKeySpkiHex dropped from deriveIncarnation bindingDigest -> SPKI-binding test RED.\n- decodeBinding made to strip restoreCommandId before the GENESIS key check -> counterfeit-refusal test RED (\"expected { …(12) } to be null\"); sweep stayed green, so it reddened for the right reason.\n\nDoD: (1) exact tagged union; RESTORE keeps both fields top-level; GENESIS structurally cannot name them; codec refuses cross-branch and untagged pre-origin rows. (2) one shared deriveIncarnation + self-proof; duplicate generateKeyPairSync deleted; test pins refs against the shared core. (3) storeContextDigest derived internally, caller-supplied key refused; repeat entropy/key refused with exact code + layer + truth + outcome. (4) no keyHandle field; JSON.stringify negative covers raw nonce hex AND base64; authority NONE. (5) succession/anchor/hostile-input green; sweep pins toHaveLength(36). (6) typecheck + focused tests exit 0.\n\nRESIDUAL, not blocking: anchorIncarnation accepts the union but readAnchoredIncarnation skips GENESIS, so re-anchoring an identical genesis binding returns false, not idempotent true. Unreachable in production (all 4 call sites pass RestoreIncarnationBinding), fails closed. The task adding a durable genesis anchor needs a genesis-side reader first."
 }

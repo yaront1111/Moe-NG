@@ -8,6 +8,7 @@ import { SqliteEventStore, createBackupGeneration } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import { ACTIVATION_WITNESS, OBSERVATION, envelope } from "../bootstrap/bootstrap-test-fixtures.js";
+import { ensureGenesisRecoveryBinding } from "../identity/genesis-recovery-binding.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
   createNodeRecoveryCryptoPort,
@@ -256,4 +257,63 @@ export function restoreRequest(
     trust: harness.trust,
     ...overrides,
   };
+}
+
+export interface GenesisFenceRowFixture {
+  readonly incarnationRef: string;
+  readonly keyEpochRef: string;
+  readonly payload: Uint8Array;
+}
+
+export interface GenesisFixture {
+  readonly row: GenesisFenceRowFixture;
+  readonly store: SqliteEventStore;
+  readonly storePath: string;
+}
+
+/**
+ * A store fenced by the PRODUCTION genesis installer, plus the exact ACTIVE row
+ * it wrote. Nothing here hand-installs a binding: a fixture that wrote the
+ * payload itself would prove the decoder while leaving the installer — the half
+ * that produced the original live symptom — completely untested.
+ */
+export function genesisFixture(label: string): GenesisFixture {
+  const root = mkdtempSync(join(tmpdir(), `moe-genesis-${label}-`));
+  roots.push(root);
+  const storePath = join(root, "project.db");
+  const store = openHarnessStore(storePath);
+  const installed = ensureGenesisRecoveryBinding(store, {
+    clock: () => DECIDED_AT,
+    projectId: PROJECT_ID,
+  });
+  if (!installed.ok) throw new Error(`genesis install failed: ${installed.code}`);
+  if (installed.outcome !== "INSTALLED") {
+    throw new Error(`genesis did not install: ${installed.outcome}`);
+  }
+  const read = store.readRecoveryBinding("ACTIVE");
+  if (!read.ok || read.outcome !== "FOUND") throw new Error("the ACTIVE slot must be FOUND");
+  return Object.freeze({
+    row: Object.freeze({
+      incarnationRef: read.binding.incarnationRef,
+      keyEpochRef: read.binding.keyEpochRef,
+      payload: read.binding.payload,
+    }),
+    store,
+    storePath,
+  });
+}
+
+/**
+ * One REAL restore incarnation, minted through the production service. Used
+ * where a case needs a genuine RESTORE-origin binding rather than a
+ * hand-shaped object that only looks like one.
+ */
+export async function mintRestoreIncarnation(
+  restoreCommandId: string,
+  backupGenerationDigest: string = "5a".repeat(32),
+): Promise<RestoreIncarnationBinding> {
+  const service = createRecoveryIncarnationService(createNodeRecoveryCryptoPort());
+  const minted = await service.mint({ backupGenerationDigest, restoreCommandId });
+  if (!minted.ok) throw new Error(`restore incarnation mint failed: ${minted.code}`);
+  return minted.binding;
 }

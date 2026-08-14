@@ -1,12 +1,13 @@
 import { RECOVERY_BINDING_CODEC_VERSION, RECOVERY_BINDING_SLOTS } from "@moe/store";
-import type {
-  RecoveryBindingReadResult,
-  RecoveryInstallResult,
-  SqliteEventStore,
-} from "@moe/store";
+import type { RecoveryBindingReadResult, RecoveryInstallResult } from "@moe/store";
 import type { RecoveryAuthenticationBinding } from "@moe/core";
 
-import { hasAnchoredIncarnation } from "../recovery/recovery-incarnation-anchor.js";
+import type { RecoveryDurableWriteRequest } from "../recovery/recovery-succession-contract.js";
+
+import { anchorIncarnation, hasAnchoredIncarnation } from "../recovery/recovery-incarnation-anchor.js";
+import type { AnchorDecisionWriter } from "../recovery/recovery-incarnation-anchor.js";
+import { decodeBinding, encodeBinding } from "../recovery/recovery-incarnation-binding-codec.js";
+import type { GenesisIncarnationBinding } from "../recovery/recovery-incarnation-contract.js";
 import { mintGenesisIncarnation } from "../recovery/recovery-incarnation-genesis.js";
 import {
   isRecoveryAuthenticationRef,
@@ -32,6 +33,7 @@ import {
  * convert an integrity fault into authority: it refuses instead.
  */
 export const GENESIS_RECOVERY_ERROR_CODES = Object.freeze([
+  "GENESIS_ANCHOR_REFUSED",
   "GENESIS_INSTALL_REFUSED",
   "GENESIS_INSTALL_UNVERIFIED",
   "GENESIS_MINT_FAILED",
@@ -40,9 +42,8 @@ export const GENESIS_RECOVERY_ERROR_CODES = Object.freeze([
 
 export type GenesisRecoveryErrorCode = (typeof GENESIS_RECOVERY_ERROR_CODES)[number];
 
-/** The three store capabilities genesis needs, so refusal paths stay testable. */
-export interface GenesisBindingStore
-  extends Pick<SqliteEventStore, "readCommandDecisionsAfter"> {
+/** The four store capabilities genesis needs, so refusal paths stay testable. */
+export interface GenesisBindingStore extends AnchorDecisionWriter {
   installRecoveryBinding(input: unknown): RecoveryInstallResult;
   readRecoveryBinding(slot: unknown): RecoveryBindingReadResult;
 }
@@ -62,7 +63,6 @@ export type GenesisRecoveryResult =
   | { readonly code: GenesisRecoveryErrorCode; readonly ok: false; readonly storeCode: string };
 
 const ACTIVE_SLOT = RECOVERY_BINDING_SLOTS[0];
-const encoder = new TextEncoder();
 
 const refuse = (code: GenesisRecoveryErrorCode, storeCode: string): GenesisRecoveryResult =>
   Object.freeze({ code, ok: false, storeCode });
@@ -82,13 +82,70 @@ const bindingFrom = (read: RecoveryBindingReadResult): RecoveryAuthenticationBin
   return Object.freeze({ keyEpochRef, recoveryIncarnationRef: incarnationRef });
 };
 
+/**
+ * DERIVED, never caller-selected. `GenesisRecoveryConfig` deliberately does not
+ * grow these two fields: a caller able to choose the correlation or the
+ * principal a fence is anchored under could file one store's genesis under
+ * another's identity, which is the same discipline `snapshotGenesisContext`
+ * enforces on the mint. Both are functions of the incarnation, so a retry after
+ * a crash reproduces the exact same command key.
+ */
+const GENESIS_PRINCIPAL_ID = "daemon-genesis";
+
+const anchorRequestFor = (
+  binding: GenesisIncarnationBinding,
+  config: GenesisRecoveryConfig,
+): RecoveryDurableWriteRequest =>
+  Object.freeze({
+    correlationId: `genesis-recovery:${binding.incarnationRef}`,
+    decidedAt: config.clock(),
+    principalId: GENESIS_PRINCIPAL_ID,
+    projectId: config.projectId,
+  });
+
+/**
+ * Anchors the fence the ACTIVE slot ACTUALLY holds, then reports it.
+ *
+ * Driven off the slot's read-back bytes rather than off the mint, so the same
+ * path covers a fresh install and a reboot: `anchorIncarnation` recognises the
+ * repeat by byte equality and commits nothing. That also HEALS a store whose
+ * install landed but whose anchor did not — without it, one failed anchor would
+ * strand the fence unanchored forever, because the next boot sees a PRESENT slot
+ * and never mints again.
+ *
+ * A slot this module did not write — a restore record, or a genesis payload
+ * whose refs disagree with its row — is reported exactly as before and never
+ * anchored. Verifying such a slot is the restore classifier's job, and it fails
+ * closed there.
+ */
+function settle(
+  store: GenesisBindingStore,
+  config: GenesisRecoveryConfig,
+  read: RecoveryBindingReadResult,
+  outcome: "INSTALLED" | "PRESENT",
+  current: RecoveryAuthenticationBinding,
+): GenesisRecoveryResult {
+  if (!read.ok || read.outcome !== "FOUND") return present(outcome, current);
+  const decoded = decodeBinding(read.binding.payload);
+  if (decoded === null || decoded.origin !== "GENESIS") return present(outcome, current);
+  if (
+    decoded.incarnationRef !== current.recoveryIncarnationRef
+    || decoded.keyEpochRef !== current.keyEpochRef
+  ) {
+    return present(outcome, current);
+  }
+  return anchorIncarnation(store, anchorRequestFor(decoded, config), decoded)
+    ? present(outcome, current)
+    : refuse("GENESIS_ANCHOR_REFUSED", "ANCHOR_NOT_COMMITTED");
+}
+
 export function ensureGenesisRecoveryBinding(
   store: GenesisBindingStore,
   config: GenesisRecoveryConfig,
 ): GenesisRecoveryResult {
   const read = store.readRecoveryBinding(ACTIVE_SLOT);
   const existing = bindingFrom(read);
-  if (existing !== null) return present("PRESENT", existing);
+  if (existing !== null) return settle(store, config, read, "PRESENT", existing);
   if (!read.ok || read.outcome !== "ABSENT") {
     return refuse("GENESIS_SLOT_UNREADABLE", read.ok ? read.outcome : read.code);
   }
@@ -106,24 +163,27 @@ export function ensureGenesisRecoveryBinding(
   if (!minted.ok) return refuse("GENESIS_MINT_FAILED", minted.code);
   const { binding } = minted;
 
-  // The installed payload keeps its existing shape on purpose: persisting the
-  // full public proof is the consuming task's edge, not this one's. The binding
-  // now HAS that proof, and `encodeBinding` is the codec that will carry it.
+  // The CANONICAL binding goes on disk, not a bare context digest. 64 hex chars
+  // carry no origin tag, no public key and no signature, so a later reader could
+  // only take the row's word that a genesis fence holds the slot. The encoded
+  // binding is checkable evidence instead, written through the SAME codec the
+  // anchor uses, so the row and its anchor agree byte-for-byte.
   const installed = store.installRecoveryBinding({
     bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
     incarnationRef: binding.incarnationRef,
     installedAt: config.clock(),
     keyEpochRef: binding.keyEpochRef,
-    payload: encoder.encode(binding.storeContextDigest),
+    payload: encodeBinding(binding),
     slot: ACTIVE_SLOT,
   });
   if (!installed.ok) return refuse("GENESIS_INSTALL_REFUSED", installed.code);
 
   // Judged on the read-back, not the install result: if a concurrent installer
   // raced this one, the slot's CURRENT content is the authority, not ours.
-  const current = bindingFrom(store.readRecoveryBinding(ACTIVE_SLOT));
+  const back = store.readRecoveryBinding(ACTIVE_SLOT);
+  const current = bindingFrom(back);
   if (current === null) return refuse("GENESIS_INSTALL_UNVERIFIED", "READ_BACK_FAILED");
   const ours = current.recoveryIncarnationRef === binding.incarnationRef
     && current.keyEpochRef === binding.keyEpochRef;
-  return present(ours ? "INSTALLED" : "PRESENT", current);
+  return settle(store, config, back, ours ? "INSTALLED" : "PRESENT", current);
 }

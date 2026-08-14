@@ -20,12 +20,12 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-18a42000 on the human's explicit instruction to unblock tasks. Hard dependency satisfied and verified on disk.\n\nSPIDR slice 2 of 3 from parent task-1eeb2dcc. Its own description states: \"HARD DEPENDENCY on sibling task-1430dfae1a0e4e8c88fafc7bf011ba9f, which puts command identity and daemon readings on the wire; re-measure that those fields exist.\"\n\ntask-1430dfae is now DONE — committed 4c39f3a, QA-approved by qa-50f0d628 against an independently re-run gate (daemon 70 files / 1516 tests, exit 0).\n\nI ran the re-measurement its description demanded rather than accepting the DONE status:\n- `commandId: string` present on StreamEvent at apps/daemon/src/http/event-stream-contract.ts:45, and again at :48 within the trace shape.\n- optional `decisionTrace` block present at :47.\n- A positive control hit and a negative control returned zero on that same file, so these readings are real rather than a mis-scoped grep.\n\nCommand identity is genuinely on the wire, which is the precise precondition this slice was parked behind.\n\nSibling task-bcae0b7e74bd4590baf0d901039e5401 (slice 3 of 3) is promoted in the same sweep. It depends on task-1430dfae as well and NOT on this task, so the two are independently plannable and may proceed in parallel.\n\nFOR THE ARCHITECT: parent task-1eeb2dcc stays BLOCKED until all three slices are DONE — do not plan the parent and do not re-draw this chain. Re-measure the wire fields yourself first; this reason is minutes old and the tree moves under a shared worktree.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1eeb2dccce204671b442704cd60b38ad",
   "priority": "HIGH",
@@ -33,5 +33,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:21.413Z",
-  "updatedAt": "2026-08-14T09:08:21.413Z"
+  "updatedAt": "2026-08-14T10:43:48.947Z"
 }

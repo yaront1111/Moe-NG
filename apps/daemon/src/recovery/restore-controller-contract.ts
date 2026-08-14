@@ -99,6 +99,20 @@ export type RestoreInspection =
       readonly outcome: "INSTALLED";
       readonly record: InstalledRestoreRecord;
     }
+  /**
+   * No disaster restore is installed; a VERIFIED genesis fence holds the slot.
+   * A distinct outcome literal rather than a flavour of ABSENT, because a
+   * caller unable to tell "nothing installed" from "genesis verified" would be
+   * free to treat a fenced store as an empty one. The refs are what a caller
+   * needs to name the fence it is about to replace; the vocabulary that proves
+   * it lives in `restore-genesis-classifier.ts`.
+   */
+  | {
+      readonly incarnationRef: string;
+      readonly keyEpochRef: string;
+      readonly ok: true;
+      readonly outcome: "GENESIS_FENCED";
+    }
   | RestoreRefused;
 export type RestoreDiscardResult =
   | { readonly ok: true; readonly outcome: "DISCARDED"; readonly preparedIdentity: string }

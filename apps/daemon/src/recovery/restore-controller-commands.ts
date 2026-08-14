@@ -52,8 +52,8 @@ export function resumeRestore(store: SqliteEventStore, request: unknown): Restor
 }
 
 /** Read-only, and read-only on every path: nothing here writes or advances. */
-export function inspectRestore(store: SqliteEventStore): RestoreInspection {
-  return readInstalledRestore(store);
+export function inspectRestore(store: SqliteEventStore, projectId: string): RestoreInspection {
+  return readInstalledRestore(store, projectId);
 }
 
 /**
@@ -72,8 +72,10 @@ function discardSnapshottedRestore(
   store: SqliteEventStore,
   snapshot: RestoreControllerRequest,
 ): RestoreDiscardResult {
-  const installed = readInstalledRestore(store);
+  const installed = readInstalledRestore(store, snapshot.projectId);
   if (!installed.ok) return installed;
+  // GENESIS_FENCED deliberately falls through with ABSENT: a genesis fence is
+  // not a settled restore, so discarding an unsettled restore stays allowed.
   if (installed.outcome === "INSTALLED") return controllerRefusal("RESTORE_ALREADY_SETTLED");
   const verified = verifyRestoreGeneration(snapshot);
   if (!verified.ok) return verified;
@@ -116,7 +118,7 @@ export function createRestorePort(store: SqliteEventStore, projectId: string): R
         ? controllerRefusal("RESTORE_REQUEST_SHAPE_INVALID")
         : discardSnapshottedRestore(store, inScope);
     },
-    inspect: (): RestoreInspection => inspectRestore(store),
+    inspect: (): RestoreInspection => inspectRestore(store, projectId),
     resume: (request: unknown): RestoreResult => {
       const inScope = scoped(request);
       return inScope === null

@@ -2,9 +2,11 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { decodeBinding, encodeBinding } from "./recovery-incarnation-binding-codec.js";
 import type {
+  GenesisIncarnationBinding,
   RecoveryIncarnationBinding,
   RestoreIncarnationBinding,
 } from "./recovery-incarnation-contract.js";
+import type { RecoveryIncarnationOrigin } from "./recovery-incarnation-context.js";
 import {
   RECOVERY_INCARNATION_ANCHOR_COMMAND_KIND,
   incarnationAggregateId,
@@ -26,6 +28,14 @@ import type { RecoveryDurableWriteRequest } from "./recovery-succession-contract
  */
 const PAGE_SIZE = 100;
 const encoder = new TextEncoder();
+
+/**
+ * The exact store capabilities each half needs, so a caller holding a narrower
+ * handle than the whole event store can still anchor and read anchors.
+ */
+export type AnchorDecisionReader = Pick<SqliteEventStore, "readCommandDecisionsAfter">;
+export type AnchorDecisionWriter = AnchorDecisionReader &
+  Pick<SqliteEventStore, "commitExpectedVersionDecision">;
 
 function isAnchorRow(decision: CommandDecisionRecord, projectId: string): boolean {
   return (
@@ -55,22 +65,20 @@ export function hasAnchoredIncarnation(
 }
 
 /**
- * Returns the anchored RESTORE binding for one incarnation, or null when
- * nothing anchored it. The aggregate id is recomputed from the DECODED content,
- * so a row filed under one incarnation while carrying another's binding is
- * dropped rather than answered with.
+ * The one anchor scan, parameterized by the origin the CALLER asked about.
  *
- * Every caller of this reader — the restore controller, the succession chain,
- * the inventory ledger — asks about a restore lineage and reads restore facts
- * off the answer. A GENESIS row therefore reads as ABSENT here rather than
- * being handed back for each of them to re-refuse: one place fails closed, and
- * the return type says so. A future genesis anchor needs its own reader.
+ * The origin is a filter rather than a field read off the answer, so a reader
+ * asking about a restore lineage can never be handed a genesis row to re-refuse
+ * — and vice versa. The aggregate id is recomputed from the DECODED content, so
+ * a row filed under one incarnation while carrying another's binding is dropped
+ * rather than answered with.
  */
-export function readAnchoredIncarnation(
-  store: SqliteEventStore,
+function readAnchoredBindingOfOrigin(
+  store: AnchorDecisionReader,
   projectId: string,
   incarnationRef: string,
-): RestoreIncarnationBinding | null {
+  origin: RecoveryIncarnationOrigin,
+): RecoveryIncarnationBinding | null {
   const wanted = incarnationAggregateId(incarnationRef);
   let cursor = 0n;
   for (;;) {
@@ -78,7 +86,7 @@ export function readAnchoredIncarnation(
     for (const decision of page.items) {
       if (!isAnchorRow(decision, projectId) || decision.targetAggregateId !== wanted) continue;
       const binding = decodeBinding(decision.resultBytes);
-      if (binding === null || binding.origin !== "RESTORE") continue;
+      if (binding === null || binding.origin !== origin) continue;
       if (incarnationAggregateId(binding.incarnationRef) !== wanted) continue;
       return binding;
     }
@@ -86,6 +94,43 @@ export function readAnchoredIncarnation(
     cursor = page.nextCursor;
   }
   return null;
+}
+
+/**
+ * Returns the anchored RESTORE binding for one incarnation, or null when
+ * nothing anchored it.
+ *
+ * Every caller of this reader — the restore controller, the succession chain,
+ * the inventory ledger — asks about a restore lineage and reads restore facts
+ * off the answer. A GENESIS row therefore reads as ABSENT here rather than
+ * being handed back for each of them to re-refuse: one place fails closed, and
+ * the return type says so. Genesis has its own reader below.
+ */
+export function readAnchoredIncarnation(
+  store: AnchorDecisionReader,
+  projectId: string,
+  incarnationRef: string,
+): RestoreIncarnationBinding | null {
+  const binding = readAnchoredBindingOfOrigin(store, projectId, incarnationRef, "RESTORE");
+  return binding !== null && binding.origin === "RESTORE" ? binding : null;
+}
+
+/**
+ * The genesis half, deliberately a SEPARATE export rather than a widened return
+ * type on the restore reader: a restore caller that started receiving genesis
+ * rows would read `restoreCommandId` off a store that never restored.
+ *
+ * A genesis fence is anchored the same way a restore incarnation is, so the
+ * classifier can compare the ACTIVE row's bytes against something the daemon
+ * durably observed rather than against the row's own claim about itself.
+ */
+export function readAnchoredGenesisIncarnation(
+  store: AnchorDecisionReader,
+  projectId: string,
+  incarnationRef: string,
+): GenesisIncarnationBinding | null {
+  const binding = readAnchoredBindingOfOrigin(store, projectId, incarnationRef, "GENESIS");
+  return binding !== null && binding.origin === "GENESIS" ? binding : null;
 }
 
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -106,13 +151,22 @@ function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
  * between anchoring and recording the succession recoverable by simply retrying.
  */
 export function anchorIncarnation(
-  store: SqliteEventStore,
+  store: AnchorDecisionWriter,
   request: RecoveryDurableWriteRequest,
   binding: RecoveryIncarnationBinding,
 ): boolean {
   const bytes = encodeBinding(binding);
   const aggregateId = incarnationAggregateId(binding.incarnationRef);
-  const existing = readAnchoredIncarnation(store, request.projectId, binding.incarnationRef);
+  // Looked up under the binding's OWN origin. Asking the restore reader about a
+  // genesis binding would always answer null, so every re-anchor would fall
+  // through to a second write and be refused as a version conflict — an
+  // idempotent retry reported as a failure.
+  const existing = readAnchoredBindingOfOrigin(
+    store,
+    request.projectId,
+    binding.incarnationRef,
+    binding.origin,
+  );
   if (existing !== null) return sameBytes(encodeBinding(existing), bytes);
 
   const commandId = `recovery-incarnate:${binding.incarnationRef}`;
