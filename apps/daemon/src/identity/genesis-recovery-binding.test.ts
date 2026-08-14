@@ -347,6 +347,40 @@ describe("genesis recovery binding — fail closed", () => {
     expect(GENESIS_RECOVERY_ERROR_CODES).toContain(result.code);
   });
 
+  it("accepts a LOST anchor race whose winner landed byte-identical evidence", () => {
+    // anchorIncarnation reads-then-writes, so two daemons opening one store can
+    // both see no anchor and both attempt one. The loser is refused by the
+    // expectedVersion-0 conflict — and must NOT fail startup over an anchor that
+    // did land. Only byte-identical evidence is accepted.
+    const store = openUnboundStore();
+    let conflicted = false;
+    const racing = {
+      commitExpectedVersionDecision: (input: unknown): unknown => {
+        // The rival commits the SAME anchor first; this call then loses.
+        if (!conflicted) {
+          conflicted = true;
+          store.commitExpectedVersionDecision(input as never);
+        }
+        return Object.freeze({ decision: Object.freeze({ effectDisposition: "NO_BUSINESS_EFFECT" }) });
+      },
+      installRecoveryBinding: (input: unknown): RecoveryInstallResult =>
+        store.installRecoveryBinding(input),
+      readCommandDecisionsAfter: (cursor: bigint, limit: number): DecisionPage =>
+        store.readCommandDecisionsAfter(cursor, limit),
+      readRecoveryBinding: (slot: unknown): RecoveryBindingReadResult =>
+        store.readRecoveryBinding(slot),
+    } as unknown as Parameters<typeof ensureGenesisRecoveryBinding>[0];
+
+    const result = ensureGenesisRecoveryBinding(racing, { clock: CLOCK, projectId: PROJECT_ID });
+
+    expect(conflicted).toBe(true);
+    const settled = requireBinding(result);
+    expect(settled.outcome).toBe("INSTALLED");
+    expect(anchorRowCount(store)).toBe(1);
+    expect(readAnchoredGenesisIncarnation(store, PROJECT_ID, settled.binding.recoveryIncarnationRef))
+      .not.toBeNull();
+  });
+
   it("defers to a restore waiting to quiesce instead of stealing the slot", () => {
     // An anchored incarnation with an empty ACTIVE slot is recovery history:
     // the restore controller owns that install, and a genesis mint here would

@@ -4,7 +4,11 @@ import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import type { RecoveryDurableWriteRequest } from "../recovery/recovery-succession-contract.js";
 
-import { anchorIncarnation, hasAnchoredIncarnation } from "../recovery/recovery-incarnation-anchor.js";
+import {
+  anchorIncarnation,
+  hasAnchoredIncarnation,
+  readAnchoredGenesisIncarnation,
+} from "../recovery/recovery-incarnation-anchor.js";
 import type { AnchorDecisionWriter } from "../recovery/recovery-incarnation-anchor.js";
 import { decodeBinding, encodeBinding } from "../recovery/recovery-incarnation-binding-codec.js";
 import type { GenesisIncarnationBinding } from "../recovery/recovery-incarnation-contract.js";
@@ -92,6 +96,15 @@ const bindingFrom = (read: RecoveryBindingReadResult): RecoveryAuthenticationBin
  */
 const GENESIS_PRINCIPAL_ID = "daemon-genesis";
 
+const sameEncodedBinding = (
+  left: GenesisIncarnationBinding,
+  right: GenesisIncarnationBinding,
+): boolean => {
+  const a = encodeBinding(left);
+  const b = encodeBinding(right);
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+};
+
 const anchorRequestFor = (
   binding: GenesisIncarnationBinding,
   config: GenesisRecoveryConfig,
@@ -134,9 +147,20 @@ function settle(
   ) {
     return present(outcome, current);
   }
-  return anchorIncarnation(store, anchorRequestFor(decoded, config), decoded)
+  if (anchorIncarnation(store, anchorRequestFor(decoded, config), decoded)) {
+    return present(outcome, current);
+  }
+  // `anchorIncarnation` reads-then-writes, so two daemons opening the same store
+  // can both see no anchor and both attempt one; the loser is refused by the
+  // expectedVersion-0 conflict and would otherwise fail startup even though the
+  // anchor it wanted DID land. Re-read and accept only BYTE-IDENTICAL evidence —
+  // the same test the idempotent path applies. A conflict that produced
+  // different bytes, or none, stays a refusal.
+  const landed = readAnchoredGenesisIncarnation(store, config.projectId, decoded.incarnationRef);
+  if (landed === null) return refuse("GENESIS_ANCHOR_REFUSED", "ANCHOR_NOT_COMMITTED");
+  return sameEncodedBinding(landed, decoded)
     ? present(outcome, current)
-    : refuse("GENESIS_ANCHOR_REFUSED", "ANCHOR_NOT_COMMITTED");
+    : refuse("GENESIS_ANCHOR_REFUSED", "ANCHOR_BYTES_DIVERGED");
 }
 
 export function ensureGenesisRecoveryBinding(
