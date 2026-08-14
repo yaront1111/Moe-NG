@@ -46,9 +46,20 @@ try {
     createArtifactStore: typeof ns.createArtifactStore,
     effectStatesFrozen: Object.isFrozen(ns.EFFECT_STATES),
     observeScope: typeof ns.observeScope,
+    probeCodexRuntime: typeof ns.probeCodexRuntime,
+    recordCodexStream: typeof ns.recordCodexStream,
+    codexCapabilitiesFrozen: Object.isFrozen(ns.CODEX_CAPABILITIES),
+    codexStreamRecordVersion: ns.CODEX_STREAM_RECORD_VERSION,
   });
 } catch (error) {
-  report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
+  // Report the SPECIFIER, not just the code. A bridge that fails to resolve
+  // surfaces downstream as an undefined binding, which names nothing and sends
+  // the reader hunting; the specifier says which module was not found.
+  report({
+    outcome: "FAILED",
+    code: error.code ?? "NO_CODE",
+    specifier: error.url ?? String(error.message ?? "").match(/'([^']+)'/)?.[1] ?? "NO_SPECIFIER",
+  });
 }
 `;
 
@@ -65,6 +76,14 @@ try {
 it("loads @moe/runner in Node's strip-types runtime with its named exports defined", async () => {
   // Asserts the bindings, not the exit code: a child can exit 0 having imported
   // nothing useful, and that weak assertion is what let this defect live.
+  //
+  // The four Codex bindings are read here because a surface module's bridge is
+  // invisible to every other suite in this repo: vitest resolves `./x.js` back
+  // to `x.ts`, so a missing or misdirected `surface/codex-surface.js` leaves the
+  // whole namespace suite green. Only a real child Node process consults it.
+  // `codexStreamRecordVersion` reads a VALUE rather than a `typeof`, so a
+  // binding that resolves to `undefined` is distinguishable from one that never
+  // resolved at all.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
     hasNamedExports: true,
@@ -74,6 +93,10 @@ it("loads @moe/runner in Node's strip-types runtime with its named exports defin
     createArtifactStore: "function",
     effectStatesFrozen: true,
     observeScope: "function",
+    probeCodexRuntime: "function",
+    recordCodexStream: "function",
+    codexCapabilitiesFrozen: true,
+    codexStreamRecordVersion: "moe-codex-stream-record/1",
   });
 });
 

@@ -11,7 +11,8 @@
  * derived from the namespace under test, so a removed export AND an unreviewed
  * addition both go red.
  */
-import { dirname } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, it } from "vitest";
@@ -39,7 +40,10 @@ import type {
  * has to fail here rather than in the consumer's own repository. `ObservationClock`,
  * `PlatformIdentity`, `RuntimeClosureEntry` and `RuntimePinningMethod` are NOT
  * repeated here: the Claude seam already roots them, and Codex's own structurally
- * identical declarations must not be re-exported under the same names.
+ * identical declarations must not be re-exported under the same names. The Codex
+ * seam publishes its copies under `Codex`-prefixed ALIASES instead, imported in
+ * their own block below; the ten `Codex*` names in THIS block stay owned by the
+ * recovery-inventory seam and are deliberately not republished by it.
  */
 import type {
   ArtifactObjectInventoryInput, ArtifactObjectInventoryReading, ClaudeCancelObservation,
@@ -52,6 +56,29 @@ import type {
   ProbeCodexRuntimeInput, ProviderLockInventoryInput, ProviderLockInventoryPort,
   ProviderProcessRecord, WorkspaceInventoryInput, WorkspaceInventoryListing,
   WorkspaceInventoryPort, WorkspaceInventoryResultAspect, WorkspaceInventorySource,
+} from "@moe/runner";
+/**
+ * The Codex provider seam's type closure, through the same root. Nine of these
+ * are aliases over provider-neutral names Codex redeclares — `CodexObservationClock`,
+ * `CodexPlatformIdentity`, `CodexRuntimeClosureEntry`, `CodexRuntimeClosureKind`,
+ * `CodexRuntimePinningMethod`, `CodexObservationTruthClass`, `CodexBuildObservationInput`,
+ * `CodexBuildObservationResult` and `CodexEffectIdentity` — so naming them here is
+ * what proves the alias reached the root rather than being dropped as an
+ * ambiguous star export, which produces no compile error of its own.
+ */
+import type {
+  CodexBuildObservationInput, CodexBuildObservationResult, CodexCapability,
+  CodexCapabilityProfile, CodexCapabilityRecord, CodexCapabilityStatus, CodexContextPolicy,
+  CodexEffectIdentity, CodexFailure, CodexMirroredSkillEntry, CodexMirroredSkillFile,
+  CodexMirroredSkillRendererInput, CodexObservationClock, CodexObservationErrorCode,
+  CodexObservationTruthClass, CodexPlatformIdentity, CodexProcessExit, CodexProofMethod,
+  CodexProviderRuntimeObservation, CodexRawRetention, CodexReconciledOutcome,
+  CodexReconciliation, CodexRenderErrorCode, CodexRenderLayer, CodexRenderLayerEntry,
+  CodexRenderedContext, CodexRuntimeClosureEntry, CodexRuntimeClosureKind,
+  CodexRuntimePinningMethod, CodexStreamAnomaly, CodexStreamDisposition, CodexStreamErrorCode,
+  CodexStreamEvent, CodexStreamRecord, CodexTokenizerPort, ProbeCodexRuntimeOk,
+  ProbeCodexRuntimeResult, ReconcileCodexRunInput, RecordCodexStreamInput,
+  RecordCodexStreamResult, RenderCodexContextInput, RenderCodexContextResult,
 } from "@moe/runner";
 /** The recovery, evidence and Claude observation seams, through the same root. */
 import type {
@@ -101,7 +128,8 @@ type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "strin
  * process wrapper publishes, the 11 values the platform boundary seam publishes,
  * the 4 registration factories the recovery-inventory seam publishes, and the 3
  * launch-selection values the launcher seam publishes so a consumer can fill
- * `ClaudeLaunchRequest.launchSelection` and spell the argv it is checked against.
+ * `ClaudeLaunchRequest.launchSelection` and spell the argv it is checked against,
+ * and the 30 values the Codex provider seam publishes.
  * Read off the module sources, never off the namespace under test —
  * a list derived from what it checks asserts only that the namespace equals
  * itself.
@@ -211,11 +239,38 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["gitIntegrationInventoryRegistration", "function"],
   ["providerLockInventoryRegistration", "function"],
   ["workspaceInventoryRegistration", "function"],
+  // The 30 values the Codex provider seam publishes: 6 schema-version strings,
+  // 15 frozen vocabularies, and 9 entry points spanning observation, probe,
+  // stream recording, render and reconciliation. Six of them are ALIASES over
+  // provider-neutral names Codex redeclares and claude-surface already roots —
+  // CODEX_OBSERVATION_TRUTH_CLASSES, CODEX_RUNTIME_CLOSURE_KINDS,
+  // CODEX_RUNTIME_PINNING_METHODS, buildCodexRuntimeObservation,
+  // codexObservationDigestInput, codexRuntimePinningIsAuthoritative — plus
+  // CODEX_MIRRORED_SKILL_RENDERER_INPUT_VERSION, codexRendererEnvelopeIdentity
+  // and renderCodexAdvisorySkills, aliased under the same rule. An alias that
+  // was missed does not fail to compile: ESM drops a name supplied by two star
+  // paths, so it lands here as a MISSING key in the equality below.
+  ["CODEX_ACCEPTED_SCHEMA_VERSIONS", "array"], ["CODEX_CAPABILITIES", "array"],
+  ["CODEX_CAPABILITY_PROFILE_VERSION", "string"], ["CODEX_CAPABILITY_STATUSES", "array"],
+  ["CODEX_CONTEXT_POLICIES", "array"],
+  ["CODEX_MIRRORED_SKILL_RENDERER_INPUT_VERSION", "string"],
+  ["CODEX_OBSERVATION_ERROR_CODES", "array"], ["CODEX_OBSERVATION_TRUTH_CLASSES", "array"],
+  ["CODEX_PROOF_METHODS", "array"], ["CODEX_RECONCILED_OUTCOMES", "array"],
+  ["CODEX_RECONCILIATION_VERSION", "string"], ["CODEX_RENDERER_ENVELOPE_VERSION", "string"],
+  ["CODEX_RENDER_ERROR_CODES", "array"], ["CODEX_RENDER_LAYERS", "array"],
+  ["CODEX_RUNTIME_CLOSURE_KINDS", "array"], ["CODEX_RUNTIME_OBSERVATION_VERSION", "string"],
+  ["CODEX_RUNTIME_PINNING_METHODS", "array"], ["CODEX_STREAM_ANOMALIES", "array"],
+  ["CODEX_STREAM_DISPOSITIONS", "array"], ["CODEX_STREAM_ERROR_CODES", "array"],
+  ["CODEX_STREAM_RECORD_VERSION", "string"], ["buildCodexRuntimeObservation", "function"],
+  ["codexObservationDigestInput", "function"], ["codexRendererEnvelopeIdentity", "function"],
+  ["codexRuntimePinningIsAuthoritative", "function"], ["probeCodexRuntime", "function"],
+  ["reconcileCodexRun", "function"], ["recordCodexStream", "function"],
+  ["renderCodexAdvisorySkills", "function"], ["renderCodexContext", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(165);
+  expect(EXPECTED_EXPORTS.length).toBe(195);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -1537,4 +1592,385 @@ it("keeps the recovery-inventory enumerators and version constants unpublished",
     "GIT_INTEGRATION_INVENTORY_VERSION", "ARTIFACT_OBJECT_INVENTORY_VERSION",
   ];
   expect(withheld.filter((name) => name in surface)).toEqual([]);
+});
+
+/**
+ * The Codex provider seam's type closure. Type-only exports are invisible to
+ * every runtime guard in this file — the `Object.keys` equality and the count
+ * literal both see values only — so an absent or misspelled `export type` line
+ * moves nothing and would surface first in a consumer's own repository.
+ *
+ * Every annotation below is applied to a REAL value obtained through the bare
+ * `@moe/runner` specifier, never to a bare literal. `const x: T = { ... }`
+ * typechecks against a locally re-declared shape whether or not `T` was ever
+ * published, so a literal would assert nothing about the seam.
+ */
+const CODEX_DIGEST_A = "a".repeat(64);
+const CODEX_DIGEST_B = "b".repeat(64);
+const codexClock: CodexObservationClock = { observedAt: () => "2026-08-14T10:00:00.000Z" };
+const codexPlatform: CodexPlatformIdentity = { os: "linux", arch: "x64", osVersion: "6.8" };
+const codexClosure: readonly CodexRuntimeClosureEntry[] = [
+  { kind: "PACKAGE", path: "z/package", sha256: CODEX_DIGEST_B },
+  { kind: "EXECUTABLE", path: "a/codex", sha256: CODEX_DIGEST_A },
+];
+const codexEffect: CodexEffectIdentity =
+  { effectIntentId: "effect-1", attemptRef: "attempt-1", epoch: 7 };
+
+function codexObservationInput(
+  overrides: Partial<CodexBuildObservationInput> = {},
+): CodexBuildObservationInput {
+  return {
+    resolvedRuntimeClosure: codexClosure,
+    reportedVersion: "codex-cli 1.0",
+    adapterCapabilitySchemaDigest: CODEX_DIGEST_A,
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: codexPlatform,
+    clock: codexClock,
+    ...overrides,
+  };
+}
+
+it("gives a root-only consumer the Codex observation type closure, both arms", () => {
+  const kinds: readonly CodexRuntimeClosureKind[] = runner.CODEX_RUNTIME_CLOSURE_KINDS;
+  const methods: readonly CodexRuntimePinningMethod[] = runner.CODEX_RUNTIME_PINNING_METHODS;
+  const truths: readonly CodexObservationTruthClass[] = runner.CODEX_OBSERVATION_TRUTH_CLASSES;
+  const codes: readonly CodexObservationErrorCode[] = runner.CODEX_OBSERVATION_ERROR_CODES;
+  expect([kinds.length, methods.length, truths.length, codes.length]).toEqual([3, 3, 2, 8]);
+
+  const built: CodexBuildObservationResult =
+    runner.buildCodexRuntimeObservation(codexObservationInput());
+  expect(built.ok).toBe(true);
+  if (!built.ok) throw new Error("valid Codex observation input was refused");
+  // OK arm reached: annotate the observation itself, then re-derive its digest
+  // input through the published helper rather than trusting the builder's own.
+  const observation: CodexProviderRuntimeObservation = built.observation;
+  const truth: CodexObservationTruthClass = observation.truthClass;
+  expect(observation.observationVersion).toBe(runner.CODEX_RUNTIME_OBSERVATION_VERSION);
+  expect(observation.providerId).toBe("codex");
+  expect(truths).toContain(truth);
+  expect(methods).toContain(observation.pinningMethod);
+  expect(typeof runner.codexRuntimePinningIsAuthoritative(observation)).toBe("boolean");
+  // The digest INPUT, not the digest: it must reproduce the observation's own
+  // identity fields and must not carry the digest it is used to compute.
+  const digestInput = runner.codexObservationDigestInput(observation);
+  expect(digestInput["providerId"]).toBe("codex");
+  expect(digestInput["observationVersion"]).toBe(observation.observationVersion);
+  expect(digestInput["truthClass"]).toBe(truth);
+  expect("observationDigest" in digestInput).toBe(false);
+
+  // REFUSED arm reached, and the exact reason code pinned rather than "not ok":
+  // a closure entry whose sha256 is a well-typed string but not a 64-hex digest.
+  const refused: CodexBuildObservationResult = runner.buildCodexRuntimeObservation(
+    codexObservationInput({
+      resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: "a/codex", sha256: "not-a-digest" }],
+    }),
+  );
+  expect(refused.ok).toBe(false);
+  if (refused.ok) throw new Error("a malformed closure digest was accepted");
+  const failure: CodexFailure<CodexObservationErrorCode> = refused;
+  expect(failure.code).toBe("CODEX_OBSERVATION_CLOSURE_INVALID");
+  expect(codes).toContain(failure.code);
+});
+
+it("gives a root-only consumer the Codex probe and capability type closure", () => {
+  const capabilities: readonly CodexCapability[] = runner.CODEX_CAPABILITIES;
+  const statuses: readonly CodexCapabilityStatus[] = runner.CODEX_CAPABILITY_STATUSES;
+  const proofs: readonly CodexProofMethod[] = runner.CODEX_PROOF_METHODS;
+  const policies: readonly CodexContextPolicy[] = runner.CODEX_CONTEXT_POLICIES;
+  expect([capabilities.length, statuses.length, proofs.length, policies.length])
+    .toEqual([12, 2, 12, 2]);
+
+  // Family B: these names already reach the root from the recovery-inventory
+  // seam and are deliberately NOT republished by the Codex seam. Building the
+  // probe input out of them is what proves this task left them reachable rather
+  // than shadowing them with a second owner.
+  const sample: CodexStructuredSample = { jsonLines: ["{}"] };
+  const cancel: CodexCancelObservation = { requestedAtSequence: 1, terminatedAtSequence: 2 };
+  const cwd: CodexCwdObservation = { requestedCwd: "/w", observedCwd: "/w" };
+  const tree: CodexProcessTreeObservation = { childrenBefore: 1, childrenAfter: 0 };
+  const runs: CodexRunEnumerationObservation =
+    { enumeratedRunIds: ["run-1"], provenAbsentRunId: "run-2" };
+  const tokenizerFacts: CodexTokenizerObservation =
+    { tokenizerId: "o200k", sampleText: "hello", sampleTokenCount: 1 };
+  const limit: CodexContextLimit = { kind: "EXACT_TOKENS", tokens: 200_000 };
+  const report: CodexProbeReport = {
+    resolvedRuntimeClosure: codexClosure,
+    reportedVersion: "codex-cli 1.0",
+    schemaVersion: "codex-stream-json/1",
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    structuredSample: sample,
+    rawSampleBase64: null,
+    cancelObservation: cancel,
+    cwdObservation: cwd,
+    processTreeObservation: tree,
+    runEnumeration: runs,
+    tokenizer: tokenizerFacts,
+    declaredContextLimit: limit,
+    helpText: "codex --help",
+    resumeClaim: null,
+  };
+  const port: CodexProbePort = { report: () => report };
+  const probeInput: ProbeCodexRuntimeInput =
+    { port, clock: codexClock, platformIdentity: codexPlatform };
+
+  const probed: ProbeCodexRuntimeResult = runner.probeCodexRuntime(probeInput);
+  expect(probed.ok).toBe(true);
+  if (!probed.ok) throw new Error("a complete Codex probe report was refused");
+  const ok: ProbeCodexRuntimeOk = probed;
+  const profile: CodexCapabilityProfile = ok.profile;
+  const observed: CodexProviderRuntimeObservation = ok.observation;
+  expect(profile.profileVersion).toBe(runner.CODEX_CAPABILITY_PROFILE_VERSION);
+  expect(policies).toContain(profile.contextPolicy);
+  expect(observed.providerId).toBe("codex");
+
+  // Every record in the profile is a member of all three published vocabularies.
+  const records: readonly CodexCapabilityRecord[] = profile.capabilities;
+  expect(records.length).toBe(capabilities.length);
+  for (const entry of records) {
+    expect(capabilities).toContain(entry.capability);
+    expect(statuses).toContain(entry.status);
+    expect(proofs).toContain(entry.proofMethod);
+  }
+});
+
+it("gives a root-only consumer the Codex stream and reconciliation type closure", () => {
+  const anomalies: readonly CodexStreamAnomaly[] = runner.CODEX_STREAM_ANOMALIES;
+  const dispositions: readonly CodexStreamDisposition[] = runner.CODEX_STREAM_DISPOSITIONS;
+  const streamCodes: readonly CodexStreamErrorCode[] = runner.CODEX_STREAM_ERROR_CODES;
+  const outcomes: readonly CodexReconciledOutcome[] = runner.CODEX_RECONCILED_OUTCOMES;
+
+  const line = JSON.stringify({ schemaVersion: "codex-stream-json/1", seq: 1, type: "assistant" });
+  const streamInput: RecordCodexStreamInput = {
+    rawBytes: new TextEncoder().encode(`${line}\n`),
+    effect: codexEffect,
+    acceptedSchemaVersions: runner.CODEX_ACCEPTED_SCHEMA_VERSIONS,
+  };
+  const recorded: RecordCodexStreamResult = runner.recordCodexStream(streamInput);
+  expect(recorded.ok).toBe(true);
+  if (!recorded.ok) throw new Error("a well-formed Codex stream line was refused");
+  const streamRecord: CodexStreamRecord = recorded.record;
+  const events: readonly CodexStreamEvent[] = streamRecord.events;
+  const raw: CodexRawRetention = streamRecord.raw;
+  expect(streamRecord.recordVersion).toBe(runner.CODEX_STREAM_RECORD_VERSION);
+  expect(dispositions).toContain(streamRecord.disposition);
+  expect(streamRecord.anomalies.every((anomaly) => anomalies.includes(anomaly))).toBe(true);
+  expect(events.length).toBe(1);
+  expect(events[0]?.effectIntentId).toBe(codexEffect.effectIntentId);
+  expect(raw.kind).toBe("INLINE");
+
+  // REFUSED arm, exact code: an empty allowlist can never admit a schema, so the
+  // recorder refuses rather than silently accepting every version.
+  const empty: RecordCodexStreamResult =
+    runner.recordCodexStream({ ...streamInput, acceptedSchemaVersions: [] });
+  expect(empty.ok).toBe(false);
+  if (empty.ok) throw new Error("an empty schema allowlist was accepted");
+  const streamFailure: CodexFailure<CodexStreamErrorCode> = empty;
+  expect(streamFailure.code).toBe("CODEX_STREAM_SCHEMA_ALLOWLIST_EMPTY");
+  expect(streamCodes).toContain(streamFailure.code);
+
+  // Reconciliation composes on the record above, which is why both are
+  // published: a consumer can carry one seam's output straight into the next.
+  const exit: CodexProcessExit = { kind: "EXITED", code: 0 };
+  const reconcileInput: ReconcileCodexRunInput =
+    { stream: streamRecord, cancelRequested: false, processExit: exit };
+  const reconciliation: CodexReconciliation = runner.reconcileCodexRun(reconcileInput);
+  const outcome: CodexReconciledOutcome = reconciliation.outcome;
+  expect(reconciliation.reconciliationVersion).toBe(runner.CODEX_RECONCILIATION_VERSION);
+  expect(outcomes).toContain(outcome);
+  expect(reconciliation.streamDigest).toBe(streamRecord.recordDigest);
+});
+
+it("gives a root-only consumer the Codex render type closure, both arms", () => {
+  const layers: readonly CodexRenderLayer[] = runner.CODEX_RENDER_LAYERS;
+  const renderCodes: readonly CodexRenderErrorCode[] = runner.CODEX_RENDER_ERROR_CODES;
+  const encoder = new TextEncoder();
+  const file: CodexMirroredSkillFile = {
+    path: "SKILL.md", byteLength: 2, contentBase64: "aGk=",
+    // The real sha256 of the decoded bytes ("hi"); the renderer re-hashes the
+    // content and refuses a file whose digest does not recompute.
+    sha256: "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+  };
+  const skill: CodexMirroredSkillEntry = {
+    skillId: "skill-1", version: "1", origin: "local", bundleDigest: CODEX_DIGEST_B, files: [file],
+  };
+  const snapshot: CodexMirroredSkillRendererInput = {
+    rendererInputVersion: runner.CODEX_MIRRORED_SKILL_RENDERER_INPUT_VERSION,
+    authority: "NONE",
+    advisoryOnly: true,
+    skills: [skill],
+  };
+  const tokenizerPort: CodexTokenizerPort = { countTokens: (bytes) => bytes.byteLength };
+  const renderInput: RenderCodexContextInput = {
+    agentsContractBytes: encoder.encode("# AGENTS\n"),
+    taskContext: { taskRef: "task-1", bodyBytes: encoder.encode("do the thing") },
+    skillSnapshot: snapshot,
+    contextLimit: { kind: "EXACT_TOKENS", tokens: 200_000 },
+    tokenizer: tokenizerPort,
+  };
+
+  const rendered: RenderCodexContextResult = runner.renderCodexContext(renderInput);
+  expect(rendered.ok).toBe(true);
+  if (!rendered.ok) throw new Error("a valid Codex render input was refused");
+  const context: CodexRenderedContext = rendered.rendered;
+  const manifest: readonly CodexRenderLayerEntry[] = context.layerManifest;
+  expect(context.rendererEnvelopeVersion).toBe(runner.CODEX_RENDERER_ENVELOPE_VERSION);
+  expect(context.authority).toBe("NONE");
+  expect(manifest.map((entry) => entry.layer)).toEqual([...layers]);
+  expect(typeof runner.codexRendererEnvelopeIdentity(context)).toBe("string");
+
+  // REFUSED arm, exact code: an UNKNOWN context limit cannot bound a render, so
+  // the renderer refuses instead of guessing a budget.
+  const unbounded: RenderCodexContextResult =
+    runner.renderCodexContext({ ...renderInput, contextLimit: { kind: "UNKNOWN" } });
+  expect(unbounded.ok).toBe(false);
+  if (unbounded.ok) throw new Error("an UNKNOWN context limit was accepted as a bound");
+  const renderFailure: CodexFailure<CodexRenderErrorCode> = unbounded;
+  expect(renderFailure.code).toBe("CODEX_RENDER_CONTEXT_LIMIT_UNKNOWN");
+  expect(renderCodes).toContain(renderFailure.code);
+
+  // The advisory skill renderer is published separately: bytes, or a refusal
+  // carrying its own code from the same closed vocabulary.
+  const bytes = runner.renderCodexAdvisorySkills(snapshot);
+  expect(bytes instanceof Uint8Array).toBe(true);
+
+  // WHICH LAYER REFUSED, pinned in both directions, because the two published
+  // entry points do NOT share a gate. `rendererInputVersion` is checked by
+  // `renderCodexContext` alone; `renderCodexAdvisorySkills` never looks at it
+  // and renders a bad-version snapshot happily. Asserting only "it refused"
+  // would let either gate answer for the other and stay green.
+  const badVersion: CodexMirroredSkillRendererInput =
+    { ...snapshot, rendererInputVersion: "x/9" };
+  expect(runner.renderCodexAdvisorySkills(badVersion) instanceof Uint8Array).toBe(true);
+  const versionRefused: RenderCodexContextResult =
+    runner.renderCodexContext({ ...renderInput, skillSnapshot: badVersion });
+  expect(versionRefused.ok).toBe(false);
+  if (versionRefused.ok) throw new Error("an unsupported renderer input version was accepted");
+  expect(versionRefused.code).toBe("CODEX_RENDER_SKILL_SNAPSHOT_VERSION_UNSUPPORTED");
+
+  // The skills renderer's OWN gate: a file digest that does not recompute over
+  // the decoded content. This one refuses at the skills layer, not the context
+  // layer, and carries a different code.
+  const badDigest: CodexMirroredSkillRendererInput = {
+    ...snapshot,
+    skills: [{ ...skill, files: [{ ...file, sha256: CODEX_DIGEST_A }] }],
+  };
+  const digestRefused = runner.renderCodexAdvisorySkills(badDigest);
+  expect(digestRefused instanceof Uint8Array).toBe(false);
+  const skillFailure = digestRefused as CodexFailure<CodexRenderErrorCode>;
+  expect(skillFailure.code).toBe("CODEX_RENDER_SKILL_SNAPSHOT_INVALID");
+  expect(renderCodes).toContain(skillFailure.code);
+});
+
+/**
+ * Negative control for the Codex seam's WIDTH. Each withheld name is an internal
+ * that would let a consumer take a step the seam applies for it: `codexFailure`
+ * and `capabilityStatus` mint a refusal and a status rather than reading one;
+ * `assessCapabilities` and `capabilitySchemaDigestOf` are what the probe applies
+ * itself, so a consumer holding them could assess one report and present another;
+ * `isBoundedLabel` and `resolveContextLimit` are internal validators;
+ * `UNPROVEN_PROBE_REPORT` is a fixture-shaped constant that must never stand in
+ * for a real observation; `frameStream` and `analyzeStream` are the two halves
+ * `recordCodexStream` composes and bounds.
+ */
+it("withholds the Codex internals, fixtures and stream framing halves from the root", () => {
+  const withheld = [
+    "codexFailure", "capabilityStatus", "assessCapabilities", "capabilitySchemaDigestOf",
+    "isBoundedLabel", "resolveContextLimit", "UNPROVEN_PROBE_REPORT", "frameStream",
+    "analyzeStream",
+  ];
+  expect(withheld.length).toBe(9);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the identical membership test over two names this seam DOES
+  // publish must find both, so the assertion above cannot be passing because `in`
+  // is broken or `surface` is the wrong object.
+  expect(["CODEX_CAPABILITIES", "recordCodexStream"].filter((name) => name in surface))
+    .toEqual(["CODEX_CAPABILITIES", "recordCodexStream"]);
+  // The seam's bounds stay internal too: every MAX_* the Codex modules declare.
+  const bounds = [
+    "MAX_RUNTIME_CLOSURE_ENTRIES", "MAX_RUNTIME_TEXT_CHARS", "MAX_MIRRORED_SKILLS",
+    "MAX_MIRRORED_SKILL_FILES", "MAX_FRAMED_LINES", "MAX_INLINE_STREAM_BYTES",
+    "MAX_INSPECTABLE_TAIL_BYTES",
+  ];
+  expect(bounds.length).toBe(7);
+  expect(bounds.filter((name) => name in surface)).toEqual([]);
+});
+
+/**
+ * Family B ownership: ten `Codex*` types that `recovery-inventory-surface.ts`
+ * already publishes from the same Codex modules. Re-exporting them from the new
+ * Codex seam would be legal ESM — one binding reached two ways — but it would
+ * give one published name two owning seams, and that file is not this task's to
+ * own. This asserts each is exported by EXACTLY ONE surface module, and names
+ * which one, so a later "tidy-up" that republishes them fails here.
+ *
+ * The surface directory is enumerated rather than hand-listed, so a sixth surface
+ * module is covered the day it lands instead of silently escaping the check.
+ */
+const SURFACE_SOURCES: ReadonlyMap<string, string> = new Map(
+  readdirSync(join(SRC_DIR, "surface"))
+    .filter((entry) => entry.endsWith("-surface.ts"))
+    .map((entry) => [entry, readFileSync(join(SRC_DIR, "surface", entry), "utf8")]),
+);
+
+/**
+ * Comments must be stripped before matching. This very task's `codex-surface.ts`
+ * lists all ten Family B names in its doc comment explaining why it does NOT
+ * republish them — matched raw, that prose would read as a second owner and turn
+ * the assertion below into a false failure. The reverse mistake is worse: a
+ * stripper that removes too much would find no owners at all and pass silently,
+ * which is why both directions are controlled below.
+ */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+}
+
+function owningSurfaces(name: string): readonly string[] {
+  const word = new RegExp(`\\b${name}\\b`);
+  return [...SURFACE_SOURCES]
+    .filter(([, source]) => word.test(withoutComments(source)))
+    .map(([file]) => file)
+    .sort();
+}
+
+it("leaves the ten Family B Codex types owned by exactly one surface module", () => {
+  // Guard the case list itself: an empty enumeration would pass every assertion
+  // below while measuring nothing.
+  expect(SURFACE_SOURCES.size).toBe(5);
+  expect([...SURFACE_SOURCES.keys()].sort()).toEqual([
+    "claude-surface.ts", "codex-surface.ts", "evidence-surface.ts",
+    "recovery-inventory-surface.ts", "recovery-surface.ts",
+  ]);
+
+  // Positive control for the stripper, both directions. `CodexCancelObservation`
+  // appears in codex-surface.ts's prose and nowhere in its exports, so the raw
+  // source must contain it and the stripped source must not; `probeCodexRuntime`
+  // is genuinely exported there and must survive stripping.
+  const codexSource = SURFACE_SOURCES.get("codex-surface.ts") ?? "";
+  expect(codexSource).toContain("CodexCancelObservation");
+  expect(withoutComments(codexSource)).not.toContain("CodexCancelObservation");
+  expect(withoutComments(codexSource)).toContain("probeCodexRuntime");
+
+  const familyB = [
+    "CodexCancelObservation", "CodexContextLimit", "CodexCwdObservation", "CodexProbePort",
+    "CodexProbeReport", "CodexProcessTreeObservation", "CodexRunEnumerationObservation",
+    "CodexStructuredSample", "CodexTokenizerObservation", "ProbeCodexRuntimeInput",
+  ];
+  expect(familyB.length).toBe(10);
+  expect(familyB.map((name) => owningSurfaces(name).join(","))).toEqual(
+    familyB.map(() => "recovery-inventory-surface.ts"),
+  );
+
+  // Family A is the opposite case: Codex redeclares these, claude-surface roots
+  // the Claude copy, and the Codex seam publishes its own under an ALIAS. The
+  // unaliased spellings must therefore never appear in codex-surface.ts exports.
+  const familyAUnaliased = [
+    "OBSERVATION_TRUTH_CLASSES", "RUNTIME_CLOSURE_KINDS", "RUNTIME_PINNING_METHODS",
+    "ObservationClock", "PlatformIdentity", "ProviderRuntimeObservation",
+  ];
+  expect(familyAUnaliased.length).toBe(6);
+  expect(familyAUnaliased.filter((name) => name in surface))
+    .toEqual(["OBSERVATION_TRUTH_CLASSES", "RUNTIME_CLOSURE_KINDS", "RUNTIME_PINNING_METHODS"]);
+  expect(familyAUnaliased.map((name) => owningSurfaces(name))).toEqual(
+    familyAUnaliased.map(() => ["claude-surface.ts", "codex-surface.ts"]),
+  );
 });

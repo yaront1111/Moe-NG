@@ -152,14 +152,15 @@ export {
 export { fenceMirroredLease, type MirrorVerdict } from "./supervisor/lease-mirror.js";
 
 /**
- * The recovery, recovery-inventory, evidence and Claude observation seams reach
- * the root through four per-area surface modules rather than four more inline
- * blocks. Each of those modules is itself an explicit named list — `export *`
- * here republishes exactly what a reviewer curated one file down and cannot grow
- * on its own, so the seam stays a reviewed decision while this entry point stays
- * readable.
+ * The recovery, recovery-inventory, evidence, Claude observation and Codex
+ * provider seams reach the root through five per-area surface modules rather
+ * than five more inline blocks. Each of those modules is itself an explicit
+ * named list — `export *` here republishes exactly what a reviewer curated one
+ * file down and cannot grow on its own, so the seam stays a reviewed decision
+ * while this entry point stays readable.
  */
 export * from "./surface/claude-surface.js";
+export * from "./surface/codex-surface.js";
 export * from "./surface/evidence-surface.js";
 export * from "./surface/recovery-inventory-surface.js";
 export * from "./surface/recovery-surface.js";
