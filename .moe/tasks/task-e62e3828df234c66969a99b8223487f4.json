@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-a9210e34",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-13T23:27:39.312Z",
+  "updatedAt": "2026-08-13T23:29:21.446Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
@@ -38,5 +38,16 @@
   "blockedReason": "Hard dependency task-6cbff010 is not DONE and does not yet expose the required durable released-attempt reader. Planning now would invent safe-release authority; re-promote only after dispatch is QA-approved and its exact public reader is re-measured.",
   "contextFetchedBy": [
     "architect-a9210e34"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the hard prerequisite with Moe, confirmed task-6cbff01023b14b26a78fc5e3eb1dd8a9 remains BLOCKED with no approved/completed reader, reported this task BLOCKED, and wrote Serena handoff task-task-e62e3828df234c66969a99b8223487f4-handoff.",
+      "whatRemains": "After task-6cbff010 is QA-approved DONE, remeasure its durable project+attempt release/result/reconciliation reader and only then plan the safe-release evidence adapter.",
+      "pitfalls": "Do not reconstruct authority from caller payload or test fixtures; missing producer facts require producer repair.",
+      "openQuestions": "Does the completed prerequisite retain every named fact: unchanged WORK_RELEASE_OR_PAUSE cause, released lease/slot, terminal effects/resources, safe-boundary observation, and exactly one committed handoff?",
+      "releasedAt": "2026-08-13T23:29:21.444Z",
+      "releasedBy": "architect-a9210e34",
+      "reason": "Explicit architect handoff after reporting the task blocked; user requested the next planning task."
+    }
   ]
 }

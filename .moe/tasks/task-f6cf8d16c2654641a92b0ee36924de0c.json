@@ -22,16 +22,13 @@
     {
       "stepId": "step-1",
       "description": "Reconfirm the planning baseline before edits: verify the pinned design hash, re-read design lines 978/1201, run the bare `@moe/runner` probe, and record the owned-path and repo-gate failing-path baseline. Lock the measured contract in the work note as six unique proof classes covering seven semantic populations (one and only one shared proof: `PROVIDER_PROCESS_LAUNCH_LOCK` covers lock registrations and provider runs); stop rather than edit if the public root or owned paths have drifted.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "note": "Baseline re-measured at HEAD faf5ee5 (reopen #1). Design hash re-verified: 1d9d1ec97d3f07247fbbc088045e0ba2fd6da8307f10a9026c55106419383191 == pinned. Owned recovery/store paths clean (git status --porcelain empty). Contract unchanged: 6 proof classes over 7 populations, PROVIDER_PROCESS_LAUNCH_LOCK shared.\n\nReproduced all three QA defects on the PRODUCTION builder via a bare node probe (deleted after run), and found two more in the same family:\n- alien 7th proof row {class:'ALIEN'} -> ok:true truth:COMPLETE proofCount:6 (silently dropped)\n- duplicate proofs[0] row -> ok:true truth:COMPLETE proofCount:6\n- subject[0].sourceProofDigest mutated to deadbeef... -> ok:true truth:COMPLETE (contradictory provenance persisted)\n- Proxy with throwing ownKeys -> ESCAPED as Error 'trap-executed'\n- NEW: transparent `new Proxy(base(),{})` -> ok:true truth:COMPLETE (accepted, not refused)\n- NEW: revoked proxy -> ESCAPED TypeError \"Cannot perform 'IsArray' on a proxy that has been revoked\" (Array.isArray asked before types.isProxy)\n\nRepair scope locked: (a) validate supplied proof rows as a closed unique set with distinct PROOF_CLASS_* codes, (b) cross-link each subject digest to its mapped configured proof, (c) types.isProxy FIRST in exactDataRecord + proxy-safe array/evidence readers. Splitting proof validation/normalisation into a new focused module to hold the per-file target.",
-      "startedAt": "2026-08-13T22:37:44.646Z",
-      "completedAt": "2026-08-13T22:38:28.551Z"
+      "status": "PENDING",
+      "affectedFiles": []
     },
     {
       "stepId": "step-2",
       "description": "TDD red: add focused record/codec and ledger tests against the planned production imports. Pin the exact six-class/ seven-population hand-written mapping and nonzero cardinalities; exact `EXTRA`, `UNKNOWN`, `DUPLICATE`, and `OMITTED` mapping refusal codes at layer `RECOVERY_INVENTORY`; every disposition arm (including design-required terminal `CANCELLED` alongside task-required `ABSENT`, `ADOPTED`, `QUARANTINED`, `UNKNOWN`); stale-incarnation and stale-key adoption refusals; UNKNOWN normalization with separately retained upstream code/layer; canonical field/digest mutations; nested freeze and secret absence. Add real temporary-file `SqliteEventStore` tests for exact replay, two-handle contention, close/reopen, missing/corrupt/truncated/extra-event evidence, and assert every generated sweep ran its exact nonzero case count. Run only these tests and record the expected missing-module/red failures.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
@@ -39,18 +36,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-hardening.test.ts"
-      ],
-      "note": "TDD red for the three rejected defects, in a focused regression file driving only production surfaces (buildRecoveryReconciliationRecord / decodeRecoveryReconciliationRecord). Fresh run:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/recovery-inventory-hardening` -> 13 failed | 2 passed (15). The 2 green are deliberate positive controls (omitted proof row still becomes the canonical UNKNOWN slot; the untouched fixture still builds COMPLETE with matching digests) — they discriminate the sweeps from vacuous refusals.\n\nRed cases pin exact code+layer: PROOF_CLASS_UNKNOWN / PROOF_CLASS_DUPLICATE (length held at 6 so EXTRA cannot answer first) / PROOF_CLASS_EXTRA / PROOF_DIGEST_RESERVED; a distinctness case proving the proof-row guard answers apart from the identical configured-class fault (CLASS_EXTRA vs PROOF_CLASS_EXTRA); a 7-case sweep (swept===7) of subject-vs-proof digest contradiction expecting ITEM_PROOF_MISMATCH; unbacked-class item forced UNKNOWN with retained RECOVERY_INVENTORY_PROOF_MISSING provenance; proxy containment on the production builder for transparent, ownKeys/getOwnPropertyDescriptor/get/getPrototypeOf-throwing (hits===0 with the REAL record as target), revoked, and 7 nested positions; and two decoder cases requiring the structural cross-link guard to answer RECORD_NONCANONICAL before the digest guard.",
-      "startedAt": "2026-08-13T22:38:30.603Z",
-      "completedAt": "2026-08-13T22:42:04.606Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "Implement the focused contract and exact LF NodeNext bridge. Freeze ordered proof classes as `PROVIDER_PROCESS_LAUNCH_LOCK`, `RESOURCE`, `WORKSPACE`, `INTEGRATION_TARGET`, `GIT_INTEGRATION_ON_DISK`, `ARTIFACT_OBJECT_STAGING`; freeze the seven design populations and the explicit class-to-population rows, with only the provider class containing two populations. Define closed proof/truth/disposition/result vocabularies, precise mapping error codes (`RECOVERY_INVENTORY_CLASS_EXTRA|UNKNOWN|DUPLICATE|OMITTED`), coordinator `UNKNOWN_TRUTH`, layer `RECOVERY_INVENTORY`, ledger upstream codes/layer, bounds, and immutable record/input/result types. Model terminal cancellation explicitly without granting retry/history authority; do not let Git/submodule evidence certify durable integration attempts or artifact-object evidence certify scheduler resources.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
@@ -58,18 +49,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-contract.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts"
-      ],
-      "note": "Contract hardened for the rejection. Frozen class/population mapping, vocabularies and bounds are unchanged (6 classes / 7 populations / provider class shared).\n\nAdded: five reason codes to the closed upstream vocabulary — RECOVERY_INVENTORY_PROOF_CLASS_EXTRA / _UNKNOWN / _DUPLICATE, RECOVERY_INVENTORY_PROOF_DIGEST_RESERVED, RECOVERY_INVENTORY_ITEM_PROOF_MISMATCH — distinct from the four CLASS_* codes so a green test can name which guard refused. Added RECOVERY_UNKNOWN_PROOF_DIGEST as the shared reserved sentinel (was a private const in record.ts; the codec now needs it to re-derive the unbacked-slot invariant).\n\nProxy containment: new isReflectableObject() and isPlainArray() ask types.isProxy FIRST — before Array.isArray, before any descriptor read — and exactDataRecord now routes through them. That closes both escapes measured in step 1: the throwing-ownKeys proxy that escaped as Error('trap-executed') and the revoked proxy that escaped as TypeError from Array.isArray. Transparent proxies are refused categorically because a proxy target can be swapped between two reads.\n\npnpm --filter @moe/daemon typecheck exits 0. contract.ts is 285 lines (target 250, hard cap 400) — the added codes and the proxy helpers are ~30 lines; no split was needed to stay well under the cap.",
-      "startedAt": "2026-08-13T22:42:06.729Z",
-      "completedAt": "2026-08-13T22:45:38.556Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "Implement total record normalization/adjudication and its exact LF bridge. Validate hostile inputs with own enumerable data descriptors before property access; require the exact configured six-class set and normalize a missing/incomplete configured proof into its canonical UNKNOWN proof slot rather than shrinking the mapping. Bind each subject to its one mapped proof, project/project-tag, verified backup cursor+generation, selected anchor binding digest/incarnation/key epoch, source proof digest, restored-intent reference/digest, terminal proof or quarantine reference, disposition, and separate coordinator/upstream refusal tuples. Enforce: ABSENT only from complete negative proof; CANCELLED only from terminal cancellation proof; ADOPTED only when external/restored identity and both selected recovery refs match exactly; unmatched items only QUARANTINED or UNKNOWN; any incomplete/non-fenceable/artifact-or-key/unresolved fact makes the persisted truth `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY`. Deep-freeze copied data and expose no secret/message bytes.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
@@ -77,21 +62,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
-        "apps/daemon/src/recovery/recovery-inventory-proofs.js",
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts"
-      ],
-      "note": "Record normalization/adjudication rebuilt around the two provenance gaps.\n\nNEW MODULE recovery-inventory-proofs.ts (154 lines) + exact LF .js bridge — the configured-proof side, split out of record.ts to hold the per-file target (record.ts is now 210 lines, down from 244 with the new logic added):\n- indexConfiguredProofs() validates the supplied ROWS as a closed unique set instead of consulting them with supplied.find. Length is asked FIRST (with only six class names an over-long list is always also a duplicate, so the EXTRA branch would otherwise be unreachable for every input — the same trap already recorded on refuseConfiguredClasses). Unknown class -> PROOF_CLASS_UNKNOWN, repeat -> PROOF_CLASS_DUPLICATE, over-length -> PROOF_CLASS_EXTRA, reserved sentinel digest -> PROOF_DIGEST_RESERVED. An OMITTED row stays legitimate: it is the canonical UNKNOWN slot.\n- refuseContradictingProof() cross-links every subject to the one proof of its mapped class; a subject citing a digest its class proof contradicts is a structural refusal (ITEM_PROOF_MISMATCH), because the caller supplied a fact and a proof that cannot both be true.\n- unbackedItem() downgrades an item whose class has no configured proof to UNKNOWN with retained RECOVERY_INVENTORY_PROOF_MISSING provenance — the item keeps its own reported digest, nothing is restamped, and no unbacked evidence can hold a positive disposition.\n- normaliseProofs() moved here unchanged in behaviour, now keyed off the validated index.\n\nrecovery-inventory-subject.ts: readEvidence() asks isReflectableObject first (its `kind` peek is itself a reflective read that a trap would beat), and readArray() uses isPlainArray so a revoked proxy refuses instead of throwing from Array.isArray.\n\nTwo pre-existing FIXTURE defects surfaced and were fixed, both of which had been masking the missing invariant: the ledger fixture built subject digests from the POPULATION index while proofs used the CLASS index (7 populations over 6 classes, so 5 of 7 subjects cited a proof digest that was not theirs), and the record test's digest-binding case moved a proof digest without its items.\n\nFresh focused run: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/recovery-inventory -> 3 files, 60 passed (60). typecheck exits 0.",
-      "startedAt": "2026-08-13T22:45:40.864Z",
-      "completedAt": "2026-08-13T22:45:55.270Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "Implement the strict canonical codec and exact LF bridge. Encode a versioned, fixed-key-order, bounded UTF-8 JSON body with deterministic class/population/item ordering; compute SHA-256 over every body field except `recordDigest`, then append that digest. Decode with fatal UTF-8, exact keys/vocabularies/bounds/cardinalities, re-derived six-to-seven mapping and disposition invariants, digest recomputation, and byte-for-byte canonical re-encoding so whitespace, key order, duplicate keys, extensions, truncation, or any semantic byte mutation cannot become an alternate authoritative record. Return the stable unreadable upstream code/layer under coordinator UNKNOWN rather than throwing or defaulting.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
@@ -99,18 +75,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-codec.ts",
         "apps/daemon/src/recovery/recovery-inventory-codec.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts"
-      ],
-      "note": "Codec now RE-DERIVES the item-to-proof provenance link on decode instead of trusting stored rows, closing the readback half of the rejected gap: a forged record whose digest was recomputed over the forgery would otherwise decode as authoritative.\n\nInside readRecord, alongside the existing per-class itemCount check and AHEAD of the digest comparison and the canonical re-encode:\n- when a proof slot carries a real digest, every item of that class must cite exactly that digest;\n- when a proof slot carries the reserved RECOVERY_UNKNOWN_PROOF_DIGEST sentinel (no configured proof), every item of that class must be disposition UNKNOWN — a terminal or adopted disposition under an unbacked slot is refused.\nBoth answer RECOVERY_INVENTORY_RECORD_NONCANONICAL at RECOVERY_INVENTORY under coordinator UNKNOWN_TRUTH; nothing throws and nothing defaults.\n\nGuard ORDER is asserted, not assumed: the hardening test that tampers one item digest expects RECORD_NONCANONICAL and would have received RECORD_DIGEST_MISMATCH had the structural check run after the digest check. Encoding, key order, bounds and the fatal-UTF-8 path are unchanged. codec.ts is 331 lines (+10), under the 400 cap. Focused run: 60 passed (60); daemon typecheck exits 0.",
-      "startedAt": "2026-08-13T22:45:57.465Z",
-      "completedAt": "2026-08-13T22:46:08.496Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "Implement content-addressed durable persistence/readback and its exact LF bridge using only the existing public `SqliteEventStore` transaction surface—no schema change or raw SQLite. The write service must read the fixed ACTIVE recovery binding from the project store and the exact anchored incarnation, cross-check key epoch/project/backup generation, and only then build the record; it must accept no request-selected current refs. Commit canonical bytes once under a domain-separated record-digest aggregate with command kind `recovery.reconcile_external`, expectedVersion 0, exact domain schema/event IDs, and identical request/result/event bytes; exact retries replay one event. The reader addresses an explicit record digest (never an invented 'latest'), verifies the sole sequence-1 event plus decision trace/decision bytes and codec/digest/aggregate identity, and maps absent, conflicting, malformed, or unverifiable evidence to `UNKNOWN_TRUTH`/`RECOVERY_INVENTORY` while retaining `RECORD_NOT_FOUND|UNREADABLE|CONFLICT` at `RECOVERY_INVENTORY_LEDGER`. R3 may later bind this immutable digest; this task grants no recovery.complete authority.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
@@ -118,18 +88,12 @@
       "newFiles": [
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "note": "Durable persistence production code is unchanged — it still reads the ACTIVE binding and anchored incarnation from the store, accepts no request-selected refs, commits once under the domain-separated record-digest aggregate at expectedVersion 0, and reads back only by an explicit digest. What changed is that it now INHERITS the two new provenance guards, and that is proved at the ledger surface rather than assumed from the builder's unit tests.\n\nNew case \"persists nothing when supplied provenance contradicts itself\": a positive control commits the untouched facts first (so the refusals below cannot be blamed on the binding, the anchor, or a malformed fixture), then a 2-case sweep (swept===2) drives recordRecoveryReconciliation with (a) one subject digest mutated to deadbeef... and (b) a seventh-class 'ALIEN' proof row, asserting exact upstream RECOVERY_INVENTORY_ITEM_PROOF_MISMATCH / RECOVERY_INVENTORY_PROOF_CLASS_UNKNOWN at RECOVERY_INVENTORY, coordinator UNKNOWN_TRUTH, authority NONE.\n\nAlso fixed in step 4 and load-bearing here: the ledger fixture itself had been building subject digests off the population index, so 5 of its 7 subjects cited a proof digest that was not their class's — the durable sink had been committing self-contradictory provenance in every one of its own green tests.\n\nFresh: pnpm --filter @moe/daemon typecheck exits 0; focused recovery-inventory run 3 files / 61 passed (61). No schema change, no raw SQLite, no 'latest' pointer, no recovery.complete authority.",
-      "startedAt": "2026-08-13T22:46:10.737Z",
-      "completedAt": "2026-08-13T22:46:57.616Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review the owned diff as a trust boundary. Confirm each production source targets <=250 lines and remains below 400, all four bridges are exact LF one-liners, caller objects are never frozen/mutated, combined proofs are stored once, no COMPLETE resource/integration proof is synthesized, no raw credential/key/nonce/message is serialized, and Windows tests close both store handles before reopen/delete. Perform byte-restored mutation drills that (a) delete one population/mapping edge, (b) omit a bound body leaf from the digest, (c) bypass recovery-incarnation equality, and (d) bypass key-epoch equality; require each named production-surface test to turn red, restore exact bytes, and rerun the focused tests green.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.ts",
@@ -137,44 +101,21 @@
         "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
         "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
         "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts"
-      ],
-      "note": "ADVERSARIAL PROBE (production builder, 16 hostile inputs, scaffolding deleted after the run). Every one of QA's reproductions now refuses with an exact code at RECOVERY_INVENTORY: alien 7th row -> PROOF_CLASS_EXTRA; alien inside 6 -> PROOF_CLASS_UNKNOWN; duplicate 7th -> PROOF_CLASS_EXTRA; duplicate inside 6 -> PROOF_CLASS_DUPLICATE; sentinel digest -> PROOF_DIGEST_RESERVED; subject digest deadbeef -> ITEM_PROOF_MISMATCH; ownKeys-throwing / getOwnPropertyDescriptor-throwing / transparent / revoked proxy, prototype-chain object, symbol key, uppercase hex -> INPUT_INVALID (nothing escaped as an exception). Caller input and its nested subjects are still unfrozen after a build. Two accepted non-refusals, both correct: proofs:[] builds truth UNKNOWN (six UNKNOWN slots, every item downgraded), subjects:[] builds COMPLETE with zero items (six COMPLETE proofs asserting a complete enumeration that found nothing).\n\nMUTATION DRILLS — 12 run, each backed up by exact bytes, asserted to have actually applied, then restored and sha256-verified identical:\n1 proxy guard off -> 4 red (all proxy cases). 2 unknown-row branch off -> 2 red (incl. the ledger case, so it is not vacuous). 3 duplicate-row off -> 1 red. 4 length-first EXTRA off -> 2 red (incl. the guard-distinctness case). 5 reserved-digest off -> 1 red. 6 subject cross-link call removed -> 2 red (sweep + ledger). 7 unbacked downgrade off -> 2 red (record + decoder). 8 decode cross-link off -> 2 red. 9 PROVIDER_RUN mapping edge deleted -> 48 red. 10 keyEpochRef omitted from the digest body -> 7 red. 11 incarnation equality bypassed -> 1 red. 12 key-epoch equality bypassed -> 1 red. No drill passed silently; each reddened the test written for it.\n\nTRUST-BOUNDARY REVIEW: all six .js bridges are exact LF one-liners (cat -A verified); the combined provider proof is stored once and declares two populations; no COMPLETE resource/integration proof is synthesised; the record serialises no credential/key/nonce/message bytes; ledger tests close both handles before reopen/delete.\n\nPER-FILE LINES (hard cap 400, target 250): proofs 154, record 210 (was 244), ledger 282 unchanged, contract 285 (was 255, +30 for five reason codes and the proxy helpers), subject 300 (was 296), codec 331 (was 321). All under the cap; four sit above the 250 target, three of them already did before this task's reopen, and splitting them late would churn a verified surface for no fail-closed gain. Disclosed rather than hidden.\n\nFocused suite green after restore: 3 files / 61 passed (61).",
-      "startedAt": "2026-08-13T22:47:02.218Z",
-      "completedAt": "2026-08-13T22:49:30.500Z"
+      ]
     },
     {
       "stepId": "step-8",
       "description": "Run the single final foreground gate and capture fresh exit codes/output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Compare repo-wide failures with the recorded merge-base failing-path baseline, require zero new failures intersecting the owned recovery paths and all owned-package legs green, report any foreign red verbatim, verify the final diff contains only the ten explicit owned paths, and hand QA the record digest/replay/reopen evidence plus consumer IDs `task-47eecd22b3b94a57a9632672c19ebd97`, `task-cf7fb147bd1c47698cbd65c9535370aa`, and downstream `task-6f786c58cabf4f85be8ed4135e68a752`.",
-      "status": "COMPLETED",
-      "affectedFiles": [],
-      "modifiedFiles": [
-        "apps/daemon/src/recovery/recovery-inventory-proofs.ts",
-        "apps/daemon/src/recovery/recovery-inventory-proofs.js",
-        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "apps/daemon/src/recovery/recovery-inventory-subject.ts",
-        "apps/daemon/src/recovery/recovery-inventory-codec.ts",
-        "apps/daemon/src/recovery/recovery-inventory-hardening.test.ts",
-        "apps/daemon/src/recovery/recovery-inventory-record.test.ts",
-        "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts"
-      ],
-      "note": "FINAL GATE, one foreground chain, GATE_EXIT=0:\n`pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`\ndaemon typecheck 0; daemon 67 files / 1221 passed; store 40 / 453; repo typecheck all 18 projects Done; root 250 files / 5476 passed + 1 skipped; verify:foundation 30 / 488; verify:store 40 / 453. ZERO failures repo-wide, so the merge-base baseline comparison is trivially satisfied: no new failing path, foreign or owned.\n\nDISCLOSED FLAKE: a first attempt at the same chain (02:10) reported runtime-entrypoint.test.ts > 'has an exact .js bridge for every runtime module and none for test-tier ones' red. Run standalone one minute later it passed 4/4, and the full clean chain above is green. That test walks the whole daemon src tree, so a foreign agent writing a .ts before its .js bridge reddens it transiently; nothing in my diff was involved. Reported rather than hidden.\n\nCOMMIT SITUATION — known board hazard, not repaired: the foreign whole-tree completion hook of task-c81953d210f14cdeb9f6070a443b6750 (commit 30458af) captured all nine of my files. I did not amend, reset, stash or create a claim commit. Every committed byte was verified sha256-identical to the gated working-tree byte for all nine paths. QA should review:\n  git diff 1e8043f..HEAD -- apps/daemon/src/recovery/\n= 9 files, 588 insertions, 5 deletions: proofs.ts (154, new) + its exact LF bridge, hardening.test.ts (337, new), contract +32, codec +12, subject +8, ledger.test +42, record.test +7, record.ts (net -1001 bytes; logic moved out).\n\nCONSUMERS notified in the handoff: task-47eecd22b3b94a57a9632672c19ebd97, task-cf7fb147bd1c47698cbd65c9535370aa, downstream task-6f786c58cabf4f85be8ed4135e68a752. The contract they bind is unchanged in shape — six proof classes over seven populations, immutable content-addressed record, no recovery.complete authority — with five new refusal codes and two new invariants they inherit for free.",
-      "startedAt": "2026-08-13T22:49:32.632Z",
-      "completedAt": "2026-08-13T23:12:14.256Z"
+      "status": "PENDING",
+      "affectedFiles": []
     }
   ],
-  "status": "REVIEW",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Fresh foreground verification is green, but adversarial production-surface probes reproduced three fail-closed gaps. The builder silently accepts unknown and duplicate supplied proof-class rows, accepts a subject whose sourceProofDigest contradicts its mapped COMPLETE proof and still returns truth COMPLETE, and lets a throwing Proxy trap escape instead of returning the stable typed refusal. These gaps violate the closed-class contract and allow unverifiable provenance to gain COMPLETE truth. Validate supplied proof rows as a closed unique set, cross-link each subject digest to its mapped proof, contain/reject proxies before reflective access, and add exact code/layer regressions against the production builder.",
+  "reopenCount": 2,
+  "reopenReason": "The prior unknown/duplicate proof-row, item/proof digest, and Proxy defects are repaired, and daemon/store tests are green, but fresh production-surface probes found the persisted contract still fails open on semantic contradictions. The builder accepts COMPLETE proof evidence that simultaneously carries an upstream refusal and silently drops that provenance. More critically, after mutating a legitimate production record, recomputing its digest with recoveryReconciliationDigest, and encoding it through the production encoder, the production decoder accepted: child proof UNKNOWN under record truth COMPLETE; a reserved no-proof sentinel slot claiming COMPLETE; ABSENT without a terminal proof; ADOPTED without an intent digest; reversed item ordering; and a duplicated class-scoped identity. These are self-consistent hostile bytes, so digest verification cannot excuse the absent semantic guards. Re-derive the builder invariants on decode and add exact RECOVERY_INVENTORY code/layer regressions that recompute the digest so DIGEST_MISMATCH cannot shadow them. Also replace the literal NUL source byte at record.ts:164 with a textual escape. Verification disclosure: the exact requested chain stopped at daemon typecheck on foreign uncommitted packages/runner/src/providers/claude/claude-launcher.ts:151 TS2339 errors; independently-run daemon tests passed 68/1230 and store tests passed 40/453. The foreign typecheck red is disclosed but is not one of the owned defects.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
@@ -191,35 +132,30 @@
       "author": "agent",
       "content": "Governance triage: first QA rejection; the three findings are concrete task-owned fail-closed repairs (closed unique proof rows, subject-to-proof digest cross-link, Proxy containment), not a structural re-plan. Keep WORKING and claim for repair when a worker is free; task-47eecd22 remains BLOCKED until QA verifies DONE.",
       "timestamp": "2026-08-13T22:30:15.731Z"
+    },
+    {
+      "id": "comment-013b87a90feb479fb098594b1e789ca1",
+      "author": "agent",
+      "content": "QA queue: repaired recovery prerequisite is complete with fresh daemon/store/repo gates. Review after the CRITICAL registry extraction; task-47eecd22 and the recovery coordinator chain remain blocked on this DONE result.",
+      "timestamp": "2026-08-13T23:27:46.193Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:51:16.732Z",
-  "updatedAt": "2026-08-13T23:12:55.513Z",
-  "contextFetchedBy": [
-    "worker-68608f71"
-  ],
+  "updatedAt": "2026-08-14T08:54:26.369Z",
+  "contextFetchedBy": [],
   "metrics": {
     "firstClaimAt": "2026-08-13T21:38:03.438Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
     "executedStepCount": 16,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "rejectCount": 2,
+    "reopenCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7",
-    "step-8"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [
     {
       "item": "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",
@@ -235,6 +171,31 @@
       "item": "DoD 4: unverifiable evidence must remain UNKNOWN with retained provenance.",
       "rejectedAt": "2026-08-13T22:28:01.038Z",
       "rejectedBy": "qa-41bfec20"
+    },
+    {
+      "item": "DoD 2: the durable decoded ADOPTED disposition must require an exact restored intent; hostile self-consistent bytes currently admit ADOPTED with no restoredIntentDigest.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "rejectedBy": "qa-111488fe"
+    },
+    {
+      "item": "DoD 3: the codec must preserve a single verifiable durable record; it currently admits duplicate identities, noncanonical item order, and disposition shapes the builder never emits.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "rejectedBy": "qa-111488fe"
+    },
+    {
+      "item": "DoD 4: incomplete/unverifiable proof evidence must persist UNKNOWN with retained upstream provenance; COMPLETE+upstream is laundered by the builder, and decoded child UNKNOWN/sentinel proof slots can still yield record truth COMPLETE.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "rejectedBy": "qa-111488fe"
+    },
+    {
+      "item": "DoD 5: hostile-byte tests do not drive recomputed-digest semantic forgeries through the real decoder, so cardinality, ordering, truth, and disposition invariants remain unpinned.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "rejectedBy": "qa-111488fe"
+    },
+    {
+      "item": "DoD 6: the named mutation/test evidence did not catch the production semantic guards above; add recomputed-digest production-surface regressions and mutation drills for each new guard.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "rejectedBy": "qa-111488fe"
     }
   ],
   "planSubmittedAt": "2026-08-13T21:56:46.952Z",
@@ -256,7 +217,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-14T08:41:44.436Z",
+    "escalatedAt": "2026-08-14T08:41:44.436Z"
   },
   "planApprovedAt": "2026-08-13T21:56:49.008Z",
   "workStartedAt": "2026-08-13T21:57:17.632Z",
@@ -278,35 +241,93 @@
     "apps/daemon/src/recovery/recovery-inventory-ledger.test.ts",
     "apps/daemon/src/recovery/recovery-inventory-record.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-13T22:28:01.038Z",
+  "reviewCompletedAt": "2026-08-14T08:54:26.369Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "DoD 1: unknown/duplicate/extra proof classes must refuse with a stable code/layer.",
-      "DoD 3: item dispositions and source-proof digests must form a verifiable durable record.",
-      "DoD 4: unverifiable evidence must remain UNKNOWN with retained provenance."
+      "DoD 2: the durable decoded ADOPTED disposition must require an exact restored intent; hostile self-consistent bytes currently admit ADOPTED with no restoredIntentDigest.",
+      "DoD 3: the codec must preserve a single verifiable durable record; it currently admits duplicate identities, noncanonical item order, and disposition shapes the builder never emits.",
+      "DoD 4: incomplete/unverifiable proof evidence must persist UNKNOWN with retained upstream provenance; COMPLETE+upstream is laundered by the builder, and decoded child UNKNOWN/sentinel proof slots can still yield record truth COMPLETE.",
+      "DoD 5: hostile-byte tests do not drive recomputed-digest semantic forgeries through the real decoder, so cardinality, ordering, truth, and disposition invariants remain unpinned.",
+      "DoD 6: the named mutation/test evidence did not catch the production semantic guards above; add recomputed-digest production-surface regressions and mutation drills for each new guard."
     ],
     "issues": [
       {
+        "type": "security",
+        "file": "apps/daemon/src/recovery/recovery-inventory-subject.ts",
+        "line": 163,
+        "description": "readProof accepts truth:'COMPLETE' with a non-null upstream refusal; normaliseProofs at recovery-inventory-proofs.ts:141-151 then emits COMPLETE and sets upstream null. Production probe supplied RECOVERY_INVENTORY_COVERAGE_UNKNOWN/INVENTORY_ADAPTER and buildRecoveryReconciliationRecord returned ok:true, record.truth:'COMPLETE'. Refuse the contradictory tuple or normalize it to UNKNOWN without losing the original code/layer; pin the exact builder refusal/answer."
+      },
+      {
+        "type": "security",
+        "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+        "line": 248,
+        "description": "readRecord checks only top-level truth/coordinator/upstream co-presence; it does not derive truth from child proofs/items or require RECOVERY_UNKNOWN_PROOF_DIGEST slots themselves to be UNKNOWN. With a freshly recomputed valid digest, both (a) one UNKNOWN proof under record COMPLETE and (b) a sentinel COMPLETE proof with itemCount 0 decoded ok:true COMPLETE. Re-derive these invariants before digest acceptance and assert exact RECORD_NONCANONICAL/RECOVERY_INVENTORY (or another frozen code/layer)."
+      },
+      {
+        "type": "security",
+        "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+        "line": 210,
+        "description": "readItems does not enforce exact disposition field combinations. Recomputed-digest bytes with ABSENT and terminalProofDigest:null, and ADOPTED with restoredIntentDigest:null, both decoded ok:true COMPLETE. Require all builder-emitted required/forbidden fields for ABSENT, CANCELLED, ADOPTED, QUARANTINED, and UNKNOWN, with exact production-decoder reason/layer tests."
+      },
+      {
         "type": "missing_feature",
-        "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "line": 137,
-        "description": "normaliseProofs uses supplied.find and silently discards all unmatched rows. Production probes with a seventh proof {class:'ALIEN', ...} and with a duplicate of proofs[0] both returned ok:true, truth:'COMPLETE', proofCount:6. Validate the supplied proof array itself; refuse unknown, duplicate, and extra class rows with distinct stable RECOVERY_INVENTORY code/layer, and add production-surface tests that pin which guard answered."
+        "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+        "line": 210,
+        "description": "The decoder preserves arbitrary item order and never rejects a duplicate class-scoped identity. Reversing all items or inserting a duplicate and adjusting itemCount, then recomputing the digest, decoded ok:true COMPLETE. Enforce the builder's canonical class/population/identity order and uniqueness on decode; tests must recompute the digest and assert the semantic guard rather than DIGEST_MISMATCH."
       },
       {
-        "type": "security",
+        "type": "other",
         "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
-        "line": 203,
-        "description": "A subject is adjudicated without verifying subject.sourceProofDigest equals the sourceProofDigest of its mapped configured proof. Mutating only the first subject digest to deadbeef... while its class proof remained c0... returned ok:true and truth:'COMPLETE', persisting contradictory provenance. Fail closed (typed refusal or UNKNOWN as specified) with an exact reason/layer and test a positive nonzero sweep across mapped classes."
-      },
-      {
-        "type": "security",
-        "file": "apps/daemon/src/recovery/recovery-inventory-contract.ts",
-        "line": 216,
-        "description": "exactDataRecord invokes Object.getOwnPropertyDescriptors on unknown input without Proxy containment. A Proxy whose ownKeys throws caused buildRecoveryReconciliationRecord to throw 'trap-executed', contradicting the claimed hostile-input refusal and the stable-result rail. Reject transparent proxies and contain throwing/revoked proxies before reflective traps; assert immutable UNKNOWN_TRUTH/RECOVERY_INVENTORY with upstream RECOVERY_INVENTORY_INPUT_INVALID/RECOVERY_INVENTORY."
+        "line": 164,
+        "description": "The identity-key template contains a literal 0x00 byte. Git classifies the production TypeScript blob as binary (byte scan NUL=1; git diff reports Bin), eliminating normal line diff/blame/merge. Preserve the separator semantics but spell it as a textual source escape such as \\\\u0000, then prove the committed blob contains zero NUL bytes."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "The prior unknown/duplicate proof-row, item/proof digest, and Proxy defects are repaired, and daemon/store tests are green, but fresh production-surface probes found the persisted contract still fails open on semantic contradictions. The builder accepts COMPLETE proof evidence that simultaneously carries an upstream refusal and silently drops that provenance. More critically, after mutating a legitimate production record, recomputing its digest with recoveryReconciliationDigest, and encoding it through the production encoder, the production decoder accepted: child proof UNKNOWN under record truth COMPLETE; a reserved no-proof sentinel slot claiming COMPLETE; ABSENT without a terminal proof; ADOPTED without an intent digest; reversed item ordering; and a duplicated class-scoped identity. These are self-consistent hostile bytes, so digest verification cannot excuse the absent semantic guards. Re-derive the builder invariants on decode and add exact RECOVERY_INVENTORY code/layer regressions that recompute the digest so DIGEST_MISMATCH cannot shadow them. Also replace the literal NUL source byte at record.ts:164 with a textual escape. Verification disclosure: the exact requested chain stopped at daemon typecheck on foreign uncommitted packages/runner/src/providers/claude/claude-launcher.ts:151 TS2339 errors; independently-run daemon tests passed 68/1230 and store tests passed 40/453. The foreign typecheck red is disclosed but is not one of the owned defects.",
+      "rejectedAt": "2026-08-14T08:54:26.369Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "DoD 2: the durable decoded ADOPTED disposition must require an exact restored intent; hostile self-consistent bytes currently admit ADOPTED with no restoredIntentDigest.",
+        "DoD 3: the codec must preserve a single verifiable durable record; it currently admits duplicate identities, noncanonical item order, and disposition shapes the builder never emits.",
+        "DoD 4: incomplete/unverifiable proof evidence must persist UNKNOWN with retained upstream provenance; COMPLETE+upstream is laundered by the builder, and decoded child UNKNOWN/sentinel proof slots can still yield record truth COMPLETE.",
+        "DoD 5: hostile-byte tests do not drive recomputed-digest semantic forgeries through the real decoder, so cardinality, ordering, truth, and disposition invariants remain unpinned.",
+        "DoD 6: the named mutation/test evidence did not catch the production semantic guards above; add recomputed-digest production-surface regressions and mutation drills for each new guard."
+      ],
+      "issues": [
+        {
+          "type": "security",
+          "file": "apps/daemon/src/recovery/recovery-inventory-subject.ts",
+          "line": 163,
+          "description": "readProof accepts truth:'COMPLETE' with a non-null upstream refusal; normaliseProofs at recovery-inventory-proofs.ts:141-151 then emits COMPLETE and sets upstream null. Production probe supplied RECOVERY_INVENTORY_COVERAGE_UNKNOWN/INVENTORY_ADAPTER and buildRecoveryReconciliationRecord returned ok:true, record.truth:'COMPLETE'. Refuse the contradictory tuple or normalize it to UNKNOWN without losing the original code/layer; pin the exact builder refusal/answer."
+        },
+        {
+          "type": "security",
+          "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+          "line": 248,
+          "description": "readRecord checks only top-level truth/coordinator/upstream co-presence; it does not derive truth from child proofs/items or require RECOVERY_UNKNOWN_PROOF_DIGEST slots themselves to be UNKNOWN. With a freshly recomputed valid digest, both (a) one UNKNOWN proof under record COMPLETE and (b) a sentinel COMPLETE proof with itemCount 0 decoded ok:true COMPLETE. Re-derive these invariants before digest acceptance and assert exact RECORD_NONCANONICAL/RECOVERY_INVENTORY (or another frozen code/layer)."
+        },
+        {
+          "type": "security",
+          "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+          "line": 210,
+          "description": "readItems does not enforce exact disposition field combinations. Recomputed-digest bytes with ABSENT and terminalProofDigest:null, and ADOPTED with restoredIntentDigest:null, both decoded ok:true COMPLETE. Require all builder-emitted required/forbidden fields for ABSENT, CANCELLED, ADOPTED, QUARANTINED, and UNKNOWN, with exact production-decoder reason/layer tests."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/recovery/recovery-inventory-codec.ts",
+          "line": 210,
+          "description": "The decoder preserves arbitrary item order and never rejects a duplicate class-scoped identity. Reversing all items or inserting a duplicate and adjusting itemCount, then recomputing the digest, decoded ok:true COMPLETE. Enforce the builder's canonical class/population/identity order and uniqueness on decode; tests must recompute the digest and assert the semantic guard rather than DIGEST_MISMATCH."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/recovery/recovery-inventory-record.ts",
+          "line": 164,
+          "description": "The identity-key template contains a literal 0x00 byte. Git classifies the production TypeScript blob as binary (byte scan NUL=1; git diff reports Bin), eliminating normal line diff/blame/merge. Preserve the separator semantics but spell it as a textual source escape such as \\\\u0000, then prove the committed blob contains zero NUL bytes."
+        }
+      ]
+    },
     {
       "reason": "Fresh foreground verification is green, but adversarial production-surface probes reproduced three fail-closed gaps. The builder silently accepts unknown and duplicate supplied proof-class rows, accepts a subject whose sourceProofDigest contradicts its mapped COMPLETE proof and still returns truth COMPLETE, and lets a throwing Proxy trap escape instead of returning the stable typed refusal. These gaps violate the closed-class contract and allow unverifiable provenance to gain COMPLETE truth. Validate supplied proof rows as a closed unique set, cross-link each subject digest to its mapped proof, contain/reject proxies before reflective access, and add exact code/layer regressions against the production builder.",
       "rejectedAt": "2026-08-13T22:28:01.038Z",

@@ -173,12 +173,21 @@ export {
  * and none can invent an opportunity ref or a DAEMON_VERIFIED marker on the way.
  * `validateOpportunityAttestation` is published beside it because the daemon
  * must be able to validate the evidence it is about to pass in.
+ *
+ * `bindCurrentExpansionHold` is the same authority WITHOUT the admission half:
+ * one ACTIVE reducer-produced hold plus the daemon's five current values in,
+ * one validated `PlanningExpansionHoldBinding` out. A caller that has a durable
+ * hold but no scheduler preparation — the atomic expansion-request path — needs
+ * it, and publishing it is what stops that caller from hand-rolling a second
+ * projection. It is the SOLE producer; `bindExpansionAdmission` calls it too.
+ * The refusal vocabulary is shared, so both surfaces speak the same words.
  */
 export { validateOpportunityAttestation } from "./fairness/fairness-evidence.js";
+export { bindExpansionAdmission } from "./expansion/expansion-binding.js";
 export {
   EXPANSION_BINDING_ISSUE_CODES, EXPANSION_BINDING_LAYERS, EXPANSION_BINDING_ORIGINS,
-  bindExpansionAdmission,
-} from "./expansion/expansion-binding.js";
+  bindCurrentExpansionHold,
+} from "./expansion/expansion-current-hold.js";
 export {
   EXPANSION_EVIDENCE_ISSUE_CODES, EXPANSION_EVIDENCE_LAYERS, FORBIDDEN_VERDICT_KEYS,
 } from "./expansion/expansion-receipt.js";
@@ -347,10 +356,19 @@ export type {
   ExpansionEvidenceResult, ExpansionInputFact,
 } from "./expansion/expansion-receipt.js";
 export type {
-  ExpansionAdmissionBinding, ExpansionBindingIssue, ExpansionBindingIssueCode,
-  ExpansionBindingLayer, ExpansionBindingOrigin, ExpansionBindingRefusal, ExpansionBindingRequest,
-  ExpansionBindingResult, ExpansionCurrentAuthority,
+  ExpansionAdmissionBinding, ExpansionBindingRequest, ExpansionBindingResult,
 } from "./expansion/expansion-binding.js";
+export type {
+  ExpansionBindingIssue, ExpansionBindingIssueCode, ExpansionBindingLayer, ExpansionBindingOrigin,
+  ExpansionBindingRefusal, ExpansionCurrentAuthority, ExpansionCurrentHoldRequest,
+  ExpansionCurrentHoldResult,
+} from "./expansion/expansion-current-hold.js";
+/**
+ * The two core types the request and the result above are written IN. Re-exported
+ * by name so a consumer completes the type closure from the bare `@moe/scheduler`
+ * specifier alone and never has to reach into `@moe/core` to name a parameter.
+ */
+export type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 export type {
   SupersessionBoundDispositionField,

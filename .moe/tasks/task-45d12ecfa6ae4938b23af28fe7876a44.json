@@ -16,12 +16,12 @@
     "Target <=250 lines per production file and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion. No hard dependency; the OS-neutral platform contract and Linux classifier are public from task-f01ef545 (DONE). Gap re-verified on disk: packages/runner/src/platform/macos does not exist. Note this task is itself the blocker for task-01c5f96, which correctly stays BACKLOG until this reaches DONE.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:45.931Z",
-  "updatedAt": "2026-08-13T22:58:45.931Z"
+  "updatedAt": "2026-08-13T23:30:41.217Z"
 }

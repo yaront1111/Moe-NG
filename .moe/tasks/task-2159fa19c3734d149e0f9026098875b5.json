@@ -16,12 +16,12 @@
     "Every runtime module gets an exact LF .js bridge and plain-Node loadability coverage."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion. No hard dependency; producer task-a0fa6da4 (Codex runtime adapter) is DONE and the only reference to task-22cfca91 is as CONSUMER, not blocker. Gap re-verified on current bytes: grep for \"odex\" in packages/runner/src/index.ts returns 0, so the operational Codex surface is genuinely unpublished at the root while packages/runner/src/providers/codex/** exists.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:44.696Z",
-  "updatedAt": "2026-08-13T22:58:44.696Z"
+  "updatedAt": "2026-08-13T23:30:34.097Z"
 }

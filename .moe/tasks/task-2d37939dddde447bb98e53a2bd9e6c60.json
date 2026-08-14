@@ -20,29 +20,39 @@
     {
       "stepId": "step-1",
       "description": "Preflight the shared worktree before editing: confirm task-5fa25bb33e974f04865b46f9fa0f3910 is DONE (otherwise report the exact root-file collision), re-run scoped status/rg/line-count/root-export probes, and record merge-base outputs for the repo-wide gates so later red can be path-attributed. Run the existing scheduler gate once to establish a green-or-disclosed baseline; do not modify or clean any foreign path.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts"
-      ]
+      ],
+      "note": "Preflight done. Collision cleared: task-5fa25bb3 landed (commit d7a71cb/350ec36); root export count is now 85, not 78 — will re-pin, never assume.\n\nGap re-measured on current bytes: `grep -rn bindCurrentExpansionHold packages apps` = 0 hits; no expansion-current-hold.* files exist; ExpansionBindingIssue (expansion-binding.ts:71-78) has no `target`. Both halves genuinely absent.\n\nScoped `git status --porcelain` over the six owned paths: CLEAN.\nLine counts: expansion-binding.ts 291, expansion-binding-facts.ts 228, index.ts 367 (grew from 332), index-surface.test.ts 1566.\nNote: there is NO expansion-binding.test.ts — bindExpansionAdmission's entire suite lives in index-surface.test.ts:~855-1400.\n\nOwned-package gate BASELINE (pre-diff, exit 0): `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` -> 42 files, 1237 tests passed.\n\nRepo-wide PRE-DIFF baseline recorded for path attribution (merge-base 1e3057ab938236a98105177fb060021ff992b529):\n- `pnpm typecheck` RED (exit 1) at packages/runner: \"src/index-surface.test.ts(532,36): error TS2741: Property 'launchSelection' is missing ... but required in type 'Record<keyof ClaudeLaunchRequest, unknown>'\". pnpm recursive aborts there and never reaches packages/scheduler. This also pre-blocks `verify:foundation` and `verify:store`, which both begin `pnpm typecheck &&`.\n- `pnpm test` RED (exit 1): 1 failed file packages/runner/src/index-surface.test.ts:540 (expected GRANT_WRAPPER_MISMATCH/GRANT, got CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER); 251 files passed, 5533 pass / 1 skip.\n- `pnpm test:meta` GREEN 30 files/488 tests; `pnpm test:store` GREEN 40/453; `pnpm --filter @moe/daemon test` GREEN 68/1230.\nForeign red is packages/runner only (git status shows peer's uncommitted claude-launcher* edits); intersection with owned paths is EMPTY.\n\nDerisked step-5 smoke: from packages/scheduler, `node --experimental-strip-types --input-type=module -e 'await import(\"@moe/scheduler\")'` resolves via self-reference and reports {\"n\":85,\"f\":\"function\"}.\n\nVerified symbols before planning bytes: exactRecord/deepFreeze/isCount/isRef (authority/authority-kernel.ts:24,144,150,158), matchesTrusted/boundSnapshot/admittedOf (expansion-binding-facts.ts:208,133,176 — admittedOf cannot refuse), reduceExpansionPlanningHold + inspectPlanningExpansionContract from bare @moe/core. Confirmed PlanningExpansionInspection carries `target` on BOTH arms (core planning-expansion-validation.ts:48-51), so the delegated target is copied verbatim, never derived. Bridge convention confirmed by `cat -A`: one LF line `export * from \"./expansion-binding.ts\";` with no CR. No foreign path touched or cleaned.",
+      "startedAt": "2026-08-13T23:28:48.323Z",
+      "completedAt": "2026-08-14T08:47:36.008Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD red: add focused bare-root tests for ExpansionCurrentHoldRequest/Result and bindCurrentExpansionHold before production exists. Pin the exact 11-field successful PlanningExpansionHoldBinding, detached/deep-frozen inputs and results, direct core-inspector validity, and byte equality with bindExpansionAdmission's existing successful planningHoldBinding. Add hand-authored positive-cardinality hostile-shape/revoked-proxy/accessor/symbol/non-enumerable/sparse cases; all five missing/invalid current fields; reducer-replay and presented-vs-replayed forgery cases; each graphEpoch/holdId/holdVersion/planningRunRef hold mismatch; invalid goalVersion domain evidence; and exact code/layer/origin/missingInput/target plus zero binding on every refusal. Update existing admission assertions to require target:null for local, reducer, and fairness issues and target:'HOLD_BINDING' for the production planning inspector. Run only the named tests and capture their expected failure against the missing surface.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
         "packages/scheduler/src/index-surface.test.ts"
       ],
       "newFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ],
+      "note": "TDD red captured BEFORE any production byte exists.\n\nNew focused test `expansion-current-hold.test.ts` (487 lines), every specifier the bare root `@moe/scheduler` — no deep import. Contents:\n- exact 11-field success (`toEqual` PLUS a hand-transcribed sorted `Object.keys` list, so an extra minted field cannot hide), re-inspected by core's own `validExpansionHoldBinding`;\n- deep-freeze + detachment: mutate caller's currentAuthority record, the nested workerHandoff and the hold AFTER the call, assert the binding did not move;\n- zero-authority walk (only `parentRunRef` matches run/lease/effect/slot/activation);\n- 15 hand-authored hostile request shapes (null/undefined/string/array/SPARSE array/revoked proxy/live proxy/extra key/symbol key/NON-ENUMERABLE extra key/custom prototype/each key missing/each key behind an accessor), count pinned at 15 and name-set uniqueness pinned;\n- a getter-invocation counter proving the accessor case refuses with `reads === 0`;\n- 9 hold-shape cases, count pinned, distinct-code count pinned at 2;\n- 10 forged-leaf replay cases + nested-handoff forgery;\n- 5 missing-authority UNKNOWN cases + 12 invalid-authority UNKNOWN cases (negative, string, fractional, NaN, empty ref, numeric ref, -0, null, extra key, symbol key, accessor, revoked proxy), both counts pinned;\n- 4 hold-backed mismatch cases, count AND distinct-code count pinned at 4;\n- the laundered-terminated-hold case caught by current holdVersion;\n- the inspector delegation asserted field-by-field against `inspectPlanningExpansionContract(\"HOLD_BINDING\", ...)` called DIRECTLY, including `target` — compared to the live inspector, never a transcribed literal;\n- exact one-line LF bridge bytes; bounded plain-Node `process.execPath` + argument array + `shell:false` + 20s timeout bare-specifier smoke.\nEvery refusal helper asserts `hasOwnProperty(result,\"binding\") === false`, so a refusal cannot smuggle a binding.\n\n`index-surface.test.ts` updated: `target` pinned null on the 15-case local BINDING_CASES sweep, on the UNKNOWN authority sweep, on the fairness delegation, on the core-reducer delegation, and on all 4 HOLD_STATE_MISMATCH assertions (python replace reported exactly 4 occurrences); `target: \"HOLD_BINDING\"` pinned on the planning-inspector delegation. Added the one-producer cross-check test asserting `bindExpansionAdmission(...).binding.planningHoldBinding` toEqual `bindCurrentExpansionHold(...).binding` with matching key sets — the assertion that goes red if the composer ever keeps a second projection.\n\nRED, for exactly the missing surface:\n- `npx vitest run --root . <both files>` -> 2 files failed, **106 failed / 155 passed (261)**; representative failure `TypeError: bindCurrentExpansionHold is not a function` at expansion-current-hold.test.ts:108, plus `ENOENT ... expansion-current-hold.js` for the bridge test and `TypeError: ns.bindCurrentExpansionHold is not a function` from the plain-Node child.\n- `pnpm --filter @moe/scheduler typecheck` exit 1 with 9x `error TS2339: Property 'target' does not exist on type 'ExpansionBindingIssue'` (index-surface.test.ts 1107/1131/1152/1165/1190/1354/1367/1377/1390) — the missing field named directly.\nNo production file touched in this step.",
+      "startedAt": "2026-08-14T08:47:41.060Z",
+      "completedAt": "2026-08-14T08:51:52.873Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement the focused expansion-current-hold production boundary and exact LF runtime bridge. Move the shared ExpansionBindingIssue/refusal/current-authority vocabulary into the acyclic module and add the required nullable target field. Snapshot the exact two-key request and exact five-key authority with own enumerable data descriptors and no caller aliasing; require the exact ACTIVE v1 hold, replay its creationReceipt through the public @moe/core reducer, exact-compare the full presented/replayed state, compare the four hold-backed current facts, construct the core PlanningExpansionHoldBinding, and pass it through inspectPlanningExpansionContract('HOLD_BINDING', ...). Return only deep-frozen success or stable UNKNOWN/REFUSED results, preserving reducer code/layer with origin EXPANSION_HOLD and null target and copying the inspector target verbatim. Keep the TypeScript source <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.js"
@@ -50,38 +60,60 @@
       "newFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/expansion/expansion-current-hold.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.js"
+      ],
+      "note": "Production boundary landed at exactly **250 physical lines** (`grep -c ''`), no line over 100 chars, zero tsc errors attributable to it (`pnpm --filter @moe/scheduler typecheck | grep -c expansion-current-hold.ts` = 0; the 33 remaining errors are all in the two TEST files, awaiting steps 4-5).\n\n`expansion-current-hold.ts` owns, acyclically (it imports only `@moe/core` root, `../authority/authority-kernel.js` and `./expansion-binding-facts.js` — never `expansion-binding.ts`, so the edge runs one way and cannot cycle):\n- the shared vocabulary moved here verbatim: EXPANSION_BINDING_ORIGINS / _ISSUE_CODES / _LAYERS and their types, ExpansionBindingIssue, ExpansionBindingRefusal, ExpansionCurrentAuthority;\n- the NEW required `readonly target: string | null` on ExpansionBindingIssue, documented as COPIED from the answering surface and never derived from code or layer;\n- `ExpansionCurrentHoldRequest` (exact two keys) and `ExpansionCurrentHoldResult`;\n- exported helpers `refusalOf` / `localRefusal` / `isBindingRefusal` so the composer reuses one refusal constructor instead of cloning it;\n- `bindCurrentExpansionHold(value: unknown)`: exactRecord over the 2-key request -> `activeHoldOf` (exact 18-key hold, ACTIVE/v1/no-terminal-receipt gate FIRST, reducer replay SECOND, `matchesTrusted(presented, replayed)` THIRD) -> `currentOf` (exact 5 keys, isCount/isRef domains, anything unreadable is UNKNOWN naming missingInput \"currentAuthority\") -> `holdMismatch` (graphEpoch, holdId, holdVersion, planningRunRef against the hold) -> `holdBindingOf` -> `inspectPlanningExpansionContract(\"HOLD_BINDING\", binding)` -> `deepFreeze({binding, ok:true})`.\n\nProvenance discipline as specified: local issues origin BRIDGE / target null; the core reducer refusal keeps its own code+layer with origin EXPANSION_HOLD and target null (the reducer names no planning target); the inspector refusal copies `inspection.target` VERBATIM with origin PLANNING_CONTRACT. Hostile input never reaches a getter or a proxy trap — every read goes through exactRecord's own-data-descriptor path.\n\n`goalVersion` is deliberately NOT in `holdMismatch`: `ExpansionPlanningHoldState` has no such field, so there is no honest hold-side operand. The module header says so explicitly and the equality fence stays with the composer that owns `preparation.bound`.\n\nBridge written with `printf` and verified byte-exact by `cat -A`: `export * from \"./expansion-current-hold.ts\";$` — one LF line, no CR.\n\nFocused test still red as expected (64 failed / 7 passed): it imports through the BARE root, which step 5 publishes. No foreign path touched.",
+      "startedAt": "2026-08-14T08:51:54.967Z",
+      "completedAt": "2026-08-14T08:54:40.731Z"
     },
     {
       "stepId": "step-4",
       "description": "Refactor bindExpansionAdmission to import and call bindCurrentExpansionHold at its existing post-preparation/post-fairness/post-winner hold/current gate, propagate its refusal unchanged, and use its returned binding as the sole PlanningExpansionHoldBinding projection. Delete the old replay/current projection mapper; retain the admission-only comparisons of returned binding.goalVersion and binding.graphEpoch against preparation.bound in their existing code/layer/origin order, including both graph operands, then build the admitted result with byte-identical success fields. Add target:null to preparation/fairness/local issues and preserve delegated targets. Reduce expansion-binding.ts below 250 lines without moving unrelated fairness/preparation policy.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/expansion/expansion-binding.ts"
+      ],
+      "note": "`bindExpansionAdmission` now COMPOSES the one producer. expansion-binding.ts went 291 -> 141 physical lines (both production sources now under the cap: 141 and 250), no line over 100 chars.\n\nDeleted outright — not duplicated, not left dormant: `activeHoldOf`, `currentOf`, `authorityMismatch`, `holdBindingOf`, `refusal`, `local`, `unknownAuthority`, `delegated`, `isBindingRefusal`, `HOLD_KEYS`, `CURRENT_KEYS`, and the `inspectPlanningExpansionContract`/`reduceExpansionPlanningHold`/`matchesTrusted` imports. The file no longer contains a hold parser, a replay, or a binding projection; `grep -n \"reduceExpansionPlanningHold\\|inspectPlanningExpansionContract\\|matchesTrusted\" expansion-binding.ts` is empty. It keeps only what needs `preparation.bound`.\n\nComposition point is exactly where the old gate was — after request parse, preparation snapshot, identity fence, fairness validation and winner check: `bindCurrentExpansionHold({currentAuthority: request[\"currentAuthority\"], hold: request[\"hold\"]})`, refusal propagated UNCHANGED (`if (isBindingRefusal(held)) return held;` — no re-wrapping, so delegated code/layer/origin/target survive), and `held.binding` used verbatim as the sole `planningHoldBinding`. `fromFairness` now sets `target: null` explicitly with the reason in a comment; `localRefusal`/`refusalOf` are imported from the producer so there is one refusal constructor, not two.\n\nRetained admission-only comparisons in their existing code/layer/origin order — goalVersion first, then graphEpoch, both `CURRENT_AUTHORITY`/`BRIDGE`: `planningHoldBinding.goalVersion !== bound.goalVersion` and `planningHoldBinding.graphEpoch !== bound.graphEpoch`. BOTH graph operands survive, now one per module: current-vs-hold inside the producer, current-vs-bound here (`binding.graphEpoch` IS the hold's, already proven equal to the daemon's current value, so this is the second operand and not a repeat).\n\nDISCLOSED BEHAVIOUR DELTA, deliberate and plan-directed: for a COMPOUND fault that is simultaneously a goalVersion-vs-bound mismatch AND a hold-backed mismatch, the answering gate changes from GOAL_VERSION_MISMATCH to the hold-backed code, because the hold-backed comparisons now run first. Every ISOLATED fault keeps its exact previous code/layer/origin — all 15 BINDING_CASES, the 5 UNKNOWN cases, both delegations and all 14 forgery cases pass unchanged. Compound-fault precedence pins are added in step-6 as planned.\n\n`ExpansionBindingRequest.hold` deliberately kept typed as `ExpansionPlanningHoldState` (not widened to `unknown`) so the published request contract is unchanged.\n\nGate after this step plus step-5's root publication: `pnpm --filter @moe/scheduler typecheck` exit 0; `pnpm --filter @moe/scheduler test` **43 files / 1310 tests passed** (baseline was 42 / 1237).",
+      "startedAt": "2026-08-14T08:54:43.098Z",
+      "completedAt": "2026-08-14T08:56:49.043Z"
     },
     {
       "stepId": "step-5",
       "description": "Publish the curated scheduler-root runtime value and complete type closure after remeasuring the concurrently changed barrel: bindCurrentExpansionHold, ExpansionCurrentHoldRequest/Result, the shared authority/issue/refusal types, and named type-only re-exports of the public core ExpansionPlanningHoldState and PlanningExpansionHoldBinding required by the request/result. Update the hand-pinned root namespace/type assertions without deriving expected counts from production. In the focused test, assert the exact one-line LF bridge and run a bounded `process.execPath`/argument-array/`shell:false` plain-Node bare `@moe/scheduler` import/invocation smoke. Record task-738a12a816e8421a96edd84648565a38 in the module contract as the eventual durable consumer.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/index-surface.test.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/expansion/expansion-current-hold.test.ts"
+      ],
+      "note": "Root surface published and re-measured, never derived from production.\n\nBarrel remeasured first: the concurrently landed task-5fa25bb3 moved the count from 78 to **85**, so the pin was updated 85 -> **86** against the measured value, and the hand-transcribed name list gained `[\"bindCurrentExpansionHold\", \"function\"]` at its ASCII position (bindC < bindE). The narrative header above EXPECTED_EXPORTS was corrected from \"the two admission-to-preparation binding values\" to three, naming the new one — a stale comment beside a bumped number is how a count guard rots.\n\nRuntime value + vocabularies now come from the producer: `export { EXPANSION_BINDING_ISSUE_CODES, EXPANSION_BINDING_LAYERS, EXPANSION_BINDING_ORIGINS, bindCurrentExpansionHold } from \"./expansion/expansion-current-hold.js\"`, with `bindExpansionAdmission` on its own line from the composer. One publication path per symbol — expansion-binding.ts re-exports none of them.\n\nTYPE CLOSURE, and the reason it needed its own test: `Object.keys` cannot see a type, so the namespace guard is blind to a dropped type re-export. The focused test therefore imports `ExpansionPlanningHoldState as RootHoldState` and `PlanningExpansionHoldBinding as RootHoldBinding` from the BARE `@moe/scheduler` and writes a whole request/response cycle in root-published types only. If the root stopped re-exporting either, tsc fails TS2305 on the import and on both annotations.\n\nNEGATIVE CONTROL added beside the new export block (a publication probe with no negative control proves nothing): `WITHHELD_BINDING_NAMES = [\"refusalOf\",\"localRefusal\",\"isBindingRefusal\"]` — the refusal constructors the module exports for the composer to reuse. Publishing one would let a consumer manufacture a refusal, or a provenance, the bridge never spoke. The test asserts count 3, zero leaked, AND the positive control that `bindCurrentExpansionHold` IS present in the same namespace — so an empty/wrong namespace cannot make the negative pass vacuously.\n\nBridge + reachability, both in the focused test: exact byte assertion `export * from \"./expansion-current-hold.ts\";\\n` read off disk, and a bounded plain-Node smoke — `process.execPath`, argument array, `shell: false`, 20s child timeout, cwd = package root so the BARE specifier resolves through the package's own exports map by Node's self-reference rule. The child asserts the exported kind is \"function\" and that invoking it returns `{ok:false, code:\"EXPANSION_BINDING_REQUEST_MALFORMED\", target:null}` — reachable AND callable AND correctly refusing, not merely importable.\n\nDurable consumer recorded in the module contract header AND on the board: comment-cee2946a2aa041498cb4f641dc1d3eb2 on task-738a12a816e8421a96edd84648565a38, documenting the exact request/result shape, the new nullable `target`, the UNKNOWN-vs-REFUSED distinction, and the explicit warning that this surface does NOT authenticate goalVersion against the hold so a bound-goal consumer must fence it itself. Epic rail on pure packages satisfied both ways: the real consumer edge is already landed (bindExpansionAdmission calls it) and the future durable consumer is named.\n\nGate: `pnpm --filter @moe/scheduler typecheck` exit 0; `pnpm --filter @moe/scheduler test` **43 files / 1312 tests passed** (baseline 42 / 1237). File sizes: expansion-current-hold.ts 250, expansion-binding.ts 141, index.ts 385 (barrel, was 367; under the 400 split threshold).",
+      "startedAt": "2026-08-14T08:56:51.307Z",
+      "completedAt": "2026-08-14T08:58:16.460Z"
     },
     {
       "stepId": "step-6",
       "description": "Complete the mutation-resistant test pass against production, never a helper reimplementation: independently remove/alter reducer replay, presented-state exact comparison, each of graphEpoch-to-hold, holdId, holdVersion, planningRunRef, goalVersion-to-preparation, and graphEpoch-to-preparation comparisons, the bindExpansionAdmission call site, and inspector target propagation; require the named direct/admission test to go red for every mutation, then restore exact bytes and rerun the focused tests. Assert every generated sweep's exact or positive case count and add compound-fault precedence pins showing preparation beats fairness/hold, fairness/winner beats hold, and hold evidence beats unknown current.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/expansion/expansion-current-hold.ts",
         "packages/scheduler/src/expansion/expansion-binding.ts",
         "packages/scheduler/src/expansion/expansion-current-hold.test.ts",
         "packages/scheduler/src/index-surface.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-14T08:58:18.676Z"
     },
     {
       "stepId": "step-7",
@@ -111,7 +143,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-4e189bb5",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -142,19 +174,28 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:48:41.262Z",
-  "updatedAt": "2026-08-13T23:11:45.415Z",
+  "updatedAt": "2026-08-14T08:58:18.676Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:57:18.499Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "worker-733c82bb",
+    "worker-4e189bb5"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-13T23:11:43.356Z",
   "planningNotes": {
@@ -171,7 +212,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-14T08:43:16.837Z",
+    "escalatedAt": "2026-08-14T08:43:16.837Z"
   },
-  "planApprovedAt": "2026-08-13T23:11:45.415Z"
+  "planApprovedAt": "2026-08-13T23:11:45.415Z",
+  "workStartedAt": "2026-08-13T23:28:48.323Z"
 }

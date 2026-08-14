@@ -10,7 +10,7 @@
 import { expect, it } from "vitest";
 
 import { reduceExpansionPlanningHold, validExpansionHoldBinding } from "@moe/core";
-import type { ExpansionPlanningHoldState } from "@moe/core";
+import type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 import * as scheduler from "@moe/scheduler";
 import type {
@@ -66,15 +66,17 @@ import type {
   ExpansionAdmissionBinding, ExpansionBindingIssue, ExpansionBindingIssueCode,
   ExpansionBindingLayer, ExpansionBindingOrigin, ExpansionBindingRefusal,
   ExpansionBindingRequest, ExpansionBindingResult, ExpansionCurrentAuthority,
+  ExpansionCurrentHoldRequest, ExpansionCurrentHoldResult,
 } from "@moe/scheduler";
 
 type ExportKind = "array" | "function" | "number" | "record";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 20 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
- * 12 fairness rotation and aging values + 7 expansion admission values + the two
- * admission-to-preparation binding values (bindExpansionAdmission and
- * validateOpportunityAttestation) + the 7 usage-measurement values (the
+ * 12 fairness rotation and aging values + 7 expansion admission values + the three
+ * admission-to-preparation binding values (bindExpansionAdmission, its sole hold
+ * producer bindCurrentExpansionHold, and validateOpportunityAttestation) + the 7
+ * usage-measurement values (the
  * normalizeUsageMeasurement authority plus the six closed vocabularies a provider
  * telemetry composer needs so it never has to copy the source/coverage matrix).
  */
@@ -110,7 +112,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
   ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
-  ["bindExpansionAdmission", "function"],
+  ["bindCurrentExpansionHold", "function"], ["bindExpansionAdmission", "function"],
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"],
@@ -134,7 +136,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(85);
+  expect(EXPECTED_EXPORTS.length).toBe(86);
 });
 
 /**
@@ -153,6 +155,24 @@ it("withholds the budget symbols a consumer could use to bypass the measurement 
   const published = new Set(Object.keys(scheduler));
   const leaked = WITHHELD_BUDGET_NAMES.filter((name) => published.has(name));
   expect(leaked).toStrictEqual([]);
+});
+
+/**
+ * The refusal CONSTRUCTORS the current-hold module exports for `expansion-binding.ts` to reuse.
+ * They mint an `ExpansionBindingIssue` from arbitrary strings, so publishing one would let a
+ * consumer manufacture a refusal — or, worse, a provenance — the bridge never spoke. This is the
+ * negative control for the export block that publishes `bindCurrentExpansionHold` beside them.
+ */
+const WITHHELD_BINDING_NAMES: readonly string[] = [
+  "refusalOf", "localRefusal", "isBindingRefusal",
+];
+
+it("withholds the refusal constructors that would let a consumer mint provenance", () => {
+  expect(WITHHELD_BINDING_NAMES.length).toBe(3);
+  const published = new Set(Object.keys(scheduler));
+  expect(WITHHELD_BINDING_NAMES.filter((name) => published.has(name))).toStrictEqual([]);
+  // Positive control on the same block: the value that IS published resolves from it.
+  expect(published.has("bindCurrentExpansionHold")).toBe(true);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -992,6 +1012,26 @@ it("binds one admitted expansion to the core admitted facts and the hold contrac
   expect(Object.isFrozen(binding.admitted.fairness)).toBe(true);
 });
 
+/**
+ * ONE PRODUCER, not two. The composer's `planningHoldBinding` must be the very thing the
+ * standalone current-hold binder returns for the same hold and the same current authority —
+ * byte for byte. A second hand-rolled projection inside the composer would drift silently,
+ * and this is the assertion that would go red the moment it did.
+ */
+it("projects the same hold binding the standalone current-hold binder returns", () => {
+  const composed = scheduler.bindExpansionAdmission(bindingRequest());
+  if (!composed.ok) throw new Error(composed.issues.map((one) => one.code).join(","));
+  const request: ExpansionCurrentHoldRequest = {
+    currentAuthority: { ...CURRENT }, hold: activeHold(),
+  };
+  const direct: ExpansionCurrentHoldResult = scheduler.bindCurrentExpansionHold(request);
+  if (!direct.ok) throw new Error(direct.issues.map((one) => one.code).join(","));
+  const binding: PlanningExpansionHoldBinding = direct.binding;
+  expect(composed.binding.planningHoldBinding).toEqual(binding);
+  expect(Object.keys(composed.binding.planningHoldBinding).sort())
+    .toEqual(Object.keys(binding).sort());
+});
+
 it("mints no run, child, lease, effect, slot or activation authority", () => {
   const result = scheduler.bindExpansionAdmission(bindingRequest());
   if (!result.ok) throw new Error("expected an accepted binding");
@@ -1082,6 +1122,9 @@ it.each(BINDING_CASES)("refuses %s with its own code, layer and origin",
     const issueLayer: string = issue.layer;
     const issueOrigin: ExpansionBindingOrigin = issue.origin;
     expect([issueCode, issueLayer, issueOrigin]).toEqual([code, layer, origin]);
+    // A LOCAL refusal invents no provenance: it names no missing input and no delegated target.
+    const issueTarget: string | null = issue.target;
+    expect([issue.missingInput, issueTarget]).toEqual([null, null]);
     const local: ExpansionBindingIssueCode = code as ExpansionBindingIssueCode;
     expect(scheduler.EXPANSION_BINDING_ISSUE_CODES).toContain(local);
     const known: ExpansionBindingLayer = layer as ExpansionBindingLayer;
@@ -1104,9 +1147,9 @@ it.each(AUTHORITY_FIELDS)("holds current authority UNKNOWN when %s is absent", (
   if (result.ok) throw new Error("expected a refusal");
   // UNKNOWN, never REFUSED: the daemon supplied no authority to compare against,
   // which is the absence of a verdict rather than a verdict of mismatch.
-  expect([result.disposition, issue.code, issue.layer, issue.missingInput]).toEqual([
+  expect([result.disposition, issue.code, issue.layer, issue.missingInput, issue.target]).toEqual([
     "UNKNOWN", "EXPANSION_BINDING_CURRENT_AUTHORITY_UNKNOWN", "CURRENT_AUTHORITY",
-    "currentAuthority",
+    "currentAuthority", null,
   ]);
 });
 
@@ -1124,6 +1167,8 @@ it("delegates an unobserved opportunity to the fairness layer verbatim", () => {
     direct.issues[0]?.code, direct.issues[0]?.layer, "FAIRNESS", direct.disposition,
     direct.issues[0]?.missingInput,
   ]);
+  // The fairness contract names no planning-expansion target, so none may be invented for it.
+  expect(issue.target).toBe(null);
   expect(issue.code).toBe("FAIRNESS_CONTRACT_OPPORTUNITY_UNOBSERVED");
 });
 
@@ -1136,8 +1181,8 @@ it("delegates a hold the core reducer refuses, keeping the reducer's code and la
   expect(direct.ok).toBe(false);
   if (direct.ok) throw new Error("expected a refusal");
   const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(bindingRequest({ hold })));
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual([direct.code, direct.layer, "EXPANSION_HOLD"]);
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual([direct.code, direct.layer, "EXPANSION_HOLD", null]);
   expect(issue.code).toBe("EXPANSION_HOLD_SAFE_BOUNDARY_UNPROVEN");
 });
 
@@ -1159,8 +1204,11 @@ it("delegates a derived hold binding core refuses, keeping core's code and layer
     })(),
   });
   const issue = onlyBindingIssue(scheduler.bindExpansionAdmission(request));
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual(["PLANNING_EXPANSION_HOLD_BINDING_INVALID", "BINDING", "PLANNING_CONTRACT"]);
+  // The inspector's own `target` is carried through the composer verbatim, so a consumer
+  // can tell WHICH planning contract refused without re-deriving it from the code.
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual(["PLANNING_EXPANSION_HOLD_BINDING_INVALID", "BINDING", "PLANNING_CONTRACT",
+      "HOLD_BINDING"]);
   // The same predicate, called directly, agrees — so the refusal came from the
   // binding check and not from the inspector's target dispatch.
   expect(validExpansionHoldBinding({ generation: 1, goalVersion: 0 })).toBe(false);
@@ -1322,8 +1370,8 @@ it.each(FORGED_HOLD_FIELDS)("refuses a presented hold whose %s was forged", (fie
   const issue = onlyBindingIssue(
     scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, [field]: forged } })),
   );
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE", null]);
 });
 
 it("refuses a presented hold whose nested handoff hides behind an accessor", () => {
@@ -1335,8 +1383,8 @@ it("refuses a presented hold whose nested handoff hides behind an accessor", () 
   const issue = onlyBindingIssue(
     scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, workerHandoff } })),
   );
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE", null]);
 });
 
 it("refuses a presented hold carrying an extra nested key", () => {
@@ -1345,8 +1393,8 @@ it("refuses a presented hold carrying an extra nested key", () => {
   const issue = onlyBindingIssue(
     scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, release } })),
   );
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE", null]);
 });
 
 it("refuses a presented hold whose nested terminal effect list grew an entry", () => {
@@ -1358,8 +1406,8 @@ it("refuses a presented hold whose nested terminal effect list grew an entry", (
   const issue = onlyBindingIssue(
     scheduler.bindExpansionAdmission(bindingRequest({ hold: { ...honest, release } })),
   );
-  expect([issue.code, issue.layer, issue.origin])
-    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE"]);
+  expect([issue.code, issue.layer, issue.origin, issue.target])
+    .toEqual(["EXPANSION_BINDING_HOLD_STATE_MISMATCH", "HOLD", "BRIDGE", null]);
 });
 
 /**

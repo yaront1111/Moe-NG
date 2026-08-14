@@ -16,12 +16,12 @@
     "Use official daemon/MCP/HTTP surfaces only; no custom transport."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion. No hard dependency; producer task-9fd52b41 (Thin JetBrains adapter) is DONE and publishes createJetBrainsSession/admitDistribution. Gap re-verified: no caller of the adapter package exists outside its own tests, so IDE_ADAPTER remains a distribution fixture rather than a shipped artifact. Reference to task-22cfca91 is its consumer.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:45.625Z",
-  "updatedAt": "2026-08-13T22:58:45.625Z"
+  "updatedAt": "2026-08-13T23:30:39.047Z"
 }

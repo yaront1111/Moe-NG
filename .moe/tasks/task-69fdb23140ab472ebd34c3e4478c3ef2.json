@@ -1,0 +1,56 @@
+{
+  "id": "task-69fdb23140ab472ebd34c3e4478c3ef2",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Genesis-aware restore record classification",
+  "description": "Objective: keep disaster restore usable after a genesis authentication fence is installed. Deliverable: teach the production restore reader/controller to distinguish an exact canonical, anchored GENESIS binding from an InstalledRestoreRecord: a verified genesis row means no disaster restore is currently installed and may be replaced only by the existing verified atomic restore flow; any malformed, unknown, unanchored, or row/proof-mismatched ACTIVE payload remains fail-closed. Depends on task-2846816783104c52bfd4226782b10cc0's tagged canonical genesis proof and is a prerequisite for task-e19074f841f9450296799abfba9bfcaa. Current live proof: fresh createStoreDependencies followed by provider.restore().inspect() returns RESTORE_RECORD_UNREADABLE because readInstalledRestore assumes every ACTIVE payload is a restore record. NOT in scope: changing restore quiesce/reducer policy, two-slot anchor mechanics, minting genesis, session lifetime, or inventing decode-failure-as-absence. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run src/recovery/restore-controller.test.ts src/recovery/restore-controller-reachability.test.ts.",
+  "definitionOfDone": [
+    "readInstalledRestore recognizes only a canonical genesis payload whose full public proof, row refs, binding digest, tagged project/store context, and durable genesis anchor all agree; it returns the exact non-installed/genesis state without claiming a disaster restore.",
+    "Malformed, truncated, alternate-version, unanchored, unknown, row-divergent, or hostile genesis-looking ACTIVE bytes still return RESTORE_RECORD_UNREADABLE at DAEMON_RESTORE_CONTROLLER (or the exact upstream store refusal), never ABSENT by decode failure.",
+    "A store with verified genesis can run the existing verified restore flow to QUIESCED/INSTALLED, atomically replacing genesis through the existing restore transaction; the old genesis refs no longer satisfy the authentication fence afterward.",
+    "An already restore-installed ACTIVE row retains byte-identical current behavior, replay/fence codes, and two-slot/anchor semantics; this task adds no second restore installer.",
+    "Generated strict-classification cases assert a nonzero exact count, and mutating the genesis discriminator/proof comparison or accepting generic decode failure reddens the production restore-boundary tests.",
+    "Fresh pnpm --filter @moe/daemon typecheck and focused restore-controller tests exit 0."
+  ],
+  "taskRails": [
+    "Never implement `decodeRestoreRecord(...) === null` as genesis/absence; genesis requires positive exact proof and anchor evidence.",
+    "Preserve restore-controller exact code/layer/component precedence and the existing atomic restore binding replacement.",
+    "Do not serialize or log raw nonce, private key, key handle, bearer, or proof-of-possession secret.",
+    "Keep new production logic in focused <=250-line modules; restore-controller.ts is already above target and must not grow toward 400."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e19074f841f9450296799abfba9bfcaa",
+  "priority": "CRITICAL",
+  "order": 9.43,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T23:50:34.193Z",
+  "updatedAt": "2026-08-14T08:52:53.637Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-14T08:43:40.180Z"
+  },
+  "contextFetchedBy": [
+    "architect-2aea4111"
+  ],
+  "blockedReason": "Dependency task-2846816783104c52bfd4226782b10cc0 (Tagged genesis recovery-incarnation proof) is still PLANNING (architect-4eca9b79); its deliverable is ABSENT on disk. Full evidence: #general msg-685b5280febb499ab0dfadb1421cc46c.\n\nRe-measured at HEAD d7a71cb per the stale-by-default rail. DoD-1 needs readInstalledRestore to accept a genesis payload whose (a) public proof, (b) row refs, (c) binding digest, (d) tagged project/store context, (e) durable genesis anchor all agree. Only (b) exists.\n\n(a) ABSENT: mintGenesis computes spki/fingerprint/signature as LOCALS, returns only {genesisDigest, incarnationRef, keyEpochRef} — identity/genesis-recovery-binding.ts:118. Public key discarded, so no reader can verify a signature.\n(c) ABSENT: bindingDigest computed at genesis-recovery-binding.ts:113, never persisted. Durable ACTIVE payload is 64 hex ASCII chars: encoder.encode(minted.genesisDigest).\n(d) ABSENT: RecoveryIncarnationBinding (recovery-incarnation-contract.ts:68-80) has flat REQUIRED restoreCommandId+backupGenerationDigest, no origin discriminator; snapshotRequest pins REQUEST_KEYS to those two with exact-length refusal.\n(e) ABSENT + UNREACHABLE: anchorIncarnation(store, request, binding: RecoveryIncarnationBinding) (recovery-incarnation-anchor.ts:205) anchors only that restore-shaped type, so anchoring genesis needs fabricated restore fields — banned by this task's rail 1 and the dep's rail 1. No production site writes any anchor; only recovery-inventory-ledger.test.ts.\n\nLive symptom confirmed by code path: 64-hex payload hits JSON.parse in decodeRestoreRecord (restore-controller-contract.ts:248), throws, catch returns null, restore-controller.ts:55 returns RESTORE_RECORD_UNREADABLE.\n\nPlanning now forces a rail violation: narrow DoD-1 to today's payload, or invent the tagged proof shape here and collide with the dep's owner in this shared worktree. DoD-5's mutation drill is unwritable against a discriminator that does not exist.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-14T08:47:29.276Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Full pre-planning measurement at HEAD d7a71cb, recorded in Serena memory task-task-69fdb23140ab472ebd34c3e4478c3ef2-handoff and #general msg-685b5280febb499ab0dfadb1421cc46c. No plan submitted, no code written, no files touched.",
+      "whatRemains": "Everything. DoD-1 needs readInstalledRestore to accept a genesis payload whose public proof, row refs, binding digest, tagged project/store context and durable genesis anchor all agree; only row refs exist today. Re-measure all five conjuncts before planning — the dep may land a different shape than assumed.",
+      "pitfalls": "Do not implement decodeRestoreRecord(...)===null as genesis/absence. Do not narrow DoD-1 to today's 64-hex refs+genesisDigest payload. anchorIncarnation only accepts the restore-shaped RecoveryIncarnationBinding, so anchoring genesis today would require fabricating restoreCommandId/backupGenerationDigest — banned by task rail 1. restore-controller.ts is already 284 lines, above the 250 target: the classifier belongs in a new focused module.",
+      "openQuestions": "Blocked on task-2846816783104c52bfd4226782b10cc0 landing the tagged GENESIS origin plus a DURABLE public proof. Key open question for that task: will it persist SPKI/fingerprint/bindingDigest/signature in the ACTIVE payload? Today mintGenesis computes them as locals and drops them, so no downstream reader can verify anything.",
+      "releasedAt": "2026-08-14T08:52:53.634Z",
+      "releasedBy": "architect-2aea4111",
+      "reason": "Human directed architect-2aea4111 onto dependency task-2846816783104c52bfd4226782b10cc0. Releasing this BLOCKED task so the daemon's assignment gate lets that claim through. Task stays BLOCKED with its recorded reason."
+    }
+  ]
+}

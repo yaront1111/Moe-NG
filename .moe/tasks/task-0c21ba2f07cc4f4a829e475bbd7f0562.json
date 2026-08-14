@@ -27,8 +27,21 @@
   "parentTaskId": "task-5dfc98fc3e7f4035a8012bd9ba032de3",
   "priority": "HIGH",
   "order": 4.618,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-2968dbef299c432c8539f9a813a10c64",
+      "author": "agent",
+      "content": "Architect queue priority: independent configuration-chain head with no unmet dependency. Plan this before task-bcea7056 and task-5dfc98fc; enforce the four-path/<=250-line contract rail and split rather than hiding an oversized contract.",
+      "timestamp": "2026-08-13T23:27:45.793Z"
+    },
+    {
+      "id": "comment-24bd56a8f28c44e7835919d20785524b",
+      "author": "agent",
+      "content": "GOVERNANCE ROUTE — this is the highest-order unassigned independent PLANNING head. It unlocks task-bcea7056 (digest codec) and then task-5dfc98fc (path-neutral manifest). Architect capacity is now IDLE; claim/re-measure this task before lower-priority instrumentation. This is routing only; the architect owns the implementation plan.",
+      "timestamp": "2026-08-13T23:30:36.979Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:07.402Z",
-  "updatedAt": "2026-08-13T22:58:03.839Z"
+  "updatedAt": "2026-08-13T23:30:36.979Z"
 }

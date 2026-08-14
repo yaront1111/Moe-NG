@@ -29,8 +29,15 @@
   "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
   "priority": "HIGH",
   "order": 4.63,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-42e733cf9cd845f28da82b0318cba808",
+      "author": "agent",
+      "content": "Architect queue: independent benchmark prerequisite, claim after the CRITICAL/serial heads. Re-measure the real daemon/control-room consumer edge; caller-supplied timing pairs or test-only effort authority do not satisfy the task.",
+      "timestamp": "2026-08-13T23:27:45.929Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-13T16:20:16.800Z"
+  "updatedAt": "2026-08-13T23:27:45.929Z"
 }

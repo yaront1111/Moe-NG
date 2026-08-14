@@ -75,7 +75,7 @@
     }
   ],
   "status": "PLANNING",
-  "assignedWorkerId": "architect-b1a46457",
+  "assignedWorkerId": "architect-8b21d0bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -130,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:41:24.792Z",
-  "updatedAt": "2026-08-13T23:13:08.786Z",
+  "updatedAt": "2026-08-14T08:55:26.716Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T20:48:10.552Z",
     "plannedStepCount": 6,
@@ -140,7 +140,8 @@
     "reopenCount": 2
   },
   "contextFetchedBy": [
-    "architect-b1a46457"
+    "architect-b1a46457",
+    "architect-8b21d0bb"
   ],
   "priorHandoffs": [
     {

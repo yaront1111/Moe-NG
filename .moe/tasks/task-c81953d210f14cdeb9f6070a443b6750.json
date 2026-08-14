@@ -69,48 +69,70 @@
     {
       "stepId": "step-5",
       "description": "Implement claude-launcher-authority.ts until step 2's suite is green. `createClaudeLauncher(authority: unknown)` returns `(value: unknown, options?: ClaudeLaunchOptions) => Promise<ClaudeLaunchResult>`. At CONSTRUCTION, bind both authority capabilities exactly once with the exported `readCapability` from claude-launcher-port-results.js (never reimplement descriptor/proxy safety); if either is null, return a launcher that refuses CLAUDE_LAUNCH_AUTHORITY_UNUSABLE at LAUNCHER without touching any port. Otherwise the returned launcher calls `launchClaude(value, {...options, deps: overlay})` where overlay = `{...(options?.deps ?? CLAUDE_LAUNCHER_DEFAULTS), consumeGrant, registerLock}` — the authority slots ALWAYS win, and the eight other slots are the shipped defaults whenever the caller supplies no deps. `consumeGrant(grant, wrapperIdentity)` delegates STRAIGHT to `consumeGrantDurably` — it must NOT pre-run the pure `consumeActivationGrant`, or replay would be answered by the pure layer and the delegated-code assertion would go vacuous. `registerLock(registration, claim, prior)` calls the PURE `registerLaunchLock` first and returns its outcome verbatim unless it is REGISTERED; on REGISTERED it classifies the phase from the validated registration's processIdentity using the step-3 constants (exact `pendingProcessIdentity(registration.wrapperIdentity)` match -> PREFLIGHT, the started prefix -> STARTED, anything else -> a LAUNCH_LOCK_MALFORMED refusal at LAUNCH_LOCK) and returns `commitProcessRegistration({phase, registration, claim, prior})` raw for the launcher's existing `decodeRegistration` to validate. Both wrappers stay SYNCHRONOUS and add NO try/catch — the launcher's `contained()` and lifecycle's try/catch own containment and layer attribution. A module doc comment names the production consumer task-6cbff01023b14b26a78fc5e3eb1dd8a9. Keep the file under 250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher-authority.ts",
+        "packages/runner/src/providers/claude/claude-launcher-authority.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher-authority-echo.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher-authority-test-fixtures.ts"
+      ],
+      "note": "GREEN. `vitest run <both authority suites>` = 2 files / 71 tests passed. claude-launcher-authority.ts is 208 physical lines (`grep -c ''`), under the 250 target.\n\nTHREE PRODUCTION CHANGES, one per defect QA reproduced.\n\n1. GRANT ECHO (rejectionDetails issue 2). New private `durableGrantPort`. Order is the whole design: the durable CAS runs FIRST and any non-OK answer — a delegated refusal, a Promise, a thenable, a bad arm — is returned RAW, so composition rule 1 survives and the delegated code/layer still reaches the caller. Only on a decoded success does the pure `consumeActivationGrant` run, and it runs as an ORACLE rather than a gate: it computes the one admissible consumption of the exact presented bytes. If no consumption is admissible (spent record, another wrapper's grant) the pure refusal is returned, so a lying store earns the pure layer's own code. If one is, the answer must equal it field for field — grantId, intentId, wrapperIdentity, state and version — which is precisely \"same identities and exact input version + 1\". A mismatch refuses ACTIVATION_COMMIT_INCOHERENT at ACTIVATION.\n\n2. REGISTRATION ECHO (rejectionDetails issue 1). `durableRegistrationPort` now decodes the durable answer and compares every field of it — lockIdentity, wrapperIdentity, processIdentity, bootstrapCredentialDigest, registeredAt — against the PURE-validated proposal before returning it. A drift refuses LAUNCH_LOCK_IDENTITY_CONFLICT at LAUNCH_LOCK, so QA's probe (pass lock-1/pending:wrapper-1, answer REGISTERED for lock-other/pending:attacker) can no longer redirect `acquireLock` at PREFLIGHT. Non-OK answers still travel on untouched.\n\nBoth comparisons go through one generic `echoes(answer, expected, fields)` whose field set is a `Readonly<Record<keyof T, true>>` map, NOT an array: a field added to ActivationGrant or LaunchLockRegistration later fails to compile until it is compared too. A hand-listed array would silently stop covering the record it polices — the same class of defect as the one being fixed.\n\n3. DEPS (QA comment-31423145 item 1). `createClaudeLauncher` is now one line: `composeDurableLauncher(CLAUDE_LAUNCHER_DEFAULTS, authority)`. The `entry.deps ?? CLAUDE_LAUNCHER_DEFAULTS` base is gone; a deps-bearing option set is refused outright with CLAUDE_LAUNCH_REQUEST_MALFORMED at LAUNCHER and the pinned message \"the durable launcher composes its own shipped dependencies\", before any port runs. `composeDurableLauncher(base, authority)` is the internal seam the suites use; it is NOT published (step 6 keeps it off claude-surface.ts and pins its absence). An unusable base is still FORWARDED to launchClaude rather than answered locally, so the launcher's own dependency reader remains the layer that refuses it — asserted by message, not just code.\n\nPLAN DEVIATION, stated rather than silent: step 5 as written prescribes `{...(options?.deps ?? CLAUDE_LAUNCHER_DEFAULTS), consumeGrant, registerLock}`. That IS the defect QA reproduced — overwriting two slots does not undo the caller having replaced the other eight — so the plan text is not followed here. Everything else in step 5 is: capabilities bound once via `readCapability`, both wrappers synchronous with no try/catch, phase classified from the identity format, module doc naming the consumer task.\n\nTYPECHECK: `tsc --project packages/runner/tsconfig.json --noEmit` reports ZERO errors in any file this task owns.\n\nFOREIGN RED, disclosed verbatim, not caused by this diff. A sibling launch-selection task has uncommitted work in claude-launcher-contract.ts / claude-launcher.ts / claude-launcher-input.ts / claude-launcher-test-fixtures.ts adding a REQUIRED `launchSelection` field to ClaudeLaunchRequest. Consequences at HEAD+worktree:\n- typecheck: `src/index-surface.test.ts(532,36): error TS2741: Property 'launchSelection' is missing ... but required in type 'Record<keyof ClaudeLaunchRequest, unknown>'` plus four nullability errors at claude-launcher.test.ts(326,33)/(330,9)/(338,47)/(342,12).\n- full runner suite: 57 files passed / 1 failed, 1822 passed / 1 failed — `index-surface.test.ts:540` expects {GRANT_WRAPPER_MISMATCH, GRANT} and receives {CLAUDE_LAUNCH_REQUEST_MALFORMED, LAUNCHER}, because the request literal there now lacks a required field and is refused at input.\nAttribution evidence: `git diff --stat -- packages/runner/src/index-surface.test.ts` is EMPTY (I did not touch it this round), the failing block was authored by commit c0c5929 \"fix(runner): lock Claude before provider start\", and the symbol that breaks it, `launchSelection`, exists only inside the sibling's uncommitted diff.",
+      "startedAt": "2026-08-13T23:27:57.991Z",
+      "completedAt": "2026-08-13T23:30:36.529Z"
     },
     {
       "stepId": "step-6",
       "description": "Publish the seam at the package root and prove the closure. Add to surface/claude-surface.ts, in the existing curated launcher block with a comment explaining why the factory is published while the individual defaults are not: the value `createClaudeLauncher`, the value `CLAUDE_LAUNCH_REGISTRATION_PHASES`, and the types `ClaudeLauncherAuthority`, `ClaudeRegistrationCommit`, `ClaudeLaunchRegistrationPhase`. Do NOT export CLAUDE_LAUNCHER_DEFAULTS or any individual default port. Then update index-surface.test.ts: add the new runtime values to the hand-transcribed EXPECTED_EXPORTS table, bump the pinned `expect(EXPECTED_EXPORTS.length).toBe(159)` at line 206 by the number of runtime values added, and — because type-only exports are invisible to the Object.keys guard — name every new type in the root `import type { ... } from \"@moe/runner\"` block AND annotate a real value with each so an unpublished type fails typecheck. Add a negative control in the same file: assert that a name deliberately NOT published (CLAUDE_LAUNCHER_DEFAULTS) is absent from `Object.keys(runner)`, so the seam is proven no wider than intended.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/surface/claude-surface.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "note": "Re-verified the already-landed curated root seam at HEAD d7a71cb: claude-surface.ts publishes only createClaudeLauncher, CLAUDE_LAUNCH_REGISTRATION_PHASES, and the three authority/phase types; index-surface.test.ts pins runtime export count 161, annotates all new root types, and explicitly withholds CLAUDE_LAUNCHER_DEFAULTS. Focused authority suites remain green (2 files, 71 tests). The runner typecheck is currently red at index-surface.test.ts:532 because concurrent task-d23a913f added required ClaudeLaunchRequest.launchSelection without yet updating the root-only compile probe; no step-6 source change was made and the foreign WIP was preserved.",
+      "startedAt": "2026-08-13T23:30:44.332Z",
+      "completedAt": "2026-08-14T08:45:50.858Z"
     },
     {
       "stepId": "step-7",
       "description": "VERIFY — the single concentrated gate for this task. (1) Run the exact command `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` from the repo root in PowerShell and paste its fresh tail, including the file/test counts, as the completion evidence; it must be exit 0 and the test count must be >= the 55 files / 1711 tests the prior task recorded. (2) Bare-root Node smoke, no deep import: import `createClaudeLauncher` from the bare specifier `@moe/runner`, build a launcher from two counting authority stubs, invoke it with `{platform:\"linux\"}`, and assert it returns CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED at LAUNCHER with both stub call counts at zero — this proves root reachability and real defaults while spawning no process. (3) Path-attributed repo baseline per the epic rail: run `pnpm typecheck` and `pnpm test` at the merge-base and at HEAD, and report the HEAD-minus-merge-base failing-path set intersected with this task's owned paths; it must be empty, and any foreign red is disclosed verbatim with its exact failing lines. (4) MUTATION DRILLS — record a sha256 of each file before and after, restore by reverse edit (never `git checkout`, which reverts to HEAD and would destroy uncommitted work), and remember `git diff` is blind to the two UNTRACKED new files so the hash is the only proof: D1 delete the `consumeGrantDurably` delegation in claude-launcher-authority.ts and fall back to the default consumeGrant — the replay case must redden on the exact delegated code; D2 make the registration wrapper skip the PREFLIGHT invocation — the phase-ordering case must redden on the named phase assertion; D3 drop the pure `registerLaunchLock` pre-check and delegate straight to the injected port — the credential-reuse case must redden with LAUNCH_LOCK_CREDENTIAL_REUSED at LAUNCH_LOCK; D4 COMPOSITION PROOF, change a real default primitive in its own file (the `EXIT_BEFORE_LAUNCH` kind literal in supervisor/duplicate-delivery.ts) — the factory's real-defaults duplicate case must redden on a named value, which is the only mechanical proof the factory composes shipped defaults rather than merely importing them; D5 widen the phase classifier to accept any prefix — the hostile-identity case must redden with its exact code. Each drill must redden on an OUTCOME assertion, not merely a shape or length assertion; if a drill goes green, the test is at fault, not the drill. (5) Confirm with `grep -c ''` that no production file under packages/runner/src/providers/claude exceeds 250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.ts",
         "packages/runner/src/providers/claude/claude-launcher-authority.test.ts",
         "packages/runner/src/providers/claude/claude-launcher.ts",
         "packages/runner/src/providers/claude/claude-launcher-lifecycle.ts"
-      ]
+      ],
+      "note": "FRESH OWNED GATE (exact plan command, foreground): `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0; Test Files 58 passed (58), Tests 1827 passed (1827). Bare-root Node self-import from packages/runner (no deep import) returned exactly {kind:REFUSED, code:CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED, layer:LAUNCHER, grants:0, regs:0}.\n\nMUTATION DRILLS, every source restored byte-exact by SHA-256. Authority source stable hash 523981B5...: D1 default consume instead of durable delegation -> replay test red, expected failure received OBSERVED; D2 skip PREFLIGHT durable commit -> phase test red 1 vs 2 calls; D3 skip pure registerLaunchLock -> credential-reuse test red, expected failure received OBSERVED; D5 accept every process identity as STARTED -> unclassifiable test red, expected LAUNCH_LOCK_MALFORMED/LAUNCH_LOCK but received commit. Shipped-default D4 changed duplicate resolver EXIT_BEFORE_LAUNCH result literal -> public factory duplicate test red, expected EXIT_BEFORE_LAUNCH but received REFUSED; duplicate-delivery.ts restored BEBAD344... exactly. Additional QA-reopen drills: D6 bypass grant relational echo -> all 4 hand-counted well-formed grant substitutions red on expected ACTIVATION_COMMIT_INCOHERENT/ACTIVATION; D7 bypass registration relational echo -> all 10 hand-counted two-phase substitutions red on expected LAUNCH_LOCK_IDENTITY_CONFLICT/LAUNCH_LOCK (the STARTED process drift instead reached PROCESS_BOUNDARY_IDENTITY_UNPROVEN/WINDOWS_PROCESS_TRANSPORT), proving layer/code assertions are attached to the echo guard. All drill hashes restored exactly.\n\nLINE MEASUREMENT: every task-owned production source is <=250 (authority 208, contract 236, launcher 210, lifecycle 249, port-results 250). Six pre-existing foreign Claude sources exceed the 250 target but remain below the hard 400 split rail (render 372, runtime-pin 301, observation 300, capabilities 289, runtime-pin-closure 281, stream-anomalies 265); no byte touched there.\n\nPATH-ATTRIBUTED REPO GATE: current `pnpm typecheck` and `pnpm test` are raw red only in packages/scheduler/src/expansion/expansion-current-hold.test.ts and packages/scheduler/src/index-surface.test.ts: missing root exports bindCurrentExpansionHold / ExpansionCurrentHoldRequest / ExpansionCurrentHoldResult and absent ExpansionBindingIssue.target, producing typecheck exit 1 and 105 scheduler test failures. Runner package legs are exit 0, and the failing-path set intersects this task's owned runner paths at EMPTY. This foreign red was disclosed verbatim in terminal output and was not repaired or hidden.",
+      "startedAt": "2026-08-14T08:45:59.827Z",
+      "completedAt": "2026-08-14T08:54:45.847Z"
     },
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL SELF-REVIEW, then record the consumer edge, then commit. Read your own diff as an attacker: can any authority-port return value reach a physical open before the durable consume answers? Can a hostile fulfilled record escape `decodeGrant`/`decodeRegistration` and become authority? Does any refusal path skip the lock release or the boundary close? Does a mutated authority object AFTER construction change behaviour (it must not — capabilities are bound once)? Does any refusal message echo the bootstrap credential digest, the grant id or a runtime path? Is every generated case count hand-written rather than derived from the production constant it is meant to police? Then satisfy the epic's composition rail by RECORDING the consumer edge: call `moe.add_comment` on task-6cbff01023b14b26a78fc5e3eb1dd8a9 naming `createClaudeLauncher`, its authority-port signatures, the PREFLIGHT/STARTED phase contract, and the fact that a durable pending registration must never be fed back as `priorRegistration`; and note in the same comment that runtime-to-activation binding is owned by the sibling task-de496f4785a242569aa4ffc3ef6f1d69, not by this launcher overlay. Finally commit by EXPLICIT PATHSPEC only — `git status --porcelain` first, unstage any foreign path with `git restore --staged`, then `git commit -- <owned paths>`, then `git show --stat` to confirm only owned paths landed. No debug, probe, scratch or drill-leftover files in the commit.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher-authority.ts",
         "packages/runner/src/providers/claude/claude-launcher-authority.test.ts",
         "packages/runner/src/surface/claude-surface.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher-authority.ts",
+        "packages/runner/src/providers/claude/claude-launcher-authority.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW: durable consume remains before preflight registration/OS lock/open; a durable success is descriptor-safely decoded, checked against an exhaustive compile-time field map, and only then reaches the launcher's existing decoder. Delegated refusal/malformed arms remain raw so the existing containment assigns their exact code/layer; no authority wrapper catches throws or awaits thenables. Registration first passes pure claim/credential/prior authority, compares every returned field to that pure proposal, and STARTED echo refusal follows the lifecycle cleanup path (boundary close before lock release). Capabilities are bound once; swap-after-construction coverage stays green. Static overlay refusal messages contain no digest, grant id, or runtime path. Generated grant/registration matrices pin handwritten 4/5/10 counts and assert the hostile record itself decodes OK.\n\nConsumer edge recorded on task-6cbff01023b14b26a78fc5e3eb1dd8a9 as comment-ba05dec3ca27496886419745a859fc74, including both port signatures, PREFLIGHT/STARTED identities, the pending-registration prior warning, and task-de496f47 ownership of runtime binding.\n\nCOMMIT DISCIPLINE: pre-commit status showed no staged paths; foreign scheduler/store/runner WIP was preserved. Explicit pathspec commit dadea79 contains only claude-launcher-authority.ts and claude-launcher-authority.test.ts (117 insertions, 39 deletions); `git show --stat` confirmed exactly those two owned paths. Echo suite/fixture bytes already sit in foreign whole-tree commit d7a71cb per the known completion-hook hazard and were not amended/reset/reclaimed.",
+      "startedAt": "2026-08-14T08:54:54.556Z",
+      "completedAt": "2026-08-14T08:57:07.337Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-28758e8f",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-50f0d628",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -153,17 +175,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:26.455Z",
-  "updatedAt": "2026-08-13T23:27:18.849Z",
+  "updatedAt": "2026-08-14T08:58:30.703Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:12:53.445Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 12,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
-    "worker-28758e8f"
+    "worker-28758e8f",
+    "worker-25ca55c6",
+    "qa-50f0d628"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -172,7 +196,11 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -204,16 +232,18 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-14T08:43:29.332Z",
+    "escalatedAt": "2026-08-14T08:43:29.332Z"
   },
   "planApprovedAt": "2026-08-13T22:23:18.253Z",
   "workStartedAt": "2026-08-13T22:23:34.455Z",
-  "reviewStartedAt": "2026-08-13T22:53:02.986Z",
+  "reviewStartedAt": "2026-08-14T08:58:24.760Z",
   "verification": {
     "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  56 passed (56)\n      Tests  1764 passed (1764)\n   Start at  01:50:48\n   Duration  4.65s (transform 14.19s, setup 0ms, import 20.49s, tests 17.73s, environment 4ms)\n\nEXIT=0",
-    "reportedAt": "2026-08-13T22:53:02.986Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  58 passed (58)\n      Tests  1827 passed (1827)\n   Start at  11:57:38\n   Duration  4.42s (transform 13.35s, setup 0ms, import 20.07s, tests 17.11s, environment 5ms)\n\n$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src",
+    "reportedAt": "2026-08-14T08:58:24.760Z"
   },
   "filesModified": [
     "packages/runner/src/providers/claude/claude-launcher.ts",
@@ -221,7 +251,8 @@
     "packages/runner/src/providers/claude/claude-launcher-authority.test.ts",
     "packages/runner/src/providers/claude/claude-launcher-contract.ts",
     "packages/runner/src/providers/claude/claude-launcher-authority.ts",
-    "packages/runner/src/providers/claude/claude-launcher-authority.js",
+    "packages/runner/src/providers/claude/claude-launcher-authority-echo.test.ts",
+    "packages/runner/src/providers/claude/claude-launcher-authority-test-fixtures.ts",
     "packages/runner/src/surface/claude-surface.ts",
     "packages/runner/src/index-surface.test.ts"
   ],

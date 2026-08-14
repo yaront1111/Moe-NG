@@ -16,12 +16,12 @@
     "Preserve source bytes and mtimes; all unsupported/ambiguous facts are typed with exact code and layer."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion. No hard dependency; buildSourceManifest/applyImport/reconcileImport are already public, and references to task-22cfca91 and task-4e1fe696 are consumers rather than blockers. The architect measured that every existing consumer is a test and that tests/migration/import/import-determinism.test.ts invents payload semantics a production decoder should own — a real production gap, not test debt.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:45.319Z",
-  "updatedAt": "2026-08-13T22:58:45.319Z"
+  "updatedAt": "2026-08-13T23:30:43.046Z"
 }

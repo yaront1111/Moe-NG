@@ -1,0 +1,42 @@
+{
+  "id": "task-2846816783104c52bfd4226782b10cc0",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Tagged genesis recovery-incarnation proof",
+  "description": "Objective: make a never-restored store's genesis fence a canonical self-proving public recovery identity without fabricating restore facts. Deliverable: refactor the landed recovery-incarnation mint/codec around an exact tagged context union (RESTORE with restoreCommandId+backupGenerationDigest; GENESIS with daemon-derived project/store context), preserve the existing restore API, and expose a synchronous or otherwise startup-composable genesis mint that returns full public SPKI/fingerprint/binding digest/signature proof while never serializing the nonce, private key, PKCS8, or handle. This is a prerequisite for task-e19074f841f9450296799abfba9bfcaa; the current genesis helper persists only refs plus a genesisDigest, while RecoveryIncarnationBinding requires restore-only fields that a fresh store does not possess. NOT in scope: SQLite installation/CAS, daemon startup/listener changes, restore quiesce policy, session lifetime, or using the key as signing authority. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run src/recovery/recovery-incarnation.test.ts src/identity/genesis-recovery-binding.test.ts.",
+  "definitionOfDone": [
+    "The public recovery-incarnation contract uses an exact tagged GENESIS versus RESTORE origin; GENESIS cannot carry or counterfeit restoreCommandId/backupGenerationDigest, and RESTORE retains its current exact fields and behavior.",
+    "One production mint/verification implementation derives incarnationRef and keyEpochRef from fresh 256-bit entropy, complete Ed25519 SPKI fingerprint, and the tagged context, and returns a full canonical binding/proof whose signature verifies.",
+    "Genesis context is derived inside the daemon from the asserted project/store identity, never caller-selected recovery refs, counters, time, or restored bytes; repeated entropy/key material is refused with the existing exact recovery code/layer.",
+    "Canonical serialized public evidence contains no raw nonce, private key, PKCS8, key handle, bearer, or proof-of-possession secret; losing/unused key handles are destroyed and the result claims no signing/business authority.",
+    "Existing restore-incarnation, succession, anchor, and hostile-input tests remain green; generated GENESIS/RESTORE and mutation sweeps assert nonzero counts and removing either context or SPKI binding reddens focused tests.",
+    "Fresh pnpm --filter @moe/daemon typecheck and the focused recovery-incarnation/genesis tests exit 0."
+  ],
+  "taskRails": [
+    "Do not synthesize restoreCommandId or backupGenerationDigest for a never-restored store; model genesis as an explicit tagged origin.",
+    "Reuse the landed recovery crypto/freshness/self-proof discipline rather than a second generateKeyPairSync implementation.",
+    "This task proves only a fencing identity; it must not claim a durable usable signing key or persist/resurrect a private key handle.",
+    "Every refusal test asserts the exact stable reason code, layer, and component where exposed; mutation drills exercise the production verifier."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-2aea4111",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e19074f841f9450296799abfba9bfcaa",
+  "priority": "CRITICAL",
+  "order": 9.42,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-13T23:50:17.121Z",
+  "updatedAt": "2026-08-14T08:53:25.385Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-14T08:43:37.244Z"
+  },
+  "contextFetchedBy": [
+    "architect-4eca9b79",
+    "architect-2aea4111"
+  ]
+}

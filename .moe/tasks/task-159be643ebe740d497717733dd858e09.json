@@ -16,12 +16,12 @@
     "If task-49ed1e6d lands the same consumer first, report the gap closed rather than duplicate it."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion. No hard dependency; producer task-8ce8b35c (Streamable HTTP MCP surface) is DONE, apps/daemon already declares @moe/mcp with the pnpm-lock importer edge, and references to task-49ed1e6d and task-22cfca91 are related/consumer rather than blockers. Gap re-verified: grep for createHttpMcpAdapter across apps/daemon/src returns zero callers, so the public adapter has no production consumer.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:58:45.007Z",
-  "updatedAt": "2026-08-13T22:58:45.007Z"
+  "updatedAt": "2026-08-13T23:30:36.655Z"
 }

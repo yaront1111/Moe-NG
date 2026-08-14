@@ -16,7 +16,7 @@
     "Every refusal/unknown asserts stable code plus layer/boundary and every generated schedule asserts positive cardinality."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-13T22:59:41.305Z"
+  "updatedAt": "2026-08-13T23:31:55.060Z"
 }

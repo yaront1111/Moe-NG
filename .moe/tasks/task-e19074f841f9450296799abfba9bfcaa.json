@@ -17,24 +17,36 @@
     "Preserve foreign work; stage and commit only explicit owned paths. Target <=250 physical lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-a42f4965",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Restoring architect-a42f4965's BLOCKED verdict of 2026-08-13T23:50:50Z, which the 08:42 daemon restart dropped by re-serving this task to PLANNING. Human authorized this flip at 2026-08-14T08:47Z. NOT an idle-time or staleness action: no worker holds this task, no plan exists, nothing is destroyed.\n\nHard dependencies — all three are SPIDR children of this task, created 08:42, all CRITICAL, all in PLANNING under architects right now:\n- task-1615065497f0489097a4bbc11cea9d6b (Atomic pristine recovery-binding install) — its own description states verbatim \"This is a prerequisite for task-e19074f841f9450296799abfba9bfcaa\".\n- task-2846816783104c52bfd4226782b10cc0 (Tagged genesis recovery-incarnation proof)\n- task-69fdb23140ab472ebd34c3e4478c3ef2 (Genesis-aware restore record classification)\n\nWhy it cannot be planned now: commit 26d85c0 already closed the basic fresh-store happy path, so this description is a PRE-SPLIT SNAPSHOT and is stale in the \"gap claimed present, actually closed\" direction. The residual defects the architect measured at HEAD d7a71cba — last-writer-wins race in ensureGenesisRecoveryBinding's ABSENT-read-then-install, genesis overwriting an ACTIVE restore, and a payload that is only a 64-hex genesisDigest rather than a self-proving recovery identity — are exactly what the three children own. Planning here would either duplicate landed bytes or reconstruct authority the children have not shipped yet. The existing governance-hold comment on this task says the same.\n\nRe-promote to PLANNING only after all three children are DONE, and re-measure their exact public surfaces on disk first.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 9.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ff9832faf3624af2beb15f3a2d3cc1fb",
+      "author": "agent",
+      "content": "GOVERNANCE HOLD — human reported in #general at 2026-08-13T23:22:56Z that this first-boot deadlock was already fixed at commit 26d85c0: createStoreDependencies now calls ensureGenesisRecoveryBinding after opening the store; first boot mints genesis fencing identity, FOUND is untouched, unreadable refuses GENESIS_SLOT_UNREADABLE, and anchored incarnation with an empty slot defers to restore. Reported fresh gates: daemon 1230, root 5508, e2e 68. Per the current-byte remeasurement rail, do not submit a duplicate implementation plan. First remeasure that commit/current HEAD and either identify an actual remaining DoD gap or hand this back as already-landed work needing only truthful task/QA reconciliation.",
+      "timestamp": "2026-08-13T23:29:42.044Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:20:28.506Z",
-  "updatedAt": "2026-08-13T23:26:59.135Z",
+  "updatedAt": "2026-08-14T08:47:45.935Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:26:51.902Z"
   },
   "contextFetchedBy": [
-    "architect-a42f4965"
-  ]
+    "architect-a42f4965",
+    "governor-18a42000"
+  ],
+  "blockedReason": "Restoring architect-a42f4965's BLOCKED verdict of 2026-08-13T23:50:50Z, which the 08:42 daemon restart dropped by re-serving this task to PLANNING. Human authorized this flip at 2026-08-14T08:47Z. NOT an idle-time or staleness action: no worker holds this task, no plan exists, nothing is destroyed.\n\nHard dependencies — all three are SPIDR children of this task, created 08:42, all CRITICAL, all in PLANNING under architects right now:\n- task-1615065497f0489097a4bbc11cea9d6b (Atomic pristine recovery-binding install) — its own description states verbatim \"This is a prerequisite for task-e19074f841f9450296799abfba9bfcaa\".\n- task-2846816783104c52bfd4226782b10cc0 (Tagged genesis recovery-incarnation proof)\n- task-69fdb23140ab472ebd34c3e4478c3ef2 (Genesis-aware restore record classification)\n\nWhy it cannot be planned now: commit 26d85c0 already closed the basic fresh-store happy path, so this description is a PRE-SPLIT SNAPSHOT and is stale in the \"gap claimed present, actually closed\" direction. The residual defects the architect measured at HEAD d7a71cba — last-writer-wins race in ensureGenesisRecoveryBinding's ABSENT-read-then-install, genesis overwriting an ACTIVE restore, and a payload that is only a 64-hex genesisDigest rather than a self-proving recovery identity — are exactly what the three children own. Planning here would either duplicate landed bytes or reconstruct authority the children have not shipped yet. The existing governance-hold comment on this task says the same.\n\nRe-promote to PLANNING only after all three children are DONE, and re-measure their exact public surfaces on disk first.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-14T08:47:45.935Z"
 }

@@ -18,12 +18,12 @@
     "Use public package roots across boundaries, exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Both hard dependencies unmet, measured 23:29Z: task-e62e3828 is BLOCKED and task-2d37939d is WORKING, where the task's own description requires both DONE. Zero of two. Its sibling task-e62e3828 was promoted in the same sweep and has already self-returned to BLOCKED after an architect paid a full claim-measure-block cycle; this re-block avoids paying a second. Detail in comment-9d72e44bb4f4464abb92920982c88ac3.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
@@ -34,9 +34,24 @@
       "author": "architect-a9210e34",
       "content": "Consumer-edge record: task-2d37939dddde447bb98e53a2bd9e6c60 is planned to publish scheduler-root bindCurrentExpansionHold and make bindExpansionAdmission its immediate production consumer. This durable daemon task remains the eventual cross-package consumer and must call that public production surface rather than reproduce hold replay/current-binding authority.",
       "timestamp": "2026-08-13T23:11:51.580Z"
+    },
+    {
+      "id": "comment-9d72e44bb4f4464abb92920982c88ac3",
+      "author": "governor-773e2f5e",
+      "content": "GOVERNOR RE-BLOCK 2026-08-13T23:29Z. **Promoted to PLANNING with both hard dependencies unmet. Returning to BLOCKED before an architect spends a full context cycle re-deriving this.**\n\nThis task's own description states: *\"Hard dependencies: task-e62e3828df234c66969a99b8223487f4 and task-2d37939dddde447bb98e53a2bd9e6c60 DONE.\"* Measured just now:\n\n| dependency | required | actual |\n|---|---|---|\n| task-e62e3828 (Current expansion safe-release evidence) | DONE | **BLOCKED** |\n| task-2d37939d (Current expansion hold binding surface) | DONE | **WORKING** |\n\nZero of two. Not a close call, and not a stale-reasoning case — I re-ran the literal condition rather than trusting the earlier block prose.\n\n**task-e62e3828 was promoted in the same sweep and has already returned to BLOCKED on its own**, because its hard dependency task-6cbff010 is BLOCKED, deep in the M1 durable Claude attempt-dispatch chain. So an architect has already paid one full claim-measure-block cycle for that promotion. This comment exists to avoid paying a second one here.\n\n**Why these keep getting promoted, and it is a structural problem worth naming.** The dependency lives in *prose* inside `description` — there is no machine-readable blocker field. A BACKLOG sweep sees a CRITICAL task with nothing structurally marking it as gated and promotes it in good faith. That is the third time today this pattern has cost a cycle on this board. Anyone sweeping BACKLOG or BLOCKED for promotable work: **parse the \"Hard dependencies:\" clause and resolve each id's current status before flipping anything.** Status DONE is the floor, not the ceiling — this board has also recorded that DONE is not the same as reachable, so a promotion still needs the symbol and the package dependency edge checked.\n\n**Do not re-promote until BOTH are DONE**, then re-measure their public surfaces before planning rather than trusting this note.\n\nConsumer-edge record from architect-a9210e34 is preserved and still accurate: task-2d37939d is planned to publish scheduler-root `bindCurrentExpansionHold` with `bindExpansionAdmission` as its immediate production consumer. That work is in flight now, which is exactly why this task cannot be planned against it yet — its surface is not settled and could still change under QA.",
+      "timestamp": "2026-08-13T23:28:25.590Z"
+    },
+    {
+      "id": "comment-cee2946a2aa041498cb4f641dc1d3eb2",
+      "author": "worker-4e189bb5",
+      "content": "Consumer-edge record from task-2d37939dddde447bb98e53a2bd9e6c60 (current expansion hold binding surface).\n\n`bindCurrentExpansionHold` is now published on the bare `@moe/scheduler` root and is the SOLE producer of a core `PlanningExpansionHoldBinding`. Do not rebuild the projection and do not set `truthClass: \"DAEMON_VERIFIED\"` yourself.\n\nAPI:\n  bindCurrentExpansionHold(value: unknown): ExpansionCurrentHoldResult\n  request = EXACTLY two own keys: { currentAuthority, hold }\n  currentAuthority = EXACTLY five own keys: { goalVersion, graphEpoch, holdId, holdVersion, planningRunRef }\n  hold = a reducer-produced ACTIVE version-1 ExpansionPlanningHoldState with terminalReceipt null\n\nSuccess -> { ok: true, binding } deeply frozen and detached; `binding` is the 11-field core PlanningExpansionHoldBinding, already re-inspected by `inspectPlanningExpansionContract(\"HOLD_BINDING\", ...)`.\nRefusal -> { ok: false, disposition: \"REFUSED\" | \"UNKNOWN\", issues } and carries NO `binding` property at all.\n\nType closure is complete from the bare root: ExpansionCurrentHoldRequest, ExpansionCurrentHoldResult, ExpansionBindingIssue/IssueCode/Layer/Origin/Refusal, ExpansionCurrentAuthority, plus named type-only re-exports of ExpansionPlanningHoldState and PlanningExpansionHoldBinding. No deep import and no `@moe/core` import needed.\n\nThree things worth knowing before you consume it:\n1. `ExpansionBindingIssue` gained `target: string | null`. It is COPIED verbatim from the core planning inspector (`\"HOLD_BINDING\"`) and is null for every local, reducer and fairness issue. Never derive it from the code or the layer.\n2. Absence is UNKNOWN, disagreement is REFUSED. An unreadable/missing currentAuthority yields disposition UNKNOWN with code EXPANSION_BINDING_CURRENT_AUTHORITY_UNKNOWN and missingInput \"currentAuthority\" — it is not a mismatch verdict and must not be treated as one.\n3. The hold carries NO goalVersion, so this surface does NOT authenticate `currentAuthority.goalVersion` against the hold; it only validates its domain and lets core's HOLD_BINDING inspector judge it. It compares graphEpoch, holdId, holdVersion and planningRunRef to the hold. If your path has an admitted/bound goal version, you must fence goalVersion equality yourself, exactly as `bindExpansionAdmission` does against `preparation.bound`. Supplying genuinely current daemon values atomically is the caller's obligation — a pure scheduler function cannot create daemon authority.\n\nGate: `pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test` exit 0, 43 files / 1312 tests.",
+      "timestamp": "2026-08-14T08:57:54.487Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:05.524Z",
-  "updatedAt": "2026-08-13T23:27:13.096Z"
+  "updatedAt": "2026-08-14T08:57:54.487Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-13T23:28:35.504Z",
+  "blockedReason": "Both hard dependencies unmet, measured 23:29Z: task-e62e3828 is BLOCKED and task-2d37939d is WORKING, where the task's own description requires both DONE. Zero of two. Its sibling task-e62e3828 was promoted in the same sweep and has already self-returned to BLOCKED after an architect paid a full claim-measure-block cycle; this re-block avoids paying a second. Detail in comment-9d72e44bb4f4464abb92920982c88ac3."
 }

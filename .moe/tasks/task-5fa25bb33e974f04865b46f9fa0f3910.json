@@ -103,7 +103,7 @@
       "completedAt": "2026-08-13T23:26:22.198Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -113,19 +113,29 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 4.601,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c3a7cf43ffd343519633f2b5a6a608ec",
+      "author": "qa-50f0d628",
+      "content": "QA VERIFICATION EVIDENCE (full record; approval summary is the short form).\n\nDiff reviewed = commit 350ec36, exactly the 2 owned paths, +271/-4. The later whole-tree commit d7a71cb bears this task's id but carries ONLY foreign runner/.moe bytes and no scheduler file — the known completion-hook hazard, not a defect of this worker, who had already committed by explicit pathspec.\n\nGATE, re-run by QA at a CLEAN packages/scheduler tree (git status --porcelain packages/scheduler empty, so committed bytes == gated bytes):\n  pnpm --filter @moe/scheduler typecheck  -> EXIT 0\n  pnpm --filter @moe/scheduler test       -> EXIT 0, 42 files / 1237 tests passed\nMatches the worker's recorded evidence exactly. DoD 4 met.\n\nDoD 1 — curated publication. index.ts adds 7 runtime values + 11 types in explicit named lists; no `export *` anywhere in the diff. A value block and a type block from budget-contract.js coexist because a value cannot join `export type {}` — correct, not drift. Withholding proven twice: the WITHHELD_BUDGET_NAMES negative control (hand-written length 6) and my own probe.\n\nDoD 2 — I ran the plain-Node bare-specifier probe MYSELF, inline, from packages/scheduler, nothing written to disk (node v24.16.0):\n  - all 7 bindings present with expected typeof / Array.isArray\n  - normalizeUsageMeasurement invoked on a valid observation -> ok === true\n  - invoked on a truncated COMPLETE claim -> refused with exact pair MEASUREMENT:BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM\n  - projectBudgetFact, validateUsageMeasurement, MEASUREMENT_FACT_TIER confirmed ABSENT from the namespace\n  PROBE EXIT 0. This is a different resolver from vitest, so it independently proves runtime loadability.\nHand-written non-zero cardinalities all present: EXPECTED_EXPORTS 85, sweep ran=18 with [accepts,refusals]=[9,9], hostile.length=3, withheld length=6.\n\nDoD 3 — every root-driven code/layer pair cross-checked against budget-measurement.test.ts lines 57-235. Transcribed, not re-derived. CONTRACT and MEASUREMENT are demonstrably separable rather than assumed: the same Proxy value yields MEASUREMENT:BUDGET_OBSERVATION_MALFORMED at the envelope position and CONTRACT:BUDGET_MEASUREMENT_MALFORMED at the nested measurement position. Kernel cardinality independently confirmed: MEASUREMENT_ISSUE_CODES is 10, MEASUREMENT_ISSUE_LAYERS is exactly [\"CONTRACT\",\"MEASUREMENT\"].\n\nTHREE INDEPENDENT DRILLS, run by QA, each reddening on the RIGHT assertion:\nA) Composition. I mutated a DIFFERENT emission site than the worker did — budget-measurement.ts:168, TRUNCATED_COMPLETION_CLAIM -> MALFORMED. The root-driven test failed at index-surface.test.ts:1427, i.e. on the `.toContain(layer:code)` assertion, NOT on `result.ok`. That is the proof the published binding reaches the production authority rather than a weaker re-export.\nB) Namespace. Removed SUPPORTED_SOURCE_PARSER_VERSIONS from index.ts -> assertion at :159 reddened printing `- \"SUPPORTED_SOURCE_PARSER_VERSIONS\"`, naming the exact removed export.\nC) Type closure. Removed ObservedIntervalRefs -> tsc TS2305 at index-surface.test.ts:37. Types are invisible to Object.keys, so this is the only guard that can hold them.\nAll restored by reverse edit, never git checkout. Restoration proven by BOTH sha256 (budget-measurement.ts bf0e97b38c6f9f24cf686bca42f992a90c03e705733890ca0a50f57a41b36099, index.ts c788973fe2a15297875585d6b3845ceddaee5085c8f7320adb083ec7d4f2a030) AND git diff --exit-code. Both kernels still exactly 250 lines and byte-identical to HEAD.\n\nCOMPOSITION RAIL (task rail 4) — satisfied by option (a): comment-5f840bff69694996b45e409176e0b01b confirmed present on consumer task-159f4c21ef9149e8a65f24735c9c1475, carrying the published value/type names and the normalizer signature.\n\nFOREIGN STATE — disclosed, verbatim, not attributed to this task. Between my clean-tree gate run and my drills, a live peer began TDD RED work inside packages/scheduler: untracked src/expansion/expansion-current-hold.test.ts appeared, and index-surface.test.ts gained foreign edits at :1082-1141 adding `issue.target` assertions against a property ExpansionBindingIssue does not yet have, producing `error TS2339: Property 'target' does not exist on type 'ExpansionBindingIssue'`. packages/runner is also red per the worker's disclosure. Intersection of the HEAD-minus-baseline failing-path set with this task's two owned paths is EMPTY, and my authoritative gate ran BEFORE any of it, on a clean tree.\n\nONE NOTE, not a defect and not a condition of approval: index.ts is now 367 physical lines. That is under the 400 split bar so it is compliant, but it is above the 250 target and this task consumed 35 of the remaining headroom. Whoever next extends this barrel should expect to split it.",
+      "timestamp": "2026-08-14T08:53:04.168Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:23:51.670Z",
-  "updatedAt": "2026-08-13T23:27:39.434Z",
+  "updatedAt": "2026-08-14T08:53:40.277Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:34:04.576Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-14T08:53:40.277Z",
+    "wallClockMs": 37175701
   },
   "contextFetchedBy": [
     "architect-b1a46457",
-    "worker-733c82bb"
+    "worker-733c82bb",
+    "qa-50f0d628"
   ],
   "stepsCompleted": [
     "step-1",
@@ -151,7 +161,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-14T08:48:31.615Z",
+    "escalatedAt": "2026-08-14T08:48:31.615Z"
   },
   "planApprovedAt": "2026-08-13T22:37:30.507Z",
   "workStartedAt": "2026-08-13T23:14:26.196Z",
@@ -165,5 +177,8 @@
   "filesModified": [
     "packages/scheduler/src/index.ts",
     "packages/scheduler/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-14T08:53:40.277Z",
+  "reviewCompletedAt": "2026-08-14T08:53:40.277Z",
+  "reviewSummary": "APPROVED. Verified by re-run. Full evidence: comment-c3a7cf43ffd343519633f2b5a6a608ec.\n\nDiff = commit 350ec36, exactly the 2 owned paths, +271/-4.\n\nGATE re-run by QA at a CLEAN packages/scheduler tree (git status --porcelain empty, so committed bytes == gated bytes): typecheck EXIT 0, test EXIT 0, 42 files / 1237 tests. Matches worker claim. DoD 4 met.\n\nDoD 1: 7 values + 11 types, explicit named lists, no `export *`. Withholding proven twice (negative-control test len 6; my probe).\nDoD 2: I ran the plain-Node bare-specifier probe myself, inline, nothing on disk (node v24.16.0) — all 7 bindings load with expected shape; normalizer ok=true on a valid observation; refused a truncated COMPLETE claim with exact pair MEASUREMENT:BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM; projectBudgetFact/validateUsageMeasurement/MEASUREMENT_FACT_TIER absent. EXIT 0. Hand-written cardinalities: 85, ran=18, [9,9], 3, 6.\nDoD 3: every root code/layer pair cross-checked against budget-measurement.test.ts:57-235 — transcribed, not re-derived. CONTRACT vs MEASUREMENT separable (same Proxy, envelope vs nested).\n\n3 DRILLS, mine, each red on the RIGHT assertion:\nA) mutated kernel :168 (site the worker did NOT drill) -> root test failed at :1427, the toContain code assertion, not on ok. Proves the binding is the authority.\nB) removed SUPPORTED_SOURCE_PARSER_VERSIONS -> namespace assertion :159 printed that exact name.\nC) removed ObservedIntervalRefs -> TS2305 at :37.\nRestored by reverse edit; proven by sha256 (bf0e97b3, c788973f) AND git diff --exit-code. Kernels still 250 lines, byte-identical to HEAD.\n\nConsumer edge: comment-5f840bff69694996b45e409176e0b01b on task-159f4c21ef9149e8a65f24735c9c1475.\n\nForeign red disclosed: a peer began TDD RED in packages/scheduler (untracked expansion-current-hold.test.ts, issue.target, TS2339) AFTER my clean-tree gate. Intersection with owned paths EMPTY."
 }
