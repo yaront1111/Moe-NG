@@ -25,16 +25,31 @@ import type { LiveSetupResult } from "./live-config.js";
  * DEVELOPMENT-ONLY live attachment: the shell rendered over what the daemon
  * actually says, and nothing else.
  *
- * The affordance snapshot is derived from the round trip alone: commands stay
- * EMPTY because the daemon serves no affordance surface yet, so every action
- * renders disabled — the fail-closed truth, not a limitation to paper over.
- * Event rows carry no wire truth class and therefore render UNKNOWN chips with
- * the kernel's ABSENT provenance note.
+ * The shell's affordance snapshot keeps its OWN command set empty: board offers
+ * are dispatched by the board itself, and no shell action is wired to a daemon
+ * command, so every shell action renders disabled — the fail-closed truth, not
+ * a limitation to paper over. The status label, however, is a statement about
+ * the daemon and must agree with the board rendered under it, so it is derived
+ * from the affordance surface as well as the event relay. Event rows carry no
+ * wire truth class and therefore render UNKNOWN chips with the kernel's ABSENT
+ * provenance note.
  */
 
 const POLL_INTERVAL_MS = 2_000;
 
-export function liveAffordance(frame: LiveFrame | null): FixtureAffordanceSnapshot {
+function surfaceLabel(surface: SurfaceFrame | null): string {
+  if (surface === null || surface.connection !== "CONNECTED") {
+    return "the affordance surface has not answered yet.";
+  }
+  const count = surface.offers.length;
+  if (count === 0) return "the daemon serves no command affordances right now.";
+  return `the daemon offers ${String(count)} command affordance${count === 1 ? "" : "s"} on the board.`;
+}
+
+export function liveAffordance(
+  frame: LiveFrame | null,
+  surface: SurfaceFrame | null = null,
+): FixtureAffordanceSnapshot {
   const connected = frame !== null && frame.connection === "CONNECTED";
   return Object.freeze({
     connection: connected ? "CONNECTED" : "DISCONNECTED",
@@ -42,7 +57,7 @@ export function liveAffordance(frame: LiveFrame | null): FixtureAffordanceSnapsh
     nextAllowedCommands: [],
     requiresAffordanceRefresh: false,
     statusLabel: connected
-      ? "Live event relay attached; the daemon serves no command affordances yet."
+      ? `Live event relay attached; ${surfaceLabel(surface)}`
       : "Live mode: the daemon has not answered yet. Actions stay visible and disabled.",
   });
 }
@@ -172,7 +187,7 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
   if (!setup.ok) return <LiveRefusedPanel result={setup} />;
   return (
     <ShellFrame
-      affordance={liveAffordance(frame)}
+      affordance={liveAffordance(frame, surface)}
       contextEyebrow="Event relay"
       contextTitle="Live daemon feed"
       inspector={
