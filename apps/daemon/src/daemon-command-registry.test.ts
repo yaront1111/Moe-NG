@@ -44,6 +44,11 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "approval.decide",
     layer: PREREQ_LAYER,
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
+  // An empty payload carries none of the six sections, so the envelope decode —
+  // the only stage above the recovery embargo — is what answers.
+  { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
+    kind: "effect.activate", layer: INGRESS,
+    payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
@@ -148,11 +153,11 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-one characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(20);
-    expect(deps.registry.size).toBe(20);
+    expect(ROWS).toHaveLength(21);
+    expect(deps.registry.size).toBe(21);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -193,7 +198,7 @@ describe("registered command table", () => {
     const delivered = agentCapabilitiesFor("node.deliver");
     expect(delivered).toEqual([REVIEW, WORK]);
     expect(Object.isFrozen(delivered)).toBe(true);
-    expect(agentCapabilitiesFor("effect.activate")).toBeNull();
+    expect(agentCapabilitiesFor("cutover.preview")).toBeNull();
     expect(agentCapabilitiesFor("")).toBeNull();
   });
 
@@ -320,7 +325,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(20);
+    expect(ports.registry.size).toBe(21);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
