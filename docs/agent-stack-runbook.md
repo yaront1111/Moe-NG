@@ -28,6 +28,20 @@ Loopback-only by design. The control room dev server proxies to it:
 `VITE_MOE_LIVE_CSRF` / `VITE_MOE_LIVE_CREDENTIAL` set — live board with
 dispatch and drag.
 
+Reading the ledger by hand (what the live board does):
+
+```
+curl -X POST http://127.0.0.1:39123/events/read   -H "content-type: application/json"   -H "origin: http://127.0.0.1:39123"   -H "x-moe-csrf: <dev-token>"   -H "x-moe-session-credential: $MOE_DAEMON_CREDENTIAL"   -H "x-moe-protocol-version: moe-runtime-command/1+moe-runtime-query/1+moe-runtime-error-registry/1"   -d '{"limit":50,"projection":"moe.board","subscriberId":"control-room-1"}'
+```
+
+`subscriberId` must name a durable subscription; the store provider registers
+`control-room-1` on `moe.board` at startup, any other id is refused with
+`SUBSCRIPTION_NOT_REGISTERED`. The protocol-version value is
+`WIRE_PROTOCOL_VERSION` from `apps/daemon/src/http/http-contract.ts`; a
+missing or stale value is refused before authentication. `/affordances/read`
+takes `{"correlationId":"…","payload":{}}` and answers the same SURFACE the
+MCP `work_get_context` tool returns.
+
 ## Per-agent MCP server (what an agent session sees)
 
 ```
@@ -54,7 +68,10 @@ claim's expiry is also the reap horizon), and spawns
 stdin. Chain agents get MCP tools only; code-node agents also get
 Edit/Write/Read/Glob/Grep/Bash and run in their workspace. Knobs:
 `MOE_WRAPPER_ONCE=1`, `MOE_WRAPPER_INTERVAL_MS` (15000), `MOE_AGENT_COMMAND`
-(default `claude`).
+(default `claude`). A pass that staffs nothing says so
+(`[wrapper] nothing to staff (surface SURFACE, active N)`). The per-agent MCP
+config file lives in a wrapper-owned temp directory, is removed when that
+agent exits, and the directory goes when the wrapper process does.
 
 ## Code-node specs
 
