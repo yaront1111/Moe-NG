@@ -20,53 +20,85 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST for defect one. In tests/integration/release-supply-chain.test.mjs, add a case that injects a `observeTools` port returning a falsy value and asserts the refusal's exact `reason` - which today is the WRONG value, FROZEN_INSTALL_FAILED. Add a second case that drives the genuine frozen-install failure (a `frozenInstall` port returning a non-zero exitCode) and asserts FROZEN_INSTALL_FAILED. Both must assert `refusedBy` is RELEASE_SUPPLY_CHAIN too. NOTE THE SHAPE: releaseRefusal (release-subject.mjs:67-74) returns {code: RELEASE_SUPPLY_CHAIN_CODE, ok:false, reason, refusedBy: RELEASE_SUPPLY_CHAIN_LAYER} - `code` is the SAME constant for every refusal, so asserting `code` proves nothing here; `reason` is the discriminator and is what these tests must pin. The first case is RED against current bytes only after step 2 changes the expectation, so write it asserting the CORRECT future reason and record it failing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "RED recorded for defect one. Added two tests: (a) \"separates an unobservable toolchain from a frozen install failure\" — injects observeTools -> undefined and asserts reason TOOLCHAIN_OBSERVATION_FAILED + refusedBy RELEASE_SUPPLY_CHAIN, then drives frozenInstall exitCode 9 and asserts FROZEN_INSTALL_FAILED, plus assert.notEqual on the two reasons and call-count proof that the observation arm never reached frozenInstall; (b) vocabulary test pinning RELEASE_REFUSAL_REASONS as a hand-written 20-member literal. Both RED at HEAD: actual 'FROZEN_INSTALL_FAILED' vs expected 'TOOLCHAIN_OBSERVATION_FAILED', and the array deepEqual missing the new member. Asserting `code` would have been vacuous (same constant every refusal) so `reason` is the discriminator, per plan. Also added supplyInput/runSupplyWithPorts helpers so a test can hold the spy object it injected. FINDING (out of scope, DoD forbids other changes to the closed set): SOURCE_ARCHIVE_FAILED is emitted at supply-chain.mjs:61, :63, :208 but is NOT a member of RELEASE_REFUSAL_REASONS — independent proof the array is documentation, not enforcement.",
+      "startedAt": "2026-08-15T13:08:47.407Z",
+      "completedAt": "2026-08-15T13:10:46.119Z"
     },
     {
       "stepId": "step-2",
       "description": "Give the toolchain-observation failure its own reason. In scripts/release/supply-chain.mjs, the guard immediately after `const tools = await ports.observeTools(...)` currently returns releaseRefusal(\"FROZEN_INSTALL_FAILED\"); change it to a new toolchain-observation reason. The evidence that this is a copy-paste rather than a decision is on the very next line, which already returns TOOLCHAIN_IDENTITY_MISMATCH for a toolchain identity problem - so the toolchain family already has its own codes and observation failure was simply borrowing the install one. Add the new member to RELEASE_REFUSAL_REASONS in scripts/release/release-subject.mjs:22-33, beside TOOLCHAIN_IDENTITY_MISMATCH, and change nothing else in that frozen set. Leave the genuine frozen-install guard (`if (installed.exitCode !== 0) return releaseRefusal(\"FROZEN_INSTALL_FAILED\")`) exactly as it is - after this change the two sites are distinguishable, which is the whole point. WORTH KNOWING, and out of scope: releaseRefusal takes a plain string and does NOT validate against RELEASE_REFUSAL_REASONS, so that array is documentation rather than enforcement and a typo'd reason would pass silently. Do not fix that here; note it in the completion for a future slice.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs",
         "scripts/release/release-subject.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "scripts/release/release-subject.mjs"
+      ],
+      "note": "GREEN for defect one. supply-chain.mjs:198 now returns releaseRefusal(\"TOOLCHAIN_OBSERVATION_FAILED\") for the observeTools falsy guard; the genuine frozen-install guard at :211 is byte-identical (still FROZEN_INSTALL_FAILED). release-subject.mjs:29 gained \"TOOLCHAIN_OBSERVATION_FAILED\" on the same line as its sibling TOOLCHAIN_IDENTITY_MISMATCH; no other member added, removed or reordered (pinned by the 20-member deepEqual literal). Both edits are in-place single-line replacements, so neither file's line count moved: supply-chain.mjs still 256, release-subject.mjs still 224 (grep -c ''). Focused run: 2 passed, 0 failed. Name chosen as a strict sibling of TOOLCHAIN_IDENTITY_MISMATCH (\"could not observe the toolchain at all\" vs \"observed it and it was wrong\"). Carrying forward for the completion note: releaseRefusal does not validate its argument against RELEASE_REFUSAL_REASONS, and SOURCE_ARCHIVE_FAILED is live proof — it is emitted at three sites yet was never a member.",
+      "startedAt": "2026-08-15T13:10:49.270Z",
+      "completedAt": "2026-08-15T13:11:20.523Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED FIRST for defect two. Add a case that forces cleanup to throw - inject or stub the removal so it raises an EBUSY-like error - and assert that the ORIGINAL outcome still reaches the caller: run it once against a successful record and once against a specific refusal, and assert the success and that exact reason respectively, NOT a cleanup error. This must be RED against current bytes: today `finally { ...; cleanRoots(roots); }` (supply-chain.mjs, final lines of runReleaseSupplyChain) runs cleanRoots, whose rmSync calls can throw, and a throw from a finally block replaces the return value AND escapes the surrounding catch - so a truthful result becomes a cleanup error. Note `rmSync(..., {force: true})` does NOT protect against this: force suppresses ENOENT, not a Windows EBUSY from a held handle.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "RED recorded for defect two, and the trigger had to be re-chosen on evidence. The plan's held-handle simulation is VACUOUS on this platform: I probed fs.openSync + rmSync(force,recursive) on a temp tree and it printed NO_THROW, because libuv opens with FILE_SHARE_DELETE, so a held fd does not block removal on Windows. A test built on that assumption would have passed against the unfixed code while proving nothing. Deterministic production-reachable trigger used instead: cleanRoots removes `${root}.tar` WITHOUT `recursive`, so a directory at that path raises ERR_FS_EISDIR from the exact production line. The injected archiveSource port receives {destination: root}, so a test can plant the obstacle at the real path. Two RED tests added, both failing with the cleanup error rather than the truth: \"keeps a successful record when temporary cleanup fails\" and \"keeps the original refusal reason when temporary cleanup fails\" (SBOM_GENERATION_FAILED arm). Stack pins the defect exactly: cleanRoots (supply-chain.mjs:186) called from runReleaseSupplyChain (supply-chain.mjs:241, the finally). Non-vacuity helper assertCleanupAttempted asserts the case count, that every build root WAS removed (cleanup really ran) and that every obstacle survives (the throwing call really was reached); the 2-root arm also pins that cleanup must not abandon the remaining roots after the first failure.",
+      "startedAt": "2026-08-15T13:11:22.551Z",
+      "completedAt": "2026-08-15T13:12:23.028Z"
     },
     {
       "stepId": "step-4",
       "description": "Make cleanup unable to overwrite the outcome. Fix it INSIDE cleanRoots rather than by wrapping the finally: supply-chain.mjs is 256 physical lines, already above the 250 target, so the change must be close to net-neutral and adding a try/catch around the finally body would grow the caller. Make cleanRoots catch per-root, continue removing the remaining roots rather than abandoning them on the first failure, and report the failure as a SUBORDINATE fact - a stderr diagnostic naming the path is sufficient and keeps the result untouched. Do NOT silence it entirely: losing the cleanup failure would trade a wrong outcome for a missing one, and a leaked temp root that nobody is told about is its own defect. Keep `roots.splice(0)` semantics so a second call does not retry the same roots, and keep the finally block's signal deregistration (process.off SIGINT/SIGTERM) exactly as it is.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ],
+      "note": "GREEN for defect two. Fixed INSIDE cleanRoots (supply-chain.mjs:184-188) as planned, not by wrapping the finally: per-root try/catch, so a failing root is reported and the loop continues to the remaining roots instead of abandoning them. Cleanup failure stays a SUBORDINATE fact — a stderr diagnostic naming the path and the error — never the returned result; nothing is silenced. Preserved exactly: roots.splice(0) semantics (second call cannot retry the same roots), the finally's process.off SIGINT/SIGTERM deregistration, and both rmSync call shapes. Line budget honoured by writing the comment as a trailing comment on the signature and keeping try/catch on one line: supply-chain.mjs is still 256 lines and release-subject.mjs still 224 (grep -c ''), so this task is net 0 on both production files. Focused run: 2 passed, 0 failed, and stderr shows BOTH temp roots reported in the 2-root arm — direct evidence the loop continued past the first failure. The same fix covers the SIGINT/SIGTERM stop handler, since it calls the same cleanRoots before process.exit(130).",
+      "startedAt": "2026-08-15T13:12:25.085Z",
+      "completedAt": "2026-08-15T13:13:53.062Z"
     },
     {
       "stepId": "step-5",
       "description": "Verify the whole surface still refuses correctly. Confirm every OTHER releaseRefusal site in supply-chain.mjs still returns its existing reason unchanged - OUTPUT_PATH_INVALID, SOURCE_PROVENANCE_INVALID, SUPPORTED_OS_EVIDENCE_MISSING, TOOLCHAIN_IDENTITY_MISMATCH, SOURCE_ARCHIVE_FAILED, REPRODUCIBILITY_MISMATCH, EVIDENCE_WRITE_INTERRUPTED - by asserting an exact case count over a table of (injected failure, expected reason) pairs with a hand-written literal length. This is what stops the new code from being introduced by widening an existing guard, and it pins that exactly one site changed reason. Also assert the signal path still deregisters its handlers and still cleans up on success, refusal, exception and signal: this task changes what cleanup can OVERWRITE, not whether it runs.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Whole refusal surface pinned. Added a 9-row (injected failure -> expected reason) table with a hand-written literal length assertion (assert.equal(refusalSites.length, 9)) plus assert.equal(new Set(reasons).size, 9), so every row must carry a DISTINCT reason — that is what stops the new code being introduced by widening an existing guard and pins that exactly one site changed. Rows cover OUTPUT_PATH_INVALID, SOURCE_PROVENANCE_INVALID, SUPPORTED_OS_EVIDENCE_MISSING, TOOLCHAIN_OBSERVATION_FAILED, TOOLCHAIN_IDENTITY_MISMATCH, SOURCE_ARCHIVE_FAILED, FROZEN_INSTALL_FAILED, REPRODUCIBILITY_MISMATCH, EVIDENCE_WRITE_INTERRUPTED. Note the EVIDENCE_WRITE_INTERRUPTED row drives the REAL catch (a throwing readSourceFile), not a port echoing the code back, unlike the pre-existing hostile-output tests. Lifecycle: a 3-case table (success/refusal/exception, literal length asserted) proves every build root is gone after the run and that SIGINT/SIGTERM listener counts return to their pre-run baseline. Signal path: the test captures the REAL registered handler via process.listeners(\"SIGINT\").at(-1) (EventEmitter unwraps the once wrapper, so this is `stop` itself), stubs process.exit, and invokes it mid-run against a build root whose removal throws — asserting exits === [130], the run still returns ok:true, both roots were removed and both obstacles survive. Pre-fix that path returned EVIDENCE_WRITE_INTERRUPTED, since the stop() throw propagated out of the injected port into the production catch. 17 focused tests pass, 0 fail.",
+      "startedAt": "2026-08-15T13:13:55.936Z",
+      "completedAt": "2026-08-15T13:14:38.949Z"
     },
     {
       "stepId": "step-6",
       "description": "Verification then adversarial review. Run `pnpm typecheck:release` and the focused release/supply-chain integration coverage on FRESH output pasted into complete_task. RUN THE INTEGRATION LEG FROM POWERSHELL, NOT GIT BASH: under MSYS, tar reads a `C:\\` path as a remote host specification, and the run fails with SOURCE_ARCHIVE_FAILED - a fake failure that has nothing to do with this diff and has burned time on this repo before. Read every summary line rather than the final exit code. Then review as an attacker: (1) Can any refusal still reach the caller with a reason belonging to a different subsystem - re-read every releaseRefusal call site and match it to the condition above it? (2) Can cleanRoots still throw out of the finally by any path, including the SIGINT/SIGTERM `stop` handler which also calls it before process.exit? (3) Does a cleanup failure still get REPORTED rather than silently swallowed? (4) Confirm supply-chain.mjs did not grow past 256 lines using `grep -c ''` (PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs",
         "scripts/release/release-subject.mjs",
         "tests/integration/release-supply-chain.test.mjs"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:14:41.585Z"
     }
   ],
   "status": "WORKING",
@@ -82,13 +114,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:48:05.310Z",
-  "updatedAt": "2026-08-15T13:06:28.845Z",
+  "updatedAt": "2026-08-15T13:14:41.585Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:53:33.481Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 5
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:55:10.293Z",
   "planningNotes": {
@@ -108,5 +147,6 @@
   "planApprovedAt": "2026-08-15T12:55:12.342Z",
   "contextFetchedBy": [
     "worker-5dfdc624"
-  ]
+  ],
+  "workStartedAt": "2026-08-15T13:08:47.407Z"
 }

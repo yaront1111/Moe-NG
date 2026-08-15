@@ -20,26 +20,41 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST. In packages/store/src/backup-generation.test.ts, add a test that publishes over an EXISTING complete generation and interrupts between the destroy and the publish, then asserts that a complete generation is still resolvable on disk. The window is real and measurable today: backup-generation.ts:172-173 is `await rm(finalPath, { force: true, recursive: true });` immediately followed by `await rename(stagingRoot, finalPath);`. Interrupt by injecting a rename that throws (or a seam that aborts) after the rm has run, then assert on the DISK STATE, not on the returned value - the point is what survives a process that never returns at all. This must be RED against current bytes: today the previous generation is gone and the new one was never renamed in, so nothing is resolvable. Record that red before touching production.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/backup-generation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/backup-generation.test.ts"
+      ],
+      "note": "RED recorded against current bytes. Added a vi.mock(\"node:fs/promises\") seam that faults ONLY the production rename whose source ends in \".staging\" (the exact publish call at backup-generation.ts:173), disarming itself so the test asserts the interruption actually fired. Test publishes generation A, commits one more event so a landed B would be distinguishable, arms the fault, publishes B. RED: \"AssertionError: no manifest at ...\\generation\\manifest.json: expected false to be true\" - today rm(finalPath) already destroyed A and the rename never landed B, so the destination is gone entirely. Foreign red disclosed: packages/store/src/recovery-anchor.test.ts fails at HEAD e6597e4 from a live peer's in-flight register-item-2 work (modified recovery-anchor-install.ts + untracked recovery-anchor-marker.ts); not my owned path and not caused by my diff (my diff touches only backup-generation.test.ts).",
+      "startedAt": "2026-08-15T13:12:35.306Z",
+      "completedAt": "2026-08-15T13:14:54.249Z"
     },
     {
       "stepId": "step-2",
       "description": "Replace destroy-then-publish with rename-aside. In backup-generation.ts, instead of removing finalPath and then renaming staging over it, rename the existing finalPath ASIDE to a sibling reserved name, rename stagingRoot into finalPath, and only then remove the aside copy. Two consequences make this the right shape rather than merely a smaller window. FIRST, the current window spans a RECURSIVE DELETE of a whole generation directory, which is long in wall-clock terms; after the change the exposed interval is two adjacent metadata renames. SECOND, at every instant a COMPLETE generation exists under a known name - the aside, or finalPath - so an interrupted publish is recoverable rather than lost. Note the Windows constraint that forces this ordering anyway: rename onto an EXISTING directory fails on Windows, which is precisely why the original code removed finalPath first, so the aside rename is required, not optional. Keep the existing post-rename manifest reopen-and-fsync (:175-183) exactly as it is - its comment records that a directory rename is not itself durable on Windows - and keep the final verifyBackupGeneration re-read.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/backup-generation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/backup-generation-publish.ts",
+        "packages/store/src/backup-generation-publish.js",
+        "packages/store/src/backup-generation.ts"
+      ],
+      "note": "Destroy-then-publish replaced with rename-aside. New module packages/store/src/backup-generation-publish.ts (86 lines) + its .js bridge (repo convention: every .ts in packages/store/src has one; vitest and tsc are blind to a missing bridge). publishStagedGeneration(stagingRoot, finalPath): stat finalPath, rename it to `${finalPath}.previous`, rename staging into finalPath, then rm the aside best-effort. On a failed staging rename it renames the aside BACK so a failed publish is never the reason the destination is empty. The aside removal is .catch(()=>undefined) on purpose: Windows EBUSY from a held handle is NOT suppressed by force:true and must not turn a landed publish into a failure. backup-generation.ts: dropped the now-unused `rename` import, added the publish import, replaced :172-173 with one call; still 208 physical lines (grep -c ''), the fsync-reopen at :175-183 and the final verifyBackupGeneration re-read are untouched. pnpm --filter @moe/store exec vitest run packages/store/src/backup-generation.test.ts -> EXIT=0, 28 passed; the step-1 RED is now green.",
+      "startedAt": "2026-08-15T13:14:56.414Z",
+      "completedAt": "2026-08-15T13:15:41.525Z"
     },
     {
       "stepId": "step-3",
       "description": "Make an interrupted publish recoverable rather than merely survivable. On entry, before staging, detect a leftover aside and/or a leftover `${finalPath}.staging` from a previous interrupted run and resolve the state deterministically: if finalPath is absent and an aside exists, restore the aside; if finalPath is present and an aside exists, the publish completed and the aside is removable. Do NOT guess from timestamps or directory mtimes - decide from which paths exist and from whether the manifest at finalPath verifies, which is evidence the code already knows how to produce via verifyBackupGeneration. An ambiguous combination that cannot be resolved from those facts must refuse with the existing exact store code rather than picking a side; silently choosing wrong here publishes an unverified generation as complete.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/backup-generation.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:15:43.570Z"
     },
     {
       "stepId": "step-4",
@@ -60,7 +75,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-86bbe9fd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -79,13 +94,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:45:50.059Z",
-  "updatedAt": "2026-08-15T13:00:15.278Z",
+  "updatedAt": "2026-08-15T13:15:43.571Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:55:16.606Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 2
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:56:43.626Z",
   "planningNotes": {
@@ -102,5 +121,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-15T12:56:45.674Z"
+  "planApprovedAt": "2026-08-15T12:56:45.674Z",
+  "contextFetchedBy": [
+    "worker-86bbe9fd"
+  ],
+  "workStartedAt": "2026-08-15T13:12:35.306Z"
 }

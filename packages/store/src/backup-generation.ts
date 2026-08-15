@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, sign as edSign } from "node:crypto";
-import { open, mkdir, rename, rm, readFile } from "node:fs/promises";
+import { open, mkdir, rm, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { captureDatabaseAtCursor } from "./backup-generation-capture.js";
@@ -21,6 +21,7 @@ import {
   inspectClosure,
   verifyBackupGeneration,
 } from "./backup-generation-manifest.js";
+import { publishStagedGeneration } from "./backup-generation-publish.js";
 
 export interface BackupGenerationCreated {
   readonly container: unknown;
@@ -169,8 +170,7 @@ export async function createBackupGeneration(
       join(stagingRoot, "manifest.json"),
       new TextEncoder().encode(JSON.stringify(container)),
     );
-    await rm(finalPath, { force: true, recursive: true });
-    await rename(stagingRoot, finalPath);
+    await publishStagedGeneration(stagingRoot, finalPath);
 
     const manifestPath = join(finalPath, "manifest.json");
     // Reopen and fsync the published manifest: on Windows the directory rename

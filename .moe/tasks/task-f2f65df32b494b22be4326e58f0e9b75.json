@@ -20,27 +20,43 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST. In packages/store/src/recovery-anchor.test.ts, drive installRecoveryAnchor to the SWITCH point using the existing injectFault seam - fault?.(\"INSTALLED_MARKER\") in recovery-anchor-install.ts is the point to abort at, since it fires AFTER the switch has been published and BEFORE the marker is written. Then call installRecoveryAnchor again with the same request and assert two things: the result is INSTALLED, and the protocol was NOT re-entered - assert that writeInactiveSlot and the stampIncarnation transaction did not run on the second call, by observing the seam rather than by inspecting bytes, since re-running them is the actual harm. This is RED today: settledInstall (recovery-anchor.ts:108-115) returns null unless `stored.state === \"INSTALLED\"`, so the post-switch/pre-marker record falls through to prepareRecoveryAnchor + runInstall and re-enters the protocol. Record that red before touching production.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor.test.ts"
+      ],
+      "note": "TDD RED recorded, and it fails naming the exact boundary that must not re-run.\n\n  AssertionError: boundary INACTIVE_INSTALL must not be crossed again:\n  expected [ 'PREPARE', 'INACTIVE_INSTALL', ...(6) ] to not include 'INACTIVE_INSTALL'\n\nEight fault points observed on the SECOND call — the full protocol, re-entered from PREPARE. That is the defect itself, not a fixture problem.\n\nI VERIFIED THE PLAN'S LOAD-BEARING CLAIM BEFORE WRITING ANYTHING. The whole fix rests on `state === \"PREPARED\" && currentSlot === targetSlot` being unreachable before the switch; if any other path could produce that pair, the new arm would skip a real install and report INSTALLED over an unwritten slot — worse than the bug being fixed. Traced every writer:\n- recovery-install-contracts.ts:11 RECOVERY_BINDING_SLOTS is exactly [\"ACTIVE\",\"PENDING\"], and selectInactiveSlot (recovery-anchor.ts:50-52) returns the opposite member, so it can never return its argument.\n- The prepare path builds the record as buildAnchorRecord(request, { current, target: selectInactiveSlot(current) }, \"PREPARED\") — target is BY CONSTRUCTION the other slot, so current !== target at PREPARE.\n- resealAnchorRecord has exactly TWO production call sites, both in runInstall: :256 sets currentSlot = targetSlot with state still PREPARED (the switch), and :260 sets state = INSTALLED.\n- The other currentSlot mentions are reads, not writes: recovery-anchor.ts:161 and :184 read stored.currentSlot in discardRecoveryAnchor/inspectRecoveryAnchor, and :191 returns it in the inspect result. discardRecoveryAnchor never writes the anchor record.\nSo the pair is produced at exactly one place and cleared at exactly one place. The signature is unambiguous. Claim holds.\n\nTHE TEST OBSERVES THE SEAM, NOT THE BYTES — this is the difference between a real test and one that passes either way. The harm is that writeInactiveSlot and stampIncarnation RUN against what is now the LIVE slot; a re-entry that happens to succeed still leaves a correct-looking anchor on disk, so asserting disk content would pass while the protocol was re-entered. The test records which fault boundaries the second call crosses and requires the six protocol boundaries to be absent.\n\nI ASSERT THE SIX BOUNDARIES INDIVIDUALLY AND THEN THE EMPTY LIST. `expect(observed).toEqual([])` alone would be strictly stronger but, when it fails, says only \"expected 8 items to equal []\" — it never names which boundary re-ran. The per-boundary loop carries the message \"boundary INACTIVE_INSTALL must not be crossed again\", which is what made this red immediately legible.\n\nTHE WINDOW IS ASSERTED, NOT ASSUMED. Before resuming, the test inspects the stored record and pins state === \"PREPARED\" with currentSlot === targetSlot. Without that, a fixture that failed to reach the window (crashing earlier, or the fault never firing) would make the resume trivially correct and the test vacuous.\n\nONE FIXTURE HAZARD CHECKED RATHER THAN DISCOVERED LATER: request() mints a fresh temp anchorRoot and fresh sqlite bytes on every call, so I confirmed computePreparedIdentity (recovery-anchor-record.ts:124-137) covers only codec version, generationDigest, incarnationRef, keyEpochRef, preparedAt and restoreCommandId — NOT the payload. So the second call carries the same prepared identity despite different database bytes, and the resume is a genuine same-command resume rather than a new command.\n\nSizes at HEAD e6597e4 (HEAD moved from the 192360e the plan measured; re-checked): recovery-anchor.ts 198, recovery-anchor-install.ts 263 (already 13 over target), recovery-anchor-contracts.ts 260, recovery-anchor.test.ts now 790. Production untouched this step.",
+      "startedAt": "2026-08-15T13:11:01.078Z",
+      "completedAt": "2026-08-15T13:12:49.715Z"
     },
     {
       "stepId": "step-2",
       "description": "Extend the completion guard to cover the post-switch window. recovery-anchor.ts:108-115 `settledInstall` currently recognises only a fully completed install: it reads the stored anchor, returns null unless `state === \"INSTALLED\"`, and otherwise matches on preparedIdentity. Add recognition of the OTHER settled state - `state === \"PREPARED\"` together with `currentSlot === targetSlot` - which is reachable ONLY after the switch has been published, because before the switch currentSlot names the other slot. Keep the preparedIdentity check on both arms: an anchor belonging to a different command must still refuse rather than be adopted. This needs no new durable field; the record already carries currentSlot (contracts :107), targetSlot (:121) and state (:120), and runInstall's own post-switch record is exactly `resealAnchorRecord(prepared, { currentSlot: prepared.targetSlot })` with state still PREPARED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor.ts",
+        "packages/store/src/recovery-anchor-install.ts",
+        "packages/store/src/recovery-anchor-marker.ts",
+        "packages/store/src/recovery-anchor-marker.js"
+      ],
+      "note": "Recognition arm landed and the step-1 red is green: 43 passed (43), exit 0. Steps 2 and 3 were coupled by a file-size constraint, so the marker-only completion landed with the recognition rather than after it; step 3's note will cover its own checks.\n\nTHE GUARD NOW READS:\n  if (stored === null || \"ok\" in stored) return null;\n  if (stored.preparedIdentity !== computePreparedIdentity(request)) return null;\n  if (stored.state === \"INSTALLED\") { return ...outcome: \"INSTALLED\"... }\n  if (stored.currentSlot !== stored.targetSlot) return null;\n  return markInstalled(anchorPath(request.anchorRoot), stored);\n\nI MOVED THE IDENTITY CHECK ABOVE THE STATE CHECK ON PURPOSE. Previously it sat last, reachable only after `state === \"INSTALLED\"` had already passed. Adding a second settled arm underneath it would have left that arm unguarded, which is exactly the risk the plan named — a different command's anchor being adopted because \"the switch already landed\". Hoisting it makes one identity gate cover both arms. This is not a behaviour change for the existing path: a non-INSTALLED record with a mismatched identity returned null before at the state check and returns null now at the identity check.\n\nWHERE THE MARKER WRITE WENT, AND WHY NOT WHERE THE PLAN SUGGESTED. The plan preferred putting it beside runInstall in recovery-anchor-install.ts, but step 5 also forbids growing that file — it was already 263 lines against a 250 target. I measured the suggested shape: removing runInstall's 3 tail lines and adding a ~14-line exported helper nets 263 -> 274. That grows it. So I took the plan's own stated fallback and split: new module packages/store/src/recovery-anchor-marker.ts (36 lines) holding markInstalled, imported by both writers.\n\nRESULT — NEITHER EXISTING FILE GREW PAST TARGET:\n  recovery-anchor-install.ts 263 -> 262 (it SHRANK; 3 tail lines became 1 call plus 1 import)\n  recovery-anchor.ts 198 -> 210\n  recovery-anchor-marker.ts 36 (new)\nBoth writers of the INSTALLED marker now share one implementation, which was the plan's actual goal — two encoders of the same durable record would be free to drift.\n\nI RULED OUT AN IMPORT CYCLE RATHER THAN ASSUMING ONE. recovery-anchor.ts already imports from recovery-anchor-install.js (anchorPath, readStoredAnchor, runInstall, slotDirectory, verifySlot), so putting the helper in recovery-anchor.ts and importing it back into install would have closed a cycle. The marker module instead depends only on contracts, fs and record — grep confirms none of those three import recovery-anchor-install. It also takes the anchor FILE PATH, not the root, specifically because anchorPath is defined in recovery-anchor-install.ts; resolving the root inside the marker module would have re-closed the cycle. That reason is written into the module's doc comment so nobody \"tidies\" the signature later.\n\n.js BRIDGE ADDED. packages/store uses the bridge convention throughout (recovery-anchor-fs.js is `export * from \"./recovery-anchor-fs.ts\";`), so recovery-anchor-marker.js carries the matching one line. This is invisible to both vitest and tsc — only a child-process probe would catch its absence — so it was added with the module rather than left to a later gate.\n\nVERIFIED BEFORE CODING, since the whole arm rests on it: `currentSlot === targetSlot` cannot occur before the switch. RECOVERY_BINDING_SLOTS is exactly [\"ACTIVE\",\"PENDING\"]; selectInactiveSlot returns the opposite member and so can never return its argument; the prepare path builds every record with target = selectInactiveSlot(current); and resealAnchorRecord has exactly two production call sites, both in runInstall (:256 the switch, :260 the marker). One producer, one consumer.",
+      "startedAt": "2026-08-15T13:12:53.179Z",
+      "completedAt": "2026-08-15T13:14:57.601Z"
     },
     {
       "stepId": "step-3",
       "description": "Complete the install by writing the MARKER ONLY, never by re-running. For the post-switch state recognised in step 2, finish exactly as runInstall's final two lines do - `resealAnchorRecord(switched, { state: \"INSTALLED\" })` published through publishFileAtomically to anchorPath - and return the same {anchor, ok, outcome: \"INSTALLED\"} shape. Do NOT call writeInactiveSlot, stampIncarnation, persistFileDurably, persistSlotDurably or verifySlot on this path: after the switch, `currentSlot === targetSlot`, so those writes would land in the slot that readers are NOW resolving. That is not a theoretical concern - recovery-anchor.ts's own doc comment above settledInstall already states it: 're-entering the protocol would write the restored payload into the slot that is now LIVE - the one thing this module exists to never do.' The guard was simply one condition short of covering the window its comment describes. Prefer putting the marker-only completion beside runInstall in recovery-anchor-install.ts so both writers of the marker share one implementation.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-install.ts",
         "packages/store/src/recovery-anchor.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:14:59.976Z"
     },
     {
       "stepId": "step-4",
@@ -62,7 +78,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40286572",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -74,13 +90,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:01.896Z",
-  "updatedAt": "2026-08-15T12:58:23.628Z",
+  "updatedAt": "2026-08-15T13:14:59.976Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:56:49.280Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 2
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:58:21.569Z",
   "planningNotes": {
@@ -97,5 +117,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-15T12:58:23.628Z"
+  "planApprovedAt": "2026-08-15T12:58:23.628Z",
+  "contextFetchedBy": [
+    "worker-40286572"
+  ],
+  "workStartedAt": "2026-08-15T13:11:01.078Z"
 }

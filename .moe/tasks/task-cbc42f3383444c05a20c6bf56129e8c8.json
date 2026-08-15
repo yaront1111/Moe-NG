@@ -133,46 +133,70 @@
     {
       "stepId": "step-7",
       "description": "Run the mutation drills DoD-4 requires, against the PRODUCTION surface rather than a test helper. [1] MODEL/EFFORT IDENTITY: make the wrapper fall back to the declared selection's selectedModelId when the observed model is absent; the declared-is-not-observed test must go red on the observed-model assertion. [2] TOKEN/STEP COVERAGE: make the parser emit a partial sum for a truncated capture instead of UNKNOWN; the never-zero/coverage test must go red on the coverage class, not merely on a differing number. [3] Make an unknown schemaVersion pass admission; the schema refusal case must go red on its exact code. For each drill: confirm it actually applied (print the replaced line range and chain with &&, because a drill that applied nothing reads as green); read the failure MESSAGE rather than the count, since over-reddening means a broken environment rather than a strong test; restore with Edit and NOT git checkout, which reverts to HEAD and destroys uncommitted work; and hash-check back to the pre-drill bytes before starting the next drill.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/claude-result-parser.ts",
         "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
         "packages/runner/src/providers/telemetry/telemetry.test.ts"
       ],
-      "startedAt": "2026-08-15T13:05:50.460Z"
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts"
+      ],
+      "note": "Three mutation drills run against the PRODUCTION surface; each confirmed applied by printing the replaced line, and each restored with Edit (never git checkout) and hash-checked back to the exact pre-drill sha256. Pre-drill: wrapper 24c313c8..., parser 761b7f1a... - both bytes-identical after every restore, and a final grep confirms zero drill residue.\n\n[1] MODEL/EFFORT IDENTITY - wrapper falls back to declared selectedModelId when the observed model is absent. Result: exactly 1 red, \"leaves the observed model UNKNOWN when the stream names none\", message `expected { known: true } to deeply equal { known: false }` on the OBSERVED-MODEL assertion. Precise, no over-reddening.\n\n[2] TOKEN/STEP COVERAGE - parser returns the truncated prefix instead of refusing. FIRST FINDING: with only the pre-existing truncation cases this drill was an EQUIVALENT MUTANT - stdoutBytes 16 and 90 cut mid-line, so the framing TRUNCATION anomaly answered instead and the drill stayed green. Added a permanent case whose bound lands EXACTLY on a record boundary (complete records, no framing anomaly, a plausible sum of 4), and reordered its assertions so coverage is asserted first. Drill then reddened on the COVERAGE CLASS: `expected 'COMPLETE' to be 'UNKNOWN'` - not on a differing number.\n\n[3] SCHEMA ADMISSION BYPASS - accepted versions widened with claude-stream-json/2. Result: 3 reds, all schema-specific with exact codes - infrastructure `expected 'NONE' to be 'SCHEMA_UNSUPPORTED'`, refusal identity `expected undefined to be 'TELEMETRY_SCHEMA_UNSUPPORTED'`, and the never-zero unknown-schema arm.\n\n66 tests green after restore.",
+      "startedAt": "2026-08-15T13:05:50.460Z",
+      "completedAt": "2026-08-15T13:08:16.505Z"
     },
     {
       "stepId": "step-8",
       "description": "Satisfy DoD-5's root-load and leakage half. FIRST CHECK whether runtime-entrypoint.test.ts already covers the new modules without being edited: its bridge sweep is readdir-driven and asserts {missing, unexpected, wrongContent} are all empty for every runtime module, so the three new .js bridges are enforced automatically the moment the .ts files land - if that sweep passes, do NOT edit the file and this task stays at nine owned paths. Each bridge must be EXACTLY `export * from \"./<name>.ts\";` with a single trailing LF: the sweep compares bridge bytes via utf8, so a CRLF bridge fails as `wrongContent` while `git diff --stat` shows nothing at all. Extend the plain-Node child-process probe to import the bare @moe/runner specifier and read launchClaudeWithTelemetry only if the existing probe does not already reach it, and make any failure branch report `code` and `specifier` - a bare `typeof x === \"function\"` check reddens with `undefined` and never names the missing bridge. Add the no-leakage assertion in index-surface.test.ts: a withheld-names list with a hand-written exact count, PLUS a positive control running the identical membership check over names the seam does publish, so the negative assertion cannot pass because the check itself is broken.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/runtime-entrypoint.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/runtime-entrypoint.test.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "DoD-5 root-load and leakage half done. BRIDGE SWEEP: checked first as the plan required - runtime-entrypoint.test.ts's readdir-driven sweep already enforced the three new .js bridges with no edit, and passes; each bridge is exactly `export * from \"./<name>.ts\";` with a single LF (verified with od -c, no CRLF). PLAIN-NODE PROBE: the existing probe did NOT name any telemetry binding, so REPORT_ROOT_ENTRY was extended (10th owned path, the plan's one slot of slack) to read launchClaudeWithTelemetry, parseClaudeResultTelemetry, PROVIDER_TELEMETRY_CONTRACT_VERSION as a VALUE, PROVIDER_TERMINAL_OUTCOMES frozen, plus telemetryHelperLeaks (expect 0) and its POSITIVE CONTROL telemetryPublished (expect 8) measured by the identical membership check in the same child. NEGATIVE CONTROL RUN: removed packages/runner/src/providers/telemetry/claude-telemetry-launch.js (the bridge the surface's relative specifier actually follows, not the entry bridge) and the probe reddened with code ERR_MODULE_NOT_FOUND naming specifier .../claude-telemetry-launch.js - so the probe genuinely consults the new bridges. Bridge restored byte-identical. LEAKAGE: index-surface.test.ts now withholds all 8 fact-minting helpers with a hand-written count and a 4-name positive control using the same `in` check. 267 tests pass.\n\nHAZARD DISCLOSURE (not a defect I caused, not one I may repair): foreign whole-tree commits def640a (task-bcea7056) and e6597e4 (task-bcae0b7e) swept my in-progress telemetry files into HEAD. Per the project rail I have not amended, reset, or claimed them. QA should review by base-ref diff: git diff 192360e..HEAD -- packages/runner/src/providers/telemetry packages/runner/src/surface/claude-surface.ts packages/runner/src/index-surface.test.ts packages/runner/src/runtime-entrypoint.test.ts",
+      "startedAt": "2026-08-15T13:08:19.678Z",
+      "completedAt": "2026-08-15T13:09:43.406Z"
     },
     {
       "stepId": "step-9",
       "description": "Verification gate on FRESH output pasted into complete_task, never a remembered or paraphrased result: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Read EVERY summary line rather than the final exit code, since a multi-leg run can exit 0 while one leg is red. Record task-159f4c21ef9149e8a65f24735c9c1475 and task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the named consumers - DoD-5 requires it, and it is also how this task satisfies the global consumer-edge rail by naming rather than by landing an edge, which task rail 2 would otherwise forbid. Apply the path-attributed baseline rail for any repo-wide red: record failures at the merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines and paths. Peers are committing to this package concurrently, so expect foreign movement.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/telemetry.test.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "note": "FRESH gate, every summary line read (not just the exit code):\n  pnpm --filter @moe/runner typecheck -> `$ tsc --project tsconfig.json`, no diagnostics\n  pnpm --filter @moe/runner test      -> `Test Files  60 passed (60)` / `Tests  2013 passed (2013)`\n  EXIT=0\n\nCONSUMERS RECORDED (DoD-5, and how this task satisfies the consumer-edge rail by NAMING rather than by landing an edge): task-159f4c21ef9149e8a65f24735c9c1475 and task-6cbff01023b14b26a78fc5e3eb1dd8a9.\n\nPATH-ATTRIBUTED BASELINE for the repo-wide legs, run at HEAD e6597e4:\n  pnpm typecheck (recursive, every package) -> EXIT 0, zero `error TS`.\n  pnpm test (repo-wide) -> EXIT 1: `Test Files  1 failed | 262 passed (263)` / `Tests  1 failed | 6209 passed | 1 skipped (6211)`.\n\nThe single failure, disclosed verbatim:\n  FAIL tests/integration/control-room/control-room-transport.test.ts > transports a committed read whose payload EQUALS the in-process handler's\n  AssertionError: expected { checkpoint: '10', ...(4) } to deeply equal { checkpoint: '10', ...(4) }\n    seamObservation.clock DAEMON_WALL_CLOCK, reading.value\n    - \"2026-08-15T13:10:14.116Z\"\n    + \"2026-08-15T13:10:14.108Z\"\n  frames: withDaemon tests/integration/control-room/control-room-transport.test.ts:87:5, :94:3\n\nAUTHORSHIP RESOLVED BEFORE REACHING FOR ATTRIBUTION (a red my own diff caused would never be disclosable):\n1. Reproduced 3/3 - a deterministic foreign defect, not a flake: two DAEMON_WALL_CLOCK readings 8ms apart inside a whole-payload equality.\n2. That test imports ONLY apps/daemon/src/** and packages/control-room-client/src/** - it never imports @moe/runner, so my diff is unreachable from it.\n3. grep over tests/ and apps/ for launchClaudeWithTelemetry, parseClaudeResultTelemetry and PROVIDER_TELEMETRY returns ZERO files.\n4. git log for that path names task-f01ef545b1554a2cb5df340ce78f6a5c.\n\nFailing-path set at HEAD = {tests/integration/control-room/control-room-transport.test.ts}. Intersected with this task's owned paths (packages/runner/src/providers/telemetry/**, surface/claude-surface.ts, index-surface.test.ts, runtime-entrypoint.test.ts) the delta is EMPTY, and the owned-package legs are exit 0.",
+      "startedAt": "2026-08-15T13:09:45.696Z",
+      "completedAt": "2026-08-15T13:11:16.664Z"
     },
     {
       "stepId": "step-10",
       "description": "Adversarial self-review before complete_task; load the adversarial-self-review skill. (1) Grep the new modules for `?? 0`, `|| 0`, `Number(`, and any default that could turn an absent measurement into a quantity - DoD-1's never-zero rule is the single most likely thing to be violated by an innocuous-looking fallback. (2) Is there ANY path where a declared selection field reaches a provider-observed field? Trace selectedModelId, reasoningEffort and concurrencyCeiling forward and confirm each lands only in a declared-side field. (3) Does the REFUSED arm and the ADOPTED/EXIT_BEFORE_LAUNCH arm of ClaudeLaunchResult produce UNKNOWN facts with the launcher's own code/layer forwarded verbatim, rather than a zero-filled or partially-populated record? (4) Did anything import @moe/scheduler or copy its coverage authority - task rail 2 forbids it; grep the diff. (5) Did claude-launcher-lifecycle.ts (249) or claude-launcher-port-results.ts (250) grow by even one line? (6) Confirm every new production source is at or under 250 physical lines using `grep -c ''` - PowerShell Measure-Object -Line undercounts. (7) Re-run the step-4 name-collision intersection against the FINAL root and confirm it is empty. Then git status --porcelain, confirm no drill or scratch file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/telemetry-contracts.ts",
         "packages/runner/src/providers/telemetry/claude-result-parser.ts",
         "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
         "packages/runner/src/surface/claude-surface.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+        "packages/runner/src/providers/telemetry/claude-result-telemetry.ts",
+        "packages/runner/src/providers/telemetry/provider-telemetry.test.ts"
+      ],
+      "note": "Adversarial self-review, all 7 checks, plus 3 fixes it produced.\n\n(1) NEVER-ZERO GREP: the ONLY `?? 0` in the diff is inside the doc comment explaining why it is forbidden. Every production `??`/`||` was read individually and defaults to a NON-numeric value - \"UNKNOWN\", null, an UNKNOWN fact, or {}. No Number(, parseInt, parseFloat, `+ 0` or Math.max(0 anywhere.\n(2) DECLARED -> OBSERVED TRACE: `declared` reaches exactly two places, handoff.declared and concurrencyOf's declaredCeiling. selectedModelId and reasoningEffort are never READ by the wrapper at all; concurrencyCeiling lands only in declaredCeiling. No path exists from a declared field to observedModel/tokens/steps/terminal/achieved.\n(3) NON-OBSERVED ARMS: blindHandoff forwards result.code/result.layer verbatim, nulls every digest and the exit via NO_LAUNCH_DIGESTS, and marks every fact UNKNOWN. Nothing is zero-filled or partially populated.\n(4) @moe/scheduler: zero hits in the telemetry subtree.\n(5) claude-launcher-lifecycle.ts 249, claude-launcher-port-results.ts 250 - unchanged; `git diff 192360e..HEAD -- providers/claude/` is empty.\n(6) grep -c '' per production source: contracts 234, parser 248, wrapper 250, claude-surface 212. All at/under 250.\n(7) COLLISION RE-CHECK against the FINAL root: zero names exported by more than one surface module across 338 curated names, with launchClaude and launchClaudeWithTelemetry each owned by exactly one module as controls.\n\nTHREE REAL GAPS FOUND AND FIXED:\na. snapshotRunRef read properties off an arbitrary object with no proxy guard - a hostile proxy would run traps, and a REVOKED proxy would throw out of the wrapper before the launch. Now refuses proxies via a contained types.isProxy, matching the launcher's own discipline. New test asserts the trap counter is 0 (refusal BEFORE any read, not merely a no), has a positive control on the same record unproxied, and covers the revoked case. DRILL: disabling the guard reddens it - `expected { provider: 'claude', ... } to be null`; restored and verified byte-identical.\nb. receipt() minted {known:true} from evidence.sha256 without validation, so an empty digest could become a known receipt nobody can verify. Now routed through the same readText bounded reader as every other observed string.\nc. Removed an `as string` cast in observedModelOf.\n\ngit status over packages/runner is clean of untracked files - no drill, probe or scratch file remains. Committed b03da5a by EXPLICIT PATHSPEC (11 paths named, no `git add -A`); committed bytes verified to equal the gated bytes.\n\nFRESH FINAL GATE: pnpm --filter @moe/runner typecheck -> no diagnostics; pnpm --filter @moe/runner test -> Test Files 60 passed (60) / Tests 2014 passed (2014); EXIT=0.",
+      "startedAt": "2026-08-15T13:11:22.117Z",
+      "completedAt": "2026-08-15T13:14:31.854Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,12 +215,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:09.437Z",
-  "updatedAt": "2026-08-15T13:05:50.460Z",
+  "updatedAt": "2026-08-15T13:15:12.207Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T11:08:23.604Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 6
+    "executedStepCount": 10
   },
   "contextFetchedBy": [
     "architect-2aea4111",
@@ -213,7 +237,11 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:39:51.650Z",
@@ -233,8 +261,30 @@
     ]
   },
   "budget": {
-    "wallClockMs": 9000000
+    "wallClockMs": 9000000,
+    "warnedAt": "2026-08-15T13:09:43.451Z"
   },
   "planApprovedAt": "2026-08-15T12:39:53.704Z",
-  "workStartedAt": "2026-08-15T12:40:29.958Z"
+  "workStartedAt": "2026-08-15T12:40:29.958Z",
+  "reviewStartedAt": "2026-08-15T13:15:12.207Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/runner/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  60 passed (60)\n      Tests  2014 passed (2014)\n   Start at  16:14:41\n   Duration  4.31s (transform 13.73s, setup 0ms, import 20.64s, tests 16.33s, environment 5ms)\n\nTYPECHECK_EXIT=0 TEST_EXIT=0\nHEAD b03da5a",
+    "reportedAt": "2026-08-15T13:15:12.207Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+    "packages/runner/src/providers/telemetry/provider-telemetry-contracts.js",
+    "packages/runner/src/providers/telemetry/provider-telemetry.test.ts",
+    "packages/runner/src/providers/telemetry/claude-result-telemetry.ts",
+    "packages/runner/src/providers/telemetry/claude-result-telemetry.js",
+    "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+    "packages/runner/src/providers/telemetry/claude-telemetry-launch.js",
+    "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts",
+    "packages/runner/src/surface/claude-surface.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "packages/runner/src/runtime-entrypoint.test.ts",
+    "packages/runner/src/providers/telemetry/telemetry.test.ts"
+  ]
 }

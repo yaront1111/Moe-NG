@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
@@ -92,6 +92,22 @@ describe("release distribution subject", () => {
     expectReleaseRefusal(result, "RELEASE_INVENTORY_EMPTY");
   });
 
+  test("carries the toolchain observation reason in the frozen refusal vocabulary", async () => {
+    const { RELEASE_REFUSAL_REASONS } = await loadSubject();
+    assert.deepEqual([...RELEASE_REFUSAL_REASONS], [
+      "SOURCE_PROVENANCE_INVALID", "RELEASE_INVENTORY_EMPTY", "RELEASE_INPUT_INVALID",
+      "SOURCE_ASSET_UNAVAILABLE", "CONTROL_ROOM_COMPATIBILITY_REFUSED",
+      "FROZEN_INSTALL_FAILED", "SBOM_GENERATION_FAILED", "DEPENDENCY_AUDIT_FAILED",
+      "LICENSE_REPORT_FAILED", "SBOM_REPORT_INVALID", "DEPENDENCY_AUDIT_INVALID",
+      "LICENSE_REPORT_INVALID", "SUPPORTED_OS_EVIDENCE_MISSING", "REPRODUCIBILITY_MISMATCH",
+      "TOOLCHAIN_IDENTITY_MISMATCH", "TOOLCHAIN_OBSERVATION_FAILED",
+      "EVIDENCE_PUBLICATION_CONFLICT", "CLI_ARGUMENT_INVALID", "OUTPUT_PATH_INVALID",
+      "EVIDENCE_WRITE_INTERRUPTED",
+    ]);
+    assert.equal(RELEASE_REFUSAL_REASONS.length, 20);
+    assert.equal(Object.isFrozen(RELEASE_REFUSAL_REASONS), true);
+  });
+
   test("preserves delegated distribution refusal code and layer", async () => {
     const result = await buildSubject({ signingKeyId: "" });
     assert.equal(result.ok, false);
@@ -156,15 +172,53 @@ function fakePorts(overrides = {}) {
   };
 }
 
-async function runSupply(overrides = {}, portOverrides = {}) {
-  const { runReleaseSupplyChain } = await loadSupplyChain();
-  return runReleaseSupplyChain({
+function supplyInput(overrides = {}) {
+  return {
     evidenceRoot: temp(),
     platform: "win32",
     repositoryRoot: REPO_ROOT,
     source: { objectFormat: "sha1", sourceSha: SOURCE_SHA },
     ...overrides,
-  }, fakePorts(portOverrides));
+  };
+}
+
+async function runSupply(overrides = {}, portOverrides = {}) {
+  const { runReleaseSupplyChain } = await loadSupplyChain();
+  return runReleaseSupplyChain(supplyInput(overrides), fakePorts(portOverrides));
+}
+
+async function runSupplyWithPorts(ports, overrides = {}) {
+  const { runReleaseSupplyChain } = await loadSupplyChain();
+  return runReleaseSupplyChain(supplyInput(overrides), ports);
+}
+
+// Forces temporary cleanup to throw. cleanRoots removes `${root}.tar` WITHOUT `recursive`, so a
+// directory at that path makes rmSync raise ERR_FS_EISDIR. That is the deterministic stand-in for
+// the Windows EBUSY (held handle) this guard exists for: holding an open fd would NOT work, because
+// libuv opens with FILE_SHARE_DELETE, rmSync then succeeds, and the test would be vacuous.
+function blockingArchiveSource(blocked) {
+  return spy(async ({ destination }) => {
+    const obstacle = `${destination}.tar`;
+    mkdirSync(obstacle, { recursive: true });
+    writeFileSync(join(obstacle, "held"), "held");
+    blocked.push({ obstacle, root: destination });
+    return { destination, ok: true };
+  });
+}
+
+function releaseBlocked(blocked) {
+  for (const { obstacle, root } of blocked) {
+    rmSync(obstacle, { force: true, recursive: true });
+    rmSync(root, { force: true, recursive: true });
+  }
+}
+
+// Cleanup ran (every build root is gone) AND it really hit the throwing removal (every obstacle
+// survives). Without both, a green cleanup test would prove nothing.
+function assertCleanupAttempted(blocked, expectedRoots) {
+  assert.equal(blocked.length, expectedRoots);
+  assert.equal(blocked.every(({ root }) => !existsSync(root)), true);
+  assert.equal(blocked.every(({ obstacle }) => existsSync(obstacle)), true);
 }
 
 describe("release supply-chain evidence", () => {
@@ -321,6 +375,49 @@ describe("release supply-chain evidence", () => {
     });
   }
 
+  test("separates an unobservable toolchain from a frozen install failure", async () => {
+    const unobservable = fakePorts({ observeTools: spy(async () => undefined) });
+    const observation = await runSupplyWithPorts(unobservable);
+    expectReleaseRefusal(observation, "TOOLCHAIN_OBSERVATION_FAILED");
+    assert.equal(unobservable.frozenInstall.calls.length, 0);
+
+    const brokenInstall = fakePorts({
+      frozenInstall: spy(async () => ({ exitCode: 9, stderr: "frozen install failed", stdout: "" })),
+    });
+    const install = await runSupplyWithPorts(brokenInstall);
+    expectReleaseRefusal(install, "FROZEN_INSTALL_FAILED");
+    assert.equal(brokenInstall.observeTools.calls.length, 1);
+    assert.equal(brokenInstall.frozenInstall.calls.length, 1);
+
+    // The two failures live in different subsystems and must never share a reason again.
+    assert.notEqual(observation.reason, install.reason);
+  });
+
+  test("keeps a successful record when temporary cleanup fails", async () => {
+    const blocked = [];
+    try {
+      const result = await runSupply({}, { archiveSource: blockingArchiveSource(blocked) });
+      // Both roots are cleaned even though the first one threw: cleanup must not abandon the rest.
+      assertCleanupAttempted(blocked, 2);
+      assert.equal(result.reason, undefined);
+      assert.equal(result.ok, true);
+      assert.equal(result.evidence.operation, "RECORDED");
+      assert.equal(result.evidence.releaseVerdict, "UNKNOWN");
+    } finally { releaseBlocked(blocked); }
+  });
+
+  test("keeps the original refusal reason when temporary cleanup fails", async () => {
+    const blocked = [];
+    try {
+      const result = await runSupply({}, {
+        archiveSource: blockingArchiveSource(blocked),
+        generateSbom: spy(async () => ({ exitCode: 1, stderr: "sbom failed", stdout: "" })),
+      });
+      assertCleanupAttempted(blocked, 1);
+      expectReleaseRefusal(result, "SBOM_GENERATION_FAILED");
+    } finally { releaseBlocked(blocked); }
+  });
+
   test("refuses unreviewed reproducibility drift", async () => {
     let buildIndex = 0;
     const buildSubject = spy(async () => {
@@ -423,6 +520,105 @@ describe("release supply-chain evidence", () => {
         exitCode: 0, stderr: "", stdout: sbomWithPath(sourceRoot, tick += 1, `note-${tick}`),
       })),
     }), "REPRODUCIBILITY_MISMATCH");
+  });
+
+  // One row per releaseRefusal site reachable through runReleaseSupplyChain. The hand-written
+  // length plus the distinct-reason count pin that exactly one site changed reason: the new code
+  // cannot have been introduced by widening a guard that already owned one of these cases.
+  let mutatingReads = 0;
+  const refusalSites = [
+    ["a traversal evidence root", { evidenceRoot: "../escape" }, {}, "OUTPUT_PATH_INVALID"],
+    ["malformed source provenance", { source: { objectFormat: "sha1", sourceSha: "bad" } }, {}, "SOURCE_PROVENANCE_INVALID"],
+    ["an unsupported host", { platform: "linux" }, {}, "SUPPORTED_OS_EVIDENCE_MISSING"],
+    ["an unobservable toolchain", {}, { observeTools: spy(async () => undefined) }, "TOOLCHAIN_OBSERVATION_FAILED"],
+    ["toolchain identity drift", {}, {
+      observeTools: spy(async () => ({ git: "2.51.0", node: "25.0.0", pnpm: "11.0.8", tar: "3.8.1", cdxgen: "12.8.2" })),
+    }, "TOOLCHAIN_IDENTITY_MISMATCH"],
+    ["a failed source archive", {}, { archiveSource: spy(async () => ({ ok: false })) }, "SOURCE_ARCHIVE_FAILED"],
+    ["a failed frozen install", {}, {
+      frozenInstall: spy(async () => ({ exitCode: 1, stderr: "install failed", stdout: "" })),
+    }, "FROZEN_INSTALL_FAILED"],
+    ["frozen source mutation", {}, {
+      readSourceFile: () => new TextEncoder().encode(`source-${mutatingReads += 1}`),
+    }, "REPRODUCIBILITY_MISMATCH"],
+    ["an unreadable source file", {}, {
+      readSourceFile: () => { throw new Error("source unreadable"); },
+    }, "EVIDENCE_WRITE_INTERRUPTED"],
+  ];
+  assert.equal(refusalSites.length, 9);
+  assert.equal(new Set(refusalSites.map((entry) => entry[3])).size, 9);
+
+  for (const [label, overrides, portOverrides, reason] of refusalSites) {
+    test(`refuses ${label} with its own reason`, async () => {
+      expectReleaseRefusal(await runSupply(overrides, portOverrides), reason);
+    });
+  }
+
+  // Cleanup and deregistration must still happen on every exit path. This task changed what
+  // cleanup can OVERWRITE, not whether it runs.
+  const lifecycleCases = [
+    ["success", {}, undefined, 2],
+    ["refusal", { generateSbom: spy(async () => ({ exitCode: 1, stderr: "", stdout: "" })) }, "SBOM_GENERATION_FAILED", 1],
+    ["exception", { readSourceFile: () => { throw new Error("source unreadable"); } }, "EVIDENCE_WRITE_INTERRUPTED", 1],
+  ];
+  assert.equal(lifecycleCases.length, 3);
+
+  for (const [label, portOverrides, reason, expectedRoots] of lifecycleCases) {
+    test(`cleans up and deregisters signal handlers on ${label}`, async () => {
+      const roots = [];
+      const sigint = process.listenerCount("SIGINT");
+      const sigterm = process.listenerCount("SIGTERM");
+      const result = await runSupply({}, {
+        archiveSource: spy(async ({ destination }) => {
+          roots.push(destination);
+          return { destination, ok: true };
+        }),
+        ...portOverrides,
+      });
+      assert.equal(roots.length, expectedRoots);
+      assert.equal(roots.every((root) => !existsSync(root)), true);
+      assert.equal(process.listenerCount("SIGINT"), sigint);
+      assert.equal(process.listenerCount("SIGTERM"), sigterm);
+      if (reason === undefined) assert.equal(result.ok, true);
+      else expectReleaseRefusal(result, reason);
+    });
+  }
+
+  test("cleans up on the signal path without replacing the outcome", async () => {
+    const blocked = [];
+    const exits = [];
+    const observed = {};
+    const sigint = process.listenerCount("SIGINT");
+    const sigterm = process.listenerCount("SIGTERM");
+    const realExit = process.exit;
+    try {
+      process.exit = (code) => { exits.push(code); };
+      // The registered SIGINT handler cleans up and exits; it must not be able to throw either,
+      // so it runs here against a build root whose removal fails.
+      const result = await runSupply({}, {
+        archiveSource: blockingArchiveSource(blocked),
+        frozenInstall: spy(async () => {
+          if (exits.length === 0) {
+            observed.sigint = process.listenerCount("SIGINT");
+            observed.sigterm = process.listenerCount("SIGTERM");
+            observed.stop = process.listeners("SIGINT").at(-1);
+            if (typeof observed.stop === "function") observed.stop();
+          }
+          return { exitCode: 0, stderr: "", stdout: "" };
+        }),
+      });
+      assert.equal(observed.sigint, sigint + 1);
+      assert.equal(observed.sigterm, sigterm + 1);
+      assert.deepEqual(exits, [130]);
+      assert.equal(result.reason, undefined);
+      assert.equal(result.ok, true);
+      assertCleanupAttempted(blocked, 2);
+    } finally {
+      process.exit = realExit;
+      releaseBlocked(blocked);
+    }
+    assert.equal(process.listenerCount("SIGINT"), sigint);
+    assert.equal(process.listenerCount("SIGTERM"), sigterm);
   });
 
   test("refuses conflicting durable content through the real publisher", async () => {

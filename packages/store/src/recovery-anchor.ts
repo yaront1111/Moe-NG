@@ -37,6 +37,7 @@ import {
   slotDirectory,
   verifySlot,
 } from "./recovery-anchor-install.js";
+import { markInstalled } from "./recovery-anchor-marker.js";
 import {
   buildAnchorRecord,
   computePreparedIdentity,
@@ -109,9 +110,20 @@ async function settledInstall(
 ): Promise<RecoveryAnchorInstallResult | null> {
   const stored = await readStoredAnchor(request.anchorRoot);
   if (stored === null || "ok" in stored) return null;
-  if (stored.state !== "INSTALLED") return null;
+  // Identity FIRST, on every arm: an anchor belonging to a different command is
+  // never adopted, however settled it looks.
   if (stored.preparedIdentity !== computePreparedIdentity(request)) return null;
-  return Object.freeze({ anchor: stored, ok: true as const, outcome: "INSTALLED" as const });
+  if (stored.state === "INSTALLED") {
+    return Object.freeze({ anchor: stored, ok: true as const, outcome: "INSTALLED" as const });
+  }
+  // The switch landed but the marker did not. `currentSlot === targetSlot` is
+  // an unambiguous signature of that window: preparation always targets the
+  // INACTIVE slot, so the pair is unreachable until runInstall publishes the
+  // switch, and it is the only durable evidence the switch is durable.
+  if (stored.currentSlot !== stored.targetSlot) return null;
+  // Marker only. Re-running the protocol would write into a slot readers now
+  // resolve, which is precisely what this function's comment forbids.
+  return markInstalled(anchorPath(request.anchorRoot), stored);
 }
 
 export async function installRecoveryAnchor(input: unknown): Promise<RecoveryAnchorInstallResult> {

@@ -4,7 +4,9 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  type PathLike,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -12,9 +14,32 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import * as storeModule from "./index.js";
+
+/**
+ * A crash between the two publish renames cannot be reproduced by returning an
+ * error, so `rename` is faulted at the exact PRODUCTION call that moves the
+ * staged generation into place. Every other filesystem call runs for real. The
+ * flag disarms itself when it fires, so a test can assert the interruption
+ * actually happened instead of assuming it did.
+ */
+const publishFault = vi.hoisted(() => ({ armed: false }));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    rename: async (from: PathLike, to: PathLike): Promise<void> => {
+      if (publishFault.armed && String(from).endsWith(".staging")) {
+        publishFault.armed = false;
+        throw Object.assign(new Error("interrupted publish"), { code: "EPERM" });
+      }
+      await actual.rename(from, to);
+    },
+  };
+});
 
 /**
  * The public surface is reached through `./index.js` on purpose: a consumer of
@@ -617,6 +642,79 @@ describe("verifyBackupGeneration — tamper detection", () => {
         verifyBackupGeneration(container, h.trust, { observedLogicalPaths: declared }),
       ).toMatchObject({ ok: true });
     } finally {
+      h.cleanup();
+    }
+  });
+});
+
+/** One more committed event, so a later publish would carry a different digest. */
+function commitOneMore(h: Harness, label: string): void {
+  const store = SqliteEventStore.openForProject(h.databasePath, "project-1");
+  try {
+    store.commit({
+      aggregateId: `aggregate-${label}`,
+      commandBytes: bytes(`command-${label}`),
+      commandId: `command-${label}`,
+      committedAt: "2026-08-06T18:11:00.000Z",
+      events: [
+        { eventId: `event-${label}`, eventType: "goal.seeded", payload: bytes(`payload-${label}`) },
+      ],
+      expectedVersion: 0,
+    });
+  } finally {
+    store.close();
+  }
+}
+
+/** The manifest container as published on disk, or a failure naming the path. */
+function readPublished(generationPath: string): {
+  manifest: { generationDigest: string; objects: readonly { logicalPath: string }[] };
+} {
+  const manifestPath = join(generationPath, "manifest.json");
+  expect(existsSync(manifestPath), `no manifest at ${manifestPath}`).toBe(true);
+  return JSON.parse(readFileSync(manifestPath, "utf8"));
+}
+
+describe("createBackupGeneration — crash-safe publish", () => {
+  it("keeps a complete generation resolvable when the publish is interrupted", async () => {
+    const h = harness("publish-interrupt", 2);
+    try {
+      const first = await createBackupGeneration(request(h));
+      expect(first).toMatchObject({ ok: true });
+      const firstDigest = readPublished(h.destinationPath).manifest.generationDigest;
+      const firstBytes = readFileSync(join(h.destinationPath, "manifest.json"));
+
+      // A different cursor and database image, so a generation that DID land
+      // here would be distinguishable from the one being replaced.
+      commitOneMore(h, "interrupt-extra");
+      publishFault.armed = true;
+      const second = await createBackupGeneration(request(h, { cursor: "3" }));
+
+      // The interruption must actually have fired: an injection that silently
+      // did nothing would leave every assertion below trivially satisfied.
+      expect(publishFault.armed).toBe(false);
+      expectRefusal(second, "DURABILITY_FAULT");
+
+      // Disk state is the assertion, not the returned value: a process killed
+      // in this window never returns at all, and what survives is the point.
+      const published = readPublished(h.destinationPath);
+      expect(published.manifest.generationDigest).toBe(firstDigest);
+      expect(readFileSync(join(h.destinationPath, "manifest.json"))).toEqual(firstBytes);
+      expect(
+        verifyBackupGeneration(JSON.parse(readFileSync(join(h.destinationPath, "manifest.json"), "utf8")), h.trust, {
+          observedLogicalPaths: published.manifest.objects.map((entry) => entry.logicalPath),
+        }),
+      ).toMatchObject({ ok: true, restorable: true });
+
+      // Every declared byte is present: a directory that merely carries a
+      // manifest is a half-published generation presenting as a complete one.
+      for (const entry of published.manifest.objects) {
+        expect(existsSync(join(h.destinationPath, ...entry.logicalPath.split("/")))).toBe(true);
+      }
+      expect(existsSync(join(h.destinationPath, "database.sqlite"))).toBe(true);
+      expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+    } finally {
+      publishFault.armed = false;
       h.cleanup();
     }
   });

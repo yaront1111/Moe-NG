@@ -62,24 +62,36 @@
     {
       "stepId": "step-4",
       "description": "Assert the ordering is a TOTAL order on the production surface, not merely that one pair now sorts correctly. Add a test that runs the production comparator over a set containing entries that collide on layer, entries that collide on layer AND code, and entries distinct at every level, and assert: the resulting order is exactly the expected sequence; sorting the same set from a different initial permutation yields the identical result (so the order does not depend on input order); and no two distinct entries compare equal. Assert an exact non-zero case count with a hand-written literal. This is what makes the fix a determinism guarantee rather than a single passing example.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
       ],
-      "startedAt": "2026-08-15T13:03:30.401Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "note": "Total-order tests landed: 26 passed (26), exit 0. THEN I DRILLED THEM AND FOUND THEY PROVE LESS THAN THE STEP ASSUMED. Recording that rather than shipping the stronger claim.\n\nWHAT LANDED. One node carrying reasons at all three layers, covering the three required collision classes: distinct at every level (LOGICAL vs ADMISSION vs DISPATCH), colliding on layer only (HARD_DEPENDENCY_UNKNOWN vs HARD_DEPENDENCY_UNSATISFIED, both LOGICAL — \"K\" < \"S\" by code units), and colliding on layer AND code (three HARD_DEPENDENCY_UNSATISFIED differing only by edgeKey: dev-edge-Alpha 0x41, dev-edge-Beta 0x42, dev-edge-alpha 0x61). Exact expected sequence pinned as a hand-written literal. Permutation invariance over all 4! orderings of the edges plus a reversed fact order. Hand-written counts: expect(orders.length).toBe(24) and expect(expected.length).toBe(6), so a sweep that silently produced zero or one case cannot pass.\n\nTWO MUTATION DRILLS, AND THE SECOND ONE IS THE FINDING.\nDRILL 1 — restore `String(a.edgeKey).localeCompare(String(b.edgeKey))`: RED, 2 failed | 24 passed. Both the step-1 tie-break test and the new exact-sequence test fail. This is the regression that actually happened, and it is locked out.\nDRILL 2 — replace the tie-break with `return 0`: GREEN. All 26 pass.\n\nI DID NOT LEAVE DRILL 2 AS A SHRUG. I traced why, and the answer is in another module: frontier.ts:219-221 ALREADY sorts each blocked node's reasons by edgeKey, using the identical code-unit form `a.edgeKey < b.edgeKey ? -1 : a.edgeKey > b.edgeKey ? 1 : 0`. Array.prototype.sort is stable, so that canonical order survives this comparator's (layer, code) regrouping even when the edgeKey level does nothing. `return 0` is therefore an EQUIVALENT MUTANT through projectReadiness — not a hole in the test.\n\nWHY THAT DOES NOT MAKE THE FIX POINTLESS, which is the obvious next question. `return 0` is inert; localeCompare is DESTRUCTIVE. It took an already-canonical upstream order and actively re-sorted it into host collation order — which is exactly what the step-1 red showed (production returned alpha, Beta; canonical is Beta, alpha). The defect was never a missing tie-break, it was a tie-break that corrupted a correct input in a host-dependent way.\n\nCONSEQUENCE FOR DoD 4, stated plainly because QA will run this drill. The edgeKey tie-break's positive ordering contribution is NOT independently observable through the public surface: every path that produces reasons with a non-null edgeKey comes through frontier.ts pre-sorted, and predicate reasons all carry edgeKey null. So these tests prove (a) the projection is deterministic end to end under input permutation, and (b) reintroducing localeCompare reddens immediately. They do NOT prove the tie-break is what orders equal-key reasons, and I have written that into the test file's doc comment rather than letting a future reader infer the stronger claim.\n\nI KEPT THE TIE-BREAK DELIBERATELY. Deleting it would make this comparator correct only by coupling to a sort two modules upstream plus an implicit reliance on sort stability. Task rail 2 also scopes this task to a tie-break correctness fix. The doc comment now warns against \"simplifying\" it away and says why the drill is green.\n\nTESTS ADJUSTED TO MATCH WHAT THEY PROVE, not left overclaiming. The block's doc comment previously said permutation invariance witnesses totality \"as a direct consequence\"; that is false here, since upstream canonicalization plus stability would satisfy it regardless. It now states the measurement, names frontier.ts:219-221, and records the equivalent mutant explicitly. The set-size test is labelled as what it is — a fixture guard proving the six entries have distinct sort keys, so the permutation check is exercising keys that could have reordered.\n\nFIXTURE LEGALITY, found the hard way: the first version put READINESS_CAPABILITY and READINESS_NO_PAUSE into the bundle while the all-true set still contained them, and the projection refused it as READINESS_INPUT_MALFORMED / \"nodeFacts[4] is malformed\" before any sorting happened. A duplicate-code bundle never reaches the comparator, so the test would have been measuring the wrong layer. Both codes are now removed before being re-added as CONFIRMED_FALSE, and the refusal is what proved the fixture had to be valid at the earlier layer first.\n\nTest file 467 lines, production 248 (unchanged this step; sha256 2957dd0d6c4e579e5b1a2403228fa6c30f2598942c5f61afeab545c26fba9b95, verified identical after both drills were restored).",
+      "startedAt": "2026-08-15T13:03:30.401Z",
+      "completedAt": "2026-08-15T13:07:35.320Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Re-run the step-1 divergence guard and confirm it would FAIL if someone swapped the fixture for a pair whose orders agree - the guard is the only thing standing between this test and vacuity. (2) Confirm the fix changed ONLY the tie-break and that READINESS_LAYERS ordering and the code comparison are byte-identical. (3) Confirm no other comparator in the touched file depends on host collation. (4) Confirm readiness-projection.ts is still at or under 250 physical lines using `grep -c ''` (it is 240 today; PowerShell Measure-Object -Line undercounts). Then git status --porcelain, confirm nothing foreign is staged, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/readiness/readiness-projection.ts",
         "packages/scheduler/src/readiness/readiness-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "note": "GATES GREEN, FRESH, on the committed bytes. Repo-wide leg green too.\n  pnpm --filter @moe/scheduler typecheck -> exit 0\n  pnpm --filter @moe/scheduler test -> exit 0, Test Files 43 passed (43), Tests 1324 passed (1324)\n  pnpm typecheck (repo-wide) -> exit 0, all packages Done\nRead the summary lines, not just the exit code: 43/43 files and 1324/1324 tests, zero skipped, zero failed. Global rail 3's path-attributed baseline is trivially satisfied — the repo-wide leg is exit 0, so the failing-path set at HEAD is empty and nothing needs attributing.\n\nMY BYTES WERE SWEPT INTO A FOREIGN COMMIT. `git diff` over my production file returned EMPTY while the file was plainly modified — that is the tell, not a sign the edit vanished. Measured: HEAD moved 192360e -> e6597e4 mid-task, and `git log -S\"Code units, never localeCompare\"` names def640a \"feat(task-bcea70569f714367b2e50c1734433631): Project configuration digest codec\" as the commit carrying my tie-break. Both my files are committed and `git status --porcelain -- packages/scheduler/` is empty.\n\nI DID NOT TOUCH THAT COMMIT. Global rail 5 is explicit: never amend the foreign commit, never reset, never create an empty commit to claim the work. So step 5's \"commit by explicit pathspec\" was NOT executed — there was nothing left to stage, and staging into a shared index behind a foreign commit is precisely what the rail forbids. This is a known hazard, not a defect I caused and not one I may repair.\n\nWHAT QA SHOULD REVIEW INSTEAD — the base-ref diff over my owned paths:\n  git diff 192360e..HEAD -- packages/scheduler/src/readiness/\n  readiness-projection.test.ts | 196 +++++++\n  readiness-projection.ts      |  10 +-\n  2 files changed, 205 insertions(+), 1 deletion(-)\nThat range over ALL of packages/scheduler/ returns the SAME two files, so nothing foreign rode in alongside my work inside my owned package, and no commit bearing this task's id exists or should be looked for.\n\nDRILL CONTAMINATION RULED OUT, which matters because a foreign whole-tree hook can commit a drill edit and git status will not say so. HEAD's test file carries TIE_EDGE_UPPER = \"dev-edge-Beta\" and TIE_EDGE_LOWER = \"dev-edge-alpha\" — the restored values, not the \"dev-edge-Zeta\" drill value. sha256 of HEAD's blob and of the working tree are byte-identical at 436b1f84e523fd0dcb18b8af9e1c0cc1fcffde28e48863c52d2a6b5dbe489e3a, and the production file at HEAD carries the code-unit form, not either mutant. Gated bytes == committed bytes.\n\nI RESTORED THE GUARD DRILL BY REVERSING THE EDIT, NOT BY git checkout. The test file held ~200 lines of uncommitted new work at that moment; `git checkout -- <path>` would have reverted to HEAD and destroyed all of it while looking like a clean restore. Reversed the exact one-line string replacement and confirmed by hash.\n\nADVERSARIAL REVIEW, all four items:\n(1) DIVERGENCE GUARD PROVEN KILLABLE. Swapped the fixture to an agreeing pair (\"dev-edge-Beta\" vs \"dev-edge-Zeta\": code units B<Z, collation Beta<Zeta, same direction). The guard FAILED as required — \"AssertionError: expected 1 not to be 1\". So it is a real gate, not decoration, and a future hand swapping in a non-divergent fixture cannot quietly make the tie-break test vacuous.\n(2) ONLY THE TIE-BREAK CHANGED. The base-ref diff is one hunk at :152. READINESS_LAYERS ordering at :147 and the byCode comparison at :151 are byte-identical — they appear as unchanged context lines in the diff above, which is stronger evidence than my asserting it.\n(3) NO OTHER HOST-COLLATION DEPENDENCE IN THE FILE. Four sort sites total: :146 the comparator (fixed), :245 nodes.sort with the explicit code-unit form, and :241/:242 admissionReady.sort() / dispatchable.sort() with NO comparator. I checked rather than assumed that the bare calls are safe: the default SortCompare converts elements to strings and orders by UTF-16 code units per spec — it does not consult ICU or the host locale. So they are determinism-safe, merely stylistically inconsistent, and changing them is outside task rail 2's tie-break-only scope.\n(4) LINE BUDGET: 248 physical lines by `grep -c ''`, at or under the 250 target with 2 to spare, up from 240. PowerShell Measure-Object -Line undercounts blank lines and was not used.",
+      "startedAt": "2026-08-15T13:07:37.708Z",
+      "completedAt": "2026-08-15T13:09:26.248Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40286572",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -91,17 +103,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:42.602Z",
-  "updatedAt": "2026-08-15T13:03:30.401Z",
+  "updatedAt": "2026-08-15T13:10:25.068Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:52:02.312Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:53:27.108Z",
@@ -123,5 +137,16 @@
   "contextFetchedBy": [
     "worker-40286572"
   ],
-  "workStartedAt": "2026-08-15T12:59:45.502Z"
+  "workStartedAt": "2026-08-15T12:59:45.502Z",
+  "reviewStartedAt": "2026-08-15T13:10:25.068Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "packages/scheduler typecheck$ tsc --project tsconfig.json\npackages/scheduler typecheck: Done\n\n Test Files  43 passed (43)\n      Tests  1324 passed (1324)\n   Duration  1.19s (transform 8.91s, setup 0ms, import 12.38s, tests 1.66s, environment 3ms)",
+    "reportedAt": "2026-08-15T13:10:25.068Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/readiness/readiness-projection.test.ts",
+    "packages/scheduler/src/readiness/readiness-projection.ts"
+  ]
 }

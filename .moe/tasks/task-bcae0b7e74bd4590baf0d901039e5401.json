@@ -171,7 +171,7 @@
       "completedAt": "2026-08-15T13:05:58.277Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -184,12 +184,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:44.795Z",
-  "updatedAt": "2026-08-15T13:06:33.842Z",
+  "updatedAt": "2026-08-15T13:15:12.377Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:40:23.627Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-15T13:15:12.377Z",
+    "wallClockMs": 2088750
   },
   "stepsCompleted": [
     "step-1",
@@ -220,7 +222,8 @@
   "planApprovedAt": "2026-08-15T12:42:51.016Z",
   "contextFetchedBy": [
     "worker-86bbe9fd",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T12:46:07.822Z",
   "reviewStartedAt": "2026-08-15T13:06:33.842Z",
@@ -242,5 +245,8 @@
     "apps/control-room/src/performance/effort-non-inference.test.ts",
     "apps/control-room/src/performance/timing.test.ts",
     "apps/control-room/src/performance/effort-sweeps.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:15:12.377Z",
+  "reviewCompletedAt": "2026-08-15T13:15:12.377Z",
+  "reviewSummary": "APPROVED. Re-ran both legs myself, exit codes captured to a var (no pipe): control-room test 67 files / 814 tests exit 0; pnpm typecheck Scope 18 of 19, all Done, exit 0. Re-ran after my drills: 814/814 exit 0.\n\nVerified against committed bytes (871c9b4). DoD1: 7 record types Object.freeze'd at build, each carrying source+commandId+observedAt; isFrozen asserted at 8 sites. DoD2: ADDITIONAL absent from BASELINE_DECISION_KINDS so a caller cannot state it (admission refuses EFFORT_OBSERVATION_CONTRADICTORY); additional-ness derived per commandId from observed sequence, never across UNATTRIBUTED. DoD3: focus/away separate map slots, NO duration field anywhere; unterminated->UNTERMINATED+EFFORT_INTERVAL_UNTERMINATED, overlap->OVERLAPPING+EFFORT_INTERVAL_OVERLAPPING, close-before-open->CONTRADICTORY, each with layer. DoD4: own EFFORT_* family mirroring timing.ts SHAPE ({code,layer}, frozen, absent-before-unparseable, no translation table); reusing TIMING_SOURCE_ABSENT would make two different facts indistinguishable. timing.ts/wire-timing.ts untouched.\n\nDoD5: sweeps assert hand-written literals 4/5/7/7/4/4/2 BEFORE iterating, each compared by name to its frozen vocabulary; both layers visited by name. My own drills: [1] attribution weakened to fall back to most recent command -> exactly 1 failure, named test \"leaves an unattributed demand unattributed, never on the most recent command\", exact assertion (expected 'cmd-a' to be 'UNATTRIBUTED'). [2] unterminated closed at seal -> 6 failures, all on state/code ('CLOSED' vs 'UNTERMINATED'), none on a duration. Restored from pre-drill copies, sha256 back to 2ffe0199/3f28dcc7, owned paths clean, no untracked scratch.\n\nPer-file: 228/192/180/129, all <=250. timing.test.ts +4 lines is the forced fix to a closed directory-scan map. e6597e4 bears this task id but carries foreign runner/daemon bytes - known whole-tree hook hazard; this task's bytes are in 871c9b4. Consumer named: parent task-1eeb2dcc."
 }

@@ -710,3 +710,81 @@ describe("recovery anchor vocabulary", () => {
     expect([...RECOVERY_ANCHOR_STATES]).toEqual(["PREPARED", "INSTALLED"]);
   });
 });
+
+/**
+ * REGISTER ITEM 2 — the post-switch, pre-marker window.
+ *
+ * runInstall publishes TWICE: the switch (`currentSlot := targetSlot`, state
+ * still PREPARED) and then the INSTALLED marker. A crash between them leaves a
+ * durable record that has SELECTED the restored slot without saying so.
+ *
+ * settledInstall recognised only `state === "INSTALLED"`, so that record fell
+ * through to prepare + runInstall and RE-ENTERED the protocol — whose first two
+ * steps write the database in `targetSlot`, which after the switch is the LIVE
+ * slot. recovery-anchor.ts's own comment above settledInstall already forbids
+ * exactly this: "re-entering the protocol would write the restored payload into
+ * the slot that is now LIVE — the one thing this module exists to never do."
+ * The guard was one condition short of covering the window it describes.
+ *
+ * THE HARM IS THAT THOSE STEPS RUN, not that the resulting bytes differ: a
+ * re-entry that happens to succeed still ends with a correct-looking anchor.
+ * So these tests observe the fault seam — which boundaries the second call
+ * crossed — rather than inspecting disk content, which would pass either way.
+ */
+async function crashAfterSwitch(root: string): Promise<void> {
+  const crash = new Error("injected fault at INSTALLED_MARKER");
+  await expect(
+    installRecoveryAnchor(
+      request({
+        anchorRoot: root,
+        injectFault: (reached: string) => {
+          if (reached === "INSTALLED_MARKER") throw crash;
+        },
+      }),
+    ),
+  ).rejects.toThrow("injected fault at INSTALLED_MARKER");
+}
+
+/** The boundaries whose re-execution is the actual defect. */
+const PROTOCOL_REENTRY_POINTS = Object.freeze([
+  "INACTIVE_INSTALL",
+  "TRANSACTION",
+  "FILE_FSYNC",
+  "DIRECTORY_PERSISTENCE",
+  "VERIFICATION",
+  "SWITCH",
+] as const);
+
+describe("resume after the switch completes the marker instead of re-installing", () => {
+  it("records the marker without crossing a single install boundary again", async () => {
+    const root = anchorRoot("post-switch");
+    await crashAfterSwitch(root);
+
+    // The stored record is the window itself: switched, but unmarked.
+    const midWindow = await inspectRecoveryAnchor(root);
+    expect(midWindow.ok, midWindow.ok ? "inspected" : "refused").toBe(true);
+    if (!midWindow.ok || midWindow.outcome !== "INSPECTED") {
+      throw new Error("expected INSPECTED");
+    }
+    expect(midWindow.anchor.state).toBe("PREPARED");
+    expect(midWindow.anchor.currentSlot).toBe(midWindow.anchor.targetSlot);
+
+    const observed: string[] = [];
+    const resumed = await installRecoveryAnchor(
+      request({ anchorRoot: root, injectFault: (point: string) => void observed.push(point) }),
+    );
+
+    expect(resumed.ok, resumed.ok ? "resumed" : `${resumed.layer}/${resumed.code}`).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.outcome).toBe("INSTALLED");
+    expect(resumed.anchor.state).toBe("INSTALLED");
+    // Named one by one: an emptiness assertion alone would not say WHICH
+    // boundary re-ran when this fails.
+    for (const point of PROTOCOL_REENTRY_POINTS) {
+      expect(observed, `boundary ${point} must not be crossed again`).not.toContain(point);
+    }
+    expect(observed).toEqual([]);
+    // The switch is not re-made: the slot chosen before the crash is kept.
+    expect(resumed.anchor.currentSlot).toBe(midWindow.anchor.currentSlot);
+  });
+});

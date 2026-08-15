@@ -16,9 +16,52 @@
     "packages/control-room-client/src/generated/generated-client.ts is marked GENERATED - DO NOT EDIT BY HAND, source of truth @moe/contracts. If the change reaches generated output, report blocked and name a contracts/codegen task.",
     "Target <=250 physical lines per production source; split before 400."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-2aea4111",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish what the daemon actually requires, and pin it, before changing the client. apps/daemon/src/http/http-listener-guards.ts:127 is `if (request.headers.origin !== origin) return \"LISTENER_ORIGIN_INVALID\";`, where the expected value comes from originOf(host, port) at :66 and the code is a member of the frozen list at :28. So the guard demands an EXACT match and refuses when the header is ABSENT, since undefined !== origin. apps/daemon/src/http/http-listener.test.ts ALREADY references LISTENER_ORIGIN_INVALID, so EXTEND that existing coverage rather than starting fresh: confirm it pins all three arms by exact code - matching Origin admitted, mismatched Origin refused, and NO Origin header refused - and add whichever arm is missing. This step changes no production code; it makes the daemon's contract explicit so the client change can be judged against it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Remove the forbidden header from the client. packages/control-room-client/src/client-transport.ts:90-96 headersFor returns an object containing `origin: options.origin`, passed as `headers` to fetch at :108-111. `Origin` is a FORBIDDEN header name in the fetch spec: a browser silently drops it and substitutes its own, so this entry is inert in the only environment that matters. Delete that one entry. Leave the other headers untouched - content-type, x-moe-csrf, x-moe-protocol-version, x-moe-session-credential - and leave the URL construction at :108 alone, since it uses options.origin as the request PREFIX and that use is correct and unrelated. In packages/control-room-client/src/client-transport.test.ts assert the EXACT set of header names headersFor produces, so re-adding `origin` fails loudly rather than passing silently.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/control-room-client/src/client-transport.ts",
+        "packages/control-room-client/src/client-transport.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "STATE AND HANDLE THE CONSEQUENCE - this is the part a careless fix gets wrong. In a BROWSER, removing the header changes nothing: it was being dropped anyway and the browser supplies Origin itself. In NODE it changes everything: no Origin header is sent, so the daemon's guard sees undefined and refuses every request with LISTENER_ORIGIN_INVALID. The transport supports non-browser use through options.fetch, so this is a real behavior change, not a theoretical one. Decide it explicitly and record the decision in a comment on headersFor: a non-browser caller must supply Origin through its own fetch wrapper, exactly as a browser does, because the transport cannot set it. Do NOT reintroduce the header behind an environment check, and do NOT relax the daemon guard to admit a missing Origin - task rail 1 forbids the latter and the former merely restores the illusion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/control-room-client/src/client-transport.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Close the coverage gap the item is really about, in the one place that can. Neither package can import the other - apps/daemon does not depend on @moe/control-room-client and the client depends only on @moe/contracts - so an end-to-end test belongs in tests/integration/control-room/control-room-transport.test.ts, which already drives createControlRoomTransport. Extend it so a REAL transport instance talks to a REAL daemon listener and the Origin the daemon sees comes from the fetch layer the way a browser supplies it, NOT from headersFor. Assert three arms by exact code: a correct Origin is admitted; a mismatched Origin refuses with LISTENER_ORIGIN_INVALID; and a request with no Origin at all refuses with the same code. Do NOT hand-set an Origin inside headersFor to make this pass - that reproduces exactly the illusion this task exists to remove, and it is the single most likely wrong turn here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/control-room/control-room-transport.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/daemon test, plus the focused integration leg for tests/integration/control-room. Run integration legs from PowerShell rather than Git Bash - MSYS path translation has produced fake failures in this repo's integration suites before, and a fake failure here looks exactly like a real Origin refusal. Read every summary line rather than the final exit code. Then review as an attacker: (1) Does ANY code path still set a forbidden header - re-grep the client for `origin:` inside a headers object. (2) Did the daemon guard get weakened in any way to make a test pass? (3) Does the dev vite proxy path still work, or did it depend on the removed header - check the proxy configuration before concluding. (4) Confirm packages/control-room-client/src/generated/generated-client.ts is UNTOUCHED; it is marked GENERATED - DO NOT EDIT BY HAND with @moe/contracts as its source of truth, and if the change reached generated output this task should report blocked and name a contracts/codegen task instead. (5) Confirm every touched production source is at or under 250 physical lines using `grep -c ''` (client-transport.ts is 138 today; PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/control-room-client/src/client-transport.ts",
+        "tests/integration/control-room/control-room-transport.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,8 +73,28 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:28.441Z",
-  "updatedAt": "2026-08-15T13:05:58.161Z",
+  "updatedAt": "2026-08-15T13:08:15.676Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T13:05:58.161Z"
-  }
+    "firstClaimAt": "2026-08-15T13:05:58.161Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 4
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T13:08:13.624Z",
+  "planningNotes": {
+    "approachesConsidered": "REMOVING THE HEADER vs FEATURE-DETECTING. Keeping the header for non-browser callers behind an environment check was considered and rejected: it restores the exact illusion the item is about - tests and Node clients would keep satisfying the guard by a route no browser can take, so the guard would remain untested from the real path while looking covered. CHOSEN: remove it unconditionally and require non-browser callers to supply Origin through their own fetch wrapper, which is what a browser does anyway.\n\nRELAXING THE DAEMON GUARD WAS REJECTED OUTRIGHT and is written into the task rails. The guard is correct; the client is what is wrong. Admitting a missing Origin would turn a coverage gap into a security regression.\n\nWHERE THE END-TO-END TEST LIVES. A daemon-side test would be the natural place and is impossible without a new workspace dependency on the client, which the dependency-edge rail forbids adding casually and which would invert the architecture. CHOSEN: extend the existing integration test, which already drives the real transport and sits outside both packages.\n\nTHE CONSEQUENCE IS PROMOTED TO ITS OWN STEP rather than left as a footnote, because it is the difference between a correct fix and a broken one: removing the header genuinely changes Node behavior from admitted to refused, and a worker who does not notice will either ship a broken non-browser client or quietly re-add the header when a test fails.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e; I raised this slice from the audit register at the same HEAD.\n\nTHE CLIENT SIDE. packages/control-room-client/src/client-transport.ts:90-96 headersFor returns { \"content-type\", origin: options.origin, \"x-moe-csrf\", \"x-moe-protocol-version\", \"x-moe-session-credential\" }, passed as `headers` to fetch at :108-111. `Origin` is a forbidden header name per the fetch spec, so a browser drops it and sets its own; a Node fetch sends it verbatim.\n\nTHE DAEMON SIDE. apps/daemon/src/http/http-listener-guards.ts:127 `if (request.headers.origin !== origin) return \"LISTENER_ORIGIN_INVALID\";`, expected value from originOf(host, port) at :66, code declared in the frozen list at :28. Exact match required, and ABSENCE refuses too because undefined !== origin.\n\nPUT TOGETHER, THIS IS WHY THE GUARD IS UNTESTED FROM THE REAL PATH: in a browser the client's header never arrives and the browser's own Origin decides the outcome; in Node the client's header arrives and satisfies the guard artificially. Neither case exercises the guard against what a real browser client actually sends.\n\nEXISTING COVERAGE, MEASURED: apps/daemon/src/http/http-listener.test.ts is the file that already references LISTENER_ORIGIN_INVALID - there is no http-listener-guards.test.ts, so step 1 extends existing coverage rather than creating a file. On the client side packages/control-room-client/src/client-transport.test.ts exists.\n\nNO DEPENDENCY EDGE EXISTS IN EITHER DIRECTION. apps/daemon/package.json declares contracts, coordination, core, mcp, review, runner, scheduler, store - NOT control-room-client. packages/control-room-client declares only @moe/contracts. So a daemon-side test cannot import the client and a client-side test cannot start the daemon; under the global dependency-edge rail neither edge may be added just to host a test. The end-to-end home is tests/integration/control-room/control-room-transport.test.ts, which ALREADY imports createControlRoomTransport - confirmed by grep - so the seam this task needs is already established there.\n\nSIZE: client-transport.ts is 138 physical lines, ample headroom.",
+    "risks": "THE FIX BREAKS NON-BROWSER CALLERS, BY DESIGN, AND THAT MUST BE DELIBERATE. After removal a Node caller sends no Origin, the daemon sees undefined, and every request refuses with LISTENER_ORIGIN_INVALID. That is the honest consequence of removing a header a browser would never send - but if it is discovered as a surprise mid-implementation, the tempting repair is to put the header back, which undoes the task.\n\nTHE MOST LIKELY WRONG TURN is hand-setting an Origin inside headersFor, or inside the integration test, to make the guard pass. That reproduces precisely the artificial satisfaction this task removes. The Origin must reach the daemon from the fetch layer, as a browser supplies it.\n\nTHE VITE DEV PROXY MAY DEPEND ON CURRENT BEHAVIOR. The audit noted the daemon guard is satisfied only by the proxy today. Check the proxy configuration before concluding the dev path still works; a fix that leaves the dev setup refusing every request will be reverted rather than debugged.\n\nGENERATED CLIENT IS OFF LIMITS. packages/control-room-client/src/generated/generated-client.ts is marked GENERATED - DO NOT EDIT BY HAND with @moe/contracts as source of truth. If the change reaches generated output, report blocked and name a contracts/codegen task.\n\nRUN INTEGRATION LEGS FROM POWERSHELL. MSYS path translation under Git Bash has produced fake failures in this repo's integration suites before, and a fake failure here looks exactly like a real Origin refusal.\n\nSHARED WORKTREE. Line numbers are a snapshot at 192360e; re-measure before editing and commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/control-room-client/src/client-transport.ts",
+      "apps/daemon/src/http/http-listener-guards.ts",
+      "apps/daemon/src/http/http-listener.test.ts",
+      "tests/integration/control-room/control-room-transport.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T13:08:15.676Z"
 }

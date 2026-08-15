@@ -181,9 +181,9 @@ function buildReceipt(/** @type {Record<string, unknown>} */ subject, /** @type 
   return { buildIndex, containers, sourceDigests, subjectReceipt: subject.receipt,
     sbomNormalizedDigest: sha256(normalizedSbom(sbom, sourceRoot)), sbomRawDigest: sha256(sbomRaw), verificationKeyUse: subject.verificationKeyUse };
 }
-function cleanRoots(/** @type {string[]} */ roots) {
+function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw here escapes the caller's finally and REPLACES the real refusal or success (Windows EBUSY on a held handle), so report each failure and keep removing the remaining roots.
   for (const root of roots.splice(0)) {
-    rmSync(root, { force: true, recursive: true }); rmSync(`${root}.tar`, { force: true });
+    try { rmSync(root, { force: true, recursive: true }); rmSync(`${root}.tar`, { force: true }); } catch (error) { console.error(`release temporary cleanup failed: ${root}: ${String(error)}`); }
   }
 }
 /** Run the Windows evidence recorder. Success records UNKNOWN release authority, never publication. */ export async function runReleaseSupplyChain(/** @type {unknown} */ value, /** @type {Record<string, unknown>} */ injected = {}) {
@@ -195,7 +195,7 @@ function cleanRoots(/** @type {string[]} */ roots) {
   const observed = await ports.resolveSource({ repositoryRoot: String(input.repositoryRoot) });
   if (!observed || observed.objectFormat !== source.objectFormat || observed.sourceSha !== source.sourceSha) return releaseRefusal("SOURCE_PROVENANCE_INVALID");
   const tools = await ports.observeTools({ repositoryRoot: String(input.repositoryRoot) });
-  if (!tools) return releaseRefusal("FROZEN_INSTALL_FAILED");
+  if (!tools) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   if (tools.node !== "24.16.0" || tools.pnpm !== "11.0.8" || tools.cdxgen !== "12.8.2") return releaseRefusal("TOOLCHAIN_IDENTITY_MISMATCH");
   const { privateKey } = generateKeyPairSync("ed25519"); const roots = /** @type {string[]} */ ([]);
   const stop = () => { cleanRoots(roots); process.exit(130); };

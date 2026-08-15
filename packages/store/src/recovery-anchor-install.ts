@@ -36,6 +36,7 @@ import {
   readFileIfPresent,
   readFileIfReadable,
 } from "./recovery-anchor-fs.js";
+import { markInstalled } from "./recovery-anchor-marker.js";
 import {
   decodeAnchorRecord,
   encodeAnchorRecord,
@@ -257,7 +258,5 @@ export async function runInstall(
   await publishFileAtomically(anchorPath(request.anchorRoot), encodeAnchorRecord(switched));
 
   fault?.("INSTALLED_MARKER");
-  const installed = resealAnchorRecord(switched, { state: "INSTALLED" });
-  await publishFileAtomically(anchorPath(request.anchorRoot), encodeAnchorRecord(installed));
-  return Object.freeze({ anchor: installed, ok: true as const, outcome: "INSTALLED" as const });
+  return markInstalled(anchorPath(request.anchorRoot), switched);
 }

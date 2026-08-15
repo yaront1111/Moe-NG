@@ -132,8 +132,8 @@
       "completedAt": "2026-08-15T13:03:22.608Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,12 +152,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:25.526Z",
-  "updatedAt": "2026-08-15T13:04:51.387Z",
+  "updatedAt": "2026-08-15T13:10:29.574Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:38:07.971Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-15T13:10:29.574Z",
+    "wallClockMs": 1941603
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -223,5 +225,8 @@
     "packages/core/src/index.ts",
     "packages/core/src/index-surface.test.ts",
     "packages/core/src/supersession/supersession-engine.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:10:29.574Z",
+  "reviewCompletedAt": "2026-08-15T13:10:29.574Z",
+  "reviewSummary": "APPROVED. Commit 268b2ce, 6 files/891 ins, all packages/core.\n\nGATE RE-RUN BY QA, exact DoD command, foreground: `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm typecheck` -> EXIT=0. contracts 12 files/416 tests; core 29/730; typecheck `Scope: 18 of 19 workspace projects`, all Done. The repo-wide red the worker disclosed (untracked peer files in apps/control-room, packages/runner) had cleared by QA time — attribution was correct, not a cover.\n\n7 MUTATION DRILLS RUN BY ME, each surgical, sha256-restored to e737bd6a63f1e733 every time:\n- drop `policy` from the digest preimage -> exactly the 7 `policy.*` sweep leaves + domain-body test red. DoD 5: the 53-leaf sweep is bound to the production preimage, not its own fixture.\n- empty domain tag -> domain-derivation test red (DoD 2).\n- delete NONCANONICAL check / delete decode digest recompute / flatten the JSON_DUPLICATE_KEY mapping -> each reddens only its own case (DoD 3).\n- `Uint8Array.prototype.slice.call` for `new Uint8Array()` -> species-trap test red.\n- rename the `.js` bridge -> index-surface strip-types child probe red, so the bridge is load-bearing.\n\nALSO VERIFIED: index.ts 283 -> 264 lines, and mechanically 266 -> 278 export entries with ZERO removed — pure same-specifier reflow, nothing dropped or converted. Production source 237 lines. Bridge `i/lf w/lf`. Zero deep/relative @moe/contracts imports from core (4 hits, all bare); zero `node:crypto` in contracts. Refusals pin code+layer+upstream; forwarding asserted by `toBe` identity against the contract's frozen singletons. Dep edge: manifest `workspace:*`, lock importer pnpm-lock.yaml:135, bare-specifier compile proven durably by typecheck. Consumer task-5dfc98fc3e7f4035a8012bd9ba032de3 recorded.\n\nNOTE, not a defect: task.verification.command recorded `--filter @moe/core typecheck`, not the DoD's repo-wide `pnpm typecheck`. Counts matched and I ran the exact command. Record it verbatim next time."
 }
