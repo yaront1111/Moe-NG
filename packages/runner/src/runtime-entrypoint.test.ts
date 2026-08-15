@@ -50,6 +50,23 @@ try {
     recordCodexStream: typeof ns.recordCodexStream,
     codexCapabilitiesFrozen: Object.isFrozen(ns.CODEX_CAPABILITIES),
     codexStreamRecordVersion: ns.CODEX_STREAM_RECORD_VERSION,
+    launchClaudeWithTelemetry: typeof ns.launchClaudeWithTelemetry,
+    parseClaudeResultTelemetry: typeof ns.parseClaudeResultTelemetry,
+    providerTelemetryContractVersion: ns.PROVIDER_TELEMETRY_CONTRACT_VERSION,
+    providerTerminalOutcomesFrozen: Object.isFrozen(ns.PROVIDER_TERMINAL_OUTCOMES),
+    // Leakage and its POSITIVE CONTROL, measured by the same membership check in
+    // the same child: a leak count of 0 produced by a broken check would leave
+    // the published count at 0 too, so the pair cannot both be satisfied by a
+    // membership test that has stopped working.
+    telemetryHelperLeaks: [
+      "knownCount", "readCount", "readText", "countCoverage", "unknownFact",
+      "telemetryRefusal", "snapshotRunRef", "PROVIDER_TELEMETRY_MESSAGES",
+    ].filter((name) => name in ns).length,
+    telemetryPublished: [
+      "launchClaudeWithTelemetry", "parseClaudeResultTelemetry", "PROVIDER_TELEMETRY_CODES",
+      "PROVIDER_TELEMETRY_LAYERS", "CLAUDE_TELEMETRY_HANDOFF_VERSION",
+      "CLAUDE_RESULT_TELEMETRY_VERSION", "CLAUDE_TOKEN_FIELDS", "CLAUDE_RESULT_SUBTYPES",
+    ].filter((name) => name in ns).length,
   });
 } catch (error) {
   // Report the SPECIFIER, not just the code. A bridge that fails to resolve
@@ -97,6 +114,17 @@ it("loads @moe/runner in Node's strip-types runtime with its named exports defin
     recordCodexStream: "function",
     codexCapabilitiesFrozen: true,
     codexStreamRecordVersion: "moe-codex-stream-record/1",
+    // The telemetry seam is read here for the same reason as the Codex block:
+    // its three modules live behind their own `.js` bridges, which only a real
+    // child Node process consults. The contract version is a VALUE rather than a
+    // `typeof`, so a binding resolving to `undefined` is distinguishable from
+    // one that never resolved at all.
+    launchClaudeWithTelemetry: "function",
+    parseClaudeResultTelemetry: "function",
+    providerTelemetryContractVersion: "moe-provider-telemetry/1",
+    providerTerminalOutcomesFrozen: true,
+    telemetryHelperLeaks: 0,
+    telemetryPublished: 8,
   });
 });
 

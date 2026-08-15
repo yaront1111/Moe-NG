@@ -22,6 +22,8 @@
  * quantity union removes at the field level: a record holding one known count
  * and one absent count would be indistinguishable from a fully measured one.
  */
+import { types } from "node:util";
+
 import { deepFreeze, isSafeByteCount } from "../../canonical.js";
 
 export const PROVIDER_TELEMETRY_CONTRACT_VERSION = "moe-provider-telemetry/1" as const;
@@ -33,12 +35,7 @@ export const PROVIDER_TELEMETRY_CONTRACT_VERSION = "moe-provider-telemetry/1" as
  * ever becomes `COMPLETED` by omission.
  */
 export const PROVIDER_TERMINAL_OUTCOMES = Object.freeze([
-  "COMPLETED",
-  "CANCELLED",
-  "MAX_TURNS_EXHAUSTED",
-  "ERROR_DURING_EXECUTION",
-  "REFUSED",
-  "UNKNOWN",
+  "COMPLETED", "CANCELLED", "MAX_TURNS_EXHAUSTED", "ERROR_DURING_EXECUTION", "REFUSED", "UNKNOWN",
 ] as const);
 export type ProviderTerminalOutcome = (typeof PROVIDER_TERMINAL_OUTCOMES)[number];
 
@@ -49,16 +46,8 @@ export type ProviderTerminalOutcome = (typeof PROVIDER_TERMINAL_OUTCOMES)[number
  * from an observed exit with an intact, admitted capture.
  */
 export const PROVIDER_INFRASTRUCTURE_OUTCOMES = Object.freeze([
-  "NONE",
-  "PROCESS_SIGNALLED",
-  "EXIT_UNOBSERVED",
-  "CAPTURE_TRUNCATED",
-  "CAPTURE_INCOMPLETE",
-  "SCHEMA_UNSUPPORTED",
-  "STREAM_ANOMALOUS",
-  "LAUNCH_REFUSED",
-  "LAUNCH_NOT_ATTEMPTED",
-  "UNKNOWN",
+  "NONE", "PROCESS_SIGNALLED", "EXIT_UNOBSERVED", "CAPTURE_TRUNCATED", "CAPTURE_INCOMPLETE",
+  "SCHEMA_UNSUPPORTED", "STREAM_ANOMALOUS", "LAUNCH_REFUSED", "LAUNCH_NOT_ATTEMPTED", "UNKNOWN",
 ] as const);
 export type ProviderInfrastructureOutcome = (typeof PROVIDER_INFRASTRUCTURE_OUTCOMES)[number];
 
@@ -79,21 +68,12 @@ export const PROVIDER_CONCURRENCY_FACTS =
 export type ProviderConcurrencyFact = (typeof PROVIDER_CONCURRENCY_FACTS)[number];
 
 export const PROVIDER_TELEMETRY_CODES = Object.freeze([
-  "TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED",
-  "TELEMETRY_CAPTURE_INCOMPLETE",
-  "TELEMETRY_CAPTURE_TRUNCATED",
-  "TELEMETRY_CAPTURE_UNDECODABLE",
-  "TELEMETRY_DECLARED_SELECTION_UNREADABLE",
-  "TELEMETRY_LAUNCH_NOT_ATTEMPTED",
-  "TELEMETRY_LAUNCH_REFUSED",
-  "TELEMETRY_MODEL_ABSENT",
-  "TELEMETRY_MODEL_AMBIGUOUS",
-  "TELEMETRY_RESULT_ABSENT",
-  "TELEMETRY_RUN_REF_MALFORMED",
-  "TELEMETRY_SCHEMA_UNSUPPORTED",
-  "TELEMETRY_STEPS_ABSENT",
-  "TELEMETRY_STREAM_ANOMALOUS",
-  "TELEMETRY_USAGE_ABSENT",
+  "TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED", "TELEMETRY_CAPTURE_INCOMPLETE",
+  "TELEMETRY_CAPTURE_TRUNCATED", "TELEMETRY_CAPTURE_UNDECODABLE",
+  "TELEMETRY_DECLARED_SELECTION_UNREADABLE", "TELEMETRY_LAUNCH_NOT_ATTEMPTED",
+  "TELEMETRY_LAUNCH_REFUSED", "TELEMETRY_MODEL_ABSENT", "TELEMETRY_MODEL_AMBIGUOUS",
+  "TELEMETRY_RESULT_ABSENT", "TELEMETRY_RUN_REF_MALFORMED", "TELEMETRY_SCHEMA_UNSUPPORTED",
+  "TELEMETRY_STEPS_ABSENT", "TELEMETRY_STREAM_ANOMALOUS", "TELEMETRY_USAGE_ABSENT",
 ] as const);
 export type ProviderTelemetryCode = (typeof PROVIDER_TELEMETRY_CODES)[number];
 
@@ -104,10 +84,7 @@ export type ProviderTelemetryCode = (typeof PROVIDER_TELEMETRY_CODES)[number];
  * green once a different layer started answering first.
  */
 export const PROVIDER_TELEMETRY_LAYERS = Object.freeze([
-  "TELEMETRY_INPUT",
-  "TELEMETRY_LAUNCH",
-  "TELEMETRY_CAPTURE",
-  "TELEMETRY_SCHEMA",
+  "TELEMETRY_INPUT", "TELEMETRY_LAUNCH", "TELEMETRY_CAPTURE", "TELEMETRY_SCHEMA",
   "TELEMETRY_RESULT",
 ] as const);
 export type ProviderTelemetryLayer = (typeof PROVIDER_TELEMETRY_LAYERS)[number];
@@ -230,6 +207,15 @@ export function countCoverage(facts: readonly ProviderQuantity[]): ProviderCount
  */
 export function snapshotRunRef(value: unknown): ProviderRunRef | null {
   if (typeof value !== "object" || value === null) return null;
+  // A proxy is refused BEFORE any property is read, matching the launcher's own
+  // discipline: a trap that has run has already had its effect whatever this
+  // guard decides afterwards, and a REVOKED proxy makes `isProxy` itself throw —
+  // so a value that will not answer whether it is a proxy is read as hostile.
+  try {
+    if (types.isProxy(value)) return null;
+  } catch {
+    return null;
+  }
   const raw = value as Record<string, unknown>;
   const runRef = raw["runRef"];
   const effectIntentId = raw["effectIntentId"];

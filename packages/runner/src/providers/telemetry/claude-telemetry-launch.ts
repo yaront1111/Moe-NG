@@ -29,7 +29,7 @@ import {
   type ClaudeTokenObservations,
 } from "./claude-result-telemetry.js";
 import {
-  countCoverage, knownCount, snapshotRunRef, telemetryRefusal, unknownFact,
+  countCoverage, knownCount, readText, snapshotRunRef, telemetryRefusal, unknownFact,
   type ProviderConcurrencyFact, type ProviderFactUnknown, type ProviderInfrastructureOutcome,
   type ProviderQuantity, type ProviderRunRef, type ProviderTelemetryCode,
   type ProviderTelemetryRefusal, type ProviderTerminalOutcome, type ProviderText,
@@ -51,6 +51,7 @@ export interface ClaudeTelemetryLaunchFacts {
   readonly truthClass: ClaudeLaunchTruthClass;
   readonly reasonCode: ClaudeLaunchErrorCode | null;
   readonly reasonLayer: ClaudeLaunchLayer | null;
+  readonly exit: ClaudeLaunchExit | null;
   readonly effectDigest: string | null;
   readonly activationDigest: string | null;
   readonly runtimeBindingDigest: string | null;
@@ -60,11 +61,9 @@ export interface ClaudeTelemetryLaunchFacts {
   readonly observationDigest: string | null;
   readonly startedAt: string | null;
   readonly completedAt: string | null;
-  readonly exit: ClaudeLaunchExit | null;
 }
-export interface ClaudeTelemetryLaunchInput
-  { readonly providerRunRef: unknown; readonly request: unknown;
-    readonly options?: ClaudeLaunchOptions }
+export interface ClaudeTelemetryLaunchInput { readonly providerRunRef: unknown;
+  readonly request: unknown; readonly options?: ClaudeLaunchOptions }
 export type ClaudeTelemetryLaunchResult =
   | { readonly ok: true; readonly handoff: ClaudeTelemetryHandoff } | ProviderTelemetryRefusal;
 
@@ -95,15 +94,17 @@ const INFRASTRUCTURE_BY_CODE:
 
 const blindTokens = (fact: ProviderFactUnknown): ClaudeTokenObservations => Object.freeze({
   inputTokens: fact, outputTokens: fact, cacheCreationInputTokens: fact,
-  cacheReadInputTokens: fact, coverage: countCoverage([fact, fact, fact, fact]),
-});
+  cacheReadInputTokens: fact, coverage: countCoverage([fact, fact, fact, fact]) });
 const blindSteps = (fact: ProviderFactUnknown): ClaudeStepObservations =>
   Object.freeze({ turns: fact, coverage: countCoverage([fact]) });
 const blindModel = (fact: ProviderFactUnknown): ClaudeObservedModel =>
   Object.freeze({ modelId: fact, snapshotKind: "UNKNOWN", snapshotEvidence: fact });
-/** The launcher's digest over every captured byte, bound rather than re-hashed. */
-const receipt = (evidence: ClaudeStreamEvidence): ProviderText =>
-  Object.freeze({ known: true as const, value: evidence.sha256 });
+/** Bound rather than re-hashed, but through the same bounded-text reader every
+ *  other observed string uses: an empty or unprintable digest becomes an
+ *  explicit UNKNOWN receipt, never a known one nobody can verify. */
+const receipt = (evidence: ClaudeStreamEvidence): ProviderText => readText(
+  { sha256: evidence.sha256 }, "sha256",
+  unknownFact("TELEMETRY_CAPTURE_UNDECODABLE", "TELEMETRY_CAPTURE"));
 
 /**
  * Own DATA descriptors only, behind the launcher's own proxy guard. An accessor

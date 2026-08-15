@@ -167,6 +167,30 @@ describe("run reference", () => {
     expect(REJECTED.length).toBe(8);
     expect(REJECTED.filter(([, value]) => snapshotRunRef(value) !== null)).toEqual([]);
   });
+
+  it("refuses a proxy before reading a single property, and a revoked one too", () => {
+    // A trap that has run has already had its effect whatever the guard decides
+    // afterwards, so the refusal has to come BEFORE the first read. The counter
+    // proves the reads never happened rather than merely that the answer was no.
+    let traps = 0;
+    const hostile = new Proxy({ ...REF }, {
+      get: (target, key, receiver) => { traps += 1; return Reflect.get(target, key, receiver); },
+      getOwnPropertyDescriptor: (target, key) => {
+        traps += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    expect(snapshotRunRef(hostile)).toBeNull();
+    expect(traps).toBe(0);
+    // Positive control: the SAME record without the proxy is adopted, so the
+    // refusal above cannot be passing because the reader is simply broken.
+    expect(snapshotRunRef({ ...REF })).toEqual(REF);
+    // A revoked proxy makes `types.isProxy` itself throw; the throw is contained
+    // and read as hostile rather than escaping to the caller.
+    const revocable = Proxy.revocable({ ...REF }, {});
+    revocable.revoke();
+    expect(snapshotRunRef(revocable.proxy)).toBeNull();
+  });
 });
 
 /**

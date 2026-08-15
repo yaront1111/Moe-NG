@@ -419,13 +419,15 @@ describe("never-zero", () => {
     expect(Buffer.byteLength(stdout, "utf8")).toBeGreaterThan(boundary);
     const { tokens, steps, telemetryRefusal, infrastructure } = await armHandoff(
       { stdout, overrides: { limits: { ...LIMITS, stdoutBytes: boundary } } });
-    expect(telemetryRefusal?.code).toBe("TELEMETRY_CAPTURE_TRUNCATED");
-    expect(infrastructure).toBe("CAPTURE_TRUNCATED");
+    // COVERAGE FIRST, deliberately: this is the assertion the truncation guard
+    // exists to hold, so a drill that starts summing the prefix reddens on the
+    // coverage CLASS rather than on a merely different number.
     expect(tokens.coverage).toBe("UNKNOWN");
     expect(steps.coverage).toBe("UNKNOWN");
-    // Not merely a different number: the prefix's own plausible total is absent.
     expect(tokens.inputTokens).not.toEqual({ known: true, value: 4 });
     expect(JSON.stringify({ tokens, steps })).not.toContain('"value"');
+    expect(telemetryRefusal?.code).toBe("TELEMETRY_CAPTURE_TRUNCATED");
+    expect(infrastructure).toBe("CAPTURE_TRUNCATED");
   });
 
   it("keeps a missing usage block unmeasured while the step count stays observed", async () => {

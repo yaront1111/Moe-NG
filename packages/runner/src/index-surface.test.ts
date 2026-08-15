@@ -2175,3 +2175,28 @@ it("launches with telemetry through the root and names the handoff type closure"
   expect(runner.PROVIDER_TELEMETRY_LAYERS).toContain(layer);
   expect(runner.PROVIDER_TELEMETRY_CONTRACT_VERSION).toBe("moe-provider-telemetry/1");
 });
+
+/**
+ * Negative control for the telemetry seam's WIDTH. Every withheld name MINTS a
+ * fact — a known quantity, an UNKNOWN carrying a reason code, a coverage class,
+ * a refusal record, or the message table behind one. A consumer able to call any
+ * of them could hand a downstream normalizer a "provider-observed" measurement
+ * no provider ever emitted, which is the exact invention this seam exists to
+ * make impossible.
+ */
+it("withholds every fact-minting telemetry helper from the root", () => {
+  const withheld = [
+    "knownCount", "readCount", "readText", "countCoverage", "unknownFact",
+    "telemetryRefusal", "snapshotRunRef", "PROVIDER_TELEMETRY_MESSAGES",
+  ];
+  expect(withheld.length).toBe(8);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the IDENTICAL membership check over names this seam does
+  // publish, so the assertion above cannot be passing because `in` is broken.
+  const published = [
+    "launchClaudeWithTelemetry", "parseClaudeResultTelemetry",
+    "PROVIDER_TELEMETRY_CODES", "PROVIDER_TERMINAL_OUTCOMES",
+  ];
+  expect(published.length).toBe(4);
+  expect(published.filter((name) => name in surface)).toEqual(published);
+});

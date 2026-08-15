@@ -150,10 +150,10 @@ function observedModelOf(lines: readonly ParsedStreamLine[]): ClaudeObservedMode
     const fact = unknownFact(code, "TELEMETRY_RESULT");
     return Object.freeze({ modelId: fact, snapshotKind: "UNKNOWN", snapshotEvidence: fact });
   }
-  const [value] = [...ids];
-  const modelId: ProviderText = Object.freeze({ known: true as const, value: value as string });
+  const value = [...ids].join("");
+  const modelId: ProviderText = Object.freeze({ known: true as const, value });
   for (const kind of ["DATED_SNAPSHOT", "BUILD_STAMP"] as const) {
-    const evidence = CLAUDE_MODEL_EVIDENCE_PATTERNS[kind].exec(value as string)?.[1];
+    const evidence = CLAUDE_MODEL_EVIDENCE_PATTERNS[kind].exec(value)?.[1];
     if (evidence === undefined) continue;
     return Object.freeze({
       modelId, snapshotKind: kind,
@@ -199,7 +199,7 @@ function terminalOf(subtype: string | null): ProviderTerminalOutcome {
 
 function decodeCapture(evidence: ClaudeStreamEvidence): Uint8Array | ProviderTelemetryRefusal {
   if (evidence.complete !== true) return refuse("TELEMETRY_CAPTURE_INCOMPLETE", "TELEMETRY_CAPTURE");
-  if (evidence.truncated !== false) return Buffer.from(evidence.capturedBase64, "base64");
+  if (evidence.truncated !== false) return refuse("TELEMETRY_CAPTURE_TRUNCATED", "TELEMETRY_CAPTURE");
   const bytes = Buffer.from(evidence.capturedBase64, "base64");
   if (
     bytes.toString("base64") !== evidence.capturedBase64 ||
