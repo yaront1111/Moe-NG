@@ -30,6 +30,10 @@
     "verify:store": "pnpm typecheck && pnpm test:store",
     "verify:release": "pnpm typecheck:release && pnpm test:integration && pnpm release:evidence"
   },
+  "dependencies": {
+    "@moe/daemon": "workspace:*",
+    "@moe/runner": "workspace:*"
+  },
   "devDependencies": {
     "@cyclonedx/cdxgen": "12.8.2",
     "@playwright/test": "1.62.1",
