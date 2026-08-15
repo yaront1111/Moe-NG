@@ -171,7 +171,8 @@ export {
   type DoctorRequestInvalid,
   type DoctorVersionReportAbsent,
 } from "./recovery/doctor-commands.js";
-export type { DoctorVersionsReported } from "./recovery/doctor-version-contract.js";
+export { collectDoctorVersionReport } from "./recovery/doctor-version.node.js";
+export type { DoctorVersionReport, DoctorVersionsReported } from "./recovery/doctor-version-contract.js";
 export { REVIEW_HANDLERS } from "./review/review-services.js";
 export type {
   DeltaClassification,

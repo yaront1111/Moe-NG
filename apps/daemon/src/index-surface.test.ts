@@ -60,6 +60,7 @@ import type {
   DoctorProposed,
   DoctorReported,
   DoctorRequestInvalid,
+  DoctorVersionReport,
   DoctorVersionReportAbsent,
   DoctorVersionsReported,
   DurableDecision,
@@ -271,6 +272,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
+  ["collectDoctorVersionReport", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
   ["createRecoverySuccessionService", "function"],
@@ -321,7 +323,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(78);
+    expect(EXPECTED_EXPORTS.length).toBe(79);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -331,6 +333,29 @@ describe("daemon package root", () => {
   it.each(EXPECTED_EXPORTS)("publishes %s as %s", (name, kind) => {
     expect(typeof surface[name]).toBe(kind);
   });
+
+  it("collects executing-host versions through the bare root in plain Node", async () => {
+    const daemonDirectory = fileURLToPath(new URL("..", import.meta.url));
+    const source = `
+import assert from "node:assert/strict";
+import { collectDoctorVersionReport } from "@moe/daemon";
+const report = await collectDoctorVersionReport();
+assert.deepStrictEqual(report.observed.platform, { known: true, value: process.platform });
+assert.deepStrictEqual(report.observed.node, { known: true, value: process.version });
+process.stdout.write(JSON.stringify({ node: report.observed.node, platform: report.observed.platform }));
+`;
+    const result = await execFileAsync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", source],
+      { cwd: daemonDirectory, maxBuffer: 1_048_576, timeout: 60_000, windowsHide: true },
+    );
+
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({
+      node: { known: true, value: process.version },
+      platform: { known: true, value: process.platform },
+    });
+  }, 70_000);
 
   it("publishes the review command table by name with exactly its four handlers", () => {
     expect(Object.hasOwn(daemon, "REVIEW_HANDLERS")).toBe(true);
@@ -510,6 +535,8 @@ describe("daemon package-root type closure", () => {
       DoctorAuthorityStale | DoctorInputRejected | DoctorProposed | DoctorReported
       | DoctorRequestInvalid | DoctorVersionsReported | DoctorVersionReportAbsent
     >();
+    expectTypeOf<ReturnType<typeof daemon.collectDoctorVersionReport>>()
+      .toEqualTypeOf<Promise<DoctorVersionReport>>();
     expectTypeOf<ReturnType<typeof daemon.evaluateDoctorCommandBytes>>()
       .toEqualTypeOf<DoctorCommandResult>();
   });
