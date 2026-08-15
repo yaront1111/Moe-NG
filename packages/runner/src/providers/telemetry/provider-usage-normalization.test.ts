@@ -237,14 +237,51 @@ describe("normalizeProviderUsage — production path", () => {
     expect(result.code).toBe("PROVIDER_USAGE_RECEIPT_UNKNOWN");
   });
 
-  it("refuses a prior that is not a normalizer-issued record", async () => {
+  /**
+   * The context is the one input a CALLER supplies, so every hostile shape must
+   * come back as a typed refusal rather than a throw. A revoked proxy is listed
+   * by name because `Array.isArray` THROWS on one, and an accessor is listed
+   * because it is the caller's own code running inside the read that decides
+   * whether to trust the caller.
+   */
+  const HOSTILE_CONTEXTS: readonly (readonly [string, () => unknown])[] = [
+    ["a prior that is not a normalizer-issued record",
+      () => ({ priors: [{ identity: 1 }] })],
+    ["a prior carrying no measurement", () => ({ priors: [{ identity: "x" }] })],
+    ["a sparse prior array", () => ({ priors: Array.from({ length: 2 }) })],
+    ["priors that are not an array at all", () => ({ priors: "provider.input_tokens" })],
+    ["a context with no own priors property", () => ({})],
+    ["an accessor that runs caller code", () => Object.defineProperty({}, "priors", {
+      get: () => { throw new Error("accessor ran"); }, configurable: true })],
+    ["a revoked proxy as the context", () => {
+      const revocable = Proxy.revocable({ priors: [] }, {});
+      revocable.revoke();
+      return revocable.proxy;
+    }],
+    ["a revoked proxy as the priors array", () => {
+      const revocable = Proxy.revocable([] as unknown[], {});
+      revocable.revoke();
+      return { priors: revocable.proxy };
+    }],
+  ];
+
+  it("pins a non-empty hostile-context table", () => {
+    expect(HOSTILE_CONTEXTS.length).toBe(8);
+  });
+
+  it.each(HOSTILE_CONTEXTS)("refuses %s without throwing", async (_label, make) => {
     const handoff = await handoffOf();
-    const result = normalizeProviderUsage(handoff,
-      { priors: [{ identity: 1 } as unknown as NormalizedMeasurement] });
+    const result = normalizeProviderUsage(
+      handoff, make() as unknown as Parameters<typeof normalizeProviderUsage>[1]);
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("a forged prior was accepted");
+    if (result.ok) throw new Error("a hostile context was accepted");
     expect(result.layer).toBe("USAGE_INPUT");
     expect(result.code).toBe("PROVIDER_USAGE_PRIOR_UNREADABLE");
+  });
+
+  it("still accepts the ordinary empty-priors context", async () => {
+    const measurements = measured(await usageOfRun());
+    expect(measurements.length).toBe(4);
   });
 });
 

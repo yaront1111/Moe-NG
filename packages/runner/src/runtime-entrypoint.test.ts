@@ -58,14 +58,20 @@ try {
     // the same child: a leak count of 0 produced by a broken check would leave
     // the published count at 0 too, so the pair cannot both be satisfied by a
     // membership test that has stopped working.
+    buildProviderRunRecord: typeof ns.buildProviderRunRecord,
+    normalizeProviderUsage: typeof ns.normalizeProviderUsage,
+    providerRunRecordVersion: ns.PROVIDER_RUN_RECORD_VERSION,
+    providerUsageContractVersion: ns.PROVIDER_USAGE_CONTRACT_VERSION,
     telemetryHelperLeaks: [
       "knownCount", "readCount", "readText", "countCoverage", "unknownFact",
       "telemetryRefusal", "snapshotRunRef", "PROVIDER_TELEMETRY_MESSAGES",
+      "providerUsageRefusal", "PROVIDER_USAGE_MESSAGES",
     ].filter((name) => name in ns).length,
     telemetryPublished: [
       "launchClaudeWithTelemetry", "parseClaudeResultTelemetry", "PROVIDER_TELEMETRY_CODES",
       "PROVIDER_TELEMETRY_LAYERS", "CLAUDE_TELEMETRY_HANDOFF_VERSION",
       "CLAUDE_RESULT_TELEMETRY_VERSION", "CLAUDE_TOKEN_FIELDS", "CLAUDE_RESULT_SUBTYPES",
+      "PROVIDER_USAGE_METERS", "PROVIDER_USAGE_CODES",
     ].filter((name) => name in ns).length,
   });
 } catch (error) {
@@ -123,8 +129,16 @@ it("loads @moe/runner in Node's strip-types runtime with its named exports defin
     parseClaudeResultTelemetry: "function",
     providerTelemetryContractVersion: "moe-provider-telemetry/1",
     providerTerminalOutcomesFrozen: true,
+    // The record seam's three modules each sit behind their own `.js` bridge
+    // too, and both versions are read as VALUES for the same reason: a bridge
+    // that resolved to nothing would leave a `typeof` reporting "undefined"
+    // while a missing version string names the module that failed.
+    buildProviderRunRecord: "function",
+    normalizeProviderUsage: "function",
+    providerRunRecordVersion: "moe-provider-run-record/1",
+    providerUsageContractVersion: "moe-provider-usage/1",
     telemetryHelperLeaks: 0,
-    telemetryPublished: 8,
+    telemetryPublished: 10,
   });
 });
 

@@ -162,6 +162,7 @@ export { fenceMirroredLease, type MirrorVerdict } from "./supervisor/lease-mirro
 export * from "./surface/claude-surface.js";
 export * from "./surface/codex-surface.js";
 export * from "./surface/evidence-surface.js";
+export * from "./surface/provider-record-surface.js";
 export * from "./surface/recovery-inventory-surface.js";
 export * from "./surface/recovery-surface.js";
 

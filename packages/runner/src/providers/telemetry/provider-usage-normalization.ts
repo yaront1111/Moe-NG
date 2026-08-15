@@ -108,7 +108,7 @@ function rowFor(
  * silently ignored — an ignored prior would turn a rewind into an acceptance.
  */
 function priorIndex(
-  priors: readonly NormalizedMeasurement[],
+  priors: unknown,
 ): ReadonlyMap<string, NormalizedMeasurement> | null {
   try {
     if (types.isProxy(priors)) return null;
@@ -135,6 +135,28 @@ function priorIndex(
     index.set(meter, prior);
   }
   return index;
+}
+
+/**
+ * The context is CALLER data, so it is read as an own DATA descriptor behind a
+ * proxy guard rather than by property access: an accessor on `priors` would be
+ * the caller's own code running inside the read that decides whether to trust
+ * the caller, and a throwing getter would turn a refusal into an exception.
+ */
+function readPriors(context: ProviderUsageContext): unknown {
+  if (typeof context !== "object" || context === null) return null;
+  try {
+    if (types.isProxy(context)) return null;
+  } catch {
+    return null;
+  }
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(context, "priors");
+  } catch {
+    return null;
+  }
+  return descriptor === undefined || !("value" in descriptor) ? null : descriptor.value;
 }
 
 function costBasisOf(
@@ -168,7 +190,7 @@ export function normalizeProviderUsage(
   if (!handoff.stdoutReceiptDigest.known) {
     return providerUsageRefusal("PROVIDER_USAGE_RECEIPT_UNKNOWN", "USAGE_INPUT");
   }
-  const priors = priorIndex(context.priors);
+  const priors = priorIndex(readPriors(context));
   if (priors === null) {
     return providerUsageRefusal("PROVIDER_USAGE_PRIOR_UNREADABLE", "USAGE_INPUT");
   }

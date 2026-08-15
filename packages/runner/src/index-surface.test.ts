@@ -2061,10 +2061,10 @@ function owningSurfaces(name: string): readonly string[] {
 it("leaves the ten Family B Codex types owned by exactly one surface module", () => {
   // Guard the case list itself: an empty enumeration would pass every assertion
   // below while measuring nothing.
-  expect(SURFACE_SOURCES.size).toBe(5);
+  expect(SURFACE_SOURCES.size).toBe(6);
   expect([...SURFACE_SOURCES.keys()].sort()).toEqual([
     "claude-surface.ts", "codex-surface.ts", "evidence-surface.ts",
-    "recovery-inventory-surface.ts", "recovery-surface.ts",
+    "provider-record-surface.ts", "recovery-inventory-surface.ts", "recovery-surface.ts",
   ]);
 
   // Positive control for the stripper, both directions. `CodexCancelObservation`
@@ -2255,11 +2255,16 @@ it("builds a provider-run record through the root and names its type closure", a
   expect(runner.PROVIDER_INFRASTRUCTURE_OUTCOMES).toContain(record.infrastructure);
   expect(runner.PROVIDER_CONCURRENCY_FACTS).toContain(concurrency.fact);
   expect([snapshotKind, observed.snapshotKind]).toEqual(["UNKNOWN", "UNKNOWN"]);
-  // Every unmeasured fact on this arm carries the launcher's own reason, and no
-  // count anywhere became a zero.
+  // Every unmeasured fact carries a reason, and WHICH layer answered depends on
+  // the family: launch facts inherit the launcher's refusal, while the declared
+  // digests inherit the selection reader's — the two are not interchangeable.
   const blind = { known: false, code: "TELEMETRY_LAUNCH_REFUSED", layer: "TELEMETRY_LAUNCH" };
-  expect([identity.effectDigest, runtimeEvidence.observationDigest, decision.policyDigest,
-    tokens.inputTokens, steps.count]).toEqual([blind, blind, blind, blind, blind]);
+  const undeclared = { known: false, code: "TELEMETRY_DECLARED_SELECTION_UNREADABLE",
+    layer: "TELEMETRY_INPUT" };
+  expect([identity.effectDigest, runtimeEvidence.observationDigest, tokens.inputTokens,
+    steps.count]).toEqual([blind, blind, blind, blind]);
+  expect([decision.policyDigest, model.selectedModelId, runtimeEvidence.profileRevisionId])
+    .toEqual([undeclared, undeclared, undeclared]);
 });
 
 it("normalizes provider usage through the root and refuses an unobserved interval", async () => {
