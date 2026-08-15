@@ -156,7 +156,7 @@
       "completedAt": "2026-08-15T13:57:56.307Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -169,7 +169,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:47.411Z",
-  "updatedAt": "2026-08-15T13:59:41.048Z",
+  "updatedAt": "2026-08-15T14:06:28.926Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -178,11 +178,14 @@
     "firstClaimAt": "2026-08-15T12:40:26.844Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-15T14:06:28.926Z",
+    "wallClockMs": 5162082
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
-    "worker-40286572"
+    "worker-40286572",
+    "qa-4ec0a625"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -234,5 +237,8 @@
     "apps/daemon/src/coordination/coordination-adapter.ts",
     "apps/daemon/src/activation/foundation-activation-contracts.ts",
     "apps/daemon/src/activation/foundation-activation-contracts.js"
-  ]
+  ],
+  "completedAt": "2026-08-15T14:06:28.926Z",
+  "reviewCompletedAt": "2026-08-15T14:06:28.926Z",
+  "reviewSummary": "APPROVED. Re-ran every gate myself, separately, redirected to files (never chained/piped): daemon typecheck 0; daemon test 0 (77 files/1661); runner test 0 (60/2014); verify:foundation 0 (32/661); verify:store 0 (42/502). Repo-wide pnpm typecheck and pnpm test are EXIT 1 on FOREIGN paths only: packages/mcp http-shutdown.* is a live peer's UNTRACKED WIP (TS2307 \"Cannot find module './http-shutdown.js'\", absent at HEAD and at base 6482e5f1) plus 2 http-server-lifecycle tests; tests/integration/control-room-transport fails on an 8 ms seamObservation timestamp inside a whole-payload deepEqual, owned by 4932d9b (task-371c80bd), which is NOT an ancestor of this task's base and reaches no activation/coordination symbol. Failing-path intersection with the 8 owned paths: EMPTY.\nDoD verified 1-5: reader is purely additive, readActivationLedgerRecord byte-unchanged, no competing codec/aggregate/initial commit; grant+PREFLIGHT+OBSERVED are CAS at expectedVersion 1/2/3 with REPLAYED requiring byte-identical stored event AND result bytes; binding returns frozen BOUND only on ACTIVE/RUNNING + lease ACTIVE/unexpired + digest-coherent + intentId/ownerSessionRef equality, else exact ABSENT/UNKNOWN codes at FOUNDATION_ACTIVATION_BINDING; real two-worker SqliteEventStore race asserts 2 results, exactly 1 CONSUMED, loser GRANT_ALREADY_CONSUMED/GRANT, exact event-type list, counts, version 2; no DatabaseSync/ad-hoc SQLite; sweeps assert cases>0.\nMy own drills (independent, anchor=1, sha256-restored, tree clean): dropping the ownerSessionRef equality reddened both suites on QUERY_MISMATCH and on the coordination wrong-session case; disabling the committed-grant equality guard reddened the ACTIVATION_COMMIT_INCOHERENT/ACTIVATION/GRANT_CONSUME test.\nPer-file lines 296/294/328/250, all under 400. All 8 owned paths: HEAD blob == working-tree hash. Files swept by foreign commit 79dcf18 - not a rejection reason."
 }

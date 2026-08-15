@@ -94,8 +94,8 @@
       "completedAt": "2026-08-15T13:42:22.684Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -107,12 +107,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:28.441Z",
-  "updatedAt": "2026-08-15T13:53:21.697Z",
+  "updatedAt": "2026-08-15T13:59:52.893Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:05:58.161Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T13:59:52.893Z",
+    "wallClockMs": 3234732
   },
   "stepsCompleted": [
     "step-1",
@@ -155,5 +157,8 @@
     "packages/control-room-client/src/client-transport.ts",
     "packages/control-room-client/src/client-transport.test.ts",
     "tests/integration/control-room/control-room-transport.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:59:52.893Z",
+  "reviewCompletedAt": "2026-08-15T13:59:52.893Z",
+  "reviewSummary": "VERIFIED, not trusted. task.verification was NARROWER than the DoD (focused src/http, -t \"Origin guard\"), so I re-ran the WIDE chain fresh, legs separate: client typecheck 0; client test 0 (6 files/41); pnpm --filter @moe/daemon test 0 (77 files/1661 - peer activation red gone). Integration control-room-transport: 4 passed / 1 failed.\n\nTHAT FAILURE IS PRE-EXISTING, PROVEN not merely disclosed: restored merge-base (de936fe) bytes for BOTH client-transport.ts AND the integration test, re-ran - identical single failure (\"payload EQUALS the in-process handler's\", wall-clock skew, observer.now() event-stream.ts:80,87). Delta INTERSECT owned paths = EMPTY. Restored, sha256 re-matched, owned-path status clean.\n\nTWO PRODUCTION DRILLS, both killed:\n(A) re-add `origin: options.origin` to headersFor -> \"sets the EXACT header set\" RED (1 failed/7 passed, precisely targeted) AND integration Origin arm RED (absent-Origin became admitted). DoD 1+2 live.\n(B) guard -> `if (true) return \"LISTENER_ORIGIN_INVALID\"` -> the NEW ADMITS arm RED.\nBoth restored; guard :127 byte-identical, git diff empty.\n\nDoD 1-5 met. Refusals pin exact code AND layer via toEqual({code:\"LISTENER_ORIGIN_INVALID\",layer:\"CONTROL_ROOM_LISTENER\"}), never bare non-200. URL prefix `${options.origin}${path}` intact :128; csrf/session-credential/protocol-version unchanged (exactly one line removed). RAILS: guard NOT relaxed (diff de936fe..HEAD empty for http-listener-guards.ts + http-listener.ts); Origin reaches the daemon only from the fetch layer, and the ABSENT arm passes NO wrapper so the shipped transport is what is tested; generated-client.ts untouched; client-transport.ts 158 lines (grep -c ''). Vite proxy supplies origin itself (vite.config.ts:59-66), dev never depended on the header. tests/integration typechecks nowhere - hand-ran strict tsc, exit 0."
 }
