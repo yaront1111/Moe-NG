@@ -1,6 +1,12 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
-import { applyApprovalCommand, reducePlanningRun } from "@moe/core";
-import type { PlanningRunCommand, PlanningRunEvent, PlanningRunState } from "@moe/core";
+import { applyApprovalCommand, decideApprovalAuthority, reducePlanningRun } from "@moe/core";
+import type {
+  ApprovalPolicy,
+  HumanAuthorityGate,
+  PlanningRunCommand,
+  PlanningRunEvent,
+  PlanningRunState,
+} from "@moe/core";
 
 import {
   commitAccepted,
@@ -18,6 +24,12 @@ import type {
   ServiceOutcome,
 } from "../bootstrap/bootstrap-ledger.js";
 import { activateInitialGraph } from "./approval-activation.js";
+import {
+  approvalDelayDisposition,
+  persistApprovalGate,
+  planningStateFromDurableRecord,
+  readApprovalGate,
+} from "./approval-gate.js";
 
 /**
  * Plan proposal and approval — the two authority-bearing commands in this task.
@@ -92,28 +104,45 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   }
 
   const prior = stateOf(ledger, runId);
+  const priorState = planningStateFromDurableRecord(prior);
   const folded = foldChain(
     context,
-    prior === undefined || prior === null ? undefined : (prior as unknown as PlanningRunState),
+    priorState === undefined ? undefined : (priorState as unknown as PlanningRunState),
     commands,
   );
   if (!folded.ok) return folded.outcome;
 
+  const result = persistApprovalGate({
+    state: folded.state as unknown as JsonValue,
+    submissionHash: folded.state.submissionHash,
+  }, prior, request.payload["humanAuthorityGate"]);
   return commitAccepted(store, request, {
     aggregateId: runId,
     eventPayload: folded.events as unknown as JsonValue,
     eventType: "PlanProposed",
     expectedVersion: versionOf(ledger, runId),
-    result: {
-      state: folded.state,
-      submissionHash: folded.state.submissionHash,
-    } as unknown as JsonValue,
+    result,
   });
 };
 
 interface DurableRun {
+  readonly gate: HumanAuthorityGate | null;
   readonly goalRef: string;
   readonly submissionHash: string;
+}
+
+const DEFAULT_APPROVAL_POLICY: ApprovalPolicy = Object.freeze({
+  delayMs: 0,
+  kind: "PROCEED_WITHOUT_HUMAN",
+});
+
+function approvalPolicy(payload: JsonObject): ApprovalPolicy {
+  const value = payload["approvalPolicy"];
+  if (value === undefined) return DEFAULT_APPROVAL_POLICY;
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as unknown as ApprovalPolicy;
+  }
+  return { kind: "INVALID_POLICY" } as unknown as ApprovalPolicy;
 }
 
 /**
@@ -129,7 +158,7 @@ function durableRun(context: HandlerContext, runId: string): DurableRun | null {
   const state = payloadObject(run as JsonObject, "state");
   const goalRef = state === null ? null : payloadRef(state, "goalRef");
   if (submissionHash === null || goalRef === null) return null;
-  return { goalRef, submissionHash };
+  return { gate: readApprovalGate(run, runId).gate, goalRef, submissionHash };
 }
 
 /**
@@ -158,6 +187,15 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
   const run = durableRun(context, runId);
   if (run === null || payloadRef(record, "exactRevisionHash") !== run.submissionHash) {
     return refuse(request.kind, "BOOTSTRAP_REVISION_HASH_MISMATCH", "DAEMON_PREREQUISITE");
+  }
+
+  const authority = decideApprovalAuthority({
+    gate: run.gate,
+    policy: approvalPolicy(request.payload),
+  });
+  if (!authority.ok) return refuse(request.kind, authority.code, authority.layer);
+  if (approvalDelayDisposition(authority.delayMs) !== "IMMEDIATE") {
+    return refuse(request.kind, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }
 
   const verdict = applyApprovalCommand(record, command);

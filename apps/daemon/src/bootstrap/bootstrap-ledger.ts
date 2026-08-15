@@ -1,5 +1,6 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue, RuntimeError } from "@moe/contracts";
+import { APPROVAL_AUTHORITY_LAYERS } from "@moe/core";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
@@ -35,6 +36,7 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   "DAEMON_PREREQUISITE",
   "CORE_REDUCER",
   "DURABLE_STORE",
+  ...APPROVAL_AUTHORITY_LAYERS,
 ] as const);
 
 export type ServiceRefusedBy = (typeof SERVICE_REFUSED_BY)[number];
