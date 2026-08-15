@@ -37,6 +37,9 @@ const MCP_MAIN = new URL("../mcp-main.ts", import.meta.url).pathname
 
 function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
+  // Per-agent files are removed as each agent exits; the directory itself goes
+  // with the wrapper process, whichever way it ends.
+  process.once("exit", () => { rmSync(configDir, { force: true, recursive: true }); });
   const command = process.env["MOE_AGENT_COMMAND"] ?? "claude";
   return (request: SpawnRequest): Promise<void> => {
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
