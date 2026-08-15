@@ -26,8 +26,7 @@ export interface ProjectConfigurationStore {
   getCommandDecision(key: Readonly<{ commandId: string; principalId: string; projectId: string }>): CommandDecisionRecord | null;
   readAggregateEvents(aggregateId: string, after: number, limit: number): CursorPage<StoredEvent, number>;
 }
-const EVENT_TYPE = "ProjectConfigurationSelected", COMMAND_KIND = "project-configuration.select";
-const TAIL_ATTEMPTS = 3, HEX64 = /^[0-9a-f]{64}$/u;
+const EVENT_TYPE = "ProjectConfigurationSelected", COMMAND_KIND = "project-configuration.select", TAIL_ATTEMPTS = 3, HEX64 = /^[0-9a-f]{64}$/u;
 const PAGE_KEYS = ["hasMore", "items", "nextCursor"] as const;
 const EVENT_KEYS = ["aggregateId", "aggregateSequence", "commandId", "committedAt", "decisionTrace", "domainSchemaVersion", "eventId", "eventType", "globalPosition", "metadata", "payload", "payloadCodecVersion", "recordVersion", "requestSha256"] as const;
 const TRACE_KEYS = ["commandId", "commandKind", "principalId", "projectId", "requestIdentityVersion", "requestSha256"] as const;
