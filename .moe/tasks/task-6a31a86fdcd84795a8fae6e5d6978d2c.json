@@ -20,13 +20,14 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST. Add a focused test for persistFileDurably that injects a write which reports FEWER bytesWritten than the payload length, and assert the call does not report success. Today packages/store/src/recovery-anchor-fs.ts:23-31 is `await handle.write(payload); await handle.sync();` inside a try/finally, and the function's return type is `Promise<void>` - so the resolved {bytesWritten} is discarded and a partial write is indistinguishable from a complete one. Inject by substituting the open/write seam rather than by writing to a real device that happens to short-write, which is not reproducible. Record the red. NOTE FOR THE TEST'S SHAPE: this module throws rather than returning refusal objects - every function here is `Promise<void>` or `Promise<T|null>` and callers map exceptions (recovery-anchor-install.ts:79 and :110 are the catch sites). So the assertion is on the thrown failure and, at the caller level, on the exact stable code that catch maps to; do not change these primitives to return refusal objects, which would ripple through five call sites for no gain.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
       ],
       "newFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:18:20.592Z"
     },
     {
       "stepId": "step-2",
@@ -63,7 +64,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-06df66bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -75,7 +76,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:20.342Z",
-  "updatedAt": "2026-08-15T13:00:01.080Z",
+  "updatedAt": "2026-08-15T13:18:20.592Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:58:27.180Z",
     "plannedStepCount": 5,
@@ -98,5 +99,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-15T13:00:01.080Z"
+  "planApprovedAt": "2026-08-15T13:00:01.080Z",
+  "contextFetchedBy": [
+    "worker-06df66bb"
+  ],
+  "workStartedAt": "2026-08-15T13:18:20.592Z"
 }

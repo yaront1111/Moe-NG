@@ -788,3 +788,127 @@ describe("resume after the switch completes the marker instead of re-installing"
     expect(resumed.anchor.currentSlot).toBe(midWindow.anchor.currentSlot);
   });
 });
+
+describe("the post-switch arm does not swallow the cases around it", () => {
+  it("still runs a full install when the crash landed BEFORE the switch", async () => {
+    const root = anchorRoot("pre-switch");
+    const crash = new Error("injected fault at SWITCH");
+    await expect(
+      installRecoveryAnchor(
+        request({
+          anchorRoot: root,
+          injectFault: (reached: string) => {
+            if (reached === "SWITCH") throw crash;
+          },
+        }),
+      ),
+    ).rejects.toThrow("injected fault at SWITCH");
+
+    // The genuine pre-switch state: PREPARED, and current still names the OTHER
+    // slot. A condition written one notch too broadly would mistake this for a
+    // completed switch and skip a real install.
+    const midWindow = await inspectRecoveryAnchor(root);
+    if (!midWindow.ok || midWindow.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(midWindow.anchor.state).toBe("PREPARED");
+    expect(midWindow.anchor.currentSlot).not.toBe(midWindow.anchor.targetSlot);
+
+    const observed: string[] = [];
+    const resumed = await installRecoveryAnchor(
+      request({ anchorRoot: root, injectFault: (point: string) => void observed.push(point) }),
+    );
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.outcome).toBe("INSTALLED");
+    // The protocol MUST have run this time — the install was never completed.
+    expect(observed).toEqual([...RECOVERY_ANCHOR_FAULT_POINTS]);
+  });
+
+  it("refuses a different command's fence over the post-switch window, by exact code and layer", async () => {
+    const root = anchorRoot("post-switch-foreign");
+    await crashAfterSwitch(root);
+
+    // A DIFFERENT restore command reusing the incarnation the crashed one spent.
+    // The new arm must not become a way to adopt another command's anchor.
+    const refused = await installRecoveryAnchor(
+      request({ anchorRoot: root, restoreCommandId: "restore-command-intruder" }),
+    );
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+    expect(refused.code).toBe("RECOVERY_ANCHOR_INCARNATION_REUSED");
+    expect(refused.layer).toBe(RECOVERY_ANCHOR_LAYER);
+
+    // resumeRecoveryAnchor screens the same intruder one layer earlier, and the
+    // two refusals are DIFFERENT codes — asserting only "refused" would let
+    // either layer answer and never notice which one did.
+    const resumeRefused = await resumeRecoveryAnchor(
+      request({ anchorRoot: root, restoreCommandId: "restore-command-intruder" }),
+    );
+    expect(resumeRefused.ok).toBe(false);
+    if (resumeRefused.ok) throw new Error("unreachable");
+    expect(resumeRefused.code).toBe("RECOVERY_ANCHOR_COMMAND_MISMATCH");
+    expect(resumeRefused.layer).toBe(RECOVERY_ANCHOR_LAYER);
+
+    // And the window is untouched by the refusal: still unmarked, still ours.
+    const after = await inspectRecoveryAnchor(root);
+    if (!after.ok || after.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(after.anchor.state).toBe("PREPARED");
+    expect(after.anchor.restoreCommandId).toBe(RESTORE_COMMAND_ID);
+  });
+
+  it("is idempotent on the third call and writes nothing further", async () => {
+    const root = anchorRoot("post-switch-thrice");
+    await crashAfterSwitch(root);
+
+    const second = await installRecoveryAnchor(request({ anchorRoot: root }));
+    if (!second.ok) throw new Error("unreachable");
+    const marked = statSync(join(root, RECOVERY_ANCHOR_FILE_NAME)).mtimeMs;
+
+    const observed: string[] = [];
+    const third = await installRecoveryAnchor(
+      request({ anchorRoot: root, injectFault: (point: string) => void observed.push(point) }),
+    );
+    if (!third.ok) throw new Error("unreachable");
+    expect(third.outcome).toBe("INSTALLED");
+    expect(third.anchor).toEqual(second.anchor);
+    expect(observed).toEqual([]);
+    // Byte-identical content would look the same whether or not it was
+    // republished, so the durable observation is that the file was not touched.
+    expect(statSync(join(root, RECOVERY_ANCHOR_FILE_NAME)).mtimeMs).toBe(marked);
+  });
+});
+
+describe("a resume completes the install from every declared crash boundary", () => {
+  const resumeCases = RECOVERY_ANCHOR_FAULT_POINTS.map((point) => [point] as const);
+
+  it("generates one resume case per declared boundary", () => {
+    // Hand-written literal, not derived from the array under test: a sweep that
+    // silently produced zero cases would otherwise pass while testing nothing,
+    // and a boundary added later must fail this count rather than be skipped.
+    expect(resumeCases.length).toBe(8);
+    expect(RECOVERY_ANCHOR_FAULT_POINTS.length).toBe(8);
+  });
+
+  it.each(resumeCases)("resumes to INSTALLED after a crash at %s", async (point) => {
+    const root = anchorRoot(`resume-${point}`);
+    const crash = new Error(`injected fault at ${point}`);
+    await expect(
+      installRecoveryAnchor(
+        request({
+          anchorRoot: root,
+          injectFault: (reached: string) => {
+            if (reached === point) throw crash;
+          },
+        }),
+      ),
+    ).rejects.toThrow(`injected fault at ${point}`);
+
+    const resumed = await installRecoveryAnchor(request({ anchorRoot: root }));
+    expect(resumed.ok, resumed.ok ? "resumed" : `${resumed.layer}/${resumed.code}`).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.outcome).toBe("INSTALLED");
+    expect(resumed.anchor.state).toBe("INSTALLED");
+    // Whichever boundary it died at, the anchor ends up selecting the slot it
+    // targeted — never half-selecting, never selecting the other one.
+    expect(resumed.anchor.currentSlot).toBe(resumed.anchor.targetSlot);
+  });
+});

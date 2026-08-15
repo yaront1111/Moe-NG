@@ -16,9 +16,101 @@
     "TDD exact codes/layers and nonzero generated cases; public roots across packages; target <=250 lines and split before 400.",
     "Derive session identity only from the committed lease ownerSessionRef and effect identity only from committed intentId; caller values may only be equality checks."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-4eca9b79",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Before editing, capture the task base/merge-base and the repo-wide failing-path baseline required by the project rail; inspect `git status --porcelain` and confirm all proposed activation/coordination paths are clean while preserving foreign `.moe` and runner telemetry WIP. Reconfirm df298's unchanged `readActivationLedgerRecord`/`deriveActivationAggregateId`/commit surface, c819's bare-root `createClaudeLauncher` authority types, daemon manifest plus lock importer edges, and a temporary in-daemon BARE-specifier compiled probe (delete it in the same command). Record physical line counts with `(Get-Content -LiteralPath <path>).Count`; do not edit the read-only design or existing 244/236-line activation contracts/codec.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD first: add a focused real-SqliteEventStore suite and extend the real coordination-adapter suite before production code. Seed sequence 1 only through `commitActivationLedgerRecord`; assert the exact sequence-2 grant, sequence-3 PREFLIGHT, and sequence-4 observed chain, same-command byte-identical replay with unchanged counts, different-command idempotency/version conflicts, injected throws at every phase, restart/reopen, and two-connection races with an asserted nonzero race count, exactly one winner per phase, exact target-aggregate event counts and public decision counts, and no event for the failed phase (an already committed earlier fence remains consumed). Pin runner code/layer/leg for every grant and registration refusal. Add nonzero generated context-mutation and hostile-shape sweeps against the production decoder/history reader. Cover binding not-found, query mismatch, terminal intent/attempt, inactive/expired lease, cross-project, duplicate, malformed, unreadable, and incomplete-page cases plus the millisecond/second boundary (deadline millisecond and +1000 ms). In coordination tests seed a real BOUND case and prove every ABSENT/UNKNOWN maps to `COORDINATION_TERMINAL_BINDING_INVALID` at `ADDRESS` with zero mailbox mutation. Capture the initial focused red run using `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/foundation-launch-authority.test.ts src/coordination/coordination-adapter.test.ts`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts",
+        "apps/daemon/src/coordination/coordination-adapter.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create the focused transition contract/codec without restating `EffectActivationCommitted`, its initial codec, aggregate derivation, or initial commit. Define record version `moe-foundation-activation-transition/1`, the exact ordered tags/events `GRANT_CONSUMED`/`FoundationActivationGrantConsumed`, `PREFLIGHT_REGISTERED`/`FoundationLaunchPreflightRegistered`, and `PROCESS_OBSERVED`/`FoundationLaunchProcessObserved`, and fixed tag-specific primitive tuples sealed by SHA-256 so encode/decode is canonical and byte-comparable. Every transition carries activationDigest, grantId, intentId, attemptId, wrapperIdentity; registration transitions additionally carry exact lockIdentity, processIdentity, bootstrapCredentialDigest, and registeredAt, but never copy leaseToken or other authority secrets. Add exact descriptor-safe snapshots (Reflect.ownKeys plus enumerable own data descriptors; accessors/proxies fail closed), bounded UTF-8 decoding, frozen outputs, and stable binding result vocabulary at layer `FOUNDATION_ACTIVATION_BINDING`: ABSENT codes `FOUNDATION_BINDING_NOT_FOUND`, `FOUNDATION_BINDING_QUERY_MISMATCH`, `FOUNDATION_BINDING_TERMINAL`, `FOUNDATION_BINDING_LEASE_INACTIVE`, `FOUNDATION_BINDING_LEASE_EXPIRED`; UNKNOWN codes `FOUNDATION_BINDING_QUERY_INVALID`, `FOUNDATION_BINDING_PROJECT_MISMATCH`, `FOUNDATION_BINDING_ACTIVATION_INCOHERENT`, `FOUNDATION_BINDING_EVIDENCE_MALFORMED`, `FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS`, `FOUNDATION_BINDING_EVIDENCE_UNREADABLE`, `FOUNDATION_BINDING_SCAN_INCOMPLETE`. Keep the TS source <=250 physical lines and add the exact one-line double-quoted LF bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/foundation-activation-contracts.ts",
+        "apps/daemon/src/activation/foundation-activation-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/foundation-activation-contracts.ts",
+        "apps/daemon/src/activation/foundation-activation-contracts.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extend the 71-line reader, without changing `readActivationLedgerRecord`, with a history fold and `readCurrentEffectSessionBinding(store, projectId, effectId, sessionId, nowMilliseconds)`. The history fold requires one aggregate with contiguous sequences, isolates sequence 1 and calls the strict df298 reader on that singleton, then admits only the exact optional prefix GRANT_CONSUMED -> PREFLIGHT_REGISTERED -> PROCESS_OBSERVED and rechecks every carried activation/grant/intent/attempt/wrapper/lock/process identity. Re-parse intent/attempt/grant through the public runner parsers, require `validateActivationCommit` COHERENT and its digest equal the stored activationDigest, parse the lease through public scheduler `parseLeaseRecord`, require the durable lease equal `effectIntent.leaseBinding`, ACTIVE intent/RUNNING attempt, ACTIVE lease, configured store health plus sequence-1 decisionTrace project, and no caller-derived positive identity. For lookup, paginate `readEventsAfter(0n, 100)` with monotonic/no-empty-progress checks, validate every initial-event candidate, and require exactly one matching committed intent; any unreadable candidate or incomplete/ambiguous scan is UNKNOWN. Return frozen exact `{status:'BOUND', effectId:<committed intentId>, sessionId:<committed lease.ownerSessionRef>, activationDigest}` only when query equality and liveness hold. Validate safe millisecond input, use `Math.floor(nowMilliseconds/1000)`, and expire only when seconds are greater than the deadline. Finish this production file <=250 lines; its existing LF bridge already re-exports it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-reader.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement the synchronous Foundation launcher authority on the existing activation aggregate. A factory captures store, asserted project, df298 aggregateId, base CommandDecisionKey/correlation, and synchronous clock; derive phase-specific command/event identities deterministically. `consumeGrantDurably` runs the public runner grant transition, equality-checks the caller grant/wrapper against the strict durable initial record, and commits the canonical GRANT_CONSUMED payload at expectedVersion 1. `commitProcessRegistration` snapshots the public ClaudeRegistrationCommit, parses the claim through the public runner parser, requires original prior null, validates the stored prefix plus intent/wrapper/attempt/lock relations, and commits PREFLIGHT at expectedVersion 2 or PROCESS_OBSERVED at expectedVersion 3; the persisted PREFLIGHT is never supplied back as launcher prior. Set committedResultBytes equal to event payload. On REPLAYED, decode response.decision.resultBytes, require byte equality with the persisted event at the exact sequence and all current context, and return the stored successor/registration; candidate drift refuses. Map malformed grant and wrapper errors to existing `EFFECT_GRANT_MALFORMED/KERNEL` and `GRANT_WRAPPER_MISMATCH/GRANT`, durable duplicate to `GRANT_ALREADY_CONSUMED/GRANT`, activation drift/unreadability to REFUSED or SUSPECT `ACTIVATION_COMMIT_INCOHERENT/ACTIVATION`; map registration malformed, conflict, and uncertainty to `LAUNCH_LOCK_MALFORMED`, `LAUNCH_LOCK_IDENTITY_CONFLICT`, or SUSPECT `LAUNCH_LOCK_SUSPECT`, all at `LAUNCH_LOCK`, with exact legs `GRANT_CONSUME`, `PREFLIGHT_REGISTER`, `PROCESS_OBSERVE`. No Promise/thenable, raw SQLite, DDL, or physical launch. Export the frozen authority ports and a `createFoundationClaudeLauncher` call site that passes them to bare-root `createClaudeLauncher`, so task-6cb can consume the composed launcher rather than reconstructing c819. Keep the TS source <=250 lines and add its exact LF bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Replace the coordination adapter's unconditional unbound stub with a direct store-owned call to `readCurrentEffectSessionBinding`; do not add a caller-injectable positive resolver. Map only `status:'BOUND'` to the exact frozen plain `{bound:true,effectId,sessionId}` accepted by @moe/coordination, and map every ABSENT/UNKNOWN/throw to frozen non-positive so the unchanged coordination service emits `COORDINATION_TERMINAL_BINDING_INVALID`/`ADDRESS`. Remove/reflow the old stub comment/constant as needed so coordination-adapter.ts remains <=250 lines. Complete the positive/negative production-adapter assertions started in step 2, including no leakage of internal binding reasons and no authority/mailbox mutation on refusal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/coordination/coordination-adapter.ts",
+        "apps/daemon/src/coordination/coordination-adapter.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run one fresh final gate exactly: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store`. Record exit codes/output, compare repo-wide failing paths with the step-1 merge-base baseline, and require zero new failure intersecting the eight owned paths plus exit 0 for daemon/runner owned legs. Also record physical production line counts, confirm both new `.js` bridges are exact one-line double-quoted LF exports, and confirm no probe/debug/generated evidence remains.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/foundation-activation-contracts.ts",
+        "apps/daemon/src/activation/foundation-activation-contracts.js",
+        "apps/daemon/src/activation/foundation-launch-authority.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.js",
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts",
+        "apps/daemon/src/activation/activation-ledger-reader.ts",
+        "apps/daemon/src/coordination/coordination-adapter.ts",
+        "apps/daemon/src/coordination/coordination-adapter.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Perform the final adversarial self-review/QA handoff: reason through simultaneous duplicate commands, same-key replay with drifted bytes, missing middle events, non-monotonic/never-ending pages, null/huge/proxy/accessor inputs, clock boundary, store reopen/throw, and the rule that pending is never prior. Run controlled production-surface mutation drills that (a) bypass the strict sequence-1 reader or one carried context comparison and (b) allow a non-BOUND coordination answer; require the named focused tests to redden with the expected reason/layer, assert each generated sweep produced >0 cases, then restore the exact owned-file hashes without reset/stash. Review the final diff for duplicated initial activation authority, secrets, extra exports, line caps, and foreign edits. If review changes bytes, rerun step 7's exact gate. Before completion, inspect staged state, unstage any foreign path, commit only with explicit pathspec over the eight owned paths, verify `git show --stat`, name downstream consumer task-6cbff01023b14b26a78fc5e3eb1dd8a9 (still separately blocked on task-e33747f982e0452a9f9d784fd1cb914d), and submit the fresh gate evidence plus any foreign baseline red verbatim for QA.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/foundation-activation-contracts.ts",
+        "apps/daemon/src/activation/foundation-activation-contracts.js",
+        "apps/daemon/src/activation/foundation-launch-authority.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.js",
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts",
+        "apps/daemon/src/activation/activation-ledger-reader.ts",
+        "apps/daemon/src/coordination/coordination-adapter.ts",
+        "apps/daemon/src/coordination/coordination-adapter.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,15 +122,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:47.411Z",
-  "updatedAt": "2026-08-15T12:40:31.377Z",
+  "updatedAt": "2026-08-15T13:16:24.560Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
   "blockedResourceId": null,
   "metrics": {
-    "firstClaimAt": "2026-08-15T12:40:26.844Z"
+    "firstClaimAt": "2026-08-15T12:40:26.844Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
   },
   "contextFetchedBy": [
     "architect-4eca9b79"
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T13:16:22.507Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected one append-only history on the existing df298 activation aggregate: sequence 1 remains the unchanged EffectActivationCommitted event and the bridge appends grant/PREFLIGHT/observed events at expected versions 1/2/3. The strict df298 reader remains unchanged and is invoked on the isolated sequence-1 singleton before any tail is trusted. Rejected (a) a second activation/index aggregate because it would introduce another identity and make the coordination answer depend on a caller-fed or separately synchronized pointer, (b) schema/DDL or a SQLite side index because the task forbids it, (c) an in-memory effect map or injectable positive coordination resolver because neither survives restart nor proves authority, and (d) growing the 244-line contracts or 236-line codec. Since CoordinationEffectQuery exposes only effectId/sessionId/now while df298 aggregate identity needs aggregateId+idempotencyKey, the restart-safe reader will paginate the public readEventsAfter surface, prove a unique initial activation candidate, and fail UNKNOWN on incomplete/ambiguous/unreadable scans.",
+    "codebaseInsights": "Fresh measurement at HEAD e6597e4b8b62e2958d0f6405197dd514d933de90: `git diff --name-only HEAD -- apps/daemon/src/activation apps/daemon/src/coordination` returned empty. Production line/blob census: activation-ledger-contracts.ts 244/b17de24..., codec.ts 236/ff3254..., commit.ts 210/d0364a..., reader.ts 71/78a1b8..., coordination-adapter.ts 242/709915.... The strict reader accepts exactly one EffectActivationCommitted event, reuses df298 decode/aggregate/event-id/version checks, and currently has no production importer; the coordination adapter still resolves every effect to frozen unbound. `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/activation-ledger-codec.test.ts src/activation/activation-ledger-commit.test.ts src/activation/activation-ledger-reader.test.ts src/coordination/coordination-adapter.test.ts` exited 0 (4 files/43 tests). Moe reports task-df29871... and task-c81953... DONE; on disk the df298 record/commit/strict reader and bare-root createClaudeLauncher/ClaudeLauncherAuthority/ClaudeRegistrationCommit are present. apps/daemon/package.json declares @moe/runner, @moe/scheduler, @moe/store and @moe/coordination; pnpm-lock.yaml has all four apps/daemon importer links. A temporary apps/daemon/src probe importing createClaudeLauncher, runner parsers/failure constructors, scheduler parseLeaseRecord, store SqliteEventStore/CursorPage/decision types, and coordination query/port types through BARE specifiers ran `pnpm --filter @moe/daemon typecheck` with exit 0 and was deleted in the same command. The direct consumer is the coordination adapter; downstream production consumer is task-6cbff01023b14b26a78fc5e3eb1dd8a9. That task remains BLOCKED on task-e33747f982e0452a9f9d784fd1cb914d even after this bridge lands.",
+    "risks": "Clock units differ: CoordinationEffectQuery.now is epoch milliseconds, scheduler LeaseRecord.serverWallDeadline is wall seconds; convert with floor(now/1000), and follow scheduler overdue semantics (`wallSeconds > deadline`), so equality is still live. Only existing runner SupervisorFailure codes/layers may cross the launcher callbacks; daemon-local reader codes would be decoded as malformed. A durable PREFLIGHT row is a reservation, never the launcher's priorRegistration; STARTED receives the original prior (normally null) and validates the stored prefix separately. Same-key replay must be distinguished from a different-key duplicate: replay reads the persisted event and decision result bytes, while a competing command refuses and never opens. The global scan is a completeness proof: malformed initial candidates, duplicate matches, thrown/page-truncated reads, non-monotonic cursors, or project drift are UNKNOWN, never ABSENT/BOUND. Foreign live WIP currently exists under .moe and runner telemetry; preserve it and commit only the eight owned paths.",
+    "keyFiles": [
+      "apps/daemon/src/activation/activation-ledger-contracts.ts",
+      "apps/daemon/src/activation/activation-ledger-reader.ts",
+      "apps/daemon/src/activation/activation-ledger-commit.ts",
+      "packages/runner/src/providers/claude/claude-launcher-authority.ts",
+      "apps/daemon/src/coordination/coordination-adapter.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-15T13:16:24.560Z"
 }

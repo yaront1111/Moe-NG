@@ -51,30 +51,44 @@
     {
       "stepId": "step-3",
       "description": "Complete the install by writing the MARKER ONLY, never by re-running. For the post-switch state recognised in step 2, finish exactly as runInstall's final two lines do - `resealAnchorRecord(switched, { state: \"INSTALLED\" })` published through publishFileAtomically to anchorPath - and return the same {anchor, ok, outcome: \"INSTALLED\"} shape. Do NOT call writeInactiveSlot, stampIncarnation, persistFileDurably, persistSlotDurably or verifySlot on this path: after the switch, `currentSlot === targetSlot`, so those writes would land in the slot that readers are NOW resolving. That is not a theoretical concern - recovery-anchor.ts's own doc comment above settledInstall already states it: 're-entering the protocol would write the restored payload into the slot that is now LIVE - the one thing this module exists to never do.' The guard was simply one condition short of covering the window its comment describes. Prefer putting the marker-only completion beside runInstall in recovery-anchor-install.ts so both writers of the marker share one implementation.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-install.ts",
         "packages/store/src/recovery-anchor.ts"
       ],
-      "startedAt": "2026-08-15T13:14:59.976Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-marker.ts",
+        "packages/store/src/recovery-anchor-install.ts",
+        "packages/store/src/recovery-anchor.ts"
+      ],
+      "note": "Marker-only completion is in place and proven not to re-enter. recovery-anchor.test.ts 43 passed (43). See step 2's note for why the helper became its own module rather than growing recovery-anchor-install.ts.\n\nTHE COMPLETION PATH IS markInstalled(anchorFilePath, switched), and it is the ONLY writer of the marker:\n  const installed = resealAnchorRecord(switched, { state: \"INSTALLED\" });\n  await publishFileAtomically(anchorFilePath, encodeAnchorRecord(installed));\n  return Object.freeze({ anchor: installed, ok: true as const, outcome: \"INSTALLED\" as const });\nrunInstall's tail is now `return markInstalled(anchorPath(request.anchorRoot), switched);`, so the resume and the install do not merely produce the same SHAPE — they execute the same bytes. Shape equality was the step's requirement; identity of implementation is strictly stronger and removes the drift the plan was worried about.\n\nTHE FORBIDDEN CALLS ARE ABSENT, checked with a positive control rather than by reading. grep -E \"writeInactiveSlot|stampIncarnation|persistFileDurably|persistSlotDurably|verifySlot\" over recovery-anchor-marker.ts returns 0. The identical pattern over recovery-anchor-install.ts returns 14, so the pattern does match these names and the zero is a measurement. The behavioural proof is stronger than either: step 1's test asserts the resume crossed ZERO fault boundaries (`expect(observed).toEqual([])`), and those five writers all sit behind fault points.\n\nOWNED-PACKAGE GATE IS RED, AND IT IS NOT MINE. `pnpm --filter @moe/store test` exits 1: 1 failed | 470 passed, Test Files 1 failed | 40 passed.\n  FAIL packages/store/src/backup-generation.test.ts > createBackupGeneration — crash-safe publish > keeps a complete generation resolvable when the publish is interrupted\n  AssertionError: no manifest at C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-backup-publish-interrupt-mRbnn4\\generation\\manifest.json: expected false to be true\n  at readPublished packages/store/src/backup-generation.test.ts:674:70\n\nATTRIBUTED THREE WAYS, none of which is \"it looks unrelated\":\n1. `git status --porcelain` shows backup-generation.ts and backup-generation.test.ts both MODIFIED and uncommitted — a live peer's working tree, +102/-4.\n2. The failing test does NOT EXIST at HEAD: `git show HEAD:packages/store/src/backup-generation.test.ts | grep -c \"keeps a complete generation resolvable when the publish is interrupted\"` returns 0. It is a RED-first test the peer added minutes ago.\n3. There is no reachability from my diff to it: `grep -c recovery-anchor packages/store/src/backup-generation.ts` returns 0, so nothing I changed is even importable from that module.\nThat is register item 1, owned by task-1fb6e871 (Crash-safe backup generation publish) — a sibling slice of the same register I closed earlier today.\n\nGlobal rail 3's arithmetic: failing paths at HEAD = {packages/store/src/backup-generation.test.ts}; intersected with my owned paths (recovery-anchor.ts, recovery-anchor-install.ts, recovery-anchor-marker.ts/.js, recovery-anchor.test.ts) = EMPTY.\n\nI AM NOT TREATING THAT AS SETTLED. The rail permits completion only when the intersection is empty AND the owned-package leg is exit 0, and the leg is currently exit 1. I did not run the store gate before writing bytes, which would have produced a clean before/after baseline; the HEAD-absence proof above is what stands in for it, and it is stronger evidence than a timing comparison. I will re-run the full gate at step 5 — the peer is mid-TDD and may be green by then. If it is still red I will report the verbatim failure and not claim a pass.",
+      "startedAt": "2026-08-15T13:14:59.976Z",
+      "completedAt": "2026-08-15T13:16:17.132Z"
     },
     {
       "stepId": "step-4",
       "description": "Keep the ambiguous cases refusing, and prove idempotence. Assert that a stored anchor whose preparedIdentity does NOT match the request still refuses on BOTH arms with the existing exact stable code and layer - the new arm must not become a way to adopt another command's anchor. Assert that a PREPARED record whose currentSlot does NOT equal targetSlot (the genuine pre-switch state) still proceeds to a normal install rather than being mistaken for a completed switch, since that is the case the new condition must not swallow. Assert that calling installRecoveryAnchor a third time is idempotent and returns the same record without writing again. Cover each fault point with generated cases asserting an exact non-zero cardinality, so a fault point added later without a case fails the count instead of being skipped silently.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor.test.ts"
+      ],
+      "note": "All four requirements landed and DRILLED. recovery-anchor.test.ts + recovery-anchor-refusals.test.ts: 73 passed (73), exit 0.\n\nTHREE MUTATION DRILLS, EACH REDDENING A DIFFERENT NAMED TEST. DoD 4 asks that mutating the already-switched detection turn a named test red; I drilled the arm in all three directions it can be wrong rather than only the one the DoD names.\n\nDRILL A — arm TOO BROAD (delete `if (stored.currentSlot !== stored.targetSlot) return null;`): 7 tests RED, led by \"still runs a full install when the crash landed BEFORE the switch\", plus every per-boundary resume case from INACTIVE_INSTALL through SWITCH. This is the dangerous direction — the arm swallowing a genuine pre-switch PREPARED record and reporting INSTALLED over a slot that was never written. Seven independent tests stand in front of it.\n\nDRILL B — arm NEVER FIRES (restore the original `if (stored.state !== \"INSTALLED\") return null;`): 1 test RED, \"records the marker without crossing a single install boundary again\". That is the original defect, reproduced exactly, and the step-1 test is what catches it.\n\nDRILL C — identity guard scoped back to the INSTALLED arm only: 1 test RED, \"refuses a different command's fence over the post-switch window, by exact code and layer\", failing with `expected true to be false` — the intruder's install SUCCEEDED. This proves the identity hoist I made in step 2 is load-bearing rather than cosmetic: without it, a different restore command adopts the crashed command's post-switch anchor and is handed a completed install.\n\nRestored from a pristine copy after each drill; sha256 of recovery-anchor.ts back to 0d98641c4cdec18e76f3eaef6a7ccb2e46b9df80efd718e78da03b766b9fae99 and `git status --porcelain` on it clean-relative-to-my-own-edit. I kept the pristine copy OUTSIDE the repo and restored by file copy, never `git checkout`, which would have reverted the file to HEAD and destroyed the whole fix.\n\nTHE FOUR REQUIREMENTS:\n1. FOREIGN IDENTITY REFUSES, BY EXACT CODE AND LAYER, ON BOTH ENTRY POINTS — and they are DIFFERENT codes, which is the point. installRecoveryAnchor gives RECOVERY_ANCHOR_INCARNATION_REUSED; resumeRecoveryAnchor screens one layer earlier and gives RECOVERY_ANCHOR_COMMAND_MISMATCH. Both pinned with layer RECOVERY_ANCHOR. Asserting merely \"refused\" would let either layer answer and never notice which one did — and drill C shows the assertion is live. The test also checks the window survives the refusal untouched: still PREPARED, still owned by RESTORE_COMMAND_ID.\n2. THE PRE-SWITCH CASE STILL INSTALLS. Crash at SWITCH (before the publish), then assert the stored record is PREPARED with currentSlot !== targetSlot — the genuine pre-switch state — and that the resume crosses ALL eight boundaries, `expect(observed).toEqual([...RECOVERY_ANCHOR_FAULT_POINTS])`. Asserting the full ordered list rather than \"it installed\" is what makes drill A redden here.\n3. THIRD CALL IS IDEMPOTENT AND WRITES NOTHING. Same anchor returned, zero fault boundaries crossed, and — the part that actually distinguishes it — the anchor file's mtimeMs is unchanged. Byte-identical content would look the same whether or not it was republished, since the record encodes deterministically; only the untouched file proves no second write.\n4. GENERATED CASES WITH A HAND-WRITTEN CARDINALITY. One resume case per declared boundary, `expect(resumeCases.length).toBe(8)` and `expect(RECOVERY_ANCHOR_FAULT_POINTS.length).toBe(8)` written as literals rather than derived from the array under test. A sweep that silently generated zero cases would otherwise pass, and a ninth boundary added later now fails the count instead of being skipped in silence. Each case asserts the resume reaches INSTALLED with currentSlot === targetSlot — never half-selecting, never selecting the other slot.",
+      "startedAt": "2026-08-15T13:16:19.477Z",
+      "completedAt": "2026-08-15T13:18:20.154Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line, not the final exit code. Then review as an attacker: (1) Is `state === \"PREPARED\" && currentSlot === targetSlot` genuinely unreachable before the switch - trace every writer of currentSlot and confirm no other path can produce that pair, because the whole fix rests on that pair being an unambiguous signature. (2) Can the new arm be reached with a record from a DIFFERENT command, and does preparedIdentity still stop it? (3) Does the marker-only path leave the single-shot guarantee intact - can it be used to install twice? (4) If the marker write itself fails, does the caller get an exact refusal rather than a partially-completed claim? (5) Confirm recovery-anchor.ts (198 lines) and recovery-anchor-install.ts (263 lines) - the latter is ALREADY above the 250 target, so the marker-only helper must not grow it further; if it would, split rather than exceed. Measure with `grep -c ''`, since PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-anchor.ts",
         "packages/store/src/recovery-anchor-install.ts",
         "packages/store/src/recovery-anchor.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:18:23.172Z"
     }
   ],
   "status": "WORKING",
@@ -90,16 +104,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:01.896Z",
-  "updatedAt": "2026-08-15T13:14:59.976Z",
+  "updatedAt": "2026-08-15T13:18:23.172Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:56:49.280Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 2
+    "executedStepCount": 4
   },
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:58:21.569Z",

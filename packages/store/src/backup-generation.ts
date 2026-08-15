@@ -21,7 +21,10 @@ import {
   inspectClosure,
   verifyBackupGeneration,
 } from "./backup-generation-manifest.js";
-import { publishStagedGeneration } from "./backup-generation-publish.js";
+import {
+  publishStagedGeneration,
+  resolveInterruptedPublish,
+} from "./backup-generation-publish.js";
 
 export interface BackupGenerationCreated {
   readonly container: unknown;
@@ -100,6 +103,8 @@ export async function createBackupGeneration(
   const finalPath = resolve(request.destinationPath);
   const stagingRoot = `${finalPath}.staging`;
   try {
+    const interrupted = await resolveInterruptedPublish(finalPath);
+    if (interrupted !== null) return refuseBackupGeneration(interrupted);
     await rm(stagingRoot, { force: true, recursive: true });
     await mkdir(stagingRoot, { recursive: true });
 

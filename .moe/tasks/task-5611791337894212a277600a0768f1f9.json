@@ -92,17 +92,24 @@
     {
       "stepId": "step-6",
       "description": "Verification then adversarial review. Run `pnpm typecheck:release` and the focused release/supply-chain integration coverage on FRESH output pasted into complete_task. RUN THE INTEGRATION LEG FROM POWERSHELL, NOT GIT BASH: under MSYS, tar reads a `C:\\` path as a remote host specification, and the run fails with SOURCE_ARCHIVE_FAILED - a fake failure that has nothing to do with this diff and has burned time on this repo before. Read every summary line rather than the final exit code. Then review as an attacker: (1) Can any refusal still reach the caller with a reason belonging to a different subsystem - re-read every releaseRefusal call site and match it to the condition above it? (2) Can cleanRoots still throw out of the finally by any path, including the SIGINT/SIGTERM `stop` handler which also calls it before process.exit? (3) Does a cleanup failure still get REPORTED rather than silently swallowed? (4) Confirm supply-chain.mjs did not grow past 256 lines using `grep -c ''` (PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs",
         "scripts/release/release-subject.mjs",
         "tests/integration/release-supply-chain.test.mjs"
       ],
-      "startedAt": "2026-08-15T13:14:41.585Z"
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "scripts/release/release-subject.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "VERIFIED. pnpm typecheck:release EXIT=0. Full focused leg `node --test tests/integration/release-supply-chain.test.mjs` from PowerShell (never Git Bash - MSYS tar reads C:\\ as a remote host): tests 59, pass 59, fail 0, cancelled 0, skipped 0, todo 0, NODE_TEST_EXIT=0, including \"records truthful evidence through the actual package script\" (the real release:evidence run, 16.8s). pnpm typecheck:packaging EXIT=0 as well. Line counts by grep -c '': supply-chain.mjs 256 (unchanged, did NOT grow), release-subject.mjs 224 (unchanged).\n\nMUTATION DRILLS (proof the tests are not vacuous, restored and hash-verified against pre-drill sha256 after each). Drill A - strip the cleanRoots try/catch: 3 failed / 0 passed, including \"cleans up on the signal path without replacing the outcome\", so the signal-path test really does detect the defect. Drill B - revert :198 to FROZEN_INSTALL_FAILED: 2 failed / 0 passed. Both files hash-identical to pre-drill afterwards (RESTORE_OK).\n\nADVERSARIAL REVIEW. (1) Every releaseRefusal site re-read against the condition above it; each now matches its own subsystem. (2) cleanRoots is total: roots.splice(0) and for-of cannot throw, both rmSync calls are inside the try, and the global console swallows write errors (ignoreErrors), so the SIGINT/SIGTERM stop handler can no longer throw before process.exit(130) either. (3) The failure is still reported - stderr names the path and the error, and it goes to stderr while main() prints its JSON record to stdout, so machine-readable output stays clean. (4) Concurrency unchanged: each run owns its roots array and its own mkdtemp roots; splice makes a second call a no-op. My signal test stubs process.exit and restores it in a finally, and node:test runs tests in a file sequentially.\n\nFINDINGS FOR FUTURE SLICES (all pre-existing, deliberately NOT fixed - DoD forbids other changes to that closed set): (a) releaseRefusal does not validate its argument against RELEASE_REFUSAL_REASONS, and SOURCE_ARCHIVE_FAILED proves it - emitted at :61, :63, :208 yet never a member of the frozen array; (b) supply-chain.mjs:190 reports OUTPUT_PATH_INVALID for ANY malformed input, so a relative repositoryRoot or a wrong key set is blamed on the output path, while RELEASE_INPUT_INVALID exists in the vocabulary and is emitted nowhere - same wrong-reason family as this task; (c) the broad catch at :240 turns ANY exception in the try body into EVIDENCE_WRITE_INTERRUPTED (my sweep reaches it with a throwing readSourceFile); (d) RELEASE_INVENTORY_EMPTY is returned when componentCount/templateCount merely differ from 5/3.\n\nCOMMIT: nothing to commit. A foreign whole-tree commit, 7263d13 feat(task-cbc42f3383444c05a20c6bf56129e8c8), swept all three of my owned paths in mid-session; git status is clean for them and git diff is empty. Per the project rail I did not amend, reset, or create a claiming commit. Committed bytes verified byte-identical to the gated bytes (sha256 of git show HEAD:<path> equals the working tree for all three files), and the drills were NOT captured. QA should review: git diff b03da5a..HEAD -- scripts/release/supply-chain.mjs scripts/release/release-subject.mjs tests/integration/release-supply-chain.test.mjs (2 +/- in release-subject.mjs, 6 in supply-chain.mjs, 206 in the test file).",
+      "startedAt": "2026-08-15T13:14:41.585Z",
+      "completedAt": "2026-08-15T13:17:26.330Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5dfdc624",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,19 +121,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:48:05.310Z",
-  "updatedAt": "2026-08-15T13:14:41.585Z",
+  "updatedAt": "2026-08-15T13:18:32.858Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:53:33.481Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:55:10.293Z",
@@ -148,5 +156,17 @@
   "contextFetchedBy": [
     "worker-5dfdc624"
   ],
-  "workStartedAt": "2026-08-15T13:08:47.407Z"
+  "workStartedAt": "2026-08-15T13:08:47.407Z",
+  "reviewStartedAt": "2026-08-15T13:18:32.858Z",
+  "verification": {
+    "command": "pnpm typecheck:release && node --test tests/integration/release-supply-chain.test.mjs",
+    "exitCode": 0,
+    "outputTail": "$ tsc --noEmit --strict --allowJs --checkJs ... scripts/release/release-subject.mjs scripts/release/supply-chain.mjs\ntypecheck:release EXIT=0\n  ✔ separates an unobservable toolchain from a frozen install failure (4.6ms)\n  ✔ keeps a successful record when temporary cleanup fails (10.8ms)\n  ✔ keeps the original refusal reason when temporary cleanup fails (1.7ms)\n  ✔ refuses an unobservable toolchain with its own reason (0.5ms)\n  ✔ refuses a failed frozen install with its own reason (0.9ms)\n  ✔ cleans up and deregisters signal handlers on success (3.4ms)\n  ✔ cleans up and deregisters signal handlers on refusal (0.9ms)\n  ✔ cleans up and deregisters signal handlers on exception (0.6ms)\n  ✔ cleans up on the signal path without replacing the outcome (4.1ms)\n  ✔ records truthful evidence through the actual package script (16856.3ms)\nℹ tests 59\nℹ suites 4\nℹ pass 59\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 17162.4\nNODE_TEST_EXIT=0",
+    "reportedAt": "2026-08-15T13:18:32.858Z"
+  },
+  "filesModified": [
+    "tests/integration/release-supply-chain.test.mjs",
+    "scripts/release/supply-chain.mjs",
+    "scripts/release/release-subject.mjs"
+  ]
 }

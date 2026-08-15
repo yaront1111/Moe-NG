@@ -50,28 +50,42 @@
     {
       "stepId": "step-3",
       "description": "Make an interrupted publish recoverable rather than merely survivable. On entry, before staging, detect a leftover aside and/or a leftover `${finalPath}.staging` from a previous interrupted run and resolve the state deterministically: if finalPath is absent and an aside exists, restore the aside; if finalPath is present and an aside exists, the publish completed and the aside is removable. Do NOT guess from timestamps or directory mtimes - decide from which paths exist and from whether the manifest at finalPath verifies, which is evidence the code already knows how to produce via verifyBackupGeneration. An ambiguous combination that cannot be resolved from those facts must refuse with the existing exact store code rather than picking a side; silently choosing wrong here publishes an unverified generation as complete.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/backup-generation.ts"
       ],
-      "startedAt": "2026-08-15T13:15:43.570Z"
+      "modifiedFiles": [
+        "packages/store/src/backup-generation-publish.ts",
+        "packages/store/src/backup-generation.ts",
+        "packages/store/src/backup-generation.test.ts"
+      ],
+      "note": "TDD: 3 recovery tests appended first, 2 RED (restore-the-aside; refuse-instead-of-publishing). The 3rd (half-populated destination) passed for the WRONG reason pre-implementation - a leftover aside makes rename(finalPath, asidePath) fail on Windows, so it was detecting a collision, not the completeness guard; it becomes a real pin post-implementation and is drilled in step 5. Implemented resolveInterruptedPublish(finalPath) in backup-generation-publish.ts, called at the top of the try in backup-generation.ts BEFORE staging is created: no aside -> null; aside+finalPath both present -> the swap landed, drop the aside, but only if finalPath is a complete generation, else DURABILITY_FAULT; finalPath absent -> restore the aside, but only if it is a complete generation, else DURABILITY_FAULT. Completeness is decided by generationIsComplete(), which runs the PRODUCTION verifyBackupGeneration (shape, recomputed digest, signature) with the carried key anchored to itself - completeness, explicitly not authority, since the previous generation's trusted key is unknowable during recovery - and then requires database.sqlite plus every declared object file to exist on disk, so a directory carrying only a manifest cannot present as complete. Decides from which paths exist and from verification only; no timestamps or mtimes. Also found: recovery is not optional - a leftover aside would otherwise wedge every later publish on Windows. Suite EXIT=0, 31 passed. backup-generation.ts 213 lines, backup-generation-publish.ts 117 lines.",
+      "startedAt": "2026-08-15T13:15:43.570Z",
+      "completedAt": "2026-08-15T13:16:52.183Z"
     },
     {
       "stepId": "step-4",
       "description": "Pin the failure paths and the unchanged contract. Assert that a publish failure returns the existing exact stable refusal - refuseBackupGeneration(\"DURABILITY_FAULT\") is the current catch-all at the end of the function - and that no failure path leaves the destination REMOVED, which is the specific harm this task exists to end. Assert that the existing `finally { await rm(stagingRoot, ...).catch(() => undefined) }` still cleans staging on every exit and still cannot itself replace the result. CONTRACT INVARIANT, and it is the thing most likely to be broken by accident: the generation digest for identical input bytes must be IDENTICAL to before this change - assert it against a known fixture, because a digest change silently invalidates every piece of existing backup evidence and would not otherwise show up as a test failure.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/backup-generation.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/backup-generation.test.ts"
+      ],
+      "note": "Failure paths and the unchanged contract pinned. (1) Digest invariant: DIGEST_FIXTURE is a fixed manifest (no captured SQLite image, so the pin does not drift with the host sqlite build) and computeGenerationDigest - the production function, imported directly - must return ee01db282f980d87d67ec3c971e31885f6ecaa4ab49aabaf76fbeb80633346c3. Independent proof the value is unchanged rather than merely recorded: git diff --stat over backup-generation-manifest.ts, backup-generation-contracts.ts and backup-generation-capture.ts is EMPTY, so the digest is produced by bytes this task never touched. (2) Paired shape pin: a real produced manifest AND the fixture must both carry exactly the 9 MANIFEST_FIELDS - a field added to the manifest but omitted from canonicalManifestBytes changes the contract without moving the digest, and a fixture that drifts would leave the digest pin testing a shape production no longer emits. (3) Every failure path asserted to leave a resolvable destination: interrupted rename -> DURABILITY_FAULT with the previous generation restored and no aside left; refusal after staging began (OBJECT_MISSING) -> published generation intact, staging cleaned by the existing finally, which still cannot replace the result; successful republish -> new cursor on disk (so cleanup is measured against a swap that actually happened) with neither .staging nor .previous left behind. Suite EXIT=0, 35 passed.",
+      "startedAt": "2026-08-15T13:16:54.406Z",
+      "completedAt": "2026-08-15T13:18:10.324Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Is there ANY remaining instant at which neither finalPath nor the aside holds a complete generation - walk the sequence step by step rather than reasoning from the happy path. (2) On Windows, can an open handle produce EBUSY on the aside removal, and does that failure replace the successful result? `force: true` suppresses ENOENT, NOT EBUSY - this is the same trap the release supply-chain code has. (3) Can two concurrent publishes to the same destination interleave their asides and destroy each other? (4) Does the recovery path ever restore an aside whose manifest does not verify? (5) Confirm backup-generation.ts is at or under 250 physical lines using `grep -c ''` - it is 208 today, so there is headroom, and PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/backup-generation.ts",
         "packages/store/src/backup-generation.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:18:15.485Z"
     }
   ],
   "status": "WORKING",
@@ -94,16 +108,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:45:50.059Z",
-  "updatedAt": "2026-08-15T13:15:43.571Z",
+  "updatedAt": "2026-08-15T13:18:15.485Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:55:16.606Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 2
+    "executedStepCount": 4
   },
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:56:43.626Z",

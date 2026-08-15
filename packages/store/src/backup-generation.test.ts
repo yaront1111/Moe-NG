@@ -17,6 +17,9 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 
 import * as storeModule from "./index.js";
+// Not part of the public surface: the digest pin below has to call the exact
+// production function whose output every existing backup receipt recorded.
+import { computeGenerationDigest } from "./backup-generation-manifest.js";
 
 /**
  * A crash between the two publish renames cannot be reproduced by returning an
@@ -668,7 +671,11 @@ function commitOneMore(h: Harness, label: string): void {
 
 /** The manifest container as published on disk, or a failure naming the path. */
 function readPublished(generationPath: string): {
-  manifest: { generationDigest: string; objects: readonly { logicalPath: string }[] };
+  manifest: {
+    cursor: string;
+    generationDigest: string;
+    objects: readonly { logicalPath: string }[];
+  };
 } {
   const manifestPath = join(generationPath, "manifest.json");
   expect(existsSync(manifestPath), `no manifest at ${manifestPath}`).toBe(true);
@@ -713,8 +720,196 @@ describe("createBackupGeneration — crash-safe publish", () => {
       }
       expect(existsSync(join(h.destinationPath, "database.sqlite"))).toBe(true);
       expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+      expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
     } finally {
       publishFault.armed = false;
+      h.cleanup();
+    }
+  });
+});
+
+describe("createBackupGeneration — interrupted publish recovery", () => {
+  /** Exactly the on-disk state a process killed between the two renames leaves. */
+  function crashBetweenRenames(h: Harness): string {
+    const asidePath = `${h.destinationPath}.previous`;
+    renameSync(h.destinationPath, asidePath);
+    mkdirSync(`${h.destinationPath}.staging`, { recursive: true });
+    return asidePath;
+  }
+
+  it("restores the previous generation a crashed publish left aside", async () => {
+    const h = harness("publish-restore", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      const firstDigest = readPublished(h.destinationPath).manifest.generationDigest;
+      const asidePath = crashBetweenRenames(h);
+
+      // A request that refuses AFTER recovery has run, so the restore is
+      // observable on its own rather than masked by a fresh publish landing.
+      rmSync(String(h.objects[0]?.sourcePath), { force: true });
+      const next = await createBackupGeneration(request(h));
+
+      expectRefusal(next, "OBJECT_MISSING");
+      expect(existsSync(asidePath)).toBe(false);
+      const restored = readPublished(h.destinationPath);
+      expect(restored.manifest.generationDigest).toBe(firstDigest);
+      for (const entry of restored.manifest.objects) {
+        expect(existsSync(join(h.destinationPath, ...entry.logicalPath.split("/")))).toBe(true);
+      }
+      expect(existsSync(join(h.destinationPath, "database.sqlite"))).toBe(true);
+      expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("refuses instead of publishing when the aside is not a complete generation", async () => {
+    const h = harness("publish-aside-broken", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      const asidePath = crashBetweenRenames(h);
+      writeFileSync(join(asidePath, "manifest.json"), "{ not a container }");
+
+      const next = await createBackupGeneration(request(h));
+
+      expectRefusal(next, "DURABILITY_FAULT");
+      // The discriminating assertion: without recovery this request publishes
+      // successfully and abandons the unresolvable aside beside it.
+      expect(existsSync(h.destinationPath)).toBe(false);
+      expect(existsSync(asidePath)).toBe(true);
+      expect(readFileSync(join(asidePath, "manifest.json"), "utf8")).toBe("{ not a container }");
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("refuses when the published path is occupied by a half-populated generation", async () => {
+    const h = harness("publish-half", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      const asidePath = crashBetweenRenames(h);
+      // A directory carrying a genuine, signature-valid manifest and NOTHING
+      // else: complete to any check that stops at the manifest.
+      mkdirSync(h.destinationPath, { recursive: true });
+      writeFileSync(
+        join(h.destinationPath, "manifest.json"),
+        readFileSync(join(asidePath, "manifest.json")),
+      );
+
+      const next = await createBackupGeneration(request(h));
+
+      expectRefusal(next, "DURABILITY_FAULT");
+      expect(existsSync(asidePath)).toBe(true);
+      // Nothing was published over the half-populated directory either.
+      expect(existsSync(join(h.destinationPath, "database.sqlite"))).toBe(false);
+    } finally {
+      h.cleanup();
+    }
+  });
+});
+
+/**
+ * A fixed manifest, so the pin below does not depend on a captured SQLite image
+ * that varies with the host's sqlite build. The generation digest is a pure
+ * function of exactly these fields: if it moves, every backup receipt that ever
+ * recorded a generation digest is silently invalidated, and nothing else in
+ * this suite would go red.
+ */
+const DIGEST_FIXTURE = Object.freeze({
+  cursor: "7",
+  databaseByteLength: "4096",
+  databaseDigest: "a".repeat(64),
+  generationDigest: "",
+  keyChain: [
+    { keyId: "key-1", role: "LEAF" },
+    { keyId: "root-1", role: "ROOT" },
+  ],
+  objects: CATEGORIES.map((category, index) => ({
+    byteLength: String(index + 1),
+    category,
+    digest: String(index).repeat(64),
+    logicalId: `${category.toLowerCase()}-1`,
+    logicalPath: `${category.toLowerCase()}/object.bin`,
+    sourceGenerationDigest: "b".repeat(64),
+  })),
+  projectId: "project-1",
+  sourceGenerationDigest: "b".repeat(64),
+  version: "moe-backup-generation/1",
+});
+
+const MANIFEST_FIELDS = Object.freeze([
+  "cursor",
+  "databaseByteLength",
+  "databaseDigest",
+  "generationDigest",
+  "keyChain",
+  "objects",
+  "projectId",
+  "sourceGenerationDigest",
+  "version",
+] as const);
+
+describe("backup generation contract — unchanged by the crash-safe publish", () => {
+  it("computes an unchanged generation digest for identical manifest bytes", () => {
+    const manifest = DIGEST_FIXTURE as unknown as Parameters<typeof computeGenerationDigest>[0];
+    expect(computeGenerationDigest(manifest)).toBe(
+      "ee01db282f980d87d67ec3c971e31885f6ecaa4ab49aabaf76fbeb80633346c3",
+    );
+  });
+
+  it("carries exactly the manifest fields the digest is defined over", async () => {
+    const h = harness("digest-fields", 2);
+    try {
+      const created = await createBackupGeneration(request(h));
+      expect(created).toMatchObject({ ok: true });
+      const manifest = (created as unknown as { manifest: Record<string, unknown> }).manifest;
+
+      // A field added to the manifest but omitted from the canonical projection
+      // changes the contract without changing the digest, so the produced shape
+      // is pinned alongside the digest rather than instead of it.
+      expect(Object.keys(manifest).toSorted()).toStrictEqual([...MANIFEST_FIELDS].toSorted());
+      // And the fixture is held to the same shape, or the pin above drifts to
+      // testing a manifest production no longer emits.
+      expect(Object.keys(DIGEST_FIXTURE).toSorted()).toStrictEqual([...MANIFEST_FIELDS].toSorted());
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("leaves no staging or aside directory behind a successful republish", async () => {
+    const h = harness("publish-clean", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      commitOneMore(h, "clean-extra");
+
+      const second = await createBackupGeneration(request(h, { cursor: "3" }));
+
+      expect(second).toMatchObject({ ok: true, restorable: true });
+      // The republish really replaced the generation, so the cleanup below is
+      // measured against a swap that happened rather than one that was skipped.
+      expect(readPublished(h.destinationPath).manifest.cursor).toBe("3");
+      expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+      expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("leaves the published generation intact when a later publish refuses", async () => {
+    const h = harness("publish-refusal-intact", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      const firstDigest = readPublished(h.destinationPath).manifest.generationDigest;
+      rmSync(String(h.objects[0]?.sourcePath), { force: true });
+
+      // A refusal raised after staging began: staging is cleaned by the
+      // `finally`, and the destination is never the casualty of that cleanup.
+      expectRefusal(await createBackupGeneration(request(h)), "OBJECT_MISSING");
+
+      expect(readPublished(h.destinationPath).manifest.generationDigest).toBe(firstDigest);
+      expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
+      expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
+    } finally {
       h.cleanup();
     }
   });

@@ -84,3 +84,34 @@ export async function publishStagedGeneration(
   // removes the leftover on the next run.
   await rm(asidePath, { force: true, recursive: true }).catch(() => undefined);
 }
+
+/**
+ * Resolves the destination an interrupted publish left behind, deciding from
+ * which paths exist and whether the generation at each is complete — never from
+ * timestamps or directory mtimes, which would make correctness depend on host
+ * clock and filesystem behavior.
+ *
+ * Recovery is not optional housekeeping: a leftover aside also blocks every
+ * later publish, because renaming onto an existing directory fails on Windows.
+ * A combination those facts cannot settle refuses with the existing store
+ * reason rather than picking a side, since choosing wrong here presents an
+ * unverified generation as a complete one.
+ */
+export async function resolveInterruptedPublish(
+  finalPath: string,
+): Promise<BackupGenerationReason | null> {
+  const asidePath = backupAsidePath(finalPath);
+  if (!(await pathExists(asidePath))) return null;
+  if (await pathExists(finalPath)) {
+    // Both names occupied: the swap landed and only the removal was cut short —
+    // unless what landed is not a complete generation, which no fact on disk
+    // can disambiguate from a destination that was never a generation at all.
+    if (!(await generationIsComplete(finalPath))) return "DURABILITY_FAULT";
+    await rm(asidePath, { force: true, recursive: true });
+    return null;
+  }
+  // Only the aside survives: the process died between the two renames.
+  if (!(await generationIsComplete(asidePath))) return "DURABILITY_FAULT";
+  await rename(asidePath, finalPath);
+  return null;
+}
