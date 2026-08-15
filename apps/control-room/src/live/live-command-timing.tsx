@@ -18,6 +18,12 @@ import type { LiveEventRow, LiveFrame } from "./live-event-feed.js";
  * THAT row's readings, so a receipt is attributable to exactly one command. A row the
  * daemon sent without an identity gets no receipt rather than one attached to a guess.
  *
+ * The receipt is addressed by command id AND event id, because one command emits many
+ * events: two rows of the same command carry two different sets of readings, and a
+ * command-only identifier would paint both under one id, leaving two distinct receipts
+ * that nothing could tell apart. The command id is what attributes; the event id is what
+ * disambiguates.
+ *
  * WHAT THE PRODUCTION RECEIPT HONESTLY SAYS, measured rather than hoped for: `render` is
  * the one phase both of whose readings come from this application's single injected
  * clock, so it is the one that measures. `server` spans the store's commit clock and the
@@ -63,7 +69,7 @@ export function LiveCommandTiming({ frame }: LiveCommandTimingProps): JSX.Elemen
               rendered,
               seam: row.seamObservation,
             })}
-            testIdPrefix={`${LIVE_TIMING_PREFIX}.${commandId}`}
+            testIdPrefix={`${LIVE_TIMING_PREFIX}.${commandId}.${row.eventId}`}
           />
         );
       })}

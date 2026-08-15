@@ -108,8 +108,9 @@ function stubBoardFetch(): void {
   ));
 }
 
+/** Command id attributes the receipt; event id disambiguates one command's many events. */
 function phaseId(name: string): string {
-  return `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.phase.${name}`;
+  return `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.evt-1.phase.${name}`;
 }
 
 /** Drives the real application through one poll and returns when the receipt is painted. */
@@ -133,7 +134,7 @@ describe("the live application renders a receipt it computed itself", () => {
       expect(phase(name).textContent, name).toBe(name);
     }
     expect(screen.getAllByTestId(
-      new RegExp(`^${LIVE_TIMING_PREFIX}\\.${COMMAND_ID}\\.phase\\.`, "u"),
+      new RegExp(`^${LIVE_TIMING_PREFIX}\\.${COMMAND_ID}\\.evt-1\\.phase\\.`, "u"),
     )).toHaveLength(4);
   });
 
@@ -153,7 +154,7 @@ describe("the live application renders a receipt it computed itself", () => {
   it("carries the daemon's command identity through to the rendered receipt", async () => {
     await liveReceipt(eventRow());
     expect(screen.getByTestId(
-      `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.${COMMAND_ID}`,
+      `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.evt-1.${COMMAND_ID}`,
     ).dataset["state"]).toBe("CONFIRMED");
   });
 });

@@ -49,8 +49,8 @@ function frameOf(events: readonly LiveEventRow[], receivedAtMs: number | null): 
   };
 }
 
-function phase(commandId: string, name: string): HTMLElement {
-  return screen.getByTestId(`${LIVE_TIMING_PREFIX}.${commandId}.phase.${name}`);
+function phase(commandId: string, name: string, eventId = "evt-1"): HTMLElement {
+  return screen.getByTestId(`${LIVE_TIMING_PREFIX}.${commandId}.${eventId}.phase.${name}`);
 }
 
 describe("the live surface computes a receipt from what it observed", () => {
@@ -64,7 +64,7 @@ describe("the live surface computes a receipt from what it observed", () => {
       expect(phase(COMMAND_ID, name)).toBeTruthy();
     }
     expect(screen.getAllByTestId(
-      new RegExp(`^${LIVE_TIMING_PREFIX}\\.${COMMAND_ID}\\.phase\\.`, "u"),
+      new RegExp(`^${LIVE_TIMING_PREFIX}\\.${COMMAND_ID}\\.evt-1\\.phase\\.`, "u"),
     )).toHaveLength(4);
   });
 
@@ -95,7 +95,28 @@ describe("the live surface computes a receipt from what it observed", () => {
       </ClockProvider>,
     );
     expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("30");
-    expect(phase("cmd-open-2", "render").dataset["durationMs"]).toBe("30");
+    expect(phase("cmd-open-2", "render", "evt-2").dataset["durationMs"]).toBe("30");
+  });
+
+  /**
+   * ONE COMMAND EMITS MANY EVENTS, so the command id alone cannot address a receipt.
+   * Two rows of one command paint two receipts built from two different sets of
+   * readings; under a command-only identifier they would share one `data-testid` and
+   * the DOM would hold two receipts nobody could tell apart — and `getByTestId` throws
+   * on the collision, so the next test to look would break rather than report it. The
+   * event id disambiguates; the command id still says which command each belongs to.
+   */
+  it("addresses each event's receipt separately when one command emitted several", () => {
+    render(
+      <ClockProvider clock={fixedClock(1_030)}>
+        <LiveCommandTiming frame={frameOf([row(), row({ eventId: "evt-2" })], 1_000)} />
+      </ClockProvider>,
+    );
+    expect(screen.getAllByTestId(
+      new RegExp(`^${LIVE_TIMING_PREFIX}\\.${COMMAND_ID}\\..+\\.phase\\.render$`, "u"),
+    )).toHaveLength(2);
+    expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("30");
+    expect(phase(COMMAND_ID, "render", "evt-2").dataset["durationMs"]).toBe("30");
   });
 
   it("renders no receipt for a row the daemon sent without a command identity", () => {
