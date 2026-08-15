@@ -41,6 +41,11 @@ function surfaceLabel(surface: SurfaceFrame | null): string {
   if (surface === null || surface.connection !== "CONNECTED") {
     return "the affordance surface has not answered yet.";
   }
+  // A refusal or an unreadable answer also carries zero offers, but "serves no
+  // affordances" is a statement about the BOARD, not about a failed read.
+  if (surface.outcome !== "SURFACE") {
+    return `the affordance surface answered ${surface.outcome}.`;
+  }
   const count = surface.offers.length;
   if (count === 0) return "the daemon serves no command affordances right now.";
   return `the daemon offers ${String(count)} command affordance${count === 1 ? "" : "s"} on the board.`;

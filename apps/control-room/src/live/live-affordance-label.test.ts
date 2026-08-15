@@ -6,12 +6,12 @@ import type { LiveFrame } from "./live-event-feed.js";
 
 const RELAY_UP = { connection: "CONNECTED" } as LiveFrame;
 
-function surface(offers: number): SurfaceFrame {
+function surface(offers: number, outcome = "SURFACE"): SurfaceFrame {
   return Object.freeze({
     connection: "CONNECTED",
     detail: "",
     offers: Array.from({ length: offers }, (_, index) => ({ commandId: `afford-${String(index)}` })),
-    outcome: "SURFACE",
+    outcome,
     steps: [],
   });
 }
@@ -46,6 +46,16 @@ describe("liveAffordance status label", () => {
     const shell = liveAffordance(RELAY_UP, surface(3));
     expect(shell.mutationsEnabled).toBe(false);
     expect(shell.nextAllowedCommands).toEqual([]);
+  });
+
+  it("does not read a REFUSED or unreadable surface as an empty one", () => {
+    // A refusal carries zero offers, but "the daemon serves no command
+    // affordances" is a statement about the BOARD, not about a failed read.
+    for (const outcome of ["REFUSED", "UNREADABLE"]) {
+      const label = liveAffordance(RELAY_UP, surface(0, outcome)).statusLabel;
+      expect(label).not.toMatch(/serves no command affordances/u);
+      expect(label).toMatch(/affordance surface answered REFUSED|affordance surface answered UNREADABLE/u);
+    }
   });
 
   it("reports the relay as disconnected before the daemon answers", () => {
