@@ -166,8 +166,8 @@
       "completedAt": "2026-08-15T19:13:49.369Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f6ca780e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -234,14 +234,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:06.538Z",
-  "updatedAt": "2026-08-15T19:14:45.905Z",
+  "updatedAt": "2026-08-15T19:16:15.162Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:09:54.588Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 9,
     "executedStepCount": 18,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-15T19:16:15.162Z",
+    "wallClockMs": 162380574
   },
   "contextFetchedBy": [
     "worker-fd8f822b",
@@ -332,7 +334,7 @@
     "packages/runner/src/surface/provider-record-surface.js",
     "packages/runner/src/index-surface.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T19:03:24.108Z",
+  "reviewCompletedAt": "2026-08-15T19:16:15.162Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Task sizing: 1429 net changed LOC across 11 files against a 400 net-LOC QA bar. Not a DoD content failure — every DoD item I could verify passed."
@@ -371,5 +373,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-15T19:16:15.162Z",
+  "reviewSummary": "APPROVED at HEAD 63bc470. My round-1 reject was WRONG and is withdrawn — I applied a per-task net-LOC bar this project does not have. Project globalRules[2]: \"The 250/400 cap is PER PRODUCTION FILE, not per task... QA: task-level net LOC is never a rejection reason.\" Verified in the rails; it forbids both remedies I offered. No governor action needed.\n\nTHE CAP THAT DOES APPLY IS CLEAN, via `grep -c ''` not a diffstat: run-record 241, usage-normalization 224, usage-contracts 112, record-surface 55, index.ts 250 — all at/under the 250 target, none near the 400 split point. Plan shape 9 steps / 10 affectedFiles, inside the thresholds that do bound task size.\n\nGATE re-run, each leg separate with its own exit code: runner typecheck EXIT=0; runner test 62 files/2107 tests EXIT=0; scheduler test 43 files/1326 tests EXIT=0. verification.command matches DoD 6 verbatim — no dropped leg, no narrowing.\n\nRESUBMITTED UNCHANGED, VERIFIED LITERALLY: both drill targets are byte-identical to the copies I mutated in round 1 (usage-normalization 3cd1c86a, run-record a983a1fb), git status clean for packages/runner and pnpm-lock.yaml — so the round-1 proofs hold here rather than being re-asserted:\n- DoD 5 names TWO mutation-checks, BOTH held. Widening the production usage-coverage comparison reddened \"keeps a partially observed run PARTIAL, unpriced, and unmixed\" — the PARTIAL-into-COMPLETE conversion DoD 2 forbids. Making an unreadable model selection claim DATED_SNAPSHOT instead of UNKNOWN reddened \"never lets runtime or observed evidence stand in for model or effort\". Both restored byte-exact.\n- DoD 3 publication proven through the BARE @moe/runner specifier (index.ts:165) with the test's own positive and negative controls; the model drill also reddened \"builds a provider-run record through the root\", binding that test to production.\n\nNon-gating: confirm task-8e307617 slices 2-4 still have distinct deliverables."
 }
