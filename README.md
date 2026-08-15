@@ -4,28 +4,70 @@ Moe Next is a greenfield, local-first orchestration control plane for reliable m
 
 This repository is independent from legacy Moe. Legacy implementation code is not copied or imported.
 
-Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRIBUTING.md) for the split-review guardrail.
+Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRIBUTING.md) for the split-review guardrail. Durable project policy lives in [AGENTS.md](./AGENTS.md).
 
-## Current status
+## What runs today
 
-The repository is a provisional pre-freeze foundation spike. It contains test infrastructure, contract-neutral evidence primitives, a durable SQLite event and decision store (`pnpm verify:store`), bounded-JSON input contracts, a control-room truth-presentation kernel, a DEVELOPMENT_ONLY / NOT_CONFIRMATORY scheduler-fairness aging reference, and a pure structural graph-analysis kernel. Each of these is a substrate, and none of them is authority:
+The full agent loop runs on the durable pipeline and is live-proven end to end
+(see [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
+entry points, environment, and knobs):
 
-- The graph kernel validates bounded HARD-edge DAG shapes and reports structural/frontier facts; it has no persistence, command, approval, provider, lease, budget, or execution authority.
-- The event store persists events and decisions and refuses to open below a minimum SQLite version. It is storage only and grants no command, approval, or execution authority. Its `node:sqlite` driver was adopted without the design-required packaging/fault spike; the retroactive record in [docs/plans/2026-08-09-node-sqlite-driver-decision.md](./docs/plans/2026-08-09-node-sqlite-driver-decision.md) is `PROPOSED — AWAITING HUMAN RATIFICATION`, not a ratified decision.
-- The bounded-JSON contracts bound and reject untrusted input; accepting a document says nothing about whether any caller was authorized to send it.
-- The truth-presentation kernel maps truth classes to display descriptors. It renders the provenance a fact already has and does not upgrade it, and `UNKNOWN` is a representable outcome rather than a failure to compute.
-- The fairness reference is an executable DEVELOPMENT_ONLY model explicitly marked NOT_CONFIRMATORY. It is not the production scheduler and confirms nothing about one.
+- **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`,
+  `/events/read`, `/affordances/read`, `/documents/dossier/read`. Boots
+  fail-closed on a fresh SQLite store, mints genesis recovery binding, and
+  refuses unauthenticated, cross-origin, stale-protocol, or malformed requests
+  with stable reason codes from the runtime error registry.
+- **Per-agent MCP server** (`apps/daemon/src/mcp-main.ts`): one tool per
+  runtime command kind plus `work_get_context` / `events_read`, scoped by a
+  session credential; the daemon's decoder stays the only payload authority.
+- **Wrapper** (`apps/daemon/src/orchestrator/agent-wrapper-main.ts`): staffs
+  every READY, unclaimed step with a scoped agent session and a real `claude -p`
+  process; a daemon-side verifier earns code-node acceptance by running the
+  node's own test, never from the agent's report.
+- **Control room** (`apps/control-room`): the truth-preserving board; `?live=1`
+  over the Vite proxy renders the daemon's own offer surface and dispatches
+  offers back verbatim.
+- **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
+  `scheduler` (zero-authority structural preview), `store` (durable event and
+  decision storage, subscriptions, snapshots, recovery), `runner`,
+  `coordination`, `review`, `context`, `mcp`, `import` (deterministic read-only
+  legacy import), `control-room-client` / `control-room-model`, `skills`,
+  `testkit` (DEVELOPMENT_ONLY / NOT_CONFIRMATORY references). Adapters under
+  `adapters/` (IDE contract, JetBrains) are integration boundaries.
 
-This does not count as Phase 1 completion until the six-document Phase 0 manifest and independent `FREEZE_READY` decision are recorded. It is not a production daemon, is not benchmark evidence, and makes no readiness or comparative claim. The benchmark specification the design pins is itself unresolved; see [docs/plans/2026-08-09-benchmark-spec-hash-resolution.md](./docs/plans/2026-08-09-benchmark-spec-hash-resolution.md).
+Authority, persistence, provider effects, and presentation stay separated;
+missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
-Phase 0 tooling can capture exact files through a fail-closed Node/Git adapter and evaluate their internal consistency in memory. The result is only an `EVIDENCE_CONSISTENT` candidate whose claimed Yaron authorization and claimed reviewer verdict are explicitly unauthenticated; it never returns an authoritative `decision: GO`, `status: VERIFIED`, or freeze-decision bytes. It also exposes no command that writes the named manifest or decision. A future non-caller-mintable trust boundary is required before any authoritative decision can exist. The real artifacts remain forbidden until the missing Moe review contains the required five-input review receipt and Yaron gives a separate post-review design-freeze `GO` through that trusted boundary.
+## What this is not
+
+Nothing here is a readiness, GA, or comparative claim. The design's Phase 0
+freeze manifest and independent `FREEZE_READY` decision are not recorded; the
+`node:sqlite` driver decision in
+[docs/plans/2026-08-09-node-sqlite-driver-decision.md](./docs/plans/2026-08-09-node-sqlite-driver-decision.md)
+is `PROPOSED — AWAITING HUMAN RATIFICATION`; the pinned benchmark specification
+is unresolved (see
+[docs/plans/2026-08-09-benchmark-spec-hash-resolution.md](./docs/plans/2026-08-09-benchmark-spec-hash-resolution.md)).
+Development fixtures and payload hints are `DEVELOPMENT_ONLY` and confirm
+nothing. Phase 0 tooling can capture and check evidence in memory but never
+returns an authoritative `decision: GO`, `status: VERIFIED`, or freeze-decision
+bytes; a non-caller-mintable trust boundary is still required before any
+authoritative decision can exist.
 
 ## Commands
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm typecheck
-pnpm test:meta
+pnpm test                       # packages/** and tests/**
+pnpm --filter @moe/daemon test  # apps/** is not discovered by the root gate
 pnpm verify:foundation
 pnpm verify:store
+pnpm test:integration           # run from PowerShell (MSYS tar breaks it)
+pnpm test:fault
+pnpm test:security
+pnpm test:property
+pnpm test:e2e
+pnpm test:e2e:browser
 ```
+
+Never claim success without a fresh foreground run and its exit status.
