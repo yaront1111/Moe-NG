@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 
@@ -13,9 +10,9 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
-import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
+import { claudeSpawner } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
-import type { NodeMission, SpawnRequest } from "./agent-wrapper.js";
+import type { NodeMission } from "./agent-wrapper.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
 
@@ -31,68 +28,6 @@ import type { VerifierRunCapture } from "./node-verifier.js";
  * a single pass. Credentials reach the agent through its process environment
  * only — never argv, never a file the mission names.
  */
-const DAEMON_DIR = new URL("../..", import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/u, "");
-const MCP_MAIN = new URL("../mcp-main.ts", import.meta.url).pathname
-  .replace(/^\/(?=[A-Za-z]:)/u, "");
-
-function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
-  const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
-  // Per-agent files are removed as each agent exits; the directory itself goes
-  // with the wrapper process, whichever way it ends.
-  process.once("exit", () => { rmSync(configDir, { force: true, recursive: true }); });
-  const command = process.env["MOE_AGENT_COMMAND"] ?? "claude";
-  return (request: SpawnRequest): Promise<void> => {
-    const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
-    // Absolute entry path: MCP server configs carry no working directory, and
-    // node resolves the module's own relative imports from its file URL anyway.
-    writeFileSync(mcpConfigPath, JSON.stringify({
-      mcpServers: {
-        "moe-next": {
-          args: [MCP_MAIN],
-          command: "node",
-          env: { ...storeEnv, MOE_SESSION_CREDENTIAL: request.credential },
-        },
-      },
-    }), "utf8");
-    // Code-node agents work IN their workspace and get the file/exec tools a
-    // worker needs; chain-step agents keep the MCP-only surface.
-    const coding = request.workspace !== null;
-    const allowed = coding
-      ? "mcp__moe-next,mcp__moe-next__*,Edit,Write,Read,Glob,Grep,Bash"
-      : "mcp__moe-next,mcp__moe-next__*";
-    return new Promise((resolve) => {
-      // The mission travels over STDIN: on Windows the CLI is a .cmd requiring
-      // shell resolution, and a shell line would shred a space-bearing prompt
-      // argument. `agentSpawnInvocation` builds that line itself (argv plus
-      // `shell: true` is deprecated, DEP0190) and quotes the one argument —
-      // the config path — that may legitimately carry whitespace.
-      const invocation = agentSpawnInvocation(command, [
-        "-p",
-        "--mcp-config", mcpConfigPath,
-        "--allowedTools", allowed,
-      ]);
-      const child = spawn(invocation.file, [...invocation.args], {
-        cwd: request.workspace ?? DAEMON_DIR,
-        shell: invocation.shell,
-        stdio: ["pipe", "inherit", "inherit"],
-      });
-      child.stdin?.write(request.mission);
-      child.stdin?.end();
-      // The config file carries the agent's credential; it must not outlive the
-      // agent it was minted for. Both exit paths remove it; a missing file is fine.
-      const finish = (): void => {
-        rmSync(mcpConfigPath, { force: true });
-        resolve();
-      };
-      child.on("exit", (code) => {
-        process.stdout.write(`[wrapper] ${request.workItemId} agent exited ${String(code)}\n`);
-        finish();
-      });
-      child.on("error", finish);
-    });
-  };
-}
-
 async function main(): Promise<void> {
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
@@ -205,6 +140,7 @@ async function main(): Promise<void> {
 
   const once = process.env["MOE_WRAPPER_ONCE"] === "1";
   const intervalMs = Number(process.env["MOE_WRAPPER_INTERVAL_MS"] ?? "15000");
+  let lastIdle = "";
   for (;;) {
     // Verify BEFORE staffing: a clean submission earns its acceptance (or its
     // failure round) before any new agent is spawned against stale state.
@@ -217,9 +153,13 @@ async function main(): Promise<void> {
     }
     if (report.spawned.length === 0) {
       // Say so: a silent pass reads as a hung wrapper to an operator watching it.
-      process.stdout.write(
-        `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`,
-      );
+      // Once per distinct idle state, not once per interval — the continuous
+      // loop would otherwise print the same line every few seconds.
+      const idle = `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`;
+      if (idle !== lastIdle) process.stdout.write(idle);
+      lastIdle = idle;
+    } else {
+      lastIdle = "";
     }
     if (once) {
       await wrapper.settle();
