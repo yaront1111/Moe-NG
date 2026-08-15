@@ -15,6 +15,7 @@ import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
+import { readWrapperKnobs } from "./wrapper-knobs.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -29,6 +30,8 @@ import type { VerifierRunCapture } from "./node-verifier.js";
  * only — never argv, never a file the mission names.
  */
 async function main(): Promise<void> {
+  // Knobs first: a malformed knob is refused by name before any store is opened.
+  const knobs = readWrapperKnobs(process.env);
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
   const affordances = provider.affordances?.();
@@ -76,7 +79,7 @@ async function main(): Promise<void> {
     claimTtlMs: 30 * 60 * 1000,
     clock: () => Date.now(),
     deps: provider.provide(),
-    maxAgents: Number(process.env["MOE_WRAPPER_MAX_AGENTS"] ?? "2"),
+    maxAgents: knobs.maxAgents,
     mintSecret: () => randomUUID().replaceAll("-", ""),
     operatorCredential: config.credential,
     spawnAgent: claudeSpawner({
@@ -138,8 +141,7 @@ async function main(): Promise<void> {
     store: SqliteEventStore.open(config.storePath),
   });
 
-  const once = process.env["MOE_WRAPPER_ONCE"] === "1";
-  const intervalMs = Number(process.env["MOE_WRAPPER_INTERVAL_MS"] ?? "15000");
+  const { intervalMs, once } = knobs;
   let lastIdle = "";
   for (;;) {
     // Verify BEFORE staffing: a clean submission earns its acceptance (or its
