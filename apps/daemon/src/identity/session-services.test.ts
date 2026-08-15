@@ -140,6 +140,12 @@ describe("session.open", () => {
       ["SESSION_CREDENTIAL_HASH_INVALID", openPayload({ credentialSha256: "ABC123" })],
       ["SESSION_CREDENTIAL_HASH_INVALID", openPayload({ credentialSha256: hashOf("x").toUpperCase() })],
       ["SESSION_EXPIRED_AT_INVALID", openPayload({ expiresAt: "not-a-date" })],
+      // Date.parse accepts all three of these, but their instant depends on the
+      // HOST timezone — a session must not expire at a different moment because
+      // the daemon moved machines. Only the canonical zoned instant is a value.
+      ["SESSION_EXPIRED_AT_INVALID", openPayload({ expiresAt: "2027-01-01T00:00:00" })],
+      ["SESSION_EXPIRED_AT_INVALID", openPayload({ expiresAt: "2027-01-01" })],
+      ["SESSION_EXPIRED_AT_INVALID", openPayload({ expiresAt: "January 1 2027" })],
     ] as const;
     for (const [index, [code, payload]] of cases.entries()) {
       const outcome = send(store, envelope("session.open", 0, payload, `cmd-p-${index}`));

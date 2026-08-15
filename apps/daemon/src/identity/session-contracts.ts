@@ -105,9 +105,17 @@ export function isCredentialSha256(value: JsonValue | undefined): value is strin
   return typeof value === "string" && CREDENTIAL_SHA256_PATTERN.test(value);
 }
 
-/** An ISO-8601 instant `Date.parse` binds to a finite epoch millisecond. */
+/**
+ * The canonical zoned ISO-8601 instant, and only that. `Date.parse` alone also
+ * accepts zone-less and plain-English dates whose epoch millisecond depends on
+ * the HOST timezone — a session must not expire at a different moment because
+ * the daemon moved machines. Same rule as work-claim-contracts.
+ */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+
 export function isIsoInstant(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && Number.isFinite(Date.parse(value));
+  return typeof value === "string" && ISO_INSTANT.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 
 export interface SessionRequest {
